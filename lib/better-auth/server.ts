@@ -11,6 +11,7 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { sso } from "@better-auth/sso";
+import { dash } from "@better-auth/infra";
 import { Pool } from "pg";
 import { sendAuthActionEmail } from "@/lib/email/send-auth-action-email";
 
@@ -101,6 +102,11 @@ export const auth = betterAuth({
   socialProviders,
   plugins: [
     sso(),
+    // Better Auth cloud dashboard (ownership verification + remote admin).
+    // Every dash endpoint requires a signed payload matched against
+    // BETTER_AUTH_API_KEY; with the key unset they reject, so mounting
+    // unconditionally is safe.
+    dash(),
     // nextCookies must stay last: it rewrites Set-Cookie handling for
     // Next.js server actions.
     nextCookies(),
