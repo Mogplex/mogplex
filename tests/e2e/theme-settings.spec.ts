@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Page, Route } from "@playwright/test";
 
@@ -172,6 +172,8 @@ async function readSearchInputTheme(page: Page) {
 async function selectThemeFromUserMenu(page: Page, theme: TestThemePreference) {
   await page.getByRole("button", { name: "User menu" }).click();
   await page.getByTestId(`theme-switcher-${theme}`).click();
+  // Close the dropdown - theme switcher uses stopPropagation to stay open
+  await page.keyboard.press("Escape");
 }
 
 async function expectDocumentTheme(page: Page, theme: "dark" | "light") {
@@ -186,7 +188,7 @@ test("theme preference persists from user menu into spaces without UI regression
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   let theme: TestThemePreference = "light";
   const patchedThemes: string[] = [];
@@ -247,7 +249,7 @@ test("theme preference persists from user menu into spaces without UI regression
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
@@ -264,19 +266,33 @@ test("theme preference persists from user menu into spaces without UI regression
   await selectThemeFromUserMenu(page, "dark");
   await expectDocumentTheme(page, "dark");
 
-  const darkTheme = await readSearchInputTheme(page);
-  expect(darkTheme.rawBackground).not.toBe(initialLightTheme.rawBackground);
-  expect(darkTheme.rawForeground).not.toBe(initialLightTheme.rawForeground);
+  // Poll both channels: the theme switcher animates colors over 200ms, so a
+  // direct read right after the class flip can still return the light values.
+  await expect
+    .poll(async () => {
+      const theme = await readSearchInputTheme(page);
+      return (
+        theme.rawBackground !== initialLightTheme.rawBackground &&
+        theme.rawForeground !== initialLightTheme.rawForeground
+      );
+    })
+    .toBe(true);
 
   await selectThemeFromUserMenu(page, "light");
   await expectDocumentTheme(page, "light");
 
+  // Wait for CSS transitions to complete (theme switcher uses 200ms transitions)
+  const expectedForeground = initialLightTheme.rawForeground;
+  await expect
+    .poll(async () => {
+      const theme = await readSearchInputTheme(page);
+      return theme.rawForeground;
+    })
+    .toBe(expectedForeground);
+
   const restoredLightTheme = await readSearchInputTheme(page);
   expect(restoredLightTheme.rawBackground).toBe(
     initialLightTheme.rawBackground
-  );
-  expect(restoredLightTheme.rawForeground).toBe(
-    initialLightTheme.rawForeground
   );
 
   expect(patchedThemes).toEqual(["dark", "light"]);
@@ -287,7 +303,7 @@ test("global theme sync ignores stale settings reads after local theme selection
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   let theme: TestThemePreference = "light";
   let staleReadHeld = false;
@@ -355,7 +371,7 @@ test("global theme sync ignores stale settings reads after local theme selection
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
   await staleReadReady;
   await expectDocumentTheme(page, "light");
@@ -381,7 +397,7 @@ test("user menu theme submenu opens and persists selection", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   let theme: TestThemePreference = "light";
   const patchedThemes: string[] = [];
@@ -432,7 +448,7 @@ test("user menu theme submenu opens and persists selection", async ({
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await selectThemeFromUserMenu(page, "dark");
@@ -445,7 +461,7 @@ test("user menu theme save failures roll back only the latest selection", async 
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   let theme: TestThemePreference = "light";
   const patchedThemes: string[] = [];
@@ -526,7 +542,7 @@ test("user menu theme save failures roll back only the latest selection", async 
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expectDocumentTheme(page, "light");
@@ -543,7 +559,9 @@ test("user menu theme save failures roll back only the latest selection", async 
   await expectDocumentTheme(page, "light");
 
   await selectThemeFromUserMenu(page, "dark");
-  await expect(page.getByText("Theme preference not saved")).toBeVisible();
+  await expect(
+    page.getByText("Theme preference not saved").first()
+  ).toBeVisible();
   await expectDocumentTheme(page, "light");
   expect(patchedThemes).toEqual(["dark", "light", "dark"]);
 });
@@ -552,7 +570,7 @@ test("user menu theme failures restore the last confirmed saved theme", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const patchedThemes: string[] = [];
   let resolveDarkPatch = () => {};
@@ -624,7 +642,7 @@ test("user menu theme failures restore the last confirmed saved theme", async ({
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expectDocumentTheme(page, "light");
@@ -634,7 +652,9 @@ test("user menu theme failures restore the last confirmed saved theme", async ({
 
   await selectThemeFromUserMenu(page, "system");
   await systemPatchReady;
-  await expect(page.getByText("Theme preference not saved")).toBeVisible();
+  await expect(
+    page.getByText("Theme preference not saved").first()
+  ).toBeVisible();
   await expectDocumentTheme(page, "light");
 
   releaseDarkPatch();
@@ -645,7 +665,7 @@ test("user menu theme failures restore the last confirmed saved theme", async ({
 test("settings renders org-scoped GitHub installation links", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockSettingsPageData(page, [
     {
       id: "inst-1",
@@ -662,7 +682,7 @@ test("settings renders org-scoped GitHub installation links", async ({
     },
   ]);
 
-  await page.goto("/settings?tab=account");
+  await page.goto(scopedPath("settings?tab=account"));
   await page.waitForLoadState("networkidle");
 
   const manageLink = page.getByRole("link", { name: "Manage on GitHub" });
@@ -675,7 +695,7 @@ test("settings renders org-scoped GitHub installation links", async ({
 test("settings keeps an add-install entry point visible after GitHub App setup", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockSettingsPageData(
     page,
     [
@@ -721,7 +741,7 @@ test("settings keeps an add-install entry point visible after GitHub App setup",
     }
   );
 
-  await page.goto("/settings?tab=account");
+  await page.goto(scopedPath("settings?tab=account"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("settings-github-add-install")).toHaveAttribute(
@@ -739,7 +759,7 @@ test("settings keeps an add-install entry point visible after GitHub App setup",
 test("settings hides broken GitHub installation manage links when metadata is incomplete", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockSettingsPageData(page, [
     {
       id: "inst-1",
@@ -755,7 +775,7 @@ test("settings hides broken GitHub installation manage links when metadata is in
     },
   ]);
 
-  await page.goto("/settings?tab=account");
+  await page.goto(scopedPath("settings?tab=account"));
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -771,7 +791,7 @@ test("settings hides broken GitHub installation manage links when metadata is in
 test("settings surfaces installation load failures without crashing", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const pageErrors: string[] = [];
 
   page.on("pageerror", (error) => {
@@ -809,7 +829,7 @@ test("settings surfaces installation load failures without crashing", async ({
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto("/settings?tab=account");
+  await page.goto(scopedPath("settings?tab=account"));
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -822,7 +842,7 @@ test("settings surfaces installation load failures without crashing", async ({
 test("settings surfaces settings preference load failures without crashing", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const pageErrors: string[] = [];
 
   page.on("pageerror", (error) => {
@@ -860,7 +880,7 @@ test("settings surfaces settings preference load failures without crashing", asy
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto("/settings?tab=account");
+  await page.goto(scopedPath("settings?tab=account"));
   await page.waitForLoadState("networkidle");
 
   await expect(

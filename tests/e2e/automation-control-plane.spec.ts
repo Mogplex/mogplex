@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Page, Route } from "@playwright/test";
 
@@ -41,14 +41,20 @@ async function mockBaseChrome(page: Page) {
   );
 }
 
-test("observability centers runtime runs and exposes repair/requeue actions", async ({
+// Skipped pending a product decision: the observability page no longer mounts
+// LiveRunsSection/RunsSection (both still exist, unreferenced, in
+// observability/_components/ alongside CallsSection/CallsControls). Unclear
+// whether they were dropped deliberately or lost in the fresh-history cut.
+// Either remount them on app/(dashboard)/[scope]/observability/page.tsx or
+// delete the sections and this test.
+test.fixme("observability centers runtime runs and exposes repair/requeue actions", async ({
   page,
 }) => {
   let repairCount = 0;
   let requeueCount = 0;
   let cancelCount = 0;
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
 
   await page.route("**/api/observability/stats", (route) =>
@@ -353,7 +359,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
     }
   );
 
-  await page.goto("/observability");
+  await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Live Runs")).toBeVisible();
@@ -383,7 +389,7 @@ test("assignments show last run health inline and triggers surface loads", async
 }) => {
   let requeueCount = 0;
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
 
   await page.route("**/api/repos", (route) =>
@@ -447,7 +453,7 @@ test("assignments show last run health inline and triggers surface loads", async
     }
   );
 
-  await page.goto("/assignments");
+  await page.goto(scopedPath("assignments"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Last run: failed")).toBeVisible();
@@ -455,7 +461,7 @@ test("assignments show last run health inline and triggers surface loads", async
   await page.getByRole("button", { name: "Requeue" }).click();
   expect(requeueCount).toBe(1);
 
-  await page.goto("/triggers");
+  await page.goto(scopedPath("triggers"));
   await page.waitForLoadState("networkidle");
   await expect(page.getByTestId("triggers-empty-state")).toBeVisible();
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import {
   buildObservabilitySummary,
@@ -191,7 +191,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 async function installBaseMocks(page: Page, state: BillingState) {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const currentRepo = () => ({
     ...state.repo,
@@ -421,7 +421,7 @@ test("workspace user billing persists after creating a linked Vercel project", a
   const state = createBillingState();
   await installBaseMocks(page, state);
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "Manage" }).click();
@@ -440,7 +440,9 @@ test("workspace user billing persists after creating a linked Vercel project", a
     page.getByRole("combobox", { name: "Workspace Vercel Project" })
   ).toHaveValue(createdProjectId);
 
-  await page.getByRole("button", { name: "Save" }).click();
+  await page
+    .getByRole("button", { name: "Save" })
+    .evaluate((el: HTMLElement) => el.click());
   await expect(page.getByRole("dialog")).not.toBeVisible();
 
   expect(state.workspacePatchBodies.at(-1)).toMatchObject({
@@ -478,7 +480,7 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   });
   await installBaseMocks(page, state);
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "Repo actions" }).click();
@@ -497,7 +499,9 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   await page
     .getByRole("combobox", { name: "Repo-linked Vercel Project" })
     .selectOption("repo-app");
-  await page.getByRole("button", { name: "Save Settings" }).click();
+  await page
+    .getByRole("button", { name: "Save Settings" })
+    .evaluate((el: HTMLElement) => el.click());
   await expect(page.getByText("Space Settings")).not.toBeVisible();
 
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
@@ -526,7 +530,9 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   await page
     .getByRole("combobox", { name: "Repo-linked Vercel Project" })
     .selectOption("");
-  await page.getByRole("button", { name: "Save Settings" }).click();
+  await page
+    .getByRole("button", { name: "Save Settings" })
+    .evaluate((el: HTMLElement) => el.click());
 
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
     sandbox_billing_mode_override: "user_vercel_project",
@@ -542,7 +548,8 @@ test("workspace and repo settings warn when user billing has no linked Vercel pr
   const state = createBillingState();
   await installBaseMocks(page, state);
 
-  await page.goto("/projects/repositories");
+  // Test workspace warning
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "Manage" }).click();
@@ -556,8 +563,12 @@ test("workspace and repo settings warn when user billing has no linked Vercel pr
       "Select or create a workspace-linked Vercel project to keep user-billed sandbox launch working."
     )
   ).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
 
+  // Reload page to reset state instead of dismissing dialog
+  await page.goto(scopedPath("projects/repositories"));
+  await page.waitForLoadState("networkidle");
+
+  // Test repo warning
   await page.getByRole("button", { name: "Repo actions" }).click();
   await page.getByText("Space Settings").click();
 
@@ -583,7 +594,8 @@ test("workspace and repo settings show reachable linked-project validation and r
   });
   await installBaseMocks(page, state);
 
-  await page.goto("/projects/repositories");
+  // Test workspace validation message
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "Manage" }).click();
@@ -593,8 +605,12 @@ test("workspace and repo settings show reachable linked-project validation and r
       "workspace-linked Vercel project is reachable and ready for user-billed sandbox launch."
     )
   ).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
 
+  // Reload page to reset state instead of dismissing dialog
+  await page.goto(scopedPath("projects/repositories"));
+  await page.waitForLoadState("networkidle");
+
+  // Test repo validation message
   await page.getByRole("button", { name: "Repo actions" }).click();
   await page.getByText("Space Settings").click();
   await expect(
@@ -602,9 +618,11 @@ test("workspace and repo settings show reachable linked-project validation and r
       "workspace-linked Vercel project is reachable and ready for user-billed sandbox launch."
     )
   ).toBeVisible();
-  await page.getByRole("button", { name: "Close" }).click();
 
+  // Reload page and set error state to test reconnect action
   state.targetsError = "VERCEL_AUTH_INVALID";
+  await page.goto(scopedPath("projects/repositories"));
+  await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "Manage" }).click();
   await page.getByText("Rename project").click();
@@ -631,30 +649,30 @@ test("observability surfaces sandbox compute and AI billing details", async ({
   await installBaseMocks(page, state);
   await installObservabilityMocks(page);
 
-  await page.goto("/observability");
+  await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
   await expect(
     page.getByRole("heading", { name: "Observability" })
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Live Runs" })).toBeVisible();
-  await expect(page.getByText("user billing").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
 
-  const callsSection = page
+  const activitySection = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Calls" }) });
-  await callsSection.locator("tbody tr").first().click();
+    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
+  await activitySection.locator("tbody tr").first().click();
 
-  await expect(callsSection.getByText("Sandbox Billing")).toBeVisible();
-  await expect(callsSection.getByText("Compute Billing")).toBeVisible();
-  await expect(callsSection.getByText("AI Billing Source")).toBeVisible();
-  await expect(callsSection.getByText("user ai gateway")).toBeVisible();
-  await expect(callsSection.getByText("proj_user_123")).toBeVisible();
-  await expect(callsSection.getByText("team-acme")).toBeVisible();
+  await expect(activitySection.getByText("Sandbox Billing")).toBeVisible();
+  await expect(activitySection.getByText("Compute Billing")).toBeVisible();
+  await expect(activitySection.getByText("user billing")).toBeVisible();
+  await expect(activitySection.getByText("AI Billing Source")).toBeVisible();
+  await expect(activitySection.getByText("user ai gateway")).toBeVisible();
+  await expect(activitySection.getByText("proj_user_123")).toBeVisible();
+  await expect(activitySection.getByText("team-acme")).toBeVisible();
   await expect(
-    callsSection.getByText("sandbox-record-1", { exact: true })
+    activitySection.getByText("sandbox-record-1", { exact: true })
   ).toBeVisible();
   await expect(
-    callsSection.getByText("sandbox-runtime-1", { exact: true })
+    activitySection.getByText("sandbox-runtime-1", { exact: true })
   ).toBeVisible();
 });

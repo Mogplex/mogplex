@@ -48,7 +48,37 @@ test("flows inspector highlights legacy hidden model overrides and supports quic
       id: "version-1",
       flow_id: "flow-1",
       version_number: 1,
-      graph: {},
+      graph: {
+        nodes: [
+          {
+            id: "start",
+            type: "start",
+            position: { x: 120, y: 160 },
+            data: { label: "PR opened", event: "pr_opened" },
+          },
+          {
+            id: "agent-a",
+            type: "agent",
+            position: { x: 380, y: 160 },
+            data: {
+              label: "Reviewer A",
+              agentId: "agent-a",
+              modelOverride: "openai/o1",
+            },
+          },
+          {
+            id: "end",
+            type: "end",
+            position: { x: 900, y: 160 },
+            data: { label: "Done" },
+          },
+        ],
+        edges: [
+          { id: "edge-1", source: "start", target: "agent-a" },
+          { id: "edge-2", source: "agent-a", target: "end" },
+        ],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
       created_at: "2026-03-28T17:00:00.000Z",
     },
     draft_graph: {
@@ -281,7 +311,37 @@ test("workflows model override selector flags a disabled current override as leg
       id: "version-1",
       flow_id: "flow-1",
       version_number: 1,
-      graph: {},
+      graph: {
+        nodes: [
+          {
+            id: "start",
+            type: "start",
+            position: { x: 120, y: 160 },
+            data: { label: "PR opened", event: "pr_opened" },
+          },
+          {
+            id: "agent-a",
+            type: "agent",
+            position: { x: 380, y: 160 },
+            data: {
+              label: "Reviewer A",
+              agentId: "agent-a",
+              modelOverride: disabledModelId,
+            },
+          },
+          {
+            id: "end",
+            type: "end",
+            position: { x: 900, y: 160 },
+            data: { label: "Done" },
+          },
+        ],
+        edges: [
+          { id: "edge-1", source: "start", target: "agent-a" },
+          { id: "edge-2", source: "agent-a", target: "end" },
+        ],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
       created_at: "2026-03-28T17:00:00.000Z",
     },
     draft_graph: {

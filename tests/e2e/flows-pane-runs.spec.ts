@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { buildE2EAuthHeaders, enableE2EAuth } from "./helpers/auth";
+import {
+  buildE2EAuthHeaders,
+  enableScopedE2EAuth,
+  scopedPath,
+} from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Route } from "@playwright/test";
 
@@ -58,7 +62,33 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
       id: "version-1",
       flow_id: "flow-1",
       version_number: 1,
-      graph: {},
+      graph: {
+        nodes: [
+          {
+            id: "start",
+            type: "start",
+            position: { x: 120, y: 160 },
+            data: { label: "PR opened", event: "pr_opened" },
+          },
+          {
+            id: "agent-1",
+            type: "agent",
+            position: { x: 380, y: 160 },
+            data: { label: "NEXTJS-REVIEWER", agentId: "agent-1" },
+          },
+          {
+            id: "end",
+            type: "end",
+            position: { x: 660, y: 160 },
+            data: { label: "Done" },
+          },
+        ],
+        edges: [
+          { id: "edge-1", source: "start", target: "agent-1" },
+          { id: "edge-2", source: "agent-1", target: "end" },
+        ],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
       created_at: "2026-03-28T17:00:00.000Z",
     },
     draft_graph: {
@@ -483,7 +513,37 @@ test("running flow runs expose cancel in the recent runs rail", async ({
       id: "version-1",
       flow_id: "flow-1",
       version_number: 1,
-      graph: {},
+      graph: {
+        nodes: [
+          {
+            id: "start",
+            type: "start",
+            position: { x: 120, y: 160 },
+            data: { label: "PR opened", event: "pr_opened" },
+          },
+          {
+            id: "agent-1",
+            type: "agent",
+            position: { x: 380, y: 160 },
+            data: {
+              label: "NEXTJS-REVIEWER",
+              agentId: "agent-1",
+              role: "review",
+            },
+          },
+          {
+            id: "end",
+            type: "end",
+            position: { x: 660, y: 160 },
+            data: { label: "Done" },
+          },
+        ],
+        edges: [
+          { id: "edge-1", source: "start", target: "agent-1" },
+          { id: "edge-2", source: "agent-1", target: "end" },
+        ],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
       created_at: "2026-03-28T17:00:00.000Z",
     },
     draft_graph: {
@@ -791,7 +851,7 @@ test("running flow runs expose cancel in the recent runs rail", async ({
 test("completed runs hide follow-up actions and show the terminal empty state", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await page.addInitScript(() => {
     window.localStorage.setItem("theme", "dark");
   });
@@ -810,7 +870,33 @@ test("completed runs hide follow-up actions and show the terminal empty state", 
       id: "version-1",
       flow_id: "flow-1",
       version_number: 1,
-      graph: {},
+      graph: {
+        nodes: [
+          {
+            id: "start",
+            type: "start",
+            position: { x: 120, y: 160 },
+            data: { label: "PR opened", event: "pr_opened" },
+          },
+          {
+            id: "agent-1",
+            type: "agent",
+            position: { x: 380, y: 160 },
+            data: { label: "NEXTJS-REVIEWER", agentId: "agent-1" },
+          },
+          {
+            id: "end",
+            type: "end",
+            position: { x: 660, y: 160 },
+            data: { label: "Done" },
+          },
+        ],
+        edges: [
+          { id: "edge-1", source: "start", target: "agent-1" },
+          { id: "edge-2", source: "agent-1", target: "end" },
+        ],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
       created_at: "2026-03-28T17:00:00.000Z",
     },
     draft_graph: {
@@ -985,7 +1071,7 @@ test("completed runs hide follow-up actions and show the terminal empty state", 
     fulfillJson(route, { run: runDetail })
   );
 
-  await page.goto("/flows");
+  await page.goto(scopedPath("workflows"));
   await page.waitForLoadState("networkidle");
   await page.getByRole("tab", { name: /^Runs/ }).click();
 
@@ -1004,7 +1090,7 @@ test("completed runs hide follow-up actions and show the terminal empty state", 
 test("a run that recovered through an error edge shows a failed node and a successful recovery node", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await page.addInitScript(() => {
     window.localStorage.setItem("theme", "dark");
   });
@@ -1023,7 +1109,45 @@ test("a run that recovered through an error edge shows a failed node and a succe
       id: "version-recover",
       flow_id: "flow-recover",
       version_number: 1,
-      graph: {},
+      graph: {
+        nodes: [
+          {
+            id: "start",
+            type: "start",
+            position: { x: 80, y: 160 },
+            data: { label: "PR opened", event: "pr_opened" },
+          },
+          {
+            id: "agent-fail",
+            type: "agent",
+            position: { x: 320, y: 160 },
+            data: { label: "FAILING-REVIEWER", agentId: "agent-fail" },
+          },
+          {
+            id: "agent-recover",
+            type: "agent",
+            position: { x: 560, y: 320 },
+            data: { label: "RECOVERY-RESPONDER", agentId: "agent-recover" },
+          },
+          {
+            id: "end",
+            type: "end",
+            position: { x: 800, y: 160 },
+            data: { label: "Done" },
+          },
+        ],
+        edges: [
+          { id: "edge-start-fail", source: "start", target: "agent-fail" },
+          {
+            id: "edge-fail-recover",
+            source: "agent-fail",
+            target: "agent-recover",
+            sourceHandle: "error",
+          },
+          { id: "edge-recover-end", source: "agent-recover", target: "end" },
+        ],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
       created_at: "2026-04-01T17:00:00.000Z",
     },
     draft_graph: {
@@ -1236,13 +1360,17 @@ test("a run that recovered through an error edge shows a failed node and a succe
     fulfillJson(route, { run: runDetail })
   );
 
-  await page.goto("/flows");
+  await page.goto(scopedPath("workflows"));
   await page.waitForLoadState("networkidle");
   await page.getByRole("tab", { name: /^Runs/ }).click();
 
   const runCard = page.getByTestId("flow-run-card-job-recover");
   await expect(runCard).toBeVisible();
   // Failed node + recovered node both surface as badges; overall run is success.
-  await expect(runCard.getByText(/FAILING-REVIEWER · failed/)).toBeVisible();
-  await expect(runCard.getByText(/RECOVERY-RESPONDER · success/)).toBeVisible();
+  await expect(
+    runCard.getByText(/FAILING-REVIEWER\s*·\s*failed/)
+  ).toBeVisible();
+  await expect(
+    runCard.getByText(/RECOVERY-RESPONDER\s*·\s*success/)
+  ).toBeVisible();
 });

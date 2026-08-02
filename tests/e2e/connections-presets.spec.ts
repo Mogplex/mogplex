@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Route } from "@playwright/test";
 
@@ -68,7 +68,7 @@ test("settings handles duplicate preset adds gracefully and shows preset origin 
     updated_at: new Date().toISOString(),
   };
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -105,7 +105,7 @@ test("settings handles duplicate preset adds gracefully and shows preset origin 
     await fulfillJson(route, { ok: true });
   });
 
-  await page.goto("/settings?tab=connections");
+  await page.goto(scopedPath("settings?tab=connections"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("settings-preset-manual-hint")).toContainText(
@@ -129,7 +129,7 @@ test("workspace connections pane auto-tests preset adds and labels preset-backed
 }) => {
   const connections: Array<Record<string, unknown>> = [];
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/__e2e/preview/**", async (route) => {
     await route.fulfill({
@@ -258,13 +258,15 @@ test("workspace connections pane auto-tests preset adds and labels preset-backed
     }
   );
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-open-workspace-repo-1").click();
 
   const agentPane = page.locator('[data-pane-type="agent"]').first();
   await agentPane.getByTitle("Add pane").click();
-  await page.getByRole("menuitem", { name: "Connections" }).click();
+  // The add-pane menu lists each pane type twice (split right + "Split below");
+  // take the first (horizontal split).
+  await page.getByRole("menuitem", { name: "Connections" }).first().click();
 
   const connectionsPane = page.locator('[data-pane-type="connections"]').last();
   await expect(
@@ -299,7 +301,7 @@ test("settings starts provider OAuth for hosted MCP presets instead of auto-test
   let oauthStarts = 0;
   let oauthTests = 0;
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -354,7 +356,7 @@ test("settings starts provider OAuth for hosted MCP presets instead of auto-test
       await route.fulfill({
         status: 302,
         headers: {
-          location: "/settings?tab=connections&oauth=success",
+          location: scopedPath("settings?tab=connections&oauth=success"),
         },
         body: "",
       });
@@ -365,13 +367,13 @@ test("settings starts provider OAuth for hosted MCP presets instead of auto-test
     await fulfillJson(route, { healthy: false, error: "should not run" }, 500);
   });
 
-  await page.goto("/settings?tab=connections");
+  await page.goto(scopedPath("settings?tab=connections"));
   await page.waitForLoadState("networkidle");
 
   const presetCard = page.getByTestId("settings-preset-notion");
   await presetCard.getByRole("button", { name: "+ Add" }).click();
   await expect(presetCard).toContainText(
-    "Connect this preset through the provider OAuth flow"
+    "Connect through the provider OAuth flow"
   );
   await presetCard.getByRole("button", { name: "Connect" }).click();
 
@@ -388,7 +390,7 @@ test("settings quick-add supports Zapier's secret full MCP URL", async ({
 }) => {
   const connections: Array<Record<string, unknown>> = [];
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -445,7 +447,7 @@ test("settings quick-add supports Zapier's secret full MCP URL", async ({
     await fulfillJson(route, { healthy: true, toolCount: 12 });
   });
 
-  await page.goto("/settings?tab=connections");
+  await page.goto(scopedPath("settings?tab=connections"));
   await page.waitForLoadState("networkidle");
 
   const presetCard = page.getByTestId("settings-preset-zapier");
@@ -500,7 +502,7 @@ test("workspace connections pane can re-include excluded global connections", as
     },
   ];
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/__e2e/preview/**", async (route) => {
     await route.fulfill({
@@ -612,13 +614,15 @@ test("workspace connections pane can re-include excluded global connections", as
     await fulfillJson(route, { connections: [globalConnection] });
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-open-workspace-repo-1").click();
 
   const agentPane = page.locator('[data-pane-type="agent"]').first();
   await agentPane.getByTitle("Add pane").click();
-  await page.getByRole("menuitem", { name: "Connections" }).click();
+  // The add-pane menu lists each pane type twice (split right + "Split below");
+  // take the first (horizontal split).
+  await page.getByRole("menuitem", { name: "Connections" }).first().click();
 
   const connectionsPane = page.locator('[data-pane-type="connections"]').last();
   const includeButton = connectionsPane.getByRole("button", {
@@ -661,7 +665,7 @@ test("workspace keeps disabled preset-backed rows visible and marks presets as c
     updated_at: new Date().toISOString(),
   };
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/__e2e/preview/**", async (route) => {
     await route.fulfill({
@@ -762,13 +766,15 @@ test("workspace keeps disabled preset-backed rows visible and marks presets as c
     await fulfillJson(route, { connections: [globalConnection] });
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-open-workspace-repo-1").click();
 
   const agentPane = page.locator('[data-pane-type="agent"]').first();
   await agentPane.getByTitle("Add pane").click();
-  await page.getByRole("menuitem", { name: "Connections" }).click();
+  // The add-pane menu lists each pane type twice (split right + "Split below");
+  // take the first (horizontal split).
+  await page.getByRole("menuitem", { name: "Connections" }).first().click();
 
   const connectionsPane = page.locator('[data-pane-type="connections"]').last();
   const connectionRow = connectionsPane.locator(
@@ -797,7 +803,7 @@ test("workspace keeps disabled preset-backed rows visible and marks presets as c
 test("settings manual add preserves input and surfaces API errors", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -824,7 +830,7 @@ test("settings manual add preserves input and surfaces API errors", async ({
     );
   });
 
-  await page.goto("/settings?tab=connections");
+  await page.goto(scopedPath("settings?tab=connections"));
   await page.waitForLoadState("networkidle");
 
   const connectionTypeSelect = page
@@ -852,7 +858,7 @@ test("settings manual add preserves input and surfaces API errors", async ({
 test("settings manual add surfaces network failures and keeps oauth hidden", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -875,7 +881,7 @@ test("settings manual add surfaces network failures and keeps oauth hidden", asy
     await route.abort("failed");
   });
 
-  await page.goto("/settings?tab=connections");
+  await page.goto(scopedPath("settings?tab=connections"));
   await page.waitForLoadState("networkidle");
 
   const connectionTypeSelect = page
@@ -941,7 +947,7 @@ test("settings shows oauth reconnect and surfaces hard connection test failures"
     updated_at: new Date().toISOString(),
   };
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -977,7 +983,7 @@ test("settings shows oauth reconnect and surfaces hard connection test failures"
     }
   );
 
-  await page.goto("/settings?tab=connections");
+  await page.goto(scopedPath("settings?tab=connections"));
   await page.waitForLoadState("networkidle");
 
   await page.getByLabel("Connection actions").click();

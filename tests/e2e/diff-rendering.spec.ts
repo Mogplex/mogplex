@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Page, Route } from "@playwright/test";
 
@@ -78,6 +78,7 @@ async function mockBaseApp(page: Page) {
   await page.route("**/api/agents", (route) =>
     fulfillJson(route, { agents: [] })
   );
+  await page.route("**/api/assignments", (route) => fulfillJson(route, []));
   await page.route("**/api/commands", (route) => fulfillJson(route, []));
   await page.route("**/api/observability/tool-calls", (route) =>
     fulfillJson(route, [])
@@ -120,7 +121,7 @@ async function mockBaseApp(page: Page) {
 test("assistant diff blocks render through the shared diff viewer", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockBaseApp(page);
 
   await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
@@ -160,7 +161,7 @@ test("assistant diff blocks render through the shared diff viewer", async ({
     });
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId(`home-open-workspace-${repo.id}`).click();
   await page
@@ -183,7 +184,7 @@ test("assistant diff blocks render through the shared diff viewer", async ({
 test("malformed diff fences fall back to the normal code renderer", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockBaseApp(page);
 
   await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
@@ -218,7 +219,7 @@ test("malformed diff fences fall back to the normal code renderer", async ({
     });
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId(`home-open-workspace-${repo.id}`).click();
   await page
@@ -238,7 +239,7 @@ test("malformed diff fences fall back to the normal code renderer", async ({
 test("saved local messages render patches through the shared diff viewer", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockBaseApp(page);
 
   const patch = [
@@ -265,7 +266,7 @@ test("saved local messages render patches through the shared diff viewer", async
     await fulfillJson(route, { ok: true });
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId(`home-open-workspace-${repo.id}`).click();
 
@@ -276,7 +277,7 @@ test("saved local messages render patches through the shared diff viewer", async
 test("assistant tool parts render nested diff output through the shared viewer", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockBaseApp(page);
 
   const patch = [
@@ -325,7 +326,7 @@ test("assistant tool parts render nested diff output through the shared viewer",
     });
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId(`home-open-workspace-${repo.id}`).click();
   await page
@@ -344,7 +345,7 @@ test("assistant tool parts render nested diff output through the shared viewer",
 test("diff pane renders pull request patches with the shared diff viewer", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockBaseApp(page);
   await page.route(/\/api\/conversations(?:\?.*)?$/, (route) =>
     fulfillJson(route, {
@@ -401,11 +402,13 @@ test("diff pane renders pull request patches with the shared diff viewer", async
     })
   );
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId(`home-open-workspace-${repo.id}`).click();
   await page.getByTitle("Add pane").first().click();
-  await page.getByRole("menuitem", { name: "Diff" }).click();
+  // The add-pane menu lists each pane type twice (split right + "Split below");
+  // take the first (horizontal split).
+  await page.getByRole("menuitem", { name: "Diff" }).first().click();
 
   await expect(page.getByText("#42")).toBeVisible();
   await expect(page.getByText("Update widget status")).toBeVisible();
@@ -416,9 +419,6 @@ test("diff pane renders pull request patches with the shared diff viewer", async
 test("observability renders nested tool output diffs with the shared viewer", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
-  await mockBaseApp(page);
-
   const now = new Date().toISOString();
   const patch = [
     "diff --git a/src/agent.ts b/src/agent.ts",
@@ -431,7 +431,54 @@ test("observability renders nested tool output diffs with the shared viewer", as
     "",
   ].join("\n");
 
-  await page.route("**/api/observability/stats", (route) =>
+  // Register the base mocks FIRST: Playwright matches routes in reverse
+  // registration order (last registered wins), so the observability-specific
+  // mocks below must come after mockBaseApp's empty-calls defaults.
+  await enableScopedE2EAuth(page);
+  await mockBaseApp(page);
+
+  await page.route("**/api/observability/calls*", (route) =>
+    fulfillJson(route, {
+      calls: [
+        {
+          id: "call-1",
+          user_id: connectedUser.id,
+          type: "chat",
+          model: modelId,
+          input_tokens: 10,
+          output_tokens: 12,
+          total_tokens: 22,
+          duration_ms: 1200,
+          started_at: now,
+          completed_at: now,
+          status: "success",
+          error: null,
+          conversation_id: "conversation-1",
+          job_run_id: null,
+          repo_id: repo.id,
+          tool_calls_count: 1,
+          tool_calls: [
+            {
+              name: "git_diff",
+              input_preview: '{"repo":"acme/demo-app"}',
+              input: { repo: repo.full_name },
+              output_preview: "diff --git a/src/agent.ts b/src/agent.ts",
+              output: { stdout: patch },
+              duration_ms: 75,
+            },
+          ],
+          metadata: { repo: repo.full_name },
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+    })
+  );
+  await page.route(/\/api\/observability\/call-events(?:\?.*)?$/, (route) =>
+    fulfillJson(route, { events: [] })
+  );
+  await page.route("**/api/observability/stats*", (route) =>
     fulfillJson(route, {
       summary: {
         total_calls: 1,
@@ -482,49 +529,21 @@ test("observability renders nested tool output diffs with the shared viewer", as
       limit: 25,
     })
   );
-  await page.route(/\/api\/observability\/calls(?:\?.*)?$/, (route) =>
-    fulfillJson(route, {
-      calls: [
-        {
-          id: "call-1",
-          user_id: connectedUser.id,
-          type: "chat",
-          model: modelId,
-          input_tokens: 10,
-          output_tokens: 12,
-          total_tokens: 22,
-          duration_ms: 1200,
-          started_at: now,
-          completed_at: now,
-          status: "success",
-          error: null,
-          conversation_id: "conversation-1",
-          job_run_id: null,
-          repo_id: repo.id,
-          tool_calls_count: 1,
-          tool_calls: [
-            {
-              name: "git_diff",
-              input_preview: '{"repo":"acme/demo-app"}',
-              input: { repo: repo.full_name },
-              output_preview: "diff --git a/src/agent.ts b/src/agent.ts",
-              output: { stdout: patch },
-              duration_ms: 75,
-            },
-          ],
-          metadata: { repo: repo.full_name },
-        },
-      ],
-      total: 1,
-      page: 1,
-      limit: 20,
-    })
-  );
 
-  await page.goto("/observability");
+  // Expand the call row via the call_id query param instead of clicking the
+  // row: the row-toggle handler navigates through buildObservabilityHref's
+  // unscoped "/observability?..." href, which only works in production because
+  // proxy.ts rescue-redirects it back into the scope — the e2e bypass skips
+  // that rescue, so a click would strand the test on a bogus
+  // "/observability" scope.
+  await page.goto(scopedPath("observability?call_id=call-1"));
   await page.waitForLoadState("networkidle");
 
-  await page.getByRole("row", { name: /minimax-m2\.5/i }).click();
+  await expect(
+    page.getByRole("heading", { name: "Observability", level: 1 })
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
+  await expect(page.getByRole("row", { name: /minimax-m2\.5/i })).toBeVisible();
 
   await expect(page.getByText("Diff source: stdout")).toBeVisible();
   await expect(page.getByText("src/agent.ts")).toBeVisible();

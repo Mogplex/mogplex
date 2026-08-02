@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   connectedUser,
   disconnectedGithubUser,
@@ -52,13 +52,13 @@ test("home prioritizes opening a workspace when repos already exist, even if Git
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockHomeState(page, {
     user: disconnectedGithubUser,
     repos: [syncedRepo],
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
 
   await expect(
     page.getByText("Open Workspace is the main action.")
@@ -74,13 +74,13 @@ test("home setup guide shows complete-install action when GitHub App install is 
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockHomeState(page, {
     user: oauthInstallPendingUser,
     repos: [],
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -96,7 +96,7 @@ test("home setup guide shows complete-install action when GitHub App install is 
 
 test("home sync failure surfaces retry guidance", async ({ page }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockHomeState(page, {
     user: connectedUser,
     repos: [],
@@ -107,7 +107,7 @@ test("home sync failure surfaces retry guidance", async ({ page }) => {
     },
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
 
@@ -123,7 +123,7 @@ test("home surfaces repo load failures without crashing the shell", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockHomeState(page, {
     user: connectedUser,
     repos: [],
@@ -133,7 +133,7 @@ test("home surfaces repo load failures without crashing the shell", async ({
     },
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Failed to load repos")).toBeVisible();
@@ -148,7 +148,7 @@ test("projects empty state prioritizes completing the GitHub App install over im
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockProjectsDashboard(page, {
     user: installPendingUser,
     repos: [],
@@ -156,7 +156,7 @@ test("projects empty state prioritizes completing the GitHub App install over im
     workspaces: [],
   });
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -176,7 +176,7 @@ test("projects empty state allows importing repos when OAuth is connected but ap
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockProjectsDashboard(page, {
     user: oauthInstallPendingUser,
     repos: [],
@@ -184,7 +184,7 @@ test("projects empty state allows importing repos when OAuth is connected but ap
     workspaces: [],
   });
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -201,7 +201,7 @@ test("projects dashboard surfaces data-load failures instead of empty onboarding
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockProjectsDashboard(page, {
     user: {
       ...connectedUser,
@@ -225,7 +225,7 @@ test("projects dashboard surfaces data-load failures instead of empty onboarding
     },
   });
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -243,10 +243,10 @@ test("sandbox stop reconciles preview and chrome without stale live state", asyn
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -292,10 +292,10 @@ test("fresh Start fresh failures from the stopped overlay render inline", async 
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -337,10 +337,10 @@ test("session overflow menu offers a Start fresh sandbox affordance", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -361,10 +361,10 @@ test("server-side sandbox stops propagate on health reconciliation", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -392,10 +392,10 @@ test("preview app errors surface recovery UI and clear live chrome", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -428,10 +428,10 @@ test("preview build failures surface Vercel deployment diagnostics in preview an
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -475,10 +475,10 @@ test("preview building state surfaces Vercel deployment progress", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -513,10 +513,10 @@ test("running VM with a non-listening dev server labels the chip as starting", a
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -545,7 +545,7 @@ test("user-billed sandbox errors stay aligned across preview, health, and observ
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const previewUrl = "http://127.0.0.1:3000/__e2e/preview/repo-1";
 
@@ -576,7 +576,7 @@ test("user-billed sandbox errors stay aligned across preview, health, and observ
     last_preview_error: "HTTP 500 at preview",
   });
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -598,7 +598,7 @@ test("user-billed sandbox errors stay aligned across preview, health, and observ
   await expect(page.getByText("Team: team-acme")).toBeVisible();
   await expect(page.getByText("HTTP 500 at preview")).toBeVisible();
 
-  await page.goto("/observability");
+  await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -630,10 +630,10 @@ test("preview unreachable state surfaces warning UI and clears live chrome", asy
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
-  await page.goto("/");
+  await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
@@ -664,7 +664,7 @@ test("idle-warning state shows warning chrome from summary-backed sandbox data",
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const sandbox = {
     id: "sandbox-record-repo-1",
     sandbox_id: "sandbox-runtime-repo-1",
@@ -687,7 +687,7 @@ test("idle-warning state shows warning chrome from summary-backed sandbox data",
     sandboxes: [sandbox],
   });
 
-  await page.goto("/projects/repositories");
+  await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Idle soon")).toBeVisible();

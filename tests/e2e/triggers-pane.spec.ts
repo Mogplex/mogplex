@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Route } from "@playwright/test";
 
@@ -38,7 +38,7 @@ test("triggers installation combobox shows scope and supports repo-name search",
 }) => {
   let postedTrigger: TriggerPayload | undefined;
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -120,7 +120,7 @@ test("triggers installation combobox shows scope and supports repo-name search",
     );
   });
 
-  await page.goto("/triggers");
+  await page.goto(scopedPath("triggers"));
   await page.waitForLoadState("networkidle");
 
   const emptyState = page.getByTestId("triggers-empty-state");
@@ -169,7 +169,7 @@ test("triggers installation combobox shows scope and supports repo-name search",
 test("triggers empty state explains missing GitHub App installations", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, {
@@ -209,7 +209,7 @@ test("triggers empty state explains missing GitHub App installations", async ({
   );
   await page.route("**/api/triggers", (route) => fulfillJson(route, []));
 
-  await page.goto("/triggers");
+  await page.goto(scopedPath("triggers"));
   await page.waitForLoadState("networkidle");
 
   const emptyState = page.getByTestId("triggers-empty-state");

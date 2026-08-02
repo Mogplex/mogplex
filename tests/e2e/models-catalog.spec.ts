@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Route } from "@playwright/test";
 
@@ -113,7 +113,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 test("models catalog supports provider, state, pricing filters, and state sorting", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   let defaultModel = "minimax/minimax-m2.7";
   const catalogState = catalog.map((model) => ({ ...model }));
 
@@ -167,7 +167,7 @@ test("models catalog supports provider, state, pricing filters, and state sortin
     fulfillJson(route, { providers: ["anthropic", "minimax", "openai"] })
   );
 
-  await page.goto("/settings?tab=models");
+  await page.goto(scopedPath("settings?tab=models"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("models-default-summary")).toContainText(
