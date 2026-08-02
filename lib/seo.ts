@@ -1,6 +1,6 @@
 import type { Metadata, MetadataRoute } from "next";
 
-export const SITE_URL = "https://www.mogplex.com";
+export const SITE_URL = "https://mogplex.com";
 export const SITE_NAME = "Mogplex";
 export const DEFAULT_TITLE = "Mogplex | Control plane for coding agents";
 export const DEFAULT_DESCRIPTION =

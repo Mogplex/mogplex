@@ -12,9 +12,9 @@ const oauthHookFixMigrationUrl = new URL(
 );
 
 function configureEnv() {
-  process.env.NEXT_PUBLIC_APP_URL = "https://www.mogplex.com";
+  process.env.NEXT_PUBLIC_APP_URL = "https://mogplex.com";
   process.env.MOGPLEX_MCP_RESOURCE_URL =
-    "https://www.mogplex.com/api/v1/mogplex/mcp";
+    "https://mogplex.com/api/v1/mogplex/mcp";
   process.env.NEXT_PUBLIC_SUPABASE_URL =
     "https://testprojectref000000.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
@@ -27,7 +27,7 @@ test("Mogplex MCP protected-resource metadata points to Supabase OAuth", async (
     await import("../../lib/mogplex-api/oauth-config");
 
   assert.deepEqual(buildMogplexMcpProtectedResourceMetadata(), {
-    resource: "https://www.mogplex.com/api/v1/mogplex/mcp",
+    resource: "https://mogplex.com/api/v1/mogplex/mcp",
     authorization_servers: ["https://testprojectref000000.supabase.co/auth/v1"],
     resource_documentation:
       "https://github.com/webrenew/mogplex/blob/main/docs/mogplex-api-mcp/local-agent-automation.md",
@@ -74,7 +74,7 @@ test("Mogplex OAuth verifier requires audience, issuer, client approval, and a l
     assert.deepEqual(verifierCalls, [
       {
         issuer: "https://testprojectref000000.supabase.co/auth/v1",
-        audience: "https://www.mogplex.com/api/v1/mogplex/mcp",
+        audience: "https://mogplex.com/api/v1/mogplex/mcp",
       },
     ]);
   } finally {
@@ -290,7 +290,7 @@ test("Mogplex OAuth decision rolls back a new client when consent finalization f
           clientId: "oauth-client-1",
           clientName: "Codex",
           approvedBy: "auth-user-1",
-          resourceUrl: "https://www.mogplex.com/api/v1/mogplex/mcp",
+          resourceUrl: "https://mogplex.com/api/v1/mogplex/mcp",
         });
         return registration;
       },
@@ -301,10 +301,10 @@ test("Mogplex OAuth decision rolls back a new client when consent finalization f
     });
 
     const response = await handler(
-      new Request("https://www.mogplex.com/api/oauth/decision", {
+      new Request("https://mogplex.com/api/oauth/decision", {
         method: "POST",
         headers: {
-          origin: "https://www.mogplex.com",
+          origin: "https://mogplex.com",
           "content-type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
@@ -317,7 +317,7 @@ test("Mogplex OAuth decision rolls back a new client when consent finalization f
     assert.equal(response.status, 303, approvalFailure.name);
     assert.equal(
       response.headers.get("location"),
-      "https://www.mogplex.com/oauth/consent?decision_error=consent_failed",
+      "https://mogplex.com/oauth/consent?decision_error=consent_failed",
       approvalFailure.name
     );
     assert.deepEqual(

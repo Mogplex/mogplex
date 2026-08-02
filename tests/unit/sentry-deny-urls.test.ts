@@ -21,7 +21,7 @@ test("SENTRY_DENY_URLS drops third-party gadstat.com frames", () => {
 test("SENTRY_DENY_URLS does not drop our own domain frames", () => {
   // Defense against an over-broad pattern accidentally swallowing our own
   // errors. Add cases here whenever a new entry is added.
-  assert.equal(matchesAny("https://www.mogplex.com/_next/static/x.js"), false);
+  assert.equal(matchesAny("https://mogplex.com/_next/static/x.js"), false);
   assert.equal(matchesAny("https://localhost:3000/_next/static/x.js"), false);
   assert.equal(
     matchesAny("https://mogplex.vercel.app/_next/static/x.js"),
