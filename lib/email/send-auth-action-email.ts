@@ -10,7 +10,18 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails";
 type SuccessChannel = "resend" | "log";
 type SendResult =
   | { ok: true; channel: SuccessChannel }
-  | { ok: false; reason: "resend_error" };
+  | { ok: false; reason: "resend_error" | "not_configured" };
+
+// Verification/reset URLs carry single-use bearer tokens — never log the
+// query string in production.
+function redactActionUrl(actionUrl: string): string {
+  try {
+    const url = new URL(actionUrl);
+    return `${url.origin}${url.pathname}${url.search ? "?[redacted]" : ""}`;
+  } catch {
+    return "[unparseable-url-redacted]";
+  }
+}
 
 export type AuthActionKind = "verify-email" | "reset-password";
 
@@ -55,8 +66,23 @@ export async function sendAuthActionEmail(params: {
   const copy = COPY[params.kind];
 
   if (!apiKey) {
-    // Same log-fallback as the waitlist and invite senders: the flow stays
-    // usable without Resend wired up; an operator can hand-deliver the link.
+    if (process.env.NODE_ENV === "production") {
+      // Unlike the waitlist/invite senders, auth links are credentials.
+      // In production a missing key fails closed: no token in the logs and
+      // the caller surfaces the failure instead of returning success.
+      console.error(
+        JSON.stringify({
+          event: "auth_action_email_not_configured",
+          kind: params.kind,
+          email: params.email,
+          actionUrl: redactActionUrl(params.actionUrl),
+          note: "RESEND_API_KEY unset in production — auth email delivery disabled",
+        })
+      );
+      return { ok: false, reason: "not_configured" };
+    }
+    // Dev/test log-fallback, same spirit as the waitlist and invite senders:
+    // the flow stays usable without Resend wired up.
     console.warn(
       JSON.stringify({
         event: "auth_action_email_pending_delivery",

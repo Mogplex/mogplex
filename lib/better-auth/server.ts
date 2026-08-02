@@ -72,22 +72,30 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: true,
     sendResetPassword: async ({ user, url }) => {
-      await sendAuthActionEmail({
+      const result = await sendAuthActionEmail({
         kind: "reset-password",
         email: user.email,
         actionUrl: url,
       });
+      if (!result.ok) {
+        // Fail closed: better-auth surfaces the error instead of telling the
+        // user a reset email is on the way when delivery is broken.
+        throw new Error(`auth email delivery failed: ${result.reason}`);
+      }
     },
   },
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      await sendAuthActionEmail({
+      const result = await sendAuthActionEmail({
         kind: "verify-email",
         email: user.email,
         actionUrl: url,
       });
+      if (!result.ok) {
+        throw new Error(`auth email delivery failed: ${result.reason}`);
+      }
     },
   },
   socialProviders,
