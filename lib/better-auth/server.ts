@@ -1,0 +1,102 @@
+// better-auth foundation (Supabase-auth replacement, Neon-backed).
+//
+// This instance is NOT wired into the UI yet — Supabase auth remains the live
+// sign-in path until the Neon cutover. The handler is mounted at
+// /api/auth/[...all]; existing static /api/auth/* routes (login, logout,
+// waitlist, …) take precedence over the catch-all, so both stacks coexist.
+//
+// Module load must stay side-effect-free: the pg Pool does not connect until
+// first query, so importing this file without DATABASE_URL (CI builds) is safe.
+
+import { betterAuth } from "better-auth";
+import { nextCookies } from "better-auth/next-js";
+import { sso } from "@better-auth/sso";
+import { Pool } from "pg";
+import { sendAuthActionEmail } from "@/lib/email/send-auth-action-email";
+
+const baseURL =
+  process.env.BETTER_AUTH_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "http://localhost:3000";
+
+const socialProviders: NonNullable<
+  Parameters<typeof betterAuth>[0]["socialProviders"]
+> = {};
+
+if (
+  process.env.AUTH_GITHUB_CLIENT_ID &&
+  process.env.AUTH_GITHUB_CLIENT_SECRET
+) {
+  socialProviders.github = {
+    clientId: process.env.AUTH_GITHUB_CLIENT_ID,
+    clientSecret: process.env.AUTH_GITHUB_CLIENT_SECRET,
+  };
+}
+
+if (
+  process.env.AUTH_GOOGLE_CLIENT_ID &&
+  process.env.AUTH_GOOGLE_CLIENT_SECRET
+) {
+  socialProviders.google = {
+    clientId: process.env.AUTH_GOOGLE_CLIENT_ID,
+    clientSecret: process.env.AUTH_GOOGLE_CLIENT_SECRET,
+  };
+}
+
+if (
+  process.env.AUTH_MICROSOFT_CLIENT_ID &&
+  process.env.AUTH_MICROSOFT_CLIENT_SECRET
+) {
+  socialProviders.microsoft = {
+    clientId: process.env.AUTH_MICROSOFT_CLIENT_ID,
+    clientSecret: process.env.AUTH_MICROSOFT_CLIENT_SECRET,
+    tenantId: process.env.AUTH_MICROSOFT_TENANT_ID || "common",
+  };
+}
+
+export const auth = betterAuth({
+  baseURL,
+  secret: process.env.BETTER_AUTH_SECRET,
+  database: new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 5,
+  }),
+  advanced: {
+    database: {
+      // uuid ids so better-auth users can FK-map onto the existing
+      // uuid-keyed profiles/auth.users shim at cutover.
+      generateId: () => crypto.randomUUID(),
+    },
+  },
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendAuthActionEmail({
+        kind: "reset-password",
+        email: user.email,
+        actionUrl: url,
+      });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendAuthActionEmail({
+        kind: "verify-email",
+        email: user.email,
+        actionUrl: url,
+      });
+    },
+  },
+  socialProviders,
+  plugins: [
+    sso(),
+    // nextCookies must stay last: it rewrites Set-Cookie handling for
+    // Next.js server actions.
+    nextCookies(),
+  ],
+});
+
+export type Session = typeof auth.$Infer.Session;
