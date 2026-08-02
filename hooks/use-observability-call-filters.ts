@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   buildClearedCallFilterHref,
   buildCurrentObservabilityCallHref,
@@ -22,6 +22,10 @@ const INITIAL_CALL_FILTERS = {
 
 export function useObservabilityCallFilters() {
   const router = useRouter();
+  // Filter hrefs must keep the current scope prefix (/<scope>/observability):
+  // the "/observability" default in the builders relies on the proxy rescue
+  // redirect and breaks on routes that skip it.
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const routeFilters = useMemo(
     () => readObservabilityCallRouteFilters(searchParams),
@@ -30,9 +34,9 @@ export function useObservabilityCallFilters() {
   const selectedCallHref = useMemo(
     () =>
       routeFilters.callId
-        ? buildCurrentObservabilityCallHref(searchParams)
+        ? buildCurrentObservabilityCallHref(searchParams, pathname)
         : null,
-    [routeFilters.callId, searchParams]
+    [pathname, routeFilters.callId, searchParams]
   );
 
   const [localCallFilters, setLocalCallFilters] = useState<
@@ -90,29 +94,31 @@ export function useObservabilityCallFilters() {
 
   const clearRepoCallFilter = useCallback(() => {
     setLocalCallFilters((prev) => ({ ...prev, page: 1 }));
-    router.replace(buildClearedRepoCallFilterHref(searchParams));
-  }, [router, searchParams]);
+    router.replace(buildClearedRepoCallFilterHref(searchParams, pathname));
+  }, [pathname, router, searchParams]);
 
   const clearSandboxCallFilter = useCallback(() => {
     setLocalCallFilters((prev) => ({ ...prev, page: 1 }));
-    router.replace(buildClearedSandboxCallFilterHref(searchParams));
-  }, [router, searchParams]);
+    router.replace(buildClearedSandboxCallFilterHref(searchParams, pathname));
+  }, [pathname, router, searchParams]);
 
   const setSelectedCallId = useCallback(
     (callId?: string | null) => {
       if (callId) {
-        router.replace(buildSelectedCallFilterHref(searchParams, callId));
+        router.replace(
+          buildSelectedCallFilterHref(searchParams, callId, pathname)
+        );
         return;
       }
 
-      router.replace(buildClearedCallFilterHref(searchParams));
+      router.replace(buildClearedCallFilterHref(searchParams, pathname));
     },
-    [router, searchParams]
+    [pathname, router, searchParams]
   );
 
   const clearSelectedCallId = useCallback(() => {
-    router.replace(buildClearedCallFilterHref(searchParams));
-  }, [router, searchParams]);
+    router.replace(buildClearedCallFilterHref(searchParams, pathname));
+  }, [pathname, router, searchParams]);
 
   const copySelectedCallLink = useCallback(async () => {
     if (
