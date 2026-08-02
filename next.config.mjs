@@ -54,6 +54,10 @@ const contentSecurityPolicy = buildContentSecurityPolicy({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Standalone output is only for the self-hosted Docker image (see
+  // Dockerfile). Vercel builds must keep the default output mode, so this
+  // is opt-in via env rather than set unconditionally.
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" } : {}),
   typescript: {
     ignoreBuildErrors: false,
   },

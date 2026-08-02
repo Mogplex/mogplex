@@ -182,6 +182,10 @@ Relevant files:
 - [`.github/workflows/deploy-production.yml`](./.github/workflows/deploy-production.yml)
 - [`vercel.json`](./vercel.json)
 
+## Self-Hosting
+
+The supported way to use Mogplex is the hosted product at [mogplex.com](https://mogplex.com). A [`Dockerfile`](./Dockerfile) and [`docker-compose.yml`](./docker-compose.yml) exist for self-hosters, but they ship the web app only — the database, auth, Trigger.dev, sandbox runtime, and every other backing service are bring-your-own. Read [docs/self-hosting.md](./docs/self-hosting.md) before attempting it.
+
 ## Project Layout
 
 - [`app/`](./app) - App Router pages, layouts, and API routes
