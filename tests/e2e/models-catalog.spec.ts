@@ -166,6 +166,21 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   await page.route("**/api/models/provider-icons", (route) =>
     fulfillJson(route, { providers: ["anthropic", "minimax", "openai"] })
   );
+  // Serve the icon bytes too: the src points at storage that does not exist
+  // in CI, and a failed load makes ProviderIcon swap the <img> for the
+  // letter fallback before the src assertion runs.
+  await page.route(
+    /\/storage\/v1\/object\/public\/provider-icons\/.*\.png$/,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+          "base64"
+        ),
+      })
+  );
 
   await page.goto(scopedPath("settings?tab=models"));
   await page.waitForLoadState("networkidle");
