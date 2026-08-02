@@ -1,6 +1,6 @@
 # Mogplex MCP OAuth deployment
 
-The MCP resource is `https://www.mogplex.com/api/v1/mogplex/mcp`. Supabase Auth is the OAuth 2.1 authorization server and Mogplex owns the consent screen at `/oauth/consent`.
+The MCP resource is `https://mogplex.com/api/v1/mogplex/mcp`. Supabase Auth is the OAuth 2.1 authorization server and Mogplex owns the consent screen at `/oauth/consent`.
 
 ## Supabase Auth configuration
 

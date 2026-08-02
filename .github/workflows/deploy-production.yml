@@ -24,11 +24,24 @@ jobs:
     name: migrate-production
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Migrations are optional while the database moves from Supabase to Neon:
+    # without SUPABASE_DB_URL the job succeeds with a warning so the Vercel
+    # deploy still ships. (secrets are not readable in job-level `if`, hence
+    # the env indirection on each step.)
+    env:
+      SUPABASE_DB_URL_PRESENT: ${{ secrets.SUPABASE_DB_URL != '' }}
     steps:
+      - name: Note migrations skipped
+        if: ${{ env.SUPABASE_DB_URL_PRESENT != 'true' }}
+        run: |
+          echo "::warning::Skipping database migrations because SUPABASE_DB_URL is not configured."
+
       - name: Check out repository
+        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' }}
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Supabase CLI
+        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' }}
         uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
 
       # Note: `supabase db push` sends each migration file through a
@@ -41,6 +54,7 @@ jobs:
       # stdin to auto-confirm. Works across CLI versions whether or not
       # `--yes` exists.
       - name: Apply production migrations
+        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' }}
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: yes | supabase db push --db-url "$SUPABASE_DB_URL" --include-all

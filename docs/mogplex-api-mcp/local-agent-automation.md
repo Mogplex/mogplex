@@ -3,7 +3,7 @@
 Local Codex, Claude Code, and other MCP clients can operate Mogplex through one OAuth-enabled streamable HTTP endpoint:
 
 ```txt
-https://www.mogplex.com/api/v1/mogplex/mcp
+https://mogplex.com/api/v1/mogplex/mcp
 ```
 
 OAuth 2.1 authorization code flow with PKCE is the preferred authentication method. Tokens are issued by Mogplex's Supabase Auth server and are accepted only when their issuer, signature, expiry, approved client id, and MCP resource audience all validate.
@@ -14,8 +14,8 @@ Register the hosted endpoint and bind OAuth to the exact MCP resource:
 
 ```bash
 codex mcp add mogplex \
-  --url https://www.mogplex.com/api/v1/mogplex/mcp \
-  --oauth-resource https://www.mogplex.com/api/v1/mogplex/mcp
+  --url https://mogplex.com/api/v1/mogplex/mcp \
+  --oauth-resource https://mogplex.com/api/v1/mogplex/mcp
 codex mcp login mogplex
 ```
 
@@ -25,8 +25,8 @@ The equivalent `~/.codex/config.toml` entry is:
 
 ```toml
 [mcp_servers.mogplex]
-url = "https://www.mogplex.com/api/v1/mogplex/mcp"
-oauth_resource = "https://www.mogplex.com/api/v1/mogplex/mcp"
+url = "https://mogplex.com/api/v1/mogplex/mcp"
+oauth_resource = "https://mogplex.com/api/v1/mogplex/mcp"
 ```
 
 For clients without OAuth support, create a key in Mogplex Settings > Mogplex Keys and send `Authorization: Bearer mog_...`. A read-only token can discover repos, agents, models, automations, runs, and logs. Creating sandboxes or changing/running automations requires `write`. Keep PATs in the client's secret or environment configuration; never paste them into a prompt.

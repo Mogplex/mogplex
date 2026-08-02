@@ -149,10 +149,9 @@ test("proxy lets CLI PAT requests reach hosted inference routes", async () => {
 });
 
 test("proxy lets unauthenticated MCP initialization reach the OAuth challenge", async () => {
-  const request = new NextRequest(
-    "https://www.mogplex.com/api/v1/mogplex/mcp",
-    { method: "POST" }
-  );
+  const request = new NextRequest("https://mogplex.com/api/v1/mogplex/mcp", {
+    method: "POST",
+  });
 
   const response = await proxy(request);
 
