@@ -59,7 +59,10 @@ export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
   database: new Pool({
-    connectionString: process.env.DATABASE_URL,
+    // mogplex_DATABASE_URL is the Neon Vercel-integration var (managed,
+    // auto-rotating); unprefixed DATABASE_URL covers local dev and CI.
+    connectionString:
+      process.env.DATABASE_URL || process.env.mogplex_DATABASE_URL,
     max: 5,
   }),
   advanced: {
