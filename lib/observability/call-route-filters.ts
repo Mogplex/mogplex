@@ -53,43 +53,61 @@ export function mergeObservabilityCallRouteFilters<
   };
 }
 
-function buildObservabilityHref(params: URLSearchParams) {
+// basePath defaults to the unscoped path for backward compatibility, but
+// callers inside the scoped dashboard must pass the current pathname (e.g.
+// "/alex/observability"): the bare "/observability" only works because
+// proxy.ts rescue-redirects it back into the scope, costing a redirect hop —
+// and routes that skip the proxy (like the e2e auth bypass) resolve it as a
+// scope slug instead.
+function buildObservabilityHref(
+  params: URLSearchParams,
+  basePath = "/observability"
+) {
   const nextQuery = params.toString();
-  return nextQuery ? `/observability?${nextQuery}` : "/observability";
+  return nextQuery ? `${basePath}?${nextQuery}` : basePath;
 }
 
 export function buildCurrentObservabilityCallHref(
-  searchParams: SearchParamsLike
+  searchParams: SearchParamsLike,
+  basePath?: string
 ) {
   const params = new URLSearchParams(searchParams.toString());
-  return buildObservabilityHref(params);
+  return buildObservabilityHref(params, basePath);
 }
 
-export function buildClearedRepoCallFilterHref(searchParams: SearchParamsLike) {
+export function buildClearedRepoCallFilterHref(
+  searchParams: SearchParamsLike,
+  basePath?: string
+) {
   const params = new URLSearchParams(searchParams.toString());
   params.delete("repo_id");
-  return buildObservabilityHref(params);
+  return buildObservabilityHref(params, basePath);
 }
 
 export function buildClearedSandboxCallFilterHref(
-  searchParams: SearchParamsLike
+  searchParams: SearchParamsLike,
+  basePath?: string
 ) {
   const params = new URLSearchParams(searchParams.toString());
   params.delete("sandbox_record_id");
-  return buildObservabilityHref(params);
+  return buildObservabilityHref(params, basePath);
 }
 
 export function buildSelectedCallFilterHref(
   searchParams: SearchParamsLike,
-  callId: string
+  callId: string,
+  basePath?: string
 ) {
   const params = new URLSearchParams(searchParams.toString());
   params.set("call_id", callId);
-  return buildObservabilityHref(params);
+  return buildObservabilityHref(params, basePath);
 }
 
-export function buildClearedCallFilterHref(searchParams: SearchParamsLike) {
+export function buildClearedCallFilterHref(
+  searchParams: SearchParamsLike,
+  basePath?: string
+) {
   const params = new URLSearchParams(searchParams.toString());
   params.delete("call_id");
-  return buildObservabilityHref(params);
+  return buildObservabilityHref(params, basePath);
 }

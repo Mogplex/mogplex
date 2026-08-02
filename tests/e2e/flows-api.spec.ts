@@ -853,6 +853,7 @@ test("personal workflow templates are private, sanitized, and rebound on creatio
           label: "Primary Agent",
           agentId: "agent-a",
           role: "review",
+          modelOverride: "minimax/minimax-m2.5",
         },
       },
       {
@@ -1385,7 +1386,11 @@ test("POST /api/flows/:id/publish atomically applies the draft installation scop
               id: "agent-1",
               type: "agent",
               position: { x: 100, y: 0 },
-              data: { label: "Reviewer", agentId: "agent-1" },
+              data: {
+                label: "Reviewer",
+                agentId: "agent-1",
+                modelOverride: "minimax/minimax-m2.5",
+              },
             },
             {
               id: "end",
@@ -1612,7 +1617,11 @@ test("POST /api/flows/:id/assistant validates request and response graphs", asyn
               id: "agent-1",
               type: "agent",
               position: { x: 100, y: 0 },
-              data: { label: "Agent", agentId: "agent-1" },
+              data: {
+                label: "Agent",
+                agentId: "agent-1",
+                modelOverride: "minimax/minimax-m2.5",
+              },
             },
             {
               id: "end",
@@ -1647,7 +1656,11 @@ test("POST /api/flows/:id/assistant validates request and response graphs", asyn
               id: "agent-1",
               type: "agent",
               position: { x: 100, y: 0 },
-              data: { label: "Agent", agentId: "agent-1" },
+              data: {
+                label: "Agent",
+                agentId: "agent-1",
+                modelOverride: "minimax/minimax-m2.5",
+              },
             },
             {
               id: "end",

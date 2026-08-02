@@ -1,5 +1,5 @@
 import { expect, test, type Route } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 
 type MockServer = {
   id: string;
@@ -45,7 +45,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 test("settings MCP page supports add, edit, secret overwrite, and delete without exposing refs", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const postBodies: unknown[] = [];
   const patchBodies: unknown[] = [];
@@ -181,7 +181,7 @@ test("settings MCP page supports add, edit, secret overwrite, and delete without
     }
   );
 
-  await page.goto("/settings/mcp");
+  await page.goto(scopedPath("settings/mcp"));
 
   await page.getByRole("button", { name: "Add server" }).click();
   await page.getByLabel("Name").fill("supabase");

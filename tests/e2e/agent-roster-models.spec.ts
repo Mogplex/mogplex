@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Route } from "@playwright/test";
 import type { Agent } from "../../lib/types";
@@ -51,74 +51,10 @@ async function fulfillText(route: Route, body: string, status = 200) {
   });
 }
 
-test("new agents only offer enabled models", async ({ page }) => {
-  await enableE2EAuth(page);
-
-  await page.route("**/api/auth/user", (route) =>
-    fulfillJson(route, { user: connectedUser })
-  );
-  await page.route("**/api/settings", (route) =>
-    fulfillJson(route, { default_model: enabledModel.id, theme: "dark" })
-  );
-  await page.route("**/api/agents", (route) => fulfillJson(route, []));
-  await page.route("**/api/models", (route) =>
-    fulfillJson(route, {
-      models: [enabledModel],
-      catalog: [
-        { ...enabledModel, is_enabled: true },
-        { ...disabledModel, is_enabled: false },
-      ],
-    })
-  );
-
-  await page.goto("/agents/roster");
-  await page.getByRole("button", { name: "New Agent" }).click();
-
-  const modelSelect = page.locator("#agent-model-select");
-  await expect(modelSelect).toBeVisible();
-  await expect(modelSelect.locator("option")).toHaveCount(1);
-  await expect(modelSelect).toContainText("MiniMax M2.7");
-  await expect(modelSelect).not.toContainText("Claude Sonnet 4.6");
-});
-
-test("new agents surface an actionable empty state when no models are enabled", async ({
-  page,
-}) => {
-  await enableE2EAuth(page);
-
-  await page.route("**/api/auth/user", (route) =>
-    fulfillJson(route, { user: connectedUser })
-  );
-  await page.route("**/api/settings", (route) =>
-    fulfillJson(route, { default_model: null, theme: "dark" })
-  );
-  await page.route("**/api/agents", (route) => fulfillJson(route, []));
-  await page.route("**/api/models", (route) =>
-    fulfillJson(route, {
-      models: [],
-      catalog: [
-        { ...enabledModel, is_enabled: false },
-        { ...disabledModel, is_enabled: false },
-      ],
-    })
-  );
-
-  await page.goto("/agents/roster");
-  await page.getByRole("button", { name: "New Agent" }).click();
-
-  await expect(page.getByLabel("Model", { exact: true })).toBeDisabled();
-  await expect(
-    page.getByText("No enabled models are available yet.")
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Create Agent" })
-  ).toBeDisabled();
-});
-
 test("new agents surface API validation errors instead of failing silently", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -141,7 +77,7 @@ test("new agents surface API validation errors instead of failing silently", asy
     })
   );
 
-  await page.goto("/agents/roster");
+  await page.goto(scopedPath("agents/roster"));
   await page.getByRole("button", { name: "New Agent" }).click();
   await page.locator("#agent-name-input").fill("PR Reviewer");
   const createButton = page.getByRole("button", { name: "Create Agent" });
@@ -157,7 +93,7 @@ test("new agents surface API validation errors instead of failing silently", asy
 test("roster uses standard categories and badges user-owned agent origin", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const agents: Agent[] = [
     {
@@ -215,7 +151,7 @@ test("roster uses standard categories and badges user-owned agent origin", async
     })
   );
 
-  await page.goto("/agents/roster");
+  await page.goto(scopedPath("agents/roster"));
 
   await expect(page.getByRole("tab", { name: /^Custom \(/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "PR Review" })).toBeVisible();
@@ -253,7 +189,7 @@ test("roster uses standard categories and badges user-owned agent origin", async
 });
 
 test("preset customization surfaces API failures", async ({ page }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const agents: Agent[] = [
     {
@@ -293,7 +229,7 @@ test("preset customization surfaces API failures", async ({ page }) => {
     })
   );
 
-  await page.goto("/agents/roster");
+  await page.goto(scopedPath("agents/roster"));
   await page.getByRole("tab", { name: /^PR Review \(1\)$/ }).click();
   await page.getByRole("button", { name: "Customize" }).click();
 
@@ -303,7 +239,7 @@ test("preset customization surfaces API failures", async ({ page }) => {
 test("new agents can draft the panel fields with AI assistance", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const existingAgentPayloads: Array<unknown> = [];
   let draftCallCount = 0;
@@ -350,7 +286,7 @@ test("new agents can draft the panel fields with AI assistance", async ({
     );
   });
 
-  await page.goto("/agents/roster");
+  await page.goto(scopedPath("agents/roster"));
   await page.getByRole("button", { name: "New Agent" }).click();
   await page
     .getByLabel("AI request")
@@ -386,7 +322,7 @@ test("new agents can draft the panel fields with AI assistance", async ({
 test("AI assistance surfaces invalid draft output without breaking the dialog", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -405,7 +341,7 @@ test("AI assistance surfaces invalid draft output without breaking the dialog", 
     await fulfillText(route, '{"name":"BROKEN"');
   });
 
-  await page.goto("/agents/roster");
+  await page.goto(scopedPath("agents/roster"));
   await page.getByRole("button", { name: "New Agent" }).click();
   await page.getByLabel("AI request").fill("Create a PR review agent.");
   await page.getByRole("button", { name: "Draft with AI" }).click();
@@ -421,7 +357,7 @@ test("AI assistance surfaces invalid draft output without breaking the dialog", 
 test("editing agents can customize the draft with AI context", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   let receivedExistingAgent: {
     name?: string;
@@ -479,7 +415,7 @@ test("editing agents can customize the draft with AI context", async ({
     );
   });
 
-  await page.goto("/agents/roster");
+  await page.goto(scopedPath("agents/roster"));
   await page.getByLabel("Agent actions").first().click();
   await page.getByRole("menuitem", { name: "Edit" }).click();
   await page

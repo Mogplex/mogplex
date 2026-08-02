@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense, useCallback, useMemo, useState } from "react"
-import { useParams, useRouter, useSearchParams } from "next/navigation"
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useObservabilityActivity, type ActivityFilters } from "@/hooks/use-observability-activity"
 import { useObservabilityStats } from "@/hooks/use-observability"
 import { useObservabilityCallFilters } from "@/hooks/use-observability-call-filters"
@@ -32,6 +32,7 @@ const INITIAL_FILTERS: ActivityFilters = {
 function ObservabilityContent() {
   const router = useRouter()
   const { scope } = useParams<{ scope: string }>()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const { repos } = useRepos()
   const openWorkspaceSession = useSessionsStore((s) => s.openWorkspaceSession)
@@ -53,9 +54,11 @@ function ObservabilityContent() {
 
   const handleDateRangeChange = useCallback(
     (next: ActivityDateRangeSelection) => {
-      router.replace(buildActivityDateRangeHref(searchParams, next))
+      // Pass the scoped pathname: the builder's "/observability" default
+      // depends on the proxy rescue redirect to recover the scope.
+      router.replace(buildActivityDateRangeHref(searchParams, next, pathname))
     },
-    [router, searchParams]
+    [pathname, router, searchParams]
   )
 
   const {

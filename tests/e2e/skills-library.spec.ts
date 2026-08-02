@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import { GLOBAL_SKILL_SCOPE, type SkillScope } from "@/lib/skills";
 import type { Route } from "@playwright/test";
@@ -61,7 +61,7 @@ test("registry install saves the skill and takes the user to the installed list"
     },
   ];
 
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
@@ -142,7 +142,7 @@ test("registry install saves the skill and takes the user to the installed list"
     await route.abort();
   });
 
-  await page.goto("/primitives?tab=skills");
+  await page.goto(scopedPath("primitives?tab=skills"));
   await page.waitForLoadState("networkidle");
 
   await page

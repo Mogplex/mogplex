@@ -47,7 +47,32 @@ const flowPayload = {
     id: "version-1",
     flow_id: "flow-1",
     version_number: 1,
-    graph: {},
+    graph: {
+      nodes: [
+        {
+          id: "start",
+          type: "start",
+          position: { x: 120, y: 160 },
+          data: { label: "PR opened", event: "pr_opened" },
+        },
+        {
+          id: "agent-1",
+          type: "agent",
+          position: { x: 380, y: 160 },
+          data: { label: "NEXTJS-REVIEWER", agentId: "agent-1" },
+        },
+        {
+          id: "end",
+          type: "end",
+          position: { x: 660, y: 160 },
+          data: { label: "Done" },
+        },
+      ],
+      edges: [
+        { id: "edge-1", source: "start", target: "agent-1" },
+        { id: "edge-2", source: "agent-1", target: "end" },
+      ],
+    },
     created_at: "2026-03-28T17:00:00.000Z",
   },
   draft_graph: {

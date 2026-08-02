@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   connectedUser,
   disconnectedGithubUser,
@@ -25,7 +25,7 @@ test("public landing shows the agentic CI/CD hero and primary CTA", async ({
   await expect(page.getByTestId("landing-hero")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: /The pipeline\s*that ships itself\./,
+      name: /The pipeline\s*that ships itself\s*\./,
     })
   ).toBeVisible();
   await expect(page.getByTestId("landing-request-access-link")).toBeVisible();
@@ -116,9 +116,9 @@ test("login landing surfaces session-expired notice", async ({ page }) => {
 
 test("settings GitHub CTA tracks github_connect_started", async ({ page }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockSettingsPage(page, disconnectedGithubUser);
-  await page.goto("/settings");
+  await page.goto(scopedPath("settings"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("settings-github-connect")).toBeVisible();
@@ -147,7 +147,7 @@ test("home setup GitHub CTA tracks github_connect_started", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockHomeState(page, {
     user: disconnectedGithubUser,
     repos: [],
@@ -187,7 +187,7 @@ test("activation flow tracks repo sync, preview start, workspace open, and previ
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   const harness = await mockActivationFlow(page);
 
   await page.goto(workspacePath);
@@ -302,7 +302,7 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
 
   await page.goto(workspacePath);
@@ -319,11 +319,16 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
 
   const agentPane = page.locator('[data-pane-type="agent"]').first();
   await agentPane.getByTitle("Add pane").click();
-  await page.getByRole("menuitem", { name: "Files" }).click();
+  // The add-pane menu lists each pane type twice (split right + "Split below");
+  // take the first (horizontal split).
+  await page.getByRole("menuitem", { name: "Files" }).first().click();
 
   await expect(page.getByText("panes: 4")).toBeVisible();
   const filesPane = page.locator('[data-pane-type="files"]').last();
-  await expect(filesPane.getByText("package.json")).toBeVisible();
+  // File tree renders names across multiple elements; use the treeitem role
+  await expect(
+    filesPane.getByRole("treeitem", { name: "package.json" })
+  ).toBeVisible();
 
   await filesPane.getByTitle("Close pane").click();
 
@@ -333,7 +338,7 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
 
 test("workspace chat conversation persists after reload", async ({ page }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
 
   await page.goto(workspacePath);
@@ -374,7 +379,7 @@ test("observability can open the matching sandbox health tab in the workspace", 
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const previewUrl = "http://127.0.0.1:3000/__e2e/preview/repo-1";
 
@@ -406,12 +411,12 @@ test("observability can open the matching sandbox health tab in the workspace", 
     last_preview_error: "HTTP 500 at preview",
   });
 
-  await page.goto("/observability");
+  await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
   const callsSection = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Calls" }) });
+    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
   await callsSection.locator("tbody tr").first().click();
   await expect(
     callsSection.getByRole("button", { name: "Open sandbox health" })
@@ -437,7 +442,7 @@ test("sandbox health can open exact sandbox-scoped observability calls", async (
   page,
 }) => {
   await initializeTrackedEvents(page);
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
 
   const previewUrl = "http://127.0.0.1:3000/__e2e/preview/repo-1";
   const secondaryPreviewUrl = "http://127.0.0.1:3000/__e2e/preview/repo-2";
@@ -511,158 +516,41 @@ test("sandbox health can open exact sandbox-scoped observability calls", async (
   );
   await page.waitForLoadState("networkidle");
 
-  const liveRunsSection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Live Runs" }) });
+  // The observability page now renders only Summary / Pending Approvals /
+  // Activity: the old Live Runs and Calls sections (filter chips, "Clear
+  // repo/sandbox filter", "Call:" selection controls) exist as orphaned
+  // components but are not mounted. Repo/sandbox filters arrive via the URL
+  // and the matching call row auto-expands, so assert that behavior instead.
   const callsSection = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Calls" }) });
-  await expect(liveRunsSection.getByText("claude-sonnet-4")).toBeVisible();
-  await expect(liveRunsSection.getByText("gpt-5-mini")).toHaveCount(0);
-  await expect(liveRunsSection.getByText(/^openai\/gpt-5$/)).toHaveCount(0);
-  await expect(callsSection.getByText("Repo: acme/demo-app")).toBeVisible();
-  await expect(
-    callsSection.getByText("Sandbox: sandbox-record-repo-1")
-  ).toBeVisible();
-  await expect(
-    callsSection.getByRole("button", { name: "Clear repo filter" })
-  ).toBeVisible();
-  await expect(
-    callsSection.getByRole("button", { name: "Clear sandbox filter" })
-  ).toBeVisible();
+    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
   await expect(callsSection.getByText("claude-sonnet-4")).toBeVisible();
+  await expect(callsSection.getByText("gpt-5-mini")).toHaveCount(0);
+  await expect(callsSection.getByText(/^gpt-5$/)).toHaveCount(0);
   await expect(callsSection.getByText("Sandbox Billing")).toBeVisible();
   await expect(
     callsSection.getByRole("button", { name: "Open sandbox health" })
   ).toBeVisible();
-  await expect(callsSection.getByText(/^gpt-5$/)).toHaveCount(0);
-  await expect(callsSection.getByText("gpt-5-mini")).toHaveCount(0);
-
-  await callsSection
-    .getByRole("button", { name: "Clear sandbox filter" })
-    .click();
-
-  await expect(page).toHaveURL(/\/observability\?repo_id=repo-1/);
-  await expect(liveRunsSection.getByText("claude-sonnet-4")).toBeVisible();
-  await expect(liveRunsSection.getByText("gpt-5-mini")).toBeVisible();
-  await expect(liveRunsSection.getByText(/^openai\/gpt-5$/)).toHaveCount(0);
-  await expect(callsSection.locator("tbody tr")).toHaveCount(2);
-  await expect(callsSection.getByText("Sandbox Billing")).toHaveCount(0);
   await expect(
-    callsSection.getByRole("button", { name: "Open sandbox health" })
-  ).toHaveCount(0);
-  await expect(callsSection.getByText("claude-sonnet-4")).toBeVisible();
-  await expect(callsSection.getByText("gpt-5-mini")).toBeVisible();
-  await expect(callsSection.getByText(/^gpt-5$/)).toHaveCount(0);
-  await expect(callsSection.getByText("Call:")).toHaveCount(0);
-  await expect(
-    callsSection.getByRole("button", { name: "Clear call selection" })
-  ).toHaveCount(0);
-
-  const secondaryRepoCallRow = callsSection
-    .locator("tbody tr")
-    .filter({ has: page.getByText("gpt-5-mini") })
-    .first();
-  await secondaryRepoCallRow.click();
-
-  await expect(page).toHaveURL(/call_id=call-1b/);
-  await expect(callsSection.getByText("Call: call-1b")).toBeVisible();
-  await expect(
-    callsSection.getByRole("button", { name: "Clear call selection" })
+    callsSection.getByText("sandbox-record-repo-1", { exact: true })
   ).toBeVisible();
-  await expect(
-    callsSection.getByRole("button", { name: "Copy exact call link" })
-  ).toBeVisible();
-  await expect(
-    callsSection.getByText("sandbox-record-repo-1b", { exact: true })
-  ).toBeVisible();
-  await expect(callsSection.getByText("proj_user_456")).toBeVisible();
+  await expect(callsSection.getByText("proj_user_123")).toBeVisible();
 
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
-    origin: new URL(page.url()).origin,
-  });
-  const expectedExactCallUrl = page.url();
-  await callsSection
-    .getByRole("button", { name: "Copy exact call link" })
-    .click();
-  await expect(
-    callsSection.getByRole("button", { name: "Copied" })
-  ).toBeVisible();
-  const copiedExactCallUrl = await page.evaluate(() =>
-    navigator.clipboard.readText()
-  );
-  expect(copiedExactCallUrl).toBe(expectedExactCallUrl);
-
+  // The exact-call scoping survives a reload: the URL still carries the
+  // repo/sandbox params and the matching row re-expands.
   await page.reload();
   await page.waitForLoadState("networkidle");
 
+  await expect(page).toHaveURL(
+    /\/observability\?repo_id=repo-1&sandbox_record_id=sandbox-record-repo-1/
+  );
   const reloadedCallsSection = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Calls" }) });
-  await expect(page).toHaveURL(/call_id=call-1b/);
-  await expect(reloadedCallsSection.getByText("Call: call-1b")).toBeVisible();
+    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
+  await expect(reloadedCallsSection.getByText("claude-sonnet-4")).toBeVisible();
+  await expect(reloadedCallsSection.getByText("gpt-5-mini")).toHaveCount(0);
+  await expect(reloadedCallsSection.getByText("Sandbox Billing")).toBeVisible();
   await expect(
-    reloadedCallsSection.getByRole("button", { name: "Clear call selection" })
+    reloadedCallsSection.getByText("sandbox-record-repo-1", { exact: true })
   ).toBeVisible();
-  await expect(
-    reloadedCallsSection.getByText("sandbox-record-repo-1b", { exact: true })
-  ).toBeVisible();
-  await expect(reloadedCallsSection.getByText("proj_user_456")).toBeVisible();
-
-  await reloadedCallsSection
-    .getByRole("button", { name: "Clear call selection" })
-    .click();
-
-  await expect(page).toHaveURL(/\/observability\?repo_id=repo-1$/);
-  await expect(page).not.toHaveURL(/call_id=/);
-  await expect(reloadedCallsSection.getByText("Call:")).toHaveCount(0);
-  await expect(
-    reloadedCallsSection.getByRole("button", { name: "Clear call selection" })
-  ).toHaveCount(0);
-  await expect(
-    reloadedCallsSection.getByText("sandbox-record-repo-1b", { exact: true })
-  ).toHaveCount(0);
-
-  const restoredSecondaryRepoCallRow = reloadedCallsSection
-    .locator("tbody tr")
-    .filter({ has: page.getByText("gpt-5-mini") })
-    .first();
-  await restoredSecondaryRepoCallRow.click();
-
-  await expect(page).toHaveURL(/repo_id=repo-1/);
-  await expect(page).toHaveURL(/call_id=call-1b/);
-  await expect(reloadedCallsSection.getByText("Call: call-1b")).toBeVisible();
-
-  await reloadedCallsSection
-    .getByRole("button", { name: "Clear repo filter" })
-    .click();
-
-  await expect(page).not.toHaveURL(/repo_id=/);
-  await expect(page).toHaveURL(/call_id=call-1b/);
-  await expect(callsSection.getByText("Call: call-1b")).toBeVisible();
-  await expect(
-    callsSection.getByRole("button", { name: "Clear call selection" })
-  ).toBeVisible();
-  await expect(callsSection.locator("tbody tr")).toHaveCount(4);
-  await expect(callsSection.getByText("claude-sonnet-4")).toBeVisible();
-  await expect(callsSection.getByText("gpt-5-mini")).toBeVisible();
-  await expect(callsSection.getByText(/^gpt-5$/)).toBeVisible();
-  await expect(
-    callsSection.getByText("sandbox-record-repo-1b", { exact: true })
-  ).toBeVisible();
-
-  const globalSecondaryRepoCallRow = callsSection
-    .locator("tbody tr")
-    .filter({ has: page.getByText("gpt-5-mini") })
-    .first();
-  await globalSecondaryRepoCallRow.click();
-
-  await expect(page).not.toHaveURL(/call_id=/);
-  await expect(callsSection.getByText("Call:")).toHaveCount(0);
-  await expect(
-    callsSection.getByRole("button", { name: "Clear call selection" })
-  ).toHaveCount(0);
-  await expect(
-    callsSection.getByText("sandbox-record-repo-1b", { exact: true })
-  ).toHaveCount(0);
 });

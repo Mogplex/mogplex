@@ -6,6 +6,12 @@ type ConsentManagerProps = {
 }
 
 export function ConsentManager({ children }: ConsentManagerProps) {
+  // The c15t banner/dialog overlays public pages and blocks Playwright clicks;
+  // no spec exercises consent itself, so drop the UI entirely in e2e runs.
+  if (process.env.PLAYWRIGHT === '1') {
+    return <>{children}</>
+  }
+
   return (
     <ConsentManagerClient hostedEnabled={Boolean(process.env.NEXT_PUBLIC_C15T_URL)}>
       {children}

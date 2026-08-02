@@ -393,6 +393,39 @@ export async function mockActivationFlow(
     await fulfillJson(route, { ok: true });
   });
 
+  // File tree pane uses /tree endpoint instead of /files
+  await page.route(/\/api\/sandbox\/[^/]+\/tree(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === "GET") {
+      await fulfillJson(route, {
+        paths: ["src/", "package.json"],
+      });
+      return;
+    }
+
+    // PATCH for move, POST for create, DELETE for delete
+    if (route.request().method() === "PATCH") {
+      const body = route.request().postDataJSON() as {
+        moves: Array<{ fromPath: string; toPath: string }>;
+      };
+      await fulfillJson(route, { moves: body.moves });
+      return;
+    }
+
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { path: string };
+      await fulfillJson(route, { path: body.path });
+      return;
+    }
+
+    if (route.request().method() === "DELETE") {
+      const body = route.request().postDataJSON() as { path: string };
+      await fulfillJson(route, { path: body.path });
+      return;
+    }
+
+    await fulfillJson(route, { ok: true });
+  });
+
   await page.route(/\/api\/sandbox$/, async (route) => {
     if (route.request().method() === "GET") {
       await fulfillJson(route, {

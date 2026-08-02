@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enableE2EAuth } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Route } from "@playwright/test";
 
@@ -113,7 +113,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 test("models catalog supports provider, state, pricing filters, and state sorting", async ({
   page,
 }) => {
-  await enableE2EAuth(page);
+  await enableScopedE2EAuth(page);
   let defaultModel = "minimax/minimax-m2.7";
   const catalogState = catalog.map((model) => ({ ...model }));
 
@@ -166,8 +166,23 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   await page.route("**/api/models/provider-icons", (route) =>
     fulfillJson(route, { providers: ["anthropic", "minimax", "openai"] })
   );
+  // Serve the icon bytes too: the src points at storage that does not exist
+  // in CI, and a failed load makes ProviderIcon swap the <img> for the
+  // letter fallback before the src assertion runs.
+  await page.route(
+    /\/storage\/v1\/object\/public\/provider-icons\/.*\.png$/,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+          "base64"
+        ),
+      })
+  );
 
-  await page.goto("/settings?tab=models");
+  await page.goto(scopedPath("settings?tab=models"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("models-default-summary")).toContainText(
