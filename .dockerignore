@@ -1,0 +1,19 @@
+# Build context hygiene for the self-hosted image (see Dockerfile).
+.git
+.github
+.next
+node_modules
+.vercel
+.env
+.env.*
+!.env.example
+artifacts
+test-results
+playwright-report
+docs
+supabase/.temp
+*.log
+.DS_Store
+Dockerfile
+docker-compose.yml
+.dockerignore

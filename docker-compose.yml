@@ -1,0 +1,28 @@
+# Self-hosted Mogplex — web app container ONLY.
+#
+# This compose file deliberately does not bundle a database, an auth service,
+# Trigger.dev, or sandbox infrastructure. Self-hosting Mogplex means running
+# or paying for every backing service yourself; read docs/self-hosting.md
+# for the full list before you start. The hosted product at
+# https://mogplex.com is the supported way to use Mogplex.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Inlined into the client bundle at build time — changing any of
+        # these requires an image rebuild, not just a restart.
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?set in .env}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set in .env}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set in .env}
+        NEXT_PUBLIC_C15T_URL: ${NEXT_PUBLIC_C15T_URL:-}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_VERCEL_APP_CLIENT_ID: ${NEXT_PUBLIC_VERCEL_APP_CLIENT_ID:-}
+    # Server-side runtime env. Copy .env.example to .env and fill in the
+    # values for the services you provisioned.
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
