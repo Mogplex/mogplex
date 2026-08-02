@@ -328,6 +328,8 @@ export default defineConfig([
       "tsconfig.json",
       "vercel.json",
       "**/*.md",
+      // pnpm requires this exact filename and CJS format.
+      ".pnpmfile.cjs",
     ],
   },
 ]);
