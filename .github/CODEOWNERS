@@ -1,0 +1,8 @@
+# Default owners for everything in the repo.
+* @charlesrhoward
+
+# Security-sensitive paths require owner review.
+/.github/ @charlesrhoward
+/lib/connections/ @charlesrhoward
+/lib/platform-access.ts @charlesrhoward
+/supabase/migrations/ @charlesrhoward

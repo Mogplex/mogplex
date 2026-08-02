@@ -1,0 +1,107 @@
+name: sync-harness-configs
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-harness-configs
+  cancel-in-progress: false
+
+env:
+  HUSKY: 0
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  NODE_VERSION: 22.22.0
+  PNPM_VERSION: 10.12.4
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+          pnpm --version
+
+      - name: Resolve pnpm store path
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Refresh harness version pins
+        run: node scripts/sync-harness-configs.mjs --write
+
+      # Executes the refreshed pins before a PR exists: installs each pinned
+      # package, checks the binary reports the pinned version, and — when the
+      # corresponding API key secret is configured — validates the production
+      # resume command against an absent session and runs a fresh buildCommand
+      # invocation headlessly. Without the secrets it degrades to the install +
+      # version checks.
+      - name: Smoke test pinned harness CLIs
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.HARNESS_SMOKE_ANTHROPIC_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.HARNESS_SMOKE_OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.HARNESS_SMOKE_OPENAI_API_KEY }}
+        run: pnpm harness:smoke
+
+      # create-pull-request commits every change in the checkout, so refuse
+      # to proceed if anything besides the pin file is dirty (e.g. a smoke
+      # harness process wrote a file despite the temp-workspace isolation).
+      - name: Verify only the pin file changed
+        run: |
+          # Exact-match the porcelain line (2-char status, space, path) so
+          # near-miss paths like config.ts.bak or config.tsx cannot slip
+          # through; anything unmatched — including renames — fails the run.
+          unexpected=$(git status --porcelain | grep -v -E '^.. lib/harness/config\.ts$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected working-tree changes; refusing to open the pin PR:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          branch: chore/sync-harness-version-pins
+          commit-message: "chore: sync harness version pins"
+          delete-branch: true
+          title: "chore: sync harness version pins"
+          body: |
+            Automated refresh of the pinned harness package versions in `lib/harness/config.ts`.
+
+            Updated packages:
+            - `@anthropic-ai/claude-code`
+            - `@openai/codex`
+
+            Each pinned CLI passed install and version checks. When the
+            corresponding smoke API key secret was configured, its production
+            resume command was validated against an absent session and a fresh
+            headless prompt run also passed before this PR was opened.
+
+            Note: this keeps the harness CLI package pins current. It does not add
+            explicit per-provider model selection.

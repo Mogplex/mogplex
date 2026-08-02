@@ -1,0 +1,183 @@
+/* ============================================================
+   MOGPLEX — marketing subpages ("sheets")
+   Static drawing-sheets that extend landing-v2: same spine,
+   same Mondwest/Geist system, no GSAP payload. Scoped to .mlp
+   and only additive — landing-v2.css owns the shared tokens.
+   ============================================================ */
+
+/* ---------- shared sheet chrome ---------- */
+.mlp .sub-wrap { position: relative; }
+
+.mlp .sub-hero {
+  padding: clamp(140px, 20vh, 200px) var(--content-r) clamp(48px, 8vh, 88px) var(--content-x);
+}
+.mlp .sub-title {
+  font-size: clamp(2.6rem, 7.5vw, 6.4rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin: clamp(16px, 3vh, 30px) 0 clamp(20px, 3.5vh, 32px);
+  max-width: 16ch;
+}
+.mlp .sub-lede {
+  max-width: 54ch;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.3vw, 1.19rem);
+  line-height: 1.5;
+}
+.mlp .sub-lede strong { color: var(--fg); font-weight: 500; }
+.mlp .sub-lede a { color: var(--fg); text-underline-offset: 3px; }
+.mlp .sub-lede a:hover { text-decoration: none; }
+.mlp .sub-hero .micro { margin-top: 22px; }
+
+/* current page in the nav reads solid, like a filled node */
+.mlp .nav-links a[aria-current="page"] { color: var(--fg); }
+
+/* ---------- /workflows — pattern sheets ---------- */
+.mlp .patterns { border-top: 1px dashed var(--grid-line); }
+.mlp .pattern {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(20px, 4vw, 72px);
+  padding: clamp(44px, 7vh, 80px) var(--content-r) clamp(44px, 7vh, 80px) var(--content-x);
+}
+.mlp .pattern + .pattern { border-top: 1px dashed var(--grid-line); }
+.mlp .pattern .node { top: calc(clamp(44px, 7vh, 80px) + 10px); }
+
+.mlp .pattern-num {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 3.6vw, 3.2rem);
+  line-height: 0.9;
+  color: transparent;
+  -webkit-text-stroke: 1px
+    color-mix(in srgb, var(--paper) 32%, transparent);
+  margin-bottom: 16px;
+}
+.mlp .pattern-name {
+  font-size: clamp(1.5rem, 2.7vw, 2.3rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin-bottom: 12px;
+  max-width: 16ch;
+}
+.mlp .pattern-chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--muted);
+}
+.mlp .pattern-chips li {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper) 1.5%, transparent);
+  padding: 6px 12px;
+  font-size: 11px;
+}
+.mlp .pattern-chips li:first-child { border-color: var(--line-strong); color: var(--fg); }
+
+.mlp .flowline {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--paper) 1.5%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 13px 16px;
+  overflow-x: auto;
+  white-space: nowrap;
+  margin-bottom: 20px;
+}
+.mlp .flowline i {
+  font-style: normal;
+  color: var(--faint);
+  padding: 0 9px;
+}
+.mlp .pattern-desc {
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.15vw, 1.05rem);
+  line-height: 1.55;
+  max-width: 58ch;
+}
+.mlp .pattern-gate {
+  margin-top: 18px;
+  color: var(--faint);
+  /* mono ch is narrow — 82ch visually matches the 58ch body column */
+  max-width: 82ch;
+}
+.mlp .pattern-gate b { color: var(--muted); font-weight: 400; }
+.mlp .pattern .install { margin-top: 22px; }
+
+/* ---------- /how-it-works — run ledger ---------- */
+.mlp .runsheet { border-top: 1px dashed var(--grid-line); }
+.mlp .stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(18px, 4vw, 72px);
+  padding: clamp(48px, 8vh, 92px) var(--content-r) clamp(40px, 6vh, 68px) var(--content-x);
+}
+.mlp .stage + .stage { border-top: 1px dashed var(--grid-line); }
+.mlp .stage .node { top: calc(clamp(48px, 8vh, 92px) + 8px); }
+
+.mlp .stage-t { color: var(--faint); margin-bottom: 12px; }
+.mlp .stage-t b { color: var(--fg); font-weight: 400; }
+.mlp .stage-name {
+  font-size: clamp(1.5rem, 2.7vw, 2.3rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  max-width: 16ch;
+}
+.mlp .stage-desc {
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.15vw, 1.05rem);
+  line-height: 1.55;
+  max-width: 58ch;
+}
+.mlp .stage-fact {
+  margin-top: 18px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line-strong);
+  color: var(--muted);
+  max-width: 80ch;
+  line-height: 1.7;
+}
+.mlp .stage-fact b { color: var(--fg); font-weight: 400; }
+
+/* ---------- /faq — objection ledger ---------- */
+.mlp .faq-list {
+  border-top: 1px dashed var(--grid-line);
+  padding: 0 var(--content-r) clamp(56px, 9vh, 110px) var(--content-x);
+}
+.mlp .faq-item {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: clamp(14px, 3vw, 40px);
+  padding: clamp(30px, 4.5vh, 48px) 0;
+  max-width: 1100px;
+}
+.mlp .faq-item + .faq-item { border-top: 1px dashed var(--grid-line); }
+.mlp .faq-idx { color: var(--faint); padding-top: 7px; }
+.mlp .faq-q {
+  font-size: clamp(1.3rem, 2.2vw, 1.8rem);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.mlp .faq-a {
+  margin-top: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 62ch;
+}
+.mlp .faq-a a { color: var(--fg); text-underline-offset: 3px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 860px) {
+  .mlp .pattern,
+  .mlp .stage { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .mlp .faq-item { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .mlp .faq-idx { padding-top: 0; }
+  .mlp .pattern-num { font-size: 1.9rem; }
+}

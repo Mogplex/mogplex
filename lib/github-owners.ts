@@ -1,0 +1,134 @@
+type GithubOrgPayload = {
+  login?: string;
+};
+
+export type GithubInstallationOwner = {
+  installation_id: number;
+  account_login: string | null;
+  account_type: string | null;
+  target_type: string | null;
+};
+
+export type GithubRepoOwnerTarget = {
+  login: string;
+  kind: "personal" | "org";
+  github_installation_id: number | null;
+  scope_label: string;
+  source: "oauth" | "installation" | "oauth+installation";
+};
+
+function getInstallationScopeLabel(installation: {
+  target_type: string | null;
+  account_type: string | null;
+}) {
+  const rawScope =
+    installation.target_type || installation.account_type || "Account";
+  if (rawScope.toLowerCase().includes("org")) return "Org";
+  if (rawScope.toLowerCase().includes("user")) return "User";
+  return rawScope;
+}
+
+async function githubOAuthFetch<T>(token: string, url: string) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`GitHub owner lookup failed (${response.status}): ${body}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function fetchGithubCurrentUserLogin(token: string) {
+  const user = await githubOAuthFetch<{ login?: string }>(
+    token,
+    "https://api.github.com/user"
+  );
+  return typeof user.login === "string" && user.login.trim()
+    ? user.login.trim()
+    : null;
+}
+
+export async function fetchGithubUserOrgs(token: string) {
+  const orgs = await githubOAuthFetch<GithubOrgPayload[]>(
+    token,
+    "https://api.github.com/user/orgs?per_page=100"
+  );
+  return orgs
+    .map((org) => (typeof org.login === "string" ? org.login.trim() : ""))
+    .filter(Boolean);
+}
+
+export function buildGithubRepoOwnerTargets(input: {
+  githubUsername: string | null;
+  installations: GithubInstallationOwner[];
+  orgLogins: string[];
+}) {
+  const targets = new Map<string, GithubRepoOwnerTarget>();
+  const personalLogin = input.githubUsername?.trim() || null;
+
+  if (personalLogin) {
+    targets.set(personalLogin.toLowerCase(), {
+      login: personalLogin,
+      kind: "personal",
+      github_installation_id: null,
+      scope_label: "Personal",
+      source: "oauth",
+    });
+  }
+
+  for (const login of input.orgLogins) {
+    const normalized = login.trim();
+    if (!normalized) continue;
+    targets.set(normalized.toLowerCase(), {
+      login: normalized,
+      kind:
+        normalized.toLowerCase() === personalLogin?.toLowerCase()
+          ? "personal"
+          : "org",
+      github_installation_id:
+        targets.get(normalized.toLowerCase())?.github_installation_id ?? null,
+      scope_label:
+        normalized.toLowerCase() === personalLogin?.toLowerCase()
+          ? "Personal"
+          : "Org",
+      source: targets.has(normalized.toLowerCase())
+        ? "oauth+installation"
+        : "oauth",
+    });
+  }
+
+  for (const installation of input.installations) {
+    const login = installation.account_login?.trim();
+    if (!login) continue;
+
+    const existing = targets.get(login.toLowerCase());
+    const scopeLabel = getInstallationScopeLabel(installation);
+    const kind =
+      scopeLabel === "Org"
+        ? "org"
+        : login.toLowerCase() === personalLogin?.toLowerCase()
+          ? "personal"
+          : "org";
+
+    targets.set(login.toLowerCase(), {
+      login,
+      kind,
+      github_installation_id: installation.installation_id,
+      scope_label: kind === "personal" ? "Personal" : scopeLabel,
+      source: existing ? "oauth+installation" : "installation",
+    });
+  }
+
+  return [...targets.values()].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "personal" ? -1 : 1;
+    return a.login.localeCompare(b.login);
+  });
+}

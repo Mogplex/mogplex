@@ -1,0 +1,16 @@
+export const TRIGGER_TASK_IDS = {
+  automationJob: "execute-automation-job",
+  externalAgentRun: "execute-external-agent-run",
+  repoSnapshotBuild: "build-repo-snapshot",
+  sandboxReaper: "sandbox-reaper",
+  sandboxAutoPause: "sandbox-auto-pause",
+  sandboxBaselineSnapshotReaper: "reap-baseline-snapshots",
+  sandboxReadinessReconciliation: "reconcile-sandbox-readiness",
+  vercelLinkReconciliation: "reconcile-vercel-links",
+  aiCallCostReconciliation: "reconcile-ai-call-costs",
+  aiSpendDivergenceCheck: "check-ai-spend-divergence",
+  zombieRowReaper: "zombie-row-reaper",
+  slackEventHandler: "handle-slack-event",
+  slackToolExecutionRetention: "retain-slack-tool-executions",
+  workflowSchedule: "dispatch-workflow-schedule",
+} as const;

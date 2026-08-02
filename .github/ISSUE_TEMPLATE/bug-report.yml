@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible problem in Mogplex
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+        Please include enough detail for someone outside your environment to reproduce it.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem clearly and concisely.
+      placeholder: Opening a workspace against a repo with no running sandbox leaves the preview pane stuck in "starting".
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the shortest reliable path to reproduce the issue.
+      placeholder: |
+        1. Connect GitHub
+        2. Import a repo
+        3. Open the workspace
+        4. Click Start Sandbox
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Auth
+        - Repo import
+        - Sandbox / preview
+        - Editor / terminal / files
+        - Automations / Trigger
+        - Observability
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit, branch, or version
+      description: If you know the exact commit or branch, include it here.
+      placeholder: main @ abc1234
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, browser, Node version, and anything relevant about your local setup.
+      placeholder: macOS 15, Chrome 136, Node 22.22.0, pnpm 10.12.4
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or extra context
+      description: Paste stack traces, server logs, screenshots, or anything else that helps.

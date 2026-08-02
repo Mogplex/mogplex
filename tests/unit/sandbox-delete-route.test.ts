@@ -1,0 +1,484 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { buildLoadedSandboxDeleteRecord } from "./sandbox-record-route-test-harness/record-builders";
+import {
+  buildResolvedSandboxRouteContext,
+  buildSandboxRouteContextFailure,
+  buildSandboxRouteParams,
+  buildSandboxRouteRequest,
+  loadSandboxRecordRouteModule,
+} from "./sandbox-record-route-test-harness";
+
+test("DELETE /api/sandbox/[id] keeps the row for reaper cleanup when remote control cannot be resolved", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const deleted: Array<{ id: string; userId?: string; sandboxId?: string }> =
+    [];
+  const stopped: Array<{
+    id: string;
+    healthStatus?: string;
+    additionalUpdates?: Record<string, unknown>;
+  }> = [];
+  const updates: Array<{ id: string; updates: Record<string, unknown> }> = [];
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord()) as never,
+    resolveLoadedSandboxRouteContext: async () =>
+      buildSandboxRouteContextFailure() as never,
+    deleteSandboxRecord: (async (
+      id: string,
+      options?: { userId?: string; expectedSandboxId?: string }
+    ) => {
+      deleted.push({
+        id,
+        userId: options?.userId,
+        sandboxId: options?.expectedSandboxId,
+      });
+      return { id } as never;
+    }) as never,
+    stopSandboxRecord: async (id, options) => {
+      stopped.push({
+        id,
+        healthStatus: options?.healthStatus,
+        additionalUpdates: options?.additionalUpdates,
+      });
+      return { id } as never;
+    },
+    updateSandboxRecord: async (id, nextUpdates) => {
+      updates.push({ id, updates: nextUpdates });
+      return { id } as never;
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(stopped, [
+    {
+      id: "sandbox-1",
+      healthStatus: "stopped",
+      additionalUpdates: {
+        error:
+          "Remote VM vm_123 could not be deleted: credentials unresolvable. Record kept for reaper cleanup.",
+      },
+    },
+  ]);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    sandboxId: "sandbox-1",
+    warning:
+      "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
+  });
+});
+
+test("DELETE /api/sandbox/[id] falls back to a row-only delete when sandbox id drifted", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const deleted: Array<{ id: string; userId?: string; sandboxId?: string }> =
+    [];
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord()) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () =>
+      ({
+        delete: async () => {},
+      }) as never,
+    deleteSandboxRecord: (async (
+      id: string,
+      options?: { userId?: string; expectedSandboxId?: string }
+    ) => {
+      deleted.push({
+        id,
+        userId: options?.userId,
+        sandboxId: options?.expectedSandboxId,
+      });
+      return deleted.length === 1 ? null : ({ id } as never);
+    }) as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(deleted, [
+    { id: "sandbox-1", userId: "user-1", sandboxId: "vm_123" },
+    { id: "sandbox-1", userId: "user-1", sandboxId: undefined },
+  ]);
+});
+
+test("DELETE /api/sandbox/[id] deletes the remote sandbox before deleting the row", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const events: string[] = [];
+  let remoteStopCount = 0;
+  let remoteDeleteCount = 0;
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord()) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () =>
+      ({
+        delete: async () => {
+          remoteDeleteCount += 1;
+          events.push("remote-delete");
+        },
+        stop: async () => {
+          remoteStopCount += 1;
+          events.push("remote-stop");
+        },
+      }) as never,
+    deleteSandboxRecord: (async () => {
+      events.push("db-delete");
+      return { id: "sandbox-1" } as never;
+    }) as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(remoteDeleteCount, 1);
+  assert.equal(remoteStopCount, 0);
+  assert.deepEqual(events, ["remote-delete", "db-delete"]);
+});
+
+test("DELETE /api/sandbox/[id] falls back to stop when delete is unavailable", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const events: string[] = [];
+  let remoteStopCount = 0;
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord()) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () =>
+      ({
+        stop: async () => {
+          remoteStopCount += 1;
+          events.push("remote-stop");
+        },
+      }) as never,
+    stopSandboxRecord: async () => {
+      events.push("db-stop");
+      return { id: "sandbox-1" } as never;
+    },
+    deleteSandboxRecord: (async () => {
+      events.push("db-delete");
+      return { id: "sandbox-1" } as never;
+    }) as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(remoteStopCount, 1);
+  assert.deepEqual(events, ["remote-stop", "db-stop", "db-delete"]);
+});
+
+test("DELETE /api/sandbox/[id] still deletes the row when stop bookkeeping fails after fallback", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const events: string[] = [];
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord()) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () =>
+      ({
+        stop: async () => {
+          events.push("remote-stop");
+        },
+      }) as never,
+    stopSandboxRecord: async () => {
+      events.push("db-stop");
+      throw new Error("stop write failed");
+    },
+    deleteSandboxRecord: (async () => {
+      events.push("db-delete");
+      return { id: "sandbox-1" } as never;
+    }) as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(events, ["remote-stop", "db-stop", "db-delete"]);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    sandboxId: "sandbox-1",
+  });
+});
+
+test("DELETE /api/sandbox/[id] preserves persistent rows when only stop fallback is available", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const deleted: Array<{ id: string; userId?: string; sandboxId?: string }> =
+    [];
+  const stopped: string[] = [];
+  const updates: Array<{ id: string; updates: Record<string, unknown> }> = [];
+  let remoteStopCount = 0;
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord({ persistent: true })) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () =>
+      ({
+        stop: async () => {
+          remoteStopCount += 1;
+        },
+      }) as never,
+    deleteSandboxRecord: (async (
+      id: string,
+      options?: { userId?: string; expectedSandboxId?: string }
+    ) => {
+      deleted.push({
+        id,
+        userId: options?.userId,
+        sandboxId: options?.expectedSandboxId,
+      });
+      return { id } as never;
+    }) as never,
+    stopSandboxRecord: async (id) => {
+      stopped.push(id);
+      return { id: "sandbox-1" } as never;
+    },
+    updateSandboxRecord: async (id, nextUpdates) => {
+      updates.push({ id, updates: nextUpdates });
+      return { id } as never;
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(remoteStopCount, 1);
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(stopped, []);
+  assert.deepEqual(updates, [
+    {
+      id: "sandbox-1",
+      updates: {
+        status: "paused",
+        health_status: "paused",
+        error:
+          "Remote VM vm_123 could not be deleted because delete() is unavailable. VM was stopped, but persistent resources may remain. Record kept for reaper cleanup.",
+      },
+    },
+  ]);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    sandboxId: "sandbox-1",
+    warning:
+      "Remote VM was stopped but persistent resources could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
+  });
+});
+
+test("DELETE /api/sandbox/[id] preserves persistent rows for reaper cleanup when getSandbox fails", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const deleted: Array<{ id: string; userId?: string; sandboxId?: string }> =
+    [];
+  const stopped: string[] = [];
+  const updates: Array<{ id: string; updates: Record<string, unknown> }> = [];
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord({ persistent: true })) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () => {
+      throw new Error("api unavailable");
+    },
+    deleteSandboxRecord: (async (
+      id: string,
+      options?: { userId?: string; expectedSandboxId?: string }
+    ) => {
+      deleted.push({
+        id,
+        userId: options?.userId,
+        sandboxId: options?.expectedSandboxId,
+      });
+      return { id } as never;
+    }) as never,
+    stopSandboxRecord: async (id) => {
+      stopped.push(id);
+      return { id } as never;
+    },
+    updateSandboxRecord: async (id, nextUpdates) => {
+      updates.push({ id, updates: nextUpdates });
+      return { id } as never;
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(stopped, []);
+  assert.deepEqual(updates, [
+    {
+      id: "sandbox-1",
+      updates: {
+        status: "paused",
+        health_status: "paused",
+        error:
+          "Remote VM vm_123 could not be deleted: api unavailable. Record kept for reaper cleanup.",
+      },
+    },
+  ]);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    sandboxId: "sandbox-1",
+    warning:
+      "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
+  });
+});
+
+test("DELETE /api/sandbox/[id] returns warning when persistent cleanup bookkeeping fails", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const deleted: Array<{ id: string; userId?: string; sandboxId?: string }> =
+    [];
+  let updateAttempts = 0;
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord({ persistent: true })) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () => {
+      throw new Error("api unavailable");
+    },
+    deleteSandboxRecord: (async (
+      id: string,
+      options?: { userId?: string; expectedSandboxId?: string }
+    ) => {
+      deleted.push({
+        id,
+        userId: options?.userId,
+        sandboxId: options?.expectedSandboxId,
+      });
+      return { id } as never;
+    }) as never,
+    updateSandboxRecord: async () => {
+      updateAttempts += 1;
+      throw new Error("update failed");
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(updateAttempts, 1);
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    sandboxId: "sandbox-1",
+    warning:
+      "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
+  });
+});
+
+test("DELETE /api/sandbox/[id] preserves the row when remote delete cannot be verified", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const deleted: Array<{ id: string; userId?: string; sandboxId?: string }> =
+    [];
+  const stopped: Array<{
+    id: string;
+    healthStatus?: string;
+    additionalUpdates?: Record<string, unknown>;
+  }> = [];
+  const updates: Array<{ id: string; updates: Record<string, unknown> }> = [];
+
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord()) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () =>
+      ({
+        delete: async () => {
+          throw new Error("delete failed");
+        },
+        stop: async () => {
+          throw new Error("stop should not run after delete failure");
+        },
+      }) as never,
+    deleteSandboxRecord: (async (
+      id: string,
+      options?: { userId?: string; expectedSandboxId?: string }
+    ) => {
+      deleted.push({
+        id,
+        userId: options?.userId,
+        sandboxId: options?.expectedSandboxId,
+      });
+      return { id } as never;
+    }) as never,
+    stopSandboxRecord: async (id, options) => {
+      stopped.push({
+        id,
+        healthStatus: options?.healthStatus,
+        additionalUpdates: options?.additionalUpdates,
+      });
+      return { id } as never;
+    },
+    updateSandboxRecord: async (id, nextUpdates) => {
+      updates.push({ id, updates: nextUpdates });
+      return { id } as never;
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(stopped, [
+    {
+      id: "sandbox-1",
+      healthStatus: "stopped",
+      additionalUpdates: {
+        error:
+          "Remote VM vm_123 could not be deleted: delete failed. Record kept for reaper cleanup.",
+      },
+    },
+  ]);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    sandboxId: "sandbox-1",
+    warning:
+      "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
+  });
+});

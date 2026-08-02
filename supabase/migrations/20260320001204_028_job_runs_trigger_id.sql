@@ -1,0 +1,3 @@
+ALTER TABLE job_runs ADD COLUMN IF NOT EXISTS trigger_id UUID REFERENCES triggers(id) ON DELETE SET NULL;
+
+ALTER TABLE job_runs ALTER COLUMN assignment_id DROP NOT NULL;;

@@ -1,0 +1,2 @@
+ALTER TABLE public.repos
+  ADD COLUMN IF NOT EXISTS dev_port_auto BOOLEAN NOT NULL DEFAULT true;

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security reports
+    about: Do not open public issues for vulnerabilities. Use the security policy instead.
+    url: https://github.com/Mogplex/mogplex/security/policy

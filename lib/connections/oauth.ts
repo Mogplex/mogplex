@@ -1,0 +1,616 @@
+import { createHash, randomBytes } from "node:crypto";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { assertSafeOutboundHttpUrlWithDns } from "@/lib/security/outbound-url";
+import { encrypt, decrypt } from "./encryption";
+import { updateConnection } from "./service";
+import { getConnectionPreset } from "./presets";
+import {
+  getSentryManagedAuthAccessToken,
+  parsePipedreamManagedAuthCredentials,
+} from "./pipedream-connect";
+import type { Connection } from "@/lib/types";
+
+type OAuthCredentials = {
+  client_secret?: string;
+  access_token?: string;
+  refresh_token?: string;
+};
+
+function parseCredentials(encrypted: string): OAuthCredentials {
+  const raw = decrypt(encrypted);
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      client_secret:
+        typeof parsed.client_secret === "string"
+          ? parsed.client_secret
+          : undefined,
+      access_token:
+        typeof parsed.access_token === "string"
+          ? parsed.access_token
+          : undefined,
+      refresh_token:
+        typeof parsed.refresh_token === "string"
+          ? parsed.refresh_token
+          : undefined,
+    };
+  } catch {
+    throw new Error("Invalid OAuth credentials format");
+  }
+}
+
+function parseCredentialsSafely(encrypted: string | null): OAuthCredentials {
+  if (!encrypted) {
+    return {};
+  }
+
+  try {
+    return parseCredentials(encrypted);
+  } catch {
+    return {};
+  }
+}
+
+function parseManagedAuthCredentialsSafely(encrypted: string | null) {
+  if (!encrypted) {
+    return null;
+  }
+
+  try {
+    return parsePipedreamManagedAuthCredentials(decrypt(encrypted));
+  } catch (error) {
+    console.warn(
+      "[managed-auth] failed to decrypt managed auth credentials",
+      error
+    );
+    return null;
+  }
+}
+
+export type OAuthTokenResponse = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+};
+
+export type StoredOAuthConnectionState = {
+  encrypted_credentials: string | null;
+  updated_at: string;
+  oauth_authorized_at: string | null;
+  oauth_token_expires_at: string | null;
+};
+
+type OAuthMetadata = {
+  authorization_endpoint: string;
+  token_endpoint: string;
+  registration_endpoint?: string;
+};
+
+type DynamicClientRegistration = {
+  client_id: string;
+  client_secret?: string;
+};
+
+async function getStoredOAuthConnectionState(
+  connectionId: string
+): Promise<StoredOAuthConnectionState | null> {
+  const { data, error } = await supabaseAdmin
+    .from("connections")
+    .select(
+      "encrypted_credentials, updated_at, oauth_authorized_at, oauth_token_expires_at"
+    )
+    .eq("id", connectionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+function getTokenExpiry(tokens: OAuthTokenResponse) {
+  return tokens.expires_in
+    ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+    : null;
+}
+
+function base64UrlEncode(buffer: Buffer) {
+  return buffer
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/[=]+$/g, "");
+}
+
+export function generatePkceVerifier() {
+  return base64UrlEncode(randomBytes(32));
+}
+
+export function generatePkceChallenge(verifier: string) {
+  return base64UrlEncode(createHash("sha256").update(verifier).digest());
+}
+
+async function fetchJson(url: string, init?: RequestInit, fieldName = "url") {
+  const safeUrl = await assertSafeOutboundHttpUrlWithDns(url, fieldName);
+  const response = await fetch(safeUrl, init);
+  if (!response.ok) {
+    throw new Error(`Request failed (${response.status}) for ${safeUrl}`);
+  }
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+async function discoverProtectedResourceMetadata(mcpServerUrl: string) {
+  const url = new URL(
+    await assertSafeOutboundHttpUrlWithDns(mcpServerUrl, "mcp_url")
+  );
+  const adjacentUrl = new URL(
+    ".well-known/oauth-protected-resource",
+    url.toString().endsWith("/") ? url : `${url.toString()}/`
+  );
+
+  try {
+    return await fetchJson(
+      adjacentUrl.toString(),
+      {
+        headers: {
+          "MCP-Protocol-Version": "2025-03-26",
+        },
+      },
+      "oauth_protected_resource"
+    );
+  } catch {
+    const pathAware = new URL(
+      `/.well-known/oauth-protected-resource${url.pathname}`,
+      url
+    );
+    return fetchJson(
+      pathAware.toString(),
+      {
+        headers: {
+          "MCP-Protocol-Version": "2025-03-26",
+        },
+      },
+      "oauth_protected_resource"
+    );
+  }
+}
+
+export async function discoverOAuthMetadata(
+  mcpServerUrl: string
+): Promise<OAuthMetadata> {
+  const protectedResource =
+    await discoverProtectedResourceMetadata(mcpServerUrl);
+  const authorizationServers = protectedResource.authorization_servers;
+  if (
+    !Array.isArray(authorizationServers) ||
+    typeof authorizationServers[0] !== "string"
+  ) {
+    throw new TypeError(
+      "No authorization servers found in protected resource metadata"
+    );
+  }
+
+  const metadataUrl = new URL(
+    "/.well-known/oauth-authorization-server",
+    authorizationServers[0]
+  );
+  const metadata = (await fetchJson(
+    metadataUrl.toString(),
+    undefined,
+    "oauth_authorization_server"
+  )) as OAuthMetadata;
+  if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
+    throw new Error(
+      "Missing required OAuth endpoints in authorization metadata"
+    );
+  }
+
+  return {
+    authorization_endpoint: metadata.authorization_endpoint,
+    token_endpoint: metadata.token_endpoint,
+    registration_endpoint: metadata.registration_endpoint,
+  };
+}
+
+async function registerOAuthClient(
+  metadata: OAuthMetadata,
+  redirectUri: string,
+  options: {
+    clientName: string;
+    clientUri: string;
+    tokenEndpointAuthMethod: "none" | "client_secret_post";
+    scopes?: string[];
+  }
+): Promise<DynamicClientRegistration> {
+  if (!metadata.registration_endpoint) {
+    throw new Error(
+      "OAuth server does not support dynamic client registration"
+    );
+  }
+
+  const registrationEndpoint = await assertSafeOutboundHttpUrlWithDns(
+    metadata.registration_endpoint,
+    "registration_endpoint"
+  );
+  const response = await fetch(registrationEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      client_name: options.clientName,
+      client_uri: options.clientUri,
+      redirect_uris: [redirectUri],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: options.tokenEndpointAuthMethod,
+      ...(options.scopes?.length ? { scope: options.scopes.join(" ") } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(
+      `Client registration failed (${response.status}): ${errorBody}`
+    );
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  if (typeof payload.client_id !== "string" || !payload.client_id) {
+    throw new Error("Dynamic client registration did not return client_id");
+  }
+
+  return {
+    client_id: payload.client_id,
+    client_secret:
+      typeof payload.client_secret === "string"
+        ? payload.client_secret
+        : undefined,
+  };
+}
+
+export async function prepareOAuthConnection(
+  connection: Connection,
+  options: {
+    redirectUri: string;
+    origin: string;
+  }
+): Promise<{ connection: Connection; codeVerifier: string | null }> {
+  const preset = getConnectionPreset(connection.source_preset);
+  if (!preset?.oauth_config) {
+    return { connection, codeVerifier: null };
+  }
+
+  let nextConnection = { ...connection };
+  let metadata: OAuthMetadata | null = null;
+
+  if (!nextConnection.oauth_authorize_url || !nextConnection.oauth_token_url) {
+    metadata = await discoverOAuthMetadata(nextConnection.mcp_url!);
+    await updateConnection(nextConnection.id, {
+      oauth_authorize_url: metadata.authorization_endpoint,
+      oauth_token_url: metadata.token_endpoint,
+      oauth_scopes:
+        nextConnection.oauth_scopes ?? preset.oauth_config.scopes?.join(" "),
+    });
+    nextConnection = {
+      ...nextConnection,
+      oauth_authorize_url: metadata.authorization_endpoint,
+      oauth_token_url: metadata.token_endpoint,
+      oauth_scopes:
+        nextConnection.oauth_scopes ??
+        preset.oauth_config.scopes?.join(" ") ??
+        null,
+    };
+  }
+
+  if (!nextConnection.oauth_client_id) {
+    metadata ??= await discoverOAuthMetadata(nextConnection.mcp_url!);
+    const registration = await registerOAuthClient(
+      metadata,
+      options.redirectUri,
+      {
+        clientName: "Mogplex",
+        clientUri: options.origin,
+        tokenEndpointAuthMethod: preset.oauth_config.token_endpoint_auth_method,
+        scopes: preset.oauth_config.scopes,
+      }
+    );
+
+    const credentials = registration.client_secret
+      ? JSON.stringify({ client_secret: registration.client_secret })
+      : undefined;
+
+    await updateConnection(nextConnection.id, {
+      oauth_client_id: registration.client_id,
+      oauth_authorize_url: metadata.authorization_endpoint,
+      oauth_token_url: metadata.token_endpoint,
+      oauth_scopes:
+        nextConnection.oauth_scopes ?? preset.oauth_config.scopes?.join(" "),
+      ...(credentials ? { credentials } : {}),
+    });
+
+    nextConnection = {
+      ...nextConnection,
+      oauth_client_id: registration.client_id,
+      oauth_authorize_url: metadata.authorization_endpoint,
+      oauth_token_url: metadata.token_endpoint,
+      oauth_scopes:
+        nextConnection.oauth_scopes ??
+        preset.oauth_config.scopes?.join(" ") ??
+        null,
+    };
+  }
+
+  return {
+    connection: nextConnection,
+    codeVerifier: preset.oauth_config.use_pkce ? generatePkceVerifier() : null,
+  };
+}
+
+async function compareAndSwapOAuthConnectionState(
+  connectionId: string,
+  current: StoredOAuthConnectionState,
+  tokens: OAuthTokenResponse
+) {
+  const nextCredentials: OAuthCredentials = {
+    ...parseCredentialsSafely(current.encrypted_credentials),
+    access_token: tokens.access_token,
+    ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+  };
+
+  const update: Record<string, unknown> = {
+    encrypted_credentials: encrypt(JSON.stringify(nextCredentials)),
+    oauth_authorized_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const expiresAt = getTokenExpiry(tokens);
+  if (expiresAt) {
+    update.oauth_token_expires_at = expiresAt;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("connections")
+    .update(update)
+    .eq("id", connectionId)
+    .eq("updated_at", current.updated_at)
+    .select(
+      "encrypted_credentials, updated_at, oauth_authorized_at, oauth_token_expires_at"
+    )
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as StoredOAuthConnectionState | null;
+}
+
+export async function storeOAuthTokensWithRetry(
+  connectionId: string,
+  initialState: StoredOAuthConnectionState,
+  tokens: OAuthTokenResponse
+): Promise<StoredOAuthConnectionState | null> {
+  let current: StoredOAuthConnectionState | null = initialState;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (!current) {
+      return null;
+    }
+
+    const updated = await compareAndSwapOAuthConnectionState(
+      connectionId,
+      current,
+      tokens
+    );
+    if (updated) {
+      return updated;
+    }
+
+    current = await getStoredOAuthConnectionState(connectionId);
+  }
+
+  return current;
+}
+
+/** Build the OAuth authorize URL with state + redirect */
+export function buildAuthorizeUrl(
+  connection: Connection,
+  redirectUri: string,
+  state: string,
+  options?: {
+    codeChallenge?: string;
+    authorizeParams?: Record<string, string>;
+  }
+): string {
+  const url = new URL(connection.oauth_authorize_url!);
+  url.searchParams.set("client_id", connection.oauth_client_id!);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("state", state);
+  if (connection.oauth_scopes) {
+    url.searchParams.set("scope", connection.oauth_scopes);
+  }
+  if (options?.codeChallenge) {
+    url.searchParams.set("code_challenge", options.codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+  }
+  for (const [key, value] of Object.entries(options?.authorizeParams ?? {})) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+/** Exchange authorization code for tokens */
+export async function exchangeCodeForTokens(
+  connection: Connection,
+  code: string,
+  redirectUri: string,
+  options?: {
+    codeVerifier?: string | null;
+  }
+): Promise<OAuthTokenResponse> {
+  const { data } = await supabaseAdmin
+    .from("connections")
+    .select("encrypted_credentials")
+    .eq("id", connection.id)
+    .single();
+
+  const creds = parseCredentialsSafely(data?.encrypted_credentials ?? null);
+
+  if (!creds.client_secret && !options?.codeVerifier) {
+    throw new Error("No credentials found for OAuth connection");
+  }
+
+  const tokenUrl = await assertSafeOutboundHttpUrlWithDns(
+    connection.oauth_token_url!,
+    "oauth_token_url"
+  );
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: connection.oauth_client_id!,
+      code,
+      redirect_uri: redirectUri,
+      ...(creds.client_secret ? { client_secret: creds.client_secret } : {}),
+      ...(options?.codeVerifier ? { code_verifier: options.codeVerifier } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OAuth token exchange failed (${res.status}): ${text}`);
+  }
+
+  const json = (await res.json()) as Record<string, unknown>;
+  if (typeof json.access_token !== "string") {
+    throw new TypeError("Invalid token response: missing access_token");
+  }
+
+  return {
+    access_token: json.access_token,
+    refresh_token:
+      typeof json.refresh_token === "string" ? json.refresh_token : undefined,
+    expires_in:
+      typeof json.expires_in === "number" ? json.expires_in : undefined,
+  };
+}
+
+/** Refresh an expired OAuth token */
+export async function refreshOAuthToken(
+  connection: Connection
+): Promise<string> {
+  const current = await getStoredOAuthConnectionState(connection.id);
+
+  if (!current?.encrypted_credentials) {
+    throw new Error("No credentials found for OAuth connection");
+  }
+
+  const creds = parseCredentials(current.encrypted_credentials);
+  if (!creds.refresh_token) {
+    throw new Error("No refresh token available");
+  }
+
+  const tokenUrl = await assertSafeOutboundHttpUrlWithDns(
+    connection.oauth_token_url!,
+    "oauth_token_url"
+  );
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: connection.oauth_client_id!,
+      refresh_token: creds.refresh_token,
+      ...(creds.client_secret ? { client_secret: creds.client_secret } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OAuth token refresh failed (${res.status}): ${text}`);
+  }
+
+  const json = (await res.json()) as Record<string, unknown>;
+  if (typeof json.access_token !== "string") {
+    throw new TypeError("Invalid refresh response: missing access_token");
+  }
+  const tokens: OAuthTokenResponse = {
+    access_token: json.access_token,
+    refresh_token:
+      typeof json.refresh_token === "string" ? json.refresh_token : undefined,
+    expires_in:
+      typeof json.expires_in === "number" ? json.expires_in : undefined,
+  };
+
+  const stored = await storeOAuthTokensWithRetry(
+    connection.id,
+    current,
+    tokens
+  );
+  if (stored) {
+    const latest = parseCredentialsSafely(stored.encrypted_credentials);
+    if (latest.access_token) {
+      return latest.access_token;
+    }
+  }
+
+  throw new Error("Failed to persist refreshed OAuth token");
+}
+
+/** Get a valid access token, refreshing if expired */
+export async function getValidAccessToken(
+  connection: Connection
+): Promise<string> {
+  const current = await getStoredOAuthConnectionState(connection.id);
+  const managedAuth = parseManagedAuthCredentialsSafely(
+    current?.encrypted_credentials ?? null
+  );
+
+  if (managedAuth) {
+    // Managed auth stores only the broker account reference in Mogplex, not a
+    // cached provider token. We intentionally resolve through Pipedream on
+    // every call so refresh / revocation stays centralized there.
+    const { accessToken } = await getSentryManagedAuthAccessToken(
+      managedAuth.account_id
+    );
+    return accessToken;
+  }
+
+  if (!current?.encrypted_credentials) {
+    throw new Error("No credentials found for OAuth connection");
+  }
+
+  const creds = parseCredentials(current.encrypted_credentials);
+
+  // Check if token is expired (with 60s buffer)
+  // If no explicit expiry, assume 1 hour from last update as a conservative default
+  const DEFAULT_TOKEN_LIFETIME_MS = 3600 * 1000;
+  const expiresAt = current.oauth_token_expires_at
+    ? new Date(current.oauth_token_expires_at).getTime()
+    : current.updated_at
+      ? new Date(current.updated_at).getTime() + DEFAULT_TOKEN_LIFETIME_MS
+      : 0;
+
+  if (expiresAt > 0 && Date.now() > expiresAt - 60_000) {
+    if (creds.refresh_token) {
+      return refreshOAuthToken(connection);
+    }
+    // No refresh token and expired — can't recover
+    throw new Error(
+      "OAuth token expired and no refresh token available — re-authorize required"
+    );
+  }
+
+  if (creds.access_token) {
+    return creds.access_token;
+  }
+
+  throw new Error(
+    "OAuth connection has no access token — authorization required"
+  );
+}

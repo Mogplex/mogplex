@@ -1,0 +1,58 @@
+import { NextResponse } from "next/server";
+import { requireUserId } from "@/lib/auth";
+import { loadOwnedJobRunDetail } from "@/lib/job-run-service";
+import type { NextRequest } from "next/server";
+
+type ObservabilityJobDetailGetDeps = {
+  requireUserId: typeof requireUserId;
+  loadOwnedJobRunDetail: typeof loadOwnedJobRunDetail;
+};
+
+const defaultObservabilityJobDetailGetDeps: ObservabilityJobDetailGetDeps = {
+  requireUserId,
+  loadOwnedJobRunDetail,
+};
+
+export function createObservabilityJobDetailGetHandler(
+  overrides: Partial<ObservabilityJobDetailGetDeps> = {}
+) {
+  const deps: ObservabilityJobDetailGetDeps = {
+    ...defaultObservabilityJobDetailGetDeps,
+    ...overrides,
+  };
+
+  return async function GET(
+    _request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+  ) {
+    const userId = await deps.requireUserId();
+    if (userId instanceof Response) return userId;
+
+    const { id } = await params;
+
+    try {
+      const { run } = await deps.loadOwnedJobRunDetail(userId, id);
+
+      if (!run) {
+        return NextResponse.json(
+          { error: "Job run not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({ run });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to load job run detail",
+        },
+        { status: 500 }
+      );
+    }
+  };
+}
+
+export const GET = createObservabilityJobDetailGetHandler();

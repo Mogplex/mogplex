@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/sync-models",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sandbox-reaper",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/repair-jobs",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-job-runs",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

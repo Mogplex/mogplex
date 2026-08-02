@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a focused improvement to Mogplex
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests are most useful when they describe the problem, the workflow, and the tradeoffs.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      placeholder: It is hard to tell which sandbox a pane is bound to after a session retarget.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What change would you like?
+      placeholder: Add a small sandbox binding indicator to each session-bound pane header.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds, competing approaches, or why existing behavior is not enough.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Product surface
+      options:
+        - Workspace UX
+        - Repo onboarding
+        - Sandbox / preview
+        - Automations / Trigger
+        - Observability
+        - Security / permissions
+        - Developer experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, mocks, prior art, constraints, or rollout concerns.
