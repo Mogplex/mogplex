@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import {
   loadUserAutomationScope,
   resolveFlowVersionAttribution,
@@ -223,6 +224,26 @@ export function summarizeEntityDispatchEvents<
   };
 }
 
+function collectEventFlowVersionIds(
+  events: readonly AutomationDispatchEventRow[]
+): string[] {
+  return Array.from(
+    new Set(
+      events.flatMap((event) =>
+        [
+          event.flow_version_id,
+          typeof event.metadata?.flow_version_id === "string"
+            ? event.metadata.flow_version_id
+            : null,
+        ].filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0
+        )
+      )
+    )
+  );
+}
+
 export async function loadUserAutomationDispatchEvents(input: {
   userId: string;
   page: number;
@@ -236,46 +257,86 @@ export async function loadUserAutomationDispatchEvents(input: {
   from?: string;
   to?: string;
 }) {
-  let query = supabaseAdmin
-    .from("automation_dispatch_events")
-    .select("*")
-    .eq("user_id", input.userId)
-    .order("created_at", { ascending: false });
+  // Minimal structural view of the query builder: the full supabase-js
+  // builder generics make a shared filter helper blow past TS's instantiation
+  // depth, and only these methods are used here.
+  type DispatchEventQuery = {
+    eq: (column: string, value: string) => DispatchEventQuery;
+    gte: (column: string, value: string) => DispatchEventQuery;
+    lte: (column: string, value: string) => DispatchEventQuery;
+    order: (column: string, opts: { ascending: boolean }) => DispatchEventQuery;
+    range: (
+      from: number,
+      to: number
+    ) => PromiseLike<{
+      data: unknown[] | null;
+      count: number | null;
+      error: { message: string } | null;
+    }>;
+  };
 
-  if (input.outcome) query = query.eq("outcome", input.outcome);
-  if (input.reason) query = query.eq("reason", input.reason);
-  if (input.repoId) query = query.eq("repo_id", input.repoId);
-  if (input.sourceType) query = query.eq("source_type", input.sourceType);
-  if (input.from) query = query.gte("created_at", input.from);
-  if (input.to) query = query.lte("created_at", input.to);
-  // sourceKind/agentId filtering happens in memory below, so pages are sliced
-  // from this fetch; cap it so a raised PostgREST max_rows can't turn one
-  // request into a full-history scan.
-  const { data, error } = await query.limit(10000);
+  const applySqlFilters = (query: DispatchEventQuery) => {
+    let next = query.eq("user_id", input.userId);
+    if (input.outcome) next = next.eq("outcome", input.outcome);
+    if (input.reason) next = next.eq("reason", input.reason);
+    if (input.repoId) next = next.eq("repo_id", input.repoId);
+    if (input.sourceType) next = next.eq("source_type", input.sourceType);
+    if (input.from) next = next.gte("created_at", input.from);
+    if (input.to) next = next.lte("created_at", input.to);
+    return next;
+  };
 
-  if (error) {
-    throw new Error(
-      `Failed to load automation dispatch events: ${error.message}`
-    );
+  const start = (input.page - 1) * input.limit;
+  const end = start + input.limit;
+
+  // sourceKind/agentId derive from metadata and entity attribution, so they
+  // can only be applied in memory. Without them every predicate is SQL, and
+  // the database can page and count exactly — no scan, no result cap.
+  const needsInMemoryFilters = Boolean(input.sourceKind || input.agentId);
+
+  if (!needsInMemoryFilters) {
+    const { data, count, error } = await applySqlFilters(
+      supabaseAdmin
+        .from("automation_dispatch_events")
+        .select("*", { count: "exact" }) as unknown as DispatchEventQuery
+    )
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(start, end - 1);
+
+    if (error) {
+      throw new Error(
+        `Failed to load automation dispatch events: ${error.message}`
+      );
+    }
+
+    const pageEvents = (data || []) as AutomationDispatchEventRow[];
+    const scope = await loadUserAutomationScope(input.userId, {
+      flowVersionIds: collectEventFlowVersionIds(pageEvents),
+    });
+    return { scope, events: pageEvents, total: count ?? pageEvents.length };
   }
 
-  const events = (data || []) as AutomationDispatchEventRow[];
+  // In-memory filters need the full SQL-matched set: a fixed cap here makes
+  // `total` a lie past the cap and can return empty pages while older
+  // matches exist, so scan to exhaustion instead. The SQL predicates (user,
+  // outcome, repo, source type, date range) keep the scanned set far smaller
+  // than the table.
+  const events = (await fetchAllRows(
+    () =>
+      applySqlFilters(
+        supabaseAdmin
+          .from("automation_dispatch_events")
+          .select("*") as unknown as DispatchEventQuery
+      ),
+    "created_at",
+    "automation dispatch events"
+  )) as AutomationDispatchEventRow[];
+  // fetchAllRows pages oldest-first for scan stability; consumers expect
+  // newest-first.
+  events.reverse();
   const scope = await loadUserAutomationScope(input.userId, {
-    flowVersionIds: Array.from(
-      new Set(
-        events.flatMap((event) =>
-          [
-            event.flow_version_id,
-            typeof event.metadata?.flow_version_id === "string"
-              ? event.metadata.flow_version_id
-              : null,
-          ].filter(
-            (value): value is string =>
-              typeof value === "string" && value.length > 0
-          )
-        )
-      )
-    ),
+    flowVersionIds: collectEventFlowVersionIds(events),
   });
 
   const filtered = events.filter((event) => {
@@ -314,9 +375,6 @@ export async function loadUserAutomationDispatchEvents(input: {
 
     return false;
   });
-
-  const start = (input.page - 1) * input.limit;
-  const end = start + input.limit;
 
   return {
     scope,

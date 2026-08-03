@@ -3,22 +3,28 @@
  * CONNECTIONS_ENCRYPTION_KEY. See docs/security/connections-key-rotation.md
  * for the full rotation procedure this script is part of.
  *
+ * Runs against the serving database (Neon) over DATABASE_URL — NOT the
+ * retired Supabase project. Rotating anywhere other than the database the
+ * app reads from would leave production ciphertexts undecryptable after the
+ * env-var key flip.
+ *
  * Usage:
  *   OLD_CONNECTIONS_ENCRYPTION_KEY=... \
  *   NEW_CONNECTIONS_ENCRYPTION_KEY=... \
- *   NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+ *   DATABASE_URL=... \
  *     npx tsx scripts/rotate-connections-encryption-key.ts [--execute]
  *
  * Dry-run by default: reports what would change without writing. Pass
  * --execute to persist. A JSON backup of every original ciphertext is
  * written to scripts/.rotation-backup-<timestamp>.json (gitignored path
  * pattern; delete after verifying the rotation). Rows whose ciphertext
- * changes between read and write are skipped and reported — re-run the
- * script to pick them up.
+ * changes between read and write are skipped and reported — the run exits
+ * non-zero so automation can't treat an incomplete rotation as done; re-run
+ * the script to pick them up.
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
+import { Pool } from "pg";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -67,83 +73,100 @@ async function main() {
   if (oldKey.equals(newKey)) {
     throw new Error("old and new keys are identical");
   }
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRole) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required"
-    );
+  const databaseUrl =
+    process.env.DATABASE_URL || process.env.mogplex_DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is required (the serving Neon database)");
   }
-  const supabase = createClient(url, serviceRole);
+  const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 
-  const { data: rows, error } = await supabase
-    .from("connections")
-    .select("id, encrypted_credentials")
-    .not("encrypted_credentials", "is", null);
-  if (error) throw error;
-
-  const backupPath = `scripts/.rotation-backup-${Date.now()}.json`;
-  if (execute) {
-    writeFileSync(backupPath, JSON.stringify(rows, null, 2), { mode: 0o600 });
-    console.log(`backed up ${rows.length} ciphertexts to ${backupPath}`);
-  }
-
-  let rotated = 0;
-  let alreadyNew = 0;
-  const failed: string[] = [];
-  const raced: string[] = [];
-
-  for (const row of rows) {
-    const original = row.encrypted_credentials as string;
-    let plaintext: string;
-    try {
-      plaintext = decryptWith(oldKey, original);
-    } catch {
-      try {
-        decryptWith(newKey, original);
-        alreadyNew += 1;
-        continue;
-      } catch {
-        failed.push(row.id as string);
-        continue;
-      }
+  try {
+    // Plain SQL over pg: one statement returns every row — no PostgREST-style
+    // page cap that could silently rotate only part of the table. The count
+    // cross-check still guards against anything truncating the result set.
+    const [{ rows }, countResult] = await Promise.all([
+      pool.query(
+        `select id, encrypted_credentials from connections
+         where encrypted_credentials is not null`
+      ),
+      pool.query(
+        `select count(*)::int as total from connections
+         where encrypted_credentials is not null`
+      ),
+    ]);
+    const expected = countResult.rows[0]?.total as number;
+    if (rows.length !== expected) {
+      throw new Error(
+        `row fetch is incomplete: got ${rows.length}, table has ${expected} — aborting before any writes`
+      );
     }
 
-    const next = encryptWith(newKey, plaintext);
-    if (decryptWith(newKey, next) !== plaintext) {
-      throw new Error(`round-trip verification failed for row ${row.id}`);
-    }
-
+    const backupPath = `scripts/.rotation-backup-${Date.now()}.json`;
     if (execute) {
-      const { data: updated, error: updateError } = await supabase
-        .from("connections")
-        .update({ encrypted_credentials: next })
-        .eq("id", row.id)
-        .eq("encrypted_credentials", original)
-        .select("id");
-      if (updateError) throw updateError;
-      if (!updated || updated.length === 0) {
-        raced.push(row.id as string);
-        continue;
-      }
+      writeFileSync(backupPath, JSON.stringify(rows, null, 2), { mode: 0o600 });
+      console.log(`backed up ${rows.length} ciphertexts to ${backupPath}`);
     }
-    rotated += 1;
-  }
 
-  const mode = execute ? "rotated" : "would rotate (dry run)";
-  console.log(
-    `${mode}: ${rotated} | already on new key: ${alreadyNew} | undecryptable: ${failed.length} | changed mid-run (re-run needed): ${raced.length}`
-  );
-  if (failed.length > 0) {
-    console.log(`undecryptable row ids: ${failed.join(", ")}`);
+    let rotated = 0;
+    let alreadyNew = 0;
+    const failed: string[] = [];
+    const raced: string[] = [];
+
+    for (const row of rows) {
+      const original = row.encrypted_credentials as string;
+      let plaintext: string;
+      try {
+        plaintext = decryptWith(oldKey, original);
+      } catch {
+        try {
+          decryptWith(newKey, original);
+          alreadyNew += 1;
+          continue;
+        } catch {
+          failed.push(row.id as string);
+          continue;
+        }
+      }
+
+      const next = encryptWith(newKey, plaintext);
+      if (decryptWith(newKey, next) !== plaintext) {
+        throw new Error(`round-trip verification failed for row ${row.id}`);
+      }
+
+      if (execute) {
+        const updated = await pool.query(
+          `update connections set encrypted_credentials = $1
+           where id = $2 and encrypted_credentials = $3
+           returning id`,
+          [next, row.id, original]
+        );
+        if (updated.rowCount === 0) {
+          raced.push(row.id as string);
+          continue;
+        }
+      }
+      rotated += 1;
+    }
+
+    const mode = execute ? "rotated" : "would rotate (dry run)";
+    console.log(
+      `${mode}: ${rotated} | already on new key: ${alreadyNew} | undecryptable: ${failed.length} | changed mid-run (re-run needed): ${raced.length}`
+    );
+    if (failed.length > 0) {
+      console.log(`undecryptable row ids: ${failed.join(", ")}`);
+    }
+    if (raced.length > 0) {
+      console.log(`raced row ids: ${raced.join(", ")}`);
+    }
+    if (!execute) {
+      console.log("no writes performed — re-run with --execute to persist");
+    }
+    // Raced rows mean the rotation is definitionally incomplete — surface it
+    // in the exit code, not just the summary line.
+    if (failed.length > 0 || raced.length > 0) process.exitCode = 1;
+  } finally {
+    await pool.end();
   }
-  if (raced.length > 0) {
-    console.log(`raced row ids: ${raced.join(", ")}`);
-  }
-  if (!execute) {
-    console.log("no writes performed — re-run with --execute to persist");
-  }
-  if (failed.length > 0) process.exitCode = 1;
 }
 
 // eslint-disable-next-line unicorn/prefer-top-level-await

@@ -6,6 +6,7 @@ import {
 // canonical choke-point for SDK-level calls from this module.
 import { getSandboxByName as getSandbox } from "@/lib/sandbox/sdk-adapter";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import {
   MAX_SANDBOX_TIMEOUT_MS,
   resolveEffectiveSandboxIdleTimeoutMs,
@@ -203,45 +204,42 @@ async function loadActiveSandboxes() {
 }
 
 async function loadBusySandboxIds() {
-  // These build the busy set that protects sandboxes from reaping; the sets
-  // are inherently small (in-flight work only), so a generous cap bounds a
-  // raised PostgREST max_rows without ever clipping real workloads.
-  const [aiCallsResult, sessionsResult, automationResult] = await Promise.all([
-    supabaseAdmin
-      .from("ai_calls")
-      .select("metadata")
-      .in("status", ["pending", "streaming"])
-      .limit(10000),
-    supabaseAdmin
-      .from("sandbox_client_sessions")
-      .select("sandbox_record_id")
-      .is("released_at", null)
-      .limit(10000),
-    supabaseAdmin
-      .from("external_agent_runs")
-      .select("sandbox_record_id")
-      .in("status", ["pending", "streaming"])
-      .limit(10000),
+  // The busy set protects sandboxes from reaping, so it must be complete — a
+  // truncated fetch could drop an in-flight sandbox from the set and let the
+  // reaper stop it under an open session or streaming call. Paged to
+  // exhaustion rather than capped.
+  const [aiCallsRows, sessionRows, automationRows] = await Promise.all([
+    fetchAllRows(
+      () =>
+        supabaseAdmin
+          .from("ai_calls")
+          .select("metadata")
+          .in("status", ["pending", "streaming"]),
+      "started_at",
+      "active ai_calls"
+    ),
+    fetchAllRows(
+      () =>
+        supabaseAdmin
+          .from("sandbox_client_sessions")
+          .select("sandbox_record_id")
+          .is("released_at", null),
+      "attached_at",
+      "active sandbox sessions"
+    ),
+    fetchAllRows(
+      () =>
+        supabaseAdmin
+          .from("external_agent_runs")
+          .select("sandbox_record_id")
+          .in("status", ["pending", "streaming"]),
+      "created_at",
+      "active external agent runs"
+    ),
   ]);
 
-  if (aiCallsResult.error) {
-    throw new Error(
-      `Failed to load active ai_calls: ${aiCallsResult.error.message}`
-    );
-  }
-  if (sessionsResult.error) {
-    throw new Error(
-      `Failed to load active sandbox sessions: ${sessionsResult.error.message}`
-    );
-  }
-  if (automationResult.error) {
-    throw new Error(
-      `Failed to load active external agent runs: ${automationResult.error.message}`
-    );
-  }
-
   return new Set([
-    ...(aiCallsResult.data ?? [])
+    ...(aiCallsRows as { metadata: unknown }[])
       .flatMap((call) => {
         const metadata = call.metadata as Record<string, unknown> | null;
         return [metadata?.sandbox_record_id, metadata?.sandbox_id];
@@ -250,13 +248,13 @@ async function loadBusySandboxIds() {
         (sandboxRecordId): sandboxRecordId is string =>
           typeof sandboxRecordId === "string"
       ),
-    ...(sessionsResult.data ?? [])
+    ...(sessionRows as { sandbox_record_id: unknown }[])
       .map((session) => session.sandbox_record_id)
       .filter(
         (sandboxRecordId): sandboxRecordId is string =>
           typeof sandboxRecordId === "string"
       ),
-    ...(automationResult.data ?? [])
+    ...(automationRows as { sandbox_record_id: unknown }[])
       .map((run) => run.sandbox_record_id)
       .filter(
         (sandboxRecordId): sandboxRecordId is string =>
