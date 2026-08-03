@@ -135,7 +135,7 @@ export function RunsSection({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              disabled={jobActionId === row.original.id}
+              disabled={jobActionId !== null}
               onClick={(event) => {
                 event.stopPropagation()
                 void onRunJobAction(row.original.id, "repair")
@@ -149,7 +149,7 @@ export function RunsSection({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              disabled={jobActionId === row.original.id}
+              disabled={jobActionId !== null}
               onClick={(event) => {
                 event.stopPropagation()
                 void onRunJobAction(row.original.id, "cancel")
@@ -163,7 +163,7 @@ export function RunsSection({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              disabled={jobActionId === row.original.id}
+              disabled={jobActionId !== null}
               onClick={(event) => {
                 event.stopPropagation()
                 void onRunJobAction(row.original.id, "requeue")

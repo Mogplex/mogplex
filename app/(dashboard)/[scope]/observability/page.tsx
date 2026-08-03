@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useCallback, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useObservabilityActivity, type ActivityFilters } from "@/hooks/use-observability-activity"
 import { useObservabilityJobs, useObservabilityStats, type JobsFilters } from "@/hooks/use-observability"
@@ -105,6 +105,11 @@ function ObservabilityContent() {
   // window — a run that failed before making a model call has no Activity
   // row, and is only visible here.
   const { jobFilters, updateJobFilter } = useObservabilityJobFilters()
+  // A range change shrinks or grows the result set, so a page index deep in
+  // the old window can land on an empty page — reset to the first page.
+  useEffect(() => {
+    updateJobFilter("page", 1)
+  }, [dateRange.from, dateRange.to, updateJobFilter])
   const jobsQuery = useMemo<JobsFilters>(() => ({
     ...jobFilters,
     from: dateRange.from,
@@ -129,6 +134,8 @@ function ObservabilityContent() {
       if (res.ok) {
         await refreshJobs()
       }
+    } catch (error) {
+      console.error(`Failed to ${action} job run`, error)
     } finally {
       jobActionInFlight.current = false
       setJobActionId(null)
