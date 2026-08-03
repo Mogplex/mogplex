@@ -19,10 +19,10 @@ import {
   formatTokens,
 } from "./formatters"
 
-type PressureOutcome = "suppressed" | "deferred" | "start_failed"
-type RunStatus = "failed" | "pending"
+export type PressureOutcome = "suppressed" | "deferred" | "start_failed"
+export type RunDrilldown = "failed" | "pending" | "repairable_pending"
 type InspectPressure = (outcome: PressureOutcome) => void
-type InspectRuns = (status: RunStatus) => void
+type InspectRuns = (target: RunDrilldown) => void
 
 type HealthState = {
   label: string
@@ -235,7 +235,7 @@ function CurrentAttention({
           <button
             type="button"
             className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => onInspectRuns("pending")}
+            onClick={() => onInspectRuns("repairable_pending")}
           >
             <span className="block text-xs font-medium text-[var(--accent-amber)]">
               {countLabel(

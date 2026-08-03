@@ -26,6 +26,7 @@ export function RunsSection({
   jobsTotal,
   jobsPages,
   jobFilters,
+  isCurrentPendingView,
   jobActionId,
   jobActionError,
   onUpdateJobFilter,
@@ -36,6 +37,7 @@ export function RunsSection({
   jobsTotal: number
   jobsPages: number
   jobFilters: JobsFilters
+  isCurrentPendingView: boolean
   jobActionId: string | null
   jobActionError: string | null
   onUpdateJobFilter: (key: keyof JobsFilters, value: JobsFilters[keyof JobsFilters]) => void
@@ -191,6 +193,7 @@ export function RunsSection({
       <RunsControls
         jobsLoading={jobsLoading}
         jobFilters={jobFilters}
+        isCurrentPendingView={isCurrentPendingView}
         onUpdateJobFilter={onUpdateJobFilter}
       />
       {jobActionError && (
