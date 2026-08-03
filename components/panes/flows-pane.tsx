@@ -1618,7 +1618,7 @@ function WorkflowSelect({
                 />
                 <span className="truncate">{option.label}</span>
                 <span className="sr-only">
-                  {option.active ? "(active)" : "(inactive)"}
+                  {option.active ? " (active)" : " (inactive)"}
                 </span>
               </span>
             )}
