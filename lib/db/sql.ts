@@ -169,6 +169,9 @@ export type ParsedEmbed = {
   alias: string;
   table: string;
   inner: boolean;
+  // Explicit FK constraint name (`table!my_fkey(...)`), used to pick the
+  // relationship when more than one FK links the two tables (e.g. cycles).
+  fkHint: string | null;
   select: ParsedSelect;
 };
 
@@ -186,16 +189,27 @@ export function parseSelect(select: string): ParsedSelect {
         `postgrest-shim: malformed embed ${JSON.stringify(part)}`
       );
     }
-    let head = part.slice(0, parenIndex).trim();
-    const inner = head.endsWith("!inner");
-    if (inner) head = head.slice(0, -"!inner".length);
-    const [aliasOrTable, tableIfAliased] = head.split(":").map((s) => s.trim());
+    const head = part.slice(0, parenIndex).trim();
+    // PostgREST embed head grammar: `alias:table!hint1!hint2` where a hint is
+    // `inner`, `left`, or an FK constraint name.
+    const [namePart, ...hints] = head.split("!").map((s) => s.trim());
+    let inner = false;
+    let fkHint: string | null = null;
+    for (const hint of hints) {
+      if (hint === "inner") inner = true;
+      else if (hint === "left") continue;
+      else fkHint = hint;
+    }
+    const [aliasOrTable, tableIfAliased] = namePart
+      .split(":")
+      .map((s) => s.trim());
     const table = tableIfAliased ?? aliasOrTable;
     const alias = tableIfAliased ? aliasOrTable : table;
     embeds.push({
       alias,
       table,
       inner,
+      fkHint,
       select: parseSelect(part.slice(parenIndex + 1, -1)),
     });
   }

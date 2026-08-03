@@ -74,13 +74,20 @@ export class SchemaCache {
   // Resolves how `child` embeds under `parent`, PostgREST-style: a FK from
   // child → parent means one-to-many (JSON array); parent → child means
   // many-to-one (JSON object). Cols are normalized so the join is always
-  // child.childCols[i] = parent.parentCols[i].
-  async getRelationship(parent: string, child: string): Promise<Relationship> {
-    const key = `${parent}→${child}`;
+  // child.childCols[i] = parent.parentCols[i]. When more than one FK links
+  // the tables (e.g. the flows↔flow_versions cycle), `fkHint` — the
+  // constraint name from a `table!my_fkey(...)` embed — selects which one.
+  async getRelationship(
+    parent: string,
+    child: string,
+    fkHint: string | null = null
+  ): Promise<Relationship> {
+    const key = `${parent}→${child}#${fkHint ?? ""}`;
     const cached = this.relationships.get(key);
     if (cached) return cached;
     const { rows } = await this.db.query(
       `select
+         c.conname::text as constraint_name,
          conrelid::regclass::text as from_table,
          (select array_agg(a.attname::text order by k.ord)
             from unnest(c.conkey) with ordinality as k(attnum, ord)
@@ -104,11 +111,19 @@ export class SchemaCache {
         `postgrest-shim: no foreign key between ${parent} and ${child}`
       );
     }
-    const constraintTable = String(rows[0].from_table)
+    const row = fkHint
+      ? rows.find((candidate) => String(candidate.constraint_name) === fkHint)
+      : rows[0];
+    if (!row) {
+      throw new Error(
+        `postgrest-shim: no foreign key named ${JSON.stringify(fkHint)} between ${parent} and ${child}`
+      );
+    }
+    const constraintTable = String(row.from_table)
       .replace(/^public\./, "")
       .replaceAll('"', "");
-    const fromCols = toStringArray(rows[0].from_cols);
-    const toCols = toStringArray(rows[0].to_cols);
+    const fromCols = toStringArray(row.from_cols);
+    const toCols = toStringArray(row.to_cols);
     const relationship: Relationship =
       constraintTable === child
         ? // FK lives on the child → each parent row can own many child rows.
