@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { buildE2EAuthHeaders } from "./helpers/auth";
+import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import type { Route } from "@playwright/test";
 
 const connectedUser = {
@@ -56,12 +56,7 @@ function buildFlow(input: {
 test("workflow picker surfaces active/inactive status and deletion shows a destructive toast", async ({
   page,
 }) => {
-  await page.context().setExtraHTTPHeaders({
-    ...buildE2EAuthHeaders(connectedUser.id),
-    "x-mogplex-scope-kind": "personal",
-    "x-mogplex-scope-slug": connectedUser.username,
-    "x-mogplex-scope-id": connectedUser.id,
-  });
+  await enableScopedE2EAuth(page);
 
   let flows = [
     buildFlow({ id: "flow-1", name: "Live Review", status: "active" }),
@@ -97,7 +92,8 @@ test("workflow picker surfaces active/inactive status and deletion shows a destr
       await fulfillJson(route, { success: true });
       return;
     }
-    await fulfillJson(route, flows[0] ?? {}, flows[0] ? 200 : 404);
+    const flow = flows.find((candidate) => candidate.id === "flow-1");
+    await fulfillJson(route, flow ?? {}, flow ? 200 : 404);
   });
   await page.route("**/api/flows/flow-2", (route) =>
     fulfillJson(
@@ -112,7 +108,7 @@ test("workflow picker surfaces active/inactive status and deletion shows a destr
   // At 1280px the centered flow-name pill overlaps the header action buttons
   // (it is hidden below xl); widen past the collision so Delete is clickable.
   await page.setViewportSize({ width: 1680, height: 900 });
-  await page.goto("/alex/workflows");
+  await page.goto(scopedPath("workflows"));
   await page.waitForLoadState("networkidle");
 
   // The label row summarizes how many workflows are live without opening

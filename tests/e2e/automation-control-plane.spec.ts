@@ -55,6 +55,8 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   let repairCount = 0;
   let requeueCount = 0;
   let cancelCount = 0;
+  const jobRequests: URL[] = [];
+  const callRequests: URL[] = [];
 
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
@@ -94,6 +96,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   );
 
   await page.route("**/api/observability/jobs?*", async (route) => {
+    jobRequests.push(new URL(route.request().url()));
     await fulfillJson(route, {
       jobs: [
         {
@@ -227,14 +230,15 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
           requeueable: false,
         },
       ],
-      total: 3,
-      page: 1,
+      total: 30,
+      page: Number(new URL(route.request().url()).searchParams.get("page")),
       limit: 25,
     });
   });
 
-  await page.route("**/api/observability/calls?*", (route) =>
-    fulfillJson(route, {
+  await page.route("**/api/observability/calls?*", (route) => {
+    callRequests.push(new URL(route.request().url()));
+    return fulfillJson(route, {
       calls: [
         {
           id: "call-live",
@@ -279,11 +283,11 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
           metadata: { repo: "acme/demo-app" },
         },
       ],
-      total: 1,
-      page: 1,
+      total: 75,
+      page: Number(new URL(route.request().url()).searchParams.get("page")),
       limit: 50,
-    })
-  );
+    });
+  });
   await page.route("**/api/observability/automation-events?*", (route) =>
     fulfillJson(route, {
       events: [
@@ -334,18 +338,11 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
     "**/api/observability/jobs/job-pending/cancel",
     async (route) => {
       cancelCount += 1;
-      await fulfillJson(route, {
-        ok: true,
-        status: "cancelled",
-        cancelRequestedAt: "2026-03-21T18:06:00.000Z",
-        cancelledAt: "2026-03-21T18:06:01.000Z",
-        cancelReason: "USER_REQUESTED",
-        cancelError: null,
-        runtimeProvider: null,
-        runtimeRunId: null,
-        aiCallsCancellationRequested: 0,
-        releasedJobs: [],
-      });
+      await fulfillJson(
+        route,
+        { error: "Job run is no longer cancelable" },
+        409
+      );
     }
   );
 
@@ -382,12 +379,53 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await expect(page.getByText("No findings").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Job run is no longer cancelable" })
+  ).toBeVisible();
   await page.getByRole("button", { name: "Repair", exact: true }).click();
   await page.getByRole("button", { name: "Requeue" }).click();
 
   expect(cancelCount).toBe(1);
   expect(repairCount).toBe(1);
   expect(requeueCount).toBe(1);
+
+  const runsSection = page
+    .getByRole("heading", { name: "Runs" })
+    .locator("xpath=ancestor::section");
+  const activitySection = page
+    .getByRole("heading", { name: "Activity" })
+    .locator("xpath=ancestor::section");
+  await runsSection.getByRole("button", { name: "Next" }).click();
+  await expect(runsSection.getByText("Showing 26–30 of 30")).toBeVisible();
+  await activitySection.getByRole("button", { name: "Next" }).click();
+  await expect(activitySection.getByText("Showing 51–75 of 75")).toBeVisible();
+
+  const previousJobsFrom = jobRequests.at(-1)?.searchParams.get("from");
+  const previousCallsFrom = callRequests.at(-1)?.searchParams.get("from");
+  const changedJobsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/api/observability/jobs" &&
+      url.searchParams.get("from") !== previousJobsFrom
+    );
+  });
+  const changedCallsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/api/observability/calls" &&
+      url.searchParams.get("from") !== previousCallsFrom
+    );
+  });
+
+  await page.getByLabel("Date range").selectOption("today");
+  const [jobsRequest, callsRequest] = await Promise.all([
+    changedJobsRequest,
+    changedCallsRequest,
+  ]);
+  expect(new URL(jobsRequest.url()).searchParams.get("page")).toBe("1");
+  expect(new URL(callsRequest.url()).searchParams.get("page")).toBe("1");
 });
 
 test("assignments show last run health inline and triggers surface loads", async ({

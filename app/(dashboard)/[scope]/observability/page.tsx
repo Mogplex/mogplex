@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useMemo, useRef, useState } from "react"
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useObservabilityActivity, type ActivityFilters } from "@/hooks/use-observability-activity"
 import {
@@ -66,15 +66,6 @@ function ObservabilityContent() {
 
   const { stats } = useObservabilityStats(dateRange)
 
-  const handleDateRangeChange = useCallback(
-    (next: ActivityDateRangeSelection) => {
-      // Pass the scoped pathname: the builder's "/observability" default
-      // depends on the proxy rescue redirect to recover the scope.
-      router.replace(buildActivityDateRangeHref(searchParams, next, pathname))
-    },
-    [pathname, router, searchParams]
-  )
-
   const {
     callFilters: legacyCallFilters,
     selectedCallId,
@@ -117,11 +108,6 @@ function ObservabilityContent() {
   // window — a run that failed before making a model call has no Activity
   // row, and is only visible here.
   const { jobFilters, updateJobFilter } = useObservabilityJobFilters()
-  // A range change shrinks or grows the result set, so a page index deep in
-  // the old window can land on an empty page — reset to the first page.
-  useEffect(() => {
-    updateJobFilter("page", 1)
-  }, [dateRange.from, dateRange.to, updateJobFilter])
   const jobsQuery = useMemo<JobsFilters>(() => ({
     ...jobFilters,
     from: dateRange.from,
@@ -138,9 +124,6 @@ function ObservabilityContent() {
   // on a range change for the same reason as Runs.
   const { automationFailureFilters, updateAutomationFailureFilter } =
     useObservabilityAutomationFailureFilters()
-  useEffect(() => {
-    updateAutomationFailureFilter("page", 1)
-  }, [dateRange.from, dateRange.to, updateAutomationFailureFilter])
   const failuresQuery = useMemo<AutomationFailuresFilters>(() => ({
     ...automationFailureFilters,
     from: dateRange.from,
@@ -155,9 +138,6 @@ function ObservabilityContent() {
 
   const { pressureFilters, updatePressureFilter } =
     useObservabilityAutomationEventFilters()
-  useEffect(() => {
-    updatePressureFilter("page", 1)
-  }, [dateRange.from, dateRange.to, updatePressureFilter])
   const pressureQuery = useMemo<AutomationEventsFilters>(() => ({
     ...pressureFilters,
     from: dateRange.from,
@@ -170,7 +150,30 @@ function ObservabilityContent() {
     1,
     Math.ceil(pressureTotal / pressureFilters.limit)
   )
+  const handleDateRangeChange = useCallback(
+    (next: ActivityDateRangeSelection) => {
+      // Reset every range-bound table in the same event so none requests a
+      // stale page for the new, potentially smaller result window.
+      updateFilter("page", 1)
+      updateJobFilter("page", 1)
+      updateAutomationFailureFilter("page", 1)
+      updatePressureFilter("page", 1)
+      // Pass the scoped pathname: the builder's "/observability" default
+      // depends on the proxy rescue redirect to recover the scope.
+      router.replace(buildActivityDateRangeHref(searchParams, next, pathname))
+    },
+    [
+      pathname,
+      router,
+      searchParams,
+      updateAutomationFailureFilter,
+      updateFilter,
+      updateJobFilter,
+      updatePressureFilter,
+    ]
+  )
   const [jobActionId, setJobActionId] = useState<string | null>(null)
+  const [jobActionError, setJobActionError] = useState<string | null>(null)
   // One action in flight at a time: jobActionId only disables the acting
   // row's buttons, so without this guard a second job's action could start
   // and then be re-enabled mid-flight by the first action's cleanup.
@@ -180,13 +183,20 @@ function ObservabilityContent() {
     if (jobActionInFlight.current) return
     jobActionInFlight.current = true
     setJobActionId(jobId)
+    setJobActionError(null)
     try {
       const res = await fetch(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
-      if (res.ok) {
-        await refreshJobs()
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string
+        } | null
+        setJobActionError(body?.error ?? `Failed to ${action} job run`)
+        return
       }
+      await refreshJobs()
     } catch (error) {
       console.error(`Failed to ${action} job run`, error)
+      setJobActionError(`Failed to ${action} job run`)
     } finally {
       jobActionInFlight.current = false
       setJobActionId(null)
@@ -261,6 +271,7 @@ function ObservabilityContent() {
         jobsPages={jobsPages}
         jobFilters={jobFilters}
         jobActionId={jobActionId}
+        jobActionError={jobActionError}
         onUpdateJobFilter={updateJobFilter}
         onRunJobAction={runJobAction}
       />
