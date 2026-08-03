@@ -41,13 +41,12 @@ async function mockBaseChrome(page: Page) {
   );
 }
 
-// Skipped pending a product decision: the observability page no longer mounts
-// LiveRunsSection/RunsSection (both still exist, unreferenced, in
-// observability/_components/ alongside CallsSection/CallsControls). Unclear
-// whether they were dropped deliberately or lost in the fresh-history cut.
-// Either remount them on app/(dashboard)/[scope]/observability/page.tsx or
-// delete the sections and this test.
-test.fixme("observability centers runtime runs and exposes repair/requeue actions", async ({
+// RunsSection is mounted on the observability page again (the run-based
+// summary cards need a runs table beneath them — a run that fails before
+// making a model call has no Activity row). LiveRunsSection remains
+// unmounted pending a product decision; the Activity table's Live status
+// filter covers that view.
+test("observability centers runtime runs and exposes repair/requeue actions", async ({
   page,
 }) => {
   let repairCount = 0;
@@ -362,10 +361,10 @@ test.fixme("observability centers runtime runs and exposes repair/requeue action
   await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Live Runs")).toBeVisible();
-  await expect(page.getByText("client-cancellable").first()).toBeVisible();
   await expect(page.getByText("Total Runs")).toBeVisible();
   await expect(page.getByText("Suppressed · 7d")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
+  await expect(page.getByLabel("Run status")).toBeVisible();
   await expect(page.getByText("Refactor Bot")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Repair", exact: true })

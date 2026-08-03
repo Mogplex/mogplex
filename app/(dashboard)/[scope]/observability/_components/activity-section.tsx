@@ -384,7 +384,7 @@ export function ActivitySection({
 
       <div className="flex flex-wrap items-center gap-2">
         <FilterSelect
-          label="Status"
+          label="Call status"
           value={filters.status || ""}
           options={[
             { label: "All", value: "" },
