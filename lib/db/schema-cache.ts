@@ -9,6 +9,27 @@ export type Relationship = {
   childCols: string[];
 };
 
+// Drivers differ on which Postgres array types they decode: node-pg leaves
+// name[] (and any uncovered oid) as its "{a,b}" text form while PGlite
+// returns a real array, so normalize both shapes.
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (
+    typeof value === "string" &&
+    value.startsWith("{") &&
+    value.endsWith("}")
+  ) {
+    const inner = value.slice(1, -1);
+    if (inner === "") return [];
+    return inner
+      .split(",")
+      .map((part) => part.replace(/^"|"$/g, "").replaceAll('\\"', '"'));
+  }
+  throw new Error(
+    `postgrest-shim: expected a column-name array, got ${JSON.stringify(value)}`
+  );
+}
+
 export class SchemaCache {
   private columnTypes = new Map<string, Map<string, string>>();
   private relationships = new Map<string, Relationship>();
@@ -61,14 +82,14 @@ export class SchemaCache {
     const { rows } = await this.db.query(
       `select
          conrelid::regclass::text as from_table,
-         (select array_agg(a.attname order by k.ord)
+         (select array_agg(a.attname::text order by k.ord)
             from unnest(c.conkey) with ordinality as k(attnum, ord)
             join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
-         ) as from_cols,
-         (select array_agg(a.attname order by k.ord)
+         )::text[] as from_cols,
+         (select array_agg(a.attname::text order by k.ord)
             from unnest(c.confkey) with ordinality as k(attnum, ord)
             join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum
-         ) as to_cols
+         )::text[] as to_cols
        from pg_constraint c
        where c.contype = 'f'
          and (
@@ -86,8 +107,8 @@ export class SchemaCache {
     const constraintTable = String(rows[0].from_table)
       .replace(/^public\./, "")
       .replaceAll('"', "");
-    const fromCols = rows[0].from_cols as string[];
-    const toCols = rows[0].to_cols as string[];
+    const fromCols = toStringArray(rows[0].from_cols);
+    const toCols = toStringArray(rows[0].to_cols);
     const relationship: Relationship =
       constraintTable === child
         ? // FK lives on the child → each parent row can own many child rows.
