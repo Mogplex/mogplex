@@ -61,7 +61,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
 
-  await page.route("**/api/observability/stats", (route) =>
+  await page.route("**/api/observability/stats*", (route) =>
     fulfillJson(route, {
       summary: {
         total_calls: 4,
@@ -82,6 +82,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
         job_runs_stale_pending: 1,
         job_runs_failed_in_range: 1,
         job_runs_repaired_in_range: 1,
+        job_runs_concluded_in_range: 3,
         job_runs_success_rate_in_range: 66.7,
         suppressed_in_range: 2,
         deferred_in_range: 1,
@@ -365,8 +366,25 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Total Runs")).toBeVisible();
-  await expect(page.getByText("Suppressed · 7d")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Automation health" })
+  ).toBeVisible();
+  await expect(page.getByText("Needs attention")).toBeVisible();
+  await expect(page.getByText("Run success")).toBeVisible();
+  await expect(page.getByText("66.7%", { exact: true })).toBeVisible();
+  await expect(page.getByText("Operational signals")).toBeVisible();
+  await expect(page.getByText("Prevented")).toBeVisible();
+  await expect(page.getByText("2 events not run")).toBeVisible();
+  await expect(page.getByText("1 start attempt retried")).toBeVisible();
+  await expect(page.getByText("1 failed start attempt")).toBeVisible();
+  await expect(page.getByText("Current attention")).toBeVisible();
+  await expect(page.getByText("1 run remains failed")).toBeVisible();
+  await expect(page.getByText("1 pending run needs recovery")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Inspect 2 prevented events" })
+    .click();
+  await expect(page.getByLabel("Outcome")).toHaveValue("suppressed");
   await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
   await expect(page.getByLabel("Run status")).toBeVisible();
   await expect(page.getByText("Refactor Bot")).toBeVisible();

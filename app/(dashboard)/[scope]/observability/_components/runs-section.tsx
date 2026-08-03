@@ -183,7 +183,11 @@ export function RunsSection({
   ], [jobActionId, onRunJobAction])
 
   return (
-    <section className="space-y-3">
+    <section
+      id="runs"
+      tabIndex={-1}
+      className="scroll-mt-4 space-y-3 focus:outline-none"
+    >
       <RunsControls
         jobsLoading={jobsLoading}
         jobFilters={jobFilters}

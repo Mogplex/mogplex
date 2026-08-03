@@ -18,7 +18,7 @@ export function RunsControls({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="ui-section-title">Runs</h2>
-          <p className="ui-meta">Background runtime runs with repair and retry controls. The Failed and Start Failed cards above count these runs.</p>
+          <p className="ui-meta">Background runtime runs with repair and retry controls. Current failures and pending recovery appear in Automation health above.</p>
         </div>
         {jobsLoading && <span className="text-sm text-muted-foreground animate-pulse">Loading runs…</span>}
       </div>
