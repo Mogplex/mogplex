@@ -5,7 +5,6 @@ import { useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/ui/data-table"
 import type { JobsFilters } from "@/hooks/use-observability"
-import type { ObservabilityDateRangePreset } from "@/hooks/use-observability-date-range"
 import type { ObservabilityJob } from "@/lib/types"
 import {
   AutomationCostCell,
@@ -27,9 +26,7 @@ export function RunsSection({
   jobsTotal,
   jobsPages,
   jobFilters,
-  datePreset,
   jobActionId,
-  onApplyDateRange,
   onUpdateJobFilter,
   onRunJobAction,
 }: {
@@ -38,9 +35,7 @@ export function RunsSection({
   jobsTotal: number
   jobsPages: number
   jobFilters: JobsFilters
-  datePreset: ObservabilityDateRangePreset
   jobActionId: string | null
-  onApplyDateRange: (preset: ObservabilityDateRangePreset) => void
   onUpdateJobFilter: (key: keyof JobsFilters, value: JobsFilters[keyof JobsFilters]) => void
   onRunJobAction: (jobId: string, action: "repair" | "requeue" | "cancel") => Promise<void>
 }) {
@@ -140,7 +135,7 @@ export function RunsSection({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              disabled={jobActionId === row.original.id}
+              disabled={jobActionId !== null}
               onClick={(event) => {
                 event.stopPropagation()
                 void onRunJobAction(row.original.id, "repair")
@@ -154,7 +149,7 @@ export function RunsSection({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              disabled={jobActionId === row.original.id}
+              disabled={jobActionId !== null}
               onClick={(event) => {
                 event.stopPropagation()
                 void onRunJobAction(row.original.id, "cancel")
@@ -168,7 +163,7 @@ export function RunsSection({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              disabled={jobActionId === row.original.id}
+              disabled={jobActionId !== null}
               onClick={(event) => {
                 event.stopPropagation()
                 void onRunJobAction(row.original.id, "requeue")
@@ -190,8 +185,6 @@ export function RunsSection({
       <RunsControls
         jobsLoading={jobsLoading}
         jobFilters={jobFilters}
-        datePreset={datePreset}
-        onApplyDateRange={onApplyDateRange}
         onUpdateJobFilter={onUpdateJobFilter}
       />
 

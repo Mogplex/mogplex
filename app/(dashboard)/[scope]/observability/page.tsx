@@ -1,10 +1,11 @@
 "use client"
 
-import { Suspense, useCallback, useMemo, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useObservabilityActivity, type ActivityFilters } from "@/hooks/use-observability-activity"
-import { useObservabilityStats } from "@/hooks/use-observability"
+import { useObservabilityJobs, useObservabilityStats, type JobsFilters } from "@/hooks/use-observability"
 import { useObservabilityCallFilters } from "@/hooks/use-observability-call-filters"
+import { useObservabilityJobFilters } from "@/hooks/use-observability-job-filters"
 import { useRepos } from "@/hooks/use-repos"
 import { useSessionsStore } from "@/hooks/use-sessions"
 import { getExpandedCallRowIds } from "@/lib/observability/call-expansion"
@@ -21,6 +22,7 @@ import { ActivityDateRangeFilter } from "./_components/activity-date-range-filte
 import { ActivitySection } from "./_components/activity-section"
 import { ObservabilitySummary } from "./_components/observability-summary"
 import { PendingApprovalsSection } from "./_components/pending-approvals-section"
+import { RunsSection } from "./_components/runs-section"
 
 const INITIAL_FILTERS: ActivityFilters = {
   page: 1,
@@ -98,6 +100,48 @@ function ObservabilityContent() {
   const total = data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / filters.limit))
 
+  // Runs share the page-level date range, so the run-based cards above
+  // (Failed, Start Failed, Run Success) and this table describe the same
+  // window — a run that failed before making a model call has no Activity
+  // row, and is only visible here.
+  const { jobFilters, updateJobFilter } = useObservabilityJobFilters()
+  // A range change shrinks or grows the result set, so a page index deep in
+  // the old window can land on an empty page — reset to the first page.
+  useEffect(() => {
+    updateJobFilter("page", 1)
+  }, [dateRange.from, dateRange.to, updateJobFilter])
+  const jobsQuery = useMemo<JobsFilters>(() => ({
+    ...jobFilters,
+    from: dateRange.from,
+    to: dateRange.to,
+  }), [jobFilters, dateRange.from, dateRange.to])
+  const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } = useObservabilityJobs(jobsQuery)
+  const jobs = jobsData?.jobs ?? []
+  const jobsTotal = jobsData?.total ?? 0
+  const jobsPages = Math.max(1, Math.ceil(jobsTotal / jobFilters.limit))
+  const [jobActionId, setJobActionId] = useState<string | null>(null)
+  // One action in flight at a time: jobActionId only disables the acting
+  // row's buttons, so without this guard a second job's action could start
+  // and then be re-enabled mid-flight by the first action's cleanup.
+  const jobActionInFlight = useRef(false)
+
+  const runJobAction = useCallback(async (jobId: string, action: "repair" | "requeue" | "cancel") => {
+    if (jobActionInFlight.current) return
+    jobActionInFlight.current = true
+    setJobActionId(jobId)
+    try {
+      const res = await fetch(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
+      if (res.ok) {
+        await refreshJobs()
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} job run`, error)
+    } finally {
+      jobActionInFlight.current = false
+      setJobActionId(null)
+    }
+  }, [refreshJobs])
+
   const reposById = useMemo(
     () => new Map(repos.map((r) => [r.id, r])),
     [repos]
@@ -158,6 +202,17 @@ function ObservabilityContent() {
       />
 
       <PendingApprovalsSection />
+
+      <RunsSection
+        jobs={jobs}
+        jobsLoading={jobsLoading}
+        jobsTotal={jobsTotal}
+        jobsPages={jobsPages}
+        jobFilters={jobFilters}
+        jobActionId={jobActionId}
+        onUpdateJobFilter={updateJobFilter}
+        onRunJobAction={runJobAction}
+      />
 
       <ActivitySection
         calls={calls}
