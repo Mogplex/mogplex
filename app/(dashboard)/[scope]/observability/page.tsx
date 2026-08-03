@@ -103,8 +103,8 @@ function ObservabilityContent() {
   const total = data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / filters.limit))
 
-  // Runs share the page-level date range, so the run-based cards above
-  // (Failed, Start Failed, Run Success) and this table describe the same
+  // Runs share the page-level date range, so the run-success and current
+  // attention summaries above and this table describe the same
   // window — a run that failed before making a model call has no Activity
   // row, and is only visible here.
   const { jobFilters, updateJobFilter } = useObservabilityJobFilters()
@@ -119,7 +119,7 @@ function ObservabilityContent() {
   const jobsPages = Math.max(1, Math.ceil(jobsTotal / jobFilters.limit))
 
   // Failures and Pressure share the page-level date range like Runs does,
-  // so the summary cards above (Failed, Suppressed, Deferred, Start Failed)
+  // so the summary outcomes above (failed, prevented, delayed, start failed)
   // and these tables describe the same window. Both reset to the first page
   // on a range change for the same reason as Runs.
   const { automationFailureFilters, updateAutomationFailureFilter } =
@@ -149,6 +149,25 @@ function ObservabilityContent() {
   const pressurePages = Math.max(
     1,
     Math.ceil(pressureTotal / pressureFilters.limit)
+  )
+  const focusSection = useCallback((sectionId: "runs" | "pressure") => {
+    const section = document.getElementById(sectionId)
+    section?.scrollIntoView({ block: "start" })
+    section?.focus({ preventScroll: true })
+  }, [])
+  const inspectPressure = useCallback(
+    (outcome: "suppressed" | "deferred" | "start_failed") => {
+      updatePressureFilter("outcome", outcome)
+      focusSection("pressure")
+    },
+    [focusSection, updatePressureFilter]
+  )
+  const inspectRuns = useCallback(
+    (status: "failed" | "pending") => {
+      updateJobFilter("status", status)
+      focusSection("runs")
+    },
+    [focusSection, updateJobFilter]
   )
   const handleDateRangeChange = useCallback(
     (next: ActivityDateRangeSelection) => {
@@ -249,7 +268,7 @@ function ObservabilityContent() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="ui-page-title">Observability</h1>
-          <p className="ui-page-subtitle">Model activity across CLI, cloud, and automation — with tokens and cost.</p>
+          <p className="ui-page-subtitle">Automation health, controls, AI usage, and cost across your fleet.</p>
         </div>
         <ActivityDateRangeFilter
           selection={dateRangeSelection}
@@ -260,6 +279,8 @@ function ObservabilityContent() {
       <ObservabilitySummary
         summary={stats?.summary}
         rangePreset={dateRangeSelection.preset}
+        onInspectPressure={inspectPressure}
+        onInspectRuns={inspectRuns}
       />
 
       <PendingApprovalsSection />

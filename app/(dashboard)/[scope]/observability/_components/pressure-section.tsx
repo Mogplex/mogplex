@@ -105,7 +105,11 @@ export function PressureSection({
   ], [])
 
   return (
-    <section className="space-y-3">
+    <section
+      id="pressure"
+      tabIndex={-1}
+      className="scroll-mt-4 space-y-3 focus:outline-none"
+    >
       <div className="flex items-center justify-between">
         <div>
           <h2 className="ui-section-title">Pressure</h2>
