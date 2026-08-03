@@ -23,12 +23,18 @@ export default async function ScopeLayout({
     headers(),
     params,
   ]);
+
+  // Missing image files bypass proxy.ts (the matcher excludes image
+  // extensions), so the proxy never injects scope headers for them — any
+  // x-mogplex-scope-* values on such a request are client-supplied. 404
+  // before parsing headers so forged values are never trusted. Real slugs
+  // never end in an image extension.
+  if (isImageAssetScopeSegment(scopeSegment)) notFound();
+
   const scope = parseScopeContextHeaders(scopeHeaders);
 
   if (!scope) {
-    // Missing image files bypass proxy.ts and can fall through to /[scope].
     // Keep real scoped-route header failures loud so matcher regressions page us.
-    if (isImageAssetScopeSegment(scopeSegment)) notFound();
     throw new Error(
       "ScopeLayout: x-mogplex-scope-* headers missing for scoped route"
     );

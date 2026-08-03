@@ -280,8 +280,13 @@ export async function proxy(request: NextRequest) {
 // as scope segments and redirects them to /login, breaking `@font-face` on
 // every page (notably the Mondwest hero on the marketing landing).
 //
-// A path-prefix exemption (not an extension-based one) keeps the bypass
-// surface tight: a request like /api/foo.woff still goes through the proxy.
+// The `fonts/` entry is a path-prefix exemption, so /api/foo.woff still goes
+// through the proxy. The image group is different: it is extension-based and
+// unanchored, so ANY path ending in one of these extensions (including under
+// /api/) bypasses the proxy entirely — no auth, no scope resolution, and no
+// header injection, which means inbound x-mogplex-scope-* headers on those
+// requests are client-controlled. ScopeLayout defends against that by
+// 404ing image-like scope segments before parsing scope headers.
 // Keep the image extension group aligned with IMAGE_ASSET_SCOPE_EXTENSIONS in
 // lib/scope-context.ts; tests/unit/scope-context.test.ts pins the invariant.
 export const config = {

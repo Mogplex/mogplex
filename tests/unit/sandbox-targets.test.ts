@@ -322,3 +322,108 @@ test("resolveSandboxRecordCredentials blocks existing platform sandboxes for non
     }
   );
 });
+
+test("getPlatformSandboxCredentials returns a null project ID instead of throwing when VERCEL_PROJECT_ID is unset", async () => {
+  const { getPlatformSandboxCredentials } = await loadSandboxCredentials();
+  const saved = process.env.VERCEL_PROJECT_ID;
+  delete process.env.VERCEL_PROJECT_ID;
+  try {
+    assert.equal(getPlatformSandboxCredentials().vercelProjectId, null);
+  } finally {
+    if (saved !== undefined) process.env.VERCEL_PROJECT_ID = saved;
+  }
+});
+
+test("resolveSandboxTargetCredentials rejects platform targets with a structured error when the platform project is not configured", async () => {
+  const {
+    resolveSandboxTargetCredentials,
+    PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR,
+  } = await loadSandboxCredentials();
+
+  assert.deepEqual(
+    resolveSandboxTargetCredentials(
+      {
+        vercelToken: "platform-token",
+        vercelTeamId: "platform-team",
+        vercelProjectId: null,
+        allowPlatformSandbox: true,
+        userVercelToken: null,
+        userVercelTeamId: null,
+      },
+      {
+        ok: true,
+        billingSource: "platform",
+        credentialSource: "platform",
+        teamId: null,
+        projectId: null,
+      }
+    ),
+    {
+      ok: false,
+      error: PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR,
+      status: 500,
+    }
+  );
+});
+
+test("resolveSandboxTargetCredentials still resolves user-billed targets when the platform project is not configured", async () => {
+  const { resolveSandboxTargetCredentials } = await loadSandboxCredentials();
+
+  assert.deepEqual(
+    resolveSandboxTargetCredentials(
+      {
+        vercelToken: null,
+        vercelTeamId: null,
+        vercelProjectId: null,
+        allowPlatformSandbox: false,
+        userVercelToken: "user-token",
+        userVercelTeamId: "user-team",
+      },
+      {
+        ok: true,
+        billingSource: "user_vercel_project",
+        credentialSource: "user",
+        teamId: "team_linked",
+        projectId: "prj_linked",
+      }
+    ),
+    {
+      ok: true,
+      vercelToken: "user-token",
+      vercelTeamId: "team_linked",
+      vercelProjectId: "prj_linked",
+    }
+  );
+});
+
+test("resolveSandboxRecordCredentials rejects platform records with a structured error when no project ID is stored or configured", async () => {
+  const {
+    resolveSandboxRecordCredentials,
+    PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR,
+  } = await loadSandboxCredentials();
+
+  assert.deepEqual(
+    resolveSandboxRecordCredentials(
+      {
+        vercelToken: "platform-token",
+        vercelTeamId: "platform-team",
+        vercelProjectId: null,
+        allowPlatformSandbox: true,
+        userVercelToken: null,
+        userVercelTeamId: null,
+      },
+      {
+        billing_source: "platform",
+        billing_project_id: null,
+        billing_team_id: null,
+        vercel_project_id: null,
+        vercel_team_id: null,
+      }
+    ),
+    {
+      ok: false,
+      error: PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR,
+      status: 500,
+    }
+  );
+});

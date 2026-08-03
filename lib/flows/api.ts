@@ -7,6 +7,7 @@ import {
   streamText,
 } from "ai";
 import { summarizeEntityDispatchEvents } from "@/lib/automation-dispatch";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { FlowServiceError } from "@/lib/flows/errors";
 import { createFlowAssistantTools } from "@/lib/flows/assistant-tools";
 import { listUsableModelIdsForScope } from "@/lib/models/default-model";
@@ -187,39 +188,111 @@ export async function listOwnedFlowsWithSummaries(userId: string) {
     .map((flow) => flow.published_version_id)
     .filter(Boolean) as string[];
   const flowIds = effectiveFlows.map((flow) => flow.id);
-  const [versionsResult, jobRunsResult, flowDispatchResult] = await Promise.all(
-    [
-      publishedVersionIds.length > 0
-        ? supabaseAdmin
-            .from("flow_versions")
-            .select("*")
-            .in("id", publishedVersionIds)
-        : Promise.resolve({ data: [], error: null }),
-      supabaseAdmin
-        .from("job_runs")
-        .select(
-          "id, flow_id, status, error, started_at, created_at, last_start_attempt_at"
-        )
-        .in("flow_id", flowIds)
-        .order("created_at", { ascending: false })
-        .limit(10000),
-      flowIds.length > 0
-        ? supabaseAdmin
-            .from("automation_dispatch_events")
-            .select(
-              "id, job_run_id, trigger_id, flow_id, outcome, reason, created_at"
-            )
-            .in("flow_id", flowIds)
-            .order("created_at", { ascending: false })
-            .limit(10000)
-        : Promise.resolve({ data: [], error: null }),
-    ]
-  );
+
+  // The summaries only need each flow's active runs, its last-24h activity,
+  // and its single latest run / latest pressure event. Fetch those directly
+  // per concern instead of one global newest-first capped query — a shared
+  // cap can be filled entirely by one high-volume flow, leaving every other
+  // flow with a null latest status and zeroed counts.
+  const runSelect =
+    "id, flow_id, status, error, started_at, created_at, last_start_attempt_at";
+  const eventSelect =
+    "id, job_run_id, trigger_id, flow_id, outcome, reason, created_at";
+  const windowStartIso = new Date(
+    Date.now() - 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  const [
+    versionsResult,
+    activeRunRows,
+    windowRunRows,
+    latestRunResults,
+    windowEventRows,
+    latestReasonEventResults,
+  ] = await Promise.all([
+    publishedVersionIds.length > 0
+      ? supabaseAdmin
+          .from("flow_versions")
+          .select("*")
+          .in("id", publishedVersionIds)
+      : Promise.resolve({ data: [], error: null }),
+    fetchAllRows(
+      () =>
+        supabaseAdmin
+          .from("job_runs")
+          .select(runSelect)
+          .in("flow_id", flowIds)
+          .in("status", ["pending", "running"]),
+      "created_at",
+      "active flow job runs"
+    ),
+    fetchAllRows(
+      () =>
+        supabaseAdmin
+          .from("job_runs")
+          .select(runSelect)
+          .in("flow_id", flowIds)
+          .or(
+            `created_at.gte.${windowStartIso},started_at.gte.${windowStartIso}`
+          ),
+      "created_at",
+      "recent flow job runs"
+    ),
+    Promise.all(
+      flowIds.map((flowId) =>
+        supabaseAdmin
+          .from("job_runs")
+          .select(runSelect)
+          .eq("flow_id", flowId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+      )
+    ),
+    fetchAllRows(
+      () =>
+        supabaseAdmin
+          .from("automation_dispatch_events")
+          .select(eventSelect)
+          .in("flow_id", flowIds)
+          .gte("created_at", windowStartIso),
+      "created_at",
+      "recent flow dispatch events"
+    ),
+    Promise.all(
+      flowIds.map((flowId) =>
+        supabaseAdmin
+          .from("automation_dispatch_events")
+          .select(eventSelect)
+          .eq("flow_id", flowId)
+          .not("reason", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+      )
+    ),
+  ]);
 
   const versionsById = new Map(
     unwrapRowsOrThrow(versionsResult).map((version) => [version.id, version])
   );
-  const jobRuns = unwrapRowsOrThrow(jobRunsResult);
+
+  type FlowJobRunRow = {
+    id: string;
+    flow_id: string | null;
+    status: string | null;
+    error: string | null;
+    started_at: string | null;
+    created_at: string | null;
+    last_start_attempt_at: string | null;
+  };
+  const jobRunById = new Map<string, FlowJobRunRow>();
+  for (const row of [
+    ...activeRunRows,
+    ...windowRunRows,
+    ...latestRunResults.flatMap((result) => unwrapRowsOrThrow(result)),
+  ] as FlowJobRunRow[]) {
+    jobRunById.set(row.id, row);
+  }
+  const jobRuns = Array.from(jobRunById.values());
   const allEvents = new Map<
     string,
     {
@@ -244,7 +317,10 @@ export async function listOwnedFlowsWithSummaries(userId: string) {
     }
   >();
 
-  for (const event of unwrapRowsOrThrow(flowDispatchResult)) {
+  for (const event of [
+    ...windowEventRows,
+    ...latestReasonEventResults.flatMap((result) => unwrapRowsOrThrow(result)),
+  ] as Parameters<typeof allEvents.set>[1][]) {
     allEvents.set(event.id, event);
   }
 

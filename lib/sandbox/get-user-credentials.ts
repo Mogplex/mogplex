@@ -54,20 +54,22 @@ export function isSandboxCapabilityDeniedError(
 }
 
 /**
- * Sandbox operations require a platform Vercel project. The ID must come from
- * the environment — there is deliberately no hardcoded fallback so the
- * production project is never baked into the (public) source tree. Read
+ * Platform sandbox operations require a platform Vercel project. The ID must
+ * come from the environment — there is deliberately no hardcoded fallback so
+ * the production project is never baked into the (public) source tree. Read
  * lazily so test suites can set the env var after module load.
+ *
+ * Deployments without platform sandbox config (self-hosted BYO Vercel) leave
+ * the var unset: the ID stays null and only the platform-billing branches of
+ * resolveSandboxTargetCredentials / resolveSandboxRecordCredentials reject —
+ * personal-billing and env-var flows must keep working without it.
  */
-export function requireDefaultVercelProjectId(): string {
-  const projectId = process.env.VERCEL_PROJECT_ID?.trim();
-  if (!projectId) {
-    throw new Error(
-      "VERCEL_PROJECT_ID is not set. Sandbox operations need the platform Vercel project ID from the environment (see .env.example)."
-    );
-  }
-  return projectId;
+function readDefaultVercelProjectId(): string | null {
+  return process.env.VERCEL_PROJECT_ID?.trim() || null;
 }
+
+export const PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR =
+  "Sandbox service not configured — set VERCEL_PROJECT_ID (see .env.example)";
 
 /** Platform-level Vercel credentials for Mogplex-managed sandboxes. */
 const PLATFORM_VERCEL_TOKEN = process.env.PLATFORM_VERCEL_TOKEN?.trim() || null;
@@ -86,7 +88,7 @@ export type SandboxServiceCredentials = {
   userId: string;
   vercelToken: string | null;
   vercelTeamId: string | null;
-  vercelProjectId: string;
+  vercelProjectId: string | null;
   allowPlatformSandbox?: boolean;
   userVercelToken: string | null;
   userVercelTeamId: string | null;
@@ -112,7 +114,7 @@ export function getPlatformSandboxCredentials() {
   return {
     vercelToken: PLATFORM_VERCEL_TOKEN,
     vercelTeamId: PLATFORM_VERCEL_TEAM_ID,
-    vercelProjectId: requireDefaultVercelProjectId(),
+    vercelProjectId: readDefaultVercelProjectId(),
   };
 }
 
@@ -333,6 +335,14 @@ export function resolveSandboxTargetCredentials(
       };
     }
 
+    if (!creds.vercelProjectId) {
+      return {
+        ok: false as const,
+        error: PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR,
+        status: 500 as const,
+      };
+    }
+
     return {
       ok: true as const,
       vercelToken: creds.vercelToken,
@@ -423,6 +433,14 @@ export function resolveSandboxRecordCredentials(
     }
 
     const platformProjectId = recordProjectId || creds.vercelProjectId;
+
+    if (!platformProjectId) {
+      return {
+        ok: false as const,
+        error: PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR,
+        status: 500 as const,
+      };
+    }
 
     return {
       ok: true as const,

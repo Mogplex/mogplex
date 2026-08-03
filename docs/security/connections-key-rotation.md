@@ -25,16 +25,20 @@ plus a database leak can decrypt every stored connection secret.
    ```sh
    OLD_CONNECTIONS_ENCRYPTION_KEY=<old> \
    NEW_CONNECTIONS_ENCRYPTION_KEY=<new> \
-   NEXT_PUBLIC_SUPABASE_URL=<url> SUPABASE_SERVICE_ROLE_KEY=<key> \
+   DATABASE_URL=<serving Neon connection string> \
      npx tsx scripts/rotate-connections-encryption-key.ts            # dry run
    # review counts, then re-run with --execute
    ```
 
-   The script backs up all original ciphertexts to a gitignored JSON file,
-   verifies each round-trip before writing, skips rows already on the new key
-   (safe to re-run), and refuses to overwrite rows whose ciphertext changed
-   mid-run (optimistic concurrency — re-run to pick those up). Take a DB
-   snapshot first anyway. Run during low traffic — writes made with the old key
+   The script runs against the serving database (Neon, via `DATABASE_URL`) —
+   pointing it anywhere else would rotate data the app doesn't read and brick
+   production ciphertexts at the env flip. It cross-checks the fetched row
+   count against `count(*)` and aborts before writing if they differ, backs up
+   all original ciphertexts to a gitignored JSON file, verifies each
+   round-trip before writing, skips rows already on the new key (safe to
+   re-run), and refuses to overwrite rows whose ciphertext changed mid-run
+   (optimistic concurrency — the run exits non-zero and re-running picks those
+   up). Take a DB snapshot first anyway. Run during low traffic — writes made with the old key
    between re-encryption and the env flip (step 3) would become undecryptable,
    so prefer a brief maintenance window, then re-run the script once after the
    flip to catch stragglers.
