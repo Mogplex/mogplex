@@ -324,7 +324,7 @@ export function AutomationFailuresSection({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
         <FailureStatCard
           label="Failed Runs"
           value={String(summary?.failedTotal ?? 0)}
@@ -339,26 +339,31 @@ export function AutomationFailuresSection({
           valueClass={(summary?.successfulRecoveries ?? 0) > 0 ? "text-accent-green" : ""}
           info="Runs that completed successfully after recovering from a model failure mid-run. The failure they recovered from is shown in the row's expanded view."
         />
-        <FailureStatCard
-          label="Timeout Failures"
-          value={String(summary?.timeoutFailures ?? 0)}
-          valueClass={(summary?.timeoutFailures ?? 0) > 0 ? "text-accent-amber" : ""}
-          info="Failed runs classified as timeouts — the run hit its execution time budget. The Timeout Budget breakdown below shows which budget tier each hit."
-        />
-        <FailureStatCard
-          label="Provider / Upstream"
-          value={String(summary?.providerFailures ?? 0)}
-          sub={`${summary?.dependencyFailures ?? 0} dependency`}
-          valueClass={(summary?.providerFailures ?? 0) > 0 ? "text-accent-amber" : ""}
-          info="Failed runs caused upstream of Mogplex: the model provider behind the AI gateway was unavailable, erroring, or rate-limiting (HTTP 429/5xx). These usually clear on their own — retry, or switch models if persistent. The dependency sub-count is different: one of Mogplex's own dependencies failed, which points at a platform problem, not the provider."
-        />
-        <FailureStatCard
-          label="Auth / Config"
-          value={String((summary?.authenticationFailures ?? 0) + (summary?.configurationFailures ?? 0))}
-          sub={`${summary?.authenticationFailures ?? 0} auth · ${summary?.configurationFailures ?? 0} config`}
-          valueClass={((summary?.authenticationFailures ?? 0) + (summary?.configurationFailures ?? 0)) > 0 ? "text-accent-red" : ""}
-          info="Failed runs caused by a bad credential (auth — e.g. an expired or revoked token) or an invalid setup (config — e.g. a bad model id or missing setting). These will not fix themselves on retry."
-        />
+        <div className="rounded-md border border-dashed border-border p-2 lg:col-span-3">
+          <div className="ui-label mb-2">Failure Types</div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <FailureStatCard
+              label="Timeout"
+              value={String(summary?.timeoutFailures ?? 0)}
+              valueClass={(summary?.timeoutFailures ?? 0) > 0 ? "text-accent-amber" : ""}
+              info="Failed runs classified as timeouts — the run hit its execution time budget. The Timeout Budget breakdown below shows which budget tier each hit."
+            />
+            <FailureStatCard
+              label="Provider / Upstream"
+              value={String(summary?.providerFailures ?? 0)}
+              sub={`${summary?.dependencyFailures ?? 0} dependency`}
+              valueClass={(summary?.providerFailures ?? 0) > 0 ? "text-accent-amber" : ""}
+              info="Failed runs caused upstream of Mogplex: the model provider behind the AI gateway was unavailable, erroring, or rate-limiting (HTTP 429/5xx). These usually clear on their own — retry, or switch models if persistent. The dependency sub-count is different: one of Mogplex's own dependencies failed, which points at a platform problem, not the provider."
+            />
+            <FailureStatCard
+              label="Auth / Config"
+              value={String((summary?.authenticationFailures ?? 0) + (summary?.configurationFailures ?? 0))}
+              sub={`${summary?.authenticationFailures ?? 0} auth · ${summary?.configurationFailures ?? 0} config`}
+              valueClass={((summary?.authenticationFailures ?? 0) + (summary?.configurationFailures ?? 0)) > 0 ? "text-accent-red" : ""}
+              info="Failed runs caused by a bad credential (auth — e.g. an expired or revoked token) or an invalid setup (config — e.g. a bad model id or missing setting). These will not fix themselves on retry."
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">

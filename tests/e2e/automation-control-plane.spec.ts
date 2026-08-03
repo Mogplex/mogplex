@@ -46,9 +46,9 @@ async function mockBaseChrome(page: Page) {
 
 // RunsSection is mounted on the observability page again (the run-based
 // summary cards need a runs table beneath them — a run that fails before
-// making a model call has no Activity row). LiveRunsSection remains
-// unmounted pending a product decision; the Activity table's Live status
-// filter covers that view.
+// making a model call has no Activity row). The once-orphaned
+// LiveRunsSection/CallsSection were deleted: the Activity table's Live
+// status filter covers that view.
 test("observability centers runtime runs and exposes repair/requeue actions", async ({
   page,
 }) => {
