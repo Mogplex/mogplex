@@ -69,6 +69,14 @@ const nextConfig = {
   },
   turbopack: {
     root: __dirname,
+    resolveAlias: {
+      // pg reaches browser chunks through client-reachable modules that lazily
+      // import lib/supabase/admin (→ the Neon PostgREST shim). Its node
+      // builtins (dns, fs, net) don't resolve for the browser target, so the
+      // browser condition swaps in a throwing stub; the server build is
+      // untouched.
+      pg: { browser: "./lib/db/pg-browser-stub.ts" },
+    },
   },
   async redirects() {
     return [

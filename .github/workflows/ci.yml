@@ -178,10 +178,16 @@ jobs:
       # Must be >= 32 chars — the catch-all auth route 503s below that in
       # production builds.
       BETTER_AUTH_SECRET: e2e-ci-placeholder-secret-0123456789abcdef
-      # Neon connection for the real-database auth specs
-      # (better-auth-neon.spec.ts); the rest of the suite is fully mocked and
-      # ignores it. The spec file self-skips when this is unset.
+      # Neon connection for the real-database auth specs and (with the
+      # backend flip below) every supabaseAdmin call in the server. The auth
+      # spec files self-skip when this is unset.
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Run the whole e2e suite through the pg-backed PostgREST shim against
+      # real Neon: every server-side supabaseAdmin call is continuously
+      # integration-tested here instead of hitting the placeholder Supabase
+      # URL. Production keeps the Supabase backend until the data-copy flip.
+      MOGPLEX_DATA_BACKEND: neon
+      NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: neon
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

@@ -28,6 +28,13 @@ export function getProviderIconUrl(provider: string) {
   const path = getProviderIconPath(provider);
   if (!path) return null;
 
+  // Neon backend: icons live in the storage_objects table and the app serves
+  // them itself under the same /storage/v1 URL shape (same-origin relative
+  // URL, so this works in both server and browser contexts).
+  if (process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon") {
+    return `/storage/v1/object/public/${PROVIDER_ICONS_BUCKET}/${path}`;
+  }
+
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!base) return null;
 

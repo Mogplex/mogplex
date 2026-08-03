@@ -20,6 +20,9 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   // RFC 9728 WWW-Authenticate challenge before a client has a token.
   { path: "/api/v1/mogplex/mcp", match: "exact" },
   { path: "/api/webhooks/", match: "prefix" },
+  // Neon-backend object serving (provider icons); mirrors Supabase Storage's
+  // public-bucket semantics, so it is public by definition.
+  { path: "/storage/v1/object/public/", match: "prefix" },
   { path: "/workflows", match: "subtree" },
   { path: "/how-it-works", match: "subtree" },
   { path: "/faq", match: "subtree" },
