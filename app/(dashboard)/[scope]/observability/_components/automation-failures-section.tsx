@@ -3,35 +3,51 @@
 import { type ColumnDef } from "@tanstack/react-table"
 import { useMemo } from "react"
 import { StructuredValueViewer } from "@/components/diffs/structured-value-viewer"
-import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/ui/data-table"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type {
   AutomationFailuresFilters,
   AutomationFailuresResponse,
 } from "@/hooks/use-observability"
-import type { ObservabilityDateRangePreset } from "@/hooks/use-observability-date-range"
 import type { AutomationFailureBreakdown, AutomationFailureRecord } from "@/lib/automation-failure-observability"
 import { FilterSelect } from "./filter-select"
 import { formatDuration, timeAgo } from "./formatters"
 import { GithubEventLinkPanel } from "./github-event-link-panel"
 import { PaginationControls } from "./pagination-controls"
 
-const DATE_RANGE_PRESETS: ObservabilityDateRangePreset[] = ["1h", "today", "7d", "30d", ""]
-
 function FailureStatCard({
   label,
   value,
   sub,
   valueClass,
+  info,
 }: {
   label: string
   value: string
   sub?: string
   valueClass?: string
+  info?: string
 }) {
   return (
     <div className="border border-border rounded-md p-3">
-      <div className="text-muted-foreground text-xs mb-1">{label}</div>
+      <div className="text-muted-foreground text-xs mb-1">
+        {info ? (
+          <Tooltip>
+            <TooltipTrigger className="cursor-help text-left underline decoration-dotted decoration-muted-foreground/50 underline-offset-2">
+              {label}
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[300px] text-[11px]">
+              {info}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          label
+        )}
+      </div>
       <div className={`text-foreground text-lg font-medium ${valueClass || ""}`}>{value}</div>
       {sub ? <div className="text-muted-foreground text-xs mt-0.5">{sub}</div> : null}
     </div>
@@ -157,16 +173,12 @@ export function AutomationFailuresSection({
   isLoading,
   filters,
   pages,
-  datePreset,
-  onApplyDateRange,
   onUpdateFilter,
 }: {
   data: AutomationFailuresResponse | undefined
   isLoading: boolean
   filters: AutomationFailuresFilters
   pages: number
-  datePreset: ObservabilityDateRangePreset
-  onApplyDateRange: (preset: ObservabilityDateRangePreset) => void
   onUpdateFilter: (
     key: keyof AutomationFailuresFilters,
     value: AutomationFailuresFilters[keyof AutomationFailuresFilters]
@@ -310,43 +322,42 @@ export function AutomationFailuresSection({
           ]}
           onChange={(value) => onUpdateFilter("model", value || undefined)}
         />
-        {DATE_RANGE_PRESETS.map((preset) => (
-          <Button
-            key={preset || "all"}
-            variant={datePreset === preset ? "default" : "outline"}
-            size="sm"
-            className="h-8 text-sm"
-            onClick={() => onApplyDateRange(preset)}
-          >
-            {preset === "1h" ? "Last hour" : preset === "today" ? "Today" : preset === "7d" ? "Last 7d" : preset === "30d" ? "Last 30d" : "All"}
-          </Button>
-        ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <FailureStatCard
           label="Failed Runs"
           value={String(summary?.failedTotal ?? 0)}
           sub={`${summary?.retriedFailures ?? 0} retried`}
           valueClass={(summary?.failedTotal ?? 0) > 0 ? "text-accent-red" : ""}
+          info="Automation runs in the window that ended failed. The sub-line counts those that attempted at least one model retry before giving up."
         />
         <FailureStatCard
           label="Successful Recoveries"
           value={String(summary?.successfulRecoveries ?? 0)}
           sub="Completed after a model retry"
           valueClass={(summary?.successfulRecoveries ?? 0) > 0 ? "text-accent-green" : ""}
+          info="Runs that completed successfully after recovering from a model failure mid-run. The failure they recovered from is shown in the row's expanded view."
         />
         <FailureStatCard
           label="Timeout Failures"
           value={String(summary?.timeoutFailures ?? 0)}
-          sub={`${summary?.providerFailures ?? 0} provider/rate-limit · ${summary?.dependencyFailures ?? 0} dependency`}
           valueClass={(summary?.timeoutFailures ?? 0) > 0 ? "text-accent-amber" : ""}
+          info="Failed runs classified as timeouts — the run hit its execution time budget. The Timeout Budget breakdown below shows which budget tier each hit."
+        />
+        <FailureStatCard
+          label="Provider / Upstream"
+          value={String(summary?.providerFailures ?? 0)}
+          sub={`${summary?.dependencyFailures ?? 0} dependency`}
+          valueClass={(summary?.providerFailures ?? 0) > 0 ? "text-accent-amber" : ""}
+          info="Failed runs caused upstream of Mogplex: the model provider behind the AI gateway was unavailable, erroring, or rate-limiting (HTTP 429/5xx). These usually clear on their own — retry, or switch models if persistent. The dependency sub-count is different: one of Mogplex's own dependencies failed, which points at a platform problem, not the provider."
         />
         <FailureStatCard
           label="Auth / Config"
           value={String((summary?.authenticationFailures ?? 0) + (summary?.configurationFailures ?? 0))}
           sub={`${summary?.authenticationFailures ?? 0} auth · ${summary?.configurationFailures ?? 0} config`}
           valueClass={((summary?.authenticationFailures ?? 0) + (summary?.configurationFailures ?? 0)) > 0 ? "text-accent-red" : ""}
+          info="Failed runs caused by a bad credential (auth — e.g. an expired or revoked token) or an invalid setup (config — e.g. a bad model id or missing setting). These will not fix themselves on retry."
         />
       </div>
 

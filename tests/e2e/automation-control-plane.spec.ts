@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
-import { linkedVercelCapability } from "./helpers/activation-fixtures";
+import {
+  emptyAutomationFailuresResponse,
+  linkedVercelCapability,
+} from "./helpers/activation-fixtures";
 import type { Page, Route } from "@playwright/test";
 
 const modelId = "minimax/minimax-m2.5";
@@ -306,6 +309,10 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
       page: 1,
       limit: 25,
     })
+  );
+  await page.route(
+    /\/api\/observability\/automation-failures(?:\?.*)?$/,
+    (route) => fulfillJson(route, emptyAutomationFailuresResponse)
   );
 
   await page.route(

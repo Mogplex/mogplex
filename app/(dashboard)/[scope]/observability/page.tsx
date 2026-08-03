@@ -3,7 +3,17 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useObservabilityActivity, type ActivityFilters } from "@/hooks/use-observability-activity"
-import { useObservabilityJobs, useObservabilityStats, type JobsFilters } from "@/hooks/use-observability"
+import {
+  useObservabilityAutomationEvents,
+  useObservabilityAutomationFailures,
+  useObservabilityJobs,
+  useObservabilityStats,
+  type AutomationEventsFilters,
+  type AutomationFailuresFilters,
+  type JobsFilters,
+} from "@/hooks/use-observability"
+import { useObservabilityAutomationEventFilters } from "@/hooks/use-observability-automation-event-filters"
+import { useObservabilityAutomationFailureFilters } from "@/hooks/use-observability-automation-failure-filters"
 import { useObservabilityCallFilters } from "@/hooks/use-observability-call-filters"
 import { useObservabilityJobFilters } from "@/hooks/use-observability-job-filters"
 import { useRepos } from "@/hooks/use-repos"
@@ -20,8 +30,10 @@ import { navigateToSandboxHealth } from "@/lib/sandbox/navigation"
 import type { AiCall } from "@/lib/types"
 import { ActivityDateRangeFilter } from "./_components/activity-date-range-filter"
 import { ActivitySection } from "./_components/activity-section"
+import { AutomationFailuresSection } from "./_components/automation-failures-section"
 import { ObservabilitySummary } from "./_components/observability-summary"
 import { PendingApprovalsSection } from "./_components/pending-approvals-section"
+import { PressureSection } from "./_components/pressure-section"
 import { RunsSection } from "./_components/runs-section"
 
 const INITIAL_FILTERS: ActivityFilters = {
@@ -119,6 +131,45 @@ function ObservabilityContent() {
   const jobs = jobsData?.jobs ?? []
   const jobsTotal = jobsData?.total ?? 0
   const jobsPages = Math.max(1, Math.ceil(jobsTotal / jobFilters.limit))
+
+  // Failures and Pressure share the page-level date range like Runs does,
+  // so the summary cards above (Failed, Suppressed, Deferred, Start Failed)
+  // and these tables describe the same window. Both reset to the first page
+  // on a range change for the same reason as Runs.
+  const { automationFailureFilters, updateAutomationFailureFilter } =
+    useObservabilityAutomationFailureFilters()
+  useEffect(() => {
+    updateAutomationFailureFilter("page", 1)
+  }, [dateRange.from, dateRange.to, updateAutomationFailureFilter])
+  const failuresQuery = useMemo<AutomationFailuresFilters>(() => ({
+    ...automationFailureFilters,
+    from: dateRange.from,
+    to: dateRange.to,
+  }), [automationFailureFilters, dateRange.from, dateRange.to])
+  const { data: failuresData, isLoading: failuresLoading } =
+    useObservabilityAutomationFailures(failuresQuery)
+  const failuresPages = Math.max(
+    1,
+    Math.ceil((failuresData?.total ?? 0) / automationFailureFilters.limit)
+  )
+
+  const { pressureFilters, updatePressureFilter } =
+    useObservabilityAutomationEventFilters()
+  useEffect(() => {
+    updatePressureFilter("page", 1)
+  }, [dateRange.from, dateRange.to, updatePressureFilter])
+  const pressureQuery = useMemo<AutomationEventsFilters>(() => ({
+    ...pressureFilters,
+    from: dateRange.from,
+    to: dateRange.to,
+  }), [pressureFilters, dateRange.from, dateRange.to])
+  const { data: pressureData, isLoading: pressureLoading } =
+    useObservabilityAutomationEvents(pressureQuery)
+  const pressureTotal = pressureData?.total ?? 0
+  const pressurePages = Math.max(
+    1,
+    Math.ceil(pressureTotal / pressureFilters.limit)
+  )
   const [jobActionId, setJobActionId] = useState<string | null>(null)
   // One action in flight at a time: jobActionId only disables the acting
   // row's buttons, so without this guard a second job's action could start
@@ -212,6 +263,23 @@ function ObservabilityContent() {
         jobActionId={jobActionId}
         onUpdateJobFilter={updateJobFilter}
         onRunJobAction={runJobAction}
+      />
+
+      <AutomationFailuresSection
+        data={failuresData}
+        isLoading={failuresLoading}
+        filters={automationFailureFilters}
+        pages={failuresPages}
+        onUpdateFilter={updateAutomationFailureFilter}
+      />
+
+      <PressureSection
+        pressureEvents={pressureData?.events ?? []}
+        pressureLoading={pressureLoading}
+        pressureTotal={pressureTotal}
+        pressurePages={pressurePages}
+        pressureFilters={pressureFilters}
+        onUpdatePressureFilter={updatePressureFilter}
       />
 
       <ActivitySection

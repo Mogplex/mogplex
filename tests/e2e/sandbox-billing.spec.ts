@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
-import { linkedVercelCapability } from "./helpers/activation-fixtures";
+import {
+  emptyAutomationFailuresResponse,
+  linkedVercelCapability,
+} from "./helpers/activation-fixtures";
 import {
   buildObservabilitySummary,
   buildSandboxBackedCall,
@@ -399,6 +402,10 @@ async function installObservabilityMocks(page: Page) {
   await page.route(
     /\/api\/observability\/automation-events(?:\?.*)?$/,
     (route) => fulfillJson(route, { events: [], total: 0, page: 1, limit: 25 })
+  );
+  await page.route(
+    /\/api\/observability\/automation-failures(?:\?.*)?$/,
+    (route) => fulfillJson(route, emptyAutomationFailuresResponse)
   );
   await page.route(/\/api\/observability\/calls(?:\?.*)?$/, (route) => {
     const url = new URL(route.request().url());
