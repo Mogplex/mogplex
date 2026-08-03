@@ -4,7 +4,8 @@ import { LoginPageClient } from "./login-page-client";
 
 export const metadata: Metadata = {
   title: "Sign in — Mogplex",
-  description: "Sign in to Mogplex with your private beta access code.",
+  description:
+    "Sign in to Mogplex with your email and password, GitHub, Google, Microsoft, or SSO.",
   robots: NO_INDEX_ROBOTS,
 };
 
