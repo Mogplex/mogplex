@@ -166,8 +166,9 @@ test.describe("auth UI against real Neon", () => {
 
     await page.getByTestId("signin-password").fill(password);
     await page.getByTestId("signin-submit").click();
-    // Successful sign-in leaves for the default post-login destination.
-    await page.waitForURL("/");
+    // Successful sign-in leaves for "/" and the proxy bounces the now-authed
+    // user into their personal workspace.
+    await page.waitForURL(/\/projects\/workspace$/);
 
     // With the Neon backend, the better-auth session resolves through
     // getResolvedAuth → profiles: the user-create hook provisioned a profile
@@ -258,6 +259,6 @@ test.describe("auth UI against real Neon", () => {
 
     await page.getByTestId("signin-password").fill(newPassword);
     await page.getByTestId("signin-submit").click();
-    await page.waitForURL("/");
+    await page.waitForURL(/\/projects\/workspace$/);
   });
 });

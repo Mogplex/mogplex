@@ -7,3 +7,9 @@
 export function Pool(): never {
   throw new Error("pg is server-only; a browser bundle constructed a Pool");
 }
+
+export const types = {
+  getTypeParser(): never {
+    throw new Error("pg is server-only; a browser bundle read a type parser");
+  },
+};
