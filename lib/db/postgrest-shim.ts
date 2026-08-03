@@ -807,12 +807,17 @@ export function createPostgrestShim(db: Queryable): PostgrestShim {
         const sql = new SqlBuilder();
         const argList = Object.entries(args)
           .map(([key, value]) => {
+            // Dates must stay scalar: a `::jsonb` cast makes Postgres unable
+            // to resolve functions with timestamptz parameters (jsonb has no
+            // implicit cast), failing the whole call.
             const param =
-              value !== null &&
-              typeof value === "object" &&
-              !Array.isArray(value)
-                ? `${sql.add(JSON.stringify(value))}::jsonb`
-                : sql.add(value);
+              value instanceof Date
+                ? sql.add(value.toISOString())
+                : value !== null &&
+                    typeof value === "object" &&
+                    !Array.isArray(value)
+                  ? `${sql.add(JSON.stringify(value))}::jsonb`
+                  : sql.add(value);
             return `${quoteIdent(key)} => ${param}`;
           })
           .join(", ");

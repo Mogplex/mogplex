@@ -102,6 +102,9 @@ const SCHEMA = /* sql */ `
     update repos set metadata = coalesce(metadata, '{}'::jsonb) || p_meta
     where id = p_repo returning metadata
   $$;
+
+  create function echo_claimed_at(p_claimed_at timestamptz) returns timestamptz
+  language sql as $$ select p_claimed_at $$;
 `;
 
 const USER_A = "00000000-0000-4000-8000-00000000000a";
@@ -223,6 +226,21 @@ describe("select + filters", () => {
       cost_usd: 12.75,
       total_bytes: 123_456_789,
     });
+  });
+
+  it("returns timestamptz columns as ISO-8601 strings (PostgREST parity)", async () => {
+    const { data, error } = await db
+      .from("repos")
+      .select("name, last_active_at")
+      .eq("name", "alpha")
+      .single();
+    expect(error).toBeNull();
+    const lastActiveAt = (data as { last_active_at: unknown }).last_active_at;
+    expect(typeof lastActiveAt).toBe("string");
+    // "2026-08-03T15:00:20.638+00:00" — T separator, full zone offset.
+    expect(lastActiveAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?[+-]\d{2}:\d{2}$/
+    );
   });
 
   it("supports neq, gt, lte, in, ilike", async () => {
@@ -644,6 +662,14 @@ describe("rpc", () => {
     });
     expect(merged.error).toBeNull();
     expect(merged.data).toMatchObject({ tier: "gold", merged: true });
+  });
+
+  it("passes Date args as scalars, not jsonb, so timestamptz params resolve", async () => {
+    const claimedAt = new Date("2026-08-03T12:34:56.789Z");
+    const echoed = await db.rpc("echo_claimed_at", { p_claimed_at: claimedAt });
+    expect(echoed.error).toBeNull();
+    expect(typeof echoed.data).toBe("string");
+    expect(new Date(echoed.data as string).getTime()).toBe(claimedAt.getTime());
   });
 
   it("surfaces raised errcodes on error.code", async () => {
