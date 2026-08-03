@@ -76,6 +76,15 @@ export function createRealtimeEventsGetHandler(
   };
 
   return async function GET(request: Request): Promise<Response> {
+    // E2e runs keep pages parked on `networkidle` waits, and a held-open SSE
+    // stream means networkidle never fires — the whole suite stalls into the
+    // job timeout. 204 tells EventSource to stop reconnecting entirely (per
+    // the SSE spec), so under Playwright the hooks connect once and go quiet.
+    // PLAYWRIGHT is never set on real deployments.
+    if (process.env.PLAYWRIGHT === "1") {
+      return new Response(null, { status: 204 });
+    }
+
     const resolved = await deps.getResolvedAuth();
     if (!resolved?.profileId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -144,6 +153,13 @@ export function createRealtimeEventsGetHandler(
         try {
           listener = await deps.createListener();
 
+          // The client can abort while the listener connects; enqueueing into
+          // the closed controller would throw, so tear down instead.
+          if (request.signal.aborted || closed) {
+            await cleanup();
+            return;
+          }
+
           listener.onNotification((payload) => {
             if (closed) return;
 
@@ -184,7 +200,11 @@ export function createRealtimeEventsGetHandler(
         } catch (error) {
           console.error("[realtime-events] Listener setup failed:", error);
           await cleanup();
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            // Already closed by cancel().
+          }
         }
       },
 
