@@ -7,6 +7,7 @@ type ActivationProperties = Record<string, AllowedPropertyValue>;
 
 export type ActivationEventName =
   | "login_started"
+  | "signup_submitted"
   | "waitlist_request_submitted"
   | "github_connect_started"
   | "repo_sync_started"

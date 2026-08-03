@@ -19,7 +19,11 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   webServer: {
-    command: `PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass pnpm --dir ${rootDir} build && PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass pnpm --dir ${rootDir} exec next start --port ${port}`,
+    // BETTER_AUTH_URL pins better-auth's baseURL to the server under test:
+    // without it a real NEXT_PUBLIC_APP_URL in .env.local makes better-auth
+    // mint Secure cookies for the public https origin, which the browser
+    // drops on http://localhost and every session-dependent flow fails.
+    command: `PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass pnpm --dir ${rootDir} build && PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass BETTER_AUTH_URL=${baseURL} pnpm --dir ${rootDir} exec next start --port ${port}`,
     cwd: rootDir,
     url: `${baseURL}/login`,
     reuseExistingServer: false,

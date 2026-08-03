@@ -135,7 +135,7 @@ export async function GET(request: Request) {
           .eq("id", targetProfileId);
 
         if (updateError) {
-          return redirect("/login?error=github_profile_link");
+          return redirect("/login/beta?error=github_profile_link");
         }
       } else {
         targetProfileId = crypto.randomUUID();
@@ -168,14 +168,14 @@ export async function GET(request: Request) {
           console.error("[auth-callback] slug allocation threw", {
             slugError,
           });
-          return redirect("/login?error=github_profile_create");
+          return redirect("/login/beta?error=github_profile_create");
         }
 
         if (!insertResult.ok) {
           console.error("[auth-callback] profile insert failed", {
             error: insertResult.error,
           });
-          return redirect("/login?error=github_profile_create");
+          return redirect("/login/beta?error=github_profile_create");
         }
         insertedSlug = insertResult.slug;
       }
@@ -188,7 +188,7 @@ export async function GET(request: Request) {
             targetProfileId,
             tokenStoreError,
           });
-          return redirect("/login?error=github_token_store");
+          return redirect("/login/beta?error=github_token_store");
         }
       }
 

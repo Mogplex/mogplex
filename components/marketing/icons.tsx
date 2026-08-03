@@ -34,6 +34,24 @@ export const Icon = {
       <path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5a3.4 3.4 0 0 0-1-2.6c3.3-.4 6.7-1.6 6.7-7a5.4 5.4 0 0 0-1.5-3.8 5 5 0 0 0-.1-3.8s-1.2-.4-3.9 1.5a13.4 13.4 0 0 0-7 0C5.5 0 4.3.4 4.3.4a5 5 0 0 0-.1 3.8 5.4 5.4 0 0 0-1.5 3.8c0 5.4 3.3 6.6 6.6 7a3.4 3.4 0 0 0-1 2.6V21" />
     </IconBase>
   ),
+  Google: (p: IconProps) => (
+    <IconBase {...p}>
+      <path
+        d="M21.35 11.1h-9.17v2.92h6.51c-.33 3.6-3.3 5.14-6.5 5.14a7.16 7.16 0 1 1 0-14.32c1.84 0 3.5.7 4.75 1.85l2.13-2.13A10.1 10.1 0 0 0 12.19 2a10 10 0 1 0 0 20c5.35 0 9.4-3.67 9.4-9.09 0-.66-.08-1.28-.24-1.81z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </IconBase>
+  ),
+  Microsoft: (p: IconProps) => (
+    <IconBase {...p}>
+      <path
+        d="M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </IconBase>
+  ),
   ArrowRight: (p: IconProps) => (
     <IconBase {...p}>
       <path d="M5 12h14M13 5l7 7-7 7" />
