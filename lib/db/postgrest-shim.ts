@@ -197,6 +197,9 @@ export class PostgrestShimBuilder implements PromiseLike<ShimResult> {
   is(path: string, value: unknown): this {
     return this.pushFilter(path, "is", value);
   }
+  isDistinct(path: string, value: unknown): this {
+    return this.pushFilter(path, "isdistinct", value);
+  }
   in(path: string, values: readonly unknown[]): this {
     return this.pushFilter(path, "in", [...values]);
   }

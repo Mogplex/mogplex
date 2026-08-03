@@ -320,6 +320,32 @@ describe("select + filters", () => {
     expect(notNull.data).toEqual([{ name: "alpha" }]);
   });
 
+  it("supports isDistinct, treating NULL as distinct (unlike neq)", async () => {
+    // gamma is 'stopped', beta is NULL: IS DISTINCT FROM keeps the NULL row.
+    const distinct = await db
+      .from("repos")
+      .select("name")
+      .isDistinct("health_status", "stopped")
+      .order("name");
+    expect(distinct.data).toEqual([{ name: "alpha" }, { name: "beta" }]);
+
+    const distinctFromNull = await db
+      .from("repos")
+      .select("name")
+      .isDistinct("metadata", null);
+    expect(distinctFromNull.data).toEqual([{ name: "alpha" }]);
+
+    // Raw or() form, as written by gatewayCostUpdateFilter in the
+    // cost-reconciliation cron.
+    const viaOr = await db
+      .from("repos")
+      .select("name")
+      .eq("user_id", USER_A)
+      .or("health_status.isdistinct.healthy,metadata.isdistinct.null")
+      .order("name");
+    expect(viaOr.data).toEqual([{ name: "alpha" }, { name: "beta" }]);
+  });
+
   it("filters through JSON arrow paths via eq, is, and filter()", async () => {
     const arrowEq = await db
       .from("repos")
