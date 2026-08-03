@@ -165,7 +165,7 @@ export function ObservabilitySummary({
           label={`Suppressed · ${windowLabel}`}
           value={String(suppressedInRange)}
           tone={suppressedInRange > 0 ? "failure" : undefined}
-          info="Incoming events dropped before any run was created — duplicate deliveries, inactive or unmatched flows, queue caps, or the mention loop-breaker. Each event's reason is listed in the Pressure table below."
+          info="Incoming events dropped before any run was created — duplicate deliveries, inactive or unmatched flows, queue caps, or the mention loop-breaker. Because no run exists, these never appear in the Runs table."
         />
         <StatCard
           label={`Deferred · ${windowLabel}`}
