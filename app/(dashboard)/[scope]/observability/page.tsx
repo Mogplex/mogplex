@@ -31,7 +31,11 @@ import type { AiCall } from "@/lib/types"
 import { ActivityDateRangeFilter } from "./_components/activity-date-range-filter"
 import { ActivitySection } from "./_components/activity-section"
 import { AutomationFailuresSection } from "./_components/automation-failures-section"
-import { ObservabilitySummary } from "./_components/observability-summary"
+import {
+  ObservabilitySummary,
+  type PressureOutcome,
+  type RunDrilldown,
+} from "./_components/observability-summary"
 import { PendingApprovalsSection } from "./_components/pending-approvals-section"
 import { PressureSection } from "./_components/pressure-section"
 import { RunsSection } from "./_components/runs-section"
@@ -103,16 +107,16 @@ function ObservabilityContent() {
   const total = data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / filters.limit))
 
-  // Runs share the page-level date range, so the run-success and current
-  // attention summaries above and this table describe the same
-  // window — a run that failed before making a model call has no Activity
-  // row, and is only visible here.
-  const { jobFilters, updateJobFilter } = useObservabilityJobFilters()
+  // Terminal run views share the page-level date range. Pending runs are
+  // current state, so their table view must remain unbounded just like the
+  // pending/stale summary metrics above.
+  const { jobFilters, setJobFilters, updateJobFilter } = useObservabilityJobFilters()
+  const isCurrentPendingView = jobFilters.status === "pending"
   const jobsQuery = useMemo<JobsFilters>(() => ({
     ...jobFilters,
-    from: dateRange.from,
-    to: dateRange.to,
-  }), [jobFilters, dateRange.from, dateRange.to])
+    from: isCurrentPendingView ? undefined : dateRange.from,
+    to: isCurrentPendingView ? undefined : dateRange.to,
+  }), [jobFilters, dateRange.from, dateRange.to, isCurrentPendingView])
   const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } = useObservabilityJobs(jobsQuery)
   const jobs = jobsData?.jobs ?? []
   const jobsTotal = jobsData?.total ?? 0
@@ -156,18 +160,24 @@ function ObservabilityContent() {
     section?.focus({ preventScroll: true })
   }, [])
   const inspectPressure = useCallback(
-    (outcome: "suppressed" | "deferred" | "start_failed") => {
+    (outcome: PressureOutcome) => {
       updatePressureFilter("outcome", outcome)
       focusSection("pressure")
     },
     [focusSection, updatePressureFilter]
   )
   const inspectRuns = useCallback(
-    (status: "failed" | "pending") => {
-      updateJobFilter("status", status)
+    (target: RunDrilldown) => {
+      const pending = target !== "failed"
+      setJobFilters((current) => ({
+        ...current,
+        status: pending ? "pending" : "failed",
+        onlyRepairable: target === "repairable_pending" || undefined,
+        page: 1,
+      }))
       focusSection("runs")
     },
-    [focusSection, updateJobFilter]
+    [focusSection, setJobFilters]
   )
   const handleDateRangeChange = useCallback(
     (next: ActivityDateRangeSelection) => {
@@ -291,6 +301,7 @@ function ObservabilityContent() {
         jobsTotal={jobsTotal}
         jobsPages={jobsPages}
         jobFilters={jobFilters}
+        isCurrentPendingView={isCurrentPendingView}
         jobActionId={jobActionId}
         jobActionError={jobActionError}
         onUpdateJobFilter={updateJobFilter}

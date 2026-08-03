@@ -373,13 +373,42 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await expect(page.getByText("Run success")).toBeVisible();
   await expect(page.getByText("66.7%", { exact: true })).toBeVisible();
   await expect(page.getByText("Operational signals")).toBeVisible();
-  await expect(page.getByText("Prevented")).toBeVisible();
+  await expect(page.getByText("Prevented", { exact: true })).toBeVisible();
   await expect(page.getByText("2 events not run")).toBeVisible();
   await expect(page.getByText("1 start attempt retried")).toBeVisible();
   await expect(page.getByText("1 failed start attempt")).toBeVisible();
   await expect(page.getByText("Current attention")).toBeVisible();
   await expect(page.getByText("1 run remains failed")).toBeVisible();
   await expect(page.getByText("1 pending run needs recovery")).toBeVisible();
+
+  const recoveryRequestPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/api/observability/jobs" &&
+      url.searchParams.get("status") === "pending" &&
+      url.searchParams.get("only_repairable") === "true"
+    );
+  });
+  await page.getByText("1 pending run needs recovery").click();
+  const recoveryRequest = new URL((await recoveryRequestPromise).url());
+  expect(recoveryRequest.searchParams.get("from")).toBeNull();
+  expect(recoveryRequest.searchParams.get("to")).toBeNull();
+  await expect(
+    page.getByText("Current pending runs across all dates.")
+  ).toBeVisible();
+
+  const pendingRequestPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/api/observability/jobs" &&
+      url.searchParams.get("status") === "pending" &&
+      !url.searchParams.has("only_repairable")
+    );
+  });
+  await page.getByRole("button", { name: "Inspect 1 pending run" }).click();
+  const pendingRequest = new URL((await pendingRequestPromise).url());
+  expect(pendingRequest.searchParams.get("from")).toBeNull();
+  expect(pendingRequest.searchParams.get("to")).toBeNull();
 
   await page
     .getByRole("button", { name: "Inspect 2 prevented events" })
@@ -419,6 +448,8 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await expect(runsSection.getByText("Showing 26–30 of 30")).toBeVisible();
   await activitySection.getByRole("button", { name: "Next" }).click();
   await expect(activitySection.getByText("Showing 51–75 of 75")).toBeVisible();
+
+  await page.getByLabel("Run status").selectOption("");
 
   const previousJobsFrom = jobRequests.at(-1)?.searchParams.get("from");
   const previousCallsFrom = callRequests.at(-1)?.searchParams.get("from");

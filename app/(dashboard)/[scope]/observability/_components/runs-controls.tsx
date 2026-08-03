@@ -7,10 +7,12 @@ import { FilterSelect } from "./filter-select"
 export function RunsControls({
   jobsLoading,
   jobFilters,
+  isCurrentPendingView,
   onUpdateJobFilter,
 }: {
   jobsLoading: boolean
   jobFilters: JobsFilters
+  isCurrentPendingView: boolean
   onUpdateJobFilter: (key: keyof JobsFilters, value: JobsFilters[keyof JobsFilters]) => void
 }) {
   return (
@@ -19,6 +21,11 @@ export function RunsControls({
         <div>
           <h2 className="ui-section-title">Runs</h2>
           <p className="ui-meta">Background runtime runs with repair and retry controls. Current failures and pending recovery appear in Automation health above.</p>
+          {isCurrentPendingView ? (
+            <p className="ui-meta text-foreground">
+              Current pending runs across all dates.
+            </p>
+          ) : null}
         </div>
         {jobsLoading && <span className="text-sm text-muted-foreground animate-pulse">Loading runs…</span>}
       </div>
