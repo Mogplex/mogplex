@@ -328,8 +328,22 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
   if (!resizeHandleBox) {
     throw new Error("Terminal resize handle was not visible");
   }
+  // Flush the component's two-frame resize correction plus one assertion frame.
+  const waitForDeferredTerminalRender = () =>
+    page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => resolve());
+            });
+          });
+        })
+    );
 
   await terminal.focus();
+  // Empty submissions are echoed locally, so this creates scrollback without
+  // introducing sandbox PTY round trips into the layout regression.
   for (let i = 0; i < 40; i += 1) {
     await page.keyboard.press("Enter");
   }
@@ -356,25 +370,35 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
       })
     )
     .toBe(true);
+  await waitForDeferredTerminalRender();
 
   await terminal.evaluate((element) => {
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll"));
   });
+  const terminalHeightBeforeManualScrollResize = await terminal.evaluate(
+    (element) => element.clientHeight
+  );
+  const currentResizeHandleBox = await verticalResizeHandle.boundingBox();
+  if (!currentResizeHandleBox) {
+    throw new Error("Terminal resize handle disappeared after the first drag");
+  }
   await page.mouse.move(
-    resizeHandleBox.x + resizeHandleBox.width / 2,
-    resizeHandleBox.y - 80
+    currentResizeHandleBox.x + currentResizeHandleBox.width / 2,
+    currentResizeHandleBox.y + currentResizeHandleBox.height / 2
   );
   await page.mouse.down();
   await page.mouse.move(
-    resizeHandleBox.x + resizeHandleBox.width / 2,
-    resizeHandleBox.y - 40,
+    currentResizeHandleBox.x + currentResizeHandleBox.width / 2,
+    currentResizeHandleBox.y + 40,
     { steps: 4 }
   );
   await page.mouse.up();
   await expect
-    .poll(() => terminal.evaluate((element) => element.scrollTop))
-    .toBe(0);
+    .poll(() => terminal.evaluate((element) => element.clientHeight))
+    .not.toBe(terminalHeightBeforeManualScrollResize);
+  await waitForDeferredTerminalRender();
+  expect(await terminal.evaluate((element) => element.scrollTop)).toBe(0);
 
   const agentPane = page.locator('[data-pane-type="agent"]').first();
   await agentPane.getByTitle("Add pane").click();

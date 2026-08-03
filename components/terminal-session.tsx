@@ -45,6 +45,7 @@ import {
 
 const commandHistory: string[] = [];
 const MAX_HISTORY = 200;
+type WTermInstance = NonNullable<TerminalHandle["instance"]>;
 
 const MOGPLEX_WTERM_STYLE = {
   height: "100%",
@@ -684,11 +685,14 @@ export function TerminalSession({ paneId }: { paneId: string }) {
   const readyFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const resizeScrollFrameRef = useRef<number | null>(null);
+  const terminalScrollCleanupRef = useRef<(() => void) | null>(null);
 
   const keepTerminalAtBottomAfterResize = useCallback(() => {
     if (resizeScrollFrameRef.current !== null) {
       cancelAnimationFrame(resizeScrollFrameRef.current);
     }
+    // wterm rebuilds its grid on a deferred render. The second frame restores
+    // scroll only after that rebuild has had a frame to reset the DOM offset.
     resizeScrollFrameRef.current = requestAnimationFrame(() => {
       resizeScrollFrameRef.current = requestAnimationFrame(() => {
         const element = termHandleRef.current?.instance?.element;
@@ -737,30 +741,33 @@ export function TerminalSession({ paneId }: { paneId: string }) {
     renderBanner(execFallbackMessage);
   }, [execFallbackMessage, renderBanner]);
 
-  const handleReady = useCallback(() => {
-    setReady(true);
-    readyRef.current = true;
-    readyFallbackRef.current = setTimeout(() => {
-      paintBanner();
-    }, 600);
-  }, [paintBanner]);
+  const handleReady = useCallback(
+    (terminal: WTermInstance) => {
+      terminalScrollCleanupRef.current?.();
+      const element = terminal.element;
+      const updateStickToBottom = () => {
+        shouldStickToBottomRef.current =
+          element.scrollHeight - element.scrollTop - element.clientHeight < 5;
+      };
+      updateStickToBottom();
+      element.addEventListener("scroll", updateStickToBottom, {
+        passive: true,
+      });
+      terminalScrollCleanupRef.current = () =>
+        element.removeEventListener("scroll", updateStickToBottom);
 
-  useEffect(() => {
-    if (!ready) return;
-    const element = termHandleRef.current?.instance?.element;
-    if (!element) return;
-
-    const updateStickToBottom = () => {
-      shouldStickToBottomRef.current =
-        element.scrollHeight - element.scrollTop - element.clientHeight < 5;
-    };
-    updateStickToBottom();
-    element.addEventListener("scroll", updateStickToBottom, { passive: true });
-    return () => element.removeEventListener("scroll", updateStickToBottom);
-  }, [ready]);
+      setReady(true);
+      readyRef.current = true;
+      readyFallbackRef.current = setTimeout(() => {
+        paintBanner();
+      }, 600);
+    },
+    [paintBanner]
+  );
 
   useEffect(
     () => () => {
+      terminalScrollCleanupRef.current?.();
       if (resizeScrollFrameRef.current !== null) {
         cancelAnimationFrame(resizeScrollFrameRef.current);
       }
