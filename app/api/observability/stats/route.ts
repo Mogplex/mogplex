@@ -165,7 +165,7 @@ export function createObservabilityStatsGetHandler(
     const pendingJobRuns = jobRuns.filter(
       (run) => run.status === "pending"
     ).length;
-    const stalePendingJobRuns = jobRuns.filter((run) =>
+    const repairablePendingJobRuns = jobRuns.filter((run) =>
       deps.isRepairableJobRun(run)
     ).length;
     // "Failed" counts failures that *started* in the window (started_at),
@@ -232,7 +232,9 @@ export function createObservabilityStatsGetHandler(
         job_runs_total: totalJobRuns,
         job_runs_running: runningJobRuns,
         job_runs_pending: pendingJobRuns,
-        job_runs_stale_pending: stalePendingJobRuns,
+        // The response key is retained for compatibility; this is the same
+        // repairability predicate used by the Runs `only_repairable` filter.
+        job_runs_stale_pending: repairablePendingJobRuns,
         job_runs_failed_in_range: failedJobRunsInRange,
         job_runs_repaired_in_range: repairedJobRunsInRange,
         job_runs_concluded_in_range: concludedInRange.length,

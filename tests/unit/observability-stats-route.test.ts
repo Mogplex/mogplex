@@ -212,6 +212,37 @@ test("GET /api/observability/stats zeroes rate and duration for an empty window"
   assert.equal(body.summary.total_cost, 0);
 });
 
+test("GET /api/observability/stats counts the same repairable pending set used by the Runs filter", async () => {
+  const { createObservabilityStatsGetHandler } =
+    await loadObservabilityStatsRoute();
+
+  const handler = createObservabilityStatsGetHandler({
+    requireUserId: async () => "user-123",
+    getNow: () => new Date("2026-04-21T15:30:00.000Z"),
+    loadSnapshot: async () => ({
+      stats: buildStats(),
+      jobRuns: [
+        buildJobRun({
+          id: "repairable",
+          status: "pending",
+          last_start_attempt_at: "2026-04-21T12:00:00.000Z",
+        }),
+        buildJobRun({ id: "waiting", status: "pending" }),
+        buildJobRun({ id: "complete", status: "success" }),
+      ],
+    }),
+    isRepairableJobRun: (run) => Boolean(run.last_start_attempt_at),
+    getJobRunPendingAnchor: () => null,
+  });
+
+  const response = await handler();
+  assert.equal(response.status, 200);
+  const body = await response.json();
+
+  assert.equal(body.summary.job_runs_pending, 2);
+  assert.equal(body.summary.job_runs_stale_pending, 1);
+});
+
 test("GET /api/observability/stats returns auth failures directly", async () => {
   const { createObservabilityStatsGetHandler } =
     await loadObservabilityStatsRoute();
