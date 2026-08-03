@@ -6,8 +6,20 @@ import { createClient as createSupabaseServerClient } from "@/lib/supabase/serve
 type ResolvedAuth = {
   profileId: string;
   authUserId: string | null;
-  source: "supabase" | "playwright" | "api-key";
+  source: "supabase" | "better-auth" | "playwright" | "api-key";
 };
+
+async function findProfileIdByAuthUserId(
+  authUserId: string
+): Promise<string | undefined> {
+  const { supabaseAdmin } = await import("@/lib/supabase/admin");
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .single();
+  return (profile?.id as string | undefined) ?? undefined;
+}
 
 async function getSupabaseLinkedUserId(): Promise<ResolvedAuth | undefined> {
   const supabase = await createSupabaseServerClient();
@@ -16,20 +28,22 @@ async function getSupabaseLinkedUserId(): Promise<ResolvedAuth | undefined> {
 
   if (error || !authUserId) return undefined;
 
-  const { supabaseAdmin } = await import("@/lib/supabase/admin");
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("id")
-    .eq("auth_user_id", authUserId)
-    .single();
+  const profileId = await findProfileIdByAuthUserId(authUserId);
+  if (!profileId) return undefined;
 
-  if (!profile?.id) return undefined;
+  return { profileId, authUserId, source: "supabase" };
+}
 
-  return {
-    profileId: profile.id as string,
-    authUserId,
-    source: "supabase",
-  };
+async function getBetterAuthLinkedUserId(): Promise<ResolvedAuth | undefined> {
+  const { auth } = await import("@/lib/better-auth/server");
+  const session = await auth.api.getSession({ headers: await headers() });
+  const authUserId = session?.user?.id;
+  if (!authUserId) return undefined;
+
+  const profileId = await findProfileIdByAuthUserId(authUserId);
+  if (!profileId) return undefined;
+
+  return { profileId, authUserId, source: "better-auth" };
 }
 
 export async function getProfileId(): Promise<string | undefined> {
@@ -74,7 +88,11 @@ export async function getResolvedAuth(): Promise<ResolvedAuth | undefined> {
     };
   }
 
-  // 3. Supabase session cookie auth
+  // 3. Session cookie auth — better-auth once the data backend is Neon
+  // (profiles and better-auth users share that database), Supabase before.
+  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+    return getBetterAuthLinkedUserId();
+  }
   return getSupabaseLinkedUserId();
 }
 

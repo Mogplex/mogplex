@@ -67,11 +67,11 @@ const SCHEMA = /* sql */ `
     primary key (bucket, name)
   );
 
-  create schema auth;
-  create table auth.users (
+  create table "user" (
     id uuid primary key,
     email text,
-    raw_user_meta_data jsonb
+    name text,
+    image text
   );
 
   create function get_answer(question text) returns text
@@ -155,7 +155,7 @@ async function seed(queryable: Queryable) {
     [team.id, ada.id]
   );
   await queryable.query(
-    `insert into auth.users (id, email, raw_user_meta_data) values ($1, 'ada@example.test', '{"name":"Ada"}')`,
+    `insert into "user" (id, email, name, image) values ($1, 'ada@example.test', 'Ada', null)`,
     [ada.id]
   );
 
@@ -658,13 +658,13 @@ describe("storage + auth shims", () => {
     );
   });
 
-  it("auth.admin.getUserById reads the auth.users shim table", async () => {
+  it("auth.admin.getUserById reads the better-auth user table", async () => {
     const found = await db.auth.admin.getUserById(ids.profileAda);
     expect(found.error).toBeNull();
     expect(found.data.user).toMatchObject({
       id: ids.profileAda,
       email: "ada@example.test",
-      user_metadata: { name: "Ada" },
+      user_metadata: { name: "Ada", avatar_url: null },
     });
 
     const missing = await db.auth.admin.getUserById(
