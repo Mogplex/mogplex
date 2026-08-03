@@ -49,10 +49,10 @@ test("public landing shows the agentic CI/CD hero and primary CTA", async ({
   }
 });
 
-test("login page shows the waitlist gate form ready for input", async ({
+test("beta login page shows the waitlist gate form ready for input", async ({
   page,
 }) => {
-  await page.goto("/login");
+  await page.goto("/login/beta");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("waitlist-gate-form")).toBeVisible();
@@ -63,7 +63,7 @@ test("login page shows the waitlist gate form ready for input", async ({
   );
 });
 
-test("login CTA tracks login_started after the waitlist code is validated", async ({
+test("beta login CTA tracks login_started after the waitlist code is validated", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
@@ -82,7 +82,7 @@ test("login CTA tracks login_started after the waitlist code is validated", asyn
     await route.fulfill({ status: 204, body: "" });
   });
 
-  await page.goto("/login");
+  await page.goto("/login/beta");
   await page.waitForLoadState("networkidle");
 
   await page.getByTestId("waitlist-code-input").fill("e2e-test-code");
@@ -108,10 +108,9 @@ test("login landing surfaces session-expired notice", async ({ page }) => {
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("session expired")).toBeVisible();
-  // The GitHub button is now a form submit inside WaitlistGateForm rather than
-  // an anchor — the next-path is preserved on the cookie set by the validate
-  // call, not on the button's href.
-  await expect(page.getByTestId("waitlist-gate-form")).toBeVisible();
+  // /login is the better-auth sign-in page now; the expired notice renders
+  // above the email/password form.
+  await expect(page.getByTestId("signin-form")).toBeVisible();
 });
 
 test("settings GitHub CTA tracks github_connect_started", async ({ page }) => {

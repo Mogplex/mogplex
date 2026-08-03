@@ -26,7 +26,7 @@ export default function RequestAccessPage() {
         <>
           Already have a code?{" "}
           <Link
-            href="/login"
+            href="/login/beta"
             className="text-white underline underline-offset-4 hover:no-underline"
           >
             Sign in

@@ -17,7 +17,8 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const waitlistCookie = cookieStore.get(WAITLIST_COOKIE_NAME)?.value;
   if (!verifyWaitlistCookieValue(waitlistCookie)) {
-    const loginUrl = buildAppUrl("/login", request);
+    // /login/beta hosts the legacy access-code gate; /login is better-auth.
+    const loginUrl = buildAppUrl("/login/beta", request);
     loginUrl.searchParams.set("error", "waitlist_required");
     if (next && next !== "/") loginUrl.searchParams.set("next", next);
     return NextResponse.redirect(loginUrl);
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
 
   if (error || !data.url) {
     return NextResponse.redirect(
-      buildAppUrl("/login?error=github_login_start", request)
+      buildAppUrl("/login/beta?error=github_login_start", request)
     );
   }
 

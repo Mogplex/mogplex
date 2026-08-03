@@ -97,7 +97,7 @@ export function RequestAccessForm() {
         <p className="text-marketing-muted text-[13px] leading-[1.5]">
           Already have a code?{" "}
           <Link
-            href="/login"
+            href="/login/beta"
             className="text-white underline underline-offset-4 hover:no-underline"
           >
             Sign in →
@@ -162,7 +162,7 @@ export function RequestAccessForm() {
           {isPending ? "Submitting…" : "Request access"}
         </button>
         <Link
-          href="/login"
+          href="/login/beta"
           className="mplex-mono text-marketing-muted text-[11px] tracking-[0.22em] uppercase hover:text-white"
         >
           Have a code? Sign in →

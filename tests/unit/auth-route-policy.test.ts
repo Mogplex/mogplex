@@ -11,6 +11,11 @@ test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavi
   assert.equal(isPublicRoutePath("/install.sh"), true);
   assert.equal(isPublicRoutePath("/api/auth/session"), true);
   assert.equal(isPublicRoutePath("/login/callback"), true);
+  assert.equal(isPublicRoutePath("/login/beta"), true);
+  assert.equal(isPublicRoutePath("/login/sso"), true);
+  assert.equal(isPublicRoutePath("/signup"), true);
+  assert.equal(isPublicRoutePath("/forgot-password"), true);
+  assert.equal(isPublicRoutePath("/reset-password"), true);
   assert.equal(isPublicRoutePath("/slack/link"), true);
   assert.equal(isPublicRoutePath("/api/cli/latest/assets"), true);
   assert.equal(isPublicRoutePath("/oauth/consent"), true);
@@ -26,6 +31,8 @@ test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavi
   assert.equal(isPublicRoutePath("/install.shXXX"), false);
   assert.equal(isPublicRoutePath("/slack/link/anything"), false);
   assert.equal(isPublicRoutePath("/loginfoo"), false);
+  assert.equal(isPublicRoutePath("/signupfoo"), false);
+  assert.equal(isPublicRoutePath("/reset-password-extra"), false);
   assert.equal(isPublicRoutePath("/privacy-policy"), false);
   assert.equal(isPublicRoutePath("/api/agents"), false);
   assert.equal(isPublicRoutePath("/api/v1/mogplex/mcp/servers"), false);

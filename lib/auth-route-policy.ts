@@ -6,6 +6,9 @@ type RoutePolicyEntry =
 const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/", match: "exact" },
   { path: "/login", match: "subtree" },
+  { path: "/signup", match: "subtree" },
+  { path: "/forgot-password", match: "subtree" },
+  { path: "/reset-password", match: "subtree" },
   { path: "/request-access", match: "subtree" },
   { path: "/api/auth/", match: "prefix" },
   { path: "/auth/callback", match: "subtree" },
