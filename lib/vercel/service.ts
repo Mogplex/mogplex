@@ -250,13 +250,21 @@ export function getPlatformVercelServiceState(): {
   platformState: VercelPlatformState;
   canUsePlatformOps: boolean;
 } {
-  const platform = getPlatformSandboxCredentials();
-  const canUsePlatformOps = Boolean(platform.vercelToken);
-
-  return {
-    platformState: canUsePlatformOps ? "ready" : "not_configured",
-    canUsePlatformOps,
-  };
+  // getPlatformSandboxCredentials throws when VERCEL_PROJECT_ID is unset.
+  // This function answers "is the platform configured" — a deployment
+  // without platform Vercel config (self-hosted BYO, CI) is simply
+  // not_configured, and must not 500 routes like /api/auth/user that only
+  // report the state.
+  try {
+    const platform = getPlatformSandboxCredentials();
+    const canUsePlatformOps = Boolean(platform.vercelToken);
+    return {
+      platformState: canUsePlatformOps ? "ready" : "not_configured",
+      canUsePlatformOps,
+    };
+  } catch {
+    return { platformState: "not_configured", canUsePlatformOps: false };
+  }
 }
 
 function readOptionalString(value?: string | null) {

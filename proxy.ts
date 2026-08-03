@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { CookieOptions } from "@supabase/ssr";
 import { createServerClient } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   allowsDelegatedInternalApiPath,
   isPublicRoutePath,
@@ -29,19 +29,13 @@ const UNSCOPED_AUTHED_FIRST_SEGMENT = new Set<string>([
 
 type PendingCookie = { name: string; value: string; options: CookieOptions };
 
-function buildAdminClient() {
-  return createClient(
-    process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY!,
-    { auth: { persistSession: false } }
-  );
-}
-
+// supabaseAdmin is the backend-aware data client: the Supabase service-role
+// REST client today, the pg-backed Neon shim when MOGPLEX_DATA_BACKEND=neon.
+// proxy.ts runs in the Node.js runtime, so the pg path is available here.
 function makeScopeDb(): ScopeLookup {
-  const admin = buildAdminClient();
   return {
     findProfileBySlug: async (slug) => {
-      const { data } = await admin
+      const { data } = await supabaseAdmin
         .from("profiles")
         .select("id")
         .eq("slug", slug)
@@ -49,7 +43,7 @@ function makeScopeDb(): ScopeLookup {
       return data ? { id: data.id as string } : null;
     },
     findTeamBySlug: async (slug) => {
-      const { data } = await admin
+      const { data } = await supabaseAdmin
         .from("teams")
         .select("id")
         .eq("slug", slug)
@@ -57,7 +51,7 @@ function makeScopeDb(): ScopeLookup {
       return data ? { id: data.id as string } : null;
     },
     isTeamMember: async (teamId, userId) => {
-      const { data } = await admin
+      const { data } = await supabaseAdmin
         .from("team_members")
         .select("team_id")
         .eq("team_id", teamId)
@@ -120,30 +114,41 @@ export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const pendingCookies: PendingCookie[] = [];
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
+  let user: { id: string } | null;
+  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+    // better-auth session. With cookieCache enabled this usually verifies the
+    // signed cookie snapshot without a database round-trip; a stale cache
+    // falls through to the real session lookup. Dynamic import keeps the
+    // better-auth/pg stack out of the Supabase-backend request path.
+    const { auth } = await import("@/lib/better-auth/server");
+    const session = await auth.api.getSession({ headers: request.headers });
+    user = session?.user ? { id: session.user.id } : null;
+  } else {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            for (const { name, value, options } of cookiesToSet) {
+              request.cookies.set(name, value);
+              pendingCookies.push({ name, value, options });
+            }
+            supabaseResponse = NextResponse.next({ request });
+            for (const { name, value, options } of cookiesToSet)
+              supabaseResponse.cookies.set(name, value, options);
+          },
         },
-        setAll(cookiesToSet) {
-          for (const { name, value, options } of cookiesToSet) {
-            request.cookies.set(name, value);
-            pendingCookies.push({ name, value, options });
-          }
-          supabaseResponse = NextResponse.next({ request });
-          for (const { name, value, options } of cookiesToSet)
-            supabaseResponse.cookies.set(name, value, options);
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+      }
+    );
+    const {
+      data: { user: supabaseUser },
+    } = await supabase.auth.getUser();
+    user = supabaseUser ? { id: supabaseUser.id } : null;
+  }
 
   if (!user) {
     const referer = request.headers.get("referer");
@@ -169,8 +174,7 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  const admin = buildAdminClient();
-  const { data: profile } = await admin
+  const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("id, slug")
     .eq("auth_user_id", user.id)

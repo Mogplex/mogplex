@@ -28,7 +28,13 @@ test.describe("better-auth against real Neon", () => {
   });
 
   test.afterAll(async () => {
-    // session/account rows cascade from the user delete.
+    // session/account rows cascade from the user delete; the profile row
+    // provisioned by the user-create hook is removed explicitly first.
+    await pool.query(
+      `delete from profiles where auth_user_id in
+         (select id from "user" where email = $1)`,
+      [email]
+    );
     await pool.query('delete from "user" where email = $1', [email]);
     await pool.end();
   });

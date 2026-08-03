@@ -30,6 +30,9 @@ export type ShimError = {
   code: string;
   details: string | null;
   hint: string | null;
+  // pg surfaces the violated constraint's name directly; call sites (e.g.
+  // profile slug-collision retry) distinguish unique violations by it.
+  constraint?: string;
 };
 
 export type ShimResult<T = unknown> = {
@@ -44,6 +47,7 @@ type PgError = Error & {
   code?: string;
   detail?: string;
   hint?: string;
+  constraint?: string;
 };
 
 function toShimError(error: unknown): ShimError {
@@ -53,6 +57,7 @@ function toShimError(error: unknown): ShimError {
     code: pgError.code ?? "SHIM_ERROR",
     details: pgError.detail ?? null,
     hint: pgError.hint ?? null,
+    ...(pgError.constraint ? { constraint: pgError.constraint } : {}),
   };
 }
 
@@ -863,8 +868,10 @@ export function createPostgrestShim(db: Queryable): PostgrestShim {
       admin: {
         async getUserById(id) {
           try {
+            // better-auth's "user" table is the identity source on Neon (the
+            // data copy preserves Supabase auth uids as its ids).
             const { rows } = await db.query(
-              `select id, email, raw_user_meta_data from auth.users where id = $1`,
+              `select id, email, name, image from "user" where id = $1`,
               [id]
             );
             const row = rows[0];
@@ -884,7 +891,10 @@ export function createPostgrestShim(db: Queryable): PostgrestShim {
                 user: {
                   id: row.id,
                   email: row.email,
-                  user_metadata: row.raw_user_meta_data ?? {},
+                  user_metadata: {
+                    name: row.name ?? null,
+                    avatar_url: row.image ?? null,
+                  },
                 },
               },
               error: null,

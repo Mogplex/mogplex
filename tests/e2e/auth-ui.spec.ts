@@ -104,8 +104,15 @@ test.describe("auth UI against real Neon", () => {
   });
 
   test.afterAll(async () => {
-    // session/account/verification rows cascade from the user delete.
+    // session/account/verification rows cascade from the user delete; the
+    // profile row provisioned by the user-create hook has no FK and is
+    // removed explicitly first.
     if (createdEmails.length > 0) {
+      await pool.query(
+        `delete from profiles where auth_user_id in
+           (select id from "user" where email = any($1))`,
+        [createdEmails]
+      );
       await pool.query('delete from "user" where email = any($1)', [
         createdEmails,
       ]);
@@ -161,6 +168,27 @@ test.describe("auth UI against real Neon", () => {
     await page.getByTestId("signin-submit").click();
     // Successful sign-in leaves for the default post-login destination.
     await page.waitForURL("/");
+
+    // With the Neon backend, the better-auth session resolves through
+    // getResolvedAuth → profiles: the user-create hook provisioned a profile
+    // row, so the app's own user endpoint recognizes the session.
+    if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+      const profile = await pool.query(
+        `select id, slug from profiles where auth_user_id =
+           (select id from "user" where email = $1)`,
+        [email]
+      );
+      expect(profile.rowCount).toBe(1);
+      expect(String(profile.rows[0].slug)).toMatch(/^e2e-ui-/);
+
+      const authUser = await page.request.get("/api/auth/user");
+      expect(authUser.status(), await authUser.text()).toBe(200);
+      const authUserBody = (await authUser.json()) as {
+        user?: { id?: string; email?: string } | null;
+      };
+      expect(authUserBody.user?.email).toBe(email);
+      expect(authUserBody.user?.id).toBe(String(profile.rows[0].id));
+    }
 
     // Back on /login the session-aware panel replaces the form.
     await page.goto("/login");

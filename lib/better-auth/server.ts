@@ -13,6 +13,7 @@ import { nextCookies } from "better-auth/next-js";
 import { sso } from "@better-auth/sso";
 import { dash } from "@better-auth/infra";
 import { Pool } from "pg";
+import { createProfileForBetterAuthUser } from "@/lib/auth/better-auth-profile";
 import { sendAuthActionEmail } from "@/lib/email/send-auth-action-email";
 
 const baseURL =
@@ -86,6 +87,28 @@ export const auth = betterAuth({
       // uuid ids so better-auth users can FK-map onto the existing
       // uuid-keyed profiles/auth.users shim at cutover.
       generateId: () => crypto.randomUUID(),
+    },
+  },
+  session: {
+    // Signed session snapshot in a cookie so the proxy can authenticate
+    // requests without a database round-trip; the API layer still validates
+    // the real session. Revocation propagates within maxAge.
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          // Only provision profiles when profiles live in the same database
+          // better-auth writes to — i.e. after the Neon data cutover. Before
+          // that, Supabase's OAuth callback owns profile creation.
+          if (process.env.MOGPLEX_DATA_BACKEND !== "neon") return;
+          await createProfileForBetterAuthUser(user);
+        },
+      },
     },
   },
   emailAndPassword: {
