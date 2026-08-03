@@ -1,0 +1,69 @@
+name: flip-data-copy
+
+# One-time Supabase → Neon production data copy for the backend flip.
+# Lives here because SUPABASE_DB_URL exists only as a repository secret.
+# Dispatch with mode=dry-run first to review table order and row counts,
+# then mode=copy for the real transfer. Delete this workflow once the
+# flip is complete and verified.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run prints the plan; copy performs the transfer"
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - copy
+        default: dry-run
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flip-data-copy
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  HUSKY: 0
+  NODE_VERSION: 22.22.0
+  PNPM_VERSION: 10.12.4
+
+jobs:
+  copy:
+    name: ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run data copy (${{ inputs.mode }})
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$DATABASE_URL" ]; then
+            echo "::error::SUPABASE_DB_URL and DATABASE_URL secrets are both required."
+            exit 1
+          fi
+          if [ "${{ inputs.mode }}" = "dry-run" ]; then
+            pnpm exec tsx scripts/copy-supabase-to-neon.ts --dry-run
+          else
+            pnpm exec tsx scripts/copy-supabase-to-neon.ts
+          fi
