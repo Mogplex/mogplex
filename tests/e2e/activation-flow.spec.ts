@@ -328,6 +328,7 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
   if (!resizeHandleBox) {
     throw new Error("Terminal resize handle was not visible");
   }
+  // Flush the component's two-frame resize correction plus one assertion frame.
   const waitForDeferredTerminalRender = () =>
     page.evaluate(
       () =>
