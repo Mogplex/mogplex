@@ -12,6 +12,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
+import { useTableEvents } from "@/hooks/use-table-events";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import type { SandboxRecordPatch } from "@/lib/sandbox/client-record";
 import type { SandboxError } from "@/lib/sandbox/error-state";
@@ -1074,15 +1075,32 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
     hasCreatingLaunchForRepo(get().creating, repoId),
 }));
 
+const useNeonBackend = process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon";
+
 export function useSandboxSync() {
   const { user } = useUser();
   const refresh = useSandboxStore((state) => state.refresh);
   const applySandboxPatch = useSandboxStore((state) => state.applySandboxPatch);
 
+  // Initial fetch on mount (runs for both backends)
   useEffect(() => {
     if (!user?.id) return;
-
     void refresh();
+  }, [user?.id, refresh]);
+
+  // Neon path: SSE-based table events (must call hook unconditionally)
+  useTableEvents({
+    tables: ["sandboxes"],
+    enabled: useNeonBackend && Boolean(user?.id),
+    onEvent: () => {
+      // NOTIFY has no row data; always refresh
+      void refresh();
+    },
+  });
+
+  // Supabase path: postgres_changes subscription
+  useEffect(() => {
+    if (useNeonBackend || !user?.id) return;
 
     const supabase = createSupabaseClient();
     const channel = supabase
