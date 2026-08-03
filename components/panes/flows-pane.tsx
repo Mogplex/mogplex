@@ -1546,6 +1546,9 @@ type WorkflowSelectOption = {
   value: string
   label: string
   disabled?: boolean
+  // When set, renders an active/inactive status dot before the label so the
+  // open dropdown doubles as a status overview of every workflow.
+  active?: boolean
 }
 
 function WorkflowSelect({
@@ -1602,7 +1605,23 @@ function WorkflowSelect({
             data-value={option.value}
             disabled={option.disabled}
           >
-            {option.label}
+            {option.active === undefined ? (
+              option.label
+            ) : (
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    option.active ? "bg-accent-green" : "bg-muted-foreground",
+                  )}
+                />
+                <span className="truncate">{option.label}</span>
+                <span className="sr-only">
+                  {option.active ? " (active)" : " (inactive)"}
+                </span>
+              </span>
+            )}
           </SelectItem>
         ))}
       </SelectContent>
@@ -3736,7 +3755,8 @@ export function FlowsPane() {
       }
       toast({
         title: "Template deleted",
-        description: `${templateDeleteTarget.template.name} was removed.`,
+        description: `"${templateDeleteTarget.template.name}" was permanently deleted.`,
+        variant: "destructive",
       })
       setTemplateDeleteTarget(null)
     } catch (error) {
@@ -4013,7 +4033,11 @@ export function FlowsPane() {
       }
       await mutateFlows()
       setSelectedFlowId((current) => (current === selectedFlow.id ? null : current))
-      toast({ title: "Flow deleted" })
+      toast({
+        title: "Workflow deleted",
+        description: `"${selectedFlow.name}" was permanently deleted.`,
+        variant: "destructive",
+      })
     } catch (error) {
       toast({
         title: "Error",
@@ -4526,12 +4550,23 @@ export function FlowsPane() {
             </div>
 
             <div className="mt-4">
-              <label
-                htmlFor="flow-library-workflow"
-                className="mb-1.5 block text-[9px] font-semibold tracking-[0.18em] text-muted-foreground uppercase"
-              >
-                Workflow
-              </label>
+              <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                <label
+                  htmlFor="flow-library-workflow"
+                  className="block text-[9px] font-semibold tracking-[0.18em] text-muted-foreground uppercase"
+                >
+                  Workflow
+                </label>
+                {visibleFlows.length > 0 ? (
+                  <span
+                    data-testid="flow-active-count"
+                    className="text-[9px] text-muted-foreground"
+                  >
+                    {visibleFlows.filter((flow) => flow.status === "active").length}
+                    /{visibleFlows.length} active
+                  </span>
+                ) : null}
+              </div>
               <div className="flex gap-1.5">
                 <WorkflowSelect
                   id="flow-library-workflow"
@@ -4551,6 +4586,7 @@ export function FlowsPane() {
                       : visibleFlows.map((flow) => ({
                           value: flow.id,
                           label: flow.name,
+                          active: flow.status === "active",
                         }))
                   }
                 />
