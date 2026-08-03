@@ -66,7 +66,13 @@ export async function sendAuthActionEmail(params: {
   const copy = COPY[params.kind];
 
   if (!apiKey) {
-    if (process.env.NODE_ENV === "production") {
+    // The e2e server is a production build, but its auth specs exercise real
+    // better-auth flows against Neon without Resend wired up — take the same
+    // log-fallback dev uses. PLAYWRIGHT is never set on real deployments.
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.PLAYWRIGHT !== "1"
+    ) {
       // Unlike the waitlist/invite senders, auth links are credentials.
       // In production a missing key fails closed: no token in the logs and
       // the caller surfaces the failure instead of returning success.

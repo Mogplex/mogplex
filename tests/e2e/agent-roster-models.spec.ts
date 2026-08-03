@@ -13,15 +13,6 @@ const enabledModel = {
   is_available: true,
 };
 
-const disabledModel = {
-  id: "anthropic/claude-sonnet-4.6",
-  provider: "anthropic",
-  name: "Claude Sonnet 4.6",
-  context_length: 1_000_000,
-  capabilities: ["reasoning"],
-  is_available: true,
-};
-
 const connectedUser = {
   id: "user-1",
   email: "alex@example.com",
