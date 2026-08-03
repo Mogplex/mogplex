@@ -27,6 +27,7 @@ export function RunsSection({
   jobsPages,
   jobFilters,
   jobActionId,
+  jobActionError,
   onUpdateJobFilter,
   onRunJobAction,
 }: {
@@ -36,6 +37,7 @@ export function RunsSection({
   jobsPages: number
   jobFilters: JobsFilters
   jobActionId: string | null
+  jobActionError: string | null
   onUpdateJobFilter: (key: keyof JobsFilters, value: JobsFilters[keyof JobsFilters]) => void
   onRunJobAction: (jobId: string, action: "repair" | "requeue" | "cancel") => Promise<void>
 }) {
@@ -187,6 +189,11 @@ export function RunsSection({
         jobFilters={jobFilters}
         onUpdateJobFilter={onUpdateJobFilter}
       />
+      {jobActionError && (
+        <p role="alert" className="text-xs text-destructive">
+          {jobActionError}
+        </p>
+      )}
 
       <div className="border border-border rounded-md overflow-hidden">
         <DataTable columns={jobColumns} data={jobs} renderExpandedRow={(job) => <JobExpandedRow job={job} />} />

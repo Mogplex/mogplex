@@ -581,6 +581,13 @@ test("personal workflow templates bind a target repository and can be saved from
   await expect(
     page.getByRole("button", { name: "Delete Critical repo review template" })
   ).toHaveCount(0);
+  const deletionToast = page
+    .locator("li[class*='destructive']")
+    .filter({ hasText: "Template deleted" });
+  await expect(deletionToast).toBeVisible();
+  await expect(deletionToast).toContainText(
+    '"Critical repo review" was permanently deleted.'
+  );
 });
 
 test("team workflow templates are separated, reused, and saved in active team scope", async ({
