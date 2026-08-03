@@ -353,7 +353,8 @@ export class PostgrestShimBuilder implements PromiseLike<ShimResult> {
   ): Promise<string> {
     const relationship = await this.schema.getRelationship(
       parentTable,
-      embed.table
+      embed.table,
+      embed.fkHint
     );
     const childQualifier = quoteIdent(`__embed_${embed.alias}`);
     const childSelectList = await this.buildSelectList(
@@ -441,7 +442,8 @@ export class PostgrestShimBuilder implements PromiseLike<ShimResult> {
       const scoped = embedFilters.get(embed.alias) ?? [];
       const relationship = await this.schema.getRelationship(
         this.state.table,
-        embed.table
+        embed.table,
+        embed.fkHint
       );
       const existsQualifier = quoteIdent(`__exists_${embed.alias}`);
       const joinConditions = relationship.parentCols

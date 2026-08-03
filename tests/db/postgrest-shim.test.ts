@@ -105,6 +105,24 @@ const SCHEMA = /* sql */ `
 
   create function echo_claimed_at(p_claimed_at timestamptz) returns timestamptz
   language sql as $$ select p_claimed_at $$;
+
+  -- FK cycle mirroring flows↔flow_versions: two constraints link the tables,
+  -- so embeds must use a constraint-name hint to pick the right one.
+  create table pipelines (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    published_version_id uuid
+  );
+
+  create table pipeline_versions (
+    id uuid primary key default gen_random_uuid(),
+    pipeline_id uuid not null references pipelines(id),
+    label text not null
+  );
+
+  alter table pipelines
+    add constraint pipelines_published_version_id_fkey
+    foreign key (published_version_id) references pipeline_versions(id);
 `;
 
 const USER_A = "00000000-0000-4000-8000-00000000000a";
@@ -163,6 +181,22 @@ async function seed(queryable: Queryable) {
   await queryable.query(
     `insert into "user" (id, email, name, image) values ($1, 'ada@example.test', 'Ada', null)`,
     [ada.id]
+  );
+
+  const pipeline = await insert(
+    `insert into pipelines (name) values ('deploy') returning id`
+  );
+  const publishedVersion = await insert(
+    `insert into pipeline_versions (pipeline_id, label) values ($1, 'v2') returning id`,
+    [pipeline.id]
+  );
+  await queryable.query(
+    `insert into pipeline_versions (pipeline_id, label) values ($1, 'v1-draft')`,
+    [pipeline.id]
+  );
+  await queryable.query(
+    `update pipelines set published_version_id = $1 where id = $2`,
+    [publishedVersion.id, pipeline.id]
   );
 
   ids.repoAlpha = String(alpha.id);
@@ -476,6 +510,47 @@ describe("embedded resources", () => {
     expect(withoutRows.data).toEqual({ name: "beta", assignments: [] });
   });
 
+  it("resolves FK-name-hinted embeds across a constraint cycle", async () => {
+    // pipelines↔pipeline_versions has two FKs (mirroring flows↔flow_versions);
+    // the hint must select pipelines.published_version_id, not the reverse FK.
+    const { data, error } = await db
+      .from("pipelines")
+      .select(
+        "name, published_version:pipeline_versions!pipelines_published_version_id_fkey(label)"
+      )
+      .eq("name", "deploy")
+      .single();
+    expect(error).toBeNull();
+    expect(data).toEqual({
+      name: "deploy",
+      published_version: { label: "v2" },
+    });
+
+    // The reverse hint picks the child-side FK: all versions as an array.
+    const versions = await db
+      .from("pipelines")
+      .select(
+        "name, versions:pipeline_versions!pipeline_versions_pipeline_id_fkey(label)"
+      )
+      .eq("name", "deploy")
+      .single();
+    expect(versions.error).toBeNull();
+    expect(
+      (versions.data as { versions: { label: string }[] }).versions
+        .map((v) => v.label)
+        .sort()
+    ).toEqual(["v1-draft", "v2"]);
+  });
+
+  it("errors clearly on an unknown FK hint", async () => {
+    const { error } = await db
+      .from("pipelines")
+      .select("name, pipeline_versions!does_not_exist_fkey(label)")
+      .eq("name", "deploy")
+      .single();
+    expect(error?.message).toContain("no foreign key named");
+  });
+
   it("embeds two levels deep", async () => {
     const { data, error } = await db
       .from("repos")
@@ -737,6 +812,7 @@ describe("select parser", () => {
           alias: "assignments",
           table: "assignments",
           inner: false,
+          fkHint: null,
           select: {
             fields: ["*"],
             embeds: [
@@ -744,12 +820,14 @@ describe("select parser", () => {
                 alias: "agents",
                 table: "agents",
                 inner: false,
+                fkHint: null,
                 select: { fields: ["*"], embeds: [] },
               },
               {
                 alias: "repos",
                 table: "repos",
                 inner: false,
+                fkHint: null,
                 select: { fields: ["*"], embeds: [] },
               },
             ],
@@ -765,9 +843,21 @@ describe("select parser", () => {
           alias: "team",
           table: "teams",
           inner: false,
+          fkHint: null,
           select: { fields: ["id", "slug"], embeds: [] },
         },
       ],
+    });
+
+    expect(
+      parseSelect(
+        "id, published_version:flow_versions!flows_published_version_id_fkey(id, graph)"
+      ).embeds[0]
+    ).toMatchObject({
+      alias: "published_version",
+      table: "flow_versions",
+      inner: false,
+      fkHint: "flows_published_version_id_fkey",
     });
 
     expect(parseSelect("id, repos!inner(user_id)").embeds[0]).toMatchObject({
