@@ -4,6 +4,7 @@
 // to flip MOGPLEX_DATA_BACKEND=neon without rewriting 150+ call sites.
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { SHIM_TYPE_PARSERS } from "@/lib/db/pool";
 import {
   createPostgrestShim,
   parseSelect,
@@ -37,6 +38,8 @@ const SCHEMA = /* sql */ `
     user_id uuid not null,
     name text not null,
     stars int not null default 0,
+    cost_usd numeric,
+    total_bytes bigint,
     metadata jsonb,
     health_status text,
     is_hidden boolean,
@@ -122,8 +125,8 @@ async function seed(queryable: Queryable) {
     (await queryable.query(sql, params)).rows[0];
 
   const alpha = await insert(
-    `insert into repos (user_id, name, stars, metadata, health_status, last_active_at)
-     values ($1, 'alpha', 5, '{"agent_id": "ag-1", "tier": "gold"}', 'healthy', now() - interval '1 hour')
+    `insert into repos (user_id, name, stars, cost_usd, total_bytes, metadata, health_status, last_active_at)
+     values ($1, 'alpha', 5, 12.75, 123456789, '{"agent_id": "ag-1", "tier": "gold"}', 'healthy', now() - interval '1 hour')
      returning id`,
     [USER_A]
   );
@@ -168,7 +171,17 @@ async function seed(queryable: Queryable) {
 }
 
 beforeAll(async () => {
-  pglite = new PGlite();
+  // Same numeric/bigint→number parsers production installs on the pg Pool
+  // (lib/db/pool.ts) — PostgREST returned JSON numbers for these types, and
+  // this battery pins that contract for the shim.
+  pglite = new PGlite({
+    parsers: Object.fromEntries(
+      Object.entries(SHIM_TYPE_PARSERS).map(([oid, parse]) => [
+        Number(oid),
+        parse,
+      ])
+    ),
+  });
   await pglite.exec(SCHEMA);
   const queryable: Queryable = {
     query: async (text, values) => {
@@ -196,6 +209,20 @@ describe("select + filters", () => {
       { name: "alpha", stars: 5 },
       { name: "beta", stars: 11 },
     ]);
+  });
+
+  it("returns numeric and bigint columns as numbers (PostgREST parity)", async () => {
+    const { data, error } = await db
+      .from("repos")
+      .select("name, cost_usd, total_bytes")
+      .eq("name", "alpha")
+      .single();
+    expect(error).toBeNull();
+    expect(data).toEqual({
+      name: "alpha",
+      cost_usd: 12.75,
+      total_bytes: 123_456_789,
+    });
   });
 
   it("supports neq, gt, lte, in, ilike", async () => {

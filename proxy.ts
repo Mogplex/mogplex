@@ -78,7 +78,12 @@ export async function proxy(request: NextRequest) {
   // Public paths run before the machine-auth gate so a request to /install.sh
   // that happens to carry an Authorization header can't get converted into a
   // machine-auth failure response instead of the install script.
-  if (isPublicRoutePath(pathname)) {
+  //
+  // The root is public (anonymous visitors get the landing page) but still
+  // flows through session resolution below: signed-in users landing on "/" —
+  // notably the post-login callback, whose fallback destination is "/" —
+  // bounce to their personal scope instead of the marketing page.
+  if (isPublicRoutePath(pathname) && pathname !== "/") {
     return NextResponse.next();
   }
 
@@ -151,6 +156,11 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!user) {
+    // Anonymous root renders the public landing page — never a login bounce.
+    if (pathname === "/") {
+      return supabaseResponse;
+    }
+
     const referer = request.headers.get("referer");
     let isAppNavigation = false;
     try {
