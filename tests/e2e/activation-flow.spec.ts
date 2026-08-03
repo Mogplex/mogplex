@@ -316,6 +316,66 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
   await expect(page.getByTestId("preview-grab-button")).toBeEnabled();
   await expect(page.getByText("panes: 3")).toBeVisible();
 
+  const terminal = page
+    .locator('[data-pane-type="terminal"]')
+    .locator(".wterm");
+  const verticalResizeHandle = page
+    .locator(
+      '[data-slot="resizable-handle"][data-panel-group-direction="vertical"]'
+    )
+    .first();
+  const resizeHandleBox = await verticalResizeHandle.boundingBox();
+  if (!resizeHandleBox) {
+    throw new Error("Terminal resize handle was not visible");
+  }
+
+  await terminal.focus();
+  for (let i = 0; i < 40; i += 1) {
+    await page.keyboard.press("Enter");
+  }
+  await expect(terminal).toHaveClass(/has-scrollback/);
+
+  await page.mouse.move(
+    resizeHandleBox.x + resizeHandleBox.width / 2,
+    resizeHandleBox.y + resizeHandleBox.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    resizeHandleBox.x + resizeHandleBox.width / 2,
+    resizeHandleBox.y - 80,
+    { steps: 8 }
+  );
+  await page.mouse.up();
+
+  await expect
+    .poll(() =>
+      terminal.evaluate((element) => {
+        const distanceFromBottom =
+          element.scrollHeight - element.scrollTop - element.clientHeight;
+        return Math.abs(distanceFromBottom) < 1;
+      })
+    )
+    .toBe(true);
+
+  await terminal.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await page.mouse.move(
+    resizeHandleBox.x + resizeHandleBox.width / 2,
+    resizeHandleBox.y - 80
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    resizeHandleBox.x + resizeHandleBox.width / 2,
+    resizeHandleBox.y - 40,
+    { steps: 4 }
+  );
+  await page.mouse.up();
+  await expect
+    .poll(() => terminal.evaluate((element) => element.scrollTop))
+    .toBe(0);
+
   const agentPane = page.locator('[data-pane-type="agent"]').first();
   await agentPane.getByTitle("Add pane").click();
   // The add-pane menu lists each pane type twice (split right + "Split below");

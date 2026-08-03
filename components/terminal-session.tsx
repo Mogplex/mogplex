@@ -682,6 +682,23 @@ export function TerminalSession({ paneId }: { paneId: string }) {
 
   const resizeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const resizeScrollFrameRef = useRef<number | null>(null);
+
+  const keepTerminalAtBottomAfterResize = useCallback(() => {
+    if (resizeScrollFrameRef.current !== null) {
+      cancelAnimationFrame(resizeScrollFrameRef.current);
+    }
+    resizeScrollFrameRef.current = requestAnimationFrame(() => {
+      resizeScrollFrameRef.current = requestAnimationFrame(() => {
+        const element = termHandleRef.current?.instance?.element;
+        if (element) {
+          element.scrollTop = element.scrollHeight;
+        }
+        resizeScrollFrameRef.current = null;
+      });
+    });
+  }, []);
 
   const renderBanner = useCallback(
     (message: string | null) => {
@@ -729,6 +746,29 @@ export function TerminalSession({ paneId }: { paneId: string }) {
   }, [paintBanner]);
 
   useEffect(() => {
+    if (!ready) return;
+    const element = termHandleRef.current?.instance?.element;
+    if (!element) return;
+
+    const updateStickToBottom = () => {
+      shouldStickToBottomRef.current =
+        element.scrollHeight - element.scrollTop - element.clientHeight < 5;
+    };
+    updateStickToBottom();
+    element.addEventListener("scroll", updateStickToBottom, { passive: true });
+    return () => element.removeEventListener("scroll", updateStickToBottom);
+  }, [ready]);
+
+  useEffect(
+    () => () => {
+      if (resizeScrollFrameRef.current !== null) {
+        cancelAnimationFrame(resizeScrollFrameRef.current);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
     ptyConnectedRef.current = ptyConnected;
   }, [ptyConnected]);
 
@@ -755,6 +795,9 @@ export function TerminalSession({ paneId }: { paneId: string }) {
           /* send on closing socket */
         }
       }
+      if (shouldStickToBottomRef.current) {
+        keepTerminalAtBottomAfterResize();
+      }
       if (ptyConnectedRef.current) return;
       if (!readyRef.current || bannerShownRef.current) return;
       if (resizeDebounceRef.current) clearTimeout(resizeDebounceRef.current);
@@ -763,7 +806,7 @@ export function TerminalSession({ paneId }: { paneId: string }) {
         paintBanner();
       }, 100);
     },
-    [paintBanner]
+    [keepTerminalAtBottomAfterResize, paintBanner]
   );
 
   useEffect(() => {

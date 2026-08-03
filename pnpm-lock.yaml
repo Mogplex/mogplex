@@ -191,14 +191,14 @@ importers:
         specifier: 2.0.0-beta.14
         version: 2.0.0-beta.14
       '@wterm/core':
-        specifier: ^0.1.8
-        version: 0.1.8
+        specifier: 0.3.2
+        version: 0.3.2
       '@wterm/dom':
-        specifier: 0.1.7
-        version: 0.1.7
+        specifier: 0.3.2
+        version: 0.3.2
       '@wterm/react':
-        specifier: ^0.1.8
-        version: 0.1.8(@wterm/dom@0.1.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        specifier: 0.3.2
+        version: 0.3.2(@wterm/dom@0.3.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@xyflow/react':
         specifier: ^12.10.2
         version: 12.10.2(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -3609,19 +3609,16 @@ packages:
   '@workflow/serde@4.1.0-beta.2':
     resolution: {integrity: sha512-8kkeoQKLDaKXefjV5dbhBj2aErfKp1Mc4pb6tj8144cF+Em5SPbyMbyLCHp+BVrFfFVCBluCtMx+jjvaFVZGww==}
 
-  '@wterm/core@0.1.7':
-    resolution: {integrity: sha512-uP8R/OxO/cZUVOWD2q9SLgRTjqH6Ovd3se3SOJvwTi13yJazUF9hGlTrybLgNi4hmuGTHxHPSDSHvQrgf0KEeg==}
+  '@wterm/core@0.3.2':
+    resolution: {integrity: sha512-vM50Flv3cokZ3rLp36Iq2GErlW2ekGQrHa+pX8aU746lJr5SnRZjQ+wo4u4u+0jDJubBeCOYs1KDlUuUXN6Zhg==}
 
-  '@wterm/core@0.1.8':
-    resolution: {integrity: sha512-suOX4Irv3/a90Y5Xn60wza7mIUG2Mu1d2U61g2nbDjs4wWD8SCbi26FUZczuKNo2xqWWjkynNXTTULuAjhiJYg==}
+  '@wterm/dom@0.3.2':
+    resolution: {integrity: sha512-Nt7kGzvIeWyXlQ1Z6BGJWQWpba8X1dSQj1cSb5cTTV4YNxq4cBe/Qkz4VLwCqS6Rt9alZ/9UMjAGHHrgpdjxFg==}
 
-  '@wterm/dom@0.1.7':
-    resolution: {integrity: sha512-235hVbza23+OIYuOror1y7L8MknISTg5yEobNqnNgUmUJ8GjCz5ertTZpZp6zE/1x4Ik2iBd8DjeG5J0g8MR+A==}
-
-  '@wterm/react@0.1.8':
-    resolution: {integrity: sha512-eW+olCGansLe47Kz9oxsMJLAkysvHItxp7EBlpVmh3I+b98ge42vwekjH67x7ME+MShMpZ4KJhtLhqBtKV44fg==}
+  '@wterm/react@0.3.2':
+    resolution: {integrity: sha512-tDZCYZ9NAtPE0Y8DoH1jaHViKLs/Qw3LYvxjNt2iD3WT81Ld226yXoPDQblxyRLoGhEmkAe378wBm3qcP2+nNA==}
     peerDependencies:
-      '@wterm/dom': 0.1.7
+      '@wterm/dom': 0.3.2
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
 
@@ -11161,17 +11158,15 @@ snapshots:
 
   '@workflow/serde@4.1.0-beta.2': {}
 
-  '@wterm/core@0.1.7': {}
+  '@wterm/core@0.3.2': {}
 
-  '@wterm/core@0.1.8': {}
-
-  '@wterm/dom@0.1.7':
+  '@wterm/dom@0.3.2':
     dependencies:
-      '@wterm/core': 0.1.7
+      '@wterm/core': 0.3.2
 
-  '@wterm/react@0.1.8(@wterm/dom@0.1.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@wterm/react@0.3.2(@wterm/dom@0.3.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
-      '@wterm/dom': 0.1.7
+      '@wterm/dom': 0.3.2
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
