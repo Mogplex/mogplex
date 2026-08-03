@@ -165,7 +165,7 @@ export function ObservabilitySummary({
           label={`Suppressed · ${windowLabel}`}
           value={String(suppressedInRange)}
           tone={suppressedInRange > 0 ? "failure" : undefined}
-          info="Incoming events dropped before any run was created — duplicate deliveries, inactive or unmatched flows, queue caps, or the mention loop-breaker. Because no run exists, these never appear in the Runs table."
+          info="Incoming events dropped before any run was created — duplicate deliveries, inactive or unmatched flows, queue caps, or the mention loop-breaker. No run exists for these, so they never appear in the Runs table; each event's reason is in the Pressure table below."
         />
         <StatCard
           label={`Deferred · ${windowLabel}`}
@@ -177,7 +177,7 @@ export function ObservabilitySummary({
           label={`Start Failed · ${windowLabel}`}
           value={String(startFailedInRange)}
           tone={startFailedInRange > 0 ? "failure" : undefined}
-          info="Start attempts that errored before the run began executing (claiming the job or launching the background runtime failed). The run stays pending and is retried — this counts attempts, not distinct runs, so one stuck run can rack up many."
+          info="Start attempts that errored before the run began executing (claiming the job or launching the background runtime failed). The run stays pending and is retried — this counts attempts, not distinct runs, so one stuck run can rack up many. Per-attempt reasons are in the Pressure table below."
         />
         <StatCard
           label="Oldest Pending"

@@ -131,6 +131,38 @@ export async function fulfillJson(route: Route, data: unknown, status = 200) {
   });
 }
 
+// Matches AutomationFailuresResponse for specs that visit /observability but
+// don't exercise the Automation Failures section.
+export const emptyAutomationFailuresResponse = {
+  records: [],
+  total: 0,
+  page: 1,
+  limit: 25,
+  summary: {
+    failedTotal: 0,
+    successfulRecoveries: 0,
+    retriedFailures: 0,
+    timeoutFailures: 0,
+    authenticationFailures: 0,
+    configurationFailures: 0,
+    providerFailures: 0,
+    dependencyFailures: 0,
+  },
+  breakdowns: {
+    byFailureClass: [],
+    bySourceType: [],
+    byProvider: [],
+    byModel: [],
+    byTimeoutBucket: [],
+  },
+  filter_options: {
+    failureClasses: [],
+    sourceTypes: [],
+    providers: [],
+    models: [],
+  },
+};
+
 export function buildUiMessageStreamBody(text: string) {
   return [
     `data: ${JSON.stringify({ type: "text-start", id: "assistant-1" })}`,
@@ -265,6 +297,10 @@ export async function mockActivationFlow(
   await page.route(
     /\/api\/observability\/automation-events(?:\?.*)?$/,
     (route) => fulfillJson(route, { events: [], total: 0, page: 1, limit: 25 })
+  );
+  await page.route(
+    /\/api\/observability\/automation-failures(?:\?.*)?$/,
+    (route) => fulfillJson(route, emptyAutomationFailuresResponse)
   );
   await page.route("**/api/observability/calls?*", (route) => {
     const url = new URL(route.request().url());
