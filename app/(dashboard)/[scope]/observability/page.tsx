@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useCallback, useMemo, useState } from "react"
+import { Suspense, useCallback, useMemo, useRef, useState } from "react"
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useObservabilityActivity, type ActivityFilters } from "@/hooks/use-observability-activity"
 import { useObservabilityJobs, useObservabilityStats, type JobsFilters } from "@/hooks/use-observability"
@@ -115,13 +115,22 @@ function ObservabilityContent() {
   const jobsTotal = jobsData?.total ?? 0
   const jobsPages = Math.max(1, Math.ceil(jobsTotal / jobFilters.limit))
   const [jobActionId, setJobActionId] = useState<string | null>(null)
+  // One action in flight at a time: jobActionId only disables the acting
+  // row's buttons, so without this guard a second job's action could start
+  // and then be re-enabled mid-flight by the first action's cleanup.
+  const jobActionInFlight = useRef(false)
 
   const runJobAction = useCallback(async (jobId: string, action: "repair" | "requeue" | "cancel") => {
+    if (jobActionInFlight.current) return
+    jobActionInFlight.current = true
     setJobActionId(jobId)
     try {
-      await fetch(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
-      await refreshJobs()
+      const res = await fetch(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
+      if (res.ok) {
+        await refreshJobs()
+      }
     } finally {
+      jobActionInFlight.current = false
       setJobActionId(null)
     }
   }, [refreshJobs])
