@@ -30,15 +30,42 @@ jobs:
     # the env indirection on each step.)
     env:
       SUPABASE_DB_URL_PRESENT: ${{ secrets.SUPABASE_DB_URL != '' }}
+      DATABASE_URL_PRESENT: ${{ secrets.DATABASE_URL != '' }}
     steps:
       - name: Note migrations skipped
-        if: ${{ env.SUPABASE_DB_URL_PRESENT != 'true' }}
+        if: ${{ env.SUPABASE_DB_URL_PRESENT != 'true' && env.DATABASE_URL_PRESENT != 'true' }}
         run: |
-          echo "::warning::Skipping database migrations because SUPABASE_DB_URL is not configured."
+          echo "::warning::Skipping database migrations because neither SUPABASE_DB_URL nor DATABASE_URL is configured."
 
       - name: Check out repository
-        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' }}
+        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' || env.DATABASE_URL_PRESENT == 'true' }}
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # Neon migrations (neon/migrations/*.sql, tracked in
+      # neon_migrations.schema_migrations). Runs before the Supabase push so
+      # the Neon side is never behind when both are configured during the
+      # transition; each migration runs in its own transaction.
+      - name: Set up Node.js for Neon migrations
+        if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm via Corepack
+        if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install dependencies for Neon migrations
+        if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply Neon migrations
+        if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm exec tsx scripts/apply-neon-migrations.ts
 
       - name: Set up Supabase CLI
         if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' }}
