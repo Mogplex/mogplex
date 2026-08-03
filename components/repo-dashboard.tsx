@@ -47,6 +47,7 @@ import {
   presentVercelSetup,
 } from "@/lib/activation/setup-state"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
+import { useTableEvents } from "@/hooks/use-table-events"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -318,6 +319,9 @@ function WorkspaceSectionPanel(props: WorkspaceSectionPanelProps) {
     </div>
   )
 }
+
+const useNeonBackend =
+  process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon"
 
 interface Props {
   onOpenChat: (repo: Repo) => void
@@ -1574,8 +1578,18 @@ export function RepoDashboard({ onOpenChat, onReposLoaded }: Props) {
     void syncGithubRepos("repo_dashboard_auto")
   }, [dataLoadError, githubSetup.canSyncRepos, hasAttemptedRepoSync, syncGithubRepos, hasLoadedInitialRepos])
 
+  // Neon path: SSE-based table events (must call hook unconditionally)
+  useTableEvents({
+    tables: ["repos"],
+    enabled: useNeonBackend && Boolean(user?.id),
+    onEvent: () => {
+      void fetchData()
+    },
+  })
+
+  // Supabase path: postgres_changes subscription
   useEffect(() => {
-    if (!user?.id) return
+    if (useNeonBackend || !user?.id) return
 
     const supabase = createSupabaseClient()
     const channel = supabase

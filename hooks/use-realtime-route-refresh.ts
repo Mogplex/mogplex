@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
+import { useTableEvents } from "@/hooks/use-table-events";
 
 export type RealtimeRefreshSpec = {
   table: string;
@@ -10,6 +11,8 @@ export type RealtimeRefreshSpec = {
   schema?: string;
   filter?: string;
 };
+
+const useNeonBackend = process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon";
 
 function resolveSpecs(
   specs: RealtimeRefreshSpec[],
@@ -55,8 +58,41 @@ export function useRealtimeRouteRefresh({
     return resolveSpecs(parsedSpecs, user?.id);
   }, [specsKey, user?.id]);
 
+  // Extract unique table names for Neon path
+  const neonTables = useMemo(() => {
+    const tables = new Set<string>();
+    for (const spec of specs) {
+      tables.add(spec.table);
+    }
+    return [...tables];
+  }, [specs]);
+
+  // Neon path: use SSE-based table events
+  // (Must be called unconditionally per Rules of Hooks)
+  const scheduleNeonInvalidate = useCallback(() => {
+    if (scheduledRef.current) return;
+    scheduledRef.current = true;
+    queueMicrotask(() => {
+      scheduledRef.current = false;
+      void Promise.resolve(invalidateRef.current()).catch((error) => {
+        console.error(
+          `[realtime-route-refresh] ${channelName} invalidate failed`,
+          error
+        );
+      });
+    });
+  }, [channelName]);
+
+  useTableEvents({
+    tables: neonTables,
+    enabled: enabled && useNeonBackend && resolvedSpecs.length > 0,
+    onEvent: scheduleNeonInvalidate,
+  });
+
+  // Supabase path: existing postgres_changes subscription
   useEffect(() => {
-    if (!enabled || resolvedSpecs.length === 0) return;
+    // Skip when Neon backend is enabled or when disabled
+    if (useNeonBackend || !enabled || resolvedSpecs.length === 0) return;
 
     const channel = supabase.channel(`${channelName}:${channelId}`);
     const scheduleInvalidate = () => {
