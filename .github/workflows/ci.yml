@@ -175,7 +175,13 @@ jobs:
     env:
       # Not a real secret: without it the e2e server boots with an unhandled
       # BetterAuthError rejection (better-auth refuses its default secret).
-      BETTER_AUTH_SECRET: e2e-ci-placeholder-secret
+      # Must be >= 32 chars — the catch-all auth route 503s below that in
+      # production builds.
+      BETTER_AUTH_SECRET: e2e-ci-placeholder-secret-0123456789abcdef
+      # Neon connection for the real-database auth specs
+      # (better-auth-neon.spec.ts); the rest of the suite is fully mocked and
+      # ignores it. The spec file self-skips when this is unset.
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

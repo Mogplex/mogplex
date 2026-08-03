@@ -58,6 +58,22 @@ if (
 export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
+  // E2e-mode accommodations; PLAYWRIGHT is never set on real deployments.
+  // - rateLimit: the auth specs fire several sign-in attempts back-to-back
+  //   and CI retries reuse the same server, tripping the production-default
+  //   limiter (429s).
+  // - trustedOrigins: the specs hit localhost:<port> while baseURL points at
+  //   the public origin, so cookie-authenticated POSTs would fail the CSRF
+  //   origin check; trust the request's own origin instead.
+  ...(process.env.PLAYWRIGHT === "1"
+    ? {
+        rateLimit: { enabled: false },
+        trustedOrigins: (request?: Request) => {
+          const origin = request?.headers.get("origin");
+          return origin ? [origin] : [];
+        },
+      }
+    : {}),
   database: new Pool({
     // mogplex_DATABASE_URL is the Neon Vercel-integration var (managed,
     // auto-rotating); unprefixed DATABASE_URL covers local dev and CI.
