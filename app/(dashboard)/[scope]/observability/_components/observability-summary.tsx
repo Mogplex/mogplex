@@ -57,6 +57,13 @@ function StatCard({
   )
 }
 
+// Tooltip copy below hardcodes tunable operational constants. If one of these
+// changes, update the matching tooltip text:
+// - 2-min staleness: STALE_PENDING_JOB_THRESHOLD_MS (lib/workflows/job-run-repair.ts)
+// - 5-min repair cadence: /api/cron/repair-jobs schedule (vercel.json)
+// - 10-min cost reconciliation: trigger/reconcile-ai-call-costs.ts cron
+// - 1-hour reconciliation staleness: reconciliationStaleBefore (app/api/observability/stats/route.ts)
+
 // Threshold is a count of pending calls (not duration). Above this, the
 // reconciliation hint turns amber. Tuned against typical Anthropic
 // reconciliation latency (~minutes); revisit if reconciler throughput or
@@ -129,7 +136,7 @@ export function ObservabilitySummary({
           value={String(stalePending)}
           sub={`${summary?.job_runs_pending ?? 0} pending`}
           tone={stalePending > 0 ? "warn" : undefined}
-          info="Pending runs whose last start attempt (or creation) is over 2 minutes old — the threshold at which the repair cron retries them. The sub-line is all pending runs, stale or not."
+          info="Pending runs whose last start attempt (or creation) is over 2 minutes old, making them eligible for retry by the repair cron (runs every 5 minutes). The sub-line is all pending runs, stale or not."
         />
         <StatCard
           label={`Failed · ${windowLabel}`}
@@ -164,7 +171,7 @@ export function ObservabilitySummary({
           label={`Deferred · ${windowLabel}`}
           value={String(deferredInRange)}
           tone={deferredInRange > 0 ? "warn" : undefined}
-          info="Start attempts postponed because the GitHub installation's concurrency limit was full. The run stays pending and the repair cron retries it within ~2 minutes — this counts attempts, not distinct runs."
+          info="Start attempts postponed because the GitHub installation's concurrency limit was full. The run stays pending; the repair cron (runs every 5 minutes) retries it once it has been pending over 2 minutes. Counts attempts, not distinct runs."
         />
         <StatCard
           label={`Start Failed · ${windowLabel}`}
@@ -218,9 +225,9 @@ export function ObservabilitySummary({
           <TooltipContent side="top" className="max-w-[300px] text-[11px]">
             Gateway-billed calls whose final cost has not been fetched from the
             AI gateway yet — still in flight, or completed over an hour ago
-            without a reconciled cost. A background job reconciles costs every
-            10 minutes; a persistently high count means reconciliation is
-            stuck.
+            without a reconciled cost. A Trigger.dev cron reconciles costs
+            every 10 minutes; a persistently high count means reconciliation
+            is stuck.
           </TooltipContent>
         </Tooltip>
       )}
