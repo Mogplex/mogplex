@@ -122,6 +122,12 @@ export function compileFilter(
 
       break;
     }
+    case "isdistinct": {
+      const value = filter.value === null ? "NULL" : sql.add(filter.value);
+      condition = `${column} IS DISTINCT FROM ${value}`;
+
+      break;
+    }
     default: {
       const operator = OP_SQL[filter.op];
       if (!operator) {
@@ -152,7 +158,9 @@ export function parseOrString(conditions: string): Filter[] {
     }
     const [, path, notPrefix, op, rawValue] = match;
     const value =
-      op === "is" && rawValue in IS_VALUES ? IS_VALUES[rawValue] : rawValue;
+      (op === "is" || op === "isdistinct") && rawValue in IS_VALUES
+        ? IS_VALUES[rawValue]
+        : rawValue;
     return { path, op, value, negated: Boolean(notPrefix) };
   });
 }
