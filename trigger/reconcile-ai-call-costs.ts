@@ -457,6 +457,8 @@ export async function runScheduledAiCallCostReconciliation(
 
 export const reconcileAiCallCostsTask = schedules.task({
   id: TRIGGER_TASK_IDS.aiCallCostReconciliation,
+  // Quoted as "every 10 minutes" in observability tooltip copy — update
+  // observability-summary.tsx if this changes.
   cron: "*/10 * * * *",
   maxDuration: 300,
   retry: { maxAttempts: 1 },

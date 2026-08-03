@@ -1,3 +1,5 @@
+// Quoted as "2 minutes" in observability tooltip copy — update
+// observability-summary.tsx if this changes.
 export const STALE_PENDING_JOB_THRESHOLD_MS = 2 * 60 * 1000;
 
 /**
