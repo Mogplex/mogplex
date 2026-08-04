@@ -26,6 +26,7 @@ function accountFixture(
     stripe_subscription_id: null,
     tier: "free",
     period_anchor: null,
+    subscription_checkout_generation: 0,
     status: "active",
     ...overrides,
   };

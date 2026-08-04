@@ -6,7 +6,7 @@
    Hash links are root-relative (/#run) so they work from any route. */
 
 import Link from "next/link";
-import { IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Inter_Tight } from "next/font/google";
 import { useTheme } from "next-themes";
 import {
   type ReactNode,
@@ -26,6 +26,12 @@ export const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
+});
+
+export const interTight = Inter_Tight({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter-tight",
 });
 
 export const GITHUB_URL = "https://github.com/mogplex/mogplex";

@@ -1,17 +1,12 @@
 import type { ReactNode } from "react";
-import { IBM_Plex_Mono } from "next/font/google";
 import {
   BlueprintOverlay,
   Eyebrow,
+  interTight,
   MpxHeader,
+  plexMono,
 } from "@/components/marketing/mpx-chrome";
 import "./auth.css";
-
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex-mono",
-});
 
 type AuthShellProps = {
   eyebrow?: ReactNode;
@@ -31,7 +26,9 @@ export function AuthShell({
   children,
 }: AuthShellProps) {
   return (
-    <div className={`mpx-landing mpx-auth ${plexMono.variable}`}>
+    <div
+      className={`mpx-landing mpx-auth ${interTight.variable} ${plexMono.variable}`}
+    >
       <BlueprintOverlay />
       <MpxHeader />
       <main>

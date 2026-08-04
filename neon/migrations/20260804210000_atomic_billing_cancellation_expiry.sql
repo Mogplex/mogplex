@@ -21,6 +21,9 @@ begin
   from public.credit_ledger
   where account_id = p_account and bucket = 'included';
 
+  -- Even a zero-dollar expiry row is the once-per-subscription marker: its
+  -- source_ref conflict prevents webhook redelivery from advancing the
+  -- Checkout generation again.
   insert into public.credit_ledger
     (account_id, delta_cents, bucket, kind, source_ref)
   values

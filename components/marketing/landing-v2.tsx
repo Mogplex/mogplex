@@ -15,6 +15,7 @@ import {
   BlueprintOverlay,
   Eyebrow,
   GITHUB_URL,
+  interTight,
   MpxFooter,
   MpxHeader,
   plexMono,
@@ -1203,7 +1204,10 @@ export function MarketingLandingPage() {
   const harness = harnesses[activeHarness];
 
   return (
-    <div className={`mpx-landing ${plexMono.variable}`} ref={rootRef}>
+    <div
+      className={`mpx-landing ${interTight.variable} ${plexMono.variable}`}
+      ref={rootRef}
+    >
       <BlueprintOverlay />
 
       <MpxHeader />

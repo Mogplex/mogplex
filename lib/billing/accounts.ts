@@ -10,7 +10,7 @@ export type BillingAccount = {
   stripe_subscription_id: string | null;
   tier: "free" | "pro" | "team";
   period_anchor: string | null;
-  subscription_checkout_generation?: number | string;
+  subscription_checkout_generation: number;
   status: "active" | "past_due" | "frozen_topups";
   updated_at?: string;
 };

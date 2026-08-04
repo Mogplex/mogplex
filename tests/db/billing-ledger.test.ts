@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const ACCOUNT_ID = "00000000-0000-4000-8000-000000000001";
 const USER_ID = "00000000-0000-4000-8000-000000000002";
+const CANCELLATION_ACCOUNT_ID = "00000000-0000-4000-8000-000000000003";
+const CANCELLATION_USER_ID = "00000000-0000-4000-8000-000000000004";
 
 describe("billing ledger migration", () => {
   let db: PGlite;
@@ -26,8 +28,8 @@ describe("billing ledger migration", () => {
     }
     await db.query(
       `insert into billing_accounts (id, owner_type, owner_user_id)
-       values ($1, 'user', $2)`,
-      [ACCOUNT_ID, USER_ID]
+       values ($1, 'user', $2), ($3, 'user', $4)`,
+      [ACCOUNT_ID, USER_ID, CANCELLATION_ACCOUNT_ID, CANCELLATION_USER_ID]
     );
   });
 
@@ -99,9 +101,15 @@ describe("billing ledger migration", () => {
   });
 
   it("expires cancellation credit atomically and deduplicates redelivery", async () => {
+    await db.query(
+      `select post_credit_ledger_entry(
+         $1, 2000, 'included', 'grant', 'grant:cancel-test', '2026-08', '{}'
+       )`,
+      [CANCELLATION_ACCOUNT_ID]
+    );
     const expiry = await db.query<{ expire_billing_included_credit: number }>(
       "select expire_billing_included_credit($1, 'grantexp:acct:cancel:sub_2')",
-      [ACCOUNT_ID]
+      [CANCELLATION_ACCOUNT_ID]
     );
     expect(expiry.rows[0]?.expire_billing_included_credit).toBe(2000);
 
@@ -109,7 +117,7 @@ describe("billing ledger migration", () => {
       expire_billing_included_credit: number;
     }>(
       "select expire_billing_included_credit($1, 'grantexp:acct:cancel:sub_2')",
-      [ACCOUNT_ID]
+      [CANCELLATION_ACCOUNT_ID]
     );
     expect(duplicate.rows[0]?.expire_billing_included_credit).toBe(0);
 
@@ -117,13 +125,13 @@ describe("billing ledger migration", () => {
       subscription_checkout_generation: number;
     }>(
       "select subscription_checkout_generation from billing_accounts where id = $1",
-      [ACCOUNT_ID]
+      [CANCELLATION_ACCOUNT_ID]
     );
     expect(account.rows[0]?.subscription_checkout_generation).toBe(1);
 
     const balance = await db.query<{ included_cents: number }>(
       "select included_cents from billing_balance($1)",
-      [ACCOUNT_ID]
+      [CANCELLATION_ACCOUNT_ID]
     );
     expect(balance.rows[0]?.included_cents).toBe(0);
   });

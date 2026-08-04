@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import { cookies } from 'next/headers'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
-import { Inter_Tight } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ConsentManager } from '@/components/consent-manager'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -30,13 +29,6 @@ export const viewport: Viewport = {
     { media: '(prefers-color-scheme: dark)', color: '#0b0c0b' },
   ],
 }
-
-const interTight = Inter_Tight({
-  subsets: ['latin'],
-  display: 'swap',
-  preload: false,
-  variable: '--font-inter-tight',
-})
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -71,7 +63,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${GeistSans.variable} ${GeistMono.variable} ${interTight.variable} font-sans antialiased`}>
+      <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme={defaultTheme}
