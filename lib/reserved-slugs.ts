@@ -5,7 +5,7 @@ import { DASHBOARD_SCOPED_FIRST_SEGMENTS } from "@/lib/dashboard-rescue";
 // for future use).
 //
 // Keep in sync with public.is_reserved_slug() — post-cutover changes live in
-// neon/migrations (latest: 20260804170000_reserve_company_slug.sql); the
+// neon/migrations (latest: 20260804180000_reserve_pricing_slug.sql); the
 // initial definition lives in supabase 20260517190000_teams_rbac_phase_0.sql
 // (frozen). Note that
 // the dashboard-scoped segments merged in below are not yet mirrored in the DB
@@ -23,6 +23,7 @@ const RESERVED = new Set<string>([
   "how-it-works",
   "install",
   "login",
+  "pricing",
   "privacy",
   "request-access",
   "slack",

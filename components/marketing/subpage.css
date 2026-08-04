@@ -365,6 +365,183 @@
   text-underline-offset: 3px;
 }
 
+/* ---------- /pricing — rate card ---------- */
+.mpx-sub .price-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 28px);
+  width: 100%;
+  max-width: 1560px;
+  padding: clamp(44px, 7vh, 72px) 40px;
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
+}
+
+.mpx-sub .price-card {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(24px, 2.6vw, 36px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.mpx-sub .price-num {
+  margin-bottom: 18px;
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+}
+
+.mpx-sub .price-value {
+  font-size: clamp(2.2rem, 3vw, 2.9rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.mpx-sub .price-value span {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.mpx-sub .price-annual {
+  margin-top: 8px;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .price-included {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-top: 18px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.mpx-sub .price-audience {
+  margin-top: 16px;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.mpx-sub .price-features {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+  color: var(--ink-body);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.mpx-sub .price-features li {
+  position: relative;
+  padding-left: 16px;
+  margin-top: 9px;
+}
+
+.mpx-sub .price-features li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font: 500 12px/1.6 var(--font-mono);
+}
+
+.mpx-sub .price-note {
+  max-width: 40ch;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+  margin-top: auto;
+  padding-top: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.mpx-sub .meter-card {
+  width: 100%;
+  max-width: 1560px;
+  padding: clamp(44px, 7vh, 72px) 40px;
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
+}
+
+.mpx-sub .meter-kicker {
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+}
+
+.mpx-sub .meter-title {
+  margin: 12px 0 26px;
+  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.mpx-sub .meter-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white);
+  overflow: hidden;
+}
+
+.mpx-sub .meter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 6fr);
+  gap: clamp(14px, 2vw, 28px);
+  padding: 18px 20px;
+}
+
+.mpx-sub .meter-row + .meter-row {
+  border-top: 1px solid var(--border-soft);
+}
+
+.mpx-sub .meter-name {
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .meter-rate {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.mpx-sub .meter-detail {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.mpx-sub .meter-foot {
+  max-width: 90ch;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.7;
+}
+
+.mpx-sub .meter-foot b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 /* ---------- close CTA ---------- */
 .mpx-sub .mpx-sub-close {
   padding: clamp(72px, 12vh, 120px) 40px;
@@ -408,9 +585,20 @@
   .mpx-sub .runsheet,
   .mpx-sub .terms,
   .mpx-sub .faq-list,
+  .mpx-sub .price-cards,
+  .mpx-sub .meter-card,
   .mpx-sub .mpx-sub-close {
     padding-left: 20px;
     padding-right: 20px;
+  }
+
+  .mpx-sub .price-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mpx-sub .meter-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 
   .mpx-sub .pattern,

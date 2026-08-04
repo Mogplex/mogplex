@@ -17,6 +17,7 @@ Authenticated workspace, team, invite, API, and callback URLs are private or ope
 - [Workflow patterns](${absoluteUrl("/workflows")}): Eight factory patterns with triggers, gates, and wire commands.
 - [How it works](${absoluteUrl("/how-it-works")}): Anatomy of a run — trigger, sandbox, agent loop, gates, and reconciliation.
 - [FAQ](${absoluteUrl("/faq")}): Common questions on agents, cost, code execution, gates, and access.
+- [Pricing](${absoluteUrl("/pricing")}): Tiers and published rate card — tokens at provider list price, sandbox compute per running minute.
 - [Company](${absoluteUrl("/company")}): Mogplex Inc. — operating principles, open-source stance, and contact.
 - [Request access](${absoluteUrl("/request-access")}): Private beta access request.
 
