@@ -17,6 +17,9 @@ import {
 } from "react";
 import useSWR from "swr";
 
+import { MogplexMark } from "@/components/brand/mogplex-mark";
+import { MogplexWordmark } from "@/components/brand/mogplex-wordmark";
+
 import "./landing-v2.css";
 
 export const plexMono = IBM_Plex_Mono({
@@ -345,7 +348,8 @@ export function MpxHeader() {
     >
       <nav className="mpx-nav" aria-label="Primary navigation">
         <Link href="/" className="mpx-brand" aria-label="Mogplex home">
-          mogplex
+          <MogplexWordmark className="mpx-brand-wordmark" />
+          <MogplexMark className="mpx-brand-mark" />
         </Link>
 
         <div className="mpx-nav-links">

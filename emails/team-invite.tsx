@@ -19,7 +19,7 @@ export type TeamInviteEmailProps = {
   acceptUrl: string;
 };
 
-const LOGO_URL = "https://mogplex.com/email/mogplex-brandmark-black.png";
+const LOGO_URL = "https://mogplex.com/email/mogplex-logo-black.png";
 const SITE_URL = "https://mogplex.com";
 const PRIVACY_URL = "https://mogplex.com/privacy";
 
@@ -39,7 +39,7 @@ export function TeamInviteEmail({
       <Body style={body}>
         <Container style={container}>
           <Section style={logoSection}>
-            <Img src={LOGO_URL} alt="Mogplex" width="190" height="30" style={logo} />
+            <Img src={LOGO_URL} alt="Mogplex" width="165" height="36" style={logo} />
           </Section>
 
           <Text style={heading}>
