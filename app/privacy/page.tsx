@@ -64,7 +64,7 @@ export default function PrivacyPage() {
           <p>We may update this Privacy Policy from time to time. We will notify users of material changes by updating the date at the top of this page.</p>
 
           <h2 className="text-lg text-foreground">10. Contact</h2>
-          <p>Questions about privacy? Open an issue on our <a href="https://github.com/webrenew/mogplex" className="text-primary hover:underline">GitHub repository</a>.</p>
+          <p>Questions about privacy? Open an issue on our <a href="https://github.com/mogplex/mogplex" className="text-primary hover:underline">GitHub repository</a>.</p>
         </section>
       </div>
     </main>

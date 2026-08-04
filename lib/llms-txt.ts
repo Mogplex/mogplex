@@ -5,7 +5,7 @@ export const LLMS_TXT_PATH = "/llms.txt";
 export function buildLlmsTxt() {
   return `# Mogplex
 
-> Mogplex is the CI/CD layer for the coding-agent era: a browser workbench and control plane for running AI agents against real repositories.
+> Mogplex is the open-source agentic software factory: a control plane and browser workbench where agents plan, build, review, and ship code through one inspectable pipeline, behind your gates.
 
 Mogplex connects GitHub, MCP tools, Vercel Sandboxes, observability, and workflow automation so teams can trigger, inspect, and ship AI-agent work through their normal review and deployment gates.
 
@@ -13,16 +13,17 @@ Authenticated workspace, team, invite, API, and callback URLs are private or ope
 
 ## Public pages
 
-- [Marketing overview](${absoluteUrl("/")}): Product overview for Mogplex and its agentic CI/CD workflow.
-- [Workflow patterns](${absoluteUrl("/workflows")}): Eight example agentic CI/CD pipelines with triggers, gates, and wire commands.
+- [Marketing overview](${absoluteUrl("/")}): Product overview for the Mogplex agentic software factory.
+- [Workflow patterns](${absoluteUrl("/workflows")}): Eight factory patterns with triggers, gates, and wire commands.
 - [How it works](${absoluteUrl("/how-it-works")}): Anatomy of a run — trigger, sandbox, agent loop, gates, and reconciliation.
 - [FAQ](${absoluteUrl("/faq")}): Common questions on agents, cost, code execution, gates, and access.
+- [Company](${absoluteUrl("/company")}): Mogplex Inc. — operating principles, open-source stance, and contact.
 - [Request access](${absoluteUrl("/request-access")}): Private beta access request.
 
 ## Documentation and source
 
 - [Mogplex docs](https://docs.mogplex.com/): Product documentation and usage guides.
-- [GitHub repository](https://github.com/webrenew/mogplex): Source, issues, and project activity.
+- [GitHub repository](https://github.com/mogplex/mogplex): Source, issues, and project activity.
 
 ## Policies
 

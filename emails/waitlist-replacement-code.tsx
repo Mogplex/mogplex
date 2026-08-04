@@ -17,7 +17,7 @@ export type WaitlistReplacementCodeEmailProps = {
   unsubscribeUrl: string;
 };
 
-const LOGO_URL = "https://assets.mogplex.com/mogplex-logo.png";
+const LOGO_URL = "https://mogplex.com/email/mogplex-brandmark-black.png";
 const SITE_URL = "https://mogplex.com";
 const PRIVACY_URL = "https://mogplex.com/privacy";
 
@@ -33,7 +33,7 @@ export function WaitlistReplacementCodeEmail({
       <Body style={body}>
         <Container style={container}>
           <Section style={logoSection}>
-            <Img src={LOGO_URL} alt="Mogplex" width="120" style={logo} />
+            <Img src={LOGO_URL} alt="Mogplex" width="190" height="30" style={logo} />
           </Section>
 
           <Text style={heading}>Your new Mogplex access code</Text>
@@ -91,7 +91,7 @@ export function WaitlistReplacementCodeEmail({
 export default WaitlistReplacementCodeEmail;
 
 const body: React.CSSProperties = {
-  backgroundColor: "#ffffff",
+  backgroundColor: "#f4f1eb",
   fontFamily:
     'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
   margin: 0,
@@ -143,8 +143,8 @@ const codeText: React.CSSProperties = {
   fontSize: 20,
   letterSpacing: "0.04em",
   color: "#0a0a0a",
-  backgroundColor: "#f5f5f5",
-  border: "1px solid #e5e5e5",
+  backgroundColor: "#fdfcf9",
+  border: "1px solid #ddd8c9",
   borderRadius: 6,
   padding: "14px 18px",
   margin: 0,
@@ -158,7 +158,7 @@ const footnote: React.CSSProperties = {
 };
 
 const divider: React.CSSProperties = {
-  borderColor: "#e5e5e5",
+  borderColor: "#ddd8c9",
   margin: "32px 0 20px",
 };
 

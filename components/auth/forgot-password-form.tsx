@@ -67,7 +67,7 @@ export function ForgotPasswordForm() {
           type="submit"
           disabled={isPending}
           data-testid="forgot-password-submit"
-          className="mplex-btn mplex-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-primary is-small"
         >
           {isPending ? "Sending…" : "Send reset link"}
         </button>

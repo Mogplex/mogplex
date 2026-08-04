@@ -46,6 +46,6 @@ export function buildMogplexMcpProtectedResourceMetadata(request?: Request) {
     resource: getMogplexMcpResourceUrl(request),
     authorization_servers: [getSupabaseOAuthIssuer()],
     resource_documentation:
-      "https://github.com/webrenew/mogplex/blob/main/docs/mogplex-api-mcp/local-agent-automation.md",
+      "https://github.com/mogplex/mogplex/blob/main/docs/mogplex-api-mcp/local-agent-automation.md",
   };
 }

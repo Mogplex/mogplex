@@ -330,6 +330,9 @@ export default defineConfig([
       "**/*.md",
       // pnpm requires this exact filename and CJS format.
       ".pnpmfile.cjs",
+      // CJS require hook preloaded via `tsx --require` in test:unit; must be
+      // CommonJS to patch require.extensions / Module._load.
+      "tests/support/bundler-shims.cjs",
     ],
   },
 ]);

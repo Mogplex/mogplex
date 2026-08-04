@@ -20,7 +20,7 @@ export type AuthActionEmailProps = {
   footnote: string;
 };
 
-const LOGO_URL = "https://assets.mogplex.com/mogplex-logo.png";
+const LOGO_URL = "https://mogplex.com/email/mogplex-brandmark-black.png";
 const SITE_URL = "https://mogplex.com";
 const PRIVACY_URL = "https://mogplex.com/privacy";
 
@@ -38,7 +38,7 @@ export function AuthActionEmail({
       <Body style={body}>
         <Container style={container}>
           <Section style={logoSection}>
-            <Img src={LOGO_URL} alt="Mogplex" width="120" style={logo} />
+            <Img src={LOGO_URL} alt="Mogplex" width="190" height="30" style={logo} />
           </Section>
 
           <Text style={headingStyle}>{heading}</Text>
@@ -87,7 +87,7 @@ export function AuthActionEmail({
 export default AuthActionEmail;
 
 const body: React.CSSProperties = {
-  backgroundColor: "#ffffff",
+  backgroundColor: "#f4f1eb",
   fontFamily:
     'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
   margin: 0,
@@ -121,7 +121,7 @@ const paragraph: React.CSSProperties = {
 const buttonWrap: React.CSSProperties = { margin: "0 0 24px" };
 
 const button: React.CSSProperties = {
-  backgroundColor: "#0a0a0a",
+  backgroundColor: "#ff4b00",
   color: "#ffffff",
   fontSize: 14,
   fontWeight: 500,
@@ -149,7 +149,7 @@ const footnoteStyle: React.CSSProperties = {
 };
 
 const divider: React.CSSProperties = {
-  borderColor: "#e5e5e5",
+  borderColor: "#ddd8c9",
   margin: "0 0 16px",
 };
 

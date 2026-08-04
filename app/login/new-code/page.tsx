@@ -18,7 +18,7 @@ export default function NewCodePage() {
       title={
         <>
           Get a new{" "}
-          <span className="mplex-gradient-text italic">access code</span>.
+          <em className="grad">access code</em>.
         </>
       }
       subtitle="Lost the code from a previous device? Enter the email tied to your account and we'll send a single-use replacement."
@@ -27,7 +27,6 @@ export default function NewCodePage() {
           Have a code?{" "}
           <Link
             href="/login/beta"
-            className="text-white underline underline-offset-4 hover:no-underline"
           >
             Back to sign in
           </Link>

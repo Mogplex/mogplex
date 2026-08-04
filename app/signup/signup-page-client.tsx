@@ -19,7 +19,7 @@ function SignupContent() {
       title={
         <>
           Create your{" "}
-          <span className="mplex-gradient-text italic">Mogplex</span> account.
+          <em className="grad">Mogplex</em> account.
         </>
       }
       subtitle="Sign up with your email and password, or continue with a provider."
@@ -28,14 +28,13 @@ function SignupContent() {
           Already have an account?{" "}
           <Link
             href="/login"
-            className="text-white underline underline-offset-4 hover:no-underline"
           >
             Sign in
           </Link>
         </div>
       }
     >
-      <div className="mplex-panel flex w-full flex-col gap-4 p-5 sm:p-6">
+      <div className="mpx-auth-card">
         <SignUpForm verifiedNext="/login?verified=1" />
         <AuthDivider />
         <SocialButtons next={next} source="signup_page" />
@@ -46,7 +45,7 @@ function SignupContent() {
 
 export function SignupPageClient() {
   return (
-    <Suspense fallback={<div className="mplex-landing min-h-dvh" />}>
+    <Suspense fallback={<div className="mpx-landing min-h-dvh" />}>
       <SignupContent />
     </Suspense>
   );

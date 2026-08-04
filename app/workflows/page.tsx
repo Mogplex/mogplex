@@ -6,7 +6,7 @@ import { buildMarketingMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Workflow patterns — Mogplex",
   description:
-    "Eight agentic CI/CD pipelines teams wire in their first week: nightly dependency bumps, CI first response, issue-to-PR, PR review, docs drift, and more. Every one ships through your gates.",
+    "Eight factory patterns teams wire in their first week: nightly dependency bumps, CI first response, issue-to-PR, PR review, docs drift, and more. Every one ships through your gates.",
   path: "/workflows",
 });
 

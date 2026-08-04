@@ -4,8 +4,10 @@ import { DASHBOARD_SCOPED_FIRST_SEGMENTS } from "@/lib/dashboard-rescue";
 // URL space collides with an unscoped surface (or one we want to reserve
 // for future use).
 //
-// Keep in sync with public.is_reserved_slug() in Supabase migrations. The
-// initial definition lives in 20260517190000_teams_rbac_phase_0.sql. Note that
+// Keep in sync with public.is_reserved_slug() — post-cutover changes live in
+// neon/migrations (latest: 20260804170000_reserve_company_slug.sql); the
+// initial definition lives in supabase 20260517190000_teams_rbac_phase_0.sql
+// (frozen). Note that
 // the dashboard-scoped segments merged in below are not yet mirrored in the DB
 // function — a follow-up migration should append them so slug claims are
 // rejected at the database layer too. Until then this set guards the
@@ -15,6 +17,7 @@ const RESERVED = new Set<string>([
   "api",
   "auth",
   "cli-auth",
+  "company",
   "conduct",
   "faq",
   "how-it-works",

@@ -25,24 +25,24 @@ function LoginNotice({
   if (!expired && !error && !verified && !reset) return null;
 
   return (
-    <div className="mplex-mono flex flex-col items-center gap-2 text-[11px] tracking-[0.24em] uppercase">
+    <div className="flex flex-col items-center gap-2">
       {expired ? (
-        <div className="border border-amber-300/20 bg-amber-300/[0.08] px-3 py-1 text-amber-200">
+        <div className="mpx-auth-alert is-warn">
           session expired — sign in again
         </div>
       ) : null}
       {verified ? (
-        <div className="border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-1 text-emerald-100">
+        <div className="mpx-auth-alert is-success">
           email verified
         </div>
       ) : null}
       {reset ? (
-        <div className="border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-1 text-emerald-100">
+        <div className="mpx-auth-alert is-success">
           password updated — sign in
         </div>
       ) : null}
       {error ? (
-        <div className="border border-rose-300/20 bg-rose-300/[0.08] px-3 py-1 text-rose-200">
+        <div className="mpx-auth-alert is-error">
           {error.replace(/_/g, " ")}
         </div>
       ) : null}
@@ -64,7 +64,7 @@ function LoginContent() {
       eyebrow="Sign in"
       title={
         <>
-          Sign in to <span className="mplex-gradient-text italic">Mogplex</span>
+          Sign in to <em className="grad">Mogplex</em>
           .
         </>
       }
@@ -83,7 +83,6 @@ function LoginContent() {
             New to Mogplex?{" "}
             <Link
               href="/signup"
-              className="text-white underline underline-offset-4 hover:no-underline"
             >
               Create an account
             </Link>
@@ -92,7 +91,6 @@ function LoginContent() {
             Have a beta access code?{" "}
             <Link
               href="/login/beta"
-              className="text-white underline underline-offset-4 hover:no-underline"
             >
               Use the beta sign-in
             </Link>
@@ -100,7 +98,7 @@ function LoginContent() {
         </div>
       }
     >
-      <div className="mplex-panel flex w-full flex-col gap-4 p-5 sm:p-6">
+      <div className="mpx-auth-card">
         {session?.user ? (
           <SignedInPanel email={session.user.email} next={next} />
         ) : (
@@ -111,7 +109,7 @@ function LoginContent() {
             <div className="text-center">
               <Link
                 href={`/login/sso?next=${encodeURIComponent(next)}`}
-                className="mplex-mono text-marketing-muted text-[11px] tracking-[0.22em] uppercase hover:text-white"
+                className="mpx-auth-minor"
               >
                 Use single sign-on (SSO) →
               </Link>
@@ -125,7 +123,7 @@ function LoginContent() {
 
 export function LoginPageClient() {
   return (
-    <Suspense fallback={<div className="mplex-landing min-h-dvh" />}>
+    <Suspense fallback={<div className="mpx-landing min-h-dvh" />}>
       <LoginContent />
     </Suspense>
   );

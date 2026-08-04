@@ -23,7 +23,7 @@ function ConsentError({ message }: { message: string }) {
       title="Authorization unavailable"
       subtitle={message}
     >
-      <div className="border border-rose-300/20 bg-rose-300/[0.08] px-4 py-3 text-center text-sm text-rose-100">
+      <div className="mpx-auth-alert is-error text-center">
         Return to your MCP client and start the sign-in again.
       </div>
     </AuthShell>
@@ -82,21 +82,21 @@ export default async function MogplexOAuthConsentPage({
       title={
         <>
           Connect{" "}
-          <span className="mplex-gradient-text italic">{data.client.name}</span>
+          <em className="grad">{data.client.name}</em>
         </>
       }
       subtitle={`Signed in as ${user.email ?? data.user.email}`}
       notice={
         decisionError ? (
-          <div className="border border-rose-300/20 bg-rose-300/[0.08] px-3 py-1 text-[11px] text-rose-100 uppercase">
+          <div className="mpx-auth-alert is-error">
             Authorization failed. Try again.
           </div>
         ) : null
       }
       footer="You can revoke this connection later from your Mogplex account."
     >
-      <div className="text-marketing-muted border border-white/10 bg-white/[0.035] p-5 text-sm">
-        <p className="text-white">This client will be able to:</p>
+      <div className="mpx-auth-scopes">
+        <p>This client will be able to:</p>
         <ul className="mt-3 list-disc space-y-2 pl-5 leading-6">
           <li>
             Read repositories, automations, models, run history, and logs.
@@ -105,7 +105,7 @@ export default async function MogplexOAuthConsentPage({
           <li>Create sandboxes and inspect their output.</li>
         </ul>
         {requestedScopes.length > 0 ? (
-          <p className="mt-4 border-t border-white/10 pt-3 text-xs">
+          <p className="mpx-auth-scopes-note">
             OAuth scopes: {requestedScopes.join(", ")}
           </p>
         ) : null}

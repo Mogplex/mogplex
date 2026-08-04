@@ -23,14 +23,13 @@ function ResetPasswordContent() {
           Back to{" "}
           <Link
             href="/login"
-            className="text-white underline underline-offset-4 hover:no-underline"
           >
             sign in
           </Link>
         </div>
       }
     >
-      <div className="mplex-panel flex w-full flex-col gap-4 p-5 sm:p-6">
+      <div className="mpx-auth-card">
         <ResetPasswordForm token={token} />
       </div>
     </AuthShell>
@@ -39,7 +38,7 @@ function ResetPasswordContent() {
 
 export function ResetPasswordPageClient() {
   return (
-    <Suspense fallback={<div className="mplex-landing min-h-dvh" />}>
+    <Suspense fallback={<div className="mpx-landing min-h-dvh" />}>
       <ResetPasswordContent />
     </Suspense>
   );

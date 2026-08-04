@@ -50,7 +50,7 @@ export default function TermsPage() {
           <p>We may update these Terms at any time. Continued use of the Service after changes constitutes acceptance of the new Terms.</p>
 
           <h2 className="text-lg text-foreground">10. Contact</h2>
-          <p>Questions about these Terms? Open an issue on our <a href="https://github.com/webrenew/mogplex" className="text-primary hover:underline">GitHub repository</a>.</p>
+          <p>Questions about these Terms? Open an issue on our <a href="https://github.com/mogplex/mogplex" className="text-primary hover:underline">GitHub repository</a>.</p>
         </section>
       </div>
     </main>

@@ -2,9 +2,10 @@ import type { Metadata, MetadataRoute } from "next";
 
 export const SITE_URL = "https://mogplex.com";
 export const SITE_NAME = "Mogplex";
-export const DEFAULT_TITLE = "Mogplex | Control plane for coding agents";
+export const DEFAULT_TITLE =
+  "Mogplex | The open-source agentic software factory";
 export const DEFAULT_DESCRIPTION =
-  "Mogplex is a browser workbench and terminal cockpit for running coding agents against real repositories with GitHub, MCP tools, sandboxes, and observability.";
+  "Mogplex coordinates agents that plan, build, review, and ship code through one inspectable pipeline.";
 
 type PublicContentRoute = {
   path: `/${string}`;
@@ -20,7 +21,7 @@ type PublicContentRoute = {
 export const PUBLIC_CONTENT_ROUTES = [
   {
     path: "/",
-    lastModified: "2026-05-19",
+    lastModified: "2026-08-04",
     changeFrequency: "weekly",
     priority: 1,
   },
@@ -41,6 +42,12 @@ export const PUBLIC_CONTENT_ROUTES = [
     lastModified: "2026-07-21",
     changeFrequency: "monthly",
     priority: 0.7,
+  },
+  {
+    path: "/company",
+    lastModified: "2026-08-04",
+    changeFrequency: "monthly",
+    priority: 0.6,
   },
   {
     path: "/request-access",
@@ -121,7 +128,7 @@ export const MARKETING_JSON_LD = {
       name: SITE_NAME,
       url: SITE_URL,
       logo: absoluteUrl("/icon.png"),
-      sameAs: ["https://github.com/webrenew/mogplex"],
+      sameAs: ["https://github.com/mogplex/mogplex"],
     },
     {
       "@type": "SoftwareApplication",

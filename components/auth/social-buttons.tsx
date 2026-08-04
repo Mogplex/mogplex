@@ -58,7 +58,7 @@ export function SocialButtons({
           onClick={() => start(id)}
           disabled={pendingProvider !== null}
           data-testid={`auth-social-${id}`}
-          className="mplex-btn mplex-btn-ghost justify-center disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-secondary"
         >
           <ProviderIcon size={14} />
           {pendingProvider === id ? "Redirecting…" : `Continue with ${label}`}

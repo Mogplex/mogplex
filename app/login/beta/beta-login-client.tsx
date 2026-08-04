@@ -23,18 +23,18 @@ function LoginNotice({
   if (!expired && !error) return null;
 
   return (
-    <div className="mplex-mono flex flex-col items-center gap-2 text-[11px] tracking-[0.24em] uppercase">
+    <div className="flex flex-col items-center gap-2">
       {expired ? (
-        <div className="border border-amber-300/20 bg-amber-300/[0.08] px-3 py-1 text-amber-200">
+        <div className="mpx-auth-alert is-warn">
           session expired — sign in again
         </div>
       ) : null}
       {error === "waitlist_required" ? (
-        <div className="border border-violet-300/25 bg-violet-300/[0.08] px-3 py-1 text-violet-100">
+        <div className="mpx-auth-alert is-accent">
           private beta — access code required
         </div>
       ) : error ? (
-        <div className="border border-rose-300/20 bg-rose-300/[0.08] px-3 py-1 text-rose-200">
+        <div className="mpx-auth-alert is-error">
           {error.replace(/_/g, " ")}
         </div>
       ) : null}
@@ -54,7 +54,7 @@ function LoginContent() {
       title={
         <>
           Sign in to{" "}
-          <span className="mplex-gradient-text italic">Mogplex</span>.
+          <em className="grad">Mogplex</em>.
         </>
       }
       subtitle="Private beta. Enter your access code, then continue with GitHub."
@@ -65,7 +65,6 @@ function LoginContent() {
             No code yet?{" "}
             <Link
               href="/request-access"
-              className="text-white underline underline-offset-4 hover:no-underline"
             >
               Request access
             </Link>
@@ -74,7 +73,6 @@ function LoginContent() {
             Signed in elsewhere?{" "}
             <Link
               href="/login/new-code"
-              className="text-white underline underline-offset-4 hover:no-underline"
             >
               Get a new code
             </Link>
@@ -92,7 +90,7 @@ function LoginContent() {
 
 export function BetaLoginClient() {
   return (
-    <Suspense fallback={<div className="mplex-landing min-h-dvh" />}>
+    <Suspense fallback={<div className="mpx-landing min-h-dvh" />}>
       <LoginContent />
     </Suspense>
   );

@@ -1,0 +1,260 @@
+/* ============================================================
+   MOGPLEX — auth surfaces (/login, /signup, /request-access, …)
+   Extends the mpx landing system: same tokens, Inter Tight /
+   IBM Plex Mono, paper + blueprint chrome. Scoped to .mpx-auth
+   and only additive — landing-v2.css owns the tokens.
+   ============================================================ */
+
+.mpx-auth {
+  position: relative;
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+.mpx-auth main {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(40px, 8vh, 88px) 24px;
+}
+
+.mpx-auth .mono {
+  font-family: var(--font-mono);
+}
+
+.mpx-auth .grad {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.mpx-auth-panel {
+  width: 100%;
+  max-width: 440px;
+}
+
+/* ---------- heading ---------- */
+.mpx-auth-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.mpx-auth-head h1 {
+  margin: 16px 0 0;
+  font-size: clamp(2rem, 3.4vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.038em;
+  line-height: 1.02;
+}
+
+.mpx-auth-sub {
+  max-width: 40ch;
+  margin-top: 14px;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.mpx-auth-notices {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* ---------- card ---------- */
+.mpx-auth-card {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+/* ---------- fields ---------- */
+.mpx-auth-label {
+  color: var(--accent);
+  font: 500 10px/1.4 var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.mpx-auth-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  font: 400 13.5px/1.4 var(--font-mono);
+  letter-spacing: 0.02em;
+  transition: border-color 160ms ease;
+}
+
+.dark .mpx-auth-input {
+  background: var(--surface);
+}
+
+.mpx-auth-input::placeholder {
+  color: var(--faint);
+}
+
+.mpx-auth-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.mpx-auth-input:disabled {
+  opacity: 0.6;
+}
+
+/* ---------- buttons (reuse .mpx-button from landing-v2.css) ---------- */
+.mpx-auth button.mpx-button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mpx-auth button.mpx-button.is-primary {
+  border: 0;
+}
+
+.mpx-auth .mpx-button.is-secondary {
+  padding: 10px 20px;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.mpx-auth .mpx-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---------- status chips / alerts ---------- */
+.mpx-auth-alert {
+  padding: 9px 12px;
+  border: 1px solid;
+  border-radius: 6px;
+  font: 400 10.5px/1.6 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mpx-auth-alert.is-error {
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+  color: var(--red);
+}
+
+.mpx-auth-alert.is-success {
+  border-color: color-mix(in srgb, var(--em-tx) 30%, transparent);
+  background: var(--em-bg);
+  color: var(--em-tx);
+}
+
+.mpx-auth-alert.is-warn {
+  border-color: color-mix(in srgb, var(--amber-tx) 30%, transparent);
+  background: var(--amber-bg);
+  color: var(--amber-tx);
+}
+
+.mpx-auth-alert.is-accent {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--accent);
+}
+
+/* ---------- divider ---------- */
+.mpx-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--faint);
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.mpx-auth-divider i {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+
+/* ---------- secondary text & links ---------- */
+.mpx-auth-minor {
+  color: var(--muted);
+  font: 400 10.5px/1.4 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color 160ms ease;
+}
+
+.mpx-auth-minor:hover {
+  color: var(--ink);
+}
+
+.mpx-auth-muted {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mpx-auth-strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.mpx-auth-foot {
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.mpx-auth-foot a,
+.mpx-auth-muted a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mpx-auth-foot a:hover,
+.mpx-auth-muted a:hover {
+  text-decoration: none;
+}
+
+/* ---------- oauth consent ---------- */
+.mpx-auth-scopes {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink-body);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.mpx-auth-scopes > p:first-child {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.mpx-auth-scopes-note {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}

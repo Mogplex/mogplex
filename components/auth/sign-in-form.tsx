@@ -98,13 +98,13 @@ export function SignInForm({ next }: { next: string }) {
           type="submit"
           disabled={disabled}
           data-testid="signin-submit"
-          className="mplex-btn mplex-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-primary is-small"
         >
           {isRedirecting ? "Redirecting…" : isPending ? "Signing in…" : "Sign in"}
         </button>
         <Link
           href="/forgot-password"
-          className="mplex-mono text-marketing-muted text-[11px] tracking-[0.22em] uppercase hover:text-white"
+          className="mpx-auth-minor"
         >
           Forgot password?
         </Link>

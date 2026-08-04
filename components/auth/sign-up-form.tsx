@@ -114,7 +114,7 @@ export function SignUpForm({ verifiedNext }: { verifiedNext: string }) {
           type="submit"
           disabled={isPending}
           data-testid="signup-submit"
-          className="mplex-btn mplex-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-primary is-small"
         >
           {isPending ? "Creating account…" : "Create account"}
         </button>
