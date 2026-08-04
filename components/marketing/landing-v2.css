@@ -310,11 +310,19 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.045em;
   line-height: 1;
   text-decoration: none;
+}
+
+.mpx-brand-wordmark {
+  height: 24px;
+}
+
+/* Compact mark swaps in for the wordmark on tablet and below. */
+.mpx-brand-mark {
+  display: none;
+  height: 26px;
+  width: auto;
 }
 
 .mpx-nav-links {
@@ -3211,6 +3219,14 @@ path.mpx-dag-line,
 }
 
 @media (width <= 1024px) {
+  .mpx-brand-wordmark {
+    display: none;
+  }
+
+  .mpx-brand-mark {
+    display: block;
+  }
+
   .mpx-cap.is-zdr,
   .mpx-cap.is-byok,
   .mpx-cap.is-observe,
