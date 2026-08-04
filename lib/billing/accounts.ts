@@ -11,12 +11,13 @@ export type BillingAccount = {
   tier: "free" | "pro" | "team";
   period_anchor: string | null;
   status: "active" | "past_due" | "frozen_topups";
+  updated_at?: string;
 };
 
 const UNIQUE_VIOLATION = "23505";
 
 const ACCOUNT_COLUMNS =
-  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, status";
+  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, status, updated_at";
 
 export async function findBillingAccountForScope(
   scope: ProductResourceScope

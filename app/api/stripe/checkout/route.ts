@@ -99,6 +99,15 @@ export async function POST(request: Request) {
         idempotencyKey: subscriptionCheckoutIdempotencyKey(account),
       }
     );
+    if (!session.url) {
+      return NextResponse.json(
+        {
+          error:
+            "This Checkout session is already complete — refresh billing to see the updated subscription",
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ url: session.url });
   }
 

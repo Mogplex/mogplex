@@ -161,12 +161,17 @@ async function handleInvoicePaid(
 
 async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
+  eventCreated: number,
   deps: StripeWebhookDeps
 ) {
   const customerId = customerIdOf(invoice.customer);
   if (!customerId) return;
   const account = await deps.findAccountByCustomer(customerId);
   if (!account) return;
+  const accountUpdatedAt = account.updated_at
+    ? Date.parse(account.updated_at) / 1000
+    : 0;
+  if (accountUpdatedAt > eventCreated) return;
   // Smart Retries run on Stripe's side; tier persists through the period
   // (grace), drop-to-free happens via customer.subscription.deleted.
   await deps.updateAccount(account.id, { status: "past_due" });
@@ -183,7 +188,7 @@ async function handlePaymentIntentSucceeded(
   if (!account) return;
   // credit_cents is the pre-tax top-up amount stamped at session creation;
   // amount_received includes automatic_tax, and collected tax must not
-  // become spendable credit. Fallback covers PIs minted before the stamp.
+  // become spendable credit. Missing or invalid stamps fail closed.
   const creditCents = stampedCreditCentsOf(paymentIntent);
   await deps.postLedgerEntry({
     accountId: account.id,
@@ -275,10 +280,12 @@ async function handleChargeRefunded(
   // refund reverses proportionally (full refund ⇒ full credited amount).
   const creditedCents = stampedCreditCentsOf(paymentIntent);
   const grossCents = paymentIntent.amount_received;
-  const refunds = (await deps.listRefunds(charge.id)).toSorted(
-    (left, right) =>
-      left.created - right.created || left.id.localeCompare(right.id)
-  );
+  const refunds = (await deps.listRefunds(charge.id))
+    .filter((refund) => refund.status === "succeeded")
+    .toSorted(
+      (left, right) =>
+        left.created - right.created || left.id.localeCompare(right.id)
+    );
   let cumulativeGrossCents = 0;
   let cumulativeReversalCents = 0;
   for (const refund of refunds) {
@@ -333,7 +340,7 @@ export async function handleStripeEvent(
     case "invoice.paid":
       return handleInvoicePaid(event.data.object, deps);
     case "invoice.payment_failed":
-      return handleInvoicePaymentFailed(event.data.object, deps);
+      return handleInvoicePaymentFailed(event.data.object, event.created, deps);
     case "payment_intent.succeeded":
       return handlePaymentIntentSucceeded(event.data.object, deps);
     case "customer.subscription.updated":
@@ -353,21 +360,22 @@ export async function handleStripeEvent(
 // belong to a crashed handler and may be taken over by a later delivery.
 const CLAIM_TAKEOVER_MS = 10 * 60 * 1000;
 
-// Claims the event id. Returns false when another delivery already
-// processed it, or holds a fresh in-flight claim (duplicate → ack + skip).
-// A stale unprocessed claim is taken over so a crashed handler (or a failed
-// release) can never permanently wedge an event.
+export type StripeEventClaim = "claimed" | "processed" | "in_progress";
+
+// Claims the event id and distinguishes completed duplicates from active
+// work. In-progress duplicates receive a non-2xx response so Stripe keeps
+// retrying until the first handler completes or the stale claim is taken over.
 export async function claimStripeEvent(
   event: Stripe.Event,
   client: SupabaseClient = supabaseAdmin,
   now: () => Date = () => new Date()
-): Promise<boolean> {
+): Promise<StripeEventClaim> {
   const insert = await client.from("billing_events").insert({
     stripe_event_id: event.id,
     type: event.type,
     payload: event as unknown as Record<string, unknown>,
   });
-  if (!insert.error) return true;
+  if (!insert.error) return "claimed";
   if (insert.error.code !== "23505") {
     throw new Error(`billing_events insert failed: ${insert.error.message}`);
   }
@@ -387,7 +395,17 @@ export async function claimStripeEvent(
       `billing_events takeover failed: ${takeover.error.message}`
     );
   }
-  return (takeover.data?.length ?? 0) > 0;
+  if ((takeover.data?.length ?? 0) > 0) return "claimed";
+
+  const existing = await client
+    .from("billing_events")
+    .select("processed_at")
+    .eq("stripe_event_id", event.id)
+    .maybeSingle();
+  if (existing.error) {
+    throw new Error(`billing_events lookup failed: ${existing.error.message}`);
+  }
+  return existing.data?.processed_at ? "processed" : "in_progress";
 }
 
 export async function markStripeEventProcessed(
@@ -403,21 +421,6 @@ export async function markStripeEventProcessed(
     // The event WAS processed; leaving the claim unprocessed only means a
     // redundant (idempotent) re-run after the takeover window.
     console.error(`[stripe-webhook] mark processed failed for ${eventId}`);
-  }
-}
-
-export async function releaseStripeEvent(
-  eventId: string,
-  client: SupabaseClient = supabaseAdmin
-): Promise<void> {
-  const { error } = await client
-    .from("billing_events")
-    .delete()
-    .eq("stripe_event_id", eventId);
-  if (error) {
-    // Not fatal: the stale-claim takeover in claimEvent recovers this event
-    // on a later Stripe retry.
-    console.error(`[stripe-webhook] claim release failed for ${eventId}`);
   }
 }
 
@@ -446,17 +449,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  if (!(await claimStripeEvent(event))) {
+  const claim = await claimStripeEvent(event);
+  if (claim === "processed") {
     return NextResponse.json({ received: true, duplicate: true });
+  }
+  if (claim === "in_progress") {
+    return NextResponse.json(
+      { error: "Event processing is already in progress" },
+      { status: 409 }
+    );
   }
 
   try {
     await handleStripeEvent(event);
   } catch (error) {
-    // Release the claim so Stripe's retry can reprocess. A concurrent
-    // duplicate delivery acked while we held the claim is fine — Stripe
-    // retries on our 500 regardless.
-    await releaseStripeEvent(event.id);
+    // Keep the unprocessed claim. Deleting it can lose the event if a
+    // concurrent duplicate was already acknowledged; stale claims remain
+    // visible and can be safely replayed after the takeover window.
     console.error(
       `[stripe-webhook] ${event.type} ${event.id} failed:`,
       error instanceof Error ? error.message : error

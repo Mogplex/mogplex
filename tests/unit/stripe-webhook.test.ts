@@ -239,6 +239,25 @@ test("invoice.payment_failed should mark the account past_due", async () => {
   ]);
 });
 
+test("stale invoice.payment_failed should not clobber a newer account status", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({
+      updated_at: "2026-08-04T19:00:00.000Z",
+    }),
+  });
+  const event = {
+    id: "evt_inv_failed_stale",
+    type: "invoice.payment_failed",
+    created: Date.parse("2026-08-04T18:00:00.000Z") / 1000,
+    data: { object: { id: "in_stale", customer: "cus_123" } },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.updates, []);
+});
+
 test("checkout.session.completed should link the Stripe customer to the account", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({
@@ -366,7 +385,7 @@ test("charge.refunded should reverse the credited amount via PaymentIntent metad
         credit_cents: "2500",
       },
     } as unknown as Stripe.PaymentIntent,
-    refunds: [{ id: "re_1", amount: 2718 }],
+    refunds: [{ id: "re_1", amount: 2718, status: "succeeded" }],
   });
   const event = {
     id: "evt_refund",
@@ -396,9 +415,9 @@ test("multiple partial refunds should cumulatively reverse the exact credited am
       },
     } as unknown as Stripe.PaymentIntent,
     refunds: [
-      { id: "re_2", amount: 1, created: 2 },
-      { id: "re_1", amount: 1, created: 1 },
-      { id: "re_3", amount: 1, created: 3 },
+      { id: "re_2", amount: 1, created: 2, status: "succeeded" },
+      { id: "re_1", amount: 1, created: 1, status: "succeeded" },
+      { id: "re_3", amount: 1, created: 3, status: "succeeded" },
     ],
   });
   const event = {
@@ -425,6 +444,39 @@ test("multiple partial refunds should cumulatively reverse the exact credited am
   );
 });
 
+test("charge.refunded should ignore refunds that did not succeed", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    paymentIntent: {
+      id: "pi_failed_refund",
+      amount_received: 2500,
+      metadata: {
+        kind: "topup",
+        billing_account_id: "acct-1",
+        credit_cents: "2500",
+      },
+    } as unknown as Stripe.PaymentIntent,
+    refunds: [
+      { id: "re_failed", amount: 2500, status: "failed" },
+      { id: "re_canceled", amount: 2500, status: "canceled" },
+    ],
+  });
+  const event = {
+    id: "evt_failed_refunds",
+    type: "charge.refunded",
+    data: {
+      object: {
+        id: "ch_failed_refunds",
+        payment_intent: "pi_failed_refund",
+      },
+    },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.ledger, []);
+});
+
 test("charge.refunded should ignore non-topup charges", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({
@@ -433,7 +485,7 @@ test("charge.refunded should ignore non-topup charges", async () => {
       amount_received: 2000,
       metadata: {},
     } as unknown as Stripe.PaymentIntent,
-    refunds: [{ id: "re_2", amount: 2000 }],
+    refunds: [{ id: "re_2", amount: 2000, status: "succeeded" }],
   });
   const event = {
     id: "evt_refund2",
@@ -609,7 +661,7 @@ test("unhandled event types should be ignored", async () => {
 });
 
 type QueryCall = {
-  method: "insert" | "update" | "delete" | "eq" | "is" | "lt" | "select";
+  method: "insert" | "update" | "eq" | "is" | "lt" | "select" | "maybeSingle";
   column?: string;
   value?: unknown;
 };
@@ -618,10 +670,11 @@ function billingEventsClient(options: {
   insertError?: { code: string; message: string } | null;
   takeoverData?: Array<{ stripe_event_id: string }>;
   takeoverError?: { message: string } | null;
-  releaseError?: { message: string } | null;
+  processedAt?: string | null;
+  lookupError?: { message: string } | null;
 }) {
   const calls: QueryCall[] = [];
-  let operation: "update" | "delete" | null = null;
+  let operation: "update" | "select" | null = null;
   const query = {
     insert(value: unknown) {
       calls.push({ method: "insert", value });
@@ -630,11 +683,6 @@ function billingEventsClient(options: {
     update(value: unknown) {
       operation = "update";
       calls.push({ method: "update", value });
-      return query;
-    },
-    delete() {
-      operation = "delete";
-      calls.push({ method: "delete" });
       return query;
     },
     eq(column: string, value: unknown) {
@@ -651,15 +699,24 @@ function billingEventsClient(options: {
     },
     select(value: string) {
       calls.push({ method: "select", value });
+      if (operation === "update") {
+        return Promise.resolve({
+          data: options.takeoverData ?? [],
+          error: options.takeoverError ?? null,
+        });
+      }
+      operation = "select";
+      return query;
+    },
+    maybeSingle() {
+      calls.push({ method: "maybeSingle" });
       return Promise.resolve({
-        data: options.takeoverData ?? [],
-        error: options.takeoverError ?? null,
+        data: { processed_at: options.processedAt ?? null },
+        error: options.lookupError ?? null,
       });
     },
     then(resolve: (value: { error: { message: string } | null }) => void) {
-      resolve({
-        error: operation === "delete" ? (options.releaseError ?? null) : null,
-      });
+      resolve({ error: null });
     },
   };
   return {
@@ -667,6 +724,7 @@ function billingEventsClient(options: {
     client: {
       from(table: string) {
         assert.equal(table, "billing_events");
+        operation = null;
         return query;
       },
     },
@@ -688,7 +746,7 @@ test("event claims insert a fresh event", async () => {
       client as unknown as SupabaseClient,
       () => new Date("2026-08-04T20:00:00.000Z")
     ),
-    true
+    "claimed"
   );
   assert.equal(calls[0]?.method, "insert");
 });
@@ -711,7 +769,7 @@ test("event claims take over only stale unprocessed duplicate rows", async () =>
       client as unknown as SupabaseClient,
       () => new Date("2026-08-04T20:00:00.000Z")
     ),
-    true
+    "claimed"
   );
   assert.ok(
     calls.some(
@@ -731,7 +789,7 @@ test("event claims take over only stale unprocessed duplicate rows", async () =>
   );
 });
 
-test("event claims skip a fresh or already processed duplicate", async () => {
+test("event claims distinguish an in-progress duplicate", async () => {
   const route = await loadWebhookRoute();
   const { client } = billingEventsClient({
     insertError: { code: "23505", message: "duplicate" },
@@ -744,7 +802,25 @@ test("event claims skip a fresh or already processed duplicate", async () => {
 
   assert.equal(
     await route.claimStripeEvent(event, client as unknown as SupabaseClient),
-    false
+    "in_progress"
+  );
+});
+
+test("event claims distinguish an already processed duplicate", async () => {
+  const route = await loadWebhookRoute();
+  const { client } = billingEventsClient({
+    insertError: { code: "23505", message: "duplicate" },
+    processedAt: "2026-08-04T20:00:00.000Z",
+  });
+  const event = {
+    id: "evt_processed_duplicate",
+    type: "invoice.paid",
+    data: { object: {} },
+  } as Stripe.Event;
+
+  assert.equal(
+    await route.claimStripeEvent(event, client as unknown as SupabaseClient),
+    "processed"
   );
 });
 
@@ -762,26 +838,6 @@ test("event claim storage failures surface instead of acknowledging the webhook"
   await assert.rejects(
     route.claimStripeEvent(event, client as unknown as SupabaseClient),
     /billing_events insert failed: connection failed/
-  );
-});
-
-test("event claim release targets the claimed Stripe event", async () => {
-  const route = await loadWebhookRoute();
-  const { client, calls } = billingEventsClient({});
-
-  await route.releaseStripeEvent(
-    "evt_release",
-    client as unknown as SupabaseClient
-  );
-
-  assert.ok(calls.some((call) => call.method === "delete"));
-  assert.ok(
-    calls.some(
-      (call) =>
-        call.method === "eq" &&
-        call.column === "stripe_event_id" &&
-        call.value === "evt_release"
-    )
   );
 });
 
