@@ -154,5 +154,15 @@ export async function POST(request: Request) {
       ),
     }
   );
+  if (!session.url) {
+    return NextResponse.json(
+      {
+        error:
+          "This Checkout session can no longer be used — try again to create a new session",
+        code: "checkout_session_unavailable",
+      },
+      { status: 409 }
+    );
+  }
   return NextResponse.json({ url: session.url });
 }

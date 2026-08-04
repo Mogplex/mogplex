@@ -96,8 +96,12 @@ export function BillingSection() {
       const payload = (await response.json()) as {
         url?: string;
         error?: string;
+        code?: string;
       };
       if (!response.ok || !payload.url) {
+        if (payload.code === "checkout_session_unavailable") {
+          topupAttemptIds.current.delete(action);
+        }
         throw new Error(payload.error ?? "Request failed");
       }
       window.location.href = payload.url;

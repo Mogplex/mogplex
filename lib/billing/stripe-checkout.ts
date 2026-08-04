@@ -89,6 +89,8 @@ export async function resolveTopupProductId(
     }
     throw new Error("Stripe top-up product not found — catalog is not seeded");
   })();
+  // Successful lookups remain cached until this runtime instance recycles.
+  // Replacing the seeded product therefore requires recycling warm instances.
   topupProductLookups.set(deps, lookup);
   try {
     return await lookup;
