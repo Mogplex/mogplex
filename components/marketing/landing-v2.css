@@ -170,16 +170,16 @@
 }
 
 .mpx-frame.is-left {
-  top: 14px;
-  bottom: 14px;
+  top: 0;
+  bottom: 0;
   left: 14px;
   border-left: 1px solid var(--frame);
 }
 
 .mpx-frame.is-right {
-  top: 14px;
+  top: 0;
   right: 14px;
-  bottom: 14px;
+  bottom: 0;
   border-left: 1px solid var(--frame);
 }
 
@@ -225,8 +225,8 @@
 
 .mpx-quarter {
   position: absolute;
-  top: 14px;
-  bottom: 14px;
+  top: 0;
+  bottom: 0;
   border-left: 1px dashed var(--frame-dash);
 }
 
@@ -3361,8 +3361,8 @@ path.mpx-dag-line,
 
   .mpx-frame.is-left,
   .mpx-frame.is-right {
-    top: 8px;
-    bottom: 8px;
+    top: 0;
+    bottom: 0;
   }
 
   .mpx-frame.is-left {

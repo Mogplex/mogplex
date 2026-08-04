@@ -54,7 +54,7 @@ export default function ConductPage() {
           </ol>
 
           <h2 className="text-lg text-foreground">Reporting</h2>
-          <p>Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by opening an issue on our <a href="https://github.com/webrenew/mogplex" className="text-primary hover:underline">GitHub repository</a> or contacting the project maintainers directly.</p>
+          <p>Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by opening an issue on our <a href="https://github.com/mogplex/mogplex" className="text-primary hover:underline">GitHub repository</a> or contacting the project maintainers directly.</p>
 
           <h2 className="text-lg text-foreground">Attribution</h2>
           <p>This Code of Conduct is adapted from the <a href="https://www.contributor-covenant.org/version/2/1/code_of_conduct/" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">Contributor Covenant, version 2.1</a>.</p>

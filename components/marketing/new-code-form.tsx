@@ -59,11 +59,11 @@ export function NewCodeForm() {
 
   if (sent) {
     return (
-      <div className="mplex-mono flex flex-col items-center gap-3 text-[12px] tracking-[0.18em] uppercase text-white/85">
-        <div className="border border-emerald-300/25 bg-emerald-300/[0.08] px-3 py-2 text-emerald-100">
+      <div className="flex flex-col items-center gap-3">
+        <div className="mpx-auth-alert is-success">
           check your inbox
         </div>
-        <p className="max-w-[36ch] text-center text-[11px] tracking-[0.12em] normal-case text-white/55">
+        <p className="mpx-auth-muted max-w-[36ch] text-center">
           If that email matches a Mogplex account, we sent a single-use code
           that expires in 24 hours.
         </p>
@@ -74,8 +74,8 @@ export function NewCodeForm() {
   const disabled = isPending;
 
   return (
-    <form onSubmit={submit} className="flex w-full flex-col gap-3">
-      <label className="mplex-mono text-[10px] tracking-[0.22em] uppercase text-white/55">
+    <form onSubmit={submit} className="mpx-auth-card gap-3">
+      <label className="mpx-auth-label">
         Email
         <input
           type="email"
@@ -85,13 +85,13 @@ export function NewCodeForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@example.com"
-          className="mt-2 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2.5 text-[14px] tracking-normal text-white normal-case placeholder:text-white/30 focus:border-white/30 focus:outline-none"
+          className="mpx-auth-input mt-2 normal-case tracking-normal"
           disabled={disabled}
         />
       </label>
 
       {error ? (
-        <div className="mplex-mono border border-rose-300/20 bg-rose-300/[0.08] px-3 py-2 text-[11px] tracking-[0.18em] uppercase text-rose-200">
+        <div className="mpx-auth-alert is-error">
           {error}
         </div>
       ) : null}
@@ -99,7 +99,7 @@ export function NewCodeForm() {
       <button
         type="submit"
         disabled={disabled}
-        className="mplex-mono inline-flex items-center justify-center gap-2 rounded-md border border-white/15 bg-white px-4 py-2.5 text-[12px] tracking-[0.18em] uppercase text-black transition-opacity hover:opacity-90 disabled:opacity-60"
+        className="mpx-button is-primary is-small"
       >
         {isPending ? "Sending…" : "Email me a new code"}
         {!isPending ? <Icon.ArrowRight className="h-3.5 w-3.5" /> : null}

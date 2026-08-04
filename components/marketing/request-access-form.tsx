@@ -80,25 +80,19 @@ export function RequestAccessForm() {
   if (success) {
     return (
       <div
-        className="mplex-panel flex w-full flex-col gap-3 p-5 sm:p-6"
+        className="mpx-auth-card gap-3"
         data-testid="request-access-success"
       >
-        <div
-          className="mplex-mono text-[10.5px] tracking-[0.22em] uppercase"
-          style={{ color: "var(--mplex-violet-dim)" }}
-        >
-          You're on the list
-        </div>
-        <p className="text-[15px] leading-[1.5] text-white">
+        <div className="mpx-auth-label">You're on the list</div>
+        <p className="text-[15px] leading-[1.5]">
           {success.alreadyRequested
             ? "You've already requested access. We'll email you the moment a code is ready."
             : "Thanks — we'll email you when an access code is ready."}
         </p>
-        <p className="text-marketing-muted text-[13px] leading-[1.5]">
+        <p className="mpx-auth-muted">
           Already have a code?{" "}
           <Link
             href="/login/beta"
-            className="text-white underline underline-offset-4 hover:no-underline"
           >
             Sign in →
           </Link>
@@ -110,7 +104,7 @@ export function RequestAccessForm() {
   return (
     <form
       onSubmit={submit}
-      className="mplex-panel flex w-full flex-col gap-4 p-5 sm:p-6"
+      className="mpx-auth-card"
       data-testid="request-access-form"
     >
       <Field
@@ -156,14 +150,14 @@ export function RequestAccessForm() {
           type="submit"
           disabled={isPending}
           data-testid="request-access-submit"
-          className="mplex-btn mplex-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-primary is-small"
         >
           <Icon.Github size={14} />
           {isPending ? "Submitting…" : "Request access"}
         </button>
         <Link
           href="/login/beta"
-          className="mplex-mono text-marketing-muted text-[11px] tracking-[0.22em] uppercase hover:text-white"
+          className="mpx-auth-minor"
         >
           Have a code? Sign in →
         </Link>
@@ -172,7 +166,7 @@ export function RequestAccessForm() {
         <p
           role="alert"
           data-testid="request-access-error"
-          className="mplex-mono border border-rose-300/20 bg-rose-300/[0.08] px-3 py-2 text-[11px] tracking-[0.22em] text-rose-200 uppercase"
+          className="mpx-auth-alert is-error"
         >
           {error}
         </p>
@@ -217,22 +211,12 @@ function Field({
     onChange: (
       event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => onChange(event.target.value),
-    className:
-      "mplex-mono px-3.5 py-3 text-[14px] tracking-wide text-white placeholder:text-marketing-faint focus:outline-none disabled:opacity-60",
-    style: {
-      background:
-        "color-mix(in srgb, var(--mplex-foreground) 2%, transparent)",
-      border: "1px solid var(--mplex-line-strong)",
-    } as const,
+    className: "mpx-auth-input",
   };
 
   return (
     <div className="flex flex-col gap-2">
-      <label
-        htmlFor={id}
-        className="mplex-mono text-[10.5px] tracking-[0.22em] uppercase"
-        style={{ color: "var(--mplex-violet-dim)" }}
-      >
+      <label htmlFor={id} className="mpx-auth-label">
         {label}
         {required ? " *" : ""}
       </label>

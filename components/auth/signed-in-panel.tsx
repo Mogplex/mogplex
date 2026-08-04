@@ -24,11 +24,11 @@ export function SignedInPanel({
 
   return (
     <div className="flex flex-col gap-4" data-testid="signed-in-panel">
-      <div className="mplex-mono text-marketing-muted text-[12px] tracking-wide">
-        Signed in as <span className="text-white">{email}</span>
+      <div className="mono mpx-auth-muted text-[12px]">
+        Signed in as <span className="mpx-auth-strong">{email}</span>
       </div>
       <div className="flex items-center gap-3">
-        <a href={next} className="mplex-btn mplex-btn-primary">
+        <a href={next} className="mpx-button is-primary is-small">
           Continue
         </a>
         <button
@@ -36,7 +36,7 @@ export function SignedInPanel({
           onClick={signOut}
           disabled={isSigningOut}
           data-testid="signout-button"
-          className="mplex-btn mplex-btn-ghost disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-secondary"
         >
           {isSigningOut ? "Signing out…" : "Sign out"}
         </button>

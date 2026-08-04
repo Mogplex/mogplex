@@ -122,7 +122,7 @@ export const MARKETING_JSON_LD = {
       name: SITE_NAME,
       url: SITE_URL,
       logo: absoluteUrl("/icon.png"),
-      sameAs: ["https://github.com/webrenew/mogplex"],
+      sameAs: ["https://github.com/mogplex/mogplex"],
     },
     {
       "@type": "SoftwareApplication",

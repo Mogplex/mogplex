@@ -24,7 +24,7 @@ export const plexMono = IBM_Plex_Mono({
   variable: "--font-plex-mono",
 });
 
-export const GITHUB_URL = "https://github.com/webrenew/mogplex";
+export const GITHUB_URL = "https://github.com/mogplex/mogplex";
 
 /* ── shared icons ─────────────────────────────────────────────── */
 

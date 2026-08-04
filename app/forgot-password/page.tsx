@@ -16,7 +16,7 @@ export default function ForgotPasswordPage() {
       eyebrow="Reset password"
       title={
         <>
-          Reset your <span className="mplex-gradient-text italic">Mogplex</span>{" "}
+          Reset your <em className="grad">Mogplex</em>{" "}
           password.
         </>
       }
@@ -26,14 +26,13 @@ export default function ForgotPasswordPage() {
           Remembered it?{" "}
           <Link
             href="/login"
-            className="text-white underline underline-offset-4 hover:no-underline"
           >
             Sign in
           </Link>
         </div>
       }
     >
-      <div className="mplex-panel flex w-full flex-col gap-4 p-5 sm:p-6">
+      <div className="mpx-auth-card">
         <ForgotPasswordForm />
       </div>
     </AuthShell>

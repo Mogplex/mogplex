@@ -7,7 +7,7 @@ import { buildMarketingMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMarketingMetadata({
   title: "FAQ — Mogplex",
   description:
-    "What Mogplex runs, what it costs, where your code executes, and what an agent can and can't ship without you. The questions skeptical engineers ask before wiring a pipeline.",
+    "What Mogplex runs, what it costs, where your code executes, and what an agent can and can't ship without you. The questions skeptical engineers ask before wiring agents into their repos.",
   path: "/faq",
 });
 
@@ -22,7 +22,7 @@ type Faq = {
 const FAQS: Faq[] = [
   {
     q: "What is Mogplex, in one sentence?",
-    a: "Agentic CI/CD: the same trigger-to-ship pipeline you already trust for commits, extended backwards so it carries intent — GitHub events, schedules, Slack asks — through coding agents and out as reviewed PRs.",
+    a: "The open-source agentic software factory: intent goes in — GitHub events, schedules, Slack asks — and agents plan, build, review, and ship it through one inspectable pipeline, so what comes out the other side is reviewed, running code.",
   },
   {
     q: "Which agents does it run?",

@@ -21,10 +21,9 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           message="That reset link is invalid or expired."
           testId="reset-password-invalid"
         />
-        <div className="text-marketing-muted text-[13px]">
+        <div className="mpx-auth-muted">
           <Link
             href="/forgot-password"
-            className="text-white underline underline-offset-4 hover:no-underline"
           >
             Request a new reset link
           </Link>
@@ -111,7 +110,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           type="submit"
           disabled={disabled}
           data-testid="reset-password-submit"
-          className="mplex-btn mplex-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-primary is-small"
         >
           {isRedirecting
             ? "Redirecting…"

@@ -78,12 +78,12 @@ export function WaitlistGateForm({ next, initialError }: Props) {
   return (
     <form
       onSubmit={submit}
-      className="mplex-panel flex w-full flex-col gap-3.5 p-5 sm:p-6"
+      className="mpx-auth-card gap-3.5"
       data-testid="waitlist-gate-form"
     >
       <label
         htmlFor="waitlist-code"
-        className="mplex-mono text-marketing-accent-muted text-[10.5px] tracking-[0.22em] uppercase"
+        className="mpx-auth-label"
       >
         Access code
       </label>
@@ -102,12 +102,7 @@ export function WaitlistGateForm({ next, initialError }: Props) {
         required
         maxLength={128}
         data-testid="waitlist-code-input"
-        className="mplex-mono h-11 px-3.5 text-[14px] tracking-wide text-white placeholder:text-marketing-faint focus:outline-none disabled:opacity-60"
-        style={{
-          background:
-            "color-mix(in srgb, var(--mplex-foreground) 2%, transparent)",
-          border: "1px solid var(--mplex-line-strong)",
-        }}
+        className="mpx-auth-input"
       />
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -115,7 +110,7 @@ export function WaitlistGateForm({ next, initialError }: Props) {
           disabled={disabled}
           data-testid="login-github-button"
           data-ready={!disabled ? "true" : undefined}
-          className="mplex-btn mplex-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-primary is-small"
         >
           <Icon.Github size={14} />
           {isRedirecting
@@ -126,7 +121,7 @@ export function WaitlistGateForm({ next, initialError }: Props) {
         </button>
         <a
           href="mailto:charles@webrenew.io?subject=Mogplex%20access"
-          className="mplex-mono text-marketing-muted text-[11px] tracking-[0.22em] uppercase hover:text-white"
+          className="mpx-auth-minor"
         >
           No code? Request access →
         </a>
@@ -135,7 +130,7 @@ export function WaitlistGateForm({ next, initialError }: Props) {
         <p
           role="alert"
           data-testid="waitlist-error"
-          className="mplex-mono border border-rose-300/20 bg-rose-300/[0.08] px-3 py-2 text-[11px] tracking-[0.22em] text-rose-200 uppercase"
+          className="mpx-auth-alert is-error"
         >
           {error}
         </p>

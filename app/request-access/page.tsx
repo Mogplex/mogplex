@@ -18,7 +18,7 @@ export default function RequestAccessPage() {
       title={
         <>
           Request{" "}
-          <span className="mplex-gradient-text italic">access</span>.
+          <em className="grad">access</em>.
         </>
       }
       subtitle="Tell us a bit about how you'd use Mogplex. We're approving teams in batches."
@@ -27,7 +27,6 @@ export default function RequestAccessPage() {
           Already have a code?{" "}
           <Link
             href="/login/beta"
-            className="text-white underline underline-offset-4 hover:no-underline"
           >
             Sign in
           </Link>

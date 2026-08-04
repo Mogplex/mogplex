@@ -64,7 +64,7 @@ export function SsoForm({ next }: { next: string }) {
           type="submit"
           disabled={isPending}
           data-testid="sso-submit"
-          className="mplex-btn mplex-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="mpx-button is-primary is-small"
         >
           {isPending ? "Looking up your provider…" : "Continue with SSO"}
         </button>

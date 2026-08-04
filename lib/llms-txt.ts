@@ -22,7 +22,7 @@ Authenticated workspace, team, invite, API, and callback URLs are private or ope
 ## Documentation and source
 
 - [Mogplex docs](https://docs.mogplex.com/): Product documentation and usage guides.
-- [GitHub repository](https://github.com/webrenew/mogplex): Source, issues, and project activity.
+- [GitHub repository](https://github.com/mogplex/mogplex): Source, issues, and project activity.
 
 ## Policies
 

@@ -1007,8 +1007,8 @@ const harnesses = [
     ],
     yaml: [
       ["harness", "mogplex", true],
-      ["model", "fable-5", false],
-      ["credentials", "vault://platform/anthropic", false],
+      ["model", "kimi-k3", false],
+      ["credentials", "vault://platform/moonshot", false],
       ["sandbox", "enterprise-restricted", false],
       ["policy", "production-default", false],
     ],
@@ -1030,7 +1030,7 @@ const harnesses = [
     ],
     yaml: [
       ["harness", "claude-code", true],
-      ["model", "claude-sonnet-4-5", false],
+      ["model", "claude-opus-5", false],
       ["credentials", "vault://platform/anthropic", false],
       ["sandbox", "enterprise-restricted", false],
       ["telemetry", "full", false],
@@ -1545,7 +1545,7 @@ export function MarketingLandingPage() {
                   <b className="is-openai">G</b>GPT 5.6 SOL ✓
                 </span>
                 <span>
-                  <b className="is-anthropic">F</b>FABLE 5 ✓
+                  <b className="is-anthropic">O</b>OPUS 5 ✓
                 </span>
                 <span>
                   <b className="is-kimi">K</b>KIMI K3 ✓
