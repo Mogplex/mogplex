@@ -737,7 +737,7 @@ function LiveRunMockup() {
             </div>
 
             <div
-              className={`mpx-file-card${filesVisible ? "is-visible" : ""}${fileRing ? "is-ringed" : ""}`}
+              className={`mpx-file-card${filesVisible ? " is-visible" : ""}${fileRing ? " is-ringed" : ""}`}
             >
               <strong>3 files changed</strong>
               {changedFiles.map(([file, add, del]) => (
