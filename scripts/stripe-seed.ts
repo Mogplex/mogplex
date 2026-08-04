@@ -1,10 +1,12 @@
-// Idempotent Stripe catalog seed (pricing-plan 02 §2). Creates products and
-// prices keyed by lookup_key so test and live mode stay in sync — never
+// Idempotent Stripe setup (pricing-plan 02 §2/§4). Creates products and
+// prices keyed by lookup_key and registers the webhook endpoint — never
 // hand-create catalog objects in the dashboard. Safe to re-run: existing
 // objects are left alone; an amount drift is corrected by creating a
 // replacement price and transferring the lookup_key (prices are immutable).
 //
-// Usage: STRIPE_SECRET_KEY=sk_test_... pnpm exec tsx scripts/stripe-seed.ts [--dry-run]
+// Usage: STRIPE_SECRET_KEY=sk_... pnpm exec tsx scripts/stripe-seed.ts [--dry-run]
+// The webhook signing secret is printed ONCE when the endpoint is first
+// created — copy it into the deployment env as STRIPE_WEBHOOK_SECRET.
 import Stripe from "stripe";
 import {
   PLAN_PRICES,
@@ -145,6 +147,81 @@ async function ensurePrices(
   }
 }
 
+// Every event type the webhook route handles (pricing-plan 02 §4).
+const WEBHOOK_EVENTS: Stripe.WebhookEndpointCreateParams.EnabledEvent[] = [
+  "checkout.session.completed",
+  "invoice.paid",
+  "invoice.payment_failed",
+  "payment_intent.succeeded",
+  "payment_intent.payment_failed",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "charge.refunded",
+  "charge.dispute.created",
+  "setup_intent.succeeded",
+];
+
+async function ensureWebhookEndpoint(stripe: Stripe) {
+  const appUrl = (
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com"
+  ).replace(/\/$/, "");
+  const url = `${appUrl}/api/webhooks/stripe`;
+  const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
+  const existing = endpoints.data.find((endpoint) => endpoint.url === url);
+
+  if (existing) {
+    const missing = WEBHOOK_EVENTS.filter(
+      (event) => !existing.enabled_events.includes(event)
+    );
+    if (missing.length === 0) {
+      console.log(`webhook ok      ${url} (${existing.id})`);
+      return;
+    }
+    if (dryRun) {
+      console.log(`webhook UPDATE  ${url} — add events: ${missing.join(", ")}`);
+      return;
+    }
+    await stripe.webhookEndpoints.update(existing.id, {
+      enabled_events: WEBHOOK_EVENTS,
+    });
+    console.log(`webhook updated ${url} — added: ${missing.join(", ")}`);
+    return;
+  }
+
+  if (dryRun) {
+    console.log(`webhook CREATE  ${url}`);
+    return;
+  }
+  const created = await stripe.webhookEndpoints.create({
+    url,
+    enabled_events: WEBHOOK_EVENTS,
+    description: "Mogplex billing (created by scripts/stripe-seed.ts)",
+  });
+  console.log(`webhook created ${url} (${created.id})`);
+  console.log(
+    `\n  >>> STRIPE_WEBHOOK_SECRET=${created.secret}\n  >>> Shown once — set it in the deployment env now.\n`
+  );
+}
+
+async function checkTaxPreflight(stripe: Stripe) {
+  // Checkout sessions use automatic_tax; they fail until Stripe Tax has an
+  // origin address + active registration status.
+  try {
+    const settings = await stripe.tax.settings.retrieve();
+    if (settings.status === "active") {
+      console.log("tax ok          Stripe Tax is active");
+    } else {
+      console.warn(
+        `tax WARNING     Stripe Tax status is "${settings.status}" — checkout will fail until Tax is configured (Dashboard → Settings → Tax)`
+      );
+    }
+  } catch {
+    console.warn(
+      "tax WARNING     could not read Stripe Tax settings — verify Tax is configured before checkout"
+    );
+  }
+}
+
 async function main() {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
@@ -159,6 +236,8 @@ async function main() {
 
   const products = await ensureProducts(stripe);
   await ensurePrices(stripe, products);
+  await ensureWebhookEndpoint(stripe);
+  await checkTaxPreflight(stripe);
   console.log("\nDone.");
 }
 

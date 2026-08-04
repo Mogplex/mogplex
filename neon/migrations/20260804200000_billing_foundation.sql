@@ -12,6 +12,9 @@ create table if not exists public.billing_accounts (
   owner_user_id uuid,
   product_team_id uuid,
   stripe_customer_id text unique,
+  -- Support/debugging handle for the active subscription; synced by the
+  -- webhook, derivable from the customer at any time.
+  stripe_subscription_id text,
   -- Tier is synced from the active Stripe subscription price metadata by the
   -- webhook — never edited by hand, so Stripe and app cannot drift.
   tier text not null default 'free' check (tier in ('free', 'pro', 'team')),
@@ -56,13 +59,24 @@ create unique index if not exists credit_ledger_source_ref_key
 create index if not exists credit_ledger_account_created_idx
   on public.credit_ledger (account_id, created_at desc);
 
--- Stripe webhook idempotency: event id is claimed before processing.
+-- Stripe webhook idempotency: event id is claimed (received_at) before
+-- processing, marked processed_at on success. A claim with null
+-- processed_at older than the takeover window is considered stuck and can
+-- be re-claimed, so a crashed handler never permanently wedges an event.
 create table if not exists public.billing_events (
   stripe_event_id text primary key,
   type text not null,
-  processed_at timestamptz not null default now(),
+  received_at timestamptz not null default now(),
+  processed_at timestamptz,
   payload jsonb not null
 );
+
+-- App access is service-role/pg-shim only (bypasses RLS); enabling RLS with
+-- no policies makes the tables default-deny if any environment ever exposes
+-- the public schema through PostgREST.
+alter table public.billing_accounts enable row level security;
+alter table public.credit_ledger enable row level security;
+alter table public.billing_events enable row level security;
 
 -- Balance and rollups stay RPCs (pricing-plan 03 §0). Billing lands on Neon
 -- so the PostgREST-aggregates constraint technically drops, but the RPC

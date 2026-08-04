@@ -7,6 +7,7 @@ export type BillingAccount = {
   owner_user_id: string | null;
   product_team_id: string | null;
   stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
   tier: "free" | "pro" | "team";
   period_anchor: string | null;
   status: "active" | "past_due" | "frozen_topups";
@@ -15,7 +16,7 @@ export type BillingAccount = {
 const UNIQUE_VIOLATION = "23505";
 
 const ACCOUNT_COLUMNS =
-  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, tier, period_anchor, status";
+  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, status";
 
 async function findAccountForScope(
   scope: ProductResourceScope
@@ -96,7 +97,11 @@ export async function updateBillingAccount(
   updates: Partial<
     Pick<
       BillingAccount,
-      "stripe_customer_id" | "tier" | "period_anchor" | "status"
+      | "stripe_customer_id"
+      | "stripe_subscription_id"
+      | "tier"
+      | "period_anchor"
+      | "status"
     >
   >
 ): Promise<void> {

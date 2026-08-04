@@ -1,0 +1,222 @@
+"use client";
+
+import { useState } from "react";
+import { usePathname } from "next/navigation";
+import useSWR from "swr";
+import { fetchWithActiveTeam } from "@/components/active-scope-provider";
+import { PLAN_PRICES, TOPUP_PRESETS } from "@/lib/billing/catalog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+
+type BillingSummary = {
+  enabled: boolean;
+  tier?: "free" | "pro" | "team";
+  status?: "active" | "past_due" | "frozen_topups";
+  hasSubscription?: boolean;
+  hasStripeCustomer?: boolean;
+  balance?: {
+    includedCents: number;
+    purchasedCents: number;
+    totalCents: number;
+  };
+};
+
+function formatUsd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+async function loadBillingSummary(url: string): Promise<BillingSummary> {
+  const response = await fetchWithActiveTeam(url);
+  if (!response.ok) {
+    throw new Error("Failed to load billing summary");
+  }
+  return (await response.json()) as BillingSummary;
+}
+
+export function BillingSection() {
+  const pathname = usePathname();
+  const { data, error, isLoading } = useSWR<BillingSummary>(
+    "/api/billing",
+    loadBillingSummary
+  );
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function redirectTo(
+    action: string,
+    url: string,
+    body: Record<string, unknown>
+  ) {
+    setPendingAction(action);
+    setActionError(null);
+    try {
+      const response = await fetchWithActiveTeam(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, returnPath: pathname }),
+      });
+      const payload = (await response.json()) as {
+        url?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.error ?? "Request failed");
+      }
+      window.location.href = payload.url;
+    } catch (redirectError) {
+      setActionError(
+        redirectError instanceof Error
+          ? redirectError.message
+          : "Request failed"
+      );
+      setPendingAction(null);
+    }
+  }
+
+  if (isLoading) {
+    return <Skeleton className="h-48 w-full" />;
+  }
+  if (error) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Billing summary is unavailable right now.
+      </p>
+    );
+  }
+  if (!data?.enabled) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Billing</CardTitle>
+          <CardDescription>
+            Billing is not enabled on this deployment. Usage is on us during
+            the beta.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const balance = data.balance ?? {
+    includedCents: 0,
+    purchasedCents: 0,
+    totalCents: 0,
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Balance
+            <Badge variant="secondary" className="uppercase">
+              {data.tier}
+            </Badge>
+            {data.status !== "active" ? (
+              <Badge variant="destructive">{data.status}</Badge>
+            ) : null}
+          </CardTitle>
+          <CardDescription>
+            Included usage resets each billing period; purchased balance never
+            expires.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-8">
+          <div>
+            <p className="text-2xl font-semibold">
+              {formatUsd(balance.includedCents)}
+            </p>
+            <p className="text-sm text-muted-foreground">Included remaining</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold">
+              {formatUsd(balance.purchasedCents)}
+            </p>
+            <p className="text-sm text-muted-foreground">Purchased balance</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Plan</CardTitle>
+          <CardDescription>
+            {data.hasSubscription
+              ? "Change plan, update payment methods, or cancel from the billing portal."
+              : "Tokens at provider list price with 0% markup. No seats."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {data.hasSubscription || data.tier !== "free" ? (
+            <Button
+              disabled={pendingAction !== null}
+              onClick={() => redirectTo("portal", "/api/stripe/portal", {})}
+            >
+              {pendingAction === "portal" ? "Opening…" : "Manage subscription"}
+            </Button>
+          ) : (
+            PLAN_PRICES.map((plan) => (
+              <Button
+                key={plan.lookupKey}
+                variant={plan.interval === "month" ? "default" : "outline"}
+                disabled={pendingAction !== null}
+                onClick={() =>
+                  redirectTo(plan.lookupKey, "/api/stripe/checkout", {
+                    kind: "subscribe",
+                    plan: plan.lookupKey,
+                  })
+                }
+              >
+                {pendingAction === plan.lookupKey
+                  ? "Redirecting…"
+                  : `${plan.productName.replace("Mogplex ", "")} ${formatUsd(plan.amountCents)}/${plan.interval === "month" ? "mo" : "yr"}`}
+              </Button>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Top up</CardTitle>
+          <CardDescription>
+            Prepaid usage balance — never expires.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {TOPUP_PRESETS.map((preset) => (
+            <Button
+              key={preset.lookupKey}
+              variant="outline"
+              disabled={
+                pendingAction !== null || data.status === "frozen_topups"
+              }
+              onClick={() =>
+                redirectTo(preset.lookupKey, "/api/stripe/checkout", {
+                  kind: "topup",
+                  preset: preset.lookupKey,
+                })
+              }
+            >
+              {pendingAction === preset.lookupKey
+                ? "Redirecting…"
+                : `Add ${formatUsd(preset.amountCents)}`}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+
+      {actionError ? (
+        <p className="text-sm text-destructive">{actionError}</p>
+      ) : null}
+    </div>
+  );
+}

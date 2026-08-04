@@ -2,13 +2,8 @@ import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 import { getStripe, isBillingEnabled } from "@/lib/billing/stripe";
-import {
-  findPlanPrice,
-  findTopupPreset,
-  TOPUP_MAX_CENTS,
-  TOPUP_MIN_CENTS,
-  TOPUP_PRODUCT_NAME,
-} from "@/lib/billing/catalog";
+import { findTopupPreset } from "@/lib/billing/catalog";
+import { validateCheckoutRequest } from "@/lib/billing/checkout";
 import {
   getOrCreateBillingAccount,
   updateBillingAccount,
@@ -18,59 +13,6 @@ import {
 // Checkout flows (pricing-plan 02 §3): mode=subscription for plan sign-up,
 // mode=payment for top-ups. Top-up credit posts on payment_intent.succeeded
 // via the webhook — never on the redirect.
-
-export type CheckoutRequest =
-  | { kind: "subscribe"; plan: string }
-  | { kind: "topup"; preset?: string; amountCents?: number };
-
-export type CheckoutValidation =
-  | { ok: true; request: CheckoutRequest }
-  | { ok: false; error: string };
-
-export function validateCheckoutRequest(body: unknown): CheckoutValidation {
-  if (!body || typeof body !== "object") {
-    return { ok: false, error: "Invalid request body" };
-  }
-  const { kind } = body as { kind?: unknown };
-  if (kind === "subscribe") {
-    const { plan } = body as { plan?: unknown };
-    if (typeof plan !== "string" || !findPlanPrice(plan)) {
-      return { ok: false, error: "Unknown plan" };
-    }
-    return { ok: true, request: { kind: "subscribe", plan } };
-  }
-  if (kind === "topup") {
-    const { preset, amountCents } = body as {
-      preset?: unknown;
-      amountCents?: unknown;
-    };
-    if (typeof preset === "string") {
-      if (!findTopupPreset(preset)) {
-        return { ok: false, error: "Unknown top-up preset" };
-      }
-      return { ok: true, request: { kind: "topup", preset } };
-    }
-    if (typeof amountCents !== "number" || !Number.isInteger(amountCents)) {
-      return { ok: false, error: "Top-up amount must be integer cents" };
-    }
-    if (amountCents < TOPUP_MIN_CENTS) {
-      return {
-        ok: false,
-        error: `Minimum top-up is $${(TOPUP_MIN_CENTS / 100).toFixed(2)}`,
-      };
-    }
-    if (amountCents > TOPUP_MAX_CENTS) {
-      // Fraud guardrail, not a usage limit — raised on request instantly
-      // (pricing-plan 02 §3b).
-      return {
-        ok: false,
-        error: `Top-ups above $${TOPUP_MAX_CENTS / 100} require a support request`,
-      };
-    }
-    return { ok: true, request: { kind: "topup", amountCents } };
-  }
-  return { ok: false, error: "Unknown checkout kind" };
-}
 
 function appUrl(path: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
@@ -99,6 +41,24 @@ async function resolvePriceIdByLookupKey(lookupKey: string): Promise<string> {
     );
   }
   return price.id;
+}
+
+// Custom-amount top-ups reference the seeded shared product so each session
+// doesn't mint an orphan ad-hoc Product in the Stripe catalog.
+async function resolveTopupProductId(): Promise<string> {
+  const products = await getStripe().products.list({
+    active: true,
+    limit: 100,
+  });
+  const product = products.data.find(
+    (candidate) => candidate.metadata.mogplex_key === "usage_topup"
+  );
+  if (!product) {
+    throw new Error(
+      "Stripe top-up product not found — run scripts/stripe-seed.ts"
+    );
+  }
+  return product.id;
 }
 
 export async function POST(request: Request) {
@@ -145,10 +105,23 @@ export async function POST(request: Request) {
       { status: 403 }
     );
   }
+  const { returnPath } = validation.request;
   const customerId = await ensureStripeCustomer(account);
   const stripe = getStripe();
 
   if (validation.request.kind === "subscribe") {
+    // One subscription per account. Plan switches (Pro↔Team,
+    // monthly↔annual) go through the Customer Portal with prorations —
+    // a second Checkout would double-charge.
+    if (account.tier !== "free") {
+      return NextResponse.json(
+        {
+          error:
+            "This account already has a subscription — manage your plan from the billing portal",
+        },
+        { status: 409 }
+      );
+    }
     const priceId = await resolvePriceIdByLookupKey(validation.request.plan);
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -158,12 +131,15 @@ export async function POST(request: Request) {
       automatic_tax: { enabled: true },
       allow_promotion_codes: true,
       billing_address_collection: "auto",
-      success_url: appUrl("/settings/billing?state=subscribed"),
-      cancel_url: appUrl("/settings/billing?state=cancelled"),
+      success_url: appUrl(`${returnPath}?billing=subscribed`),
+      cancel_url: appUrl(`${returnPath}?billing=cancelled`),
     });
     return NextResponse.json({ url: session.url });
   }
 
+  const creditCents = validation.request.preset
+    ? findTopupPreset(validation.request.preset)!.amountCents
+    : validation.request.amountCents!;
   const lineItem = validation.request.preset
     ? {
         price: await resolvePriceIdByLookupKey(validation.request.preset),
@@ -172,8 +148,8 @@ export async function POST(request: Request) {
     : {
         price_data: {
           currency: "usd",
-          product_data: { name: TOPUP_PRODUCT_NAME },
-          unit_amount: validation.request.amountCents!,
+          product: await resolveTopupProductId(),
+          unit_amount: creditCents,
         },
         quantity: 1,
       };
@@ -184,10 +160,16 @@ export async function POST(request: Request) {
     line_items: [lineItem],
     automatic_tax: { enabled: true },
     payment_intent_data: {
-      metadata: { kind: "topup", billing_account_id: account.id },
+      // credit_cents = the pre-tax amount the webhook credits to the ledger
+      // (amount_received includes automatic_tax, which is not spendable).
+      metadata: {
+        kind: "topup",
+        billing_account_id: account.id,
+        credit_cents: String(creditCents),
+      },
     },
-    success_url: appUrl("/settings/billing?state=topup"),
-    cancel_url: appUrl("/settings/billing?state=cancelled"),
+    success_url: appUrl(`${returnPath}?billing=topup`),
+    cancel_url: appUrl(`${returnPath}?billing=cancelled`),
   });
   return NextResponse.json({ url: session.url });
 }

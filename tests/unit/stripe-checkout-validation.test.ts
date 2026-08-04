@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 async function loadCheckoutRoute() {
-  return import("../../app/api/stripe/checkout/route");
+  return import("../../lib/billing/checkout");
 }
 
 test("subscribe should accept every catalog plan and reject unknown plans", async () => {
@@ -81,4 +81,40 @@ test("unknown checkout kinds and malformed bodies should be rejected", async () 
   assert.equal(route.validateCheckoutRequest(null).ok, false);
   assert.equal(route.validateCheckoutRequest("subscribe").ok, false);
   assert.equal(route.validateCheckoutRequest({ kind: "gift-card" }).ok, false);
+});
+
+test("returnPath should only accept same-app absolute paths", async () => {
+  const route = await loadCheckoutRoute();
+  assert.equal(
+    route.sanitizeReturnPath("/acme/settings/billing"),
+    "/acme/settings/billing"
+  );
+  assert.equal(route.sanitizeReturnPath("https://evil.example"), "/");
+  assert.equal(route.sanitizeReturnPath("//evil.example"), "/");
+  assert.equal(route.sanitizeReturnPath("/path?query=1"), "/");
+  assert.equal(route.sanitizeReturnPath("relative/path"), "/");
+  assert.equal(route.sanitizeReturnPath(42), "/");
+  assert.equal(route.sanitizeReturnPath(undefined), "/");
+});
+
+test("validated requests should carry the sanitized returnPath", async () => {
+  const route = await loadCheckoutRoute();
+  const valid = route.validateCheckoutRequest({
+    kind: "subscribe",
+    plan: "pro_monthly",
+    returnPath: "/acme/settings/billing",
+  });
+  assert.equal(valid.ok, true);
+  if (valid.ok) {
+    assert.equal(valid.request.returnPath, "/acme/settings/billing");
+  }
+  const fallback = route.validateCheckoutRequest({
+    kind: "topup",
+    preset: "topup_10",
+    returnPath: "https://evil.example",
+  });
+  assert.equal(fallback.ok, true);
+  if (fallback.ok) {
+    assert.equal(fallback.request.returnPath, "/");
+  }
 });
