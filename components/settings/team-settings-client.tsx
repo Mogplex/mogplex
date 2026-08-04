@@ -10,20 +10,34 @@ import { useModels } from "@/hooks/use-models";
 import { useMemberships } from "@/hooks/use-memberships";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BillingSection } from "@/components/settings/billing-section";
 import type { TeamAuditEventsResponse } from "@/app/api/teams/[teamId]/audit-events/route";
 import type { TeamMembersResponse } from "@/app/api/teams/[teamId]/members/route";
 import type { TeamModelsResponse } from "@/app/api/teams/[teamId]/models/route";
 import type { TeamRole } from "@/lib/team-capabilities";
 import type { Provider } from "@/lib/vault";
 
-type TeamSettingsTab = "members" | "keys" | "models" | "audit" | "connections";
+type TeamSettingsTab =
+  | "members"
+  | "keys"
+  | "models"
+  | "audit"
+  | "connections"
+  | "billing";
 
 type TeamKeysResponse = {
   keys: Array<{ provider: Provider; created_at: string; updated_at: string }>;
   viewer: { role: TeamRole; canManage: boolean };
 };
 
-const TEAM_TABS = ["members", "keys", "models", "audit", "connections"] as const;
+const TEAM_TABS = [
+  "members",
+  "keys",
+  "models",
+  "audit",
+  "connections",
+  "billing",
+] as const;
 const TEAM_TAB_SET: ReadonlySet<string> = new Set(TEAM_TABS);
 
 const PROVIDERS: Array<{
@@ -578,6 +592,7 @@ export function TeamSettingsClient({
             <TabsTrigger value="models" className="h-7 px-3 text-[13px]">Models</TabsTrigger>
             {canManageMembers && <TabsTrigger value="audit" className="h-7 px-3 text-[13px]">Audit</TabsTrigger>}
             <TabsTrigger value="connections" className="h-7 px-3 text-[13px]">Connections</TabsTrigger>
+            <TabsTrigger value="billing" className="h-7 px-3 text-[13px]">Billing</TabsTrigger>
           </TabsList>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -936,6 +951,10 @@ export function TeamSettingsClient({
               Team-scoped connections are intentionally deferred. Personal connections continue to work from your personal scope.
             </div>
           </section>
+        </TabsContent>
+
+        <TabsContent value="billing" className="mt-0">
+          <BillingSection embedded />
         </TabsContent>
       </Tabs>
     </div>

@@ -41,6 +41,7 @@ type SandboxCredentialLike = Pick<
   | "accountDefaultVercelTeamId"
 > & {
   userId?: string | null;
+  productTeamId?: string | null;
 };
 
 type SandboxResolvedCredentials = {
@@ -177,7 +178,10 @@ async function maybeResolveAiContext(
     };
   }
 
-  const access = await deps.resolveSandboxAiAccess(sandboxCredentials.userId);
+  const access = await deps.resolveSandboxAiAccess(
+    sandboxCredentials.userId,
+    sandboxCredentials.productTeamId
+  );
   return {
     ok: true,
     context: buildAiContext(access),

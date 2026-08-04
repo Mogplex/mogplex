@@ -135,7 +135,14 @@ test("returnPath should only accept same-app absolute paths", async () => {
   );
   assert.equal(route.sanitizeReturnPath("https://evil.example"), "/");
   assert.equal(route.sanitizeReturnPath("//evil.example"), "/");
-  assert.equal(route.sanitizeReturnPath("/path?query=1"), "/");
+  assert.equal(
+    route.sanitizeReturnPath("/personal/settings?tab=billing"),
+    "/personal/settings?tab=billing"
+  );
+  assert.equal(
+    route.sanitizeReturnPath("/path?next=https://evil.example"),
+    "/"
+  );
   assert.equal(route.sanitizeReturnPath("relative/path"), "/");
   assert.equal(route.sanitizeReturnPath(42), "/");
   assert.equal(route.sanitizeReturnPath(undefined), "/");

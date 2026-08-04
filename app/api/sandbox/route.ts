@@ -913,6 +913,7 @@ async function resolveSandboxLaunchRuntimePreparation(input: {
   githubToken: string;
   launchRequest: ResolvedSandboxLaunchRequest;
   userId: string;
+  productTeamId: string | null;
   /**
    * Pre-computed launch-time path so this helper and the surrounding
    * SandboxLaunchPreparation share a single source of truth. Avoids two
@@ -949,6 +950,7 @@ async function resolveSandboxLaunchRuntimePreparation(input: {
     launchRequest: input.launchRequest,
     githubToken: input.githubToken,
     userId: input.userId,
+    productTeamId: input.productTeamId,
     effectiveRootDirectory: input.effectiveRootDirectory,
   });
 
@@ -969,11 +971,15 @@ async function resolveSandboxSourceForLaunch(input: {
   launchRequest: ResolvedSandboxLaunchRequest;
   githubToken: string;
   userId: string;
+  productTeamId: string | null;
   effectiveRootDirectory: string | null;
 }): Promise<SandboxSource> {
   let fastSpawnEnabled: boolean;
   try {
-    const access = await loadUserPlatformAccess(input.userId);
+    const access = await loadUserPlatformAccess(
+      input.userId,
+      input.productTeamId
+    );
     fastSpawnEnabled = Boolean(access.allowPlatformSandbox);
   } catch (error) {
     console.warn(
@@ -1083,6 +1089,7 @@ async function prepareSandboxLaunch(input: {
     githubToken: repoAccess.githubToken,
     launchRequest: launchRequest.launchRequest,
     userId: input.creds.userId,
+    productTeamId: input.productTeamId,
     effectiveRootDirectory,
   });
 
@@ -2461,6 +2468,7 @@ export function createSandboxGetHandler(
     const activeTeamId = readActiveTeamIdHeader(request);
     const creds = await deps.getSandboxServiceCredentials(request, {
       allowInternal: true,
+      teamId: activeTeamId,
     });
     if (!creds)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

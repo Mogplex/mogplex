@@ -1,4 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findBillingAccountForScope } from "@/lib/billing/accounts";
+import { getBillingBalance } from "@/lib/billing/ledger";
+import { isBillingEnabled } from "@/lib/billing/stripe";
 
 export type PlatformAccess = {
   allowPlatformAi: boolean;
@@ -15,6 +18,10 @@ export type PlatformAccessProfile = {
 type LoadUserPlatformAccessDeps = {
   env: NodeJS.ProcessEnv;
   loadProfile: (userId: string) => Promise<PlatformAccessProfile | null>;
+  loadBillingAccess: (
+    userId: string,
+    productTeamId?: string | null
+  ) => Promise<boolean>;
 };
 
 const PLATFORM_ACCESS_USER_IDS_ENV = "PLATFORM_ACCESS_USER_IDS";
@@ -24,22 +31,22 @@ const PLATFORM_ACCESS_EMAIL_DOMAINS_ENV = "PLATFORM_ACCESS_EMAIL_DOMAINS";
 const BUILT_IN_ALLOWLISTED_EMAIL_DOMAINS = ["blackbox.ai"] as const;
 
 export const PLATFORM_AI_ACCESS_ERROR =
-  "Platform AI access is not enabled for this account. Add your own AI Gateway key or provider key in Settings > API Keys.";
+  "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own AI Gateway or provider key in Settings > API Keys.";
 
 export const PLATFORM_OPENAI_ACCESS_ERROR =
-  "Platform AI access is not enabled for this account. Add your own OpenAI API key or AI Gateway key in Settings > API Keys.";
+  "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own OpenAI or AI Gateway key in Settings > API Keys.";
 
 export const PLATFORM_ANTHROPIC_ACCESS_ERROR =
-  "Platform AI access is not enabled for this account. Add your own Anthropic API key or AI Gateway key in Settings > API Keys.";
+  "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own Anthropic or AI Gateway key in Settings > API Keys.";
 
 export const PLATFORM_OPENROUTER_ACCESS_ERROR =
-  "Platform AI access is not enabled for this account. Add your own OpenRouter API key in Settings > API Keys or select a model backed by your AI Gateway key.";
+  "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own OpenRouter or AI Gateway key in Settings > API Keys.";
 
 export const PLATFORM_SANDBOX_ACCESS_ERROR =
-  "Platform sandbox billing is not enabled for this account. Link Personal Vercel and select a billing project to launch sandboxes.";
+  "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.";
 
 export const PLATFORM_SANDBOX_RECORD_ACCESS_ERROR =
-  "Platform sandbox access is not enabled for this account. Relaunch this repo with a personal Vercel billing project to keep using sandbox tools.";
+  "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.";
 
 function parseAllowlist(
   value: string | undefined,
@@ -125,20 +132,42 @@ async function loadPlatformAccessProfile(
   return (data ?? null) as PlatformAccessProfile | null;
 }
 
+async function loadBillingAccess(
+  userId: string,
+  productTeamId?: string | null
+): Promise<boolean> {
+  if (!isBillingEnabled()) return false;
+
+  const scope = productTeamId
+    ? ({
+        kind: "team",
+        userId,
+        productTeamId,
+      } as const)
+    : ({ kind: "personal", userId, productTeamId: null } as const);
+  const account = await findBillingAccountForScope(scope);
+  if (!account) return false;
+
+  const balance = await getBillingBalance(account.id);
+  return balance.totalCents > 0;
+}
+
 export function createLoadUserPlatformAccess(
   overrides: Partial<LoadUserPlatformAccessDeps> = {}
 ) {
   const deps: LoadUserPlatformAccessDeps = {
     env: process.env,
     loadProfile: loadPlatformAccessProfile,
+    loadBillingAccess,
     ...overrides,
   };
 
   return async function loadUserPlatformAccess(
-    userId: string
+    userId: string,
+    productTeamId?: string | null
   ): Promise<PlatformAccess> {
     const profile = await deps.loadProfile(userId);
-    return derivePlatformAccess(
+    const allowlistedAccess = derivePlatformAccess(
       profile ?? {
         id: userId,
         email: null,
@@ -147,6 +176,22 @@ export function createLoadUserPlatformAccess(
       },
       deps.env
     );
+    if (
+      allowlistedAccess.allowPlatformAi &&
+      allowlistedAccess.allowPlatformSandbox
+    ) {
+      return allowlistedAccess;
+    }
+
+    const hasBillingAccess = await deps.loadBillingAccess(
+      userId,
+      productTeamId
+    );
+    return {
+      allowPlatformAi: allowlistedAccess.allowPlatformAi || hasBillingAccess,
+      allowPlatformSandbox:
+        allowlistedAccess.allowPlatformSandbox || hasBillingAccess,
+    };
   };
 }
 

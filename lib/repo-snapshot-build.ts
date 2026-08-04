@@ -27,6 +27,7 @@ import type { SandboxServiceCredentials } from "@/lib/sandbox/get-user-credentia
 export type SnapshotBuildRepoRecord = {
   id: string;
   user_id: string;
+  product_team_id?: string | null;
   full_name: string;
   default_branch: string | null;
   root_directory: string | null;

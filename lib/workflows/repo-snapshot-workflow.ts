@@ -51,7 +51,7 @@ export async function executeRepoSnapshotBuild(input: RepoSnapshotBuildInput) {
 
   const [userCreds, platformAccess] = await Promise.all([
     loadUserVercelCredentials(repo.user_id),
-    loadUserPlatformAccess(repo.user_id),
+    loadUserPlatformAccess(repo.user_id, repo.product_team_id),
   ]);
   if (!platformCreds.vercelToken && !userCreds.userVercelToken) {
     return { success: false, reason: "sandbox_service_not_configured" };
@@ -61,6 +61,7 @@ export async function executeRepoSnapshotBuild(input: RepoSnapshotBuildInput) {
     repo,
     sandboxCredentials: {
       userId: repo.user_id,
+      productTeamId: repo.product_team_id,
       ...platformCreds,
       allowPlatformSandbox: platformAccess.allowPlatformSandbox,
       ...userCreds,

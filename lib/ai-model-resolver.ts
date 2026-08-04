@@ -102,7 +102,8 @@ type ResolveUserLanguageModelDeps = {
     teamId?: string | null
   ) => Promise<string | null>;
   loadUserPlatformAccess: (
-    userId: string
+    userId: string,
+    productTeamId?: string | null
   ) => Promise<{ allowPlatformAi: boolean }>;
   resolveMemberCapabilities: (
     userId: string,
@@ -316,7 +317,7 @@ export function createResolveUserLanguageModel(
     });
 
     const [{ allowPlatformAi }, userGatewayKey] = await Promise.all([
-      deps.loadUserPlatformAccess(userId).catch(() => ({
+      deps.loadUserPlatformAccess(userId, teamId).catch(() => ({
         allowPlatformAi: false,
       })),
       deps.getProviderKey(userId, "ai_gateway", teamId),

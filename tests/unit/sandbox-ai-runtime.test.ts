@@ -210,6 +210,25 @@ test("resolveSandboxAiAccess withholds platform gateway fallback for non-allowli
   assert.deepEqual(buildSandboxHarnessAiEnv(access, "codex"), {
     ok: false,
     error:
-      "Platform AI access is not enabled for this account. Add your own OpenAI API key or AI Gateway key in Settings > API Keys.",
+      "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own OpenAI or AI Gateway key in Settings > API Keys.",
   });
+});
+
+test("resolveSandboxAiAccess checks platform billing in the active team scope", async () => {
+  const { createResolveSandboxAiAccess } = await loadSandboxAiRuntime();
+  let resolvedTeamId: string | null | undefined;
+  const resolveSandboxAiAccess = createResolveSandboxAiAccess({
+    getProviderKey: async () => null,
+    getPlatformGatewayApiKey: () => "platform-gateway-key",
+    loadUserPlatformAccess: async (_userId, productTeamId) => {
+      resolvedTeamId = productTeamId;
+      return { allowPlatformAi: productTeamId === "team-paid" };
+    },
+  });
+
+  const access = await resolveSandboxAiAccess("user-member", "team-paid");
+
+  assert.equal(resolvedTeamId, "team-paid");
+  assert.equal(access.aiBillingSource, "platform_ai_gateway");
+  assert.equal(access.gatewayApiKey, "platform-gateway-key");
 });

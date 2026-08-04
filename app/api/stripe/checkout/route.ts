@@ -22,6 +22,11 @@ function appUrl(path: string): string {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
+function billingResultPath(returnPath: string, result: string): string {
+  const separator = returnPath.includes("?") ? "&" : "?";
+  return `${returnPath}${separator}billing=${result}`;
+}
+
 export async function POST(request: Request) {
   if (!isBillingEnabled()) {
     return NextResponse.json(
@@ -93,8 +98,8 @@ export async function POST(request: Request) {
         automatic_tax: { enabled: true },
         allow_promotion_codes: true,
         billing_address_collection: "auto",
-        success_url: appUrl(`${returnPath}?billing=subscribed`),
-        cancel_url: appUrl(`${returnPath}?billing=cancelled`),
+        success_url: appUrl(billingResultPath(returnPath, "subscribed")),
+        cancel_url: appUrl(billingResultPath(returnPath, "cancelled")),
       },
       {
         idempotencyKey: subscriptionCheckoutIdempotencyKey(account),
@@ -144,8 +149,8 @@ export async function POST(request: Request) {
           credit_cents: String(creditCents),
         },
       },
-      success_url: appUrl(`${returnPath}?billing=topup`),
-      cancel_url: appUrl(`${returnPath}?billing=cancelled`),
+      success_url: appUrl(billingResultPath(returnPath, "topup")),
+      cancel_url: appUrl(billingResultPath(returnPath, "cancelled")),
     },
     {
       idempotencyKey: topupCheckoutIdempotencyKey(

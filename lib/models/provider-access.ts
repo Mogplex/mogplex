@@ -32,7 +32,7 @@ export async function loadScopedUserProviderAccess(
   const [keys, teamKeys, platform] = await Promise.all([
     listProviderKeys(userId),
     teamKeysPromise,
-    loadUserPlatformAccess(userId),
+    loadUserPlatformAccess(userId, teamId),
   ]);
   const providers = new Set([
     ...keys.map((row) => row.provider),

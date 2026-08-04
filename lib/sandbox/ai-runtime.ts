@@ -43,7 +43,8 @@ type ResolveSandboxAiAccessDeps = {
   ) => Promise<string | null>;
   getPlatformGatewayApiKey: () => string | null;
   loadUserPlatformAccess: (
-    userId: string
+    userId: string,
+    productTeamId?: string | null
   ) => Promise<{ allowPlatformAi: boolean }>;
 };
 
@@ -81,11 +82,12 @@ export function createResolveSandboxAiAccess(
   };
 
   return async function resolveSandboxAiAccess(
-    userId: string
+    userId: string,
+    productTeamId?: string | null
   ): Promise<SandboxAiAccess> {
     const [platformAccess, userGatewayKey, anthropicKey, openaiKey] =
       await Promise.all([
-        deps.loadUserPlatformAccess(userId).catch(() => ({
+        deps.loadUserPlatformAccess(userId, productTeamId).catch(() => ({
           allowPlatformAi: false,
         })),
         deps.getProviderKey(userId, "ai_gateway").catch(() => null),
