@@ -19,6 +19,7 @@ function accountFixture(
     stripe_subscription_id: null,
     tier: "free",
     period_anchor: null,
+    subscription_checkout_generation: 0,
     status: "active",
     ...overrides,
   };
@@ -98,27 +99,33 @@ test("top-up product lookup is shared across checkout requests", async () => {
   assert.equal(calls, 1);
 });
 
-test("subscription checkout idempotency serializes every plan for one billing period", async () => {
+test("subscription checkout idempotency advances only with cancellation generation", async () => {
   const { subscriptionCheckoutIdempotencyKey } = await loadCheckoutRuntime();
 
   assert.equal(
     subscriptionCheckoutIdempotencyKey(accountFixture()),
-    "billing-subscribe:acct-1:new"
-  );
-  assert.equal(
-    subscriptionCheckoutIdempotencyKey(
-      accountFixture({ tier: "pro", period_anchor: "2026-08-01" })
-    ),
-    "billing-subscribe:acct-1:2026-08-01"
+    "billing-subscribe:acct-1:0"
   );
   assert.equal(
     subscriptionCheckoutIdempotencyKey(
       accountFixture({
+        tier: "free",
         period_anchor: "2026-08-01",
         updated_at: "2026-08-04T21:00:00.000Z",
+        subscription_checkout_generation: 1,
       })
     ),
-    "billing-subscribe:acct-1:cancelled:2026-08-04T21:00:00.000Z"
+    "billing-subscribe:acct-1:1"
+  );
+  assert.equal(
+    subscriptionCheckoutIdempotencyKey(
+      accountFixture({
+        status: "past_due",
+        updated_at: "2026-08-04T22:00:00.000Z",
+        subscription_checkout_generation: 1,
+      })
+    ),
+    "billing-subscribe:acct-1:1"
   );
 });
 

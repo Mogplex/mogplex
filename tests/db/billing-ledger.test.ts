@@ -113,6 +113,14 @@ describe("billing ledger migration", () => {
     );
     expect(duplicate.rows[0]?.expire_billing_included_credit).toBe(0);
 
+    const account = await db.query<{
+      subscription_checkout_generation: number;
+    }>(
+      "select subscription_checkout_generation from billing_accounts where id = $1",
+      [ACCOUNT_ID]
+    );
+    expect(account.rows[0]?.subscription_checkout_generation).toBe(1);
+
     const balance = await db.query<{ included_cents: number }>(
       "select included_cents from billing_balance($1)",
       [ACCOUNT_ID]

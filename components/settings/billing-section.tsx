@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -61,6 +61,16 @@ export function BillingSection() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const topupAttemptIds = useRef(new Map<string, string>());
+  const checkoutResult = searchParams.get("billing");
+
+  useEffect(() => {
+    if (checkoutResult === "topup") topupAttemptIds.current.clear();
+    const resetBfcacheAttempts = (event: PageTransitionEvent) => {
+      if (event.persisted) topupAttemptIds.current.clear();
+    };
+    window.addEventListener("pageshow", resetBfcacheAttempts);
+    return () => window.removeEventListener("pageshow", resetBfcacheAttempts);
+  }, [checkoutResult]);
 
   function getTopupAttemptId(action: string) {
     const existing = topupAttemptIds.current.get(action);
@@ -130,7 +140,6 @@ export function BillingSection() {
     purchasedCents: 0,
     totalCents: 0,
   };
-  const checkoutResult = searchParams.get("billing");
   const paymentSubmitted =
     checkoutResult === "topup" || checkoutResult === "subscribed";
 

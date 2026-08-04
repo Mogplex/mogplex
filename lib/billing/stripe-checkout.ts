@@ -134,13 +134,10 @@ export async function resolveCatalogPriceId(
 export function subscriptionCheckoutIdempotencyKey(
   account: BillingAccount
 ): string {
-  // Concurrent subscribe requests share one key. After cancellation, the
-  // account update timestamp provides a new generation so re-subscribing does
-  // not replay the completed session from the prior subscription.
-  const generation =
-    account.tier === "free" && account.period_anchor
-      ? `cancelled:${account.updated_at ?? account.period_anchor}`
-      : (account.period_anchor ?? "new");
+  // Concurrent requests share one key. The cancellation RPC advances this
+  // generation exactly once per subscription, so a later re-subscribe cannot
+  // replay an old session without unrelated account updates splitting races.
+  const generation = account.subscription_checkout_generation ?? 0;
   return `billing-subscribe:${account.id}:${generation}`;
 }
 

@@ -231,7 +231,9 @@ async function syncSubscription(
   if (subscription.status === "canceled") {
     // Drop to Free and expire subscription-included credit; purchased top-up
     // credit persists indefinitely. past_due clears — there is nothing left
-    // to dun — but a dispute freeze survives until support lifts it.
+    // to dun — but a dispute freeze survives until support lifts it. The RPC
+    // also advances the subscription Checkout generation once per canceled
+    // subscription so later sign-ups cannot replay its completed session.
     await deps.expireIncludedCredit({
       accountId: account.id,
       sourceRef: `grantexp:${account.id}:cancel:${subscription.id}`,

@@ -10,6 +10,7 @@ export type BillingAccount = {
   stripe_subscription_id: string | null;
   tier: "free" | "pro" | "team";
   period_anchor: string | null;
+  subscription_checkout_generation?: number | string;
   status: "active" | "past_due" | "frozen_topups";
   updated_at?: string;
 };
@@ -17,7 +18,7 @@ export type BillingAccount = {
 const UNIQUE_VIOLATION = "23505";
 
 const ACCOUNT_COLUMNS =
-  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, status, updated_at";
+  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, subscription_checkout_generation, status, updated_at";
 
 export async function findBillingAccountForScope(
   scope: ProductResourceScope
