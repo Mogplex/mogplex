@@ -18,7 +18,7 @@ const UNIQUE_VIOLATION = "23505";
 const ACCOUNT_COLUMNS =
   "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, status";
 
-async function findAccountForScope(
+export async function findBillingAccountForScope(
   scope: ProductResourceScope
 ): Promise<BillingAccount | null> {
   let query = supabaseAdmin
@@ -41,7 +41,7 @@ async function findAccountForScope(
 export async function getOrCreateBillingAccount(
   scope: ProductResourceScope
 ): Promise<BillingAccount> {
-  const existing = await findAccountForScope(scope);
+  const existing = await findBillingAccountForScope(scope);
   if (existing) return existing;
 
   const insert =
@@ -58,7 +58,7 @@ export async function getOrCreateBillingAccount(
   // Concurrent create for the same scope: the partial unique index rejects
   // the second insert — re-read the winner.
   if (error.code === UNIQUE_VIOLATION) {
-    const winner = await findAccountForScope(scope);
+    const winner = await findBillingAccountForScope(scope);
     if (winner) return winner;
   }
   throw new Error(`billing_accounts insert failed: ${error.message}`);

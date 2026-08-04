@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 import { isBillingEnabled } from "@/lib/billing/stripe";
-import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
+import { findBillingAccountForScope } from "@/lib/billing/accounts";
 import { getBillingBalance } from "@/lib/billing/ledger";
 
 // Billing summary for the current scope (Settings → Billing). Any member
@@ -24,14 +24,16 @@ export async function GET(request: Request) {
     );
   }
 
-  const account = await getOrCreateBillingAccount(resolution.scope);
-  const balance = await getBillingBalance(account.id);
+  const account = await findBillingAccountForScope(resolution.scope);
+  const balance = account
+    ? await getBillingBalance(account.id)
+    : { includedCents: 0, purchasedCents: 0, totalCents: 0 };
   return NextResponse.json({
     enabled: true,
-    tier: account.tier,
-    status: account.status,
-    hasSubscription: Boolean(account.stripe_subscription_id),
-    hasStripeCustomer: Boolean(account.stripe_customer_id),
+    tier: account?.tier ?? "free",
+    status: account?.status ?? "active",
+    hasSubscription: Boolean(account?.stripe_subscription_id),
+    hasStripeCustomer: Boolean(account?.stripe_customer_id),
     balance: {
       includedCents: balance.includedCents,
       purchasedCents: balance.purchasedCents,

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type LedgerBucket = "included" | "purchased";
 
@@ -31,28 +32,67 @@ export type BillingBalance = {
   totalCents: number;
 };
 
-const UNIQUE_VIOLATION = "23505";
+export type BillingPeriodGrant = {
+  accountId: string;
+  deltaCents: number;
+  grantSourceRef: string;
+  expirySourceRef: string;
+  period: string;
+  metadata?: Record<string, unknown>;
+};
 
 export async function postLedgerEntry(
-  entry: LedgerEntry
+  entry: LedgerEntry,
+  client: SupabaseClient = supabaseAdmin
 ): Promise<{ posted: boolean }> {
   if (!Number.isInteger(entry.deltaCents)) {
     throw new TypeError(
       `ledger delta must be integer cents, got ${entry.deltaCents}`
     );
   }
-  const { error } = await supabaseAdmin.from("credit_ledger").insert({
-    account_id: entry.accountId,
-    delta_cents: entry.deltaCents,
-    bucket: entry.bucket,
-    kind: entry.kind,
-    source_ref: entry.sourceRef,
-    period: entry.period ?? null,
-    metadata: entry.metadata ?? {},
+  const { data, error } = await client.rpc("post_credit_ledger_entry", {
+    p_account: entry.accountId,
+    p_delta: entry.deltaCents,
+    p_bucket: entry.bucket,
+    p_kind: entry.kind,
+    p_source_ref: entry.sourceRef,
+    p_period: entry.period ?? null,
+    p_metadata: entry.metadata ?? {},
   });
-  if (!error) return { posted: true };
-  if (error.code === UNIQUE_VIOLATION) return { posted: false };
-  throw new Error(`credit_ledger insert failed: ${error.message}`);
+  if (error) {
+    throw new Error(`credit_ledger insert failed: ${error.message}`);
+  }
+  return { posted: data === true };
+}
+
+export async function postBillingPeriodGrant(
+  grant: BillingPeriodGrant,
+  client: SupabaseClient = supabaseAdmin
+): Promise<{ posted: boolean; expiredCents: number }> {
+  if (!Number.isInteger(grant.deltaCents) || grant.deltaCents <= 0) {
+    throw new TypeError(
+      `billing period grant must be positive integer cents, got ${grant.deltaCents}`
+    );
+  }
+  const { data, error } = await client.rpc("post_billing_period_grant", {
+    p_account: grant.accountId,
+    p_delta: grant.deltaCents,
+    p_grant_source_ref: grant.grantSourceRef,
+    p_expiry_source_ref: grant.expirySourceRef,
+    p_period: grant.period,
+    p_metadata: grant.metadata ?? {},
+  });
+  if (error) {
+    throw new Error(`billing period grant failed: ${error.message}`);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    posted?: boolean;
+    expired_cents?: number | string;
+  } | null;
+  return {
+    posted: row?.posted === true,
+    expiredCents: Number(row?.expired_cents ?? 0),
+  };
 }
 
 export async function getBillingBalance(

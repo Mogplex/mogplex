@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { fetchWithActiveTeam } from "@/components/active-scope-provider";
 import { PLAN_PRICES, TOPUP_PRESETS } from "@/lib/billing/catalog";
@@ -43,7 +43,8 @@ async function loadBillingSummary(url: string): Promise<BillingSummary> {
 
 export function BillingSection() {
   const pathname = usePathname();
-  const { data, error, isLoading } = useSWR<BillingSummary>(
+  const searchParams = useSearchParams();
+  const { data, error, isLoading, mutate } = useSWR<BillingSummary>(
     "/api/billing",
     loadBillingSummary
   );
@@ -110,9 +111,25 @@ export function BillingSection() {
     purchasedCents: 0,
     totalCents: 0,
   };
+  const checkoutResult = searchParams.get("billing");
+  const paymentSubmitted =
+    checkoutResult === "topup" || checkoutResult === "subscribed";
 
   return (
     <div className="flex flex-col gap-6">
+      {paymentSubmitted ? (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/40 p-3 text-sm"
+          role="status"
+        >
+          <span>
+            Payment submitted. Your balance updates after Stripe confirms it.
+          </span>
+          <Button variant="outline" size="sm" onClick={() => void mutate()}>
+            Refresh balance
+          </Button>
+        </div>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

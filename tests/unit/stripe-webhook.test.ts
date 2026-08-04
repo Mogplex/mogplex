@@ -3,7 +3,11 @@ import test from "node:test";
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BillingAccount } from "../../lib/billing/accounts";
-import type { BillingBalance, LedgerEntry } from "../../lib/billing/ledger";
+import type {
+  BillingBalance,
+  BillingPeriodGrant,
+  LedgerEntry,
+} from "../../lib/billing/ledger";
 
 async function loadWebhookRoute() {
   return import("../../app/api/webhooks/stripe/route");
@@ -55,6 +59,34 @@ function makeDeps(overrides: {
       recorded.ledger.push(entry);
       return { posted: true };
     },
+    postBillingPeriodGrant: async (grant: BillingPeriodGrant) => {
+      if (postedRefs.has(grant.grantSourceRef)) {
+        return { posted: false, expiredCents: 0 };
+      }
+      postedRefs.add(grant.grantSourceRef);
+      recorded.ledger.push({
+        accountId: grant.accountId,
+        deltaCents: grant.deltaCents,
+        bucket: "included",
+        kind: "grant",
+        sourceRef: grant.grantSourceRef,
+        period: grant.period,
+        metadata: grant.metadata,
+      });
+      const expiredCents = overrides.balance?.includedCents ?? 0;
+      if (expiredCents > 0) {
+        postedRefs.add(grant.expirySourceRef);
+        recorded.ledger.push({
+          accountId: grant.accountId,
+          deltaCents: -expiredCents,
+          bucket: "included",
+          kind: "grant_expiry",
+          sourceRef: grant.expirySourceRef,
+          period: grant.period,
+        });
+      }
+      return { posted: true, expiredCents };
+    },
     getBalance: async () =>
       overrides.balance ?? {
         includedCents: 0,
@@ -72,9 +104,12 @@ function makeDeps(overrides: {
   return { deps, recorded, postedRefs };
 }
 
-function subscriptionFixture(lookupKey: string): Partial<Stripe.Subscription> {
+function subscriptionFixture(
+  lookupKey: string,
+  subscriptionId = "sub_1"
+): Partial<Stripe.Subscription> {
   return {
-    id: "sub_1",
+    id: subscriptionId,
     status: "active",
     customer: "cus_123",
     items: {
@@ -119,8 +154,8 @@ test("invoice.paid should post the grant and expire prior included leftover", as
       ["grant_expiry", -350],
     ]
   );
-  assert.equal(recorded.ledger[0].sourceRef, "grant:acct-1:2026-08");
-  assert.equal(recorded.ledger[1].sourceRef, "grantexp:acct-1:2026-08");
+  assert.equal(recorded.ledger[0].sourceRef, "grant:acct-1:2026-08:sub_1");
+  assert.equal(recorded.ledger[1].sourceRef, "grantexp:acct-1:2026-08:sub_1");
   assert.deepEqual(recorded.updates, [
     {
       id: "acct-1",
@@ -153,6 +188,25 @@ test("invoice.paid redelivery should not double-post grant rows", async () => {
   });
   await route.handleStripeEvent(invoicePaidEvent(), second.deps);
   assert.equal(second.recorded.ledger.length, 0);
+});
+
+test("invoice.paid should grant a same-month re-subscription", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({ tier: "free" }),
+    subscription: subscriptionFixture("pro_monthly", "sub_new"),
+    postedRefs: new Set([
+      "grant:acct-1:2026-08",
+      "grant:acct-1:2026-08:sub_old",
+    ]),
+  });
+
+  await route.handleStripeEvent(invoicePaidEvent(), deps);
+
+  assert.deepEqual(
+    recorded.ledger.map((entry) => [entry.kind, entry.sourceRef]),
+    [["grant", "grant:acct-1:2026-08:sub_new"]]
+  );
 });
 
 test("invoice.paid should NOT lift a dispute freeze on routine renewal", async () => {
@@ -263,7 +317,7 @@ test("payment_intent.succeeded should credit the stamped pre-tax amount, not amo
   );
 });
 
-test("payment_intent.succeeded should fall back to amount_received without a stamp", async () => {
+test("payment_intent.succeeded should reject a missing pre-tax credit stamp", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({});
   const event = {
@@ -278,8 +332,11 @@ test("payment_intent.succeeded should fall back to amount_received without a sta
     },
   } as unknown as Stripe.Event;
 
-  await route.handleStripeEvent(event, deps);
-  assert.equal(recorded.ledger[0].deltaCents, 1000);
+  await assert.rejects(
+    route.handleStripeEvent(event, deps),
+    /missing a valid credit_cents stamp/
+  );
+  assert.equal(recorded.ledger.length, 0);
 });
 
 test("payment_intent.succeeded should ignore non-topup payments", async () => {
@@ -412,7 +469,7 @@ test("invoice.paid should add the included-usage delta for a mid-cycle upgrade",
   const { deps, recorded } = makeDeps({
     account: accountFixture({ tier: "pro" }),
     subscription: subscriptionFixture("team_monthly"),
-    postedRefs: new Set(["grant:acct-1:2026-08"]),
+    postedRefs: new Set(["grant:acct-1:2026-08:sub_1"]),
   });
 
   await route.handleStripeEvent(invoicePaidEvent(), deps);

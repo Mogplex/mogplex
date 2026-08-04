@@ -34,9 +34,6 @@ test("customer creation uses one stable idempotency key per billing account", as
       calls.push({ params, options: options ?? {} });
       return { id: "cus_new" };
     },
-    listProducts: () => {
-      throw new Error("unused");
-    },
     updateAccountCustomer: async (id, stripeCustomerId) => {
       updates.push({ id, customerId: stripeCustomerId });
     },
@@ -56,9 +53,6 @@ test("existing Stripe customers do not call Stripe or update the account", async
       createCustomer: async () => {
         called = true;
         return { id: "cus_wrong" };
-      },
-      listProducts: () => {
-        throw new Error("unused");
       },
       updateAccountCustomer: async () => {
         called = true;
@@ -83,30 +77,70 @@ test("top-up product lookup follows Stripe pagination beyond 100 products", asyn
   }
 
   const productId = await resolveTopupProductId({
-    createCustomer: async () => {
-      throw new Error("unused");
-    },
     listProducts: () => paginateProducts(),
-    updateAccountCustomer: async () => {
-      throw new Error("unused");
-    },
   });
 
   assert.equal(productId, "prod_100");
 });
 
-test("subscription checkout idempotency changes after a completed billing period", async () => {
+test("subscription checkout idempotency serializes every plan for one billing period", async () => {
   const { subscriptionCheckoutIdempotencyKey } = await loadCheckoutRuntime();
 
   assert.equal(
-    subscriptionCheckoutIdempotencyKey(accountFixture(), "pro_monthly"),
-    "billing-subscribe:acct-1:new:pro_monthly"
+    subscriptionCheckoutIdempotencyKey(accountFixture()),
+    "billing-subscribe:acct-1:new"
   );
   assert.equal(
     subscriptionCheckoutIdempotencyKey(
-      accountFixture({ period_anchor: "2026-08-01" }),
-      "pro_monthly"
+      accountFixture({ period_anchor: "2026-08-01" })
     ),
-    "billing-subscribe:acct-1:2026-08-01:pro_monthly"
+    "billing-subscribe:acct-1:2026-08-01"
+  );
+});
+
+test("catalog price lookup rejects amount, currency, and interval drift", async () => {
+  const { resolveCatalogPriceId } = await loadCheckoutRuntime();
+  const matchingPlan = {
+    id: "price_pro",
+    active: true,
+    unit_amount: 2000,
+    currency: "usd",
+    recurring: { interval: "month" as const },
+  };
+
+  assert.equal(
+    await resolveCatalogPriceId("pro_monthly", async () => ({
+      data: [matchingPlan],
+    })),
+    "price_pro"
+  );
+  for (const drifted of [
+    { ...matchingPlan, unit_amount: 2500 },
+    { ...matchingPlan, currency: "cad" },
+    { ...matchingPlan, recurring: { interval: "year" as const } },
+  ]) {
+    await assert.rejects(
+      resolveCatalogPriceId("pro_monthly", async () => ({ data: [drifted] })),
+      /does not match the local catalog/
+    );
+  }
+});
+
+test("catalog price lookup validates one-time top-up prices", async () => {
+  const { resolveCatalogPriceId } = await loadCheckoutRuntime();
+
+  assert.equal(
+    await resolveCatalogPriceId("topup_25", async () => ({
+      data: [
+        {
+          id: "price_topup",
+          active: true,
+          unit_amount: 2500,
+          currency: "usd",
+          recurring: null,
+        },
+      ],
+    })),
+    "price_topup"
   );
 });

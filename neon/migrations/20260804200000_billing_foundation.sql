@@ -78,6 +78,82 @@ alter table public.billing_accounts enable row level security;
 alter table public.credit_ledger enable row level security;
 alter table public.billing_events enable row level security;
 
+-- Every ledger writer locks the owning account row before inserting. Period
+-- grants use the same lock and post the grant plus prior-balance expiry in one
+-- transaction, so concurrent usage cannot be swallowed at a period boundary.
+create or replace function public.post_credit_ledger_entry(
+  p_account uuid,
+  p_delta bigint,
+  p_bucket text,
+  p_kind text,
+  p_source_ref text,
+  p_period text default null,
+  p_metadata jsonb default '{}'
+) returns boolean language plpgsql as $$
+declare
+  v_posted boolean;
+begin
+  perform 1 from public.billing_accounts where id = p_account for update;
+  if not found then
+    raise exception 'billing account % not found', p_account;
+  end if;
+
+  insert into public.credit_ledger
+    (account_id, delta_cents, bucket, kind, source_ref, period, metadata)
+  values
+    (p_account, p_delta, p_bucket, p_kind, p_source_ref, p_period, p_metadata)
+  on conflict (source_ref) do nothing;
+  v_posted := found;
+  return v_posted;
+end;
+$$;
+
+create or replace function public.post_billing_period_grant(
+  p_account uuid,
+  p_delta bigint,
+  p_grant_source_ref text,
+  p_expiry_source_ref text,
+  p_period text,
+  p_metadata jsonb default '{}'
+) returns table (posted boolean, expired_cents bigint)
+language plpgsql as $$
+declare
+  v_included_before bigint;
+begin
+  perform 1 from public.billing_accounts where id = p_account for update;
+  if not found then
+    raise exception 'billing account % not found', p_account;
+  end if;
+
+  select coalesce(sum(delta_cents), 0)::bigint
+    into v_included_before
+  from public.credit_ledger
+  where account_id = p_account and bucket = 'included';
+
+  insert into public.credit_ledger
+    (account_id, delta_cents, bucket, kind, source_ref, period, metadata)
+  values
+    (p_account, p_delta, 'included', 'grant', p_grant_source_ref, p_period, p_metadata)
+  on conflict (source_ref) do nothing;
+
+  if not found then
+    return query select false, 0::bigint;
+    return;
+  end if;
+
+  if v_included_before > 0 then
+    insert into public.credit_ledger
+      (account_id, delta_cents, bucket, kind, source_ref, period)
+    values
+      (p_account, -v_included_before, 'included', 'grant_expiry',
+       p_expiry_source_ref, p_period)
+    on conflict (source_ref) do nothing;
+  end if;
+
+  return query select true, greatest(v_included_before, 0::bigint);
+end;
+$$;
+
 -- Balance and rollups stay RPCs (pricing-plan 03 §0). Billing lands on Neon
 -- so the PostgREST-aggregates constraint technically drops, but the RPC
 -- pattern is kept for consistency with the rest of the codebase.

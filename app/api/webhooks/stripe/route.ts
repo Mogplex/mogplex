@@ -11,8 +11,10 @@ import {
 } from "@/lib/billing/accounts";
 import {
   getBillingBalance,
+  postBillingPeriodGrant,
   postLedgerEntry,
   type BillingBalance,
+  type BillingPeriodGrant,
   type LedgerEntry,
 } from "@/lib/billing/ledger";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -28,6 +30,9 @@ export type StripeWebhookDeps = {
     updates: Parameters<typeof updateBillingAccount>[1]
   ) => Promise<void>;
   postLedgerEntry: (entry: LedgerEntry) => Promise<{ posted: boolean }>;
+  postBillingPeriodGrant: (
+    grant: BillingPeriodGrant
+  ) => Promise<{ posted: boolean; expiredCents: number }>;
   getBalance: (accountId: string) => Promise<BillingBalance>;
   retrieveSubscription: (id: string) => Promise<Stripe.Subscription>;
   retrievePaymentIntent: (id: string) => Promise<Stripe.PaymentIntent>;
@@ -41,6 +46,7 @@ function defaultDeps(): StripeWebhookDeps {
     findAccountById: findBillingAccountById,
     updateAccount: updateBillingAccount,
     postLedgerEntry,
+    postBillingPeriodGrant,
     getBalance: getBillingBalance,
     retrieveSubscription: (id) => getStripe().subscriptions.retrieve(id),
     retrievePaymentIntent: (id) => getStripe().paymentIntents.retrieve(id),
@@ -102,39 +108,23 @@ async function handleInvoicePaid(
   const periodStart = new Date(item.current_period_start * 1000);
   const period = periodOf(periodStart);
 
-  // Read the pre-grant balance, then claim the grant's source_ref. The
-  // expiry of the prior period's leftover ("no rollover" as an explicit,
-  // auditable ledger row — pricing-plan 03 §1) only posts when this delivery
-  // won the grant claim; otherwise a redelivery would mistake the fresh
-  // grant for prior-period leftover and expire it.
+  // The database serializes all ledger writes for this account, claims the
+  // grant, and expires the prior included balance in one transaction. A
+  // redelivery therefore cannot expire fresh credit, and concurrent metering
+  // cannot be swallowed at the period boundary.
   //
   // Annual plans: this grants month 1 only (their invoice fires yearly);
   // months 2–12 come from the grant-annual-included-usage scheduled task
-  // (pricing-plan 02 §5, not yet built) using the same grant:{account}:{YYYY-MM}
-  // source_ref scheme, so the two writers are mutually idempotent.
-  const balance = await deps.getBalance(account.id);
-  const grant = await deps.postLedgerEntry({
+  // (pricing-plan 02 §5, not yet built) using the same
+  // grant:{account}:{YYYY-MM}:{subscription} source_ref scheme.
+  const grant = await deps.postBillingPeriodGrant({
     accountId: account.id,
     deltaCents: plan.includedUsageCents,
-    bucket: "included",
-    kind: "grant",
-    sourceRef: `grant:${account.id}:${period}`,
+    grantSourceRef: `grant:${account.id}:${period}:${subscription.id}`,
+    expirySourceRef: `grantexp:${account.id}:${period}:${subscription.id}`,
     period,
     metadata: { invoice: invoice.id, plan: plan.lookupKey },
   });
-  if (grant.posted && balance.includedCents > 0) {
-    // If this insert throws after the grant landed, the retry skips both
-    // (grant source_ref already claimed) and the leftover never expires —
-    // fail-open in the customer's favor, accepted for v1.
-    await deps.postLedgerEntry({
-      accountId: account.id,
-      deltaCents: -balance.includedCents,
-      bucket: "included",
-      kind: "grant_expiry",
-      sourceRef: `grantexp:${account.id}:${period}`,
-      period,
-    });
-  }
   const priorIncludedUsageCents = PLAN_PRICES.find(
     (candidate) => candidate.tier === account.tier
   )?.includedUsageCents;
@@ -194,11 +184,7 @@ async function handlePaymentIntentSucceeded(
   // credit_cents is the pre-tax top-up amount stamped at session creation;
   // amount_received includes automatic_tax, and collected tax must not
   // become spendable credit. Fallback covers PIs minted before the stamp.
-  const stampedCredit = Number(paymentIntent.metadata.credit_cents);
-  const creditCents =
-    Number.isInteger(stampedCredit) && stampedCredit > 0
-      ? stampedCredit
-      : paymentIntent.amount_received;
+  const creditCents = stampedCreditCentsOf(paymentIntent);
   await deps.postLedgerEntry({
     accountId: account.id,
     deltaCents: creditCents,
@@ -210,6 +196,16 @@ async function handlePaymentIntentSucceeded(
       amount_received: paymentIntent.amount_received,
     },
   });
+}
+
+function stampedCreditCentsOf(paymentIntent: Stripe.PaymentIntent): number {
+  const stampedCredit = Number(paymentIntent.metadata.credit_cents);
+  if (!Number.isInteger(stampedCredit) || stampedCredit <= 0) {
+    throw new Error(
+      `top-up PaymentIntent ${paymentIntent.id} is missing a valid credit_cents stamp`
+    );
+  }
+  return stampedCredit;
 }
 
 async function syncSubscription(
@@ -277,11 +273,7 @@ async function handleChargeRefunded(
   // Reverse the credited (pre-tax) amount, not the gross refund: the ledger
   // was credited credit_cents while the charge total includes tax, so a
   // refund reverses proportionally (full refund ⇒ full credited amount).
-  const stampedCredit = Number(paymentIntent.metadata.credit_cents);
-  const creditedCents =
-    Number.isInteger(stampedCredit) && stampedCredit > 0
-      ? stampedCredit
-      : paymentIntent.amount_received;
+  const creditedCents = stampedCreditCentsOf(paymentIntent);
   const grossCents = paymentIntent.amount_received;
   const refunds = (await deps.listRefunds(charge.id)).toSorted(
     (left, right) =>

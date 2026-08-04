@@ -7,6 +7,7 @@ import { validateCheckoutRequest } from "@/lib/billing/checkout";
 import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
 import {
   ensureStripeCustomer,
+  resolveCatalogPriceId,
   resolveTopupProductId,
   subscriptionCheckoutIdempotencyKey,
 } from "@/lib/billing/stripe-checkout";
@@ -18,21 +19,6 @@ import {
 function appUrl(path: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
   return `${base.replace(/\/$/, "")}${path}`;
-}
-
-async function resolvePriceIdByLookupKey(lookupKey: string): Promise<string> {
-  const prices = await getStripe().prices.list({
-    lookup_keys: [lookupKey],
-    active: true,
-    limit: 1,
-  });
-  const price = prices.data[0];
-  if (!price) {
-    throw new Error(
-      `Stripe price for lookup_key "${lookupKey}" not found — catalog is not seeded`
-    );
-  }
-  return price.id;
 }
 
 export async function POST(request: Request) {
@@ -96,7 +82,7 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    const priceId = await resolvePriceIdByLookupKey(validation.request.plan);
+    const priceId = await resolveCatalogPriceId(validation.request.plan);
     const session = await stripe.checkout.sessions.create(
       {
         mode: "subscription",
@@ -110,10 +96,7 @@ export async function POST(request: Request) {
         cancel_url: appUrl(`${returnPath}?billing=cancelled`),
       },
       {
-        idempotencyKey: subscriptionCheckoutIdempotencyKey(
-          account,
-          validation.request.plan
-        ),
+        idempotencyKey: subscriptionCheckoutIdempotencyKey(account),
       }
     );
     return NextResponse.json({ url: session.url });
@@ -124,7 +107,7 @@ export async function POST(request: Request) {
     : validation.request.amountCents!;
   const lineItem = validation.request.preset
     ? {
-        price: await resolvePriceIdByLookupKey(validation.request.preset),
+        price: await resolveCatalogPriceId(validation.request.preset),
         quantity: 1,
       }
     : {
