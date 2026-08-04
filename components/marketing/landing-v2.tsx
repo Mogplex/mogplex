@@ -989,6 +989,14 @@ const traceRows = [
   },
 ] as const;
 
+/* The native harness runs any top model — the yaml panel cycles through
+   them, credentials vault kept in sync with the provider. */
+const nativeModelRotation = [
+  ["claude-opus-5", "vault://platform/anthropic"],
+  ["gpt-5.6-sol", "vault://platform/openai"],
+  ["kimi-k3", "vault://platform/moonshot"],
+] as const;
+
 const harnesses = [
   {
     id: "mogplex",
@@ -1007,8 +1015,8 @@ const harnesses = [
     ],
     yaml: [
       ["harness", "mogplex", true],
-      ["model", "kimi-k3", false],
-      ["credentials", "vault://platform/moonshot", false],
+      ["model", "claude-opus-5", false],
+      ["credentials", "vault://platform/anthropic", false],
       ["sandbox", "enterprise-restricted", false],
       ["policy", "production-default", false],
     ],
@@ -1139,7 +1147,17 @@ const connectors = [
 export function MarketingLandingPage() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeHarness, setActiveHarness] = useState(0);
+  const [nativeModel, setNativeModel] = useState(0);
   const harnessRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(
+      () => setNativeModel((index) => (index + 1) % nativeModelRotation.length),
+      2600
+    );
+    return () => window.clearInterval(timer);
+  }, []);
 
   /* corner brackets fade in while scrolling, matching the blueprint frame */
   useEffect(() => {
@@ -1664,14 +1682,32 @@ export function MarketingLandingPage() {
                   <code>
                     <span className="t-root">run:</span>
                     {"\n"}
-                    {harness.yaml.map(([key, value, hot]) => (
-                      <Fragment key={key}>
-                        {"  "}
-                        {key}:{" "}
-                        <span className={hot ? "t-hot" : "t-val"}>{value}</span>
-                        {"\n"}
-                      </Fragment>
-                    ))}
+                    {harness.yaml.map(([key, value, hot]) => {
+                      const rotates =
+                        harness.id === "mogplex" &&
+                        (key === "model" || key === "credentials");
+                      const display = rotates
+                        ? nativeModelRotation[nativeModel][
+                            key === "model" ? 0 : 1
+                          ]
+                        : value;
+                      return (
+                        <Fragment key={key}>
+                          {"  "}
+                          {key}:{" "}
+                          <span className={hot ? "t-hot" : "t-val"}>
+                            {rotates ? (
+                              <span key={display} className="mpx-model-swap">
+                                {display}
+                              </span>
+                            ) : (
+                              display
+                            )}
+                          </span>
+                          {"\n"}
+                        </Fragment>
+                      );
+                    })}
                   </code>
                 </pre>
               </div>

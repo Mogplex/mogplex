@@ -2555,6 +2555,7 @@ path.mpx-dag-line,
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 12px;
   margin-top: 20px;
+  background: color-mix(in srgb, var(--dark) 94%, #fff);
   grid-template-columns: 1.1fr 0.9fr;
 }
 
@@ -2609,6 +2610,29 @@ path.mpx-dag-line,
 
 .mpx-code-panel .t-val {
   color: #d7d2c6;
+}
+
+.mpx-model-swap {
+  display: inline-block;
+  animation: mpx-model-swap 480ms var(--ease-out);
+}
+
+@keyframes mpx-model-swap {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mpx-model-swap {
+    animation: none;
+  }
 }
 
 .mpx-harness-copy {

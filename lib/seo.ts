@@ -44,6 +44,12 @@ export const PUBLIC_CONTENT_ROUTES = [
     priority: 0.7,
   },
   {
+    path: "/company",
+    lastModified: "2026-08-04",
+    changeFrequency: "monthly",
+    priority: 0.6,
+  },
+  {
     path: "/request-access",
     lastModified: "2026-05-19",
     changeFrequency: "monthly",

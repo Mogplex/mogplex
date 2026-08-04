@@ -15,6 +15,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import useSWR from "swr";
 
 import "./landing-v2.css";
 
@@ -61,22 +62,56 @@ function StarGlyph() {
   );
 }
 
+const GITHUB_REPO_API = "https://api.github.com/repos/mogplex/mogplex";
+
+async function fetchStarCount(): Promise<number | null> {
+  const response = await fetch(GITHUB_REPO_API, {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  // Private repo, rename, or rate limit → no count segment rather than a stale
+  // or made-up number.
+  if (!response.ok) return null;
+  const data = (await response.json()) as { stargazers_count?: unknown };
+  return typeof data.stargazers_count === "number"
+    ? data.stargazers_count
+    : null;
+}
+
+function formatStarCount(count: number): string {
+  if (count < 1000) return String(count);
+  const thousands = count / 1000;
+  return `${thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10}k`;
+}
+
 export function GithubPill({ small = false }: { small?: boolean }) {
+  const { data: stars } = useSWR("github-stars", fetchStarCount, {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+    dedupingInterval: 3_600_000,
+  });
+  const showCount = typeof stars === "number" && stars > 0;
+
   return (
     <a
       href={GITHUB_URL}
       target="_blank"
       rel="noreferrer noopener"
-      aria-label="View Mogplex on GitHub — 1.2k stars"
+      aria-label={
+        showCount
+          ? `View Mogplex on GitHub — ${formatStarCount(stars)} stars`
+          : "View Mogplex on GitHub"
+      }
       title="View Mogplex on GitHub"
       className={small ? "mpx-github-pill is-small" : "mpx-github-pill"}
     >
       <span>
         <GithubGlyph />
       </span>
-      <span>
-        <StarGlyph /> 1.2k
-      </span>
+      {showCount ? (
+        <span>
+          <StarGlyph /> {formatStarCount(stars)}
+        </span>
+      ) : null}
     </a>
   );
 }
@@ -337,7 +372,7 @@ export function MpxHeader() {
             </button>
           </div>
           <Link href="/#run">Developers</Link>
-          <Link href="/faq">Company</Link>
+          <Link href="/company">Company</Link>
           <a href="https://docs.mogplex.com">Docs</a>
         </div>
 
@@ -426,7 +461,7 @@ export function MpxHeader() {
         <Link href="/#run" onClick={() => setMobileOpen(false)}>
           Developers
         </Link>
-        <Link href="/faq" onClick={() => setMobileOpen(false)}>
+        <Link href="/company" onClick={() => setMobileOpen(false)}>
           Company
         </Link>
         <a
@@ -594,8 +629,8 @@ export function MpxFooter() {
           </div>
           <div>
             <b>COMPANY</b>
-            <Link href="/faq">About</Link>
-            <Link href="/faq">Careers</Link>
+            <Link href="/company">About</Link>
+            <Link href="/company">Careers</Link>
             <a href="https://docs.mogplex.com/security">Security</a>
             <a href="https://status.mogplex.com">Status</a>
           </div>
