@@ -389,6 +389,7 @@ export function MpxHeader() {
             </button>
           </div>
           <Link href="/#run">Developers</Link>
+          <Link href="/pricing">Pricing</Link>
           <Link href="/company">Company</Link>
           <a href="https://docs.mogplex.com">Docs</a>
         </div>
@@ -478,6 +479,9 @@ export function MpxHeader() {
         </div>
         <Link href="/#run" onClick={() => setMobileOpen(false)}>
           Developers
+        </Link>
+        <Link href="/pricing" onClick={() => setMobileOpen(false)}>
+          Pricing
         </Link>
         <Link href="/company" onClick={() => setMobileOpen(false)}>
           Company
@@ -648,6 +652,7 @@ export function MpxFooter() {
           <div>
             <b>COMPANY</b>
             <Link href="/company">About</Link>
+            <Link href="/pricing">Pricing</Link>
             <Link href="/company">Careers</Link>
             <a href="https://docs.mogplex.com/security">Security</a>
             <a href="https://status.mogplex.com">Status</a>
