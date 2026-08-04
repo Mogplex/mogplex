@@ -21,7 +21,7 @@ export type CheckoutValidation =
 
 // Redirect targets must be same-app paths — never caller-supplied absolute
 // URLs (open-redirect via Stripe's success_url otherwise).
-const SAFE_RETURN_PATH = /^\/[\w\-./]*$/;
+const SAFE_RETURN_PATH = /^\/[\w\-./]*(?:\?[\w%+.,:=&-]*)?$/;
 const CHECKOUT_ATTEMPT_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

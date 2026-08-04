@@ -287,7 +287,7 @@ test("resolveSandboxTargetCredentials blocks platform billing for non-allowliste
     {
       ok: false,
       error:
-        "Platform sandbox billing is not enabled for this account. Link Personal Vercel and select a billing project to launch sandboxes.",
+        "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.",
       status: 403,
     }
   );
@@ -317,7 +317,7 @@ test("resolveSandboxRecordCredentials blocks existing platform sandboxes for non
     {
       ok: false,
       error:
-        "Platform sandbox access is not enabled for this account. Relaunch this repo with a personal Vercel billing project to keep using sandbox tools.",
+        "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.",
       status: 403,
     }
   );

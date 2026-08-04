@@ -88,8 +88,10 @@ function buildResolvedContext(): SandboxContextResult<SandboxVercelContext> {
 test("reconcileSandboxReadiness keeps installing sandboxes active when Vercel lookup fails transiently", async () => {
   const { reconcileSandboxReadiness } =
     await loadSandboxReadinessReconciliation();
-  const record = buildSandboxReconcileRecord();
+  const record = buildSandboxReconcileRecord({ product_team_id: "team-1" });
   const updates: Array<Partial<SandboxReconcileRecordFixture>> = [];
+  const platformAccessScopes: Array<[string, string | null | undefined]> = [];
+  let resolvedProductTeamId: string | null | undefined;
   const originalWarn = console.warn;
   const warnings: unknown[][] = [];
 
@@ -114,11 +116,17 @@ test("reconcileSandboxReadiness keeps installing sandboxes active when Vercel lo
           accountDefaultVercelProjectId: null,
           accountDefaultVercelTeamId: null,
         }),
-        loadUserPlatformAccess: async () => ({
-          allowPlatformAi: false,
-          allowPlatformSandbox: false,
-        }),
-        resolveSandboxRecordContext: async () => buildResolvedContext(),
+        loadUserPlatformAccess: async (userId, productTeamId) => {
+          platformAccessScopes.push([userId, productTeamId]);
+          return {
+            allowPlatformAi: false,
+            allowPlatformSandbox: false,
+          };
+        },
+        resolveSandboxRecordContext: async ({ sandboxCredentials }) => {
+          resolvedProductTeamId = sandboxCredentials.productTeamId;
+          return buildResolvedContext();
+        },
         getSandbox: async () => {
           throw new Error("temporary Vercel lookup failure");
         },
@@ -147,6 +155,8 @@ test("reconcileSandboxReadiness keeps installing sandboxes active when Vercel lo
     assert.equal(result.sandbox.runtime_summary.health_status, "running");
     assert.equal(result.isSettled, true);
     assert.equal(warnings.length, 1);
+    assert.deepEqual(platformAccessScopes, [["user-1", "team-1"]]);
+    assert.equal(resolvedProductTeamId, "team-1");
   } finally {
     console.warn = originalWarn;
   }

@@ -86,6 +86,7 @@ export type SandboxCredentialSource = "platform" | "user";
 
 export type SandboxServiceCredentials = {
   userId: string;
+  productTeamId?: string | null;
   vercelToken: string | null;
   vercelTeamId: string | null;
   vercelProjectId: string | null;
@@ -193,7 +194,7 @@ export async function getSandboxServiceCredentials(
     }
   }
 
-  return loadSandboxServiceCredentialsForUser(userId);
+  return loadSandboxServiceCredentialsForUser(userId, options?.teamId);
 }
 
 /**
@@ -203,12 +204,13 @@ export async function getSandboxServiceCredentials(
  * browser session or exposing internal machine credentials.
  */
 export async function loadSandboxServiceCredentialsForUser(
-  userId: string
+  userId: string,
+  productTeamId?: string | null
 ): Promise<SandboxServiceCredentials> {
   const [profile, userVercelToken, platformAccess] = await Promise.all([
     loadUserVercelProfile(userId),
     getOAuthToken(userId, "vercel").catch(() => null),
-    loadUserPlatformAccess(userId).catch(() => ({
+    loadUserPlatformAccess(userId, productTeamId).catch(() => ({
       allowPlatformAi: false,
       allowPlatformSandbox: false,
     })),
@@ -216,6 +218,7 @@ export async function loadSandboxServiceCredentialsForUser(
 
   return {
     userId,
+    productTeamId: productTeamId?.trim() || null,
     ...getPlatformSandboxCredentials(),
     allowPlatformSandbox: platformAccess.allowPlatformSandbox,
     userVercelToken,

@@ -399,7 +399,7 @@ test("POST /api/sandbox blocks platform-billed launches for users without platfo
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), {
     error:
-      "Platform sandbox billing is not enabled for this account. Link Personal Vercel and select a billing project to launch sandboxes.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.",
   });
 });
 

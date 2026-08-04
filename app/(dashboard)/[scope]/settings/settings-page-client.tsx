@@ -8,6 +8,7 @@ import { fetchJsonArray, fetchJsonObject } from "@/lib/client-fetch"
 import { ModelsSection } from "@/components/library/models-section"
 import { TeamSettingsClient } from "@/components/settings/team-settings-client"
 import { TeamsListSection } from "@/components/settings/teams-list-section"
+import { BillingSection } from "@/components/settings/billing-section"
 import { CliApiKeysSection } from "@/components/settings/cli-api-keys-section"
 import { SlackInstallToast } from "@/components/connections/slack-install-toast"
 import { SlackSection } from "@/components/connections/slack-section"
@@ -99,7 +100,7 @@ const CONNECTION_AUTH_OPTIONS = [
   { value: "basic", label: "Basic Auth" },
 ] as const
 
-const SETTINGS_TABS = ["account", "teams", "connections", "keys", "models"] as const
+const SETTINGS_TABS = ["account", "teams", "connections", "keys", "models", "billing"] as const
 type SettingsTab = (typeof SETTINGS_TABS)[number]
 const SETTINGS_TAB_SET: ReadonlySet<string> = new Set(SETTINGS_TABS)
 
@@ -795,6 +796,7 @@ function PersonalSettingsClient() {
             <TabsTrigger value="connections" className="px-3 h-7 text-[13px]">Connections</TabsTrigger>
             <TabsTrigger value="keys" className="px-3 h-7 text-[13px]">Keys &amp; Tokens</TabsTrigger>
             <TabsTrigger value="models" className="px-3 h-7 text-[13px]">Models</TabsTrigger>
+            <TabsTrigger value="billing" className="px-3 h-7 text-[13px]">Billing</TabsTrigger>
           </TabsList>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -1387,6 +1389,10 @@ function PersonalSettingsClient() {
         onSetDefault={saveDefaultModel}
         savingDefault={saving}
       />
+        </TabsContent>
+
+        <TabsContent value="billing" className="mt-0">
+          <BillingSection embedded />
         </TabsContent>
       </Tabs>
     </div>

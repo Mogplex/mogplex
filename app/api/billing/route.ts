@@ -4,6 +4,7 @@ import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 import { isBillingEnabled } from "@/lib/billing/stripe";
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
 import { getBillingBalance } from "@/lib/billing/ledger";
+import { hasCapability } from "@/lib/team-capabilities";
 
 // Billing summary for the current scope (Settings → Billing). Any member
 // can read balance/tier; mutating flows (checkout/portal) stay
@@ -30,6 +31,9 @@ export async function GET(request: Request) {
     : { includedCents: 0, purchasedCents: 0, totalCents: 0 };
   return NextResponse.json({
     enabled: true,
+    canManageBilling:
+      resolution.scope.kind === "personal" ||
+      hasCapability(resolution.capabilities ?? new Set(), "billing.manage"),
     tier: account?.tier ?? "free",
     status: account?.status ?? "active",
     hasSubscription: Boolean(account?.stripe_subscription_id),

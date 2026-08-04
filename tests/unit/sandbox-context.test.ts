@@ -217,7 +217,7 @@ test("resolveSandboxCreateContext blocks platform billing for users without plat
   assert.deepEqual(resolved, {
     ok: false,
     error:
-      "Platform sandbox billing is not enabled for this account. Link Personal Vercel and select a billing project to launch sandboxes.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.",
     status: 403,
     billingSource: "platform",
     credentialSource: "platform",

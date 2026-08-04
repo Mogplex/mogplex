@@ -362,7 +362,7 @@ test("resolveUserLanguageModel blocks platform AI Gateway fallback for non-allow
 
     await assert.rejects(
       () => resolver("user-123", "openai/gpt-5.4"),
-      /Platform AI access is not enabled for this account/
+      /Hosted AI requires a positive billing balance/
     );
   } finally {
     if (originalGatewayApiKey === undefined) {

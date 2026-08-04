@@ -237,7 +237,7 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock when sandbox credentia
   assert.deepEqual(callOrder, ["load"]);
   assert.deepEqual(await response.json(), {
     error:
-      "Platform sandbox access is not enabled for this account. Relaunch this repo with a personal Vercel billing project to keep using sandbox tools.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.",
   });
 });
 

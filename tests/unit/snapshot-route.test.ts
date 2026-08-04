@@ -186,7 +186,7 @@ test("resolveSnapshotCredentialsForRepo blocks platform-billed snapshots for use
   assert.deepEqual(resolved, {
     ok: false,
     error:
-      "Platform sandbox access is not enabled for this account. Relaunch this repo with a personal Vercel billing project to keep using sandbox tools.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.",
     status: 403,
   });
 });

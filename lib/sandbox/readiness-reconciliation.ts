@@ -27,6 +27,7 @@ import type { VercelAuthMode } from "@/lib/vercel/service";
 const SANDBOX_RECONCILE_SELECT = [
   "id",
   "user_id",
+  "product_team_id",
   "repo_id",
   "sandbox_id",
   "base_branch",
@@ -396,21 +397,24 @@ export async function reconcileSandboxReadiness(
 
   const [userVercelCredentials, platformAccess] = await Promise.all([
     deps.loadUserVercelCredentials(record.user_id),
-    deps.loadUserPlatformAccess(record.user_id).catch((error) => {
-      console.warn(
-        `[sandbox/readiness] Failed to load platform access for ${record.user_id}; assuming access is disabled`,
-        error
-      );
-      return {
-        allowPlatformAi: false,
-        allowPlatformSandbox: false,
-      };
-    }),
+    deps
+      .loadUserPlatformAccess(record.user_id, record.product_team_id)
+      .catch((error) => {
+        console.warn(
+          `[sandbox/readiness] Failed to load platform access for ${record.user_id}; assuming access is disabled`,
+          error
+        );
+        return {
+          allowPlatformAi: false,
+          allowPlatformSandbox: false,
+        };
+      }),
   ]);
 
   const contextResult = await deps.resolveSandboxRecordContext({
     sandboxCredentials: {
       userId: record.user_id,
+      productTeamId: record.product_team_id,
       ...getPlatformSandboxCredentials(),
       allowPlatformSandbox: platformAccess.allowPlatformSandbox,
       ...userVercelCredentials,

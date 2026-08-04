@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type BillingSummary = {
   enabled: boolean;
+  canManageBilling?: boolean;
   tier?: "free" | "pro" | "team";
   status?: "active" | "past_due" | "frozen_topups";
   hasSubscription?: boolean;
@@ -44,13 +45,16 @@ async function loadBillingSummary([
   const response = await fetch(url, {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
   });
+  if (response.status === 503) {
+    return { enabled: false };
+  }
   if (!response.ok) {
     throw new Error("Failed to load billing summary");
   }
   return (await response.json()) as BillingSummary;
 }
 
-export function BillingSection() {
+export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTeamId = useActiveTeamId();
@@ -62,15 +66,19 @@ export function BillingSection() {
   const [actionError, setActionError] = useState<string | null>(null);
   const topupAttemptIds = useRef(new Map<string, string>());
   const checkoutResult = searchParams.get("billing");
+  const returnPath = embedded ? `${pathname}?tab=billing` : pathname;
 
   useEffect(() => {
     if (checkoutResult === "topup") topupAttemptIds.current.clear();
+    if (checkoutResult === "topup" || checkoutResult === "subscribed") {
+      void mutate();
+    }
     const resetBfcacheAttempts = (event: PageTransitionEvent) => {
       if (event.persisted) topupAttemptIds.current.clear();
     };
     window.addEventListener("pageshow", resetBfcacheAttempts);
     return () => window.removeEventListener("pageshow", resetBfcacheAttempts);
-  }, [checkoutResult]);
+  }, [checkoutResult, mutate]);
 
   function getTopupAttemptId(action: string) {
     const existing = topupAttemptIds.current.get(action);
@@ -91,7 +99,7 @@ export function BillingSection() {
       const response = await fetchWithActiveTeam(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, returnPath: pathname }),
+        body: JSON.stringify({ ...body, returnPath }),
       });
       const payload = (await response.json()) as {
         url?: string;
@@ -146,6 +154,7 @@ export function BillingSection() {
   };
   const paymentSubmitted =
     checkoutResult === "topup" || checkoutResult === "subscribed";
+  const canManageBilling = data.canManageBilling !== false;
 
   return (
     <div className="flex flex-col gap-6">
@@ -198,18 +207,25 @@ export function BillingSection() {
         <CardHeader>
           <CardTitle>Plan</CardTitle>
           <CardDescription>
-            {data.hasSubscription
+            {!canManageBilling
+              ? "Only a team owner or admin can change this plan."
+              : data.hasSubscription
               ? "Change plan, update payment methods, or cancel from the billing portal."
               : "Tokens at provider list price with 0% markup. No seats."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {data.hasSubscription || data.tier !== "free" ? (
+          {!canManageBilling ? (
+            <p className="text-sm text-muted-foreground">
+              Your team&apos;s balance and plan are visible here. Ask a team
+              owner or admin to make billing changes.
+            </p>
+          ) : data.hasSubscription || data.tier !== "free" ? (
             <Button
               disabled={pendingAction !== null}
               onClick={() => redirectTo("portal", "/api/stripe/portal", {})}
             >
-              {pendingAction === "portal" ? "Opening…" : "Manage subscription"}
+              {pendingAction === "portal" ? "Opening…" : "Manage plan"}
             </Button>
           ) : (
             PLAN_PRICES.map((plan) => (
@@ -241,26 +257,37 @@ export function BillingSection() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {TOPUP_PRESETS.map((preset) => (
-            <Button
-              key={preset.lookupKey}
-              variant="outline"
-              disabled={
-                pendingAction !== null || data.status === "frozen_topups"
-              }
-              onClick={() =>
-                redirectTo(preset.lookupKey, "/api/stripe/checkout", {
-                  kind: "topup",
-                  preset: preset.lookupKey,
-                  attemptId: getTopupAttemptId(preset.lookupKey),
-                })
-              }
-            >
-              {pendingAction === preset.lookupKey
-                ? "Redirecting…"
-                : `Add ${formatUsd(preset.amountCents)}`}
-            </Button>
-          ))}
+          {canManageBilling ? (
+            TOPUP_PRESETS.map((preset) => (
+              <Button
+                key={preset.lookupKey}
+                variant="outline"
+                disabled={
+                  pendingAction !== null || data.status === "frozen_topups"
+                }
+                onClick={() =>
+                  redirectTo(preset.lookupKey, "/api/stripe/checkout", {
+                    kind: "topup",
+                    preset: preset.lookupKey,
+                    attemptId: getTopupAttemptId(preset.lookupKey),
+                  })
+                }
+              >
+                {pendingAction === preset.lookupKey
+                  ? "Redirecting…"
+                  : `Add ${formatUsd(preset.amountCents)}`}
+              </Button>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Only a team owner or admin can add funds.
+            </p>
+          )}
+          {data.status === "frozen_topups" ? (
+            <p className="basis-full text-sm text-destructive">
+              Top-ups are paused for this account. Contact support for help.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 

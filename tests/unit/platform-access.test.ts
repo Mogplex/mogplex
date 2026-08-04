@@ -87,3 +87,82 @@ test("derivePlatformAccess allows both platform resources for domain-allowlisted
     allowPlatformSandbox: true,
   });
 });
+
+test("loadUserPlatformAccess grants hosted resources to a funded personal account", async () => {
+  const { createLoadUserPlatformAccess } = await loadPlatformAccess();
+  const billingLookups: Array<{
+    userId: string;
+    productTeamId: string | null | undefined;
+  }> = [];
+  const loadAccess = createLoadUserPlatformAccess({
+    env: {} as NodeJS.ProcessEnv,
+    loadProfile: async () => ({
+      id: "user-paid",
+      email: "paid@example.com",
+      allow_platform_ai: false,
+      allow_platform_sandbox: false,
+    }),
+    loadBillingAccess: async (userId, productTeamId) => {
+      billingLookups.push({ userId, productTeamId });
+      return true;
+    },
+  });
+
+  assert.deepEqual(await loadAccess("user-paid"), {
+    allowPlatformAi: true,
+    allowPlatformSandbox: true,
+  });
+  assert.deepEqual(billingLookups, [
+    { userId: "user-paid", productTeamId: undefined },
+  ]);
+});
+
+test("loadUserPlatformAccess resolves the active team's billing balance", async () => {
+  const { createLoadUserPlatformAccess } = await loadPlatformAccess();
+  let resolvedTeamId: string | null | undefined;
+  const loadAccess = createLoadUserPlatformAccess({
+    env: {} as NodeJS.ProcessEnv,
+    loadProfile: async () => ({
+      id: "user-member",
+      email: "member@example.com",
+      allow_platform_ai: false,
+      allow_platform_sandbox: false,
+    }),
+    loadBillingAccess: async (_userId, productTeamId) => {
+      resolvedTeamId = productTeamId;
+      return productTeamId === "team-funded";
+    },
+  });
+
+  assert.deepEqual(await loadAccess("user-member", "team-funded"), {
+    allowPlatformAi: true,
+    allowPlatformSandbox: true,
+  });
+  assert.equal(resolvedTeamId, "team-funded");
+});
+
+test("loadUserPlatformAccess skips billing for allowlisted users", async () => {
+  const { createLoadUserPlatformAccess } = await loadPlatformAccess();
+  let billingLookups = 0;
+  const loadAccess = createLoadUserPlatformAccess({
+    env: {
+      PLATFORM_ACCESS_USER_IDS: "user-allowlisted",
+    } as unknown as NodeJS.ProcessEnv,
+    loadProfile: async () => ({
+      id: "user-allowlisted",
+      email: "dev@example.com",
+      allow_platform_ai: false,
+      allow_platform_sandbox: false,
+    }),
+    loadBillingAccess: async () => {
+      billingLookups += 1;
+      return false;
+    },
+  });
+
+  assert.deepEqual(await loadAccess("user-allowlisted"), {
+    allowPlatformAi: true,
+    allowPlatformSandbox: true,
+  });
+  assert.equal(billingLookups, 0);
+});
