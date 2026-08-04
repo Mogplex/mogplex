@@ -30,7 +30,7 @@ test("Mogplex MCP protected-resource metadata points to Supabase OAuth", async (
     resource: "https://mogplex.com/api/v1/mogplex/mcp",
     authorization_servers: ["https://testprojectref000000.supabase.co/auth/v1"],
     resource_documentation:
-      "https://github.com/webrenew/mogplex/blob/main/docs/mogplex-api-mcp/local-agent-automation.md",
+      "https://github.com/mogplex/mogplex/blob/main/docs/mogplex-api-mcp/local-agent-automation.md",
   });
 });
 

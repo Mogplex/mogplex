@@ -21,7 +21,7 @@ type PublicContentRoute = {
 export const PUBLIC_CONTENT_ROUTES = [
   {
     path: "/",
-    lastModified: "2026-08-03",
+    lastModified: "2026-08-04",
     changeFrequency: "weekly",
     priority: 1,
   },

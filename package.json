@@ -32,7 +32,7 @@
     "trigger:dev": "pnpm exec tsx scripts/trigger-cli.ts dev",
     "trigger:deploy": "pnpm exec tsx scripts/trigger-cli.ts deploy",
     "email:dev": "email dev --dir emails --port 3030",
-    "test:unit": "tsx --test tests/unit/*.test.ts",
+    "test:unit": "tsx --require ./tests/support/bundler-shims.cjs --test tests/unit/*.test.ts",
     "test:db": "vitest run -c vitest-db.config.ts",
     "test:all": "pnpm test && pnpm test:unit && pnpm test:db",
     "test:e2e": "playwright test",

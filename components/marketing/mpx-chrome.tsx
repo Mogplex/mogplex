@@ -289,6 +289,7 @@ export function MpxHeader() {
   const [platformOpen, setPlatformOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const platformButtonRef = useRef<HTMLButtonElement>(null);
+  const platformMenuRef = useRef<HTMLDivElement>(null);
   const platformCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -326,7 +327,22 @@ export function MpxHeader() {
   );
 
   return (
-    <header className="mpx-header">
+    // Focus containment lives on the header (not .mpx-platform-wrap) because
+    // #platform-menu is a sibling of .mpx-nav — the menu must stay open while
+    // keyboard focus travels through the nav into it.
+    <header
+      className="mpx-header"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !platformOpen) return;
+        hidePlatform(true);
+        platformButtonRef.current?.focus();
+      }}
+      onBlur={(event) => {
+        if (!platformOpen) return;
+        if (!event.currentTarget.contains(event.relatedTarget))
+          hidePlatform(true);
+      }}
+    >
       <nav className="mpx-nav" aria-label="Primary navigation">
         <Link href="/" className="mpx-brand" aria-label="Mogplex home">
           mogplex
@@ -338,15 +354,6 @@ export function MpxHeader() {
             onMouseEnter={showPlatform}
             onMouseLeave={() => hidePlatform()}
             onFocus={showPlatform}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
-              hidePlatform(true);
-              platformButtonRef.current?.focus();
-            }}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget))
-                hidePlatform(true);
-            }}
           >
             <button
               ref={platformButtonRef}
@@ -355,6 +362,16 @@ export function MpxHeader() {
               aria-expanded={platformOpen}
               aria-controls="platform-menu"
               onClick={() => setPlatformOpen((open) => !open)}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowDown") return;
+                event.preventDefault();
+                showPlatform();
+                requestAnimationFrame(() => {
+                  platformMenuRef.current
+                    ?.querySelector<HTMLAnchorElement>("a")
+                    ?.focus();
+                });
+              }}
             >
               Platform
               <svg
@@ -406,6 +423,7 @@ export function MpxHeader() {
       </nav>
       <div
         id="platform-menu"
+        ref={platformMenuRef}
         className={
           platformOpen ? "mpx-platform-menu is-open" : "mpx-platform-menu"
         }
