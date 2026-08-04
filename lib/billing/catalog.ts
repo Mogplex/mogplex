@@ -1,7 +1,7 @@
-// Stripe product/price catalog (pricing-plan 02 §2). lookup_key is the
-// cross-environment identity: scripts/stripe-seed.ts creates/updates by
-// lookup_key and runtime code resolves prices the same way. Never
-// hand-create catalog objects in the Stripe dashboard.
+// Stripe product/price catalog. lookup_key is the cross-environment
+// identity: the deployment's seed tooling creates/updates by lookup_key and
+// runtime code resolves prices the same way, so no environment-specific
+// Stripe IDs are ever stored.
 
 export type PlanTier = "pro" | "team";
 export type PlanInterval = "month" | "year";

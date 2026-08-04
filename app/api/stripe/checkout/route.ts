@@ -37,7 +37,7 @@ async function resolvePriceIdByLookupKey(lookupKey: string): Promise<string> {
   const price = prices.data[0];
   if (!price) {
     throw new Error(
-      `Stripe price for lookup_key "${lookupKey}" not found — run scripts/stripe-seed.ts`
+      `Stripe price for lookup_key "${lookupKey}" not found — catalog is not seeded`
     );
   }
   return price.id;
@@ -54,9 +54,7 @@ async function resolveTopupProductId(): Promise<string> {
     (candidate) => candidate.metadata.mogplex_key === "usage_topup"
   );
   if (!product) {
-    throw new Error(
-      "Stripe top-up product not found — run scripts/stripe-seed.ts"
-    );
+    throw new Error("Stripe top-up product not found — catalog is not seeded");
   }
   return product.id;
 }
