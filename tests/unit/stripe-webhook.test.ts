@@ -223,6 +223,20 @@ test("invoice.paid should NOT lift a dispute freeze on routine renewal", async (
   assert.equal(recorded.updates[0].updates.tier, "pro");
 });
 
+test("invoice.paid should fail visibly for an unknown paid price", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    subscription: subscriptionFixture("unknown_plan"),
+  });
+
+  await assert.rejects(
+    route.handleStripeEvent(invoicePaidEvent(), deps),
+    /paid invoice in_1 references an unknown subscription price/
+  );
+  assert.deepEqual(recorded.ledger, []);
+  assert.deepEqual(recorded.updates, []);
+});
+
 test("invoice.payment_failed should mark the account past_due", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({});
@@ -237,6 +251,22 @@ test("invoice.payment_failed should mark the account past_due", async () => {
   assert.deepEqual(recorded.updates, [
     { id: "acct-1", updates: { status: "past_due" } },
   ]);
+});
+
+test("invoice.payment_failed should preserve a dispute freeze", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({ status: "frozen_topups" }),
+  });
+  const event = {
+    id: "evt_inv_failed_frozen",
+    type: "invoice.payment_failed",
+    data: { object: { id: "in_frozen", customer: "cus_123" } },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.updates, []);
 });
 
 test("stale invoice.payment_failed should not clobber a newer account status", async () => {

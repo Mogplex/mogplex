@@ -173,5 +173,5 @@ returns bigint language sql stable as $$
   where account_id = p_account
     and delta_cents < 0
     and kind in ('usage_tokens', 'usage_sandbox')
-    and to_char(created_at at time zone 'utc', 'YYYY-MM') = p_period;
+    and period = p_period;
 $$;

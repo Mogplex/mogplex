@@ -103,7 +103,11 @@ async function handleInvoicePaid(
   const item = subscription.items.data[0];
   const lookupKey = item?.price.lookup_key;
   const plan = lookupKey ? findPlanPrice(lookupKey) : null;
-  if (!plan || !item) return;
+  if (!plan || !item) {
+    throw new Error(
+      `paid invoice ${invoice.id} references an unknown subscription price`
+    );
+  }
 
   const periodStart = new Date(item.current_period_start * 1000);
   const period = periodOf(periodStart);
@@ -174,7 +178,9 @@ async function handleInvoicePaymentFailed(
   if (accountUpdatedAt > eventCreated) return;
   // Smart Retries run on Stripe's side; tier persists through the period
   // (grace), drop-to-free happens via customer.subscription.deleted.
-  await deps.updateAccount(account.id, { status: "past_due" });
+  if (account.status !== "frozen_topups") {
+    await deps.updateAccount(account.id, { status: "past_due" });
+  }
 }
 
 async function handlePaymentIntentSucceeded(
@@ -247,7 +253,11 @@ async function syncSubscription(
   }
   const lookupKey = subscription.items.data[0]?.price.lookup_key;
   const plan = lookupKey ? findPlanPrice(lookupKey) : null;
-  if (!plan) return;
+  if (!plan) {
+    throw new Error(
+      `subscription ${subscription.id} references an unknown price`
+    );
+  }
   // invoice.paid is authoritative for paid tier changes and posts any grant
   // adjustment. Updating tier here can grant Team state before the prorated
   // invoice succeeds and loses the previous tier needed to calculate delta.

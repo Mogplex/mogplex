@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { fetchWithActiveTeam } from "@/components/active-scope-provider";
+import {
+  fetchWithActiveTeam,
+  getActiveTeamRequestHeaders,
+  useActiveTeamId,
+} from "@/components/active-scope-provider";
 import { PLAN_PRICES, TOPUP_PRESETS } from "@/lib/billing/catalog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,8 +37,13 @@ function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-async function loadBillingSummary(url: string): Promise<BillingSummary> {
-  const response = await fetchWithActiveTeam(url);
+async function loadBillingSummary([
+  url,
+  activeTeamId,
+]: [string, string | null]): Promise<BillingSummary> {
+  const response = await fetch(url, {
+    headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+  });
   if (!response.ok) {
     throw new Error("Failed to load billing summary");
   }
@@ -44,8 +53,9 @@ async function loadBillingSummary(url: string): Promise<BillingSummary> {
 export function BillingSection() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const activeTeamId = useActiveTeamId();
   const { data, error, isLoading, mutate } = useSWR<BillingSummary>(
-    "/api/billing",
+    ["/api/billing", activeTeamId],
     loadBillingSummary
   );
   const [pendingAction, setPendingAction] = useState<string | null>(null);

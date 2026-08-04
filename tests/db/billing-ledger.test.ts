@@ -92,4 +92,20 @@ describe("billing ledger migration", () => {
     );
     expect(balance.rows[0]?.included_cents).toBe(2000);
   });
+
+  it("attributes delayed usage to its explicit billing period", async () => {
+    await db.query(
+      `select post_credit_ledger_entry(
+         $1, -125, 'purchased', 'usage_tokens',
+         'usage:delayed', '1999-12', '{}'
+       )`,
+      [ACCOUNT_ID]
+    );
+
+    const spend = await db.query<{ billing_monthly_spend: number }>(
+      "select billing_monthly_spend($1, '1999-12')",
+      [ACCOUNT_ID]
+    );
+    expect(spend.rows[0]?.billing_monthly_spend).toBe(125);
+  });
 });
