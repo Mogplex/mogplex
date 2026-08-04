@@ -6,6 +6,7 @@ import type { BillingAccount } from "../../lib/billing/accounts";
 import type {
   BillingBalance,
   BillingPeriodGrant,
+  IncludedCreditExpiry,
   LedgerEntry,
 } from "../../lib/billing/ledger";
 
@@ -87,12 +88,19 @@ function makeDeps(overrides: {
       }
       return { posted: true, expiredCents };
     },
-    getBalance: async () =>
-      overrides.balance ?? {
-        includedCents: 0,
-        purchasedCents: 0,
-        totalCents: 0,
-      },
+    expireIncludedCredit: async (expiry: IncludedCreditExpiry) => {
+      const expiredCents = overrides.balance?.includedCents ?? 0;
+      if (expiredCents <= 0 || postedRefs.has(expiry.sourceRef)) return 0;
+      postedRefs.add(expiry.sourceRef);
+      recorded.ledger.push({
+        accountId: expiry.accountId,
+        deltaCents: -expiredCents,
+        bucket: "included",
+        kind: "grant_expiry",
+        sourceRef: expiry.sourceRef,
+      });
+      return expiredCents;
+    },
     retrieveSubscription: async () =>
       overrides.subscription as Stripe.Subscription,
     retrievePaymentIntent: async () =>
@@ -885,8 +893,11 @@ test("processed event claims record the completion timestamp", async () => {
     calls.some(
       (call) =>
         call.method === "update" &&
-        (call.value as { processed_at?: string }).processed_at ===
-          "2026-08-04T20:05:00.000Z"
+        (call.value as { processed_at?: string; payload?: unknown })
+          .processed_at === "2026-08-04T20:05:00.000Z" &&
+        JSON.stringify(
+          (call.value as { processed_at?: string; payload?: unknown }).payload
+        ) === "{}"
     )
   );
   assert.ok(

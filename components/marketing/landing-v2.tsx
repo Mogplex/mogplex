@@ -991,11 +991,15 @@ const traceRows = [
 
 /* The native harness runs any top model — the yaml panel cycles through
    them, credentials vault kept in sync with the provider. */
-const nativeModelRotation = [
+export const nativeModelRotation = [
   ["claude-opus-5", "vault://platform/anthropic"],
   ["gpt-5.6-sol", "vault://platform/openai"],
   ["kimi-k3", "vault://platform/moonshot"],
 ] as const;
+
+export function nextNativeModelIndex(index: number): number {
+  return (index + 1) % nativeModelRotation.length;
+}
 
 const harnesses = [
   {
@@ -1153,7 +1157,7 @@ export function MarketingLandingPage() {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(
-      () => setNativeModel((index) => (index + 1) % nativeModelRotation.length),
+      () => setNativeModel(nextNativeModelIndex),
       2600
     );
     return () => window.clearInterval(timer);

@@ -64,3 +64,34 @@ test("period grants use one atomic grant-and-expiry RPC", async () => {
   );
   assert.equal(calls[0]?.name, "post_billing_period_grant");
 });
+
+test("cancellation expiry uses one account-serialized RPC", async () => {
+  const { expireIncludedCredit } = await loadLedger();
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const client = {
+    async rpc(name: string, args: Record<string, unknown>) {
+      calls.push({ name, args });
+      return { data: 4200, error: null };
+    },
+  } as unknown as SupabaseClient;
+
+  assert.equal(
+    await expireIncludedCredit(
+      {
+        accountId: "acct-1",
+        sourceRef: "grantexp:acct-1:cancel:sub_1",
+      },
+      client
+    ),
+    4200
+  );
+  assert.deepEqual(calls, [
+    {
+      name: "expire_billing_included_credit",
+      args: {
+        p_account: "acct-1",
+        p_source_ref: "grantexp:acct-1:cancel:sub_1",
+      },
+    },
+  ]);
+});

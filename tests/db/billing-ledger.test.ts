@@ -11,14 +11,19 @@ describe("billing ledger migration", () => {
 
   beforeAll(async () => {
     db = new PGlite();
-    const migration = await readFile(
-      path.resolve(
-        import.meta.dirname,
-        "../../neon/migrations/20260804200000_billing_foundation.sql"
-      ),
-      "utf8"
-    );
-    await db.exec(migration);
+    for (const migrationName of [
+      "20260804200000_billing_foundation.sql",
+      "20260804210000_atomic_billing_cancellation_expiry.sql",
+    ]) {
+      const migration = await readFile(
+        path.resolve(
+          import.meta.dirname,
+          `../../neon/migrations/${migrationName}`
+        ),
+        "utf8"
+      );
+      await db.exec(migration);
+    }
     await db.query(
       `insert into billing_accounts (id, owner_type, owner_user_id)
        values ($1, 'user', $2)`,
@@ -91,6 +96,28 @@ describe("billing ledger migration", () => {
       [ACCOUNT_ID]
     );
     expect(balance.rows[0]?.included_cents).toBe(2000);
+  });
+
+  it("expires cancellation credit atomically and deduplicates redelivery", async () => {
+    const expiry = await db.query<{ expire_billing_included_credit: number }>(
+      "select expire_billing_included_credit($1, 'grantexp:acct:cancel:sub_2')",
+      [ACCOUNT_ID]
+    );
+    expect(expiry.rows[0]?.expire_billing_included_credit).toBe(2000);
+
+    const duplicate = await db.query<{
+      expire_billing_included_credit: number;
+    }>(
+      "select expire_billing_included_credit($1, 'grantexp:acct:cancel:sub_2')",
+      [ACCOUNT_ID]
+    );
+    expect(duplicate.rows[0]?.expire_billing_included_credit).toBe(0);
+
+    const balance = await db.query<{ included_cents: number }>(
+      "select included_cents from billing_balance($1)",
+      [ACCOUNT_ID]
+    );
+    expect(balance.rows[0]?.included_cents).toBe(0);
   });
 
   it("attributes delayed usage to its explicit billing period", async () => {

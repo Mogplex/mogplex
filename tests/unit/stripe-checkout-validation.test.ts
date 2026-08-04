@@ -5,6 +5,8 @@ async function loadCheckoutRoute() {
   return import("../../lib/billing/checkout");
 }
 
+const ATTEMPT_ID = "0198f3e8-9c41-4d40-8cb9-4afdfac76f01";
+
 test("subscribe should accept every catalog plan and reject unknown plans", async () => {
   const route = await loadCheckoutRoute();
   for (const plan of [
@@ -30,6 +32,7 @@ test("topup should reject custom amounts below the $10 minimum", async () => {
   const result = route.validateCheckoutRequest({
     kind: "topup",
     amountCents: 999,
+    attemptId: ATTEMPT_ID,
   });
   assert.equal(result.ok, false);
   assert.match((result as { error: string }).error, /Minimum top-up/);
@@ -40,6 +43,7 @@ test("topup should reject custom amounts above the fraud sanity cap", async () =
   const result = route.validateCheckoutRequest({
     kind: "topup",
     amountCents: 500001,
+    attemptId: ATTEMPT_ID,
   });
   assert.equal(result.ok, false);
 });
@@ -47,11 +51,19 @@ test("topup should reject custom amounts above the fraud sanity cap", async () =
 test("topup should reject non-integer and non-numeric amounts", async () => {
   const route = await loadCheckoutRoute();
   assert.equal(
-    route.validateCheckoutRequest({ kind: "topup", amountCents: 10.5 }).ok,
+    route.validateCheckoutRequest({
+      kind: "topup",
+      amountCents: 10.5,
+      attemptId: ATTEMPT_ID,
+    }).ok,
     false
   );
   assert.equal(
-    route.validateCheckoutRequest({ kind: "topup", amountCents: "1000" }).ok,
+    route.validateCheckoutRequest({
+      kind: "topup",
+      amountCents: "1000",
+      attemptId: ATTEMPT_ID,
+    }).ok,
     false
   );
 });
@@ -59,19 +71,35 @@ test("topup should reject non-integer and non-numeric amounts", async () => {
 test("topup should accept presets and valid custom amounts", async () => {
   const route = await loadCheckoutRoute();
   assert.equal(
-    route.validateCheckoutRequest({ kind: "topup", preset: "topup_25" }).ok,
+    route.validateCheckoutRequest({
+      kind: "topup",
+      preset: "topup_25",
+      attemptId: ATTEMPT_ID,
+    }).ok,
     true
   );
   assert.equal(
-    route.validateCheckoutRequest({ kind: "topup", amountCents: 1000 }).ok,
+    route.validateCheckoutRequest({
+      kind: "topup",
+      amountCents: 1000,
+      attemptId: ATTEMPT_ID,
+    }).ok,
     true
   );
   assert.equal(
-    route.validateCheckoutRequest({ kind: "topup", amountCents: 500000 }).ok,
+    route.validateCheckoutRequest({
+      kind: "topup",
+      amountCents: 500000,
+      attemptId: ATTEMPT_ID,
+    }).ok,
     true
   );
   assert.equal(
-    route.validateCheckoutRequest({ kind: "topup", preset: "topup_5" }).ok,
+    route.validateCheckoutRequest({
+      kind: "topup",
+      preset: "topup_5",
+      attemptId: ATTEMPT_ID,
+    }).ok,
     false
   );
 });
@@ -81,6 +109,22 @@ test("unknown checkout kinds and malformed bodies should be rejected", async () 
   assert.equal(route.validateCheckoutRequest(null).ok, false);
   assert.equal(route.validateCheckoutRequest("subscribe").ok, false);
   assert.equal(route.validateCheckoutRequest({ kind: "gift-card" }).ok, false);
+});
+
+test("topups require a client checkout-attempt id", async () => {
+  const route = await loadCheckoutRoute();
+  assert.equal(
+    route.validateCheckoutRequest({ kind: "topup", preset: "topup_25" }).ok,
+    false
+  );
+  assert.equal(
+    route.validateCheckoutRequest({
+      kind: "topup",
+      preset: "topup_25",
+      attemptId: "not-a-uuid",
+    }).ok,
+    false
+  );
 });
 
 test("returnPath should only accept same-app absolute paths", async () => {
@@ -111,6 +155,7 @@ test("validated requests should carry the sanitized returnPath", async () => {
   const fallback = route.validateCheckoutRequest({
     kind: "topup",
     preset: "topup_10",
+    attemptId: ATTEMPT_ID,
     returnPath: "https://evil.example",
   });
   assert.equal(fallback.ok, true);

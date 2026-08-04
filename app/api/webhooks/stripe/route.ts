@@ -10,10 +10,10 @@ import {
   type BillingAccount,
 } from "@/lib/billing/accounts";
 import {
-  getBillingBalance,
+  expireIncludedCredit,
   postBillingPeriodGrant,
   postLedgerEntry,
-  type BillingBalance,
+  type IncludedCreditExpiry,
   type BillingPeriodGrant,
   type LedgerEntry,
 } from "@/lib/billing/ledger";
@@ -33,7 +33,7 @@ export type StripeWebhookDeps = {
   postBillingPeriodGrant: (
     grant: BillingPeriodGrant
   ) => Promise<{ posted: boolean; expiredCents: number }>;
-  getBalance: (accountId: string) => Promise<BillingBalance>;
+  expireIncludedCredit: (expiry: IncludedCreditExpiry) => Promise<number>;
   retrieveSubscription: (id: string) => Promise<Stripe.Subscription>;
   retrievePaymentIntent: (id: string) => Promise<Stripe.PaymentIntent>;
   listRefunds: (chargeId: string) => Promise<Stripe.Refund[]>;
@@ -47,7 +47,7 @@ function defaultDeps(): StripeWebhookDeps {
     updateAccount: updateBillingAccount,
     postLedgerEntry,
     postBillingPeriodGrant,
-    getBalance: getBillingBalance,
+    expireIncludedCredit,
     retrieveSubscription: (id) => getStripe().subscriptions.retrieve(id),
     retrievePaymentIntent: (id) => getStripe().paymentIntents.retrieve(id),
     listRefunds: async (chargeId) =>
@@ -232,16 +232,10 @@ async function syncSubscription(
     // Drop to Free and expire subscription-included credit; purchased top-up
     // credit persists indefinitely. past_due clears — there is nothing left
     // to dun — but a dispute freeze survives until support lifts it.
-    const balance = await deps.getBalance(account.id);
-    if (balance.includedCents > 0) {
-      await deps.postLedgerEntry({
-        accountId: account.id,
-        deltaCents: -balance.includedCents,
-        bucket: "included",
-        kind: "grant_expiry",
-        sourceRef: `grantexp:${account.id}:cancel:${subscription.id}`,
-      });
-    }
+    await deps.expireIncludedCredit({
+      accountId: account.id,
+      sourceRef: `grantexp:${account.id}:cancel:${subscription.id}`,
+    });
     await deps.updateAccount(account.id, {
       tier: "free",
       stripe_subscription_id: null,
@@ -425,7 +419,7 @@ export async function markStripeEventProcessed(
 ): Promise<void> {
   const { error } = await client
     .from("billing_events")
-    .update({ processed_at: now().toISOString() })
+    .update({ processed_at: now().toISOString(), payload: {} })
     .eq("stripe_event_id", eventId);
   if (error) {
     // The event WAS processed; leaving the claim unprocessed only means a

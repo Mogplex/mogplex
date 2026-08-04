@@ -83,6 +83,21 @@ test("top-up product lookup follows Stripe pagination beyond 100 products", asyn
   assert.equal(productId, "prod_100");
 });
 
+test("top-up product lookup is shared across checkout requests", async () => {
+  const { resolveTopupProductId } = await loadCheckoutRuntime();
+  let calls = 0;
+  const deps = {
+    async *listProducts() {
+      calls += 1;
+      yield { id: "prod_topup", metadata: { mogplex_key: "usage_topup" } };
+    },
+  };
+
+  assert.equal(await resolveTopupProductId(deps), "prod_topup");
+  assert.equal(await resolveTopupProductId(deps), "prod_topup");
+  assert.equal(calls, 1);
+});
+
 test("subscription checkout idempotency serializes every plan for one billing period", async () => {
   const { subscriptionCheckoutIdempotencyKey } = await loadCheckoutRuntime();
 
@@ -92,9 +107,30 @@ test("subscription checkout idempotency serializes every plan for one billing pe
   );
   assert.equal(
     subscriptionCheckoutIdempotencyKey(
-      accountFixture({ period_anchor: "2026-08-01" })
+      accountFixture({ tier: "pro", period_anchor: "2026-08-01" })
     ),
     "billing-subscribe:acct-1:2026-08-01"
+  );
+  assert.equal(
+    subscriptionCheckoutIdempotencyKey(
+      accountFixture({
+        period_anchor: "2026-08-01",
+        updated_at: "2026-08-04T21:00:00.000Z",
+      })
+    ),
+    "billing-subscribe:acct-1:cancelled:2026-08-04T21:00:00.000Z"
+  );
+});
+
+test("top-up checkout retries reuse an attempt-scoped idempotency key", async () => {
+  const { topupCheckoutIdempotencyKey } = await loadCheckoutRuntime();
+
+  assert.equal(
+    topupCheckoutIdempotencyKey(
+      "acct-1",
+      "0198f3e8-9c41-4d40-8cb9-4afdfac76f01"
+    ),
+    "billing-topup:acct-1:0198f3e8-9c41-4d40-8cb9-4afdfac76f01"
   );
 });
 

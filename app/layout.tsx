@@ -34,6 +34,7 @@ export const viewport: Viewport = {
 const interTight = Inter_Tight({
   subsets: ['latin'],
   display: 'swap',
+  preload: false,
   variable: '--font-inter-tight',
 })
 

@@ -41,6 +41,11 @@ export type BillingPeriodGrant = {
   metadata?: Record<string, unknown>;
 };
 
+export type IncludedCreditExpiry = {
+  accountId: string;
+  sourceRef: string;
+};
+
 export async function postLedgerEntry(
   entry: LedgerEntry,
   client: SupabaseClient = supabaseAdmin
@@ -93,6 +98,20 @@ export async function postBillingPeriodGrant(
     posted: row?.posted === true,
     expiredCents: Number(row?.expired_cents ?? 0),
   };
+}
+
+export async function expireIncludedCredit(
+  expiry: IncludedCreditExpiry,
+  client: SupabaseClient = supabaseAdmin
+): Promise<number> {
+  const { data, error } = await client.rpc("expire_billing_included_credit", {
+    p_account: expiry.accountId,
+    p_source_ref: expiry.sourceRef,
+  });
+  if (error) {
+    throw new Error(`included credit expiry failed: ${error.message}`);
+  }
+  return Number(data ?? 0);
 }
 
 export async function getBillingBalance(

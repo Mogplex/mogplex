@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -60,6 +60,15 @@ export function BillingSection() {
   );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const topupAttemptIds = useRef(new Map<string, string>());
+
+  function getTopupAttemptId(action: string) {
+    const existing = topupAttemptIds.current.get(action);
+    if (existing) return existing;
+    const attemptId = crypto.randomUUID();
+    topupAttemptIds.current.set(action, attemptId);
+    return attemptId;
+  }
 
   async function redirectTo(
     action: string,
@@ -230,6 +239,7 @@ export function BillingSection() {
                 redirectTo(preset.lookupKey, "/api/stripe/checkout", {
                   kind: "topup",
                   preset: preset.lookupKey,
+                  attemptId: getTopupAttemptId(preset.lookupKey),
                 })
               }
             >

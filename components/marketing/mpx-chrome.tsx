@@ -67,7 +67,7 @@ function StarGlyph() {
 
 const GITHUB_REPO_API = "https://api.github.com/repos/mogplex/mogplex";
 
-async function fetchStarCount(): Promise<number | null> {
+export async function fetchStarCount(): Promise<number | null> {
   const response = await fetch(GITHUB_REPO_API, {
     headers: { Accept: "application/vnd.github+json" },
   });
@@ -80,10 +80,16 @@ async function fetchStarCount(): Promise<number | null> {
     : null;
 }
 
-function formatStarCount(count: number): string {
+export function formatStarCount(count: number): string {
   if (count < 1000) return String(count);
   const thousands = count / 1000;
   return `${thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10}k`;
+}
+
+export function shouldShowStarCount(
+  count: number | null | undefined
+): count is number {
+  return typeof count === "number" && count > 0;
 }
 
 export function GithubPill({ small = false }: { small?: boolean }) {
@@ -92,7 +98,7 @@ export function GithubPill({ small = false }: { small?: boolean }) {
     shouldRetryOnError: false,
     dedupingInterval: 3_600_000,
   });
-  const showCount = typeof stars === "number" && stars > 0;
+  const showCount = shouldShowStarCount(stars);
 
   return (
     <a
