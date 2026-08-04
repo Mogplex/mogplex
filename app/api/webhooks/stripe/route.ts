@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStripe, isBillingEnabled } from "@/lib/billing/stripe";
-import { findPlanPrice } from "@/lib/billing/catalog";
+import { findPlanPrice, PLAN_PRICES } from "@/lib/billing/catalog";
 import {
   findBillingAccountById,
   findBillingAccountByStripeCustomer,
@@ -71,7 +72,10 @@ async function handleCheckoutCompleted(
   const customerId = customerIdOf(session.customer);
   if (!accountId || !customerId) return;
   const account = await deps.findAccountById(accountId);
-  if (!account || account.stripe_customer_id === customerId) return;
+  // Customer creation is idempotent. This remains a backstop for a failed
+  // DB linkage, but an old Checkout completion must never replace a current
+  // customer link.
+  if (!account || account.stripe_customer_id) return;
   await deps.updateAccount(account.id, { stripe_customer_id: customerId });
 }
 
@@ -129,6 +133,28 @@ async function handleInvoicePaid(
       kind: "grant_expiry",
       sourceRef: `grantexp:${account.id}:${period}`,
       period,
+    });
+  }
+  const priorIncludedUsageCents = PLAN_PRICES.find(
+    (candidate) => candidate.tier === account.tier
+  )?.includedUsageCents;
+  if (
+    !grant.posted &&
+    account.tier === "pro" &&
+    plan.tier === "team" &&
+    priorIncludedUsageCents !== undefined
+  ) {
+    // A same-period portal upgrade reuses the period grant source_ref. Add
+    // only the entitlement delta after the prorated upgrade invoice is paid;
+    // subscription.updated deliberately does not grant before payment.
+    await deps.postLedgerEntry({
+      accountId: account.id,
+      deltaCents: plan.includedUsageCents - priorIncludedUsageCents,
+      bucket: "included",
+      kind: "grant_adjustment",
+      sourceRef: `grantadj:${account.id}:${subscription.id}:${period}:${plan.lookupKey}`,
+      period,
+      metadata: { invoice: invoice.id, plan: plan.lookupKey },
     });
   }
   await deps.updateAccount(account.id, {
@@ -196,9 +222,19 @@ async function syncSubscription(
   if (!account) return;
 
   if (subscription.status === "canceled") {
-    // Drop to Free; purchased balance persists indefinitely (ledger is
-    // untouched). past_due clears — there is nothing left to dun — but a
-    // dispute freeze survives until support lifts it.
+    // Drop to Free and expire subscription-included credit; purchased top-up
+    // credit persists indefinitely. past_due clears — there is nothing left
+    // to dun — but a dispute freeze survives until support lifts it.
+    const balance = await deps.getBalance(account.id);
+    if (balance.includedCents > 0) {
+      await deps.postLedgerEntry({
+        accountId: account.id,
+        deltaCents: -balance.includedCents,
+        bucket: "included",
+        kind: "grant_expiry",
+        sourceRef: `grantexp:${account.id}:cancel:${subscription.id}`,
+      });
+    }
     await deps.updateAccount(account.id, {
       tier: "free",
       stripe_subscription_id: null,
@@ -211,8 +247,10 @@ async function syncSubscription(
   const lookupKey = subscription.items.data[0]?.price.lookup_key;
   const plan = lookupKey ? findPlanPrice(lookupKey) : null;
   if (!plan) return;
+  // invoice.paid is authoritative for paid tier changes and posts any grant
+  // adjustment. Updating tier here can grant Team state before the prorated
+  // invoice succeeds and loses the previous tier needed to calculate delta.
   await deps.updateAccount(account.id, {
-    tier: plan.tier,
     stripe_subscription_id: subscription.id,
   });
 }
@@ -245,15 +283,26 @@ async function handleChargeRefunded(
       ? stampedCredit
       : paymentIntent.amount_received;
   const grossCents = paymentIntent.amount_received;
-  const refunds = await deps.listRefunds(charge.id);
+  const refunds = (await deps.listRefunds(charge.id)).toSorted(
+    (left, right) =>
+      left.created - right.created || left.id.localeCompare(right.id)
+  );
+  let cumulativeGrossCents = 0;
+  let cumulativeReversalCents = 0;
   for (const refund of refunds) {
-    const reversalCents =
+    cumulativeGrossCents += refund.amount;
+    const targetReversalCents =
       grossCents > 0
-        ? Math.round((refund.amount * creditedCents) / grossCents)
-        : refund.amount;
+        ? Math.round(
+            (Math.min(cumulativeGrossCents, grossCents) * creditedCents) /
+              grossCents
+          )
+        : cumulativeGrossCents;
+    const reversalCents = targetReversalCents - cumulativeReversalCents;
+    cumulativeReversalCents = targetReversalCents;
     await deps.postLedgerEntry({
       accountId: account.id,
-      deltaCents: -reversalCents,
+      deltaCents: reversalCents === 0 ? 0 : -reversalCents,
       bucket: "purchased",
       kind: "refund",
       sourceRef: `refund:${refund.id}`,
@@ -316,8 +365,12 @@ const CLAIM_TAKEOVER_MS = 10 * 60 * 1000;
 // processed it, or holds a fresh in-flight claim (duplicate → ack + skip).
 // A stale unprocessed claim is taken over so a crashed handler (or a failed
 // release) can never permanently wedge an event.
-async function claimEvent(event: Stripe.Event): Promise<boolean> {
-  const insert = await supabaseAdmin.from("billing_events").insert({
+export async function claimStripeEvent(
+  event: Stripe.Event,
+  client: SupabaseClient = supabaseAdmin,
+  now: () => Date = () => new Date()
+): Promise<boolean> {
+  const insert = await client.from("billing_events").insert({
     stripe_event_id: event.id,
     type: event.type,
     payload: event as unknown as Record<string, unknown>,
@@ -326,10 +379,13 @@ async function claimEvent(event: Stripe.Event): Promise<boolean> {
   if (insert.error.code !== "23505") {
     throw new Error(`billing_events insert failed: ${insert.error.message}`);
   }
-  const cutoff = new Date(Date.now() - CLAIM_TAKEOVER_MS).toISOString();
-  const takeover = await supabaseAdmin
+  const claimedAt = now();
+  const cutoff = new Date(
+    claimedAt.getTime() - CLAIM_TAKEOVER_MS
+  ).toISOString();
+  const takeover = await client
     .from("billing_events")
-    .update({ received_at: new Date().toISOString() })
+    .update({ received_at: claimedAt.toISOString() })
     .eq("stripe_event_id", event.id)
     .is("processed_at", null)
     .lt("received_at", cutoff)
@@ -342,10 +398,14 @@ async function claimEvent(event: Stripe.Event): Promise<boolean> {
   return (takeover.data?.length ?? 0) > 0;
 }
 
-async function markEventProcessed(eventId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+export async function markStripeEventProcessed(
+  eventId: string,
+  client: SupabaseClient = supabaseAdmin,
+  now: () => Date = () => new Date()
+): Promise<void> {
+  const { error } = await client
     .from("billing_events")
-    .update({ processed_at: new Date().toISOString() })
+    .update({ processed_at: now().toISOString() })
     .eq("stripe_event_id", eventId);
   if (error) {
     // The event WAS processed; leaving the claim unprocessed only means a
@@ -354,8 +414,11 @@ async function markEventProcessed(eventId: string): Promise<void> {
   }
 }
 
-async function releaseEvent(eventId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+export async function releaseStripeEvent(
+  eventId: string,
+  client: SupabaseClient = supabaseAdmin
+): Promise<void> {
+  const { error } = await client
     .from("billing_events")
     .delete()
     .eq("stripe_event_id", eventId);
@@ -391,7 +454,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  if (!(await claimEvent(event))) {
+  if (!(await claimStripeEvent(event))) {
     return NextResponse.json({ received: true, duplicate: true });
   }
 
@@ -401,7 +464,7 @@ export async function POST(request: Request) {
     // Release the claim so Stripe's retry can reprocess. A concurrent
     // duplicate delivery acked while we held the claim is fine — Stripe
     // retries on our 500 regardless.
-    await releaseEvent(event.id);
+    await releaseStripeEvent(event.id);
     console.error(
       `[stripe-webhook] ${event.type} ${event.id} failed:`,
       error instanceof Error ? error.message : error
@@ -409,6 +472,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 
-  await markEventProcessed(event.id);
+  await markStripeEventProcessed(event.id);
   return NextResponse.json({ received: true });
 }

@@ -4,11 +4,12 @@ import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 import { getStripe, isBillingEnabled } from "@/lib/billing/stripe";
 import { findTopupPreset } from "@/lib/billing/catalog";
 import { validateCheckoutRequest } from "@/lib/billing/checkout";
+import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
 import {
-  getOrCreateBillingAccount,
-  updateBillingAccount,
-  type BillingAccount,
-} from "@/lib/billing/accounts";
+  ensureStripeCustomer,
+  resolveTopupProductId,
+  subscriptionCheckoutIdempotencyKey,
+} from "@/lib/billing/stripe-checkout";
 
 // Checkout flows (pricing-plan 02 §3): mode=subscription for plan sign-up,
 // mode=payment for top-ups. Top-up credit posts on payment_intent.succeeded
@@ -17,15 +18,6 @@ import {
 function appUrl(path: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
   return `${base.replace(/\/$/, "")}${path}`;
-}
-
-async function ensureStripeCustomer(account: BillingAccount): Promise<string> {
-  if (account.stripe_customer_id) return account.stripe_customer_id;
-  const customer = await getStripe().customers.create({
-    metadata: { billing_account_id: account.id },
-  });
-  await updateBillingAccount(account.id, { stripe_customer_id: customer.id });
-  return customer.id;
 }
 
 async function resolvePriceIdByLookupKey(lookupKey: string): Promise<string> {
@@ -41,22 +33,6 @@ async function resolvePriceIdByLookupKey(lookupKey: string): Promise<string> {
     );
   }
   return price.id;
-}
-
-// Custom-amount top-ups reference the seeded shared product so each session
-// doesn't mint an orphan ad-hoc Product in the Stripe catalog.
-async function resolveTopupProductId(): Promise<string> {
-  const products = await getStripe().products.list({
-    active: true,
-    limit: 100,
-  });
-  const product = products.data.find(
-    (candidate) => candidate.metadata.mogplex_key === "usage_topup"
-  );
-  if (!product) {
-    throw new Error("Stripe top-up product not found — catalog is not seeded");
-  }
-  return product.id;
 }
 
 export async function POST(request: Request) {
@@ -121,17 +97,25 @@ export async function POST(request: Request) {
       );
     }
     const priceId = await resolvePriceIdByLookupKey(validation.request.plan);
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      client_reference_id: account.id,
-      line_items: [{ price: priceId, quantity: 1 }],
-      automatic_tax: { enabled: true },
-      allow_promotion_codes: true,
-      billing_address_collection: "auto",
-      success_url: appUrl(`${returnPath}?billing=subscribed`),
-      cancel_url: appUrl(`${returnPath}?billing=cancelled`),
-    });
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "subscription",
+        customer: customerId,
+        client_reference_id: account.id,
+        line_items: [{ price: priceId, quantity: 1 }],
+        automatic_tax: { enabled: true },
+        allow_promotion_codes: true,
+        billing_address_collection: "auto",
+        success_url: appUrl(`${returnPath}?billing=subscribed`),
+        cancel_url: appUrl(`${returnPath}?billing=cancelled`),
+      },
+      {
+        idempotencyKey: subscriptionCheckoutIdempotencyKey(
+          account,
+          validation.request.plan
+        ),
+      }
+    );
     return NextResponse.json({ url: session.url });
   }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type Stripe from "stripe";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BillingAccount } from "../../lib/billing/accounts";
 import type { BillingBalance, LedgerEntry } from "../../lib/billing/ledger";
 
@@ -209,6 +210,27 @@ test("checkout.session.completed should link the Stripe customer to the account"
   ]);
 });
 
+test("checkout.session.completed should not replace an existing Stripe customer", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({});
+  const event = {
+    id: "evt_checkout_stale",
+    type: "checkout.session.completed",
+    data: {
+      object: {
+        id: "cs_stale",
+        mode: "subscription",
+        client_reference_id: "acct-1",
+        customer: "cus_stale",
+      },
+    },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.updates, []);
+});
+
 test("payment_intent.succeeded should credit the stamped pre-tax amount, not amount_received", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({});
@@ -304,6 +326,48 @@ test("charge.refunded should reverse the credited amount via PaymentIntent metad
   );
 });
 
+test("multiple partial refunds should cumulatively reverse the exact credited amount", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    paymentIntent: {
+      id: "pi_partial",
+      amount_received: 3,
+      metadata: {
+        kind: "topup",
+        billing_account_id: "acct-1",
+        credit_cents: "2",
+      },
+    } as unknown as Stripe.PaymentIntent,
+    refunds: [
+      { id: "re_2", amount: 1, created: 2 },
+      { id: "re_1", amount: 1, created: 1 },
+      { id: "re_3", amount: 1, created: 3 },
+    ],
+  });
+  const event = {
+    id: "evt_partial_refunds",
+    type: "charge.refunded",
+    data: {
+      object: { id: "ch_partial", payment_intent: "pi_partial", metadata: {} },
+    },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(
+    recorded.ledger.map((entry) => [entry.sourceRef, entry.deltaCents]),
+    [
+      ["refund:re_1", -1],
+      ["refund:re_2", 0],
+      ["refund:re_3", -1],
+    ]
+  );
+  assert.equal(
+    recorded.ledger.reduce((sum, entry) => sum + entry.deltaCents, 0),
+    -2
+  );
+});
+
 test("charge.refunded should ignore non-topup charges", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({
@@ -324,7 +388,7 @@ test("charge.refunded should ignore non-topup charges", async () => {
   assert.equal(recorded.ledger.length, 0);
 });
 
-test("customer.subscription.updated should sync tier and subscription id", async () => {
+test("customer.subscription.updated should defer a paid tier change until invoice.paid", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({});
   const event = {
@@ -338,9 +402,30 @@ test("customer.subscription.updated should sync tier and subscription id", async
   assert.deepEqual(recorded.updates, [
     {
       id: "acct-1",
-      updates: { tier: "team", stripe_subscription_id: "sub_1" },
+      updates: { stripe_subscription_id: "sub_1" },
     },
   ]);
+});
+
+test("invoice.paid should add the included-usage delta for a mid-cycle upgrade", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({ tier: "pro" }),
+    subscription: subscriptionFixture("team_monthly"),
+    postedRefs: new Set(["grant:acct-1:2026-08"]),
+  });
+
+  await route.handleStripeEvent(invoicePaidEvent(), deps);
+
+  assert.deepEqual(
+    recorded.ledger.map((entry) => [entry.kind, entry.deltaCents]),
+    [["grant_adjustment", 8000]]
+  );
+  assert.equal(
+    recorded.ledger[0]?.sourceRef,
+    "grantadj:acct-1:sub_1:2026-08:team_monthly"
+  );
+  assert.equal(recorded.updates[0]?.updates.tier, "team");
 });
 
 test("customer.subscription.deleted should drop to free and clear past_due", async () => {
@@ -374,6 +459,42 @@ test("customer.subscription.deleted should drop to free and clear past_due", asy
     },
   ]);
   assert.equal(recorded.ledger.length, 0);
+});
+
+test("customer.subscription.deleted should expire included credit but preserve purchased credit", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({ tier: "team" }),
+    balance: {
+      includedCents: 4200,
+      purchasedCents: 2500,
+      totalCents: 6700,
+    },
+  });
+  const event = {
+    id: "evt_sub_del_credit",
+    type: "customer.subscription.deleted",
+    data: {
+      object: {
+        id: "sub_1",
+        status: "canceled",
+        customer: "cus_123",
+        items: { data: [] },
+      },
+    },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(
+    recorded.ledger.map((entry) => [
+      entry.kind,
+      entry.bucket,
+      entry.deltaCents,
+      entry.sourceRef,
+    ]),
+    [["grant_expiry", "included", -4200, "grantexp:acct-1:cancel:sub_1"]]
+  );
 });
 
 test("customer.subscription.deleted should preserve a dispute freeze", async () => {
@@ -428,4 +549,209 @@ test("unhandled event types should be ignored", async () => {
   await route.handleStripeEvent(event, deps);
   assert.equal(recorded.ledger.length, 0);
   assert.equal(recorded.updates.length, 0);
+});
+
+type QueryCall = {
+  method: "insert" | "update" | "delete" | "eq" | "is" | "lt" | "select";
+  column?: string;
+  value?: unknown;
+};
+
+function billingEventsClient(options: {
+  insertError?: { code: string; message: string } | null;
+  takeoverData?: Array<{ stripe_event_id: string }>;
+  takeoverError?: { message: string } | null;
+  releaseError?: { message: string } | null;
+}) {
+  const calls: QueryCall[] = [];
+  let operation: "update" | "delete" | null = null;
+  const query = {
+    insert(value: unknown) {
+      calls.push({ method: "insert", value });
+      return Promise.resolve({ error: options.insertError ?? null });
+    },
+    update(value: unknown) {
+      operation = "update";
+      calls.push({ method: "update", value });
+      return query;
+    },
+    delete() {
+      operation = "delete";
+      calls.push({ method: "delete" });
+      return query;
+    },
+    eq(column: string, value: unknown) {
+      calls.push({ method: "eq", column, value });
+      return query;
+    },
+    is(column: string, value: unknown) {
+      calls.push({ method: "is", column, value });
+      return query;
+    },
+    lt(column: string, value: unknown) {
+      calls.push({ method: "lt", column, value });
+      return query;
+    },
+    select(value: string) {
+      calls.push({ method: "select", value });
+      return Promise.resolve({
+        data: options.takeoverData ?? [],
+        error: options.takeoverError ?? null,
+      });
+    },
+    then(resolve: (value: { error: { message: string } | null }) => void) {
+      resolve({
+        error: operation === "delete" ? (options.releaseError ?? null) : null,
+      });
+    },
+  };
+  return {
+    calls,
+    client: {
+      from(table: string) {
+        assert.equal(table, "billing_events");
+        return query;
+      },
+    },
+  };
+}
+
+test("event claims insert a fresh event", async () => {
+  const route = await loadWebhookRoute();
+  const { client, calls } = billingEventsClient({});
+  const event = {
+    id: "evt_fresh",
+    type: "invoice.paid",
+    data: { object: {} },
+  } as Stripe.Event;
+
+  assert.equal(
+    await route.claimStripeEvent(
+      event,
+      client as unknown as SupabaseClient,
+      () => new Date("2026-08-04T20:00:00.000Z")
+    ),
+    true
+  );
+  assert.equal(calls[0]?.method, "insert");
+});
+
+test("event claims take over only stale unprocessed duplicate rows", async () => {
+  const route = await loadWebhookRoute();
+  const { client, calls } = billingEventsClient({
+    insertError: { code: "23505", message: "duplicate" },
+    takeoverData: [{ stripe_event_id: "evt_stale" }],
+  });
+  const event = {
+    id: "evt_stale",
+    type: "invoice.paid",
+    data: { object: {} },
+  } as Stripe.Event;
+
+  assert.equal(
+    await route.claimStripeEvent(
+      event,
+      client as unknown as SupabaseClient,
+      () => new Date("2026-08-04T20:00:00.000Z")
+    ),
+    true
+  );
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.method === "is" &&
+        call.column === "processed_at" &&
+        call.value === null
+    )
+  );
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.method === "lt" &&
+        call.column === "received_at" &&
+        call.value === "2026-08-04T19:50:00.000Z"
+    )
+  );
+});
+
+test("event claims skip a fresh or already processed duplicate", async () => {
+  const route = await loadWebhookRoute();
+  const { client } = billingEventsClient({
+    insertError: { code: "23505", message: "duplicate" },
+  });
+  const event = {
+    id: "evt_duplicate",
+    type: "invoice.paid",
+    data: { object: {} },
+  } as Stripe.Event;
+
+  assert.equal(
+    await route.claimStripeEvent(event, client as unknown as SupabaseClient),
+    false
+  );
+});
+
+test("event claim storage failures surface instead of acknowledging the webhook", async () => {
+  const route = await loadWebhookRoute();
+  const { client } = billingEventsClient({
+    insertError: { code: "08006", message: "connection failed" },
+  });
+  const event = {
+    id: "evt_db_error",
+    type: "invoice.paid",
+    data: { object: {} },
+  } as Stripe.Event;
+
+  await assert.rejects(
+    route.claimStripeEvent(event, client as unknown as SupabaseClient),
+    /billing_events insert failed: connection failed/
+  );
+});
+
+test("event claim release targets the claimed Stripe event", async () => {
+  const route = await loadWebhookRoute();
+  const { client, calls } = billingEventsClient({});
+
+  await route.releaseStripeEvent(
+    "evt_release",
+    client as unknown as SupabaseClient
+  );
+
+  assert.ok(calls.some((call) => call.method === "delete"));
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.method === "eq" &&
+        call.column === "stripe_event_id" &&
+        call.value === "evt_release"
+    )
+  );
+});
+
+test("processed event claims record the completion timestamp", async () => {
+  const route = await loadWebhookRoute();
+  const { client, calls } = billingEventsClient({});
+
+  await route.markStripeEventProcessed(
+    "evt_processed",
+    client as unknown as SupabaseClient,
+    () => new Date("2026-08-04T20:05:00.000Z")
+  );
+
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.method === "update" &&
+        (call.value as { processed_at?: string }).processed_at ===
+          "2026-08-04T20:05:00.000Z"
+    )
+  );
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.method === "eq" &&
+        call.column === "stripe_event_id" &&
+        call.value === "evt_processed"
+    )
+  );
 });
