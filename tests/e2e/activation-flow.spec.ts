@@ -16,7 +16,7 @@ import { buildSandboxBackedCall } from "./helpers/sandbox-fixtures";
 
 const workspacePath = `/${connectedUser.username}/projects/workspace`;
 
-test("public landing shows the agentic CI/CD hero and primary CTA", async ({
+test("public landing shows the agentic software factory and primary CTA", async ({
   page,
 }) => {
   await page.goto("/");
@@ -25,27 +25,27 @@ test("public landing shows the agentic CI/CD hero and primary CTA", async ({
   await expect(page.getByTestId("landing-hero")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: /The pipeline\s*that ships itself\s*\./,
+      name: /The open-source agentic software factory\./,
     })
   ).toBeVisible();
-  await expect(page.getByTestId("landing-request-access-link")).toBeVisible();
+  await expect(page.getByTestId("landing-primary-cta")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: /Build it\. Watch it run\. Step in when it matters\./,
+      name: /Move at agent speed\. Keep enterprise control\./,
     })
   ).toBeVisible();
 
   await expect
-    .poll(() => page.evaluate(() => document.fonts.check("44px Mondwest")))
+    .poll(() => page.evaluate(() => document.fonts.check("44px Inter Tight")))
     .toBe(true);
   const headingFamilies = await page
-    .locator(".mlp h1, .mlp h2, .mlp h3")
+    .locator(".mpx-landing h1, .mpx-landing h2, .mpx-landing h3")
     .evaluateAll((headings) =>
       headings.map((heading) => getComputedStyle(heading).fontFamily)
     );
   expect(headingFamilies.length).toBeGreaterThan(0);
   for (const fontFamily of headingFamilies) {
-    expect(fontFamily).toContain("Mondwest");
+    expect(fontFamily).toContain("Inter Tight");
   }
 });
 

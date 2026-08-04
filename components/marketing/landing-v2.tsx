@@ -1,642 +1,587 @@
-"use client";
+"use client"
 
-/* The page is the pipeline. Intents ride the spine from the hero
-   inlet through Trigger / Integrate / Deploy and leave as merged PRs. */
+import Link from "next/link"
+import { useTheme } from "next-themes"
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { MogplexWordmark } from "@/components/brand/mogplex-wordmark";
+import { MogplexMark } from "@/components/brand/mogplex-mark"
+import { MogplexWordmark } from "@/components/brand/mogplex-wordmark"
 
-import "./landing-v2.css";
+import "./landing-v2.css"
 
-const PR_START = 214;
-const TERMINAL_CMD = "mogplex wire nightly-deps";
-const SEP = " · ";
-const MARQUEE_HALF =
-  "YOUR REPO, ALWAYS MOVING ◆ TRIGGER → INTEGRATE → DEPLOY ◆ ".repeat(6);
+const GITHUB_URL = "https://github.com/webrenew/mogplex"
 
-function rideLabels(src: string, i: number) {
-  return [
-    src, // before trigger: raw intent
-    "agent: building…", // past trigger
-    "tests green ✓", // past integrate
-    `PR #${PR_START + i} merged ✓`, // past deploy
-  ];
+const platformLinks = [
+  {
+    label: "Control planes",
+    description: "Observe and steer every agent, run, and policy from one inspectable dashboard.",
+    href: "#control-planes",
+    glyph: "⌁",
+  },
+  {
+    label: "Harnesses",
+    description: "Sandboxed execution rigs where agents plan, build, and test code safely.",
+    href: "#harnesses",
+    glyph: "◇",
+  },
+  {
+    label: "CLI",
+    description: "Trigger runs, stream logs, and inspect pipelines without leaving the terminal.",
+    href: "#run",
+    glyph: ">_",
+  },
+  {
+    label: "Connectors",
+    description: "Wire GitHub, Slack, and CI into the pipeline with a few lines of config.",
+    href: "#enterprise",
+    glyph: "↗",
+  },
+] as const
+
+const harnesses = [
+  {
+    id: "mogplex",
+    label: "Mogplex native",
+    status: "VALID POLICY",
+    description:
+      "Full planner-to-deploy orchestration with review fan-out, durable checkpoints, and policy-aware retries.",
+    bullets: [
+      "Multi-agent planning",
+      "Native approvals and checkpoints",
+      "End-to-end trace and cost graph",
+    ],
+    yaml: [
+      ["harness", "mogplex"],
+      ["model", "fable-5"],
+      ["credentials", "vault://platform/anthropic"],
+      ["sandbox", "enterprise-restricted"],
+      ["policy", "production-default"],
+    ],
+  },
+  {
+    id: "claude",
+    label: "Claude Code",
+    status: "HARNESS READY",
+    description:
+      "Keep the Claude Code workflow developers know while Mogplex supplies policy, identity, and observability.",
+    bullets: [
+      "CLAUDE.md behavior preserved",
+      "Provider key stays in vault",
+      "Central policy without workflow changes",
+    ],
+    yaml: [
+      ["harness", "claude-code"],
+      ["model", "claude-sonnet-4-5"],
+      ["credentials", "vault://platform/anthropic"],
+      ["sandbox", "enterprise-restricted"],
+      ["telemetry", "full"],
+    ],
+  },
+  {
+    id: "codex",
+    label: "Codex",
+    status: "HARNESS READY",
+    description:
+      "Run Codex inside the same governed delivery system, with repo boundaries and spend visible by default.",
+    bullets: [
+      "Keys delivered through the vault",
+      "Repo and command allowlists",
+      "Unified spend and audit reporting",
+    ],
+    yaml: [
+      ["harness", "codex"],
+      ["model", "gpt-5.6-sol"],
+      ["credentials", "vault://platform/openai"],
+      ["sandbox", "enterprise-restricted"],
+      ["telemetry", "full"],
+    ],
+  },
+] as const
+
+function Eyebrow({ children }: { children: ReactNode }) {
+  return (
+    <p className="mpx-eyebrow">
+      <span aria-hidden>+</span> {children}
+    </p>
+  )
 }
 
-function initRides(root: HTMLElement) {
-  const wrap = root.querySelector<HTMLElement>(".flow-wrap");
-  const spine = root.querySelector<HTMLElement>(".spine");
-  const rides = gsap.utils.toArray<HTMLElement>(root.querySelectorAll(".ride"));
-  if (!wrap || !spine || rides.length === 0) return () => {};
-
-  const SPEED = 110; // px per second down the pipe
-  let tweens: gsap.core.Tween[] = [];
-
-  function nodeCenters() {
-    if (!wrap) return [];
-    const wrapTop = wrap.getBoundingClientRect().top + window.scrollY;
-    return ["trigger", "integrate", "deploy"].map((key) => {
-      const node = root.querySelector(`[data-station="${key}"] .node`);
-      if (!node) return 0;
-      const r = node.getBoundingClientRect();
-      return r.top + window.scrollY - wrapTop + r.height / 2;
-    });
-  }
-
-  function endY() {
-    const end = root.querySelector(".shipped .node-end");
-    if (!end || !wrap) return 0;
-    const wrapTop = wrap.getBoundingClientRect().top + window.scrollY;
-    const r = end.getBoundingClientRect();
-    return r.top + window.scrollY - wrapTop + r.height / 2;
-  }
-
-  function build() {
-    for (const t of tweens) t.kill();
-    tweens = [];
-    const stations = nodeCenters();
-    const finish = endY();
-    if (finish === 0) return;
-    const duration = finish / SPEED;
-
-    rides.forEach((ride, i) => {
-      const labels = rideLabels(ride.dataset.src ?? "", i);
-      const label = ride.querySelector("span");
-      if (!label) return;
-      let stageIdx = -2; // sentinel so the first setStage(-1) applies
-
-      const setStage = (idx: number) => {
-        if (idx === stageIdx) return;
-        stageIdx = idx;
-        label.textContent = idx < 0 ? labels[0] : labels[idx + 1];
-        ride.classList.toggle("is-merged", idx >= 2);
-      };
-      setStage(-1);
-
-      const tween = gsap.fromTo(
-        ride,
-        { y: -40, opacity: 0 },
-        {
-          y: finish,
-          duration,
-          ease: "none",
-          repeat: -1,
-          delay: (duration / rides.length) * i,
-          onUpdate() {
-            const y = Number(gsap.getProperty(ride, "y"));
-            let idx = -1;
-            for (let s = 0; s < stations.length; s++) if (y >= stations[s]) idx = s;
-            setStage(idx);
-            // fade in at the inlet, fade out into the end node
-            const fadeIn = gsap.utils.clamp(0, 1, (y + 40) / 140);
-            const fadeOut = gsap.utils.clamp(0, 1, (finish - y) / 140);
-            gsap.set(ride, { opacity: Math.min(fadeIn, fadeOut) });
-          },
-          onRepeat() {
-            setStage(-1);
-          },
-        },
-      );
-      tweens.push(tween);
-    });
-  }
-
-  build();
-  // station positions settle once Mondwest finishes loading
-  document.fonts?.ready.then(build).catch(() => {});
-
-  let resizeT: ReturnType<typeof setTimeout>;
-  const onResize = () => {
-    clearTimeout(resizeT);
-    resizeT = setTimeout(build, 250);
-  };
-  window.addEventListener("resize", onResize, { passive: true });
-
-  return () => {
-    clearTimeout(resizeT);
-    window.removeEventListener("resize", onResize);
-    for (const t of tweens) t.kill();
-  };
+function AccentPeriod() {
+  return <span className="mpx-accent">.</span>
 }
 
-function initHero() {
-  const tl = gsap.timeline({ defaults: { ease: "power4.out" } });
-  tl.from(".hero-title .line-inner", { yPercent: 112, duration: 1.1, stagger: 0.12 }, 0.1)
-    .from(".hero-annot", { opacity: 0, y: -8, duration: 0.7 }, 0.4)
-    .from(".hero-sub, .hero-cta", { opacity: 0, y: 24, duration: 0.9, stagger: 0.1 }, 0.55)
-    .from(".inlet, .hero-hint", { opacity: 0, duration: 1.2 }, 0.9);
+function Check({ muted = false }: { muted?: boolean }) {
+  return (
+    <span className={muted ? "mpx-check is-muted" : "mpx-check"} aria-hidden>
+      {muted ? "" : "✓"}
+    </span>
+  )
 }
 
-function initReveals(root: HTMLElement) {
-  for (const el of gsap.utils.toArray<HTMLElement>(
-    root.querySelectorAll(".station .station-body > *, .station .station-num"),
-  )) {
-    gsap.from(el, {
-      opacity: 0,
-      y: 26,
-      duration: 0.7,
-      ease: "power3.out",
-      scrollTrigger: { trigger: el, start: "top 86%" },
-    });
-  }
+// The timeline intentionally derives several visible states from one phase.
+// eslint-disable-next-line complexity
+function LiveRunMockup() {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const mockupRef = useRef<HTMLDivElement>(null)
+  const [phase, setPhase] = useState(0)
 
-  for (const el of gsap.utils.toArray<HTMLElement>(
-    root.querySelectorAll(".pipe-head, .run-copy, .terms-row > *, .shipped"),
-  )) {
-    gsap.from(el, {
-      opacity: 0,
-      y: 30,
-      duration: 0.8,
-      ease: "power3.out",
-      scrollTrigger: { trigger: el, start: "top 84%" },
-    });
-  }
+  useEffect(() => {
+    const wrap = wrapRef.current
+    const mockup = mockupRef.current
+    if (!wrap || !mockup) return
 
-  gsap.from(".close-title .line-inner", {
-    yPercent: 112,
-    duration: 1,
-    stagger: 0.1,
-    ease: "power4.out",
-    scrollTrigger: { trigger: ".close", start: "top 60%" },
-  });
-  gsap.from(".close-kicker, .close-cta", {
-    opacity: 0,
-    y: 20,
-    duration: 0.8,
-    stagger: 0.15,
-    ease: "power3.out",
-    scrollTrigger: { trigger: ".close", start: "top 55%" },
-  });
+    const resize = () => {
+      const scale = Math.min(1, wrap.clientWidth / 920)
+      mockup.style.transform = `scale(${scale})`
+      wrap.style.height = `${660 * scale}px`
+    }
+    const observer = new ResizeObserver(resize)
+    observer.observe(wrap)
+    resize()
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const reducedMotionTimer = setTimeout(() => setPhase(5), 0)
+      return () => clearTimeout(reducedMotionTimer)
+    }
+
+    let cancelled = false
+    let timers: ReturnType<typeof setTimeout>[] = []
+    const run = () => {
+      setPhase(0)
+      const sequence = [
+        [3600, 1],
+        [4700, 2],
+        [6200, 3],
+        [7500, 4],
+        [8800, 5],
+      ] as const
+      timers = sequence.map(([delay, next]) =>
+        setTimeout(() => {
+          if (!cancelled) setPhase(next)
+        }, delay),
+      )
+      timers.push(
+        setTimeout(() => {
+          if (!cancelled) run()
+        }, 14_500),
+      )
+    }
+    run()
+    return () => {
+      cancelled = true
+      timers.forEach(clearTimeout)
+    }
+  }, [])
+
+  const implementDone = phase >= 1
+  const filesVisible = phase >= 2
+  const reviewsRunning = phase === 2
+  const reviewsDone = phase >= 3
+  const deployRunning = phase === 4
+  const deployDone = phase >= 5
+
+  return (
+    <div className="mpx-run-scale-wrap" ref={wrapRef}>
+      <div className="mpx-run-ui" ref={mockupRef} data-phase={phase}>
+        <aside className="mpx-run-rail" aria-label="Run navigation">
+          <MogplexMark className="mpx-run-mark" />
+          {[
+            ["⌁", "Pipelines"],
+            ["▦", "Workspaces"],
+            [">_", "Terminal"],
+            ["▧", "Artifacts"],
+            ["⚙", "Settings"],
+          ].map(([glyph, label], index) => (
+            <button key={label} type="button" aria-label={label} data-active={index === 0}>
+              {glyph}
+            </button>
+          ))}
+          <span className="mpx-avatar">MA<i /></span>
+        </aside>
+
+        <aside className="mpx-run-plan">
+          <strong className="mpx-accent">RUN 4821</strong>
+          <p className="mpx-run-commit">main · a1b2c3d</p>
+          <div className="mpx-intent-card">
+            <small>INTENT</small>
+            <p>Add rate limiting to public API endpoints</p>
+            <span>#4821</span>
+          </div>
+          <small className="mpx-plan-label">AGENT PLAN</small>
+          <div className="mpx-plan-steps">
+            <div><i>◇</i><span><b>PLANNER</b><small>Break down and sequence the work</small></span><Check /></div>
+            <div><i>&lt;/&gt;</i><span><b>IMPLEMENT</b><small>Write code and add tests</small></span>{implementDone ? <Check /> : <span className="mpx-spinner" />}</div>
+            <div><i>◎</i><span><b>REVIEW</b><small>Assess changes and request updates</small></span>{reviewsDone ? <Check /> : <Check muted />}</div>
+            <div><i>↗</i><span><b>DEPLOY</b><small>Merge, build, and roll out safely</small></span>{deployDone ? <Check /> : <Check muted />}</div>
+          </div>
+          <button className="mpx-full-log" type="button">View full run log <span>→</span></button>
+        </aside>
+
+        <section className="mpx-run-canvas" aria-label="Animated agent run 4821">
+          <div className="mpx-run-topbar">
+            <span className={reviewsDone ? "mpx-top-check is-visible" : "mpx-top-check"}>
+              <Check /> Checks passed
+            </span>
+            <div>
+              <span className={filesVisible ? "mpx-files-pill is-visible" : "mpx-files-pill"}>
+                3 files changed <b>+142</b> <em>−18</em>
+              </span>
+              <button type="button">View changes</button>
+              <button type="button" aria-label="Run settings">⚙</button>
+            </div>
+          </div>
+
+          <div className="mpx-run-graph">
+            <svg viewBox="0 0 600 392" preserveAspectRatio="none" aria-hidden>
+              <path d="M300 80V96" />
+              <path d="M300 188V205H115V222" />
+              <path d="M300 205H485V222" />
+              <path d="M115 302V321H300V322" />
+              <path d="M485 302V321H300" />
+              <path className="is-dashed" d="M385 142H458V84" />
+              <circle cx="300" cy="205" r="3" />
+              <circle cx="300" cy="321" r="3" />
+            </svg>
+
+            <div className="mpx-agent-node is-planner">
+              <header><span>◇</span><small>PLANNER</small><Check /></header>
+              <p>Analyzed codebase and dependencies</p><time>1.2s</time>
+            </div>
+            <div className="mpx-agent-node is-implement">
+              <header><span>&lt;/&gt;</span><small>IMPLEMENT</small>{implementDone ? <Check /> : <span className="mpx-live-dot" />}</header>
+              <p>Create rate limiter middleware and tests</p>
+              <div className="mpx-node-status"><span>{implementDone ? "Completed" : "Running"}</span><time>{implementDone ? "18s" : "13s"}</time></div>
+              <div className="mpx-progress"><i /></div>
+            </div>
+            <div className="mpx-agent-node is-review-left">
+              <header><span>◎</span><small>REVIEW</small>{reviewsDone ? <Check /> : reviewsRunning ? <span className="mpx-live-dot" /> : <Check muted />}</header>
+              <p>Security review</p><time>{reviewsDone ? "Checks passed" : reviewsRunning ? "Running checks…" : "Queued"}</time>
+            </div>
+            <div className="mpx-agent-node is-review-right">
+              <header><span>◎</span><small>REVIEW</small>{reviewsDone ? <Check /> : reviewsRunning ? <span className="mpx-live-dot" /> : <Check muted />}</header>
+              <p>Code quality review</p><time>{reviewsDone ? "Checks passed" : reviewsRunning ? "Running checks…" : "Queued"}</time>
+            </div>
+            <div className="mpx-agent-node is-deploy">
+              <header><span>↗</span><small>DEPLOY</small>{deployDone ? <Check /> : deployRunning ? <span className="mpx-live-dot" /> : <Check muted />}</header>
+              <p>Staging deployment</p><time>{deployDone ? "Live" : deployRunning ? "Deploying…" : "Queued"}</time>
+            </div>
+
+            <div className={filesVisible ? "mpx-file-card is-visible" : "mpx-file-card"}>
+              <strong>3 files changed</strong>
+              <p><span>middleware/rate_limit.py</span><b>+78</b><em>−2</em></p>
+              <p><span>tests/test_rate_limit.py</span><b>+45</b><em>−0</em></p>
+              <p><span>app/api/routes.py</span><b>+19</b><em>−16</em></p>
+            </div>
+          </div>
+
+          <div className="mpx-terminal">
+            <header><b>TERMINAL</b><span>LOGS</span><span>EVENTS</span><small>Shell · zsh</small></header>
+            <div>
+              <p><i>$</i> mogplex run 4821</p>
+              <p><time>10:25:02</time> <b>PASS</b> planner.completed <span>Analyzed codebase and dependencies</span></p>
+              <p className={implementDone ? "is-visible" : ""}><time>10:25:20</time> <b>PASS</b> agent.implement.completed <span>(+142 −18)</span></p>
+              <p className={reviewsDone ? "is-visible" : ""}><time>10:25:28</time> <b>PASS</b> review.completed <span>Security and quality checks passed</span></p>
+              <p className={deployRunning || deployDone ? "is-visible" : ""}><time>10:25:29</time> <b>RUN</b> deploy.staging <span>{deployDone ? "Deployment live" : "Deployment in progress"}</span></p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  )
 }
 
-function initWedge() {
-  gsap.to(".strike-wrap", {
-    "--strike": 1,
-    duration: 0.9,
-    ease: "power3.inOut",
-    scrollTrigger: { trigger: ".wedge-title", start: "top 70%" },
-  });
-  gsap.from(".wedge-cols > *", {
-    opacity: 0,
-    y: 28,
-    duration: 0.8,
-    stagger: 0.15,
-    ease: "power3.out",
-    scrollTrigger: { trigger: ".wedge-cols", start: "top 80%" },
-  });
+function BlueprintOverlay() {
+  return (
+    <div className="mpx-blueprint" aria-hidden>
+      <i className="mpx-cross is-nw" /><i className="mpx-cross is-ne" />
+      <i className="mpx-cross is-sw" /><i className="mpx-cross is-se" />
+      <span>021</span>
+    </div>
+  )
 }
 
-function initTerminal(root: HTMLElement) {
-  const cmd = root.querySelector<HTMLElement>("[data-type]");
-  const lines = gsap.utils.toArray<HTMLElement>(root.querySelectorAll("[data-line]"));
-  if (!cmd) return;
+function ThemeMenu() {
+  const { theme, setTheme } = useTheme()
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  )
+  const current = mounted ? theme ?? "system" : "system"
 
-  cmd.textContent = "";
-  gsap.set(lines, { opacity: 0 });
-
-  const tl = gsap.timeline({
-    scrollTrigger: { trigger: ".terminal", start: "top 72%" },
-  });
-  tl.to(
-    {},
-    {
-      duration: TERMINAL_CMD.length * 0.045,
-      ease: "none",
-      onUpdate() {
-        cmd.textContent = TERMINAL_CMD.slice(0, Math.round(this.progress() * TERMINAL_CMD.length));
-      },
-    },
-  ).to(lines, { opacity: 1, duration: 0.01, stagger: 0.3 }, "+=0.35");
-
-  gsap.from(".terminal", {
-    opacity: 0,
-    y: 40,
-    duration: 0.9,
-    ease: "power3.out",
-    scrollTrigger: { trigger: ".terminal", start: "top 85%" },
-  });
+  return (
+    <details className="mpx-theme-menu">
+      <summary aria-label="Choose color theme">◐ <span>{current}</span></summary>
+      <div role="menu" aria-label="Color theme">
+        {(["light", "system", "dark"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="menuitemradio"
+            aria-checked={current === option}
+            onClick={(event) => {
+              setTheme(option)
+              event.currentTarget.closest("details")?.removeAttribute("open")
+            }}
+          >
+            <span>{option}</span>{current === option ? "✓" : ""}
+          </button>
+        ))}
+      </div>
+    </details>
+  )
 }
 
 export function MarketingLandingPage() {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [platformOpen, setPlatformOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [activeHarness, setActiveHarness] = useState(0)
+  const platformButtonRef = useRef<HTMLButtonElement>(null)
+  const harnessRefs = useRef<Array<HTMLButtonElement | null>>([])
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
+    document.body.classList.toggle("mpx-menu-open", mobileOpen)
+    return () => document.body.classList.remove("mpx-menu-open")
+  }, [mobileOpen])
 
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    document.documentElement.style.scrollBehavior = reduced ? "auto" : "smooth";
+  const onHarnessKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+    event.preventDefault()
+    const last = harnesses.length - 1
+    const next = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? last
+        : event.key === "ArrowRight"
+          ? (index + 1) % harnesses.length
+          : (index - 1 + harnesses.length) % harnesses.length
+    setActiveHarness(next)
+    harnessRefs.current[next]?.focus()
+  }
 
-    if (reduced) {
-      root.querySelector<HTMLElement>(".strike-wrap")?.style.setProperty("--strike", "1");
-      return () => {
-        document.documentElement.style.scrollBehavior = "";
-      };
-    }
-
-    gsap.registerPlugin(ScrollTrigger);
-    let cleanupRides: () => void = () => {};
-    const ctx = gsap.context(() => {
-      cleanupRides = initRides(root);
-      initHero();
-      initReveals(root);
-      initWedge();
-      initTerminal(root);
-    }, root);
-
-    return () => {
-      document.documentElement.style.scrollBehavior = "";
-      cleanupRides();
-      ctx.revert();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    const onResize = () => {
-      // the hamburger only exists ≤860px; close the menu if the viewport outgrows it
-      if (window.innerWidth > 860) setMenuOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("resize", onResize);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", onResize);
-    };
-  }, [menuOpen]);
-
-  const closeMenu = () => setMenuOpen(false);
+  const harness = harnesses[activeHarness]
 
   return (
-    <div className="mlp" ref={rootRef}>
-      <header className="nav">
-        <a className="nav-brand" href="#top" aria-label="Mogplex home">
-          <MogplexWordmark className="wordmark" height={20} />
-        </a>
-        <nav className="nav-links" aria-label="Primary">
-          <a href="#pipeline">Product</a>
-          <Link href="/workflows">Workflows</Link>
-          <Link href="/how-it-works">How it works</Link>
-          <Link href="/faq">FAQ</Link>
-          <a href="https://docs.mogplex.com">Docs</a>
-          <Link href="/login">Sign in</Link>
+    <div className="mpx-landing">
+      <BlueprintOverlay />
+
+      <header className="mpx-header">
+        <nav className="mpx-nav" aria-label="Primary navigation">
+          <Link href="/" className="mpx-brand" aria-label="Mogplex home">
+            <MogplexWordmark height={24} />
+          </Link>
+
+          <div className="mpx-nav-links">
+            <div
+              className="mpx-platform-wrap"
+              onMouseEnter={() => setPlatformOpen(true)}
+              onMouseLeave={() => setPlatformOpen(false)}
+              onFocus={() => setPlatformOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") return
+                setPlatformOpen(false)
+                platformButtonRef.current?.focus()
+              }}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setPlatformOpen(false)
+              }}
+            >
+              <button
+                ref={platformButtonRef}
+                type="button"
+                aria-haspopup="true"
+                aria-expanded={platformOpen}
+                aria-controls="platform-menu"
+                onClick={(event) => {
+                  setPlatformOpen((open) => (event.detail === 0 ? !open : true))
+                }}
+              >
+                Platform <span>⌄</span>
+              </button>
+              <div id="platform-menu" className="mpx-platform-menu" hidden={!platformOpen}>
+                <Eyebrow>PLATFORM · ONE PIPELINE, EVERY SURFACE</Eyebrow>
+                <div>
+                  {platformLinks.map((item) => (
+                    <a key={item.label} href={item.href} onClick={() => setPlatformOpen(false)}>
+                      <i>{item.glyph}</i><span><b>{item.label}</b><small>{item.description}</small></span><em>→</em>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <a href="#capabilities">Enterprise</a>
+            <a href="https://docs.mogplex.com">Developers</a>
+            <Link href="/faq">Company</Link>
+            <a href="https://docs.mogplex.com">Docs</a>
+          </div>
+
+          <span className="mpx-control-stamp">CONTROL PLANE v0.9.14</span>
+          <a className="mpx-live-link" href="#run">View a live run</a>
+          <a className="mpx-github-pill" href={GITHUB_URL} target="_blank" rel="noreferrer noopener" aria-label="View Mogplex on GitHub">
+            GitHub ↗
+          </a>
+          <Link className="mpx-button is-primary is-small" href="/signup">Start building</Link>
+          <button
+            type="button"
+            className="mpx-mobile-toggle"
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-nav"
+            onClick={() => setMobileOpen((open) => !open)}
+          ><span /><span /></button>
         </nav>
-        <Link className="btn btn-primary btn-sm nav-cta" href="/request-access">
-          Request access
-        </Link>
-        <button
-          className="nav-toggle"
-          type="button"
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
-          aria-controls="mobile-menu"
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          <span className="bar" aria-hidden />
-          <span className="bar" aria-hidden />
-        </button>
+        <nav id="mobile-nav" className="mpx-mobile-nav" hidden={!mobileOpen} aria-label="Mobile navigation">
+          <a href="#capabilities" onClick={() => setMobileOpen(false)}>Enterprise</a>
+          <a href="#harnesses" onClick={() => setMobileOpen(false)}>Harnesses</a>
+          <a href="https://docs.mogplex.com" onClick={() => setMobileOpen(false)}>Docs</a>
+          <a href={GITHUB_URL} onClick={() => setMobileOpen(false)}>GitHub</a>
+          <Link href="/signup" onClick={() => setMobileOpen(false)}>Start building</Link>
+        </nav>
       </header>
 
-      {/* full-screen menu behind the fixed nav; toggled on small screens only */}
-      <div className={`mobile-menu${menuOpen ? " is-open" : ""}`} id="mobile-menu">
-        <nav className="mobile-links" aria-label="Mobile">
-          <a href="#pipeline" onClick={closeMenu}>Product</a>
-          <Link href="/workflows" onClick={closeMenu}>Workflows</Link>
-          <Link href="/how-it-works" onClick={closeMenu}>How it works</Link>
-          <Link href="/faq" onClick={closeMenu}>FAQ</Link>
-          <a href="https://docs.mogplex.com" onClick={closeMenu}>Docs</a>
-        </nav>
-        <div className="mobile-cta">
-          <Link className="btn btn-primary" href="/request-access" onClick={closeMenu}>
-            Request access
-          </Link>
-          <Link className="btn btn-ghost" href="/login" onClick={closeMenu}>
-            Sign in
-          </Link>
-        </div>
-      </div>
-
-      <main id="top">
-        {/* everything inside flow-wrap shares one continuous pipe */}
-        <div className="flow-wrap">
-          <div className="spine" aria-hidden>
-            <i className="ride" data-src="git push origin main"><b /><span /></i>
-            <i className="ride" data-src="cron · nightly 02:00"><b /><span /></i>
-            <i className="ride" data-src="issue #88 opened"><b /><span /></i>
-            <i className="ride" data-src="slack: fix the flaky e2e"><b /><span /></i>
-          </div>
-          <div className="rail-right" aria-hidden />
-
-          {/* ============ HERO ============ */}
-          <section className="hero" id="hero" data-testid="landing-hero">
-            <p className="inlet mono" aria-hidden>
-              ↓ intent enters the pipe
-            </p>
-
-            <div className="hero-annot mono" aria-hidden>
-              <span>MOGPLEX</span>
-              <span className="annot-rule" />
-              <span>AGENTIC CI/CD</span>
-              <span className="annot-rule" />
-              <span>FIG. 01 — THE PIPE</span>
+      <main>
+        <section className="mpx-hero" data-testid="landing-hero">
+          <div className="mpx-hero-copy">
+            <Eyebrow>OPEN-SOURCE AGENTIC SOFTWARE FACTORY</Eyebrow>
+            <h1>The open-source agentic software factory<AccentPeriod /></h1>
+            <p>Mogplex coordinates agents that plan, build, review, and ship code through one inspectable pipeline.</p>
+            <div className="mpx-hero-actions">
+              <a className="mpx-button is-primary" href={GITHUB_URL} target="_blank" rel="noreferrer noopener" data-testid="landing-primary-cta">View on GitHub <span>↗</span></a>
+              <a className="mpx-button is-secondary" href="#run">See how it works <span>↓</span></a>
             </div>
-
-            <h1 className="hero-title">
-              <span className="line"><span className="line-inner">The pipeline</span></span>
-              <span className="line">
-                <span className="line-inner">
-                  that ships <em className="grad">itself</em>.
-                </span>
-              </span>
-            </h1>
-
-            <div className="hero-lower">
-              <p className="hero-sub">
-                You already trust CI/CD to carry a commit from push to production. Mogplex carries{" "}
-                <strong>intent</strong>: GitHub events, schedules, Slack asks, standing assignments.
-                From trigger to shipped code, with agents (Claude Code, Codex, your MCP tools) doing
-                the work in between.
-              </p>
-              <div className="hero-cta">
-                <div className="hero-cta-row">
-                  <Link
-                    className="btn btn-primary"
-                    href="/request-access"
-                    data-testid="landing-request-access-link"
-                  >
-                    Get an access code
-                  </Link>
-                  <Link className="btn btn-ghost" href="/login">
-                    Have a code? Sign in
-                  </Link>
-                </div>
-                <p className="mono micro">
-                  {`private beta${SEP}free while we learn${SEP}your model keys${SEP}your gates`}
-                </p>
-              </div>
-            </div>
-
-            <p className="hero-hint mono" aria-hidden>
-              the marks travelling this line are intents.{" "}
-              <span className="hint-more">watch one become a merged PR. </span>↓
-            </p>
-          </section>
-
-          {/* ============ MARQUEE ============ */}
-          <div className="marquee" aria-hidden>
-            <div className="marquee-track mono">
-              {/* two identical halves; the loop translates exactly one half (-50%) */}
-              <span>{MARQUEE_HALF}</span>
-              <span>{MARQUEE_HALF}</span>
+            <div className="mpx-hero-stamps">
+              <span>+ MOGPLEX SYSTEMS</span>
+              <span>+ INTENT → REVIEWED → RUNNING CODE</span>
+              <span>+ CONTROLLED. OBSERVABLE. AGENTIC.</span>
             </div>
           </div>
+          <div id="run" className="mpx-hero-run">
+            <LiveRunMockup />
+          </div>
+        </section>
 
-          {/* ============ STATIONS ============ */}
-          <section className="pipeline" id="pipeline">
-            <div className="pipe-head">
-              <p className="kicker mono">FIG. 02 — THREE STATIONS</p>
-              <h2 className="h2">
-                Classic CI/CD automated the path <em>after</em> the code was written. Agentic CI/CD
-                automates the writing&nbsp;too.
-              </h2>
-            </div>
+        <section className="mpx-proof" aria-label="Enterprise defaults">
+          <Eyebrow>GOVERNED BY DEFAULT</Eyebrow>
+          {[
+            ["○", "Zero training data"],
+            ["⌘", "Bring your own keys"],
+            ["▣", "Policy-bound sandboxes"],
+            ["⌁", "Cost-attributed traces"],
+          ].map(([icon, label]) => <div key={label}><i>{icon}</i><span>{label}</span></div>)}
+        </section>
 
-            <article className="station" data-station="trigger">
-              <span className="node" aria-hidden />
-              <span className="station-num" aria-hidden>01</span>
-              <div className="station-body">
-                <p className="station-kicker mono">WAKE</p>
-                <h3 className="station-name">Trigger</h3>
-                <p className="station-desc">
-                  An issue opens, a PR needs review, CI fails, a schedule fires, or someone asks in
-                  Slack. Mogplex catches the event and queues a run with the right agent, repo, and
-                  context. No webhook plumbing, no glue scripts.
-                </p>
-                <ul className="station-spec mono">
-                  <li>github events</li>
-                  <li>ci failures</li>
-                  <li>slack</li>
-                  <li>cron</li>
-                  <li>standing assignments</li>
-                </ul>
+        <section id="capabilities" className="mpx-capabilities">
+          <div className="mpx-section-intro">
+            <div><Eyebrow>ENTERPRISE CONTROL PLANE</Eyebrow><h2>Move at agent speed. <span>Keep enterprise control<AccentPeriod /></span></h2></div>
+            <p>Standardize how every agent accesses models, code, credentials, and infrastructure, without slowing down the teams doing the work.</p>
+          </div>
+
+          <div className="mpx-cap-grid">
+            <article className="mpx-cap is-zdr">
+              <div><Eyebrow>ZERO DATA RETENTION</Eyebrow><span className="mpx-default-pill">DEFAULT ON</span></div>
+              <h3>Your code is never model training data<AccentPeriod /></h3>
+              <div className="mpx-zdr-flow">
+                <div><small>01 · INGRESS</small><b>Encrypted context</b><span>TLS 1.3</span></div><i>→</i>
+                <div><small>02 · EXECUTION</small><b>Ephemeral runtime</b><span>Isolated</span></div><i>→</i>
+                <div><small>03 · EGRESS</small><b>Policy-filtered output</b><span>Secrets redacted</span></div>
               </div>
             </article>
 
-            <article className="station" data-station="integrate">
-              <span className="node" aria-hidden />
-              <span className="station-num" aria-hidden>02</span>
-              <div className="station-body">
-                <p className="station-kicker mono">BUILD</p>
-                <h3 className="station-name">Continuous Agentic Integration</h3>
-                <p className="station-desc">
-                  A per-run sandbox boots with your repo. The agent writes, runs tests, and uses
-                  your MCP tools, iterating until it holds together. Every call is metered and
-                  logged: you know what it did and what it cost.
-                </p>
-                <ul className="station-spec mono">
-                  <li>per-run sandbox</li>
-                  <li>claude code · codex</li>
-                  <li>every call metered</li>
-                </ul>
-              </div>
+            <article className="mpx-cap is-byok">
+              <Eyebrow>BRING YOUR OWN KEYS</Eyebrow>
+              <h3>Your providers. Your contracts. Your keys<AccentPeriod /></h3>
+              <div className="mpx-vault"><small>VAULT://PLATFORM/PRODUCTION</small>{["Anthropic", "OpenAI", "AWS Bedrock"].map((provider, index) => <p key={provider}><span>{provider}</span><b>{index === 2 ? "AVAILABLE" : "CONNECTED"}</b></p>)}</div>
             </article>
 
-            <article className="station" data-station="deploy">
-              <span className="node" aria-hidden />
-              <span className="station-num" aria-hidden>03</span>
-              <div className="station-body">
-                <p className="station-kicker mono">SHIP</p>
-                <h3 className="station-name">Continuous Agentic Deployment</h3>
-                <p className="station-desc">
-                  Output ships as a PR, a check run, or a merged change, behind the gates you set.
-                  Deploys reconcile back to the run that caused them, and your branch protections
-                  still rule.
-                </p>
-                <ul className="station-spec mono">
-                  <li>PR → merge → deploy</li>
-                  <li>your approval gates</li>
-                  <li>branch protections rule</li>
-                </ul>
-              </div>
+            <article id="control-planes" className="mpx-cap is-observe">
+              <Eyebrow>OBSERVABILITY</Eyebrow>
+              <h3>Trace every decision down to the dollar<AccentPeriod /></h3>
+              <div className="mpx-trace"><small>RUN 4821 · 43.1s</small>{[
+                ["PLANNER", "1.2s", "8%"], ["IMPLEMENT", "18.0s", "46%"], ["SECURITY", "2.1s", "24%"], ["QUALITY", "2.8s", "31%"], ["DEPLOY", "22.0s", "64%"],
+              ].map(([label, time, width]) => <p key={label}><span>{label}</span><i style={{ width }} /><time>{time}</time></p>)}</div>
+              <div className="mpx-stats"><p><small>TOKENS</small><b>84.2k</b></p><p><small>COST</small><b>$2.18</b></p><p><small>TOOLS</small><b>37</b></p></div>
+              <div className="mpx-chips"><span>OTEL EXPORT</span><span>LIVE REPLAY</span><span>COST ATTRIBUTION</span></div>
             </article>
-          </section>
 
-          {/* ============ WEDGE ============ */}
-          <section className="wedge" id="difference">
-            <p className="kicker mono">FIG. 03 — THE DIFFERENCE</p>
-            <h2 className="wedge-title">
-              <span className="strike-wrap">Staffing is a tool you use.</span>
-              <br />
-              Infrastructure is a thing you <em>build on</em>.
-            </h2>
-            <div className="wedge-cols">
-              <div className="wedge-col wedge-them">
-                <p className="mono wedge-label">DELEGATION PLATFORMS</p>
-                <p>
-                  Hire droids. Assign tasks. Review their output one at a time. Every task is a
-                  transaction; when you stop delegating, everything stops.
-                </p>
-              </div>
-              <div className="wedge-col wedge-us">
-                <p className="mono wedge-label us">MOGPLEX</p>
-                <p>
-                  Wire a pipeline once. Work flows through it continuously: while you sleep, while
-                  you build something else, while you&apos;re not looking. Infrastructure is
-                  stickier than staffing.
-                </p>
-              </div>
-            </div>
-          </section>
+            <article className="mpx-cap is-sandbox">
+              <Eyebrow>SANDBOX POLICY</Eyebrow><h3>Define exactly where agents can go<AccentPeriod /></h3>
+              <div className="mpx-policy">{[["Network egress", "ALLOWLIST"], ["Filesystem", "WORKSPACE ONLY"], ["Secrets", "SCOPED"], ["Max runtime", "20 MIN"]].map(([key, value]) => <p key={key}><span>{key}</span><b>{value}</b></p>)}</div>
+            </article>
 
-          {/* ============ RUN ============ */}
-          <section className="run" id="run">
-            <div className="run-copy">
-              <p className="kicker mono">FIG. 04 — HANDS ON</p>
-              <h2 className="h2">Build it. Watch it run. Step in when it matters.</h2>
-              <p className="body-lg">
-                The web app and CLI are where you wire the pipeline, watch agents work, inspect any
-                run call-by-call, and step into one already in motion: approve the next tool call,
-                redirect the plan, or kill it.
-              </p>
-              <p className="install mono" id="install">
-                <span className="t-dim">$</span> curl -fsSL https://install.mogplex.com/install.sh
-                | sh
-              </p>
-              <p className="mono micro install-note">
-                {`open-source Apache 2.0 CLI${SEP}your access code authenticates it`}
-              </p>
-            </div>
-
-            <div
-              className="terminal"
-              role="img"
-              aria-label="Terminal session: mogplex wire nightly-deps creates a live pipeline with trigger, integrate and deploy stages"
-            >
-              <div className="terminal-bar">
-                <span className="tdot" />
-                <span className="tdot" />
-                <span className="tdot" />
-                <span className="terminal-title mono">mogplex — zsh</span>
-              </div>
-              <pre className="terminal-body mono" id="term">
-                <span className="t-prompt">$</span> <span className="t-cmd" data-type="">{TERMINAL_CMD}</span>
-                {"\n"}
-                <span className="t-line" data-line="">
-                  <span className="t-ok">✓</span> auth        <span className="t-dim">access code · ok</span>
-                </span>
-                {"\n"}
-                <span className="t-line" data-line="">
-                  <span className="t-ok">✓</span> trigger     <span className="t-dim">schedule · 02:00 UTC</span>
-                </span>
-                {"\n"}
-                <span className="t-line" data-line="">
-                  <span className="t-ok">✓</span> integrate   <span className="t-dim">sandbox · write · test · iterate</span>
-                </span>
-                {"\n"}
-                <span className="t-line" data-line="">
-                  <span className="t-ok">✓</span> deploy      <span className="t-dim">PR → merge · gate: you</span>
-                </span>
-                {"\n"}
-                <span className="t-line" data-line="" />
-                {"\n"}
-                <span className="t-line" data-line="">
-                  <span className="t-sig">◆ pipeline live.</span> <span className="t-dim">your repo keeps moving.</span>
-                </span>
-                {"\n"}
-                <span className="t-caret" aria-hidden />
-              </pre>
-            </div>
-          </section>
-
-          {/* ============ TERMS ============ */}
-          <section className="terms">
-            <div className="terms-row">
-              <div className="term">
-                <p className="term-k mono">MODELS</p>
-                <p className="term-v">
-                  Model access included. Pick the agent and model per pipeline — no API keys to set up.
-                </p>
-              </div>
-              <div className="term">
-                <p className="term-k mono">METER</p>
-                <p className="term-v">
-                  Free in private beta. Every model and tool call is metered, observed call-by-call.
-                </p>
-              </div>
-              <div className="term">
-                <p className="term-k mono">GATES</p>
-                <p className="term-v">
-                  Nothing ships without passing the gates you set. Autonomy is configurable.
-                </p>
-              </div>
-            </div>
-
-            <div className="shipped">
-              <span className="node node-end" aria-hidden />
-              <p className="mono shipped-label">
-                <b>SHIPPED.</b> &nbsp;the pipe loops back to trigger &nbsp;↺
-              </p>
-            </div>
-          </section>
-        </div>
-        {/* /flow-wrap */}
-
-        {/* ============ CLOSE (inverted) ============ */}
-        <section className="close">
-          <p className="kicker mono close-kicker">REV 01 — SHIP IT</p>
-          <h2 className="close-title">
-            <span className="line"><span className="line-inner">Set the gates.</span></span>
-            <span className="line"><span className="line-inner">Let it ship.</span></span>
-          </h2>
-          <div className="close-cta">
-            <Link className="btn btn-inverse" href="/request-access">
-              Get an access code
-            </Link>
-            <p className="mono micro">
-              private beta, approving in batches. free while we learn what you need.
-            </p>
+            <article className="mpx-cap is-small-cap"><Eyebrow>MULTI-HARNESS</Eyebrow><h3>One factory. Every harness<AccentPeriod /></h3><div className="mpx-harness-stack"><i>M</i><i>CC</i><i>CX</i></div><a href="#harnesses">Explore harnesses →</a></article>
+            <article className="mpx-cap is-small-cap"><Eyebrow>TEAM CONTROLS</Eyebrow><h3>Budgets and models, set once<AccentPeriod /></h3><div className="mpx-budget"><p><span>JULY SPEND</span><b>$18,420 / $25,000</b></p><i><span /></i></div><div className="mpx-models"><span>GPT 5.6 SOL ✓</span><span>FABLE 5 ✓</span><span>KIMI K3 ✓</span></div></article>
+            <article className="mpx-cap is-small-cap"><Eyebrow>ROLE-BASED ACCESS</Eyebrow><h3>The right access at every step<AccentPeriod /></h3><div className="mpx-rbac"><small><span>ROLE</span><b>RUN</b><b>SHIP</b><b>ADMIN</b></small>{[["Developer", "●", "○", "○"], ["Release lead", "●", "●", "○"], ["Platform admin", "●", "●", "●"]].map((row) => <p key={row[0]}>{row.map((cell, index) => index === 0 ? <span key={cell}>{cell}</span> : <b key={`${cell}-${index}`}>{cell}</b>)}</p>)}</div></article>
           </div>
-          <div className="close-flow" aria-hidden />
+        </section>
+
+        <section id="harnesses" className="mpx-harnesses">
+          <div className="mpx-harness-inner">
+            <Eyebrow>MULTI-HARNESS ORCHESTRATION</Eyebrow>
+            <h2>Any harness. <span>Same factory<AccentPeriod /></span></h2>
+            <p className="mpx-harness-lede">Bring the coding agent your team already trusts. Mogplex gives every harness the same controls, telemetry, and delivery path.</p>
+            <div className="mpx-harness-tabs" role="tablist" aria-label="Harness options">
+              {harnesses.map((item, index) => (
+                <button
+                  key={item.id}
+                  ref={(node) => { harnessRefs.current[index] = node }}
+                  type="button"
+                  role="tab"
+                  id={`harness-tab-${item.id}`}
+                  aria-selected={index === activeHarness}
+                  aria-controls={`harness-panel-${item.id}`}
+                  tabIndex={index === activeHarness ? 0 : -1}
+                  onClick={() => setActiveHarness(index)}
+                  onKeyDown={(event) => onHarnessKeyDown(event, index)}
+                >{item.label}</button>
+              ))}
+            </div>
+            <div className="mpx-harness-panel" role="tabpanel" id={`harness-panel-${harness.id}`} aria-labelledby={`harness-tab-${harness.id}`}>
+              <div className="mpx-code-panel"><header><span>MOGPLEX.YAML</span><b>{harness.status}</b></header><pre>{harness.yaml.map(([key, value]) => <code key={key}><span>{key}:</span> {value}{"\n"}</code>)}</pre></div>
+              <div className="mpx-harness-copy"><Eyebrow>{harness.label}</Eyebrow><h3>{harness.description}</h3><ul>{harness.bullets.map((bullet) => <li key={bullet}><Check />{bullet}</li>)}</ul></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="enterprise" className="mpx-enterprise">
+          <div className="mpx-enterprise-card">
+            <div className="mpx-enterprise-copy">
+              <Eyebrow>BUILT FOR YOUR ENVIRONMENT</Eyebrow>
+              <h2>Standardize agents across the enterprise<AccentPeriod /></h2>
+              <p>Put one governed delivery system under every team and every coding harness, while keeping the infrastructure choices you already made.</p>
+              <div className="mpx-enterprise-actions"><a className="mpx-button is-primary" href="mailto:enterprise@mogplex.com">Talk to enterprise →</a><a className="mpx-button is-secondary" href="#capabilities">Review controls</a></div>
+              <div className="mpx-enterprise-tiles">{["SSO/SAML + SCIM", "VPC or self-hosted", "Immutable audit export", "Enterprise SLA"].map((item) => <span key={item}>{item}</span>)}</div>
+            </div>
+            <div className="mpx-connectors">
+              <Eyebrow>CONNECTORS</Eyebrow>
+              <div>{[["SOURCE", "GitHub · GitLab"], ["IDENTITY", "Okta · Entra ID"], ["SECRETS", "Vault · KMS"], ["TELEMETRY", "OTel · Datadog"], ["WORKFLOW", "Slack · Jira"], ["DELIVERY", "CI · Kubernetes"]].map(([label, value]) => <p key={label}><small>{label}</small><b>{value}</b></p>)}</div>
+              <aside><b>POLICY SYNCED</b><p>Every connector inherits workspace RBAC, secret scopes, audit rules, and data controls automatically.</p></aside>
+            </div>
+          </div>
         </section>
       </main>
 
-      <footer className="footer">
-        <div className="footer-brand">
-          <svg
-            className="mark"
-            width="18"
-            height="18"
-            viewBox="0 0 32 32"
-            fill="currentColor"
-            aria-hidden
-          >
-            <path d="M16.0002 26.6667L10.667 32L0 21.3335L5.33326 15.9998L16.0002 26.6667ZM32.0005 21.3335L21.3335 32L16.0002 26.6667L26.6667 15.9998L32.0005 21.3335ZM16.0002 5.33326L5.33326 15.9998L0.000460359 10.667L10.667 0L16.0002 5.33326ZM32.0005 10.6665L26.6667 15.9998L16.0002 5.33326L21.3335 0L32.0005 10.6665Z" />
-          </svg>
-          <span className="mono">MOGPLEX — AGENTIC CI/CD</span>
+      <footer className="mpx-footer">
+        <div className="mpx-footer-main">
+          <div><MogplexWordmark height={26} /><p>The open-source control plane for building, governing, and scaling agentic software delivery.</p><span className="mpx-system-status"><i /> ALL SYSTEMS OPERATIONAL</span></div>
+          <nav aria-label="Footer navigation">
+            <div><b>PLATFORM</b><a href="#control-planes">Control planes</a><a href="#harnesses">Harnesses</a><a href="#run">CLI</a><a href="#enterprise">Connectors</a></div>
+            <div><b>ENTERPRISE</b><a href="#capabilities">Security</a><a href="#capabilities">Governance</a><a href="#enterprise">Deployment</a><a href="mailto:enterprise@mogplex.com">Contact</a></div>
+            <div><b>DEVELOPERS</b><a href="https://docs.mogplex.com">Docs</a><a href="https://docs.mogplex.com/quickstart">Quickstart</a><a href={GITHUB_URL}>GitHub</a><Link href="/workflows">Workflows</Link></div>
+            <div><b>COMPANY</b><Link href="/faq">About</Link><Link href="/conduct">Conduct</Link><a href="https://docs.mogplex.com/security">Security</a><Link href="/privacy">Privacy</Link></div>
+          </nav>
         </div>
-        <nav className="footer-links mono" aria-label="Footer">
-          <Link href="/workflows">Workflows</Link>
-          <Link href="/how-it-works">How it works</Link>
-          <Link href="/faq">FAQ</Link>
-          <a href="https://docs.mogplex.com">Docs</a>
-          <Link href="/request-access">Request access</Link>
-          <Link href="/login">Sign in</Link>
-          <Link href="/terms">Terms</Link>
-          <Link href="/privacy">Privacy</Link>
-          <a href="https://x.com/mogplex">@mogplex</a>
-        </nav>
-        <p className="mono footer-fine">© 2026 Webrenew · Mogplex. Drawn to scale.</p>
+        <div className="mpx-footer-bottom"><span>© 2026 MOGPLEX SYSTEMS. APACHE-2.0.</span><div><Link href="/privacy">PRIVACY</Link><Link href="/terms">TERMS</Link><a href="https://docs.mogplex.com/security">SECURITY</a></div><ThemeMenu /></div>
       </footer>
     </div>
-  );
+  )
 }
