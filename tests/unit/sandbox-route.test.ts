@@ -1399,9 +1399,18 @@ test("GET /api/sandbox reconciles stale sandboxes and returns normalized summari
 test("GET /api/sandbox validates and filters by active team", async () => {
   const { createSandboxGetHandler } = await loadSandboxRouteModule();
   const listCalls: Array<{ userId: string; productTeamId: string | null }> = [];
+  const credentialTeamIds: Array<string | null | undefined> = [];
+  const accessScopes: Array<[string, string | null | undefined]> = [];
 
   const handler = createSandboxGetHandler({
-    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    getSandboxServiceCredentials: async (_request, options) => {
+      credentialTeamIds.push(options?.teamId);
+      return buildSandboxServiceRouteAuth();
+    },
+    loadUserPlatformAccess: async (userId, productTeamId) => {
+      accessScopes.push([userId, productTeamId]);
+      return { allowPlatformAi: true, allowPlatformSandbox: true };
+    },
     resolveActiveTeamCapabilities: async (userId, teamId) => {
       assert.equal(userId, "user-123");
       assert.equal(teamId, "00000000-0000-4000-8000-000000123456");
@@ -1430,12 +1439,59 @@ test("GET /api/sandbox validates and filters by active team", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { sandboxes: [] });
+  assert.deepEqual(credentialTeamIds, [undefined]);
+  assert.deepEqual(accessScopes, [
+    ["user-123", "00000000-0000-4000-8000-000000123456"],
+  ]);
   assert.deepEqual(listCalls, [
     {
       userId: "user-123",
       productTeamId: "00000000-0000-4000-8000-000000123456",
     },
   ]);
+});
+
+test("GET /api/sandbox rejects a foreign team before loading team billing access", async () => {
+  const { createSandboxGetHandler } = await loadSandboxRouteModule();
+  let accessLookups = 0;
+  let listCalls = 0;
+
+  const handler = createSandboxGetHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadUserPlatformAccess: async () => {
+      accessLookups += 1;
+      return { allowPlatformAi: true, allowPlatformSandbox: true };
+    },
+    resolveActiveTeamCapabilities: async () => ({
+      ok: false,
+      status: 403,
+      error: "Forbidden",
+    }),
+    listSandboxesForUser: async () => {
+      listCalls += 1;
+      return [];
+    },
+    findStaleActiveSandboxIds: async () => ({
+      staleIds: new Set(),
+      skippedIds: new Set(),
+    }),
+    stopSandboxRecord: async () => null,
+  });
+
+  const response = await handler(
+    buildSandboxCollectionRequest({
+      init: {
+        headers: {
+          "x-mogplex-team-id": "00000000-0000-4000-8000-000000123456",
+        },
+      },
+    })
+  );
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "Forbidden" });
+  assert.equal(accessLookups, 0);
+  assert.equal(listCalls, 0);
 });
 
 test("GET /api/sandbox?format=cli returns a flat CLI-shaped array and hides historical records", async () => {

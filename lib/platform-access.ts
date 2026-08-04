@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
 import { getBillingBalance } from "@/lib/billing/ledger";
 import { isBillingEnabled } from "@/lib/billing/stripe";
+import { resolveActiveTeamCapabilities } from "@/lib/team-capabilities";
 
 export type PlatformAccess = {
   allowPlatformAi: boolean;
@@ -22,6 +23,15 @@ type LoadUserPlatformAccessDeps = {
     userId: string,
     productTeamId?: string | null
   ) => Promise<boolean>;
+  loadTeamMembership: (
+    userId: string,
+    productTeamId: string
+  ) => Promise<boolean>;
+};
+
+type BillingAccessCacheEntry = {
+  expiresAt: number;
+  value: Promise<boolean>;
 };
 
 const PLATFORM_ACCESS_USER_IDS_ENV = "PLATFORM_ACCESS_USER_IDS";
@@ -29,6 +39,10 @@ const PLATFORM_ACCESS_EMAILS_ENV = "PLATFORM_ACCESS_EMAILS";
 const PLATFORM_ACCESS_EMAIL_DOMAINS_ENV = "PLATFORM_ACCESS_EMAIL_DOMAINS";
 
 const BUILT_IN_ALLOWLISTED_EMAIL_DOMAINS = ["blackbox.ai"] as const;
+// Balance reads are hot and can tolerate webhook-scale staleness. Membership
+// is deliberately checked outside this cache so removals take effect at once.
+const BILLING_ACCESS_CACHE_TTL_MS = 5_000;
+const BILLING_ACCESS_CACHE_MAX_ENTRIES = 256;
 
 export const PLATFORM_AI_ACCESS_ERROR =
   "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own AI Gateway or provider key in Settings > API Keys.";
@@ -152,6 +166,33 @@ async function loadBillingAccess(
   return balance.totalCents > 0;
 }
 
+async function loadTeamMembership(
+  userId: string,
+  productTeamId: string
+): Promise<boolean> {
+  const resolution = await resolveActiveTeamCapabilities(userId, productTeamId);
+  return resolution.ok;
+}
+
+function billingAccessCacheKey(
+  userId: string,
+  productTeamId?: string | null
+): string {
+  return productTeamId ? `team:${productTeamId}` : `user:${userId}`;
+}
+
+function reclaimBillingAccessCache(
+  cache: Map<string, BillingAccessCacheEntry>,
+  now: number
+) {
+  for (const [key, entry] of cache) {
+    if (entry.expiresAt <= now) cache.delete(key);
+  }
+  if (cache.size < BILLING_ACCESS_CACHE_MAX_ENTRIES) return;
+  const oldestKey = cache.keys().next().value as string | undefined;
+  if (oldestKey) cache.delete(oldestKey);
+}
+
 export function createLoadUserPlatformAccess(
   overrides: Partial<LoadUserPlatformAccessDeps> = {}
 ) {
@@ -159,8 +200,34 @@ export function createLoadUserPlatformAccess(
     env: process.env,
     loadProfile: loadPlatformAccessProfile,
     loadBillingAccess,
+    loadTeamMembership,
     ...overrides,
   };
+  const billingAccessCache = new Map<string, BillingAccessCacheEntry>();
+
+  function loadCachedBillingAccess(
+    userId: string,
+    productTeamId?: string | null
+  ): Promise<boolean> {
+    const key = billingAccessCacheKey(userId, productTeamId);
+    const now = Date.now();
+    const cached = billingAccessCache.get(key);
+    if (cached && cached.expiresAt > now) return cached.value;
+    if (cached) billingAccessCache.delete(key);
+
+    reclaimBillingAccessCache(billingAccessCache, now);
+    const entry: BillingAccessCacheEntry = {
+      expiresAt: now + BILLING_ACCESS_CACHE_TTL_MS,
+      value: Promise.resolve().then(() =>
+        deps.loadBillingAccess(userId, productTeamId)
+      ),
+    };
+    billingAccessCache.set(key, entry);
+    void entry.value.catch(() => {
+      if (billingAccessCache.get(key) === entry) billingAccessCache.delete(key);
+    });
+    return entry.value;
+  }
 
   return async function loadUserPlatformAccess(
     userId: string,
@@ -183,7 +250,14 @@ export function createLoadUserPlatformAccess(
       return allowlistedAccess;
     }
 
-    const hasBillingAccess = await deps.loadBillingAccess(
+    if (
+      productTeamId &&
+      !(await deps.loadTeamMembership(userId, productTeamId))
+    ) {
+      return allowlistedAccess;
+    }
+
+    const hasBillingAccess = await loadCachedBillingAccess(
       userId,
       productTeamId
     );

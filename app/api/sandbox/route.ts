@@ -2371,6 +2371,7 @@ export const POST = createSandboxPostHandler();
 
 type SandboxGetDeps = {
   getSandboxServiceCredentials: typeof getSandboxServiceCredentials;
+  loadUserPlatformAccess: typeof loadUserPlatformAccess;
   resolveActiveTeamCapabilities: typeof resolveActiveTeamCapabilities;
   listSandboxesForUser: (
     userId: string,
@@ -2382,6 +2383,7 @@ type SandboxGetDeps = {
 
 const defaultSandboxGetDeps: SandboxGetDeps = {
   getSandboxServiceCredentials,
+  loadUserPlatformAccess,
   resolveActiveTeamCapabilities,
   async listSandboxesForUser(userId, productTeamId) {
     let query = supabaseAdmin
@@ -2466,19 +2468,33 @@ export function createSandboxGetHandler(
 
   return async function GET(request: Request) {
     const activeTeamId = readActiveTeamIdHeader(request);
-    const creds = await deps.getSandboxServiceCredentials(request, {
+    const baseCreds = await deps.getSandboxServiceCredentials(request, {
       allowInternal: true,
-      teamId: activeTeamId,
     });
-    if (!creds)
+    if (!baseCreds)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const productTeam = await resolveSandboxListProductTeamId({
       deps,
-      userId: creds.userId,
+      userId: baseCreds.userId,
       activeTeamId,
     });
     if ("response" in productTeam) return productTeam.response;
+
+    const creds = productTeam.productTeamId
+      ? {
+          ...baseCreds,
+          productTeamId: productTeam.productTeamId,
+          allowPlatformSandbox: (
+            await deps
+              .loadUserPlatformAccess(
+                baseCreds.userId,
+                productTeam.productTeamId
+              )
+              .catch(() => ({ allowPlatformSandbox: false }))
+          ).allowPlatformSandbox,
+        }
+      : baseCreds;
 
     const format = readSandboxFormat(request);
     const sandboxes = await deps.listSandboxesForUser(
