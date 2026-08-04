@@ -1238,15 +1238,15 @@
 }
 
 .mplex-landing {
-  /* Monochrome design tokens (matches reference Mogplex Landing.html) */
-  --mplex-bg: #0a0a0a;
-  --mplex-bg-deep: #050505;
-  --mplex-surface: #141414;
-  --mplex-surface-soft: #1a1a1a;
-  --mplex-surface-raised: #262626;
-  --mplex-foreground: #f5f5f5;
-  --mplex-muted: #a3a3a3;
-  --mplex-faint: #6b6b6b;
+  /* Warm dark tokens aligned with the mpx landing (landing-v2.css dark set) */
+  --mplex-bg: #0b0c0b;
+  --mplex-bg-deep: #080908;
+  --mplex-surface: #111210;
+  --mplex-surface-soft: #151614;
+  --mplex-surface-raised: #272925;
+  --mplex-foreground: #e9e7e1;
+  --mplex-muted: #b7b3a9;
+  --mplex-faint: #77736a;
   --mplex-line: rgba(255, 255, 255, 0.08);
   --mplex-line-strong: rgba(255, 255, 255, 0.16);
   --mplex-grid-line: hsl(0 0% 98% / 0.16);
@@ -1260,11 +1260,11 @@
   --mplex-blue: #d4d4d4;
   --mplex-paper: #ffffff;
   --mplex-shadow: #000000;
-  --mplex-gradient-start: #9aa3ff;
-  --mplex-gradient-mid-a: #c9a0ff;
-  --mplex-gradient-mid-b: #d6a4ff;
-  --mplex-gradient-end: #ffa5d8;
-  --mplex-auth-glow: rgba(140, 110, 220, 0.08);
+  --mplex-gradient-start: #ff4b00;
+  --mplex-gradient-mid-a: #ff6a26;
+  --mplex-gradient-mid-b: #ff7a3c;
+  --mplex-gradient-end: #ffa06b;
+  --mplex-auth-glow: rgba(255, 75, 0, 0.06);
   --mplex-workflow-glow: #af71d2;
   --mplex-live-pulse: #5dcaa5;
   --mplex-cli-cursor: #c9c9c4;
@@ -1323,15 +1323,19 @@
 /* Typography helpers */
 .mplex-landing .mplex-mono {
   font-family:
-    var(--font-geist-mono), "SF Mono", Menlo, Monaco, Consolas, monospace;
+    var(--font-plex-mono, var(--font-geist-mono)), "IBM Plex Mono", "SF Mono",
+    Menlo, Monaco, Consolas, monospace;
 }
 .mplex-landing h1,
 .mplex-landing h2,
 .mplex-landing h3,
 .mplex-landing .mplex-heading,
 .mplex-landing .mplex-serif {
-  font-family: "Mondwest", "Newsreader", "Cormorant Garamond", Georgia, serif;
-  font-feature-settings: "liga", "calt";
+  font-family:
+    var(--font-inter-tight), "Inter Tight", var(--font-geist-sans),
+    ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.038em;
 }
 .mplex-landing .mplex-gradient-text {
   background: linear-gradient(
@@ -1346,13 +1350,17 @@
   color: transparent;
 }
 .mplex-landing .mplex-eyebrow {
-  font-family: var(--font-geist-mono), "SF Mono", Menlo, Monaco, monospace;
+  font-family:
+    var(--font-plex-mono, var(--font-geist-mono)), "IBM Plex Mono", "SF Mono",
+    Menlo, Monaco, monospace;
   font-size: 11.5px;
   letter-spacing: 0.04em;
   color: var(--mplex-violet-dim);
 }
 .mplex-landing .mplex-label-mono {
-  font-family: var(--font-geist-mono), "SF Mono", Menlo, Monaco, monospace;
+  font-family:
+    var(--font-plex-mono, var(--font-geist-mono)), "IBM Plex Mono", "SF Mono",
+    Menlo, Monaco, monospace;
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--mplex-muted);
@@ -1547,16 +1555,12 @@
   line-height: 1;
 }
 .mplex-landing .mplex-btn-primary {
-  background: var(--mplex-paper);
-  color: var(--mplex-bg);
-  box-shadow:
-    inset 0 1px 0
-      color-mix(in srgb, var(--mplex-paper) 90%, transparent),
-    0 6px 18px -6px
-      color-mix(in srgb, var(--mplex-shadow) 60%, transparent);
+  background: #ff4b00;
+  color: #fff;
+  box-shadow: 0 10px 22px -8px rgb(255 75 0 / 60%);
 }
 .mplex-landing .mplex-btn-primary:hover {
-  filter: brightness(0.94);
+  background: #e64300;
   transform: translateY(-1px);
 }
 .mplex-landing .mplex-btn-ghost {

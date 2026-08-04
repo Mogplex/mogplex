@@ -1,183 +1,441 @@
 /* ============================================================
    MOGPLEX — marketing subpages ("sheets")
-   Static drawing-sheets that extend landing-v2: same spine,
-   same Mondwest/Geist system, no GSAP payload. Scoped to .mlp
-   and only additive — landing-v2.css owns the shared tokens.
+   Static sheets that extend the mpx landing system: same tokens,
+   Inter Tight / IBM Plex Mono, paper + blueprint chrome. Scoped
+   to .mpx-sub and only additive — landing-v2.css owns the tokens.
    ============================================================ */
 
-/* ---------- shared sheet chrome ---------- */
-.mlp .sub-wrap { position: relative; }
-
-.mlp .sub-hero {
-  padding: clamp(140px, 20vh, 200px) var(--content-r) clamp(48px, 8vh, 88px) var(--content-x);
+.mpx-sub main {
+  position: relative;
+  z-index: 10;
 }
-.mlp .sub-title {
-  font-size: clamp(2.6rem, 7.5vw, 6.4rem);
-  line-height: 1;
-  letter-spacing: -0.02em;
-  margin: clamp(16px, 3vh, 30px) 0 clamp(20px, 3.5vh, 32px);
-  max-width: 16ch;
-}
-.mlp .sub-lede {
-  max-width: 54ch;
-  color: var(--muted);
-  font-size: clamp(1rem, 1.3vw, 1.19rem);
-  line-height: 1.5;
-}
-.mlp .sub-lede strong { color: var(--fg); font-weight: 500; }
-.mlp .sub-lede a { color: var(--fg); text-underline-offset: 3px; }
-.mlp .sub-lede a:hover { text-decoration: none; }
-.mlp .sub-hero .micro { margin-top: 22px; }
 
-/* current page in the nav reads solid, like a filled node */
-.mlp .nav-links a[aria-current="page"] { color: var(--fg); }
+.mpx-sub .mono {
+  font-family: var(--font-mono);
+}
 
-/* ---------- /workflows — pattern sheets ---------- */
-.mlp .patterns { border-top: 1px dashed var(--grid-line); }
-.mlp .pattern {
+.mpx-sub .micro {
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .grad {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* ---------- sheet hero ---------- */
+.mpx-sub .sub-hero {
+  width: 100%;
+  max-width: 1560px;
+  padding: clamp(72px, 12vh, 128px) 40px clamp(40px, 7vh, 72px);
+  margin: 0 auto;
+}
+
+.mpx-sub .hero-annot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #8a8578;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .annot-rule {
+  width: 56px;
+  height: 1px;
+  background: var(--bracket);
+}
+
+.mpx-sub .sub-title {
+  margin: clamp(16px, 3vh, 28px) 0 clamp(18px, 3vh, 28px);
+  font-size: clamp(2.6rem, 4.55vw, 4.4rem);
+  font-weight: 800;
+  letter-spacing: -0.038em;
+  line-height: 0.99;
+  max-width: 18ch;
+}
+
+.mpx-sub .sub-lede {
+  max-width: 56ch;
+  color: var(--ink-soft);
+  font-size: clamp(0.97rem, 1.15vw, 1.06rem);
+  line-height: 1.625;
+}
+
+.mpx-sub .sub-lede strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.mpx-sub .sub-lede a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+.mpx-sub .sub-lede a:hover {
+  text-decoration: none;
+}
+
+.mpx-sub .sub-hero .micro {
+  margin-top: 20px;
+}
+
+/* ---------- ledger rows (shared by /workflows + /how-it-works) ---------- */
+.mpx-sub .patterns,
+.mpx-sub .runsheet {
+  width: 100%;
+  max-width: 1560px;
+  padding: 0 40px;
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
+}
+
+.mpx-sub .pattern,
+.mpx-sub .stage {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: clamp(20px, 4vw, 72px);
-  padding: clamp(44px, 7vh, 80px) var(--content-r) clamp(44px, 7vh, 80px) var(--content-x);
+  padding: clamp(44px, 7vh, 72px) 0 clamp(44px, 7vh, 72px) 26px;
 }
-.mlp .pattern + .pattern { border-top: 1px dashed var(--grid-line); }
-.mlp .pattern .node { top: calc(clamp(44px, 7vh, 80px) + 10px); }
 
-.mlp .pattern-num {
-  font-family: var(--font-serif);
-  font-size: clamp(2rem, 3.6vw, 3.2rem);
-  line-height: 0.9;
-  color: transparent;
-  -webkit-text-stroke: 1px
-    color-mix(in srgb, var(--paper) 32%, transparent);
-  margin-bottom: 16px;
+.mpx-sub .pattern + .pattern,
+.mpx-sub .stage + .stage {
+  border-top: 1px solid var(--border-soft);
 }
-.mlp .pattern-name {
-  font-size: clamp(1.5rem, 2.7vw, 2.3rem);
-  line-height: 1.05;
-  letter-spacing: -0.01em;
+
+/* blueprint "+" node marker on each row */
+.mpx-sub .node {
+  position: absolute;
+  top: clamp(44px, 7vh, 72px);
+  left: 0;
+  color: var(--accent);
+  font: 500 14px/1 var(--font-mono);
+}
+
+.mpx-sub .node::before {
+  content: "+";
+}
+
+/* ---------- /workflows — pattern sheets ---------- */
+.mpx-sub .pattern-num {
+  margin-bottom: 14px;
+  color: var(--accent);
+  font: 500 11px/1.4 var(--font-mono);
+  letter-spacing: 0.2em;
+}
+
+.mpx-sub .pattern-name {
   margin-bottom: 12px;
-  max-width: 16ch;
+  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  max-width: 18ch;
 }
-.mlp .pattern-chips {
+
+.mpx-sub .pattern-chips {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
+  padding: 0;
+  margin: 14px 0 0;
   color: var(--muted);
 }
-.mlp .pattern-chips li {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--paper) 1.5%, transparent);
-  padding: 6px 12px;
-  font-size: 11px;
-}
-.mlp .pattern-chips li:first-child { border-color: var(--line-strong); color: var(--fg); }
 
-.mlp .flowline {
+.mpx-sub .pattern-chips li {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--white);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .pattern-chips li:first-child {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mpx-sub .flowline {
   display: block;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  background: var(--card);
+  color: var(--ink);
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: var(--fg);
-  background: color-mix(in srgb, var(--paper) 1.5%, transparent);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 13px 16px;
   overflow-x: auto;
   white-space: nowrap;
-  margin-bottom: 20px;
 }
-.mlp .flowline i {
-  font-style: normal;
-  color: var(--faint);
+
+.mpx-sub .flowline i {
   padding: 0 9px;
-}
-.mlp .pattern-desc {
-  color: var(--muted);
-  font-size: clamp(0.95rem, 1.15vw, 1.05rem);
-  line-height: 1.55;
-  max-width: 58ch;
-}
-.mlp .pattern-gate {
-  margin-top: 18px;
   color: var(--faint);
-  /* mono ch is narrow — 82ch visually matches the 58ch body column */
-  max-width: 82ch;
+  font-style: normal;
 }
-.mlp .pattern-gate b { color: var(--muted); font-weight: 400; }
-.mlp .pattern .install { margin-top: 22px; }
 
-/* ---------- /how-it-works — run ledger ---------- */
-.mlp .runsheet { border-top: 1px dashed var(--grid-line); }
-.mlp .stage {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: clamp(18px, 4vw, 72px);
-  padding: clamp(48px, 8vh, 92px) var(--content-r) clamp(40px, 6vh, 68px) var(--content-x);
-}
-.mlp .stage + .stage { border-top: 1px dashed var(--grid-line); }
-.mlp .stage .node { top: calc(clamp(48px, 8vh, 92px) + 8px); }
-
-.mlp .stage-t { color: var(--faint); margin-bottom: 12px; }
-.mlp .stage-t b { color: var(--fg); font-weight: 400; }
-.mlp .stage-name {
-  font-size: clamp(1.5rem, 2.7vw, 2.3rem);
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-  max-width: 16ch;
-}
-.mlp .stage-desc {
-  color: var(--muted);
-  font-size: clamp(0.95rem, 1.15vw, 1.05rem);
-  line-height: 1.55;
+.mpx-sub .pattern-desc,
+.mpx-sub .stage-desc {
   max-width: 58ch;
+  color: var(--ink-body);
+  font-size: clamp(0.92rem, 1.1vw, 1rem);
+  line-height: 1.65;
 }
-.mlp .stage-fact {
+
+.mpx-sub .pattern-gate {
+  max-width: 82ch;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
   margin-top: 18px;
-  padding-left: 14px;
-  border-left: 1px solid var(--line-strong);
   color: var(--muted);
-  max-width: 80ch;
+  font-size: 11px;
   line-height: 1.7;
 }
-.mlp .stage-fact b { color: var(--fg); font-weight: 400; }
+
+.mpx-sub .pattern-gate b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.mpx-sub .install {
+  display: inline-block;
+  padding: 11px 16px;
+  border-radius: 6px;
+  margin-top: 22px;
+  background: var(--dark);
+  color: #e9e7e1;
+  font-size: 12.5px;
+}
+
+.mpx-sub .t-dim {
+  color: #77736a;
+}
+
+/* ---------- /how-it-works — run ledger ---------- */
+.mpx-sub .stage-t {
+  margin-bottom: 10px;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .stage-t b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.mpx-sub .stage-name {
+  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  max-width: 18ch;
+}
+
+.mpx-sub .stage-fact {
+  max-width: 80ch;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.mpx-sub .stage-fact b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* what stays yours */
+.mpx-sub .terms {
+  width: 100%;
+  max-width: 1560px;
+  padding: clamp(44px, 7vh, 72px) 40px;
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
+}
+
+.mpx-sub .terms-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(20px, 3vw, 40px);
+}
+
+.mpx-sub .term-k {
+  margin-bottom: 10px;
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+}
+
+.mpx-sub .term-v {
+  color: var(--ink-body);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.mpx-sub .term-v a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+.mpx-sub .shipped {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: clamp(36px, 6vh, 56px);
+}
+
+.mpx-sub .node-end {
+  position: static;
+}
+
+.mpx-sub .shipped-label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .shipped-label b {
+  color: var(--green-deep);
+  font-weight: 600;
+}
+
+.dark .mpx-sub .shipped-label b {
+  color: var(--green-soft);
+}
 
 /* ---------- /faq — objection ledger ---------- */
-.mlp .faq-list {
-  border-top: 1px dashed var(--grid-line);
-  padding: 0 var(--content-r) clamp(56px, 9vh, 110px) var(--content-x);
+.mpx-sub .faq-list {
+  width: 100%;
+  max-width: 1560px;
+  padding: 0 40px clamp(56px, 9vh, 96px);
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
 }
-.mlp .faq-item {
+
+.mpx-sub .faq-item {
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr);
   gap: clamp(14px, 3vw, 40px);
-  padding: clamp(30px, 4.5vh, 48px) 0;
   max-width: 1100px;
+  padding: clamp(28px, 4.5vh, 44px) 0;
 }
-.mlp .faq-item + .faq-item { border-top: 1px dashed var(--grid-line); }
-.mlp .faq-idx { color: var(--faint); padding-top: 7px; }
-.mlp .faq-q {
-  font-size: clamp(1.3rem, 2.2vw, 1.8rem);
-  line-height: 1.1;
-  letter-spacing: -0.01em;
+
+.mpx-sub .faq-item + .faq-item {
+  border-top: 1px solid var(--border-soft);
 }
-.mlp .faq-a {
-  margin-top: 12px;
-  color: var(--muted);
-  line-height: 1.6;
+
+.mpx-sub .faq-idx {
+  padding-top: 6px;
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.mpx-sub .faq-q {
+  font-size: clamp(1.2rem, 1.8vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.mpx-sub .faq-a {
   max-width: 62ch;
+  margin-top: 12px;
+  color: var(--ink-body);
+  font-size: 15px;
+  line-height: 1.65;
 }
-.mlp .faq-a a { color: var(--fg); text-underline-offset: 3px; }
+
+.mpx-sub .faq-a a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+/* ---------- close CTA ---------- */
+.mpx-sub .mpx-sub-close {
+  padding: clamp(72px, 12vh, 120px) 40px;
+  border-top: 1px solid var(--border);
+  background: var(--wash);
+  text-align: center;
+}
+
+.mpx-sub .mpx-sub-close .mpx-eyebrow {
+  justify-content: center;
+  display: flex;
+}
+
+.mpx-sub .mpx-sub-close h2 {
+  margin: 20px 0 0;
+  font-size: clamp(2.1rem, 3.6vw, 3.3rem);
+  font-weight: 800;
+  letter-spacing: -0.038em;
+  line-height: 1.02;
+}
+
+.mpx-sub .mpx-sub-close-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  margin-top: 36px;
+}
+
+.mpx-sub .mpx-sub-close-actions p {
+  color: var(--faint);
+  font: 400 10px/1.4 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
-  .mlp .pattern,
-  .mlp .stage { grid-template-columns: minmax(0, 1fr); gap: 18px; }
-  .mlp .faq-item { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .mlp .faq-idx { padding-top: 0; }
-  .mlp .pattern-num { font-size: 1.9rem; }
+  .mpx-sub .sub-hero,
+  .mpx-sub .patterns,
+  .mpx-sub .runsheet,
+  .mpx-sub .terms,
+  .mpx-sub .faq-list,
+  .mpx-sub .mpx-sub-close {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .mpx-sub .pattern,
+  .mpx-sub .stage {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    padding-left: 22px;
+  }
+
+  .mpx-sub .terms-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mpx-sub .faq-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .mpx-sub .faq-idx {
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .mpx-sub .terms-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

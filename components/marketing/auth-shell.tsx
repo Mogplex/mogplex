@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
+import { IBM_Plex_Mono } from "next/font/google";
 import { MarketingHeader } from "@/components/marketing/header";
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+});
 
 type AuthShellProps = {
   eyebrow?: ReactNode;
@@ -19,7 +26,9 @@ export function AuthShell({
   children,
 }: AuthShellProps) {
   return (
-    <main className="mplex-landing relative min-h-dvh overflow-hidden pt-14">
+    <main
+      className={`mplex-landing ${plexMono.variable} relative min-h-dvh overflow-hidden pt-14`}
+    >
       <div aria-hidden className="mplex-auth-grid" />
       <div aria-hidden className="mplex-auth-vignette" />
       <MarketingHeader mode="login" />
