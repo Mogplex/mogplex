@@ -53,6 +53,9 @@ function defaultProductDeps(): StripeProductDeps {
   };
 }
 
+const topupProductLookups = new WeakMap<StripeProductDeps, Promise<string>>();
+const sharedProductDeps = defaultProductDeps();
+
 export async function ensureStripeCustomer(
   account: BillingAccount,
   deps: StripeCustomerDeps = defaultCustomerDeps()
@@ -72,12 +75,29 @@ export async function ensureStripeCustomer(
 // doesn't mint an orphan ad-hoc Product in the Stripe catalog. Stripe's list
 // promise is async-iterable, so this remains correct beyond the first page.
 export async function resolveTopupProductId(
-  deps: StripeProductDeps = defaultProductDeps()
+  deps: StripeProductDeps = sharedProductDeps
 ): Promise<string> {
-  for await (const product of deps.listProducts({ active: true, limit: 100 })) {
-    if (product.metadata.mogplex_key === "usage_topup") return product.id;
+  const cached = topupProductLookups.get(deps);
+  if (cached) return cached;
+
+  const lookup = (async () => {
+    for await (const product of deps.listProducts({
+      active: true,
+      limit: 100,
+    })) {
+      if (product.metadata.mogplex_key === "usage_topup") return product.id;
+    }
+    throw new Error("Stripe top-up product not found — catalog is not seeded");
+  })();
+  // Successful lookups remain cached until this runtime instance recycles.
+  // Replacing the seeded product therefore requires recycling warm instances.
+  topupProductLookups.set(deps, lookup);
+  try {
+    return await lookup;
+  } catch (error) {
+    topupProductLookups.delete(deps);
+    throw error;
   }
-  throw new Error("Stripe top-up product not found — catalog is not seeded");
 }
 
 export async function resolveCatalogPriceId(
@@ -116,8 +136,16 @@ export async function resolveCatalogPriceId(
 export function subscriptionCheckoutIdempotencyKey(
   account: BillingAccount
 ): string {
-  // period_anchor changes after a completed subscription, so a later genuine
-  // re-subscribe gets a new key while concurrent first-subscribe requests do
-  // not create two Checkout sessions.
-  return `billing-subscribe:${account.id}:${account.period_anchor ?? "new"}`;
+  // Concurrent requests share one key. The cancellation RPC advances this
+  // generation exactly once per subscription, so a later re-subscribe cannot
+  // replay an old session without unrelated account updates splitting races.
+  const generation = account.subscription_checkout_generation ?? 0;
+  return `billing-subscribe:${account.id}:${generation}`;
+}
+
+export function topupCheckoutIdempotencyKey(
+  accountId: string,
+  attemptId: string
+): string {
+  return `billing-topup:${accountId}:${attemptId}`;
 }

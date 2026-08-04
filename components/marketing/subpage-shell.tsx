@@ -10,6 +10,7 @@ import Link from "next/link";
 import {
   BlueprintOverlay,
   Eyebrow,
+  interTight,
   MpxFooter,
   MpxHeader,
   plexMono,
@@ -32,7 +33,9 @@ export function MarketingSubpageShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`mpx-landing mpx-sub ${plexMono.variable}`}>
+    <div
+      className={`mpx-landing mpx-sub ${interTight.variable} ${plexMono.variable}`}
+    >
       <BlueprintOverlay />
       <MpxHeader />
 

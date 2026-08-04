@@ -10,6 +10,7 @@ import {
   resolveCatalogPriceId,
   resolveTopupProductId,
   subscriptionCheckoutIdempotencyKey,
+  topupCheckoutIdempotencyKey,
 } from "@/lib/billing/stripe-checkout";
 
 // Checkout flows (pricing-plan 02 §3): mode=subscription for plan sign-up,
@@ -127,23 +128,41 @@ export async function POST(request: Request) {
         },
         quantity: 1,
       };
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    customer: customerId,
-    client_reference_id: account.id,
-    line_items: [lineItem],
-    automatic_tax: { enabled: true },
-    payment_intent_data: {
-      // credit_cents = the pre-tax amount the webhook credits to the ledger
-      // (amount_received includes automatic_tax, which is not spendable).
-      metadata: {
-        kind: "topup",
-        billing_account_id: account.id,
-        credit_cents: String(creditCents),
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "payment",
+      customer: customerId,
+      client_reference_id: account.id,
+      line_items: [lineItem],
+      automatic_tax: { enabled: true },
+      payment_intent_data: {
+        // credit_cents = the pre-tax amount the webhook credits to the ledger
+        // (amount_received includes automatic_tax, which is not spendable).
+        metadata: {
+          kind: "topup",
+          billing_account_id: account.id,
+          credit_cents: String(creditCents),
+        },
       },
+      success_url: appUrl(`${returnPath}?billing=topup`),
+      cancel_url: appUrl(`${returnPath}?billing=cancelled`),
     },
-    success_url: appUrl(`${returnPath}?billing=topup`),
-    cancel_url: appUrl(`${returnPath}?billing=cancelled`),
-  });
+    {
+      idempotencyKey: topupCheckoutIdempotencyKey(
+        account.id,
+        validation.request.attemptId
+      ),
+    }
+  );
+  if (!session.url) {
+    return NextResponse.json(
+      {
+        error:
+          "This Checkout session can no longer be used — try again to create a new session",
+        code: "checkout_session_unavailable",
+      },
+      { status: 409 }
+    );
+  }
   return NextResponse.json({ url: session.url });
 }

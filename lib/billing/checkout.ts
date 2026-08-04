@@ -11,6 +11,7 @@ export type CheckoutRequest =
       kind: "topup";
       preset?: string;
       amountCents?: number;
+      attemptId: string;
       returnPath: string;
     };
 
@@ -21,6 +22,8 @@ export type CheckoutValidation =
 // Redirect targets must be same-app paths — never caller-supplied absolute
 // URLs (open-redirect via Stripe's success_url otherwise).
 const SAFE_RETURN_PATH = /^\/[\w\-./]*$/;
+const CHECKOUT_ATTEMPT_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function sanitizeReturnPath(value: unknown): string {
   if (
@@ -51,15 +54,22 @@ export function validateCheckoutRequest(body: unknown): CheckoutValidation {
     return { ok: true, request: { kind: "subscribe", plan, returnPath } };
   }
   if (kind === "topup") {
-    const { preset, amountCents } = body as {
+    const { preset, amountCents, attemptId } = body as {
       preset?: unknown;
       amountCents?: unknown;
+      attemptId?: unknown;
     };
+    if (typeof attemptId !== "string" || !CHECKOUT_ATTEMPT_ID.test(attemptId)) {
+      return { ok: false, error: "Invalid checkout attempt" };
+    }
     if (typeof preset === "string") {
       if (!findTopupPreset(preset)) {
         return { ok: false, error: "Unknown top-up preset" };
       }
-      return { ok: true, request: { kind: "topup", preset, returnPath } };
+      return {
+        ok: true,
+        request: { kind: "topup", preset, attemptId, returnPath },
+      };
     }
     if (typeof amountCents !== "number" || !Number.isInteger(amountCents)) {
       return { ok: false, error: "Top-up amount must be integer cents" };
@@ -78,7 +88,10 @@ export function validateCheckoutRequest(body: unknown): CheckoutValidation {
         error: `Top-ups above $${TOPUP_MAX_CENTS / 100} require a support request`,
       };
     }
-    return { ok: true, request: { kind: "topup", amountCents, returnPath } };
+    return {
+      ok: true,
+      request: { kind: "topup", amountCents, attemptId, returnPath },
+    };
   }
   return { ok: false, error: "Unknown checkout kind" };
 }

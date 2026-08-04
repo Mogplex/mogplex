@@ -6,7 +6,7 @@
    Hash links are root-relative (/#run) so they work from any route. */
 
 import Link from "next/link";
-import { IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Inter_Tight } from "next/font/google";
 import { useTheme } from "next-themes";
 import {
   type ReactNode,
@@ -26,6 +26,12 @@ export const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
+});
+
+export const interTight = Inter_Tight({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter-tight",
 });
 
 export const GITHUB_URL = "https://github.com/mogplex/mogplex";
@@ -67,7 +73,7 @@ function StarGlyph() {
 
 const GITHUB_REPO_API = "https://api.github.com/repos/mogplex/mogplex";
 
-async function fetchStarCount(): Promise<number | null> {
+export async function fetchStarCount(): Promise<number | null> {
   const response = await fetch(GITHUB_REPO_API, {
     headers: { Accept: "application/vnd.github+json" },
   });
@@ -80,10 +86,16 @@ async function fetchStarCount(): Promise<number | null> {
     : null;
 }
 
-function formatStarCount(count: number): string {
+export function formatStarCount(count: number): string {
   if (count < 1000) return String(count);
   const thousands = count / 1000;
   return `${thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10}k`;
+}
+
+export function shouldShowStarCount(
+  count: number | null | undefined
+): count is number {
+  return typeof count === "number" && count > 0;
 }
 
 export function GithubPill({ small = false }: { small?: boolean }) {
@@ -92,7 +104,7 @@ export function GithubPill({ small = false }: { small?: boolean }) {
     shouldRetryOnError: false,
     dedupingInterval: 3_600_000,
   });
-  const showCount = typeof stars === "number" && stars > 0;
+  const showCount = shouldShowStarCount(stars);
 
   return (
     <a

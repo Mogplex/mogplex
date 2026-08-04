@@ -19,6 +19,7 @@ function accountFixture(
     stripe_subscription_id: null,
     tier: "free",
     period_anchor: null,
+    subscription_checkout_generation: 0,
     status: "active",
     ...overrides,
   };
@@ -83,18 +84,60 @@ test("top-up product lookup follows Stripe pagination beyond 100 products", asyn
   assert.equal(productId, "prod_100");
 });
 
-test("subscription checkout idempotency serializes every plan for one billing period", async () => {
+test("top-up product lookup is shared across checkout requests", async () => {
+  const { resolveTopupProductId } = await loadCheckoutRuntime();
+  let calls = 0;
+  const deps = {
+    async *listProducts() {
+      calls += 1;
+      yield { id: "prod_topup", metadata: { mogplex_key: "usage_topup" } };
+    },
+  };
+
+  assert.equal(await resolveTopupProductId(deps), "prod_topup");
+  assert.equal(await resolveTopupProductId(deps), "prod_topup");
+  assert.equal(calls, 1);
+});
+
+test("subscription checkout idempotency advances only with cancellation generation", async () => {
   const { subscriptionCheckoutIdempotencyKey } = await loadCheckoutRuntime();
 
   assert.equal(
     subscriptionCheckoutIdempotencyKey(accountFixture()),
-    "billing-subscribe:acct-1:new"
+    "billing-subscribe:acct-1:0"
   );
   assert.equal(
     subscriptionCheckoutIdempotencyKey(
-      accountFixture({ period_anchor: "2026-08-01" })
+      accountFixture({
+        tier: "free",
+        period_anchor: "2026-08-01",
+        updated_at: "2026-08-04T21:00:00.000Z",
+        subscription_checkout_generation: 1,
+      })
     ),
-    "billing-subscribe:acct-1:2026-08-01"
+    "billing-subscribe:acct-1:1"
+  );
+  assert.equal(
+    subscriptionCheckoutIdempotencyKey(
+      accountFixture({
+        status: "past_due",
+        updated_at: "2026-08-04T22:00:00.000Z",
+        subscription_checkout_generation: 1,
+      })
+    ),
+    "billing-subscribe:acct-1:1"
+  );
+});
+
+test("top-up checkout retries reuse an attempt-scoped idempotency key", async () => {
+  const { topupCheckoutIdempotencyKey } = await loadCheckoutRuntime();
+
+  assert.equal(
+    topupCheckoutIdempotencyKey(
+      "acct-1",
+      "0198f3e8-9c41-4d40-8cb9-4afdfac76f01"
+    ),
+    "billing-topup:acct-1:0198f3e8-9c41-4d40-8cb9-4afdfac76f01"
   );
 });
 
