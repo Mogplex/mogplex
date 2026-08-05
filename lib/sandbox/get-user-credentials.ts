@@ -65,7 +65,11 @@ export function isSandboxCapabilityDeniedError(
  * personal-billing and env-var flows must keep working without it.
  */
 function readDefaultVercelProjectId(): string | null {
-  return process.env.VERCEL_PROJECT_ID?.trim() || null;
+  return (
+    process.env.VERCEL_PROJECT_ID?.trim() ||
+    process.env.PLATFORM_VERCEL_PROJECT_ID?.trim() ||
+    null
+  );
 }
 
 export const PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR =
