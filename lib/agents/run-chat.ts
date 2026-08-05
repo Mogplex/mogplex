@@ -1,6 +1,9 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { buildTools } from "@/lib/agents/tools";
-import { buildSystemPrompt } from "@/lib/agents/system-prompt";
+import {
+  buildSystemPrompt,
+  resolveAgentDeliveryBranch,
+} from "@/lib/agents/system-prompt";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 import { resolveUserDefaultModelId } from "@/lib/models/default-model";
 import {
@@ -148,7 +151,11 @@ function buildToolsInput(context: ChatAgentContext) {
     repoId: context.repoId ?? undefined,
     repoOwner: context.repoOwner ?? undefined,
     repoName: context.repoName ?? undefined,
-    repoBranch: context.repoBranch ?? undefined,
+    repoBranch: resolveAgentDeliveryBranch({
+      repoBranch: context.repoBranch,
+      repoBaseBranch: context.repoBaseBranch,
+      sandboxId: context.sandboxId,
+    }),
     repoBaseBranch: context.repoBaseBranch ?? undefined,
     workspaceSessionId: context.workspaceSessionId ?? null,
     conversationId: context.conversationId ?? null,

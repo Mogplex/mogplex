@@ -114,6 +114,9 @@ test("successful code changes are committed, pushed, and return a PR URL", async
     pullRequestUrl: "https://github.com/acme/repo/pull/42",
   });
   assert.match(commands[0]?.command ?? "", /git status --porcelain/);
+  assert.match(commands[0]?.command ?? "", /git ls-files --others/);
+  assert.match(commands[0]?.command ?? "", /git add -u/);
+  assert.doesNotMatch(commands[0]?.command ?? "", /git add -A/);
   assert.match(commands[0]?.command ?? "", /git commit/);
   assert.match(commands[0]?.command ?? "", /git push -u origin/);
   assert.match(commands[0]?.command ?? "", /gh pr create/);

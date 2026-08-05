@@ -57,8 +57,29 @@ function immediateExecJson(body: Record<string, unknown>, init?: ResponseInit) {
   });
 }
 
+const REMOTE_GIT_COMMANDS = new Set([
+  "clone",
+  "fetch",
+  "pull",
+  "push",
+  "ls-remote",
+]);
+
 function commandMayNeedGithubAuth(command: string) {
-  return /(?:^|[^\w-])(?:git|gh)(?:\s|$)/.test(command);
+  const tokens = command
+    .split(/\s+/)
+    .map((token) => token.replace(/^[;&|()]+|[;&|()]+$/g, ""));
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index] === "gh") return true;
+    if (
+      tokens[index] === "git" &&
+      tokens.slice(index + 1).some((token) => REMOTE_GIT_COMMANDS.has(token))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Map of CLI binary name → harness ID for auto-install detection. */

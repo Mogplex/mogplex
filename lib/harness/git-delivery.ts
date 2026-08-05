@@ -116,7 +116,7 @@ fi
   if (result.exitCode !== 0) {
     const detail = [result.stdout, result.stderr].filter(Boolean).join("\n");
     throw new Error(
-      `Could not synchronize ${workingBranch} before the agent run${detail.trim() ? `: ${detail.trim()}` : ""}`
+      `Could not synchronize ${workingBranch} before the agent run${detail.trim() ? `: ${detail.trim()}` : ""}. Resolve the branch in Terminal or start a new sandbox, then retry.`
     );
   }
 
@@ -155,7 +155,13 @@ if [ "$current_branch" != "$MOGPLEX_WORKING_BRANCH" ]; then
 fi
 changed=false
 if [ -n "$(git status --porcelain)" ]; then
-  git add -A
+  untracked_files="$(git ls-files --others --exclude-standard)"
+  if [ -n "$untracked_files" ]; then
+    echo "Untracked files remain after the agent run; commit intended new files explicitly before delivery:" >&2
+    echo "$untracked_files" >&2
+    exit 1
+  fi
+  git add -u
   if ! git diff --cached --quiet; then
     git commit -m "$MOGPLEX_PR_TITLE"
     changed=true

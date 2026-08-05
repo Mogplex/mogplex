@@ -11,6 +11,23 @@ type PromptContext = {
   connections?: Connection[];
 };
 
+export function resolveAgentDeliveryBranch(input: {
+  repoBranch?: string | null;
+  repoBaseBranch?: string | null;
+  sandboxId?: string | null;
+}) {
+  const baseBranch = input.repoBaseBranch || "main";
+  const currentBranch = input.repoBranch || baseBranch;
+  if (currentBranch !== baseBranch || !input.sandboxId) return currentBranch;
+
+  const sandboxSlug = (input.sandboxId || "workspace")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  return `mogplex/agent-${sandboxSlug || "workspace"}`;
+}
+
 export function buildSystemPrompt(ctx: PromptContext): string {
   const {
     repoFullName,
@@ -22,8 +39,13 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     sandboxId,
     connections,
   } = ctx;
-  const branch = repoBranch || "main";
   const baseBranch = repoBaseBranch || "main";
+  const startsOnBaseBranch = (repoBranch || baseBranch) === baseBranch;
+  const branch = resolveAgentDeliveryBranch({
+    repoBranch,
+    repoBaseBranch: baseBranch,
+    sandboxId,
+  });
   const hasSandbox = Boolean(sandboxId);
   const hasRepo = Boolean(repoFullName);
 
@@ -39,6 +61,10 @@ When using read_file or list_files, always default to owner="${repoOwner}", repo
 `
     : "";
 
+  const gitSyncInstruction = startsOnBaseBranch
+    ? `Before changing code, fetch ${baseBranch} from origin, then switch to the isolated delivery branch ${branch}. If ${branch} exists locally or on origin, check it out and fast-forward it; otherwise create it from origin/${baseBranch}. Never commit or push directly to ${baseBranch}.`
+    : `Before changing code, synchronize the sandbox with \`git fetch origin && git checkout ${branch} && git pull --ff-only origin ${branch}\`.`;
+
   const sandboxBlock = hasSandbox
     ? `
 <sandbox>
@@ -51,7 +77,7 @@ Prefer sandbox tools (bash, write_file) over GitHub API tools (read_file, list_f
 
 When editing files, read the current content first with bash (e.g. \`cat src/app/page.tsx\`), then use write_file to apply changes. For multi-file changes, batch them and verify with bash.
 
-Before changing code, synchronize the sandbox with \`git fetch origin && git checkout ${branch} && git pull --ff-only origin ${branch}\`. If you make code changes, run the relevant tests, commit and push ${branch}, then call github_create_pull_request with base ${baseBranch}. Include the pull request URL in your final response. Never leave completed work only inside the sandbox.
+${gitSyncInstruction} If you make code changes, run the relevant tests, commit and push ${branch}, then call github_create_pull_request with head ${branch} and base ${baseBranch}. Include the pull request URL in your final response. Never leave completed work only inside the sandbox.
 
 You can stop the sandbox with stop_sandbox when the user is done.
 </sandbox>

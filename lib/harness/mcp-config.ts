@@ -158,9 +158,9 @@ type McpConfigWritableSandbox = Pick<Sandbox, "writeFiles" | "readFile">;
 export const CLAUDE_MCP_CONFIG_FILENAME = ".mogplex/mcp.json";
 
 // Self-ignoring .gitignore pinned inside .mogplex/. The `*` pattern ignores
-// every sibling (including this file itself), so `git add -A` in the sandbox
-// checkout can never stage mcp.json bearer tokens — regardless of whether the
-// user's repo root has a .mogplex ignore rule.
+// every sibling (including this file itself), so broad git staging in the
+// sandbox checkout can never include mcp.json bearer tokens — regardless of
+// whether the user's repo root has a .mogplex ignore rule.
 const MOGPLEX_GITIGNORE_FILENAME = ".mogplex/.gitignore";
 const MOGPLEX_GITIGNORE_CONTENT = "*\n";
 
@@ -168,7 +168,7 @@ const MOGPLEX_GITIGNORE_CONTENT = "*\n";
  * Seed `.mogplex/.gitignore` with `*` only when the repo doesn't already own
  * one. If the user tracks their own `.mogplex/.gitignore`, overwriting it
  * would dirty the working tree and — because tracked files override ignore
- * rules — could leak the change into a `git add -A` commit. On a read error
+ * rules — could leak the change into a broad agent commit. On a read error
  * (file missing in the sandbox VFS, permission, etc.) we assume absent and
  * seed it: the whole point is defense-in-depth, so failing-open here would
  * defeat the guard.
@@ -195,7 +195,7 @@ async function ensureMogplexGitignore(
  * overwritten even when the user has removed every MCP. Seeds a
  * self-ignoring `.mogplex/.gitignore` the first time (never overwrites a
  * repo-owned one) so the config cannot be accidentally committed by a
- * harness `git add -A`.
+ * harness commit.
  */
 export async function writeClaudeMcpConfig(
   sandbox: McpConfigWritableSandbox,
