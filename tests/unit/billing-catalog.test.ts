@@ -73,6 +73,8 @@ test("USD formatting preserves cent precision", () => {
   assert.equal(formatUsd(2000), "$20.00");
   assert.equal(formatUsd(2050), "$20.50");
   assert.equal(formatUsd(1051), "$10.51");
+  assert.equal(formatUsd(-500), "-$5.00");
+  assert.equal(formatUsd(-1051), "-$10.51");
 });
 
 test("finders return null for unknown keys", () => {
