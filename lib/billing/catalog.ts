@@ -74,7 +74,8 @@ export const TOPUP_MIN_CENTS = 1000;
 export const TOPUP_MAX_CENTS = 500000;
 
 export function formatUsd(amountCents: number): string {
-  return `$${(amountCents / 100).toFixed(2)}`;
+  const sign = amountCents < 0 ? "-" : "";
+  return `${sign}$${(Math.abs(amountCents) / 100).toFixed(2)}`;
 }
 
 export function findPlanPrice(lookupKey: string): PlanPrice | null {
