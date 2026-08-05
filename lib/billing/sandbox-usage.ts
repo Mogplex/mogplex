@@ -473,10 +473,17 @@ async function stopSandboxAfterBillingAdmissionFailure(input: {
   // active unless the provider confirms termination so the reconciler can
   // retry instead of hiding a VM that may still be consuming compute.
   if (confirmedStopped && input.record) {
-    await stopSandboxRecord(input.record.id, {
-      expectedSandboxId: input.record.sandbox_id,
-      stopReason: input.reason,
-    }).catch(() => null);
+    try {
+      await stopSandboxRecord(input.record.id, {
+        expectedSandboxId: input.record.sandbox_id,
+        stopReason: input.reason,
+      });
+    } catch (error) {
+      console.warn(
+        "[sandbox/billing] Provider session stopped but its platform record could not be updated; lifecycle reconciliation will recover:",
+        error
+      );
+    }
   }
 }
 

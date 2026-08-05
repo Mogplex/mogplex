@@ -513,6 +513,46 @@ test("a depleted sandbox missing after stop closes at the confirmed meter time",
   assert.equal(summary.depleted, 1);
 });
 
+test("depletion after an un-timestamped provider rotation closes at the meter cursor", async () => {
+  const finalizedAt: Date[] = [];
+  let rotated = false;
+  const replacement = {
+    name: "provider-sandbox-1",
+    async stop() {
+      rotated = true;
+    },
+    currentSession: () =>
+      rotated
+        ? {
+            sessionId: "provider-session-2",
+            status: "running",
+          }
+        : {
+            sessionId: "provider-session-1",
+            status: "running",
+            createdAt: STARTED_AT,
+            startedAt: STARTED_AT,
+            updatedAt: NOW,
+          },
+  };
+  const summary = await reconcileSandboxBillingSessions({
+    ...baseDeps(),
+    getSandbox: async () => replacement as never,
+    getBalance: async () => ({
+      includedCents: 0,
+      purchasedCents: 0,
+      totalCents: 0,
+    }),
+    finalizeClose: async (_attempt, endedAt) => {
+      finalizedAt.push(endedAt);
+      return { finalized: true, metered: true };
+    },
+  });
+
+  assert.deepEqual(finalizedAt, [STARTED_AT]);
+  assert.equal(summary.depleted, 1);
+});
+
 test("a failed depleted stop reopens the exact close attempt", async () => {
   const reopened: unknown[] = [];
   const stillRunning = {

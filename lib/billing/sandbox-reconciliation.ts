@@ -234,7 +234,10 @@ async function stopDepletedSandbox(input: {
 
   // The provider rotated despite the stop attempt. Close the paid predecessor
   // at the replacement boundary, then stop the unfunded replacement too.
-  await input.deps.finalizeClose(attempt, provider.startedAt);
+  const replacementBoundary = provider.hasReliableStartedAt
+    ? provider.startedAt
+    : new Date(input.session.metered_through_at);
+  await input.deps.finalizeClose(attempt, replacementBoundary);
   await stopSandboxWithConfirmation({
     record: input.record,
     sandbox: observed,
