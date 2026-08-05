@@ -4063,6 +4063,20 @@ export function FlowsPane() {
     return true
   }, [draft, updateDraft])
 
+  const duplicateContextMenuNode = useCallback((nodeId: string) => {
+    updateDraft((current) => {
+      const selected = selectFlowDraftNode(current, nodeId)
+      return duplicateSelectedFlowDraftAgents(selected).snapshot
+    }, { mergeKey: "graph-duplicate" })
+  }, [updateDraft])
+
+  const deleteContextMenuNode = useCallback((nodeId: string) => {
+    updateDraft((current) => {
+      const selected = selectFlowDraftNode(current, nodeId)
+      return deleteSelectedFlowDraftItems(selected).snapshot
+    }, { mergeKey: "graph-delete" })
+  }, [updateDraft])
+
   const copySelectedCanvasItems = useCallback(() => {
     if (!draft) return false
     const clipboard = copySelectedFlowDraftItems(draft)
@@ -4266,6 +4280,9 @@ export function FlowsPane() {
   }, [draft, updateDraft])
 
   const handlePaneContextMenu = useCallback((event: MouseEvent | ReactMouseEvent) => {
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest(".react-flow__node, .react-flow__edge")) return
+
     event.preventDefault()
     if ("stopPropagation" in event) {
       event.stopPropagation()
@@ -4320,7 +4337,13 @@ export function FlowsPane() {
       }
 
       if (contextMenu) {
-        // The menu owns the remaining canvas shortcuts until it closes.
+        // Destructive canvas shortcuts dismiss the menu without reaching the
+        // current selection. Editable fields retain their native behavior via
+        // the guard above.
+        if (event.key === "Delete" || event.key === "Backspace") {
+          event.preventDefault()
+          closeContextMenu()
+        }
         return
       }
 
@@ -5293,7 +5316,9 @@ export function FlowsPane() {
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
                   onSelectionChange={onSelectionChange}
-                  onMoveStart={() => closeContextMenu()}
+                  onMoveStart={(event) => {
+                    if (event) closeContextMenu()
+                  }}
                   onMoveEnd={(_event, nextViewport) => {
                     updateDraft((current) => ({
                       ...current,
@@ -5571,7 +5596,9 @@ export function FlowsPane() {
                               data-testid="flow-context-node-duplicate"
                               type="button"
                               onClick={() => runContextMenuAction(() => {
-                                duplicateSelectedCanvasItems()
+                                if (contextMenu.nodeId) {
+                                  duplicateContextMenuNode(contextMenu.nodeId)
+                                }
                               })}
                               className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                             >
@@ -5581,7 +5608,9 @@ export function FlowsPane() {
                               data-testid="flow-context-node-delete"
                               type="button"
                               onClick={() => runContextMenuAction(() => {
-                                deleteSelectedCanvasItems()
+                                if (contextMenu.nodeId) {
+                                  deleteContextMenuNode(contextMenu.nodeId)
+                                }
                               })}
                               className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm text-accent-red transition-colors hover:bg-accent hover:text-accent-red"
                             >

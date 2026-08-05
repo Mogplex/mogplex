@@ -6,7 +6,7 @@ import {
 } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import { selectAppOption } from "./helpers/app-select";
-import type { Page, Route } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 
 const connectedUser = {
   id: E2E_SCOPE_USER.id,
@@ -26,6 +26,30 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
     status,
     contentType: "application/json",
     body: JSON.stringify(data),
+  });
+}
+
+async function dispatchContextMenu(
+  target: Locator,
+  position: { xRatio?: number; yRatio?: number } = {}
+) {
+  await expect(target).toBeVisible();
+  const bounds = await target.boundingBox();
+  if (!bounds) throw new Error("Context-menu target has no bounding box");
+
+  const xRatio = position.xRatio ?? 0.5;
+  const yRatio = position.yRatio ?? 0.5;
+  const clientX =
+    bounds.x + Math.max(1, Math.min(bounds.width - 1, bounds.width * xRatio));
+  const clientY =
+    bounds.y + Math.max(1, Math.min(bounds.height - 1, bounds.height * yRatio));
+
+  await target.dispatchEvent("contextmenu", {
+    clientX,
+    clientY,
+    button: 2,
+    bubbles: true,
+    cancelable: true,
   });
 }
 
@@ -208,13 +232,7 @@ test("canvas context menu adds and configures workflow nodes, then closes on esc
   await page.waitForLoadState("networkidle");
 
   const pane = page.locator(".react-flow__pane");
-  await pane.dispatchEvent("contextmenu", {
-    clientX: 540,
-    clientY: 180,
-    button: 2,
-    bubbles: true,
-    cancelable: true,
-  });
+  await dispatchContextMenu(pane, { xRatio: 0.35, yRatio: 0.25 });
 
   const menu = page.getByTestId("flow-context-menu");
   await expect(menu).toBeVisible();
@@ -224,26 +242,14 @@ test("canvas context menu adds and configures workflow nodes, then closes on esc
 
   // Click on canvas to deselect before opening next context menu
   await pane.click({ position: { x: 50, y: 50 } });
-  await pane.dispatchEvent("contextmenu", {
-    clientX: 900,
-    clientY: 120,
-    button: 2,
-    bubbles: true,
-    cancelable: true,
-  });
+  await dispatchContextMenu(pane, { xRatio: 0.55, yRatio: 0.3 });
   await expect(menu).toBeVisible();
   await page.getByTestId("flow-context-add-condition").click();
   await expect(page.locator(".react-flow__node")).toHaveCount(6);
 
   // Click on canvas to deselect before opening next context menu
   await pane.click({ position: { x: 50, y: 50 } });
-  await pane.dispatchEvent("contextmenu", {
-    clientX: 980,
-    clientY: 160,
-    button: 2,
-    bubbles: true,
-    cancelable: true,
-  });
+  await dispatchContextMenu(pane, { xRatio: 0.7, yRatio: 0.35 });
   await expect(menu).toBeVisible();
   await page.getByTestId("flow-context-add-transform").click();
   await expect(page.locator(".react-flow__node")).toHaveCount(7);
@@ -260,13 +266,7 @@ test("canvas context menu adds and configures workflow nodes, then closes on esc
     "metadata.changed_files"
   );
 
-  await pane.dispatchEvent("contextmenu", {
-    clientX: 1040,
-    clientY: 200,
-    button: 2,
-    bubbles: true,
-    cancelable: true,
-  });
+  await dispatchContextMenu(pane, { xRatio: 0.75, yRatio: 0.4 });
   await expect(menu).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
@@ -284,30 +284,17 @@ test("agent node context menu duplicates and deletes nodes", async ({
     .locator(".react-flow__node")
     .filter({ hasText: "Reviewer B" })
     .first();
-  await agentNode.dispatchEvent("contextmenu", {
-    clientX: 760,
-    clientY: 180,
-    button: 2,
-    bubbles: true,
-    cancelable: true,
-  });
+  await dispatchContextMenu(agentNode);
   await expect(page.getByTestId("flow-context-node-duplicate")).toBeVisible();
-  // Force click to bypass stability checks - the menu re-renders during selection
-  await page.getByTestId("flow-context-node-duplicate").click({ force: true });
+  await page.getByTestId("flow-context-node-duplicate").click();
   await expect(page.locator(".react-flow__node")).toHaveCount(5);
 
   // Wait for the duplicated node to be selected and stable
   const selectedNode = page.locator(".react-flow__node.selected").first();
   await expect(selectedNode).toBeVisible();
-  await selectedNode.dispatchEvent("contextmenu", {
-    clientX: 820,
-    clientY: 230,
-    button: 2,
-    bubbles: true,
-    cancelable: true,
-  });
+  await dispatchContextMenu(selectedNode);
   await expect(page.getByTestId("flow-context-node-delete")).toBeVisible();
-  await page.getByTestId("flow-context-node-delete").click({ force: true });
+  await page.getByTestId("flow-context-node-delete").click();
   await expect(page.locator(".react-flow__node")).toHaveCount(4);
 });
 
@@ -323,13 +310,7 @@ test("an open node context menu owns destructive canvas shortcuts", async ({
     .locator(".react-flow__node")
     .filter({ hasText: "Reviewer B" })
     .first();
-  await agentNode.dispatchEvent("contextmenu", {
-    clientX: 760,
-    clientY: 180,
-    button: 2,
-    bubbles: true,
-    cancelable: true,
-  });
+  await dispatchContextMenu(agentNode);
 
   const menu = page.getByTestId("flow-context-menu");
   await expect(menu).toBeVisible();
@@ -374,10 +355,7 @@ test("structural nodes do not expose destructive context actions", async ({
   await page.goto(scopedPath("workflows"));
   await page.waitForLoadState("networkidle");
 
-  await page
-    .locator(".react-flow__node")
-    .filter({ hasText: "PR opened" })
-    .click({ button: "right" });
+  await dispatchContextMenu(page.locator('.react-flow__node[data-id="start"]'));
   const menu = page.getByTestId("flow-context-menu");
   await expect(menu).toBeVisible();
   await expect(menu.getByTestId("flow-context-node-duplicate")).toHaveCount(0);
