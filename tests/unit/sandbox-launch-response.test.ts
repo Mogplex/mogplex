@@ -462,6 +462,48 @@ test("launch failures are tagged with unique attempt ids per scoped key", async 
   }
 });
 
+test("stop fallback publishes a manual stop reason", async () => {
+  const { useSandboxStore } = await loadSandboxStore();
+  const record = buildSandboxRecord({
+    id: "sandbox-running",
+    repo_id: "repo-1",
+    sandbox_id: "vm-running",
+    status: "running",
+    health_status: "running",
+  });
+  const initialState = useSandboxStore.getState();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    assert.equal(input.toString(), "/api/sandbox/sandbox-running/stop");
+    return Response.json({});
+  }) as typeof fetch;
+
+  useSandboxStore.setState({
+    sandboxes: {},
+    sandboxesById: {},
+    sandboxIdsByRepoId: {},
+    activeSandboxId: null,
+  });
+  useSandboxStore.getState().setSandboxRecord(record);
+
+  try {
+    await useSandboxStore.getState().stop(record.id);
+
+    const stopped = useSandboxStore.getState().sandboxesById[record.id];
+    assert.equal(stopped?.runtime_summary.status, "stopped");
+    assert.equal(stopped?.stop_reason, "manual");
+  } finally {
+    globalThis.fetch = originalFetch;
+    useSandboxStore.setState({
+      sandboxes: initialState.sandboxes,
+      sandboxesById: initialState.sandboxesById,
+      sandboxIdsByRepoId: initialState.sandboxIdsByRepoId,
+      activeSandboxId: initialState.activeSandboxId,
+    });
+  }
+});
+
 test("restart treats 409 'still booting' as a transient retry signal, not a launch error", async () => {
   // /api/sandbox/[id]/restart returns 409 when sandbox_id is still "pending"
   // (the original launch hasn't finished). The store must not stamp that as a

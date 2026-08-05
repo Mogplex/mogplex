@@ -27,9 +27,7 @@ import type { PaneType, SplitDir } from "@/hooks/use-split-panes"
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox"
 import {
   isSandboxUiBooting,
-  isSandboxUiErrored,
   isSandboxUiRuntimeRunning,
-  isSandboxUiStopped,
   resolveSandboxUiState,
 } from "@/lib/sandbox/ui-state"
 import { useRepos } from "@/hooks/use-repos"
@@ -41,6 +39,10 @@ import {
 } from "@/lib/sandbox/session-retarget"
 import { AsciiLoader } from "@/components/ascii-loader"
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider"
+import {
+  getSessionSandboxRestartCandidate,
+  type SessionSandboxRestartCandidate,
+} from "@/lib/sandbox/session-auto-restart"
 
 type ActiveRepoProps = {
   id: string
@@ -52,13 +54,6 @@ type ActiveRepoProps = {
 
 type ActiveSandboxProps = {
   id: string
-}
-
-type SessionSandboxRestartCandidate = {
-  repoId: string
-  sessionId: string
-  previousSandboxId: string
-  pendingSandboxBranch: string | null
 }
 
 function buildActiveRepoProps(
@@ -93,48 +88,6 @@ function resetAutoRestartedSandboxRef(
     && autoRestartedRef.current !== activeSessionSandboxId
   ) {
     autoRestartedRef.current = null
-  }
-}
-
-function getSessionSandboxRestartCandidate({
-  activeRepoId,
-  activeSessionId,
-  activeSessionSandbox,
-  activeSessionSandboxId,
-  autoRestartedSandboxId,
-  sandboxCreating,
-}: {
-  activeRepoId: string | undefined
-  activeSessionId: string
-  activeSessionSandbox: SandboxRecord | null
-  activeSessionSandboxId: string | null
-  autoRestartedSandboxId: string | null
-  sandboxCreating: boolean
-}): SessionSandboxRestartCandidate | null {
-  if (!activeRepoId || !activeSessionSandboxId || !activeSessionSandbox) {
-    return null
-  }
-
-  if (
-    sandboxCreating
-    || autoRestartedSandboxId === activeSessionSandboxId
-  ) {
-    return null
-  }
-
-  const uiState = resolveSandboxUiState({
-    session: null,
-    record: activeSessionSandbox,
-  })
-  if (!isSandboxUiStopped(uiState) && !isSandboxUiErrored(uiState)) {
-    return null
-  }
-
-  return {
-    repoId: activeRepoId,
-    sessionId: activeSessionId,
-    previousSandboxId: activeSessionSandboxId,
-    pendingSandboxBranch: activeSessionSandbox.working_branch ?? null,
   }
 }
 
