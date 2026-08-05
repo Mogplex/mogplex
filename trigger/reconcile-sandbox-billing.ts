@@ -48,6 +48,7 @@ export const sandboxBillingReconciliationTask = schedules.task({
   // one-minute granularity as the provider rate instead of waiting for the
   // broader five-minute sandbox hygiene pass.
   cron: "* * * * *",
+  queue: { concurrencyLimit: 1 },
   maxDuration: 240,
   retry: { maxAttempts: 1 },
   run: async () => runScheduledSandboxBillingReconciliation(),

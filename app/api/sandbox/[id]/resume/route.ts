@@ -29,8 +29,8 @@ import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
+  presentSandboxBillingAdmissionError,
   requireSandboxBillingSession,
-  sandboxBillingAdmissionHttpStatus,
 } from "@/lib/billing/sandbox-usage";
 
 /**
@@ -289,11 +289,12 @@ export function createSandboxResumeHandler(
         },
       })
       .catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : "Failed to resume sandbox";
+        const billingError = presentSandboxBillingAdmissionError(err);
         return {
-          __error: message,
-          __status: sandboxBillingAdmissionHttpStatus(err) ?? 502,
+          __error:
+            billingError?.message ??
+            (err instanceof Error ? err.message : "Failed to resume sandbox"),
+          __status: billingError?.status ?? 502,
         } as const;
       });
 
@@ -309,11 +310,14 @@ export function createSandboxResumeHandler(
       await deps.requireSandboxBillingSession(record.id, sandbox);
     } catch (error) {
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-      const message =
-        error instanceof Error ? error.message : "Sandbox metering failed";
+      const billingError = presentSandboxBillingAdmissionError(error);
       return NextResponse.json(
-        { error: message },
-        { status: sandboxBillingAdmissionHttpStatus(error) ?? 503 }
+        {
+          error:
+            billingError?.message ??
+            "Sandbox billing is temporarily unavailable",
+        },
+        { status: billingError?.status ?? 503 }
       );
     }
 

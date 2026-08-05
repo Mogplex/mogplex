@@ -936,9 +936,17 @@ export async function runSandboxAutoPauseCheck(
   const previousHealthStatus =
     claimResult.previousHealthStatus ?? finalRecord.health_status ?? "running";
   let sandbox: Awaited<ReturnType<typeof getSandbox>>;
-  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>>;
+  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+    null;
   try {
     billingClose = await deps.prepareSandboxBillingClose(finalRecord.id);
+  } catch (billingError) {
+    console.warn(
+      "[sandbox/auto-pause] Billing close preparation failed; stopping idle compute and leaving ledger closure to reconciliation:",
+      billingError
+    );
+  }
+  try {
     sandbox = await deps.getSandbox(finalRecord.sandbox_id, credentials);
     await sandbox.stop({ blocking: true });
   } catch (error) {

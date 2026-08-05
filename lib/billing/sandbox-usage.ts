@@ -10,6 +10,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 // rounding. Stripe price and product IDs never participate in compute billing.
 export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
 export const SANDBOX_BALANCE_REQUIRED_SQLSTATE = "MP001";
+export const SANDBOX_BILLING_UNAVAILABLE_MESSAGE =
+  "Sandbox billing is temporarily unavailable. Please try again.";
 
 export type ActiveSandboxBillingSession = {
   id: string;
@@ -88,9 +90,11 @@ export function isSandboxBillingBalanceRequiredError(error: unknown) {
   );
 }
 
-export function sandboxBillingAdmissionHttpStatus(error: unknown) {
+export function presentSandboxBillingAdmissionError(error: unknown) {
   if (!(error instanceof SandboxBillingAdmissionError)) return null;
-  return error.reason === "no_billing_account" ? 402 : 503;
+  return error.reason === "no_billing_account"
+    ? { status: 402, message: error.message }
+    : { status: 503, message: SANDBOX_BILLING_UNAVAILABLE_MESSAGE };
 }
 
 type SandboxBillingProvider = Pick<Sandbox, "name" | "currentSession">;
@@ -491,6 +495,12 @@ export async function requireSandboxBillingSession(
     result = await syncSandboxBillingSession({ record, sandbox });
   } catch (error) {
     const depleted = isBalanceAdmissionFailure(error);
+    if (!depleted) {
+      console.error("[sandbox/billing] Provider session admission failed", {
+        sandboxRecordId,
+        error,
+      });
+    }
     await stopSandboxAfterBillingAdmissionFailure({
       sandbox,
       record,

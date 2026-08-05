@@ -18,7 +18,7 @@ import type { VercelAuthMode } from "@/lib/vercel/service";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes/types";
 import {
   createSandboxBillingOnResume,
-  sandboxBillingAdmissionHttpStatus,
+  presentSandboxBillingAdmissionError,
 } from "@/lib/billing/sandbox-usage";
 
 type SandboxHealthRecord = {
@@ -171,7 +171,7 @@ async function readCompatibilityDevLog(
   try {
     return await deps.readDevLog(record, credentials);
   } catch (error) {
-    if (sandboxBillingAdmissionHttpStatus(error)) throw error;
+    if (presentSandboxBillingAdmissionError(error)) throw error;
     return record.dev_log || "";
   }
 }
@@ -408,11 +408,11 @@ export function createSandboxHealthGetHandler(
           }
         );
       } catch (error) {
-        const status = sandboxBillingAdmissionHttpStatus(error);
-        if (!status) throw error;
+        const billingError = presentSandboxBillingAdmissionError(error);
+        if (!billingError) throw error;
         return NextResponse.json(
-          { error: error instanceof Error ? error.message : "Billing failed" },
-          { status }
+          { error: billingError.message },
+          { status: billingError.status }
         );
       }
 
@@ -460,11 +460,11 @@ export function createSandboxHealthGetHandler(
         credentialSource: sandboxData.context.ownership.credentialSource,
       });
     } catch (error) {
-      const status = sandboxBillingAdmissionHttpStatus(error);
-      if (!status) throw error;
+      const billingError = presentSandboxBillingAdmissionError(error);
+      if (!billingError) throw error;
       return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Billing failed" },
-        { status }
+        { error: billingError.message },
+        { status: billingError.status }
       );
     }
     const { nextRecord, vercelDiagnostics } = refreshed;

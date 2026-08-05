@@ -35,8 +35,8 @@ import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
+  presentSandboxBillingAdmissionError,
   requireSandboxBillingSession,
-  sandboxBillingAdmissionHttpStatus,
 } from "@/lib/billing/sandbox-usage";
 
 // ---- Legacy restart record (non-persistent path, re-POSTs /api/sandbox) ----
@@ -360,11 +360,15 @@ async function handlePersistentRestart(
     await deps.requireSandboxBillingSession(record.id, sandbox);
   } catch (err) {
     await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+    const billingError = presentSandboxBillingAdmissionError(err);
     const message =
-      err instanceof Error ? err.message : "Failed to wake sandbox for restart";
+      billingError?.message ??
+      (err instanceof Error
+        ? err.message
+        : "Failed to wake sandbox for restart");
     return NextResponse.json(
       { error: message },
-      { status: sandboxBillingAdmissionHttpStatus(err) ?? 502 }
+      { status: billingError?.status ?? 502 }
     );
   }
 

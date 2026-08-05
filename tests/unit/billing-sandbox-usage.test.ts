@@ -3,7 +3,10 @@ import test from "node:test";
 import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
+  presentSandboxBillingAdmissionError,
   readSandboxProviderSession,
+  SandboxBillingAdmissionError,
+  SANDBOX_BILLING_UNAVAILABLE_MESSAGE,
   syncSandboxBillingSession,
   type ActiveSandboxBillingSession,
 } from "@/lib/billing/sandbox-usage";
@@ -91,6 +94,20 @@ test("readSandboxProviderSession uses the provider start and identifiers", () =>
     startedAt: STARTED_AT,
     stoppedAt: null,
     updatedAt: STARTED_AT,
+  });
+});
+
+test("metering failures expose a generic 503 message", () => {
+  const presented = presentSandboxBillingAdmissionError(
+    new SandboxBillingAdmissionError(
+      "sandbox record private-id provider id mismatch",
+      "metering_failed"
+    )
+  );
+
+  assert.deepEqual(presented, {
+    status: 503,
+    message: SANDBOX_BILLING_UNAVAILABLE_MESSAGE,
   });
 });
 

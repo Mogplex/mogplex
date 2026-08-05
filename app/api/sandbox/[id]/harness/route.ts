@@ -61,7 +61,7 @@ import type { HarnessId } from "@/lib/harness/config";
 import type { MemoryScope } from "@/lib/memories-client";
 import {
   createSandboxBillingOnResume,
-  sandboxBillingAdmissionHttpStatus,
+  presentSandboxBillingAdmissionError,
 } from "@/lib/billing/sandbox-usage";
 
 const VALID_HARNESSES = new Set<HarnessId>(["claude-code", "codex"]);
@@ -1207,8 +1207,10 @@ export function createSandboxHarnessPostHandler(
         });
       }
 
+      const billingError = presentSandboxBillingAdmissionError(err);
       const rawMessage =
-        err instanceof Error ? err.message : "Harness execution failed";
+        billingError?.message ??
+        (err instanceof Error ? err.message : "Harness execution failed");
       const apiDetail = extractVercelApiErrorDetail(err);
       const message = apiDetail ? `${rawMessage} — ${apiDetail}` : rawMessage;
 
@@ -1272,7 +1274,7 @@ export function createSandboxHarnessPostHandler(
       }
       return NextResponse.json(
         { error: message },
-        { status: sandboxBillingAdmissionHttpStatus(err) ?? 500 }
+        { status: billingError?.status ?? 500 }
       );
     }
   };

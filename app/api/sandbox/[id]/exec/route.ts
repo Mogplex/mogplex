@@ -28,7 +28,7 @@ import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import {
   createSandboxBillingOnResume,
-  sandboxBillingAdmissionHttpStatus,
+  presentSandboxBillingAdmissionError,
 } from "@/lib/billing/sandbox-usage";
 import {
   buildSandboxRouteErrorResponse,
@@ -513,10 +513,13 @@ export function createSandboxExecPostHandler(
         cwd: commandCwd || repoRootDirectory || ".",
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Execution failed";
+      const billingError = presentSandboxBillingAdmissionError(err);
+      const message =
+        billingError?.message ??
+        (err instanceof Error ? err.message : "Execution failed");
       return NextResponse.json(
         { error: message },
-        { status: sandboxBillingAdmissionHttpStatus(err) ?? 500 }
+        { status: billingError?.status ?? 500 }
       );
     } finally {
       if (!lockReleaseHandedOff) {

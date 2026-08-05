@@ -85,6 +85,7 @@ function buildDeps(
     activeAiCallSequence?: boolean[];
     runningAutomation?: boolean;
     claimResult?: boolean;
+    billingCloseError?: Error;
     stopError?: Error;
     mode?: "observe" | "enabled";
     updateResult?: unknown;
@@ -177,7 +178,10 @@ function buildDeps(
         events.push(event);
         return `event-${events.length}`;
       },
-      prepareSandboxBillingClose: async () => null,
+      prepareSandboxBillingClose: async () => {
+        if (input.billingCloseError) throw input.billingCloseError;
+        return null;
+      },
       finalizeSandboxBillingClose: async () => ({
         finalized: false,
         metered: false,
@@ -548,6 +552,30 @@ test("auto-pause restores running state when remote stop fails after claim", asy
     expectedSandboxId: "vm_123",
     fromStatuses: "pausing",
   });
+});
+
+test("auto-pause still stops idle compute when billing close preparation fails", async () => {
+  const { runSandboxAutoPauseCheck } = await loadAutoPauseModule();
+  const harness = buildDeps({
+    mode: "enabled",
+    billingCloseError: new Error("billing RPC unavailable"),
+  });
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...args: unknown[]) => warnings.push(args);
+
+  try {
+    const result = await runSandboxAutoPauseCheck(
+      buildPayload(),
+      harness.deps as never
+    );
+
+    assert.equal(result.decisionCode, "auto_pause_succeeded");
+    assert.equal(harness.stopCalls, 1);
+    assert.match(String(warnings[0]?.[0]), /stopping idle compute/);
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test("auto-pause duplicate worker runs no-op when claim fails", async () => {
