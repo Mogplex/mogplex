@@ -511,9 +511,15 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   await page
     .getByRole("combobox", { name: "Repo-linked Vercel Project" })
     .selectOption("repo-app");
+  const pinProjectResponse = page.waitForResponse(
+    (response) =>
+      /\/api\/repos(?:\?.*)?$/.test(response.url()) &&
+      response.request().method() === "PATCH"
+  );
   await page
     .getByRole("button", { name: "Save Settings" })
     .evaluate((el: HTMLElement) => el.click());
+  await pinProjectResponse;
   await expect(page.getByText("Space Settings")).not.toBeVisible();
 
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
@@ -542,9 +548,15 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   await page
     .getByRole("combobox", { name: "Repo-linked Vercel Project" })
     .selectOption("");
+  const clearProjectResponse = page.waitForResponse(
+    (response) =>
+      /\/api\/repos(?:\?.*)?$/.test(response.url()) &&
+      response.request().method() === "PATCH"
+  );
   await page
     .getByRole("button", { name: "Save Settings" })
     .evaluate((el: HTMLElement) => el.click());
+  await clearProjectResponse;
 
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
     sandbox_billing_mode_override: "user_vercel_project",
