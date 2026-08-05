@@ -1,6 +1,5 @@
 const ERROR_KEY_PATTERN =
   /(?:^|_)(?:error|errors|exception|stack|stacktrace|stderr|failure|failure_message|last_start_error|cancel_error)(?:$|_)/i;
-const DIAGNOSTIC_MESSAGE_KEY_PATTERN = /(?:^|_)(?:message|reason)(?:$|_)/i;
 
 const ENV_CONFIGURATION_PATTERN =
   /\b[A-Z][A-Z0-9_]{2,}\b.{0,80}\b(?:required|missing|unset|not configured)\b/i;
@@ -11,6 +10,42 @@ const INTERNAL_PROVIDER_PATTERN =
   /\b(?:postgres|postgrest|database|supabase|neon|stripe|vercel|trigger\.dev)\b.{0,100}\b(?:error|failed|failure|unavailable|denied|timeout)\b/i;
 const FAILURE_SIGNAL_PATTERN =
   /\b(?:error|failed|failure|exception|invalid|unavailable|denied|timeout|timed out|429|rate limit|cancelled|canceled|aborted)\b/i;
+const FAILURE_STATE_PATTERN =
+  /^(?:failed|failure|start_failed|cancel_failed|error|errored)$/i;
+const SAFE_MACHINE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,80}$/;
+const SAFE_FAILURE_FIELDS = new Set([
+  "id",
+  "status",
+  "state",
+  "type",
+  "event_type",
+  "event_kind",
+  "outcome",
+  "source",
+  "source_kind",
+  "source_type",
+  "model",
+  "name",
+  "slug",
+  "path",
+  "line",
+  "severity",
+]);
+const FAILURE_CONTEXT_RESET_KEYS = new Set([
+  "agent",
+  "ai_calls",
+  "dispatch_events",
+  "events",
+  "latest_ai_call",
+  "latest_dispatch_event",
+  "node_runs",
+  "repo",
+  "review_findings",
+  "sandbox_context",
+  "tool_calls",
+  "input",
+  "input_preview",
+]);
 
 type FailureKind =
   | "cancelled"
@@ -87,17 +122,34 @@ function looksLikeInternalDiagnostic(value: string) {
   );
 }
 
+function isSafeFailureField(key: string) {
+  const normalized = key.toLowerCase();
+  return (
+    SAFE_FAILURE_FIELDS.has(normalized) ||
+    normalized.endsWith("_id") ||
+    normalized.endsWith("_type") ||
+    normalized.endsWith("_at")
+  );
+}
+
 function sanitizeValue(
   value: unknown,
   incidentId: string,
-  parentKey?: string
+  entityKind: string,
+  parentKey?: string,
+  failureContext = false
 ): unknown {
   if (typeof value === "string") {
     if (
+      parentKey &&
+      /(?:^|_)(?:code|error_code)(?:$|_)/i.test(parentKey) &&
+      SAFE_MACHINE_CODE_PATTERN.test(value)
+    ) {
+      return value;
+    }
+    if (
+      (failureContext && (!parentKey || !isSafeFailureField(parentKey))) ||
       (parentKey && ERROR_KEY_PATTERN.test(parentKey)) ||
-      (parentKey &&
-        DIAGNOSTIC_MESSAGE_KEY_PATTERN.test(parentKey) &&
-        FAILURE_SIGNAL_PATTERN.test(value)) ||
       looksLikeInternalDiagnostic(value)
     ) {
       return presentObservabilityFailure(value, incidentId);
@@ -105,19 +157,34 @@ function sanitizeValue(
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeValue(entry, incidentId, parentKey));
+    return value.map((entry) =>
+      sanitizeValue(entry, incidentId, entityKind, parentKey, failureContext)
+    );
   }
   if (!value || typeof value !== "object") return value;
 
   const record = value as Record<string, unknown>;
   const childIncidentId =
     typeof record.id === "string"
-      ? buildObservabilityIncidentId("RUN", record.id)
+      ? buildObservabilityIncidentId(entityKind, record.id)
       : incidentId;
+  const recordFailureContext =
+    failureContext ||
+    (Boolean(parentKey) && ERROR_KEY_PATTERN.test(parentKey ?? "")) ||
+    [record.status, record.state, record.outcome, record.event_type].some(
+      (candidate) =>
+        typeof candidate === "string" && FAILURE_STATE_PATTERN.test(candidate)
+    );
   return Object.fromEntries(
     Object.entries(record).map(([key, entry]) => [
       key,
-      sanitizeValue(entry, childIncidentId, key),
+      sanitizeValue(
+        entry,
+        childIncidentId,
+        entityKind,
+        key,
+        recordFailureContext && !FAILURE_CONTEXT_RESET_KEYS.has(key)
+      ),
     ])
   );
 }
@@ -129,7 +196,8 @@ export function sanitizeObservabilityPayload<T>(
 ): T {
   return sanitizeValue(
     value,
-    buildObservabilityIncidentId(entityKind, entityId)
+    buildObservabilityIncidentId(entityKind, entityId),
+    entityKind
   ) as T;
 }
 
@@ -140,13 +208,12 @@ export function sanitizeObservabilityEvent<T extends Record<string, unknown>>(
     "EVENT",
     typeof event.id === "string" ? event.id : "unknown"
   );
-  const sanitized = sanitizeValue(event, incidentId) as T;
+  const sanitized = sanitizeValue(event, incidentId, "EVENT") as T;
   if (
     typeof event.message === "string" &&
     (event.event_type === "failed" ||
       (event.event_type === "log" &&
-        (looksLikeInternalDiagnostic(event.message) ||
-          classifyFailure(event.message) !== "internal")))
+        looksLikeInternalDiagnostic(event.message)))
   ) {
     (sanitized as Record<string, unknown>).message =
       presentObservabilityFailure(event.message, incidentId) as T["message"];
@@ -161,7 +228,7 @@ export function sanitizeObservabilityToolEntry<
     "TOOL",
     typeof entry.id === "string" ? entry.id : "unknown"
   );
-  const sanitized = sanitizeValue(entry, incidentId) as T;
+  const sanitized = sanitizeValue(entry, incidentId, "TOOL") as T;
   for (const key of ["output", "output_preview"] as const) {
     const original = entry[key];
     if (

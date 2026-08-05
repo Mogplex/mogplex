@@ -803,8 +803,12 @@ function AgentPane({
             return;
           }
 
+          // The second POST has claimed the prepared row. From this point the
+          // active-run controls own cancellation; a client stream or sync
+          // failure must not cancel a healthy server-side harness run.
+          preparedAiCallId = null;
+
           if (!res.body) {
-            await cancelPreparedCall();
             updateLocalMsg(pane.id, outputMsgId, "No response stream");
             return;
           }

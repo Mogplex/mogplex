@@ -21,7 +21,11 @@ function subscription(
 }
 
 test("annual grant periods start after the anchor day and skip invoice months", async () => {
-  const { annualGrantPeriod } = await loadAnnualGrants();
+  const { annualGrantLedgerStartPeriod, annualGrantPeriod } =
+    await loadAnnualGrants();
+
+  assert.equal(annualGrantLedgerStartPeriod("2026-08-15"), "2026-08");
+  assert.equal(annualGrantLedgerStartPeriod("not-a-date"), null);
 
   assert.equal(
     annualGrantPeriod("2026-08-15", new Date("2026-09-14T23:59:59Z")),

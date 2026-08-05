@@ -59,28 +59,42 @@ export async function loadAnnualGrantCandidates(): Promise<
 
   // Loading posted schedule periods with the candidates lets the daily task
   // avoid a Stripe request (and a guaranteed duplicate ledger RPC) once an
-  // account is current. The source_ref remains the final concurrency guard.
+  // account is current. period_anchor advances on each Stripe invoice, so
+  // grouping by its YYYY-MM value bounds every ledger lookup to the active
+  // subscription cycle. The source_ref remains the final concurrency guard.
+  const candidatesByAnchorPeriod = new Map<string, AnnualGrantCandidate[]>();
+  for (const candidate of candidates) {
+    const anchorPeriod = annualGrantLedgerStartPeriod(candidate.period_anchor);
+    if (!anchorPeriod) continue;
+    const group = candidatesByAnchorPeriod.get(anchorPeriod) ?? [];
+    group.push(candidate);
+    candidatesByAnchorPeriod.set(anchorPeriod, group);
+  }
+
   const ledgerRows: Array<{ account_id: string; period: string }> = [];
-  for (
-    let index = 0;
-    index < candidates.length;
-    index += LEDGER_ACCOUNT_BATCH_SIZE
-  ) {
-    const accountIds = candidates
-      .slice(index, index + LEDGER_ACCOUNT_BATCH_SIZE)
-      .map((candidate) => candidate.id);
-    const batch = (await fetchAllRows(
-      () =>
-        supabaseAdmin
-          .from("credit_ledger")
-          .select("id, account_id, period, created_at")
-          .in("account_id", accountIds)
-          .eq("kind", "grant")
-          .contains("metadata", { source: "annual_schedule" }),
-      "created_at",
-      "posted annual billing grants"
-    )) as Array<{ account_id: string; period: string }>;
-    ledgerRows.push(...batch);
+  for (const [anchorPeriod, groupedCandidates] of candidatesByAnchorPeriod) {
+    for (
+      let index = 0;
+      index < groupedCandidates.length;
+      index += LEDGER_ACCOUNT_BATCH_SIZE
+    ) {
+      const accountIds = groupedCandidates
+        .slice(index, index + LEDGER_ACCOUNT_BATCH_SIZE)
+        .map((candidate) => candidate.id);
+      const batch = (await fetchAllRows(
+        () =>
+          supabaseAdmin
+            .from("credit_ledger")
+            .select("id, account_id, period, created_at")
+            .in("account_id", accountIds)
+            .gte("period", anchorPeriod)
+            .eq("kind", "grant")
+            .contains("metadata", { source: "annual_schedule" }),
+        "created_at",
+        "posted annual billing grants"
+      )) as Array<{ account_id: string; period: string }>;
+      ledgerRows.push(...batch);
+    }
   }
   const periodsByAccount = new Map<string, string[]>();
   for (const row of ledgerRows) {
@@ -110,6 +124,10 @@ function parseAnchor(anchor: string) {
     return null;
   }
   return { year, month, day };
+}
+
+export function annualGrantLedgerStartPeriod(periodAnchor: string) {
+  return parseAnchor(periodAnchor) ? periodAnchor.slice(0, 7) : null;
 }
 
 export function annualGrantPeriod(
