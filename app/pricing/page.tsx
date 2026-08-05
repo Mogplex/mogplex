@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { MarketingSubpageShell } from "@/components/marketing/subpage-shell";
 import {
+  formatUsd,
   PLAN_PRICES,
   SANDBOX_RATE_MICRO_USD_PER_MINUTE,
   TOPUP_PRESETS,
@@ -25,10 +26,6 @@ type Tier = {
   features: string[];
   note: string;
 };
-
-function dollars(amountCents: number) {
-  return `$${amountCents / 100}`;
-}
 
 function plan(lookupKey: string) {
   const match = PLAN_PRICES.find((price) => price.lookupKey === lookupKey);
@@ -60,10 +57,10 @@ const TIERS: Tier[] = [
   {
     key: "01",
     name: "Pro",
-    price: dollars(PRO_MONTHLY.amountCents),
+    price: formatUsd(PRO_MONTHLY.amountCents),
     cadence: "per month",
-    annual: `${dollars(PRO_ANNUAL.amountCents)}/yr — 20% off`,
-    included: `${dollars(PRO_MONTHLY.includedUsageCents)}.00/mo usage included`,
+    annual: `${formatUsd(PRO_ANNUAL.amountCents)}/yr — 20% off`,
+    included: `${formatUsd(PRO_MONTHLY.includedUsageCents)}/mo usage included`,
     audience: "For the indie developer who ships with agents each day.",
     features: [
       "Mogplex gives you model access. You do not need to set up API keys.",
@@ -76,10 +73,10 @@ const TIERS: Tier[] = [
   {
     key: "02",
     name: "Team",
-    price: dollars(TEAM_MONTHLY.amountCents),
+    price: formatUsd(TEAM_MONTHLY.amountCents),
     cadence: "per month, flat",
-    annual: `${dollars(TEAM_ANNUAL.amountCents)}/yr — 20% off`,
-    included: `${dollars(TEAM_MONTHLY.includedUsageCents)}.00/mo pooled usage included`,
+    annual: `${formatUsd(TEAM_ANNUAL.amountCents)}/yr — 20% off`,
+    included: `${formatUsd(TEAM_MONTHLY.includedUsageCents)}/mo pooled usage included`,
     audience: "Unlimited members. We charge for runs, not people.",
     features: [
       "No per-seat pricing. Members do not drive our costs. Runs do.",
@@ -118,7 +115,7 @@ const METERS: Meter[] = [
   },
 ];
 
-const TOPUPS = TOPUP_PRESETS.map((preset) => dollars(preset.amountCents));
+const TOPUPS = TOPUP_PRESETS.map((preset) => formatUsd(preset.amountCents));
 
 export default function PricingPage() {
   return (

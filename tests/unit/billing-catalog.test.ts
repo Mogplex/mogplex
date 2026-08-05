@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   findPlanPrice,
   findTopupPreset,
+  formatUsd,
   PLAN_PRICES,
   SANDBOX_RATE_MICRO_USD_PER_MINUTE,
   TOPUP_MAX_CENTS,
@@ -66,6 +67,12 @@ test("top-up guardrails bracket the presets", () => {
     assert.ok(preset.amountCents >= TOPUP_MIN_CENTS);
     assert.ok(preset.amountCents <= TOPUP_MAX_CENTS);
   }
+});
+
+test("USD formatting preserves cent precision", () => {
+  assert.equal(formatUsd(2000), "$20.00");
+  assert.equal(formatUsd(2050), "$20.50");
+  assert.equal(formatUsd(1051), "$10.51");
 });
 
 test("finders return null for unknown keys", () => {
