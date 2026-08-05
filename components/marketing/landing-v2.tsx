@@ -1101,13 +1101,13 @@ export function MarketingLandingPage() {
           <div className="mpx-hero-copy">
             <div className="mpx-rise" style={{ animationDelay: ".05s" }}>
               <Eyebrow large>
-                OPEN SOURCE · APACHE-2.0 · GENERALLY AVAILABLE
+                APACHE-2.0 · SELF-HOSTABLE · GENERALLY AVAILABLE
               </Eyebrow>
             </div>
             <h1 className="mpx-rise" style={{ animationDelay: ".14s" }}>
-              The system that
-              <br className="mpx-lg-break" /> builds and maintains
-              <br className="mpx-lg-break" /> your software
+              The open-source engine
+              <br className="mpx-lg-break" /> for building and
+              <br className="mpx-lg-break" /> maintaining software
               <AccentPeriod />
             </h1>
             <p className="mpx-rise" style={{ animationDelay: ".24s" }}>
