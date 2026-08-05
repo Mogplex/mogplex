@@ -1,6 +1,5 @@
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
-import { postBillingUsageDebit } from "@/lib/billing/ledger";
-import { isBillingEnabled } from "@/lib/billing/stripe";
+import { accrueTokenUsage } from "@/lib/billing/ledger";
 import { loadExplicitPlatformAccess } from "@/lib/platform-access";
 
 export type TokenUsageMeteringInput = {
@@ -18,26 +17,24 @@ export type TokenUsageMeteringResult = {
   reason:
     | "posted"
     | "duplicate"
-    | "billing_disabled"
     | "allowlisted"
     | "no_billing_account"
     | "before_billing_account"
-    | "below_one_cent";
+    | "zero_cost";
   amountCents: number;
+  costUnits: number;
 };
 
 type TokenUsageMeteringDeps = {
-  isBillingEnabled: typeof isBillingEnabled;
   loadExplicitPlatformAccess: typeof loadExplicitPlatformAccess;
   findBillingAccountForScope: typeof findBillingAccountForScope;
-  postBillingUsageDebit: typeof postBillingUsageDebit;
+  accrueTokenUsage: typeof accrueTokenUsage;
 };
 
 const defaultDeps: TokenUsageMeteringDeps = {
-  isBillingEnabled,
   loadExplicitPlatformAccess,
   findBillingAccountForScope,
-  postBillingUsageDebit,
+  accrueTokenUsage,
 };
 
 function readMetadataTeamId(metadata: Record<string, unknown> | null) {
@@ -48,9 +45,9 @@ function readMetadataTeamId(metadata: Record<string, unknown> | null) {
   return null;
 }
 
-export function tokenCostUsdToCents(costUsd: number) {
+export function tokenCostUsdToCostUnits(costUsd: number) {
   if (!Number.isFinite(costUsd) || costUsd <= 0) return 0;
-  return Math.round(costUsd * 100);
+  return Math.round(costUsd * 1e8);
 }
 
 function billingPeriod(completedAt: string) {
@@ -66,16 +63,23 @@ export async function meterReconciledTokenUsage(
   overrides: Partial<TokenUsageMeteringDeps> = {}
 ): Promise<TokenUsageMeteringResult> {
   const deps = { ...defaultDeps, ...overrides };
-  const amountCents = tokenCostUsdToCents(input.costUsd);
-  if (!deps.isBillingEnabled()) {
-    return { metered: false, reason: "billing_disabled", amountCents };
-  }
-  if (amountCents === 0) {
-    return { metered: false, reason: "below_one_cent", amountCents };
+  const costUnits = tokenCostUsdToCostUnits(input.costUsd);
+  if (costUnits === 0) {
+    return {
+      metered: false,
+      reason: "zero_cost",
+      amountCents: 0,
+      costUnits,
+    };
   }
   const explicitAccess = await deps.loadExplicitPlatformAccess(input.userId);
   if (explicitAccess.allowPlatformAi) {
-    return { metered: false, reason: "allowlisted", amountCents };
+    return {
+      metered: false,
+      reason: "allowlisted",
+      amountCents: 0,
+      costUnits,
+    };
   }
 
   const productTeamId = readMetadataTeamId(input.metadata);
@@ -85,7 +89,12 @@ export async function meterReconciledTokenUsage(
       : { kind: "personal", userId: input.userId, productTeamId: null }
   );
   if (!account) {
-    return { metered: false, reason: "no_billing_account", amountCents };
+    return {
+      metered: false,
+      reason: "no_billing_account",
+      amountCents: 0,
+      costUnits,
+    };
   }
 
   const accountCreatedAt = account.created_at
@@ -100,14 +109,14 @@ export async function meterReconciledTokenUsage(
     return {
       metered: false,
       reason: "before_billing_account",
-      amountCents,
+      amountCents: 0,
+      costUnits,
     };
   }
 
-  const debit = await deps.postBillingUsageDebit({
+  const accrual = await deps.accrueTokenUsage({
     accountId: account.id,
-    amountCents,
-    kind: "usage_tokens",
+    costUnits,
     sourceRef: `tok:${input.aiCallId}`,
     period: billingPeriod(input.completedAt),
     metadata: {
@@ -118,8 +127,9 @@ export async function meterReconciledTokenUsage(
     },
   });
   return {
-    metered: debit.posted,
-    reason: debit.posted ? "posted" : "duplicate",
-    amountCents,
+    metered: accrual.posted,
+    reason: accrual.posted ? "posted" : "duplicate",
+    amountCents: accrual.debitedCents,
+    costUnits,
   };
 }

@@ -179,6 +179,10 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
     getOAuthToken: async () => null,
     hasOAuthToken: async () => false,
     migrateLegacyOAuthTokensForUser: async () => undefined,
+    loadUserPlatformAccess: async () => ({
+      allowPlatformAi: true,
+      allowPlatformSandbox: true,
+    }),
     getPlatformVercelServiceState: () => ({
       platformState: "not_configured",
       canUsePlatformOps: false,
@@ -208,8 +212,8 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
         "GitHub App coverage is active and synced repositories are available in Projects.",
       github_primary_action: null,
       platform_access: {
-        allowPlatformAi: false,
-        allowPlatformSandbox: false,
+        allowPlatformAi: true,
+        allowPlatformSandbox: true,
       },
       vercel: {
         platformState: "not_configured",

@@ -23,6 +23,8 @@ const LIFECYCLE_SANDBOX_ID = "00000000-0000-4000-8000-000000000017";
 const MISMATCH_SANDBOX_ID = "00000000-0000-4000-8000-000000000018";
 const RECOVERY_SANDBOX_ID = "00000000-0000-4000-8000-000000000019";
 const RECOVERY_CURSOR_TARGET_ID = "00000000-0000-4000-8000-000000000020";
+const TOKEN_ACCRUAL_ACCOUNT_ID = "00000000-0000-4000-8000-000000000021";
+const TOKEN_ACCRUAL_USER_ID = "00000000-0000-4000-8000-000000000022";
 
 describe("billing ledger migration", () => {
   let db: PGlite;
@@ -47,6 +49,7 @@ describe("billing ledger migration", () => {
       "20260805060000_billing_usage_debits.sql",
       "20260805070000_sandbox_billing_sessions.sql",
       "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
+      "20260805140000_exact_token_usage_accrual.sql",
     ]) {
       const migration = await readFile(
         path.resolve(
@@ -60,7 +63,8 @@ describe("billing ledger migration", () => {
     await db.query(
       `insert into billing_accounts (id, owner_type, owner_user_id)
        values ($1, 'user', $2), ($3, 'user', $4), ($5, 'user', $6),
-              ($7, 'user', $8), ($9, 'user', $10), ($11, 'user', $12)`,
+              ($7, 'user', $8), ($9, 'user', $10), ($11, 'user', $12),
+              ($13, 'user', $14)`,
       [
         ACCOUNT_ID,
         USER_ID,
@@ -74,6 +78,8 @@ describe("billing ledger migration", () => {
         MINIMUM_USER_ID,
         NEGATIVE_ACCOUNT_ID,
         NEGATIVE_USER_ID,
+        TOKEN_ACCRUAL_ACCOUNT_ID,
+        TOKEN_ACCRUAL_USER_ID,
       ]
     );
     await db.query(
@@ -301,6 +307,106 @@ describe("billing ledger migration", () => {
       [USAGE_ACCOUNT_ID]
     );
     expect(balance.rows[0]?.total_cents).toBe(-30);
+  });
+
+  it("carries exact Gateway fractions into whole-cent token debits", async () => {
+    await db.query(
+      `select post_credit_ledger_entry(
+         $1, 100, 'purchased', 'topup', 'topup:token-accrual', null, '{}'
+       )`,
+      [TOKEN_ACCRUAL_ACCOUNT_ID]
+    );
+
+    const first = await db.query<{
+      posted: boolean;
+      debited_cents: number;
+      remainder_cost_units: number;
+    }>(
+      `select * from accrue_token_usage(
+         $1, 499999, 'tok:exact-1', '2026-08', '{"cost_usd":0.00499999}'
+       )`,
+      [TOKEN_ACCRUAL_ACCOUNT_ID]
+    );
+    expect(first.rows).toEqual([
+      {
+        posted: true,
+        debited_cents: 0,
+        remainder_cost_units: 499_999,
+      },
+    ]);
+
+    const second = await db.query<{
+      posted: boolean;
+      debited_cents: number;
+      remainder_cost_units: number;
+    }>(
+      `select * from accrue_token_usage(
+         $1, 500001, 'tok:exact-2', '2026-08', '{"cost_usd":0.00500001}'
+       )`,
+      [TOKEN_ACCRUAL_ACCOUNT_ID]
+    );
+    expect(second.rows).toEqual([
+      { posted: true, debited_cents: 1, remainder_cost_units: 0 },
+    ]);
+
+    const third = await db.query<{
+      posted: boolean;
+      debited_cents: number;
+      remainder_cost_units: number;
+    }>(
+      `select * from accrue_token_usage(
+         $1, 8340000, 'tok:exact-3', '2026-08', '{"cost_usd":0.0834}'
+       )`,
+      [TOKEN_ACCRUAL_ACCOUNT_ID]
+    );
+    expect(third.rows).toEqual([
+      {
+        posted: true,
+        debited_cents: 8,
+        remainder_cost_units: 340_000,
+      },
+    ]);
+
+    const duplicate = await db.query<{
+      posted: boolean;
+      debited_cents: number;
+      remainder_cost_units: number;
+    }>(
+      `select * from accrue_token_usage(
+         $1, 8340000, 'tok:exact-3', '2026-08', '{"cost_usd":0.0834}'
+       )`,
+      [TOKEN_ACCRUAL_ACCOUNT_ID]
+    );
+    expect(duplicate.rows).toEqual([
+      {
+        posted: false,
+        debited_cents: 8,
+        remainder_cost_units: 340_000,
+      },
+    ]);
+
+    const state = await db.query<{
+      purchased_cents: number;
+      token_usage_remainder_cost_units: number;
+      accrued_cost_units: number;
+    }>(
+      `select b.purchased_cents,
+              a.token_usage_remainder_cost_units,
+              (select sum(t.cost_units)::bigint
+               from token_usage_accruals t where t.account_id = a.id)
+                as accrued_cost_units
+       from billing_accounts a
+       cross join billing_balance(a.id) b
+       where a.id = $1`,
+      [TOKEN_ACCRUAL_ACCOUNT_ID]
+    );
+    expect(state.rows).toEqual([
+      {
+        purchased_cents: 91,
+        token_usage_remainder_cost_units: 340_000,
+        accrued_cost_units: 9_340_000,
+      },
+    ]);
   });
 
   it("carries half-cent sandbox usage exactly across five-minute accruals", async () => {

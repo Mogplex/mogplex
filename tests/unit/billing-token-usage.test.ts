@@ -36,24 +36,28 @@ function input(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("token costs round to whole cents without a minimum charge", async () => {
-  const { tokenCostUsdToCents } = await loadTokenUsage();
-  assert.equal(tokenCostUsdToCents(0.0834), 8);
-  assert.equal(tokenCostUsdToCents(0.005), 1);
-  assert.equal(tokenCostUsdToCents(0.004), 0);
-  assert.equal(tokenCostUsdToCents(Number.NaN), 0);
+test("token costs preserve Gateway's eight-decimal USD precision", async () => {
+  const { tokenCostUsdToCostUnits } = await loadTokenUsage();
+  assert.equal(tokenCostUsdToCostUnits(0.0834), 8_340_000);
+  assert.equal(tokenCostUsdToCostUnits(0.005), 500_000);
+  assert.equal(tokenCostUsdToCostUnits(0.004), 400_000);
+  assert.equal(tokenCostUsdToCostUnits(0.00000001), 1);
+  assert.equal(tokenCostUsdToCostUnits(Number.NaN), 0);
 });
 
-test("billing-disabled installs never read or write billing data", async () => {
+test("zero-cost calls never read or write billing data", async () => {
   const { meterReconciledTokenUsage } = await loadTokenUsage();
   let calls = 0;
-  const result = await meterReconciledTokenUsage(input(), {
-    isBillingEnabled: () => false,
+  const result = await meterReconciledTokenUsage(input({ costUsd: 0 }), {
+    loadExplicitPlatformAccess: async () => {
+      calls += 1;
+      throw new Error("should not load access");
+    },
     findBillingAccountForScope: async () => {
       calls += 1;
       return account;
     },
-    postBillingUsageDebit: async () => {
+    accrueTokenUsage: async () => {
       calls += 1;
       throw new Error("should not post");
     },
@@ -61,8 +65,9 @@ test("billing-disabled installs never read or write billing data", async () => {
 
   assert.deepEqual(result, {
     metered: false,
-    reason: "billing_disabled",
-    amountCents: 8,
+    reason: "zero_cost",
+    amountCents: 0,
+    costUnits: 0,
   });
   assert.equal(calls, 0);
 });
@@ -70,9 +75,8 @@ test("billing-disabled installs never read or write billing data", async () => {
 test("personal usage posts an idempotent token debit", async () => {
   const { meterReconciledTokenUsage } = await loadTokenUsage();
   const scopes: unknown[] = [];
-  const debits: unknown[] = [];
+  const accruals: unknown[] = [];
   const result = await meterReconciledTokenUsage(input(), {
-    isBillingEnabled: () => true,
     loadExplicitPlatformAccess: async () => ({
       allowPlatformAi: false,
       allowPlatformSandbox: false,
@@ -81,13 +85,12 @@ test("personal usage posts an idempotent token debit", async () => {
       scopes.push(scope);
       return account;
     },
-    postBillingUsageDebit: async (debit) => {
-      debits.push(debit);
+    accrueTokenUsage: async (accrual) => {
+      accruals.push(accrual);
       return {
         posted: true,
         debitedCents: 8,
-        includedDebitedCents: 0,
-        purchasedDebitedCents: 8,
+        remainderCostUnits: 340_000,
       };
     },
   });
@@ -95,11 +98,10 @@ test("personal usage posts an idempotent token debit", async () => {
   assert.deepEqual(scopes, [
     { kind: "personal", userId: "user-1", productTeamId: null },
   ]);
-  assert.deepEqual(debits, [
+  assert.deepEqual(accruals, [
     {
       accountId: "account-1",
-      amountCents: 8,
-      kind: "usage_tokens",
+      costUnits: 8_340_000,
       sourceRef: "tok:call-1",
       period: "2026-08",
       metadata: {
@@ -114,6 +116,7 @@ test("personal usage posts an idempotent token debit", async () => {
     metered: true,
     reason: "posted",
     amountCents: 8,
+    costUnits: 8_340_000,
   });
 });
 
@@ -123,7 +126,6 @@ test("team metadata charges the team account", async () => {
   await meterReconciledTokenUsage(
     input({ metadata: { product_team_id: "team-1" } }),
     {
-      isBillingEnabled: () => true,
       loadExplicitPlatformAccess: async () => ({
         allowPlatformAi: false,
         allowPlatformSandbox: false,
@@ -132,11 +134,10 @@ test("team metadata charges the team account", async () => {
         scope = value;
         return { ...account, owner_type: "team", product_team_id: "team-1" };
       },
-      postBillingUsageDebit: async () => ({
+      accrueTokenUsage: async () => ({
         posted: false,
-        debitedCents: 0,
-        includedDebitedCents: 0,
-        purchasedDebitedCents: 0,
+        debitedCents: 8,
+        remainderCostUnits: 340_000,
       }),
     }
   );
@@ -148,18 +149,17 @@ test("team metadata charges the team account", async () => {
   });
 });
 
-test("pre-account calls and sub-cent calls are not debited", async () => {
+test("pre-account calls are not accrued", async () => {
   const { meterReconciledTokenUsage } = await loadTokenUsage();
-  let debitCalls = 0;
+  let accrualCalls = 0;
   const deps = {
-    isBillingEnabled: () => true,
     loadExplicitPlatformAccess: async () => ({
       allowPlatformAi: false,
       allowPlatformSandbox: false,
     }),
     findBillingAccountForScope: async () => account,
-    postBillingUsageDebit: async () => {
-      debitCalls += 1;
+    accrueTokenUsage: async () => {
+      accrualCalls += 1;
       throw new Error("should not post");
     },
   };
@@ -168,21 +168,40 @@ test("pre-account calls and sub-cent calls are not debited", async () => {
     input({ completedAt: "2026-07-31T23:59:59.000Z" }),
     deps
   );
-  const belowOneCent = await meterReconciledTokenUsage(
-    input({ costUsd: 0.004 }),
-    deps
-  );
 
   assert.equal(beforeAccount.reason, "before_billing_account");
-  assert.equal(belowOneCent.reason, "below_one_cent");
-  assert.equal(debitCalls, 0);
+  assert.equal(accrualCalls, 0);
+});
+
+test("sub-cent calls are accrued instead of discarded", async () => {
+  const { meterReconciledTokenUsage } = await loadTokenUsage();
+  const accruals: unknown[] = [];
+  const result = await meterReconciledTokenUsage(input({ costUsd: 0.004 }), {
+    loadExplicitPlatformAccess: async () => ({
+      allowPlatformAi: false,
+      allowPlatformSandbox: false,
+    }),
+    findBillingAccountForScope: async () => account,
+    accrueTokenUsage: async (accrual) => {
+      accruals.push(accrual);
+      return {
+        posted: true,
+        debitedCents: 0,
+        remainderCostUnits: 400_000,
+      };
+    },
+  });
+
+  assert.equal(result.reason, "posted");
+  assert.equal(result.amountCents, 0);
+  assert.equal(result.costUnits, 400_000);
+  assert.equal((accruals[0] as { costUnits: number }).costUnits, 400_000);
 });
 
 test("explicitly allowlisted users are not debited from funded accounts", async () => {
   const { meterReconciledTokenUsage } = await loadTokenUsage();
   let billingCalls = 0;
   const result = await meterReconciledTokenUsage(input(), {
-    isBillingEnabled: () => true,
     loadExplicitPlatformAccess: async () => ({
       allowPlatformAi: true,
       allowPlatformSandbox: false,
@@ -191,7 +210,7 @@ test("explicitly allowlisted users are not debited from funded accounts", async 
       billingCalls += 1;
       return account;
     },
-    postBillingUsageDebit: async () => {
+    accrueTokenUsage: async () => {
       billingCalls += 1;
       throw new Error("should not post");
     },
@@ -200,7 +219,8 @@ test("explicitly allowlisted users are not debited from funded accounts", async 
   assert.deepEqual(result, {
     metered: false,
     reason: "allowlisted",
-    amountCents: 8,
+    amountCents: 0,
+    costUnits: 8_340_000,
   });
   assert.equal(billingCalls, 0);
 });

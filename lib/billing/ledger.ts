@@ -62,6 +62,20 @@ export type BillingUsageDebitResult = {
   purchasedDebitedCents: number;
 };
 
+export type TokenUsageAccrual = {
+  accountId: string;
+  costUnits: number;
+  sourceRef: string;
+  period: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type TokenUsageAccrualResult = {
+  posted: boolean;
+  debitedCents: number;
+  remainderCostUnits: number;
+};
+
 export async function postLedgerEntry(
   entry: LedgerEntry,
   client: SupabaseClient = supabaseAdmin
@@ -161,6 +175,37 @@ export async function postBillingUsageDebit(
     debitedCents: Number(row?.debited_cents ?? 0),
     includedDebitedCents: Number(row?.included_debited_cents ?? 0),
     purchasedDebitedCents: Number(row?.purchased_debited_cents ?? 0),
+  };
+}
+
+export async function accrueTokenUsage(
+  accrual: TokenUsageAccrual,
+  client: SupabaseClient = supabaseAdmin
+): Promise<TokenUsageAccrualResult> {
+  if (!Number.isSafeInteger(accrual.costUnits) || accrual.costUnits <= 0) {
+    throw new TypeError(
+      `token usage cost must be positive integer cost units, got ${accrual.costUnits}`
+    );
+  }
+  const { data, error } = await client.rpc("accrue_token_usage", {
+    p_account: accrual.accountId,
+    p_cost_units: accrual.costUnits,
+    p_source_ref: accrual.sourceRef,
+    p_period: accrual.period,
+    p_metadata: accrual.metadata ?? {},
+  });
+  if (error) {
+    throw new Error(`token usage accrual failed: ${error.message}`);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    posted?: boolean;
+    debited_cents?: number | string;
+    remainder_cost_units?: number | string;
+  } | null;
+  return {
+    posted: row?.posted === true,
+    debitedCents: Number(row?.debited_cents ?? 0),
+    remainderCostUnits: Number(row?.remainder_cost_units ?? 0),
   };
 }
 

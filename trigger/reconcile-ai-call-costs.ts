@@ -357,7 +357,7 @@ async function reconcileAiCallCostRow(
     // calls are not visible to this Gateway client and remain unreconciled.
     // Post the idempotent debit before marking the cost reconciled: if the DB
     // update fails, the next run safely sees the duplicate debit and retries it.
-    await deps.meterReconciledTokenUsage({
+    const metering = await deps.meterReconciledTokenUsage({
       aiCallId: row.id,
       userId: row.user_id,
       model: row.model,
@@ -366,6 +366,11 @@ async function reconcileAiCallCostRow(
       generationIds,
       metadata: row.metadata,
     });
+    if (metering.reason === "no_billing_account") {
+      throw new Error(
+        `Cannot finalize Gateway cost for ai_call ${row.id}: billing account not found`
+      );
+    }
 
     const updated = await persistGatewayAiCallCost(deps, {
       rowId: row.id,
