@@ -521,6 +521,7 @@ function AgentPane({
   const [activeHarnessCallId, setActiveHarnessCallId] = useState<string | null>(
     null
   );
+  const activeHarnessCallIdRef = useRef<string | null>(null);
   const liveConversationRuns = useMemo(
     () =>
       conversationRuns.filter(
@@ -543,6 +544,7 @@ function AgentPane({
     activeHarnessRun?.id || liveConversationRuns[0]?.id || null;
   const { events: activeCallEvents } = useAiCallEvents(activeCallId);
   const [stopError, setStopError] = useState<string | null>(null);
+  const [isHarnessRunning, setIsHarnessRunning] = useState(false);
 
   useEffect(() => {
     if (!loaded) return;
@@ -561,19 +563,21 @@ function AgentPane({
   }, [loaded, messages, pane.id, syncMessages]);
 
   const isStreaming = status === "streaming" || status === "submitted";
+  const isAgentRunning =
+    isStreaming || isHarnessRunning || Boolean(activeHarnessRun);
 
   const wasStreamingRef = useRef(false);
 
   useEffect(() => {
     if (!loaded) return;
 
-    if (wasStreamingRef.current && !isStreaming) {
+    if (wasStreamingRef.current && !isAgentRunning) {
       void syncConversation(pane.id);
       void useSandboxStore.getState().refresh();
     }
 
-    wasStreamingRef.current = isStreaming;
-  }, [isStreaming, loaded, pane.id, syncConversation]);
+    wasStreamingRef.current = isAgentRunning;
+  }, [isAgentRunning, loaded, pane.id, syncConversation]);
 
   const usedTokens = useMemo(() => {
     return messages.reduce((acc, m) => {
@@ -595,8 +599,8 @@ function AgentPane({
   );
 
   useEffect(() => {
-    onStreamingChange?.(isStreaming);
-  }, [isStreaming, onStreamingChange]);
+    onStreamingChange?.(isAgentRunning);
+  }, [isAgentRunning, onStreamingChange]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -611,7 +615,7 @@ function AgentPane({
 
   const { launchRepoSandbox } = useSandboxLaunchActions();
 
-  const submitToHarness = useCallback(
+  const executeHarnessRun = useCallback(
     async (input: string) => {
       const harnessId = model.replace("harness:", "") as
         | "claude-code"
@@ -700,6 +704,38 @@ function AgentPane({
         setStopError(null);
 
         try {
+          const prepareRes = await fetch(`/api/sandbox/${sandboxId}/harness`, {
+            method: "POST",
+            headers: getActiveTeamRequestHeaders({
+              "Content-Type": "application/json",
+            }),
+            body: JSON.stringify({
+              harness: harnessId,
+              prompt: input,
+              conversationId: pane.id,
+              workspaceSessionId: activeSessionId,
+              resumeSessionId,
+              mode,
+              prepareOnly: true,
+            }),
+            signal: controller.signal,
+          });
+          const prepared = (await prepareRes.json().catch(() => ({}))) as {
+            aiCallId?: string;
+            error?: string;
+          };
+          if (!prepareRes.ok || !prepared.aiCallId) {
+            updateLocalMsg(
+              pane.id,
+              outputMsgId,
+              prepared.error || "Harness initialization failed"
+            );
+            return;
+          }
+
+          activeHarnessCallIdRef.current = prepared.aiCallId;
+          setActiveHarnessCallId(prepared.aiCallId);
+
           const res = await fetch(`/api/sandbox/${sandboxId}/harness`, {
             method: "POST",
             headers: getActiveTeamRequestHeaders({
@@ -712,6 +748,7 @@ function AgentPane({
               workspaceSessionId: activeSessionId,
               resumeSessionId,
               mode,
+              aiCallId: prepared.aiCallId,
             }),
             signal: controller.signal,
           });
@@ -801,10 +838,13 @@ function AgentPane({
                   stream?: string;
                   data?: string;
                   exitCode?: number | null;
+                  error?: string | null;
+                  failureCode?: string | null;
                   ai_call_id?: string;
                   sessionId?: string;
                 };
                 if (event.type === "run" && event.ai_call_id) {
+                  activeHarnessCallIdRef.current = event.ai_call_id;
                   setActiveHarnessCallId(event.ai_call_id);
                 } else if (event.type === "session" && event.sessionId) {
                   setHarnessState(
@@ -845,6 +885,7 @@ function AgentPane({
                     : "[cancelled]";
                   output += "\n[cancelled]";
                   wasCancelled = true;
+                  activeHarnessCallIdRef.current = null;
                   setActiveHarnessCallId(null);
                 } else if (event.type === "done") {
                   const rendered = outputRenderer.flush();
@@ -856,14 +897,17 @@ function AgentPane({
                     renderedSegments = rendered.segments;
                   }
                   finalExitCode = event.exitCode ?? null;
-                  const doneMarker =
-                    event.exitCode === 0
+                  finalError = event.error ?? null;
+                  const doneMarker = event.error
+                    ? `[error: ${event.error}]`
+                    : event.exitCode === 0
                       ? "[done]"
                       : `[exit ${event.exitCode ?? "unknown"}]`;
                   trailerText = trailerText
                     ? `${trailerText}\n${doneMarker}`
                     : doneMarker;
                   output += `\n${doneMarker}`;
+                  activeHarnessCallIdRef.current = null;
                   setActiveHarnessCallId(null);
                 } else if (event.type === "error") {
                   const rendered = outputRenderer.flush();
@@ -882,6 +926,7 @@ function AgentPane({
                     ? `${trailerText}\n${errorMarker}`
                     : errorMarker;
                   output += `\n${errorMarker}`;
+                  activeHarnessCallIdRef.current = null;
                   setActiveHarnessCallId(null);
                 }
               } catch {
@@ -976,12 +1021,30 @@ function AgentPane({
     ]
   );
 
+  const submitToHarness = useCallback(
+    async (input: string) => {
+      setIsHarnessRunning(true);
+      try {
+        await executeHarnessRun(input);
+      } finally {
+        setIsHarnessRunning(false);
+        activeHarnessCallIdRef.current = null;
+        setActiveHarnessCallId(null);
+      }
+    },
+    [executeHarnessRun]
+  );
+
   const handleStopRun = useCallback(async () => {
     setStopError(null);
 
-    if (activeHarnessRun?.id) {
+    const harnessCallId =
+      activeHarnessCallIdRef.current ??
+      activeHarnessCallId ??
+      activeHarnessRun?.id;
+    if (harnessCallId) {
       const res = await fetch(
-        `/api/observability/calls/${activeHarnessRun.id}/cancel`,
+        `/api/observability/calls/${harnessCallId}/cancel`,
         {
           method: "POST",
         }
@@ -1002,11 +1065,25 @@ function AgentPane({
       return;
     }
 
+    if (isHarnessRunning) {
+      harnessAbortRef.current?.abort();
+      return;
+    }
+
     stop();
-  }, [activeHarnessRun?.id, addLocalMsg, pane.id, stop]);
+  }, [
+    activeHarnessCallId,
+    activeHarnessRun?.id,
+    addLocalMsg,
+    isHarnessRunning,
+    pane.id,
+    stop,
+  ]);
 
   const handleSubmit = useCallback(
     (input: string) => {
+      if (isAgentRunning) return;
+
       const result = parseSlashCommand(
         input,
         builtinCommands,
@@ -1075,6 +1152,7 @@ function AgentPane({
       asSlashCommands,
       builtinCommands,
       clearMessages,
+      isAgentRunning,
       model,
       pane.id,
       sendMessage,
@@ -1157,7 +1235,7 @@ function AgentPane({
         >
           New chat
         </button>
-        {(isStreaming || Boolean(activeHarnessRun)) && (
+        {isAgentRunning && (
           <button
             onClick={() => void handleStopRun()}
             className="rounded px-2 py-0.5 text-[11px] text-accent-red transition-colors hover:bg-accent-red/10"
@@ -1276,7 +1354,7 @@ function AgentPane({
                 ))}
               </div>
             )}
-            {(status === "streaming" || status === "submitted") && (
+            {isAgentRunning && (
               <div className="py-2">
                 <AsciiLoader />
               </div>
@@ -1285,6 +1363,13 @@ function AgentPane({
           </div>
           <CommandInput
             onSubmit={handleSubmit}
+            isRunning={isAgentRunning}
+            runningLabel={
+              model.startsWith("harness:")
+                ? `${model === "harness:claude-code" ? "Claude Code" : "Codex"} is working`
+                : "Agent is working"
+            }
+            onStop={() => void handleStopRun()}
             builtinCommands={builtinCommands}
             customCommands={asSlashCommands()}
             models={modelIds}
