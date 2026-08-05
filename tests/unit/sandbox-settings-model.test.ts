@@ -40,7 +40,7 @@ function createRepo(overrides: Partial<Repo> = {}): Repo {
   };
 }
 
-test("workspace settings model flags user billing without a linked project", () => {
+test("workspace settings draft normalizes legacy user billing to platform", () => {
   const draft = createWorkspaceSandboxSettingsDraft(
     createWorkspace({
       sandbox_billing_mode: "user_vercel_project",
@@ -51,8 +51,11 @@ test("workspace settings model flags user billing without a linked project", () 
   const model = buildWorkspaceSandboxSettingsModel(draft);
 
   assert.equal(model.teamScope, "personal");
-  assert.equal(model.needsLinkedProject, true);
-  assert.equal(model.effectiveOwnerLabel, "Your Vercel project");
+  assert.equal(draft.billingMode, "platform");
+  assert.equal(draft.vercelTeamId, "");
+  assert.equal(draft.vercelProjectId, "");
+  assert.equal(model.needsLinkedProject, false);
+  assert.equal(model.effectiveOwnerLabel, "Mogplex platform project");
 });
 
 test("workspace settings payload normalizes empty Vercel target values to null", () => {
@@ -65,7 +68,7 @@ test("workspace settings payload normalizes empty Vercel target values to null",
       vercelProjectId: "",
     }),
     {
-      sandbox_billing_mode: "user_vercel_project",
+      sandbox_billing_mode: "platform",
       sandbox_timeout_ms: 30 * 60 * 1000,
       sandbox_idle_timeout_ms: 15 * 60 * 1000,
       sandbox_vercel_team_id: null,
@@ -79,7 +82,7 @@ test("workspace settings draft exposes default idle timeout when unset", () => {
   assert.equal(draft.idleTimeoutMs, 30 * 60 * 1000);
 });
 
-test("repo settings model inherits workspace user billing and target", () => {
+test("repo settings model ignores legacy workspace user billing", () => {
   const repo = createRepo({
     workspace: createWorkspace({
       sandbox_billing_mode: "user_vercel_project",
@@ -97,16 +100,15 @@ test("repo settings model inherits workspace user billing and target", () => {
     ]
   );
 
-  assert.equal(model.effectiveBillingMode, "user_vercel_project");
-  assert.equal(model.effectiveLinkedProjectId, "prj_workspace");
-  assert.equal(model.selectedTeamValue, INHERITED_WORKSPACE_TEAM_OPTION);
-  assert.equal(model.teamScope, "team_workspace");
-  assert.equal(model.usingWorkspaceTeam, true);
+  assert.equal(model.effectiveBillingMode, "platform");
+  assert.equal(model.selectedTeamValue, "personal");
+  assert.equal(model.teamScope, "personal");
+  assert.equal(model.usingWorkspaceTeam, false);
   assert.equal(model.inheritedTeamName, "Workspace Team");
   assert.equal(model.needsLinkedProject, false);
 });
 
-test("repo save payload pins inherited workspace team when a repo-specific project is selected from that scope", () => {
+test("repo save payload does not pin billing scope from a disabled legacy mode", () => {
   const repo = createRepo({
     workspace: createWorkspace({
       sandbox_billing_mode: "user_vercel_project",
@@ -122,10 +124,10 @@ test("repo save payload pins inherited workspace team when a repo-specific proje
       vercelProjectId: "prj_repo",
     }),
     {
-      sandbox_billing_target: "team",
+      sandbox_billing_target: "personal",
       sandbox_billing_mode_override: null,
-      vercel_team_id: "team_workspace",
-      vercel_project_id: "prj_repo",
+      vercel_team_id: null,
+      vercel_project_id: null,
     }
   );
 });

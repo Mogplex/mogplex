@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { loadOwnedJobRunDetail } from "@/lib/job-run-service";
 import type { NextRequest } from "next/server";
+import {
+  buildObservabilityIncidentId,
+  sanitizeObservabilityPayload,
+} from "@/lib/observability/user-facing-errors";
 
 type ObservabilityJobDetailGetDeps = {
   requireUserId: typeof requireUserId;
@@ -40,14 +44,18 @@ export function createObservabilityJobDetailGetHandler(
         );
       }
 
-      return NextResponse.json({ run });
+      return NextResponse.json({
+        run: sanitizeObservabilityPayload(run, "JOB", id),
+      });
     } catch (error) {
+      console.error("failed to load observability job detail", {
+        jobRunId: id,
+        error,
+      });
+      const incidentId = buildObservabilityIncidentId("JOB", id);
       return NextResponse.json(
         {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to load job run detail",
+          error: `Failed to load job run detail. Contact support with incident ${incidentId}.`,
         },
         { status: 500 }
       );

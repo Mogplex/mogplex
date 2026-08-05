@@ -515,10 +515,12 @@ function VercelSetupBlock({
               <a
                 href={action.href}
                 onClick={() => {
-                  trackActivation("vercel_connect_started", {
-                    source: "repos_empty_state",
-                    action_kind: action.kind,
-                  })
+                  if (action.kind !== "billing") {
+                    trackActivation("vercel_connect_started", {
+                      source: "repos_empty_state",
+                      action_kind: action.kind,
+                    });
+                  }
                 }}
               >
                 {action.label}

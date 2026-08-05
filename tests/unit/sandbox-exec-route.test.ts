@@ -242,7 +242,7 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock when sandbox credentia
   assert.deepEqual(callOrder, ["load"]);
   assert.deepEqual(await response.json(), {
     error:
-      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.",
   });
 });
 

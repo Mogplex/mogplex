@@ -422,242 +422,58 @@ async function installObservabilityMocks(page: Page) {
   );
 }
 
-test("workspace user billing persists after creating a linked Vercel project", async ({
+test("workspace and repo settings retire legacy personal Vercel configuration", async ({
   page,
 }) => {
-  const state = createBillingState();
+  const state = createBillingState({
+    workspace: {
+      sandbox_billing_mode: "user_vercel_project",
+      sandbox_vercel_team_id: "team-acme",
+      sandbox_vercel_project_id: "workspace-app",
+    },
+  });
   await installBaseMocks(page, state);
+  const targetRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/vercel/targets")) {
+      targetRequests.push(request.url());
+    }
+  });
 
   await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
-
-  await page.getByRole("button", { name: "Manage" }).click();
-  await page.getByText("Rename project").click();
-
-  await expect(page.getByText("Default Sandbox Lifetime")).toHaveCount(0);
-  await expect(page.getByText("Default Sandbox Idle Timeout")).toHaveCount(0);
-
-  await page
-    .getByRole("combobox", { name: "Default Sandbox Billing" })
-    .selectOption("user_vercel_project");
-  await page
-    .getByRole("combobox", { name: "Workspace Vercel Team" })
-    .selectOption("team-acme");
-
-  const createdProjectId = "created-team-acme-core";
-  await page.getByRole("button", { name: "Create core" }).click();
-  await expect(
-    page.getByRole("combobox", { name: "Workspace Vercel Project" })
-  ).toHaveValue(createdProjectId);
-
-  await page
-    .getByRole("button", { name: "Save" })
-    .evaluate((el: HTMLElement) => el.click());
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-
-  expect(state.workspacePatchBodies.at(-1)).toMatchObject({
-    sandbox_billing_mode: "user_vercel_project",
-    sandbox_vercel_team_id: "team-acme",
-    sandbox_vercel_project_id: createdProjectId,
-  });
-
   await page.getByRole("button", { name: "Manage" }).click();
   await page.getByText("Rename project").click();
 
   await expect(
     page.getByRole("combobox", { name: "Default Sandbox Billing" })
-  ).toHaveValue("user_vercel_project");
-  await expect(
-    page.getByRole("combobox", { name: "Workspace Vercel Team" })
-  ).toHaveValue("team-acme");
+  ).toHaveValue("platform");
   await expect(
     page.getByRole("combobox", { name: "Workspace Vercel Project" })
-  ).toHaveValue(createdProjectId);
-  await expect(
-    page.getByText("Effective owner: Your Vercel project.")
-  ).toBeVisible();
-});
-
-test("repo project pinning persists inherited workspace team and can be cleared back to personal", async ({
-  page,
-}) => {
-  const state = createBillingState({
-    workspace: {
-      sandbox_billing_mode: "user_vercel_project",
-      sandbox_vercel_team_id: "team-acme",
-      sandbox_vercel_project_id: "workspace-app",
-    },
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Save" }).click();
+  expect(state.workspacePatchBodies.at(-1)).toMatchObject({
+    sandbox_billing_mode: "platform",
+    sandbox_vercel_team_id: null,
+    sandbox_vercel_project_id: null,
   });
-  await installBaseMocks(page, state);
-
-  await page.goto(scopedPath("projects/repositories"));
-  await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "Repo actions" }).click();
   await page.getByText("Space Settings").click();
-
-  await expect(page.getByText("Sandbox Timeout")).toHaveCount(0);
-
   await expect(
-    page.getByText("Effective owner: Your Vercel project.")
-  ).toBeVisible();
+    page.getByRole("combobox", { name: "Sandbox Billing" })
+  ).toHaveValue("inherit");
   await expect(
-    page.getByText("Current effective project: workspace-app.")
-  ).toBeVisible();
-  await expect(
-    page.getByRole("combobox", { name: "Repo-linked Vercel Team" })
-  ).toHaveValue("__workspace__");
-
-  await page
-    .getByRole("combobox", { name: "Repo-linked Vercel Project" })
-    .selectOption("repo-app");
-  const pinProjectResponse = page.waitForResponse(
-    (response) =>
-      /\/api\/repos(?:\?.*)?$/.test(response.url()) &&
-      response.request().method() === "PATCH"
-  );
-  await page
-    .getByRole("button", { name: "Save Settings" })
-    .evaluate((el: HTMLElement) => el.click());
-  await pinProjectResponse;
-  await expect(page.getByText("Space Settings")).not.toBeVisible();
-
+    page.getByRole("combobox", { name: "Repo-linked Vercel Project" })
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Save Settings" }).click();
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
     sandbox_billing_mode_override: null,
-    sandbox_billing_target: "team",
-    vercel_team_id: "team-acme",
-    vercel_project_id: "repo-app",
-  });
-
-  await page.getByRole("button", { name: "Repo actions" }).click();
-  await page.getByText("Space Settings").click();
-
-  await page
-    .getByRole("combobox", { name: "Sandbox Billing" })
-    .selectOption("platform");
-  await expect(
-    page.getByText("Effective owner: Mogplex platform project.")
-  ).toBeVisible();
-
-  await page
-    .getByRole("combobox", { name: "Sandbox Billing" })
-    .selectOption("user_vercel_project");
-  await page
-    .getByRole("combobox", { name: "Repo-linked Vercel Team" })
-    .selectOption("personal");
-  await page
-    .getByRole("combobox", { name: "Repo-linked Vercel Project" })
-    .selectOption("");
-  const clearProjectResponse = page.waitForResponse(
-    (response) =>
-      /\/api\/repos(?:\?.*)?$/.test(response.url()) &&
-      response.request().method() === "PATCH"
-  );
-  await page
-    .getByRole("button", { name: "Save Settings" })
-    .evaluate((el: HTMLElement) => el.click());
-  await clearProjectResponse;
-
-  expect(state.repoPatchBodies.at(-1)).toMatchObject({
-    sandbox_billing_mode_override: "user_vercel_project",
     sandbox_billing_target: "personal",
     vercel_team_id: null,
     vercel_project_id: null,
   });
-});
-
-test("workspace and repo settings warn when user billing has no linked Vercel project", async ({
-  page,
-}) => {
-  const state = createBillingState();
-  await installBaseMocks(page, state);
-
-  // Test workspace warning
-  await page.goto(scopedPath("projects/repositories"));
-  await page.waitForLoadState("networkidle");
-
-  await page.getByRole("button", { name: "Manage" }).click();
-  await page.getByText("Rename project").click();
-
-  await page
-    .getByRole("combobox", { name: "Default Sandbox Billing" })
-    .selectOption("user_vercel_project");
-  await expect(
-    page.getByText(
-      "Select or create a workspace-linked Vercel project to keep user-billed sandbox launch working."
-    )
-  ).toBeVisible();
-
-  // Reload page to reset state instead of dismissing dialog
-  await page.goto(scopedPath("projects/repositories"));
-  await page.waitForLoadState("networkidle");
-
-  // Test repo warning
-  await page.getByRole("button", { name: "Repo actions" }).click();
-  await page.getByText("Space Settings").click();
-
-  await page
-    .getByRole("combobox", { name: "Sandbox Billing" })
-    .selectOption("user_vercel_project");
-  await expect(
-    page.getByText(
-      "Select or create a repo-linked Vercel project to keep user-billed sandbox launch working."
-    )
-  ).toBeVisible();
-});
-
-test("workspace and repo settings show reachable linked-project validation and reconnect actions", async ({
-  page,
-}) => {
-  const state = createBillingState({
-    workspace: {
-      sandbox_billing_mode: "user_vercel_project",
-      sandbox_vercel_team_id: "team-acme",
-      sandbox_vercel_project_id: "workspace-app",
-    },
-  });
-  await installBaseMocks(page, state);
-
-  // Test workspace validation message
-  await page.goto(scopedPath("projects/repositories"));
-  await page.waitForLoadState("networkidle");
-
-  await page.getByRole("button", { name: "Manage" }).click();
-  await page.getByText("Rename project").click();
-  await expect(
-    page.getByText(
-      "workspace-linked Vercel project is reachable and ready for user-billed sandbox launch."
-    )
-  ).toBeVisible();
-
-  // Reload page to reset state instead of dismissing dialog
-  await page.goto(scopedPath("projects/repositories"));
-  await page.waitForLoadState("networkidle");
-
-  // Test repo validation message
-  await page.getByRole("button", { name: "Repo actions" }).click();
-  await page.getByText("Space Settings").click();
-  await expect(
-    page.getByText(
-      "workspace-linked Vercel project is reachable and ready for user-billed sandbox launch."
-    )
-  ).toBeVisible();
-
-  // Reload page and set error state to test reconnect action
-  state.targetsError = "VERCEL_AUTH_INVALID";
-  await page.goto(scopedPath("projects/repositories"));
-  await page.waitForLoadState("networkidle");
-
-  await page.getByRole("button", { name: "Manage" }).click();
-  await page.getByText("Rename project").click();
-  await expect(
-    page.getByText(
-      "Reconnect Personal Vercel to restore access to the linked billing project."
-    )
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Reconnect Personal Vercel" })
-  ).toBeVisible();
+  expect(targetRequests).toEqual([]);
 });
 
 test("observability surfaces sandbox compute and AI billing details", async ({

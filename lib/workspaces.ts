@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { normalizeSandboxBillingMode } from "@/lib/sandbox/billing";
+import { resolveEffectiveSandboxBillingMode } from "@/lib/sandbox/billing";
 import {
   applyResourceOwnerScope,
   buildResourceOwnershipInsert,
@@ -53,12 +53,6 @@ export function normalizeWorkspaceName(value: unknown) {
 }
 
 export function normalizeWorkspaceDescription(value: unknown) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeWorkspaceSandboxTargetId(value: unknown) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -202,18 +196,14 @@ export function normalizeWorkspaceSettings(input: {
   return {
     name: normalizeWorkspaceName(input.name),
     description: normalizeWorkspaceDescription(input.description),
-    sandbox_billing_mode: normalizeSandboxBillingMode(
-      input.sandbox_billing_mode
-    ),
+    sandbox_billing_mode: resolveEffectiveSandboxBillingMode({
+      workspaceBillingModeInput: input.sandbox_billing_mode,
+    }),
     sandbox_timeout_ms: normalizeSandboxTimeoutMs(input.sandbox_timeout_ms),
     sandbox_idle_timeout_ms: normalizeSandboxIdleTimeoutMs(
       input.sandbox_idle_timeout_ms
     ),
-    sandbox_vercel_team_id: normalizeWorkspaceSandboxTargetId(
-      input.sandbox_vercel_team_id
-    ),
-    sandbox_vercel_project_id: normalizeWorkspaceSandboxTargetId(
-      input.sandbox_vercel_project_id
-    ),
+    sandbox_vercel_team_id: null,
+    sandbox_vercel_project_id: null,
   };
 }

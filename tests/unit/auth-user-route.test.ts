@@ -128,11 +128,11 @@ test("GET /api/auth/user derives connected state from vault-backed OAuth storage
         personalState: "linked",
         linkedProjectState: "none",
         canUsePlatformOps: true,
-        canLinkUserBillingProject: true,
+        canLinkUserBillingProject: false,
         canUseUserBilling: false,
         statusLabel: "Platform ready",
         statusDetail:
-          "Mogplex platform Vercel is ready. Personal Vercel is linked, but no billing project is selected yet.",
+          "Mogplex platform Vercel is ready. Sign in with Vercel is identity-only; user-owned compute requires a future API-capable integration.",
       },
       account_vercel_project_id: null,
       account_vercel_team_id: null,
@@ -229,7 +229,7 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
         canUseUserBilling: false,
         statusLabel: "Platform not configured",
         statusDetail:
-          "Mogplex platform Vercel is not configured. Link Personal Vercel only if you want to bill sandboxes to your own Vercel project.",
+          "Mogplex platform Vercel is not configured. Sign in with Vercel is identity-only; user-owned compute requires a future API-capable integration.",
       },
       account_vercel_project_id: null,
       account_vercel_team_id: null,

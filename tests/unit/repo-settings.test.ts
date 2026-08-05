@@ -162,7 +162,7 @@ test("parseEnvVarsText keeps mismatched or interior quotes untouched and unwraps
   );
 });
 
-test("resolveEffectiveSandboxTimeoutMs prefers repo override, then workspace default, then app default", async () => {
+test("resolveEffectiveSandboxTimeoutMs ignores invisible repo overrides", async () => {
   const { DEFAULT_SANDBOX_TIMEOUT_MS, resolveEffectiveSandboxTimeoutMs } =
     await loadRepoSettings();
 
@@ -171,7 +171,7 @@ test("resolveEffectiveSandboxTimeoutMs prefers repo override, then workspace def
       repoTimeoutMs: 30 * 60 * 1000,
       workspaceTimeoutMs: 45 * 60 * 1000,
     }),
-    30 * 60 * 1000
+    45 * 60 * 1000
   );
   assert.equal(
     resolveEffectiveSandboxTimeoutMs({
@@ -211,7 +211,7 @@ test("normalizeSandboxIdleTimeoutMs clamps to the 5-minute floor and the lifetim
   );
 });
 
-test("resolveEffectiveSandboxIdleTimeoutMs prefers repo, then workspace, then default, and caps at lifetime", async () => {
+test("resolveEffectiveSandboxIdleTimeoutMs ignores invisible repo overrides and caps at lifetime", async () => {
   const {
     DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
     resolveEffectiveSandboxIdleTimeoutMs,
@@ -222,7 +222,7 @@ test("resolveEffectiveSandboxIdleTimeoutMs prefers repo, then workspace, then de
       repoIdleTimeoutMs: 45 * 60 * 1000,
       workspaceIdleTimeoutMs: 90 * 60 * 1000,
     }),
-    45 * 60 * 1000
+    90 * 60 * 1000
   );
   assert.equal(
     resolveEffectiveSandboxIdleTimeoutMs({
@@ -343,7 +343,7 @@ test("hasConfiguredSandboxEnv: non-empty manual env vars is true", async () => {
   );
 });
 
-test("hasConfiguredSandboxEnv: vercel-project mode requires a linked project id", async () => {
+test("hasConfiguredSandboxEnv: disabled Vercel import does not count as configured", async () => {
   const { hasConfiguredSandboxEnv } = await loadRepoSettings();
   assert.equal(
     hasConfiguredSandboxEnv({
@@ -351,7 +351,7 @@ test("hasConfiguredSandboxEnv: vercel-project mode requires a linked project id"
       env_sync_mode: "vercel-project",
       vercel_project_id: "prj_123",
     }),
-    true
+    false
   );
   assert.equal(
     hasConfiguredSandboxEnv({

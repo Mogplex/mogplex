@@ -5,7 +5,7 @@ async function loadTargetResolution() {
   return import("../../lib/vercel/target-resolution");
 }
 
-test("resolveBillingLinkedProjectSelection prefers repo-linked targets over workspace defaults", async () => {
+test("resolveBillingLinkedProjectSelection ignores disabled user-billing targets", async () => {
   const {
     resolveBillingLinkedProjectSelection,
     resolveBillingLinkedProjectOwner,
@@ -21,10 +21,10 @@ test("resolveBillingLinkedProjectSelection prefers repo-linked targets over work
       workspaceLinkedTeamId: "team-workspace",
     }),
     {
-      billingMode: "user_vercel_project",
-      source: "repo",
-      projectId: "repo-project",
-      teamId: "team-repo",
+      billingMode: "platform",
+      source: null,
+      projectId: null,
+      teamId: null,
     }
   );
 
@@ -60,7 +60,7 @@ test("resolveBillingLinkedProjectOwner keeps repo ownership when override is ena
   );
 });
 
-test("resolveBillingLinkedProjectSelection falls back to account default when repo and workspace have no project", async () => {
+test("resolveBillingLinkedProjectSelection ignores legacy account defaults", async () => {
   const { resolveBillingLinkedProjectSelection } = await loadTargetResolution();
 
   assert.deepEqual(
@@ -75,10 +75,10 @@ test("resolveBillingLinkedProjectSelection falls back to account default when re
       accountLinkedTeamId: "account-team",
     }),
     {
-      billingMode: "user_vercel_project",
-      source: "account",
-      projectId: "account-project",
-      teamId: "account-team",
+      billingMode: "platform",
+      source: null,
+      projectId: null,
+      teamId: null,
     }
   );
 });
@@ -109,7 +109,7 @@ test("resolveBillingLinkedProjectOwner attributes to account when only account d
   );
 });
 
-test("resolveEnvSyncLinkedProjectSelection only uses repo-linked projects for Vercel env sync", async () => {
+test("resolveEnvSyncLinkedProjectSelection normalizes disabled Vercel import", async () => {
   const { resolveEnvSyncLinkedProjectSelection } = await loadTargetResolution();
 
   assert.deepEqual(
@@ -119,10 +119,10 @@ test("resolveEnvSyncLinkedProjectSelection only uses repo-linked projects for Ve
       repoLinkedTeamId: "team-repo",
     }),
     {
-      envSyncMode: "vercel-project",
-      source: "repo",
-      projectId: "repo-project",
-      teamId: "team-repo",
+      envSyncMode: "sandbox-only",
+      source: null,
+      projectId: null,
+      teamId: null,
     }
   );
 
@@ -141,7 +141,7 @@ test("resolveEnvSyncLinkedProjectSelection only uses repo-linked projects for Ve
   );
 });
 
-test("resolveRepoEnvVarAccess returns NO_LINKED_PROJECT for vercel-project sync without a repo-linked project", async () => {
+test("resolveRepoEnvVarAccess clearly rejects disabled Vercel project import", async () => {
   const { resolveRepoEnvVarAccess } = await loadTargetResolution();
 
   assert.deepEqual(
@@ -153,15 +153,15 @@ test("resolveRepoEnvVarAccess returns NO_LINKED_PROJECT for vercel-project sync 
     }),
     {
       ok: false,
-      status: 400,
-      error: "NO_LINKED_PROJECT",
+      status: 501,
+      error: "VERCEL_INTEGRATION_REQUIRED",
       message:
-        "Link a repo-linked Vercel project to sync env vars from Vercel.",
+        "Vercel project environment import requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
     }
   );
 });
 
-test("resolveRepoEnvVarAccess uses personal auth for user-billed linked projects", async () => {
+test("resolveRepoEnvVarAccess ignores legacy workspace user billing", async () => {
   const { resolveRepoEnvVarAccess } = await loadTargetResolution();
 
   assert.deepEqual(
@@ -175,18 +175,16 @@ test("resolveRepoEnvVarAccess uses personal auth for user-billed linked projects
       platformVercelProjectId: "platform-project",
     }),
     {
-      ok: true,
-      authMode: "personal",
-      projectId: "workspace-project",
-      teamId: "team-workspace",
-      selectionSource: "workspace",
-      reason: "billing",
-      vercelToken: "user-token",
+      ok: false,
+      status: 501,
+      error: "VERCEL_INTEGRATION_REQUIRED",
+      message:
+        "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
     }
   );
 });
 
-test("resolveRepoEnvVarAccess uses the account-default project when repo and workspace have no linked project", async () => {
+test("resolveRepoEnvVarAccess ignores legacy account-default user billing", async () => {
   const { resolveRepoEnvVarAccess } = await loadTargetResolution();
 
   assert.deepEqual(
@@ -200,13 +198,11 @@ test("resolveRepoEnvVarAccess uses the account-default project when repo and wor
       platformVercelProjectId: "platform-project",
     }),
     {
-      ok: true,
-      authMode: "personal",
-      projectId: "account-project",
-      teamId: "account-team",
-      selectionSource: "account",
-      reason: "billing",
-      vercelToken: "user-token",
+      ok: false,
+      status: 501,
+      error: "VERCEL_INTEGRATION_REQUIRED",
+      message:
+        "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
     }
   );
 });
@@ -225,10 +221,10 @@ test("resolveRepoEnvVarAccess blocks platform billing from managing env vars", a
     }),
     {
       ok: false,
-      status: 400,
-      error: "NO_LINKED_PROJECT",
+      status: 501,
+      error: "VERCEL_INTEGRATION_REQUIRED",
       message:
-        "Select or create a repo-linked or workspace-linked Vercel project, then link Personal Vercel to manage env vars. Platform-backed env var management is disabled.",
+        "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
     }
   );
 });

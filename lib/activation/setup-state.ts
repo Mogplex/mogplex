@@ -17,12 +17,13 @@ export type ActivationSetupUser = {
 
 export type VercelSetupState =
   | "disconnected"
+  | "billing_required"
   | "oauth_connected_needs_project"
   | "linked"
   | "platform_billed";
 
 export type VercelPrimaryAction = {
-  kind: "connect" | "link_project";
+  kind: "connect" | "link_project" | "billing";
   label: string;
   href: string;
 } | null;
@@ -160,7 +161,6 @@ export function presentVercelSetup(
   const allowPlatformSandbox = Boolean(
     user?.platform_access?.allowPlatformSandbox
   );
-  const vercel = user?.vercel ?? null;
 
   if (allowPlatformSandbox) {
     return {
@@ -173,46 +173,15 @@ export function presentVercelSetup(
     };
   }
 
-  if (vercel?.canUseUserBilling) {
-    return {
-      state: "linked",
-      label: "Vercel connected",
-      detail:
-        vercel.statusDetail ||
-        "Vercel is linked and a billing project is selected. Sandboxes will bill to your Vercel project.",
-      primaryAction: null,
-      canLaunchSandbox: true,
-    };
-  }
-
-  if (vercel?.canLinkUserBillingProject) {
-    return {
-      state: "oauth_connected_needs_project",
-      label: "Select a Vercel billing project",
-      detail:
-        "Vercel is connected. Create a project to pick which Vercel project sandbox runs should bill to.",
-      // href here is a fallback — the dashboard component swaps in an onClick
-      // that opens the New project dialog (which includes the Vercel project
-      // selector). Keep the href pointing to /api/auth/vercel so a direct
-      // navigation still lands somewhere useful instead of a dead page.
-      primaryAction: {
-        kind: "link_project",
-        label: "Create project with Vercel billing",
-        href: "/api/auth/vercel",
-      },
-      canLaunchSandbox: false,
-    };
-  }
-
   return {
-    state: "disconnected",
-    label: "Connect Vercel",
+    state: "billing_required",
+    label: "Sandbox billing required",
     detail:
-      "Sandboxes run on Vercel's infrastructure and bill to your Vercel project. Connect your account to launch sandboxes.",
+      "Add funds or choose a plan to launch sandboxes on Mogplex infrastructure.",
     primaryAction: {
-      kind: "connect",
-      label: "Connect Vercel",
-      href: "/api/auth/vercel",
+      kind: "billing",
+      label: "Open billing settings",
+      href: "/settings?section=billing",
     },
     canLaunchSandbox: false,
   };
@@ -232,6 +201,12 @@ export function presentSandboxEmptyState(vercel: VercelSetupPresentation) {
         title: "Select a Vercel project to bill sandboxes to",
         detail:
           "Vercel is connected — finish setup by selecting a billing project in your workspace or repo settings.",
+      };
+    case "billing_required":
+      return {
+        title: "Add sandbox billing",
+        detail:
+          "Add funds or choose a plan in Billing before launching a sandbox.",
       };
     case "disconnected":
     default:

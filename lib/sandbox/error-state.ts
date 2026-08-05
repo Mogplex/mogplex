@@ -1,5 +1,6 @@
 export type SandboxErrorCode =
   | "GITHUB_NOT_CONNECTED"
+  | "BILLING_REQUIRED"
   | "SANDBOX_SERVICE_UNAVAILABLE"
   | "VERCEL_CONNECTION_REQUIRED"
   | "VERCEL_RECONNECT_REQUIRED"
@@ -39,6 +40,10 @@ export const SANDBOX_ERROR_CTA: Record<
   { label: string; href: string } | null
 > = {
   GITHUB_NOT_CONNECTED: { label: "Connect GitHub", href: "/settings" },
+  BILLING_REQUIRED: {
+    label: "Open billing settings",
+    href: "/settings?section=billing",
+  },
   SANDBOX_SERVICE_UNAVAILABLE: null,
   VERCEL_CONNECTION_REQUIRED: {
     label: "Connect Vercel",
@@ -61,6 +66,12 @@ export function parseSandboxErrorCode(message: string): SandboxErrorCode {
   // Vercel matches. Keep the most-specific messages first.
   const lower = message.toLowerCase();
   if (lower.includes("github account")) return "GITHUB_NOT_CONNECTED";
+  if (
+    lower.includes("positive billing balance") ||
+    lower.includes("add funds or choose a plan")
+  ) {
+    return "BILLING_REQUIRED";
+  }
   if (
     lower.includes("platform sandbox billing is not enabled") ||
     lower.includes("platform sandbox access is not enabled") ||
@@ -98,15 +109,17 @@ export function presentSandboxError(
   const title =
     code === "GITHUB_NOT_CONNECTED"
       ? "Connect GitHub to launch this preview"
-      : code === "VERCEL_CONNECTION_REQUIRED"
-        ? "Connect your Vercel account to launch sandboxes"
-        : code === "VERCEL_RECONNECT_REQUIRED"
-          ? "Reconnect Vercel to launch this preview"
-          : code === "VERCEL_PROJECT_REQUIRED"
-            ? "Link a Vercel project to launch this preview"
-            : code === "SANDBOX_SERVICE_UNAVAILABLE"
-              ? "Sandbox service is unavailable"
-              : "Sandbox launch failed";
+      : code === "BILLING_REQUIRED"
+        ? "Add sandbox billing to launch this preview"
+        : code === "VERCEL_CONNECTION_REQUIRED"
+          ? "Connect your Vercel account to launch sandboxes"
+          : code === "VERCEL_RECONNECT_REQUIRED"
+            ? "Reconnect Vercel to launch this preview"
+            : code === "VERCEL_PROJECT_REQUIRED"
+              ? "Link a Vercel project to launch this preview"
+              : code === "SANDBOX_SERVICE_UNAVAILABLE"
+                ? "Sandbox service is unavailable"
+                : "Sandbox launch failed";
 
   return {
     code,

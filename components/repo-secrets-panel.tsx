@@ -90,7 +90,7 @@ export function RepoSecretsPanel({ repo }: Props) {
   return (
     <div className="space-y-3 p-4">
       <div className="text-[11px] leading-5 text-muted-foreground">
-        GitHub Actions secrets are managed here. Personal Vercel project linking now lives in repo and project settings.
+        GitHub Actions secrets are managed here. Sandbox environment variables are managed in repo settings.
       </div>
 
       {error && (

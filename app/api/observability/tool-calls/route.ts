@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
+import { sanitizeObservabilityToolEntry } from "@/lib/observability/user-facing-errors";
 
 export async function GET() {
   const userId = await requireUserId();
@@ -14,8 +15,13 @@ export async function GET() {
     .order("started_at", { ascending: false })
     .limit(50);
 
-  if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("observability tool call query failed", error);
+    return NextResponse.json(
+      { error: "Failed to fetch tool calls" },
+      { status: 500 }
+    );
+  }
 
   type StoredToolCall = {
     name: string;
@@ -41,5 +47,7 @@ export async function GET() {
     }));
   });
 
-  return NextResponse.json(entries);
+  return NextResponse.json(
+    entries.map((entry) => sanitizeObservabilityToolEntry(entry))
+  );
 }

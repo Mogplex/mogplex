@@ -85,7 +85,7 @@ interface Props {
   onPopOut?: (activeFile?: string) => void;
 }
 
-function formatPreviewToolbarStatus(status: PreviewOverlayStatus) {
+export function formatPreviewToolbarStatus(status: PreviewOverlayStatus) {
   switch (status) {
     case "starting":
       return "Starting...";
@@ -106,7 +106,10 @@ function formatPreviewToolbarStatus(status: PreviewOverlayStatus) {
     case "unreachable":
       return "Unreachable";
     case "idle_warning":
-      return "Idle warning";
+      // The runtime remains reachable and interactive in this state; the
+      // separate lifecycle controls own pause/resume messaging. Do not present
+      // a healthy preview as degraded merely because it is idle.
+      return "Ready";
     case "error":
       return "Error";
     default:

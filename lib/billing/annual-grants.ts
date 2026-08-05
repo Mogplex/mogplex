@@ -7,11 +7,13 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 const GRANT_CONCURRENCY = 20;
+const LEDGER_ACCOUNT_BATCH_SIZE = 200;
 
 export type AnnualGrantCandidate = {
   id: string;
   stripe_subscription_id: string;
   period_anchor: string;
+  granted_periods?: string[];
 };
 
 export type AnnualGrantSummary = {
@@ -52,7 +54,59 @@ export async function loadAnnualGrantCandidates(): Promise<
     "created_at",
     "annual billing grant candidates"
   );
-  return rows as AnnualGrantCandidate[];
+  const candidates = rows as AnnualGrantCandidate[];
+  if (candidates.length === 0) return candidates;
+
+  // Loading posted schedule periods with the candidates lets the daily task
+  // avoid a Stripe request (and a guaranteed duplicate ledger RPC) once an
+  // account is current. period_anchor advances on each Stripe invoice, so
+  // grouping by its YYYY-MM value bounds every ledger lookup to the active
+  // subscription cycle. The source_ref remains the final concurrency guard.
+  const candidatesByAnchorPeriod = new Map<string, AnnualGrantCandidate[]>();
+  for (const candidate of candidates) {
+    const anchorPeriod = annualGrantLedgerStartPeriod(candidate.period_anchor);
+    if (!anchorPeriod) continue;
+    const group = candidatesByAnchorPeriod.get(anchorPeriod) ?? [];
+    group.push(candidate);
+    candidatesByAnchorPeriod.set(anchorPeriod, group);
+  }
+
+  const ledgerRows: Array<{ account_id: string; period: string }> = [];
+  for (const [anchorPeriod, groupedCandidates] of candidatesByAnchorPeriod) {
+    for (
+      let index = 0;
+      index < groupedCandidates.length;
+      index += LEDGER_ACCOUNT_BATCH_SIZE
+    ) {
+      const accountIds = groupedCandidates
+        .slice(index, index + LEDGER_ACCOUNT_BATCH_SIZE)
+        .map((candidate) => candidate.id);
+      const batch = (await fetchAllRows(
+        () =>
+          supabaseAdmin
+            .from("credit_ledger")
+            .select("id, account_id, period, created_at")
+            .in("account_id", accountIds)
+            .gte("period", anchorPeriod)
+            .eq("kind", "grant")
+            .contains("metadata", { source: "annual_schedule" }),
+        "created_at",
+        "posted annual billing grants"
+      )) as Array<{ account_id: string; period: string }>;
+      ledgerRows.push(...batch);
+    }
+  }
+  const periodsByAccount = new Map<string, string[]>();
+  for (const row of ledgerRows) {
+    const periods = periodsByAccount.get(row.account_id) ?? [];
+    periods.push(row.period);
+    periodsByAccount.set(row.account_id, periods);
+  }
+
+  return candidates.map((candidate) => ({
+    ...candidate,
+    granted_periods: periodsByAccount.get(candidate.id) ?? [],
+  }));
 }
 
 function parseAnchor(anchor: string) {
@@ -70,6 +124,10 @@ function parseAnchor(anchor: string) {
     return null;
   }
   return { year, month, day };
+}
+
+export function annualGrantLedgerStartPeriod(periodAnchor: string) {
+  return parseAnchor(periodAnchor) ? periodAnchor.slice(0, 7) : null;
 }
 
 export function annualGrantPeriod(
@@ -94,6 +152,34 @@ export function annualGrantPeriod(
   return now.toISOString().slice(0, 7);
 }
 
+export function annualGrantPeriodsDue(
+  periodAnchor: string,
+  now: Date
+): string[] {
+  const anchor = parseAnchor(periodAnchor);
+  if (!anchor || Number.isNaN(now.getTime())) return [];
+
+  const currentOffset =
+    (now.getUTCFullYear() - anchor.year) * 12 +
+    (now.getUTCMonth() - anchor.month);
+  if (currentOffset <= 0) return [];
+
+  const periods: string[] = [];
+  for (let offset = 1; offset <= currentOffset; offset += 1) {
+    // Stripe's invoice webhook owns each annual renewal month.
+    if (offset % 12 === 0) continue;
+    const year = anchor.year + Math.floor((anchor.month + offset) / 12);
+    const month = (anchor.month + offset) % 12;
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const dueAt = new Date(
+      Date.UTC(year, month, Math.min(anchor.day, lastDay))
+    );
+    if (dueAt > now) continue;
+    periods.push(`${year}-${String(month + 1).padStart(2, "0")}`);
+  }
+  return periods;
+}
+
 type AnnualGrantOutcome = "granted" | "duplicates" | "skipped" | "errored";
 
 async function grantCandidate(
@@ -102,8 +188,11 @@ async function grantCandidate(
   deps: AnnualGrantDeps
 ): Promise<AnnualGrantOutcome> {
   try {
-    const period = annualGrantPeriod(candidate.period_anchor, now);
-    if (!period) return "skipped";
+    const postedPeriods = new Set(candidate.granted_periods);
+    const periods = annualGrantPeriodsDue(candidate.period_anchor, now).filter(
+      (period) => !postedPeriods.has(period)
+    );
+    if (periods.length === 0) return "skipped";
 
     const subscription = await deps.retrieveSubscription(
       candidate.stripe_subscription_id
@@ -113,15 +202,19 @@ async function grantCandidate(
     const plan = lookupKey ? findPlanPrice(lookupKey) : null;
     if (plan?.interval !== "year") return "skipped";
 
-    const grant = await deps.postBillingPeriodGrant({
-      accountId: candidate.id,
-      deltaCents: plan.includedUsageCents,
-      grantSourceRef: `grant:${candidate.id}:${period}:${candidate.stripe_subscription_id}`,
-      expirySourceRef: `grantexp:${candidate.id}:${period}:${candidate.stripe_subscription_id}`,
-      period,
-      metadata: { source: "annual_schedule", plan: plan.lookupKey },
-    });
-    return grant.posted ? "granted" : "duplicates";
+    let posted = false;
+    for (const period of periods) {
+      const grant = await deps.postBillingPeriodGrant({
+        accountId: candidate.id,
+        deltaCents: plan.includedUsageCents,
+        grantSourceRef: `grant:${candidate.id}:${period}:${candidate.stripe_subscription_id}`,
+        expirySourceRef: `grantexp:${candidate.id}:${period}:${candidate.stripe_subscription_id}`,
+        period,
+        metadata: { source: "annual_schedule", plan: plan.lookupKey },
+      });
+      posted ||= grant.posted;
+    }
+    return posted ? "granted" : "duplicates";
   } catch (error) {
     deps.captureException(error, {
       extra: {

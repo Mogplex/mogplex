@@ -44,7 +44,7 @@ function baseLibDeps() {
   };
 }
 
-test("listMogplexApiRepoEnvVars returns metadata without values", async () => {
+test("listMogplexApiRepoEnvVars rejects unavailable Vercel env access", async () => {
   const { lib } = await loadEnvVarsModules();
   const listCalls: Array<Record<string, unknown>> = [];
 
@@ -68,20 +68,15 @@ test("listMogplexApiRepoEnvVars returns metadata without values", async () => {
     },
   });
 
-  assert.equal(listCalls[0]?.decrypt, false);
-  assert.ok(result.ok);
-  assert.deepEqual(result.data.envVars, [
-    {
-      id: "env_1",
-      key: "DATABASE_URL",
-      target: ["production"],
-      type: "encrypted",
-      updatedAt: 1_700_000_000_000,
-    },
-  ]);
+  assert.equal(listCalls.length, 0);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(result.error.status, 501);
+  }
 });
 
-test("upsertMogplexApiRepoEnvVar creates when the key is new", async () => {
+test("upsertMogplexApiRepoEnvVar does not create through an identity-only grant", async () => {
   const { lib } = await loadEnvVarsModules();
   const upsertCalls: Array<Record<string, unknown>> = [];
 
@@ -102,18 +97,15 @@ test("upsertMogplexApiRepoEnvVar creates when the key is new", async () => {
     }
   );
 
-  assert.ok(result.ok);
-  assert.deepEqual(result.data, {
-    action: "created",
-    key: "NEW_KEY",
-    updatedCount: 1,
-  });
-  assert.equal(upsertCalls.length, 1);
-  assert.equal(upsertCalls[0]?.envId, undefined);
-  assert.equal(upsertCalls[0]?.key, "NEW_KEY");
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(result.error.status, 501);
+  }
+  assert.equal(upsertCalls.length, 0);
 });
 
-test("upsertMogplexApiRepoEnvVar updates every existing entry with the key", async () => {
+test("upsertMogplexApiRepoEnvVar does not update through an identity-only grant", async () => {
   const { lib } = await loadEnvVarsModules();
   const upsertCalls: Array<Record<string, unknown>> = [];
 
@@ -141,19 +133,15 @@ test("upsertMogplexApiRepoEnvVar updates every existing entry with the key", asy
     }
   );
 
-  assert.ok(result.ok);
-  assert.deepEqual(result.data, {
-    action: "updated",
-    key: "API_KEY",
-    updatedCount: 2,
-  });
-  assert.deepEqual(
-    upsertCalls.map((call) => call.envId),
-    ["env_prod", "env_dev"]
-  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(result.error.status, 501);
+  }
+  assert.equal(upsertCalls.length, 0);
 });
 
-test("upsertMogplexApiRepoEnvVar rejects explicit targets when the key has multiple entries", async () => {
+test("upsertMogplexApiRepoEnvVar fails before resolving target conflicts", async () => {
   const { lib } = await loadEnvVarsModules();
   const upsertCalls: unknown[] = [];
 
@@ -179,13 +167,13 @@ test("upsertMogplexApiRepoEnvVar rejects explicit targets when the key has multi
 
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.equal(result.error.code, "CONFLICT");
-    assert.equal(result.error.status, 409);
+    assert.equal(result.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(result.error.status, 501);
   }
   assert.equal(upsertCalls.length, 0);
 });
 
-test("upsertMogplexApiRepoEnvVar reports partial progress when an update fails mid-loop", async () => {
+test("upsertMogplexApiRepoEnvVar performs no partial provider updates", async () => {
   const { lib } = await loadEnvVarsModules();
   let calls = 0;
 
@@ -224,12 +212,13 @@ test("upsertMogplexApiRepoEnvVar reports partial progress when an update fails m
 
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.equal(result.error.code, "RATE_LIMITED");
-    assert.match(result.error.message, /Updated 1 of 2 entries/);
+    assert.equal(result.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(result.error.status, 501);
   }
+  assert.equal(calls, 0);
 });
 
-test("deleteMogplexApiRepoEnvVar deletes matches and 404s on unknown keys", async () => {
+test("deleteMogplexApiRepoEnvVar performs no provider deletes", async () => {
   const { lib } = await loadEnvVarsModules();
   const deletedIds: string[] = [];
   const deps = {
@@ -253,9 +242,12 @@ test("deleteMogplexApiRepoEnvVar deletes matches and 404s on unknown keys", asyn
     { key: "API_KEY" },
     deps
   );
-  assert.ok(deleted.ok);
-  assert.deepEqual(deleted.data, { key: "API_KEY", deletedCount: 2 });
-  assert.deepEqual(deletedIds, ["env_1", "env_2"]);
+  assert.equal(deleted.ok, false);
+  if (!deleted.ok) {
+    assert.equal(deleted.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(deleted.error.status, 501);
+  }
+  assert.deepEqual(deletedIds, []);
 
   const missing = await lib.deleteMogplexApiRepoEnvVar(
     "user-123",
@@ -265,12 +257,12 @@ test("deleteMogplexApiRepoEnvVar deletes matches and 404s on unknown keys", asyn
   );
   assert.equal(missing.ok, false);
   if (!missing.ok) {
-    assert.equal(missing.error.code, "NOT_FOUND");
-    assert.equal(missing.error.status, 404);
+    assert.equal(missing.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(missing.error.status, 501);
   }
 });
 
-test("env vars lib maps repos without a linked Vercel project to BAD_REQUEST", async () => {
+test("env vars lib returns the integration-required response before repo lookup", async () => {
   const { lib } = await loadEnvVarsModules();
 
   const result = await lib.listMogplexApiRepoEnvVars("user-123", "repo-1", {
@@ -284,8 +276,8 @@ test("env vars lib maps repos without a linked Vercel project to BAD_REQUEST", a
 
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.equal(result.error.code, "BAD_REQUEST");
-    assert.equal(result.error.status, 400);
+    assert.equal(result.error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(result.error.status, 501);
   }
 });
 

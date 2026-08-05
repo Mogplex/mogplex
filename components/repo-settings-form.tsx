@@ -6,26 +6,18 @@ import {
   DEFAULT_DEV_PORT,
   DEFAULT_ENV_SYNC_MODE,
   formatEnvVars,
+  resolveEffectiveEnvSyncMode,
   parseEnvVarsText,
 } from "@/lib/repo-settings";
+import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import {
-  INHERITED_WORKSPACE_TEAM_OPTION,
-  type SandboxBillingMode,
-} from "@/lib/sandbox/billing";
-import {
-  buildRepoSandboxSettingsModel,
   buildRepoSandboxSettingsPayload,
   createRepoSandboxSettingsDraft,
-  resolveRepoTeamSelectionDraft,
 } from "@/lib/sandbox/settings-model";
-import { useVercelTargets } from "@/hooks/use-vercel-targets";
-import { useUser } from "@/hooks/use-user";
 import {
   SUPPORTED_RUNTIMES,
   RUNTIME_LABELS,
 } from "@/lib/sandbox/runtimes/types";
-import { VercelLinkedProjectValidationBanner } from "@/components/vercel-linked-project-validation-banner";
-import { derivePersistedVercelLinkedProjectValidation } from "@/lib/vercel/validation";
 
 interface Props {
   repo: Repo;
@@ -50,16 +42,8 @@ export function RepoSettingsForm({
     "inherit" | SandboxBillingMode
   >(createRepoSandboxSettingsDraft(repo).billingModeOverride);
   const [envSyncMode, setEnvSyncMode] = useState(
-    repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE
+    resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
   );
-  const [vercelTeamId, setVercelTeamId] = useState(
-    createRepoSandboxSettingsDraft(repo).vercelTeamId
-  );
-  const [vercelProjectId, setVercelProjectId] = useState(
-    createRepoSandboxSettingsDraft(repo).vercelProjectId
-  );
-  const { user } = useUser();
-  const accountDefaultProjectId = user?.account_vercel_project_id ?? null;
   const [rootDirectory, setRootDirectory] = useState(repo.root_directory || "");
   const [installCommand, setInstallCommand] = useState(
     repo.install_command || ""
@@ -78,68 +62,9 @@ export function RepoSettingsForm({
 
   const draft = {
     billingModeOverride,
-    vercelTeamId,
-    vercelProjectId,
+    vercelTeamId: "",
+    vercelProjectId: "",
   };
-  const baseSandboxModel = buildRepoSandboxSettingsModel(repo, draft);
-  const matchesStoredDraft =
-    billingModeOverride === (repo.sandbox_billing_mode_override || "inherit") &&
-    vercelTeamId === (repo.vercel_team_id || "") &&
-    vercelProjectId === (repo.vercel_project_id || "");
-  const initialLinkedProjectValidation =
-    matchesStoredDraft &&
-    baseSandboxModel.effectiveBillingMode === "user_vercel_project"
-      ? billingModeOverride === "user_vercel_project"
-        ? derivePersistedVercelLinkedProjectValidation({
-            status: repo.vercel_link_status,
-            source: "repo",
-            message: repo.vercel_link_message,
-            errorCode: repo.vercel_link_error_code,
-          })
-        : baseSandboxModel.effectiveLinkedProjectSource === "repo"
-          ? derivePersistedVercelLinkedProjectValidation({
-              status: repo.vercel_link_status,
-              source: "repo",
-              message: repo.vercel_link_message,
-              errorCode: repo.vercel_link_error_code,
-            })
-          : baseSandboxModel.effectiveLinkedProjectSource === "workspace"
-            ? derivePersistedVercelLinkedProjectValidation({
-                status: repo.workspace?.vercel_link_status,
-                source: "workspace",
-                message: repo.workspace?.vercel_link_message,
-                errorCode: repo.workspace?.vercel_link_error_code,
-              })
-            : null
-      : null;
-  const {
-    teams,
-    projects,
-    loadingTargets,
-    creatingProject,
-    targetsError,
-    needsVercelReconnect,
-    linkedProjectValidation,
-    createProject,
-  } = useVercelTargets({
-    teamScope: baseSandboxModel.teamScope,
-    reconnectMessage:
-      "Link Personal Vercel to choose your own billing project or sync envs from a linked project.",
-    initialValidation: initialLinkedProjectValidation,
-    validation: {
-      billingMode: baseSandboxModel.effectiveBillingMode,
-      source: baseSandboxModel.effectiveLinkedProjectSource,
-      projectId: baseSandboxModel.effectiveLinkedProjectId,
-      teamId: baseSandboxModel.effectiveLinkedTeamId,
-    },
-  });
-  const sandboxModel = buildRepoSandboxSettingsModel(repo, draft, teams);
-
-  const createProjectDefaultName = (
-    repo.name ||
-    repo.full_name.split("/")[1] ||
-    "mogplex-sandbox"
-  ).trim();
   const buildRepo = () => {
     const sandboxEnvVars = parseEnvVarsText(envVarsText);
     return {
@@ -155,14 +80,6 @@ export function RepoSettingsForm({
       dev_port_auto: devPortAuto,
       sandbox_env_vars: sandboxEnvVars,
     } satisfies Repo;
-  };
-
-  const handleCreateProject = async () => {
-    const result = await createProject(createProjectDefaultName);
-    if (result.ok) {
-      setVercelProjectId(result.project.id);
-      setVercelTeamId(result.teamId === "personal" ? "" : result.teamId);
-    }
   };
 
   const handleSave = async () => {
@@ -238,102 +155,14 @@ export function RepoSettingsForm({
           className="border-border bg-input text-foreground w-full border px-2 py-1"
         >
           <option value="inherit">
-            Inherit workspace default (
-            {sandboxModel.workspaceBillingMode === "user_vercel_project"
-              ? "Your Vercel project"
-              : "Mogplex billing"}
-            )
+            Inherit workspace default (Mogplex billing)
           </option>
           <option value="platform">Mogplex billing</option>
-          <option value="user_vercel_project">
-            Your Vercel project billing
-          </option>
         </select>
         <p className="text-muted-foreground text-[11px]">
-          Effective owner: {sandboxModel.effectiveOwnerLabel}.
+          Sandboxes use Mogplex billing. User-owned Vercel compute is not yet
+          available.
         </p>
-      </label>
-
-      <label className="space-y-1">
-        <div className="ui-label">Repo-linked Vercel Team</div>
-        <select
-          aria-label="Repo-linked Vercel Team"
-          value={sandboxModel.selectedTeamValue}
-          onChange={(e) => {
-            const next = resolveRepoTeamSelectionDraft(e.target.value, draft);
-            setVercelTeamId(next.vercelTeamId);
-            setVercelProjectId(next.vercelProjectId);
-          }}
-          className="border-border bg-input text-foreground w-full border px-2 py-1 disabled:opacity-50"
-          disabled={loadingTargets}
-        >
-          <option value="personal">Personal</option>
-          {sandboxModel.usingWorkspaceTeam ? (
-            <option value={INHERITED_WORKSPACE_TEAM_OPTION}>
-              Inherit workspace team ({sandboxModel.inheritedTeamName})
-            </option>
-          ) : null}
-          {teams
-            .filter((team) => team.id !== "personal")
-            .map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-        </select>
-      </label>
-
-      <label className="space-y-1">
-        <div className="ui-label">Repo-linked Vercel Project</div>
-        <select
-          aria-label="Repo-linked Vercel Project"
-          value={vercelProjectId}
-          onChange={(e) => setVercelProjectId(e.target.value)}
-          className="border-border bg-input text-foreground w-full border px-2 py-1"
-          disabled={loadingTargets}
-        >
-          {/* Falls back to the raw project ID when the account-default project is
-              not in the currently-scoped team's list (loading, or different team). */}
-          <option value="">
-            {accountDefaultProjectId
-              ? `Use account default (${
-                  projects.find((p) => p.id === accountDefaultProjectId)
-                    ?.name ?? accountDefaultProjectId
-                })`
-              : "No repo-specific project"}
-          </option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-              {project.framework ? ` (${project.framework})` : ""}
-            </option>
-          ))}
-        </select>
-        <div className="text-muted-foreground flex items-center justify-between gap-3 text-[11px]">
-          <span>
-            Used when this repo links its own Vercel project for user billing or
-            env sync, and overrides the workspace billing project for this repo.{" "}
-            {sandboxModel.effectiveLinkedProjectId
-              ? `Current effective project: ${sandboxModel.effectiveLinkedProjectId}.`
-              : "No effective Vercel project is configured yet."}
-            {sandboxModel.usingWorkspaceTeam
-              ? ` Available projects are being loaded from the inherited workspace team (${sandboxModel.inheritedTeamName}).`
-              : ""}
-            {sandboxModel.pinsInheritedWorkspaceTeam
-              ? " Saving a repo-specific project here will also pin the inherited workspace team to this repo."
-              : ""}
-          </span>
-          <button
-            type="button"
-            onClick={() => void handleCreateProject()}
-            disabled={loadingTargets || creatingProject}
-            className="border-border text-foreground shrink-0 border px-2 py-1 disabled:opacity-50"
-          >
-            {creatingProject
-              ? "Creating..."
-              : `Create ${createProjectDefaultName}`}
-          </button>
-        </div>
       </label>
 
       <label className="space-y-1">
@@ -347,21 +176,12 @@ export function RepoSettingsForm({
           <option value="sandbox-and-preview">
             Sandbox + preview conventions
           </option>
-          <option value="vercel-project">Sync from Vercel project</option>
         </select>
-        {envSyncMode === "vercel-project" && !vercelProjectId && (
-          <p className="text-muted-foreground text-[11px]">
-            Link a Vercel project above to enable env var syncing.
-          </p>
-        )}
+        <p className="text-muted-foreground text-[11px]">
+          Vercel project import is unavailable with Sign in with Vercel. Add
+          sandbox variables manually below.
+        </p>
       </label>
-
-      {linkedProjectValidation && (
-        <VercelLinkedProjectValidationBanner
-          validation={linkedProjectValidation}
-          className={mode === "page" ? "" : "md:col-span-2"}
-        />
-      )}
 
       <label className="space-y-1">
         <div className="ui-label">Root Directory</div>
@@ -414,17 +234,7 @@ export function RepoSettingsForm({
       </label>
 
       <label className={`space-y-1 ${mode === "page" ? "" : "md:col-span-2"}`}>
-        <div className="ui-label">
-          {envSyncMode === "vercel-project"
-            ? "Manual Overrides"
-            : "Environment Variables"}
-        </div>
-        {envSyncMode === "vercel-project" && (
-          <p className="text-muted-foreground text-[11px]">
-            These override Vercel project env vars when both define the same
-            key.
-          </p>
-        )}
+        <div className="ui-label">Environment Variables</div>
         <textarea
           value={envVarsText}
           onChange={(e) => setEnvVarsText(e.target.value)}
@@ -437,34 +247,11 @@ export function RepoSettingsForm({
         </p>
       </label>
 
-      {targetsError && linkedProjectValidation?.state !== "auth_invalid" && (
-        <div
-          className={`${mode === "page" ? "" : "md:col-span-2"} border-border text-muted-foreground border px-2 py-1.5 text-[11px]`}
-        >
-          {targetsError}
-          {needsVercelReconnect ? (
-            <>
-              {" "}
-              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- OAuth start endpoint, needs full-page navigation */}
-              <a
-                href="/api/auth/vercel"
-                className="text-foreground underline underline-offset-2"
-              >
-                Reconnect Personal Vercel
-              </a>
-            </>
-          ) : null}
-        </div>
-      )}
-
       <div
         className={`${mode === "page" ? "" : "md:col-span-2"} text-muted-foreground text-[11px] leading-5`}
       >
-        Mogplex can bill sandbox usage to its own platform project or to a
-        Vercel project you link from your personal account. User-owned billing
-        never falls back silently: if you pick it without a valid personal
-        Vercel link and project, sandbox launch will fail until the
-        configuration is fixed.
+        Sandboxes use the Mogplex platform project. User-owned Vercel compute
+        requires a future API-capable integration and is not available.
       </div>
 
       {error && (

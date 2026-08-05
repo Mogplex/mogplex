@@ -134,6 +134,37 @@ test("Mogplex OAuth verifier rejects sessions without Mogplex API scopes", async
   }
 });
 
+test("Mogplex OAuth verifier reports operational failures without the bearer", async () => {
+  configureEnv();
+  const {
+    __resetMogplexOAuthVerifierForTesting,
+    __setMogplexOAuthVerifierDependenciesForTesting,
+    resolveMogplexOAuthToken,
+  } = await import("../../lib/auth/mogplex-oauth");
+  const captured: unknown[] = [];
+
+  __setMogplexOAuthVerifierDependenciesForTesting({
+    getMcpSession: async () => {
+      throw new Error("database unavailable");
+    },
+    captureException: (error: unknown, context?: unknown) => {
+      captured.push({ error, context });
+      return "event-id";
+    },
+  });
+
+  try {
+    assert.deepEqual(await resolveMogplexOAuthToken("Bearer oauth.jwt.token"), {
+      ok: false,
+      reason: "invalid",
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(JSON.stringify(captured).includes("oauth.jwt.token"), false);
+  } finally {
+    __resetMogplexOAuthVerifierForTesting();
+  }
+});
+
 test("Mogplex OAuth consent helpers validate authorization ids and decisions", async () => {
   const {
     buildMogplexOAuthConsentPath,

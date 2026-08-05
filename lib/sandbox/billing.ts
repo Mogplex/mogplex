@@ -1,6 +1,10 @@
 export type SandboxBillingMode = "platform" | "user_vercel_project";
 
 export const DEFAULT_SANDBOX_BILLING_MODE: SandboxBillingMode = "platform";
+// Sign in with Vercel grants identity scopes only. It is not an API-capable
+// integration grant, so user-owned compute cannot safely be activated by an
+// environment flag or a stale database setting.
+export const USER_VERCEL_PROJECT_BILLING_AVAILABLE = false;
 export const INHERITED_WORKSPACE_TEAM_OPTION = "__workspace__";
 
 export type RepoSandboxBillingModeOverride = SandboxBillingMode | null;
@@ -60,21 +64,15 @@ export function resolveEffectiveSandboxBillingMode(input?: {
     repoOverride ??
     normalizeSandboxBillingMode(input?.workspaceBillingModeInput);
 
-  // Phase 1 kill-switch: when NEXT_PUBLIC_SANDBOX_DISABLE_USER_BILLING=1,
-  // ignore any workspace/repo selection of `user_vercel_project` and always
-  // run on the platform Vercel account. NEXT_PUBLIC_ so the same flag is
-  // visible to client bundles (settings-model.ts is consumed by client
-  // components like workspace-dialog.tsx) — without that, the client would
-  // render BYO-Vercel UI while the server silently downgrades launches.
   if (
     resolved === "user_vercel_project" &&
-    process.env.NEXT_PUBLIC_SANDBOX_DISABLE_USER_BILLING === "1"
+    !USER_VERCEL_PROJECT_BILLING_AVAILABLE
   ) {
     // Warn only on the server so we can grep prod logs for stragglers
     // without spamming the browser console on every render.
     if (typeof window === "undefined") {
       console.warn(
-        "[sandbox-billing] user_vercel_project requested but disabled; forcing platform"
+        "[sandbox-billing] user_vercel_project is not implemented; forcing platform"
       );
     }
     return "platform";

@@ -5,6 +5,19 @@ import { expect } from "vitest";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 
+export const SANDBOX_BILLING_SANDBOX_STUB_SQL = /* sql */ `
+  create table public.sandboxes (
+    id uuid primary key,
+    user_id uuid not null,
+    actor_user_id uuid,
+    product_team_id uuid,
+    sandbox_id text not null,
+    billing_source text,
+    status text not null default 'stopped',
+    last_active_at timestamptz not null default now()
+  )
+`;
+
 // Minimal schema for the tables the cost trigger battery exercises.
 //
 // We intentionally don't apply the full Supabase migration chain — most of it

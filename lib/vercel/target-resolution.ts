@@ -1,4 +1,7 @@
-import { normalizeEnvSyncMode } from "@/lib/repo-settings";
+import {
+  normalizeEnvSyncMode,
+  resolveEffectiveEnvSyncMode,
+} from "@/lib/repo-settings";
 import {
   resolveEffectiveSandboxBillingMode,
   normalizeRepoSandboxBillingModeOverride,
@@ -37,7 +40,10 @@ export type RepoEnvVarAccessResolution =
   | {
       ok: false;
       status: number;
-      error: "NO_LINKED_PROJECT" | "PERSONAL_VERCEL_REQUIRED";
+      error:
+        | "NO_LINKED_PROJECT"
+        | "PERSONAL_VERCEL_REQUIRED"
+        | "VERCEL_INTEGRATION_REQUIRED";
       message: string;
     };
 
@@ -153,7 +159,7 @@ export function resolveEnvSyncLinkedProjectSelection(input?: {
   repoLinkedProjectId?: unknown;
   repoLinkedTeamId?: unknown;
 }): EnvSyncLinkedProjectSelection {
-  const envSyncMode = normalizeEnvSyncMode(input?.envSyncModeInput);
+  const envSyncMode = resolveEffectiveEnvSyncMode(input?.envSyncModeInput);
   if (envSyncMode !== "vercel-project") {
     return {
       envSyncMode,
@@ -186,6 +192,16 @@ export function resolveRepoEnvVarAccess(input: {
   platformVercelTeamId?: string | null;
   platformVercelProjectId?: string | null;
 }): RepoEnvVarAccessResolution {
+  if (normalizeEnvSyncMode(input.envSyncModeInput) === "vercel-project") {
+    return {
+      ok: false,
+      status: 501,
+      error: "VERCEL_INTEGRATION_REQUIRED",
+      message:
+        "Vercel project environment import requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
+    };
+  }
+
   const envSyncSelection = resolveEnvSyncLinkedProjectSelection({
     envSyncModeInput: input.envSyncModeInput,
     repoLinkedProjectId: input.repoLinkedProjectId,
@@ -283,9 +299,9 @@ export function resolveRepoEnvVarAccess(input: {
 
   return {
     ok: false,
-    status: 400,
-    error: "NO_LINKED_PROJECT",
+    status: 501,
+    error: "VERCEL_INTEGRATION_REQUIRED",
     message:
-      "Select or create a repo-linked or workspace-linked Vercel project, then link Personal Vercel to manage env vars. Platform-backed env var management is disabled.",
+      "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
   };
 }

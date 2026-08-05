@@ -15,6 +15,7 @@ import {
   isMogplexBearerApiRequest,
 } from "@/lib/internal-api-auth";
 import { isDashboardScopedFirstSegment } from "@/lib/dashboard-rescue";
+import { getCanonicalAppUrl } from "@/lib/app-url";
 import { resolveScope, type ScopeLookup } from "@/lib/middleware-scope";
 import type { NextRequest } from "next/server";
 
@@ -83,7 +84,26 @@ export function buildLoginRedirectUrl(
   return loginUrl;
 }
 
+/**
+ * Collapse the legacy www host onto the configured application origin before
+ * auth runs. Better Auth cookies are intentionally host-only; allowing both
+ * hosts to serve the app would otherwise create two unrelated session jars.
+ */
+export function buildCanonicalHostRedirectUrl(request: NextRequest) {
+  const canonical = getCanonicalAppUrl(request);
+  if (request.nextUrl.hostname !== `www.${canonical.hostname}`) return null;
+
+  const redirect = new URL(request.nextUrl.pathname, canonical);
+  redirect.search = request.nextUrl.search;
+  return redirect;
+}
+
 export async function proxy(request: NextRequest) {
+  const canonicalHostRedirect = buildCanonicalHostRedirectUrl(request);
+  if (canonicalHostRedirect) {
+    return NextResponse.redirect(canonicalHostRedirect, 308);
+  }
+
   const { pathname } = request.nextUrl;
 
   if (hasPlaywrightAuthBypass(request)) {

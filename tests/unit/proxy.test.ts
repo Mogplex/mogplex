@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
-import { buildLoginRedirectUrl, config, proxy } from "../../proxy";
+import {
+  buildCanonicalHostRedirectUrl,
+  buildLoginRedirectUrl,
+  config,
+  proxy,
+} from "../../proxy";
 import {
   isCliPatApiRequest,
   isMogplexBearerApiRequest,
@@ -29,6 +34,42 @@ test("anonymous login redirects preserve the original path and query", () => {
   assert.equal(
     buildLoginRedirectUrl(request, true).toString(),
     "https://mogplex.com/login?expired=true&next=%2Fcli-auth%3Fcallback%3Dhttp%253A%252F%252Flocalhost%253A45454%252Fcallback%26nonce%3Dabc123%26name%3DCLI"
+  );
+});
+
+test("the legacy www host redirects to the configured canonical origin", async () => {
+  await withEnv(
+    { NEXT_PUBLIC_APP_URL: "https://mogplex.com", APP_URL: undefined },
+    () => {
+      const request = new NextRequest(
+        "https://www.mogplex.com/cli-auth?nonce=abc123"
+      );
+
+      assert.equal(
+        buildCanonicalHostRedirectUrl(request)?.toString(),
+        "https://mogplex.com/cli-auth?nonce=abc123"
+      );
+    }
+  );
+});
+
+test("canonical and unrelated hosts are not redirected", async () => {
+  await withEnv(
+    { NEXT_PUBLIC_APP_URL: "https://mogplex.com", APP_URL: undefined },
+    () => {
+      assert.equal(
+        buildCanonicalHostRedirectUrl(
+          new NextRequest("https://mogplex.com/cli-auth")
+        ),
+        null
+      );
+      assert.equal(
+        buildCanonicalHostRedirectUrl(
+          new NextRequest("https://preview.example/cli-auth")
+        ),
+        null
+      );
+    }
   );
 });
 

@@ -47,15 +47,15 @@ test("resolveSandboxCreateContext returns durable ownership, credentials, and AI
 
   assert.deepEqual(resolved.context.ownership, {
     source: "config",
-    billingSource: "user_vercel_project",
-    credentialSource: "user",
-    projectId: "repo-project",
-    teamId: "repo-team",
+    billingSource: "platform",
+    credentialSource: "platform",
+    projectId: "platform-project",
+    teamId: "platform-team",
   });
   assert.deepEqual(resolved.context.credentials, {
-    vercelToken: "user-token",
-    vercelTeamId: "repo-team",
-    vercelProjectId: "repo-project",
+    vercelToken: "platform-token",
+    vercelTeamId: "platform-team",
+    vercelProjectId: "platform-project",
   });
   assert.ok("ai" in resolved.context);
   if (!("ai" in resolved.context)) return;
@@ -148,7 +148,7 @@ test("resolveSnapshotContext prefers stored snapshot ownership over mutable repo
   });
 });
 
-test("resolveSnapshotContext falls back to account-default Vercel project when no snapshot or workspace/repo project is set", async () => {
+test("resolveSnapshotContext ignores legacy account-default user billing without stored ownership", async () => {
   const { resolveSnapshotContext } = await loadSandboxContext();
 
   const resolved = await resolveSnapshotContext({
@@ -181,16 +181,16 @@ test("resolveSnapshotContext falls back to account-default Vercel project when n
   if (!resolved.ok) return;
 
   assert.deepEqual(resolved.context.credentials, {
-    vercelToken: "user-token",
-    vercelTeamId: "account-team",
-    vercelProjectId: "account-project",
+    vercelToken: "platform-token",
+    vercelTeamId: "platform-team",
+    vercelProjectId: "platform-project",
   });
   assert.deepEqual(resolved.context.ownership, {
     source: "config",
-    billingSource: "user_vercel_project",
-    credentialSource: "user",
-    projectId: "account-project",
-    teamId: "account-team",
+    billingSource: "platform",
+    credentialSource: "platform",
+    projectId: "platform-project",
+    teamId: "platform-team",
   });
 });
 
@@ -217,7 +217,7 @@ test("resolveSandboxCreateContext blocks platform billing for users without plat
   assert.deepEqual(resolved, {
     ok: false,
     error:
-      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.",
     status: 403,
     billingSource: "platform",
     credentialSource: "platform",

@@ -12,6 +12,8 @@ The Neon database was bootstrapped as a verified 1:1 structural mirror of the pr
 
 New Neon-only changes (better-auth tables, post-cutover schema work) go in this directory. Never add them to `supabase/migrations/` — the Supabase pipeline must not apply them, and vice versa.
 
+Neon migrations may reference tables from the frozen mirror, including `public.sandboxes`. Database tests that apply only the Neon billing slice use the shared `SANDBOX_BILLING_SANDBOX_STUB_SQL` contract in `tests/db/harness.ts`; keep that stub limited to the columns the migrations actually require.
+
 ## Compat-shim deviations from real Supabase
 
 - `vault.*` is a plaintext passthrough shim (structure-compatible, no encryption). Secret storage moves to app-layer encryption at cutover; do not store production secrets through the shim.

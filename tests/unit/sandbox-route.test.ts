@@ -420,7 +420,7 @@ test("POST /api/sandbox blocks platform-billed launches for users without platfo
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), {
     error:
-      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.",
   });
 });
 
@@ -495,7 +495,7 @@ test("POST /api/sandbox rejects an inaccessible hosted Vercel project before cre
   assert.equal(sandboxCreations, 0);
 });
 
-test("POST /api/sandbox returns linked-project repair guidance when a user-billed Vercel project is inaccessible", async () => {
+test("POST /api/sandbox does not reactivate a legacy user-billing override", async () => {
   let sandboxCreations = 0;
   const persistedRepoStates: Array<Record<string, unknown>> = [];
 
@@ -549,35 +549,17 @@ test("POST /api/sandbox returns linked-project repair guidance when a user-bille
     })
   );
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), {
     error:
-      "The repo-linked Vercel project is missing or inaccessible. Select or create a different project to restore user-billed sandbox launch.",
-    code: "VERCEL_LINKED_PROJECT_INVALID",
-    linkedProjectValidation: {
-      state: "inaccessible",
-      source: "repo",
-      message:
-        "The repo-linked Vercel project is missing or inaccessible. Select or create a different project to restore user-billed sandbox launch.",
-      action: "select_project",
-    },
+      "Hosted sandbox service is temporarily unavailable. Please try again shortly.",
+    code: "SANDBOX_SERVICE_UNAVAILABLE",
   });
   assert.equal(sandboxCreations, 0);
-  assert.deepEqual(persistedRepoStates, [
-    {
-      repoId: "repo-123",
-      userId: "user-123",
-      vercel_link_status: "inaccessible",
-      vercel_link_checked_at: persistedRepoStates[0]?.vercel_link_checked_at,
-      vercel_link_error_code: "PROJECT_NOT_FOUND",
-      vercel_link_message:
-        "The repo-linked Vercel project is missing or inaccessible. Select or create a different project to restore user-billed sandbox launch.",
-    },
-  ]);
-  assert.equal(typeof persistedRepoStates[0]?.vercel_link_checked_at, "string");
+  assert.deepEqual(persistedRepoStates, []);
 });
 
-test("POST /api/sandbox persists missing_project on the owning workspace before blocking user-billed launch", async () => {
+test("POST /api/sandbox ignores legacy workspace user billing", async () => {
   const persistedWorkspaceStates: Array<Record<string, unknown>> = [];
 
   const handler = await createSandboxPostTestHandler({
@@ -596,6 +578,14 @@ test("POST /api/sandbox persists missing_project on the owning workspace before 
     persistWorkspaceVercelLinkState: async (workspaceId, userId, state) => {
       persistedWorkspaceStates.push({ workspaceId, userId, ...state });
     },
+    validateVercelProjectAccess: async () => ({
+      ok: false as const,
+      error: {
+        code: "PROJECT_NOT_FOUND",
+        status: 404,
+        message: "missing",
+      },
+    }),
     createSandboxForRepo: async () => {
       throw new Error("createSandboxForRepo should not be called");
     },
@@ -614,26 +604,13 @@ test("POST /api/sandbox persists missing_project on the owning workspace before 
     })
   );
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), {
-    error: "Select or create a Vercel project for user-owned sandbox billing.",
+    error:
+      "Hosted sandbox service is temporarily unavailable. Please try again shortly.",
+    code: "SANDBOX_SERVICE_UNAVAILABLE",
   });
-  assert.deepEqual(persistedWorkspaceStates, [
-    {
-      workspaceId: "ws-1",
-      userId: "user-123",
-      vercel_link_status: "missing_project",
-      vercel_link_checked_at:
-        persistedWorkspaceStates[0]?.vercel_link_checked_at,
-      vercel_link_error_code: "MISSING_PROJECT",
-      vercel_link_message:
-        "Select or create a workspace-linked Vercel project to keep user-billed sandbox launch working.",
-    },
-  ]);
-  assert.equal(
-    typeof persistedWorkspaceStates[0]?.vercel_link_checked_at,
-    "string"
-  );
+  assert.deepEqual(persistedWorkspaceStates, []);
 });
 
 test("POST /api/sandbox returns 429 when sandbox boot limits are exceeded", async () => {

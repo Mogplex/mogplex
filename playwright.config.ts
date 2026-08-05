@@ -3,6 +3,10 @@ import { defineConfig, devices } from "@playwright/test";
 const rootDir = process.cwd();
 const port = Number(process.env.PLAYWRIGHT_PORT || 3000);
 const baseURL = `http://localhost:${port}`;
+const testServerEnv =
+  `PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass ` +
+  `BETTER_AUTH_SECRET=playwright-better-auth-secret-at-least-32-chars ` +
+  `BETTER_AUTH_URL=${baseURL} NEXT_PUBLIC_APP_URL=${baseURL}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -23,7 +27,7 @@ export default defineConfig({
     // without it a real NEXT_PUBLIC_APP_URL in .env.local makes better-auth
     // mint Secure cookies for the public https origin, which the browser
     // drops on http://localhost and every session-dependent flow fails.
-    command: `PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass pnpm --dir ${rootDir} build && PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass BETTER_AUTH_URL=${baseURL} pnpm --dir ${rootDir} exec next start --port ${port}`,
+    command: `${testServerEnv} pnpm --dir ${rootDir} build && ${testServerEnv} pnpm --dir ${rootDir} exec next start --port ${port}`,
     cwd: rootDir,
     url: `${baseURL}/login`,
     reuseExistingServer: false,

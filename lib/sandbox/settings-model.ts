@@ -37,12 +37,12 @@ export function createWorkspaceSandboxSettingsDraft(
   workspace?: Workspace | null
 ): WorkspaceSandboxSettingsDraft {
   return {
-    billingMode: workspace?.sandbox_billing_mode || "platform",
+    billingMode: "platform",
     timeoutMs: workspace?.sandbox_timeout_ms ?? DEFAULT_SANDBOX_TIMEOUT_MS,
     idleTimeoutMs:
       workspace?.sandbox_idle_timeout_ms ?? DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
-    vercelTeamId: workspace?.sandbox_vercel_team_id || "",
-    vercelProjectId: workspace?.sandbox_vercel_project_id || "",
+    vercelTeamId: "",
+    vercelProjectId: "",
   };
 }
 
@@ -50,9 +50,12 @@ export function createRepoSandboxSettingsDraft(
   repo: Repo
 ): RepoSandboxSettingsDraft {
   return {
-    billingModeOverride: repo.sandbox_billing_mode_override || "inherit",
-    vercelTeamId: repo.vercel_team_id || "",
-    vercelProjectId: repo.vercel_project_id || "",
+    billingModeOverride:
+      repo.sandbox_billing_mode_override === "platform"
+        ? "platform"
+        : "inherit",
+    vercelTeamId: "",
+    vercelProjectId: "",
   };
 }
 
@@ -84,11 +87,11 @@ export function buildWorkspaceSandboxSettingsPayload(
   draft: WorkspaceSandboxSettingsDraft
 ) {
   return {
-    sandbox_billing_mode: draft.billingMode,
+    sandbox_billing_mode: "platform" as const,
     sandbox_timeout_ms: draft.timeoutMs,
     sandbox_idle_timeout_ms: draft.idleTimeoutMs,
-    sandbox_vercel_team_id: draft.vercelTeamId || null,
-    sandbox_vercel_project_id: draft.vercelProjectId || null,
+    sandbox_vercel_team_id: null,
+    sandbox_vercel_project_id: null,
   };
 }
 
@@ -124,12 +127,13 @@ export function buildRepoSandboxSettingsModel(
   const inheritedWorkspaceProjectId =
     repo.workspace?.sandbox_vercel_project_id || "";
   const inheritedWorkspaceTeamId = repo.workspace?.sandbox_vercel_team_id || "";
-  const effectiveBillingMode =
-    draft.billingModeOverride === "inherit"
-      ? resolveEffectiveSandboxBillingMode({
-          workspaceBillingModeInput: workspaceBillingMode,
-        })
-      : draft.billingModeOverride;
+  const effectiveBillingMode = resolveEffectiveSandboxBillingMode({
+    workspaceBillingModeInput: workspaceBillingMode,
+    repoBillingModeOverrideInput:
+      draft.billingModeOverride === "inherit"
+        ? null
+        : draft.billingModeOverride,
+  });
   const linkedProject = resolveBillingLinkedProjectSelection({
     workspaceBillingModeInput: workspaceBillingMode,
     repoBillingModeOverrideInput:
@@ -191,25 +195,13 @@ export function buildRepoSandboxSettingsPayload(
   repo: Repo,
   draft: RepoSandboxSettingsDraft
 ) {
-  const inheritedWorkspaceTeamId = repo.workspace?.sandbox_vercel_team_id || "";
-  const normalizedProjectId = draft.vercelProjectId.trim() || null;
-  const model = buildRepoSandboxSettingsModel(repo, draft);
-  const normalizedTeamId = resolveRepoLinkedTeamPersistence({
-    repoLinkedTeamId: draft.vercelTeamId,
-    repoLinkedProjectId: normalizedProjectId,
-    workspaceLinkedTeamId: inheritedWorkspaceTeamId,
-    usingWorkspaceTeam: model.usingWorkspaceTeam,
-  });
+  void repo;
 
   return {
-    sandbox_billing_target: normalizedTeamId
-      ? ("team" as const)
-      : ("personal" as const),
+    sandbox_billing_target: "personal" as const,
     sandbox_billing_mode_override:
-      draft.billingModeOverride === "inherit"
-        ? null
-        : draft.billingModeOverride,
-    vercel_team_id: normalizedTeamId,
-    vercel_project_id: normalizedProjectId,
+      draft.billingModeOverride === "platform" ? ("platform" as const) : null,
+    vercel_team_id: null,
+    vercel_project_id: null,
   };
 }

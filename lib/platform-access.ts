@@ -39,6 +39,11 @@ type BillingAccessCacheEntry = {
   value: Promise<boolean>;
 };
 
+type ProfileAccessCacheEntry = {
+  expiresAt: number;
+  value: Promise<PlatformAccess>;
+};
+
 const PLATFORM_ACCESS_USER_IDS_ENV = "PLATFORM_ACCESS_USER_IDS";
 const PLATFORM_ACCESS_EMAILS_ENV = "PLATFORM_ACCESS_EMAILS";
 const PLATFORM_ACCESS_EMAIL_DOMAINS_ENV = "PLATFORM_ACCESS_EMAIL_DOMAINS";
@@ -48,6 +53,8 @@ const BUILT_IN_ALLOWLISTED_EMAIL_DOMAINS = ["blackbox.ai"] as const;
 // is deliberately checked outside this cache so removals take effect at once.
 const BILLING_ACCESS_CACHE_TTL_MS = 5_000;
 const BILLING_ACCESS_CACHE_MAX_ENTRIES = 256;
+const PROFILE_ACCESS_CACHE_TTL_MS = 5_000;
+const PROFILE_ACCESS_CACHE_MAX_ENTRIES = 256;
 
 export const PLATFORM_AI_ACCESS_ERROR =
   "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own AI Gateway or provider key in Settings > API Keys.";
@@ -62,10 +69,10 @@ export const PLATFORM_OPENROUTER_ACCESS_ERROR =
   "Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own OpenRouter or AI Gateway key in Settings > API Keys.";
 
 export const PLATFORM_SANDBOX_ACCESS_ERROR =
-  "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.";
+  "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.";
 
 export const PLATFORM_SANDBOX_RECORD_ACCESS_ERROR =
-  "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.";
+  "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.";
 
 function parseAllowlist(
   value: string | undefined,
@@ -142,11 +149,15 @@ export function derivePlatformAccess(
 async function loadPlatformAccessProfile(
   userId: string
 ): Promise<PlatformAccessProfile | null> {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("id, email, allow_platform_ai, allow_platform_sandbox")
     .eq("id", userId)
     .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load platform access profile: ${error.message}`);
+  }
 
   return (data ?? null) as PlatformAccessProfile | null;
 }
@@ -175,11 +186,27 @@ export function createLoadExplicitPlatformAccess(
     loadProfile: loadPlatformAccessProfile,
     ...overrides,
   };
+  const cache = new Map<string, ProfileAccessCacheEntry>();
 
   return async function loadExplicitPlatformAccess(
     userId: string
   ): Promise<PlatformAccess> {
-    return resolveExplicitPlatformAccess(userId, deps);
+    const now = Date.now();
+    const cached = cache.get(userId);
+    if (cached && cached.expiresAt > now) return cached.value;
+    if (cached) cache.delete(userId);
+    reclaimPromiseCache(cache, now, PROFILE_ACCESS_CACHE_MAX_ENTRIES);
+    const entry: ProfileAccessCacheEntry = {
+      expiresAt: now + PROFILE_ACCESS_CACHE_TTL_MS,
+      value: Promise.resolve().then(() =>
+        resolveExplicitPlatformAccess(userId, deps)
+      ),
+    };
+    cache.set(userId, entry);
+    void entry.value.catch(() => {
+      if (cache.get(userId) === entry) cache.delete(userId);
+    });
+    return entry.value;
   };
 }
 
@@ -220,14 +247,15 @@ function billingAccessCacheKey(
   return productTeamId ? `team:${productTeamId}` : `user:${userId}`;
 }
 
-function reclaimBillingAccessCache(
-  cache: Map<string, BillingAccessCacheEntry>,
-  now: number
+function reclaimPromiseCache<T extends { expiresAt: number }>(
+  cache: Map<string, T>,
+  now: number,
+  maxEntries: number
 ) {
   for (const [key, entry] of cache) {
     if (entry.expiresAt <= now) cache.delete(key);
   }
-  if (cache.size < BILLING_ACCESS_CACHE_MAX_ENTRIES) return;
+  if (cache.size < maxEntries) return;
   const oldestKey = cache.keys().next().value as string | undefined;
   if (oldestKey) cache.delete(oldestKey);
 }
@@ -243,6 +271,33 @@ export function createLoadUserPlatformAccess(
     ...overrides,
   };
   const billingAccessCache = new Map<string, BillingAccessCacheEntry>();
+  const profileAccessCache = new Map<string, ProfileAccessCacheEntry>();
+
+  function loadCachedExplicitAccess(userId: string): Promise<PlatformAccess> {
+    const now = Date.now();
+    const cached = profileAccessCache.get(userId);
+    if (cached && cached.expiresAt > now) return cached.value;
+    if (cached) profileAccessCache.delete(userId);
+
+    reclaimPromiseCache(
+      profileAccessCache,
+      now,
+      PROFILE_ACCESS_CACHE_MAX_ENTRIES
+    );
+    const entry: ProfileAccessCacheEntry = {
+      expiresAt: now + PROFILE_ACCESS_CACHE_TTL_MS,
+      value: Promise.resolve().then(() =>
+        resolveExplicitPlatformAccess(userId, deps)
+      ),
+    };
+    profileAccessCache.set(userId, entry);
+    void entry.value.catch(() => {
+      if (profileAccessCache.get(userId) === entry) {
+        profileAccessCache.delete(userId);
+      }
+    });
+    return entry.value;
+  }
 
   function loadCachedBillingAccess(
     userId: string,
@@ -254,7 +309,11 @@ export function createLoadUserPlatformAccess(
     if (cached && cached.expiresAt > now) return cached.value;
     if (cached) billingAccessCache.delete(key);
 
-    reclaimBillingAccessCache(billingAccessCache, now);
+    reclaimPromiseCache(
+      billingAccessCache,
+      now,
+      BILLING_ACCESS_CACHE_MAX_ENTRIES
+    );
     const entry: BillingAccessCacheEntry = {
       expiresAt: now + BILLING_ACCESS_CACHE_TTL_MS,
       value: Promise.resolve().then(() =>
@@ -275,7 +334,10 @@ export function createLoadUserPlatformAccess(
   ): Promise<PlatformAccess> {
     const allowlistedAccess = loadedProfile
       ? derivePlatformAccess(loadedProfile, deps.env)
-      : await resolveExplicitPlatformAccess(userId, deps);
+      : await loadCachedExplicitAccess(userId);
+    // Explicit grants belong to the actor, not a billing scope. An approved
+    // operator remains exempt while acting inside any team; team membership
+    // only gates access obtained from that team's funded billing account.
     if (
       allowlistedAccess.allowPlatformAi &&
       allowlistedAccess.allowPlatformSandbox

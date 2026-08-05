@@ -12,7 +12,7 @@ async function loadBilling() {
   return import(url);
 }
 
-test("resolveEffectiveSandboxBillingMode honors user_vercel_project when the kill-switch is off", async () => {
+test("resolveEffectiveSandboxBillingMode keeps user billing disabled without relying on an env switch", async () => {
   const prior = process.env.NEXT_PUBLIC_SANDBOX_DISABLE_USER_BILLING;
   delete process.env.NEXT_PUBLIC_SANDBOX_DISABLE_USER_BILLING;
   try {
@@ -20,7 +20,7 @@ test("resolveEffectiveSandboxBillingMode honors user_vercel_project when the kil
     const mode = resolveEffectiveSandboxBillingMode({
       workspaceBillingModeInput: "user_vercel_project",
     });
-    assert.equal(mode, "user_vercel_project");
+    assert.equal(mode, "platform");
   } finally {
     if (prior !== undefined)
       process.env.NEXT_PUBLIC_SANDBOX_DISABLE_USER_BILLING = prior;

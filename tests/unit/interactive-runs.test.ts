@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   ACTIVE_CHAT_STALE_THRESHOLD_MS,
   ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS,
+  PREPARED_HARNESS_STALE_THRESHOLD_MS,
   buildAiCallCompletionUpdate,
   isStaleLiveInteractiveCall,
 } from "../../lib/interactive-runs";
@@ -36,6 +37,40 @@ test("buildAiCallCompletionUpdate finalizes summary status and tool call rollups
   assert.equal(typeof update.completed_at, "string");
   assert.equal(typeof update.duration_ms, "number");
   assert.ok((update.duration_ms ?? 0) >= 4_000);
+});
+
+test("isStaleLiveInteractiveCall promptly reaps orphaned prepared harness calls", () => {
+  const now = Date.parse("2026-03-30T12:00:00.000Z");
+  const prepared = {
+    type: "agent" as const,
+    status: "pending" as const,
+    metadata: { prepared: true },
+  };
+
+  assert.equal(
+    isStaleLiveInteractiveCall(
+      {
+        ...prepared,
+        started_at: new Date(
+          now - PREPARED_HARNESS_STALE_THRESHOLD_MS - 1
+        ).toISOString(),
+      },
+      now
+    ),
+    true
+  );
+  assert.equal(
+    isStaleLiveInteractiveCall(
+      {
+        ...prepared,
+        started_at: new Date(
+          now - PREPARED_HARNESS_STALE_THRESHOLD_MS + 1
+        ).toISOString(),
+      },
+      now
+    ),
+    false
+  );
 });
 
 test("buildAiCallCompletionUpdate supports cancelled interactive runs", () => {

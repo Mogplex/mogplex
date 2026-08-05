@@ -510,7 +510,10 @@ export function createSandboxHarnessPostHandler(
       ? await deps.mergeAiCallMetadata({
           userId: creds.userId,
           aiCallId: existingAiCall.id,
-          metadata: harnessMetadataPatch,
+          // Claiming a prepared row must clear the short-lived preparation
+          // marker before the command starts, otherwise the zombie reaper
+          // can mistake a legitimate long-running harness for an orphan.
+          metadata: { ...harnessMetadataPatch, prepared: false },
         })
       : await deps.createAiCall({
           userId: creds.userId,

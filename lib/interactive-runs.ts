@@ -26,6 +26,7 @@ export type AiCallEventType = (typeof AI_CALL_EVENT_TYPES)[number];
 
 export const ACTIVE_CHAT_STALE_THRESHOLD_MS = 5 * 60 * 1000;
 export const ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
+export const PREPARED_HARNESS_STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
 type AiCallUpdate = Partial<
   Pick<
@@ -329,7 +330,8 @@ export async function loadOwnedAiCall(userId: string, aiCallId: string) {
 }
 
 export function isStaleLiveInteractiveCall(
-  call: Pick<AiCall, "type" | "status" | "started_at">,
+  call: Pick<AiCall, "type" | "status" | "started_at"> &
+    Partial<Pick<AiCall, "metadata">>,
   now = Date.now()
 ) {
   if (call.status !== "pending" && call.status !== "streaming") {
@@ -352,9 +354,11 @@ export function isStaleLiveInteractiveCall(
   // runtime_command_id callback is still legitimately live and must not be
   // hidden from the UI within minutes.
   const threshold =
-    call.type === "chat"
-      ? ACTIVE_CHAT_STALE_THRESHOLD_MS
-      : ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS;
+    call.metadata?.prepared === true
+      ? PREPARED_HARNESS_STALE_THRESHOLD_MS
+      : call.type === "chat"
+        ? ACTIVE_CHAT_STALE_THRESHOLD_MS
+        : ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS;
 
   return now - startedAt >= threshold;
 }

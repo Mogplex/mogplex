@@ -140,3 +140,25 @@ test("GET /api/observability/jobs/[id] returns review findings with job detail",
     },
   ]);
 });
+
+test("GET /api/observability/jobs/[id] never returns raw loader errors", async (t) => {
+  const { createObservabilityJobDetailGetHandler } =
+    await loadObservabilityJobDetailRoute();
+  t.mock.method(console, "error", () => {});
+  const handler = createObservabilityJobDetailGetHandler({
+    requireUserId: async () => "user-1",
+    loadOwnedJobRunDetail: async () => {
+      throw new Error("DATABASE_URL is required at postgres://internal");
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/observability/jobs/job-secret") as never,
+    { params: Promise.resolve({ id: "job-secret" }) }
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 500);
+  assert.equal(JSON.stringify(payload).includes("DATABASE_URL"), false);
+  assert.match(payload.error, /MOG-JOB-JOBSECRET/);
+});
