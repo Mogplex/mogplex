@@ -435,7 +435,14 @@ export function resolveSandboxRecordCredentials(
       };
     }
 
-    const platformProjectId = recordProjectId || creds.vercelProjectId;
+    // Platform-owned records follow the current platform target so project or
+    // team rotations heal existing sandboxes instead of pinning stale IDs.
+    const platformProjectId =
+      billingSource === "platform"
+        ? creds.vercelProjectId
+        : recordProjectId || creds.vercelProjectId;
+    const platformTeamId =
+      billingSource === "platform" ? creds.vercelTeamId : recordTeamId;
 
     if (!platformProjectId) {
       return {
@@ -448,7 +455,7 @@ export function resolveSandboxRecordCredentials(
     return {
       ok: true as const,
       vercelToken: creds.vercelToken,
-      vercelTeamId: recordTeamId,
+      vercelTeamId: platformTeamId,
       vercelProjectId: platformProjectId,
     };
   }
