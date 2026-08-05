@@ -121,6 +121,60 @@ async function mockBaseApp(page: Page) {
   });
 }
 
+test("composer shows agent activity immediately and clears it after completion", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseApp(page);
+
+  await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === "GET") {
+      await fulfillJson(route, {
+        messages: [],
+        local_msgs: [],
+        model: modelId,
+        mode: "AUTO",
+      });
+      return;
+    }
+    await fulfillJson(route, { ok: true });
+  });
+
+  let releaseResponse: (() => void) | undefined;
+  const responseReleased = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route("**/api/chat", async (route) => {
+    await responseReleased;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: buildUiMessageStreamBody("Finished the work."),
+    });
+  });
+
+  await page.goto(scopedPath("projects/workspace"));
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId(`home-open-workspace-${repo.id}`).click();
+  await page
+    .getByRole("textbox", {
+      name: "Ask the agent what to build, fix, or explain. Type / for commands or drop files here.",
+    })
+    .fill("do the work");
+  await page.keyboard.press("Enter");
+
+  const indicator = page.getByTestId("agent-running-indicator");
+  await expect(indicator).toContainText("Agent is working");
+  await expect(indicator.getByRole("button", { name: "Stop" })).toBeVisible();
+
+  releaseResponse?.();
+  await expect(page.getByText("Finished the work.")).toBeVisible();
+  await expect(indicator).toHaveCount(0);
+});
+
 test("assistant diff blocks render through the shared diff viewer", async ({
   page,
 }) => {

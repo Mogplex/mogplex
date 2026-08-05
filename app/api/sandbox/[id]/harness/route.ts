@@ -13,6 +13,10 @@ import { HarnessCancelRequestedError, runHarness } from "@/lib/harness/runner";
 import { injectClaudeMcpConfig } from "@/lib/harness/mcp-config";
 import { getResolvedConnections } from "@/lib/connections/service";
 import { createHarnessSessionParser } from "@/lib/harness/session-parser";
+import {
+  appendHarnessFailureOutput,
+  presentHarnessFailure,
+} from "@/lib/harness/failure";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { ensureDevTools } from "@/lib/sandbox/dev-tools";
@@ -782,6 +786,9 @@ export function createSandboxHarnessPostHandler(
       const stream = new ReadableStream({
         async start(controller) {
           const sessionParser = createHarnessSessionParser(harnessId);
+          let failureOutput = "";
+          let finalFailure: ReturnType<typeof presentHarnessFailure> | null =
+            null;
 
           try {
             const runEvent = `data: ${JSON.stringify({ type: "run", ai_call_id: aiCall.id })}\n\n`;
@@ -796,6 +803,10 @@ export function createSandboxHarnessPostHandler(
             // Stream command output
             for await (const log of result.command.logs()) {
               await deps.renewSandboxActivityLease(sandbox);
+              failureOutput = appendHarnessFailureOutput(
+                failureOutput,
+                log.data
+              );
               const sessionId = sessionParser.push(log.stream, log.data);
               if (sessionId) {
                 const sessionEvent = `data: ${JSON.stringify({ type: "session", sessionId })}\n\n`;
@@ -818,10 +829,15 @@ export function createSandboxHarnessPostHandler(
 
             if (!cancelled) {
               const status = exitResult.exitCode === 0 ? "success" : "failed";
-              const error =
+              finalFailure =
                 exitResult.exitCode === 0
                   ? null
-                  : `Harness exited with code ${exitResult.exitCode}`;
+                  : presentHarnessFailure({
+                      harnessId,
+                      exitCode: exitResult.exitCode,
+                      output: failureOutput,
+                    });
+              const error = finalFailure?.message ?? null;
 
               const finalizedCall = await finalizeAiCallIfNotCancelled(
                 aiCall.id,
@@ -846,6 +862,7 @@ export function createSandboxHarnessPostHandler(
                       : "Harness run finished",
                   payload: {
                     exit_code: exitResult.exitCode,
+                    failure_code: finalFailure?.code ?? null,
                   },
                 });
               }
@@ -877,13 +894,21 @@ export function createSandboxHarnessPostHandler(
               const cancelledEvent = `data: ${JSON.stringify({ type: "cancelled" })}\n\n`;
               controller.enqueue(encoder.encode(cancelledEvent));
             } else {
-              const doneEvent = `data: ${JSON.stringify({ type: "done", exitCode: exitResult.exitCode })}\n\n`;
+              const doneEvent = `data: ${JSON.stringify({
+                type: "done",
+                exitCode: exitResult.exitCode,
+                error: finalFailure?.message ?? null,
+                failureCode: finalFailure?.code ?? null,
+              })}\n\n`;
               controller.enqueue(encoder.encode(doneEvent));
             }
           } catch (err) {
-            const errorMsg =
+            const rawErrorMsg =
               err instanceof Error ? err.message : "Stream error";
             const sandboxStreamClosed = isClosedSandboxStreamError(err);
+            const errorMsg = sandboxStreamClosed
+              ? "The development environment stopped during this agent run. Start it again, then retry."
+              : rawErrorMsg;
             console.error("[harness] command stream failed", {
               aiCallId: aiCall.id,
               sandboxRecordId: id,
@@ -891,7 +916,7 @@ export function createSandboxHarnessPostHandler(
               harnessId,
               runtimeCommandId: result.command.cmdId,
               sandboxStreamClosed,
-              error: errorMsg,
+              error: rawErrorMsg,
             });
             if (sandboxStreamClosed) {
               await deps

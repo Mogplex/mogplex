@@ -20,6 +20,9 @@ interface Props {
   repoId?: string
   model?: string
   onModelSelect?: (model: string) => void
+  isRunning?: boolean
+  runningLabel?: string
+  onStop?: () => void
 }
 
 const HARNESS_ENTRIES: { id: "claude-code" | "codex"; label: string; icon: ReactNode }[] = [
@@ -27,7 +30,21 @@ const HARNESS_ENTRIES: { id: "claude-code" | "codex"; label: string; icon: React
   { id: "codex", label: "Codex", icon: <OpenaiFill className="h-3 w-3" /> },
 ]
 
-export function CommandInput({ onSubmit, builtinCommands, customCommands = [], models, mode = "AUTO", contextPct = 100, repoPath, repoId, model, onModelSelect }: Props) {
+export function CommandInput({
+  onSubmit,
+  builtinCommands,
+  customCommands = [],
+  models,
+  mode = "AUTO",
+  contextPct = 100,
+  repoPath,
+  repoId,
+  model,
+  onModelSelect,
+  isRunning = false,
+  runningLabel = "Agent is working",
+  onStop,
+}: Props) {
   const isMobile = useIsMobile()
   const [value, setValue] = useState("")
   const [showMenu, setShowMenu] = useState(false)
@@ -111,6 +128,10 @@ export function CommandInput({ onSubmit, builtinCommands, customCommands = [], m
   }, [modelMenuOpen])
 
   const handleKey = (e: React.KeyboardEvent) => {
+    if (isRunning && e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      return
+    }
     if (showMenu) {
       if (e.key === "ArrowDown") {
         e.preventDefault()
@@ -151,7 +172,7 @@ export function CommandInput({ onSubmit, builtinCommands, customCommands = [], m
       onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}>
-      {showMenu && (
+      {showMenu && !isRunning && (
         <div className="absolute bottom-full left-0 w-full max-w-80 bg-card/95 backdrop-blur-sm border border-border rounded-md mb-1 max-h-48 overflow-auto shadow-lg">
           {filtered.map((c, i) => (
             <div key={c.name} onClick={() => {
@@ -169,6 +190,25 @@ export function CommandInput({ onSubmit, builtinCommands, customCommands = [], m
               <span className={`ml-2 text-[11px] ${i === selectedIdx ? "text-secondary-foreground" : "text-muted-foreground"}`}>{c.description}</span>
             </div>
           ))}
+        </div>
+      )}
+      {isRunning && (
+        <div
+          data-testid="agent-running-indicator"
+          aria-live="polite"
+          className="border-accent-blue/20 bg-accent-blue/[0.06] text-accent-blue flex items-center gap-2 border-t px-3 py-2 text-xs"
+        >
+          <span className="bg-accent-blue h-1.5 w-1.5 animate-pulse rounded-full" />
+          <span>{runningLabel}</span>
+          {onStop && (
+            <button
+              type="button"
+              onClick={onStop}
+              className="text-accent-red hover:bg-accent-red/10 ml-auto rounded px-2 py-0.5"
+            >
+              Stop
+            </button>
+          )}
         </div>
       )}
       {attachments.length > 0 && (
@@ -190,7 +230,7 @@ export function CommandInput({ onSubmit, builtinCommands, customCommands = [], m
         <textarea ref={inputRef} value={value} onChange={e => setValue(e.target.value)} onKeyDown={handleKey} onPaste={handlePaste}
           rows={1}
           className="flex-1 bg-transparent outline-none text-foreground text-sm placeholder:text-muted-foreground resize-y min-h-5 max-h-48 [field-sizing:content]"
-          placeholder="Ask the agent what to build, fix, or explain. Type / for commands or drop files here." />
+          placeholder={isRunning ? "Agent is working. You can draft the next message here." : "Ask the agent what to build, fix, or explain. Type / for commands or drop files here."} />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[12px] text-muted-foreground border-t border-border/50">
         <span className={mode === "YOLO" ? "text-accent-amber" : ""}>Mode: {mode}</span>
@@ -200,6 +240,7 @@ export function CommandInput({ onSubmit, builtinCommands, customCommands = [], m
         <div className="relative">
           <button
             ref={modelBtnRef}
+            disabled={isRunning}
             onClick={() => {
               setModelMenuOpen(o => {
                 if (!o && modelBtnRef.current) {
@@ -210,7 +251,7 @@ export function CommandInput({ onSubmit, builtinCommands, customCommands = [], m
               })
               setModelFilter("")
             }}
-            className="text-accent-blue hover:underline cursor-pointer"
+            className="text-accent-blue cursor-pointer hover:underline disabled:cursor-not-allowed disabled:opacity-50"
           >
             Model: {model?.startsWith("harness:") ? (model === "harness:claude-code" ? "Claude Code" : "Codex") : model?.split("/")[1] || "gpt-5-mini"}
           </button>
