@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveSandboxPath } from "@/lib/repo-settings";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
+import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
 import {
   buildSandboxRouteErrorResponse,
   loadOwnedSandboxRouteContext,
@@ -31,6 +32,7 @@ export async function GET(
         { status: 409 }
       );
     }
+    await renewSandboxActivityLease(sandboxData.sandbox);
 
     const buffer = await sandboxData.sandbox.readFileToBuffer({
       path: resolveSandboxPath(sandboxData.rootDirectory, path),
@@ -73,6 +75,7 @@ export async function PUT(
         { status: 409 }
       );
     }
+    await renewSandboxActivityLease(sandboxData.sandbox);
 
     await sandboxData.sandbox.writeFiles([
       {
@@ -112,6 +115,7 @@ export async function POST(
         { status: 409 }
       );
     }
+    await renewSandboxActivityLease(sandboxData.sandbox);
 
     const targetPath = resolveSandboxPath(sandboxData.rootDirectory, path);
     const result = await sandboxData.sandbox.runCommand({

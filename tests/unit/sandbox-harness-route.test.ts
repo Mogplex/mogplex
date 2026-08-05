@@ -15,6 +15,20 @@ import {
   normalizeSlackRunImageAttachmentsMetadata,
   type SlackRunImageAttachmentsMetadata,
 } from "../../lib/slack/run-attachments";
+import { isClosedSandboxStreamError } from "../../app/api/sandbox/[id]/harness/route";
+
+test("closed sandbox streams are recognized for lifecycle reconciliation", () => {
+  assert.equal(
+    isClosedSandboxStreamError(
+      new Error("Sandbox stream was closed and is not accepting commands.")
+    ),
+    true
+  );
+  assert.equal(
+    isClosedSandboxStreamError(new Error("Provider returned 429")),
+    false
+  );
+});
 
 test("POST /api/sandbox/[id]/harness fails clearly when neither gateway nor provider credentials exist", async () => {
   const { createSandboxHarnessPostHandler } =

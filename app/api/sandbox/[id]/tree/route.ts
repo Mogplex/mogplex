@@ -7,6 +7,7 @@ import {
 } from "@/lib/file-tree-paths";
 import { resolveSandboxPath } from "@/lib/repo-settings";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
+import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
 import {
   buildSandboxRouteErrorResponse,
   type LoadedSandboxRouteContext,
@@ -32,11 +33,13 @@ const PRUNED_DIRECTORY_NAMES = [
 type TreeRouteDeps = {
   loadOwnedSandboxRouteContext: typeof loadOwnedSandboxRouteContext;
   touchSandboxLastActive: typeof touchSandboxLastActive;
+  renewSandboxActivityLease: typeof renewSandboxActivityLease;
 };
 
 const DEFAULT_DEPS: TreeRouteDeps = {
   loadOwnedSandboxRouteContext,
   touchSandboxLastActive,
+  renewSandboxActivityLease,
 };
 
 type LoadedTreeSandboxData =
@@ -251,6 +254,7 @@ export function createSandboxTreeGetHandler(
       if (loaded.response) return loaded.response;
 
       const sandboxData = loaded.sandboxData;
+      await deps.renewSandboxActivityLease(sandboxData.sandbox);
       const targetPath = resolveSandboxPath(sandboxData.rootDirectory, ".");
       const result = await sandboxData.sandbox.runCommand({
         cmd: "find",
@@ -305,6 +309,7 @@ export function createSandboxTreePostHandler(
       const repoPath = normalizeTreePathInput(body?.path, kind);
 
       const sandboxData = loaded.sandboxData;
+      await deps.renewSandboxActivityLease(sandboxData.sandbox);
       const fsPath = toFilesystemPath(sandboxData.rootDirectory, repoPath);
 
       await ensurePathMissing(sandboxData.sandbox, fsPath);
@@ -388,6 +393,7 @@ export function createSandboxTreePatchHandler(
       );
 
       const sandboxData = loaded.sandboxData;
+      await deps.renewSandboxActivityLease(sandboxData.sandbox);
 
       for (const move of moves) {
         if (move.fromPath === move.toPath) continue;
@@ -445,6 +451,7 @@ export function createSandboxTreeDeleteHandler(
       const repoPath = normalizeTreePathInput(body?.path, "either");
 
       const sandboxData = loaded.sandboxData;
+      await deps.renewSandboxActivityLease(sandboxData.sandbox);
       const fsPath = toFilesystemPath(sandboxData.rootDirectory, repoPath);
 
       await ensurePathExists(sandboxData.sandbox, fsPath);

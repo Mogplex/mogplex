@@ -816,29 +816,11 @@ export async function snapshotSandbox(
   return sandbox.snapshot({ expiration: opts?.expiration });
 }
 
-/**
- * Extend the timeout of a running sandbox by `durationMs`.
- *
- * The v2 SDK exposes two APIs:
- * - `sandbox.extendTimeout(ms)` — ADD ms to the current timeout.
- * - `sandbox.update({ timeout })` — REPLACE the timeout with the given
- *   value.
- *
- * The original migration plan called for switching to
- * `sandbox.update({ timeout })`. To keep add-semantics, we read the
- * sandbox's current `timeout` getter and compute the new total
- * before calling update. Falls back to `extendTimeout` when the
- * current timeout isn't available (older v1-shape mocks, tests).
- */
+/** Extend the active VM session by `durationMs`. */
 export async function extendSandboxTimeout(
   sandbox: Sandbox,
   durationMs: number
 ) {
-  const current = sandbox.timeout;
-  if (typeof current === "number" && Number.isFinite(current)) {
-    await sandbox.update({ timeout: current + durationMs });
-    return;
-  }
   await sandbox.extendTimeout(durationMs);
 }
 

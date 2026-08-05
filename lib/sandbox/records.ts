@@ -26,6 +26,10 @@ export async function updateSandboxRecord(
     expectedHealthStatus,
     select = "id, sandbox_id, status, health_status",
   } = options;
+  const hasEmbeddedSelect = select.includes("(");
+  const writeSelect = hasEmbeddedSelect
+    ? "id, sandbox_id, status, health_status"
+    : select;
 
   let query = supabaseAdmin.from("sandboxes").update(updates).eq("id", id);
 
@@ -43,13 +47,25 @@ export async function updateSandboxRecord(
       : query.eq("status", fromStatuses);
   }
 
-  const { data, error } = await query.select(select).maybeSingle();
+  const { data, error } = await query.select(writeSelect).maybeSingle();
 
   if (error) {
     throw new Error(`Failed to update sandbox ${id}: ${error.message}`);
   }
 
-  return data;
+  if (!data || !hasEmbeddedSelect) return data;
+
+  const { data: reloaded, error: reloadError } = await supabaseAdmin
+    .from("sandboxes")
+    .select(select)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (reloadError) {
+    throw new Error(`Failed to reload sandbox ${id}: ${reloadError.message}`);
+  }
+
+  return reloaded;
 }
 
 type StopSandboxProtectedKey = "status" | "health_status" | "stop_reason";
