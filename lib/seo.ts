@@ -3,7 +3,7 @@ import type { Metadata, MetadataRoute } from "next";
 export const SITE_URL = "https://mogplex.com";
 export const SITE_NAME = "Mogplex";
 export const DEFAULT_TITLE =
-  "Mogplex | The system that builds and maintains your software";
+  "Mogplex | The open-source engine for building and maintaining software";
 export const DEFAULT_DESCRIPTION =
   "Mogplex runs agents that plan, build, test, and review code in per-run sandboxes. Pull requests come out behind your gates.";
 
