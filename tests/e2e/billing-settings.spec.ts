@@ -106,8 +106,11 @@ test("billing is a first-class personal Settings tab with live checkout actions"
   await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Enterprise" })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Contact enterprise" })
-  ).toHaveAttribute("href", /mailto:enterprise@mogplex\.com/);
+    page.getByRole("link", { name: "Self-hosting docs" })
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/mogplex/mogplex/blob/main/docs/self-hosting.md"
+  );
   await expect(page.getByRole("button", { name: "Add $10.00" })).toBeVisible();
 
   await page.getByRole("button", { name: "Add $10.00" }).click();
@@ -293,4 +296,24 @@ test("frozen top-ups stay disabled with an actionable message", async ({
       "Top-ups are paused for this account. Contact support for help."
     )
   ).toBeVisible();
+});
+
+test("billing-disabled deployments show a neutral OSS state", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsShell(page);
+  await page.route("**/api/billing", (route) =>
+    fulfillJson(route, { error: "Billing is disabled" }, 503)
+  );
+
+  await page.goto(scopedPath("settings?tab=billing"));
+
+  await expect(
+    page.getByText("Billing is not enabled on this deployment.")
+  ).toBeVisible();
+  await expect(page.getByText(/beta/i)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Choose|Add \$/ })).toHaveCount(
+    0
+  );
 });

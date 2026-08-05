@@ -4,6 +4,7 @@ import {
   findPlanPrice,
   findTopupPreset,
   PLAN_PRICES,
+  SANDBOX_RATE_MICRO_USD_PER_MINUTE,
   TOPUP_MAX_CENTS,
   TOPUP_MIN_CENTS,
   TOPUP_PRESETS,
@@ -23,6 +24,10 @@ test("plan prices match the signed-off rate card", () => {
       ["team_annual", 96000],
     ]
   );
+});
+
+test("sandbox rate matches the published half-cent per minute", () => {
+  assert.equal(SANDBOX_RATE_MICRO_USD_PER_MINUTE, 5_000);
 });
 
 test("annual plans are exactly 20% off 12x monthly", () => {

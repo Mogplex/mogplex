@@ -3,9 +3,9 @@ import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { SignupPageClient } from "./signup-page-client";
 
 export const metadata: Metadata = {
-  title: "Create account — Mogplex",
+  title: "Start now — Mogplex",
   description:
-    "Create a Mogplex account with your email and password, GitHub, Google, or Microsoft.",
+    "Create a Mogplex account, connect a repo, and wire your first pipeline. PAYG has no monthly fee.",
   robots: NO_INDEX_ROBOTS,
 };
 

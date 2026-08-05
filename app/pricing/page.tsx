@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import { MarketingSubpageShell } from "@/components/marketing/subpage-shell";
+import {
+  PLAN_PRICES,
+  SANDBOX_RATE_MICRO_USD_PER_MINUTE,
+  TOPUP_PRESETS,
+} from "@/lib/billing/catalog";
 import { buildMarketingMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pricing — tokens at cost, compute by the minute",
   description:
-    "Three tiers, no seats. Model tokens at provider list price with zero markup, sandbox compute at $0.005 per running minute, and every run itemized to the cent.",
+    "Three tiers, no seats. Model tokens at provider list price with zero markup, sandbox compute at a published per-minute rate, and every run itemized to the cent.",
   path: "/pricing",
 });
 
@@ -21,53 +26,68 @@ type Tier = {
   note: string;
 };
 
+function dollars(amountCents: number) {
+  return `$${amountCents / 100}`;
+}
+
+function plan(lookupKey: string) {
+  const match = PLAN_PRICES.find((price) => price.lookupKey === lookupKey);
+  if (!match) throw new Error(`Missing billing catalog entry: ${lookupKey}`);
+  return match;
+}
+
+const PRO_MONTHLY = plan("pro_monthly");
+const PRO_ANNUAL = plan("pro_annual");
+const TEAM_MONTHLY = plan("team_monthly");
+const TEAM_ANNUAL = plan("team_annual");
+
 const TIERS: Tier[] = [
   {
     key: "00",
-    name: "Free",
+    name: "PAYG",
     price: "$0",
-    cadence: "forever",
-    included: "$5.00/mo sandbox compute included",
+    cadence: "/mo · pay as you go",
+    included: "no monthly fee — pay the published rates and nothing else",
     audience: "Evaluate, bring your own key, or self-host.",
     features: [
-      "BYOK via your AI Gateway key — tokens billed by your provider, never by us",
-      "About 1,000 sandbox-minutes a month at the public rate",
-      "Top-ups work on Free; purchased balance never expires",
-      "Self-hosting is free forever — the whole platform is open source",
+      "Bring your own AI Gateway key. Your provider bills the tokens, not Mogplex.",
+      "Sandbox compute stays on the meter. A $10 top-up buys 2,000 sandbox-minutes.",
+      "Your prepaid balance is in dollars. Purchased balance never expires.",
+      "Self-hosting is free forever. The whole system is Apache-2.0.",
     ],
-    note: "When the allowance runs out, runs pause with a clear message. Nothing is deleted.",
+    note: "Runs pause when your balance reaches zero, with a clear message. Nothing is deleted.",
   },
   {
     key: "01",
     name: "Pro",
-    price: "$20",
+    price: dollars(PRO_MONTHLY.amountCents),
     cadence: "per month",
-    annual: "$192/yr — 20% off",
-    included: "$20.00/mo usage included",
-    audience: "For the indie dev shipping with agents daily.",
+    annual: `${dollars(PRO_ANNUAL.amountCents)}/yr — 20% off`,
+    included: `${dollars(PRO_MONTHLY.includedUsageCents)}.00/mo usage included`,
+    audience: "For the indie developer who ships with agents each day.",
     features: [
-      "Mogplex-provided model access — no API keys to set up",
-      "Included usage covers tokens at list price and sandbox minutes",
-      "All features: every trigger, every gate, cloud + CLI",
-      "Included usage resets monthly; top-up balance rolls over forever",
+      "Mogplex gives you model access. You do not need to set up API keys.",
+      "Included usage covers tokens at list price and sandbox minutes.",
+      "Use every trigger and gate from the cloud app or CLI.",
+      "Included usage resets monthly. Top-up balance rolls over forever.",
     ],
-    note: "Every run shows its exact itemized cost — token spend and sandbox minutes, to the cent.",
+    note: "Every run shows its itemized cost: token spend and sandbox minutes, to the cent.",
   },
   {
     key: "02",
     name: "Team",
-    price: "$100",
+    price: dollars(TEAM_MONTHLY.amountCents),
     cadence: "per month, flat",
-    annual: "$960/yr — 20% off",
-    included: "$100.00/mo pooled usage included",
+    annual: `${dollars(TEAM_ANNUAL.amountCents)}/yr — 20% off`,
+    included: `${dollars(TEAM_MONTHLY.includedUsageCents)}.00/mo pooled usage included`,
     audience: "Unlimited members. We charge for runs, not people.",
     features: [
-      "No per-seat pricing — members don't drive our costs, runs do",
-      "RBAC, audit log, centralized billing in one place",
-      "Org-wide usage analytics with per-member cost attribution",
-      "Usage pooled across the whole org",
+      "No per-seat pricing. Members do not drive our costs. Runs do.",
+      "Role-based access, the audit log, and billing stay in one place.",
+      "Team usage analytics show the cost for each member.",
+      "Usage is pooled across the whole team.",
     ],
-    note: "No enterprise tier, no sales call. Need dedicated infra? It's open source — self-host it.",
+    note: "No enterprise tier, no sales call. Need dedicated infrastructure? Self-host the open-source system. Read the self-hosting docs first. They explain the work involved.",
   },
 ];
 
@@ -82,22 +102,23 @@ const METERS: Meter[] = [
     meter: "Model tokens",
     rate: "Provider list price · 0% markup",
     detail:
-      "Billed at the exact per-model rate your provider publishes, per input, output, and cache class. Your cost is reconciled per generation from the Gateway — not estimated.",
+      "We use the per-model rate that your provider publishes for input, output, and cache classes. The Gateway reconciles each generation. We do not estimate the cost.",
   },
   {
     meter: "Sandbox compute",
-    rate: "$0.005 / running-minute",
+    rate: `$${SANDBOX_RATE_MICRO_USD_PER_MINUTE / 1_000_000} / running-minute`,
     detail:
-      "$0.30 an hour, one-minute minimum per session. The meter runs only while the sandbox is running — pause or stop and it halts.",
+      "$0.30 an hour, with a one-minute minimum per session. The meter runs only while the sandbox runs. Pause or stop the sandbox, and the meter stops.",
   },
   {
-    meter: "Sandbox creation · snapshots · resume",
-    rate: "$0",
-    detail: "Boots, snapshots, and resumes are on us.",
+    meter: "Sandbox lifecycle",
+    rate: "No separate fee",
+    detail:
+      "Creation, snapshots, and resume have no line-item fee. Active time still uses the running-minute meter.",
   },
 ];
 
-const TOPUPS = ["$10", "$25", "$100", "custom (min $10)"];
+const TOPUPS = TOPUP_PRESETS.map((preset) => dollars(preset.amountCents));
 
 export default function PricingPage() {
   return (
@@ -105,7 +126,7 @@ export default function PricingPage() {
       close={{
         kicker: "SHEET 06 — END",
         lines: ["Priced like infrastructure.", "Not like seats."],
-        note: "private beta, approving in batches. usage is on us while we learn what you need.",
+        note: "every tier is self-serve. the whole rate card is on this page.",
       }}
     >
       <header className="sub-hero">
@@ -119,13 +140,13 @@ export default function PricingPage() {
         </h1>
         <p className="sub-lede">
           Two things cost real money when an agent ships a PR: model tokens and
-          the sandbox they run in. We bill both at published rates —{" "}
-          <strong>tokens at API price with no markup</strong>, compute at half a
-          cent a minute — and show you every run&apos;s exact cost. No seats, no
-          request quotas, no sales call.
+          the sandbox it runs in. We bill both at published rates. Tokens pass
+          through at API price with no markup. Compute is half a cent a minute.
+          Every run shows its exact cost. No seats, no request quotas, no sales
+          call.
         </p>
         <p className="mono micro">
-          launch pricing · during the private beta, usage is on us
+          launch pricing · start on payg, upgrade when the meter says so
         </p>
       </header>
 
@@ -178,8 +199,8 @@ export default function PricingPage() {
         </div>
         <p className="meter-foot mono">
           top-ups: {TOPUPS.join(" · ")} — prepaid, dollar-denominated,{" "}
-          <b>never expire</b>. optional auto top-up. balance reads
-          &ldquo;$13.42 remaining&rdquo;, not invented credits.
+          <b>never expire</b>. balance reads &ldquo;$13.42 remaining&rdquo;, not
+          invented credits.
         </p>
       </section>
 
@@ -188,30 +209,31 @@ export default function PricingPage() {
           <div className="term">
             <p className="term-k mono">NO SEATS</p>
             <p className="term-v">
-              Team is flat-rate with unlimited members. Adding a teammate costs
-              you nothing — runs are the unit of cost, so runs are the unit of
+              Team is flat-rate with unlimited members. A new teammate costs
+              you nothing. Runs are the unit of cost, so runs are the unit of
               billing.
             </p>
           </div>
           <div className="term">
             <p className="term-k mono">NO MARKUP</p>
             <p className="term-v">
-              Tokens pass through at provider list price. Our margin lives on
-              the compute we actually run, at a rate published right here.
+              Tokens pass through at provider list price. Our margin comes from
+              the compute we run, at the rate on this page.
             </p>
           </div>
           <div className="term">
             <p className="term-k mono">PREPAID</p>
             <p className="term-v">
-              Balance-based, in dollars. No surprise invoices, no dunning.
-              Budget caps are yours to set — we never invent limits for you.
+              Your prepaid balance is in dollars. You do not get a surprise
+              usage invoice. Purchased balance never expires.
             </p>
           </div>
           <div className="term">
             <p className="term-k mono">OPEN SOURCE</p>
             <p className="term-v">
-              The control plane is open source. Self-hosting is free forever
-              and is our enterprise answer — no gated tier, no demo call.
+              The system is Apache-2.0. Self-hosting is free forever and is our
+              enterprise answer. There is no gated tier or demo call. The docs
+              explain what self-hosting takes.
             </p>
           </div>
         </div>

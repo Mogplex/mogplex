@@ -62,6 +62,11 @@ export const TOPUP_PRESETS: readonly TopupPreset[] = [
   { lookupKey: "topup_100", amountCents: 10000 },
 ];
 
+// Vercel bills active sandbox sessions at $0.005/minute. Keep the published
+// rate with the rest of the billing catalog so charging and marketing cannot
+// drift.
+export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
+
 // Fraud guardrails, not usage limits (pricing-plan 02 §3b): the cap is
 // raised on request instantly. ⚠️ Open decision #5 — both values need
 // Charles's sign-off before billing goes live (no-artificial-limits rule).

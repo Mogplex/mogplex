@@ -50,8 +50,8 @@ export function MarketingSubpageShell({
             {close.lines[1]}
           </h2>
           <div className="mpx-sub-close-actions">
-            <Link className="mpx-button is-primary" href="/request-access">
-              Get an access code
+            <Link className="mpx-button is-primary" href="/signup">
+              Start now
             </Link>
             <p>{close.note}</p>
           </div>

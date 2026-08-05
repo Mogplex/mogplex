@@ -1,14 +1,11 @@
 import type { Sandbox } from "@vercel/sandbox";
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
+import { SANDBOX_RATE_MICRO_USD_PER_MINUTE } from "@/lib/billing/catalog";
 import { isBillingEnabled } from "@/lib/billing/stripe";
 import { loadExplicitPlatformAccess } from "@/lib/platform-access";
 import { stopSandboxRecord } from "@/lib/sandbox/records";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-// Vercel bills active sandbox sessions at $0.005/minute. Store the rate in
-// micro-USD so elapsed milliseconds can be accumulated without floating-point
-// rounding. Stripe price and product IDs never participate in compute billing.
-export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
 export const SANDBOX_BALANCE_REQUIRED_SQLSTATE = "MP001";
 export const SANDBOX_BALANCE_REQUIRED_MESSAGE =
   "Hosted sandbox compute requires a positive billing balance";
@@ -587,3 +584,5 @@ export async function reopenSandboxBillingClose(
   const deps = { ...defaultDeps, ...overrides };
   return deps.reopen(attempt);
 }
+
+export { SANDBOX_RATE_MICRO_USD_PER_MINUTE } from "@/lib/billing/catalog";

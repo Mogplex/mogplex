@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Fragment,
   type KeyboardEvent,
@@ -19,6 +20,7 @@ import {
   MpxFooter,
   MpxHeader,
   plexMono,
+  SELF_HOSTING_URL,
 } from "@/components/marketing/mpx-chrome";
 
 import "./landing-v2.css";
@@ -296,9 +298,9 @@ const planSteps = [
   {
     icon: "review",
     name: "REVIEW",
-    desc: "Assess changes and request updates",
+    desc: "Review the diff and request changes",
   },
-  { icon: "deploy", name: "DEPLOY", desc: "Merge, build, and roll out safely" },
+  { icon: "deploy", name: "DEPLOY", desc: "Merge and deploy behind your gates" },
 ] as const;
 
 const changedFiles = [
@@ -882,7 +884,7 @@ function LiveRunMockup() {
 
 const proofItems = [
   {
-    label: "Zero training data",
+    label: "Apache-2.0 source",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -893,8 +895,8 @@ const proofItems = [
         strokeLinejoin="round"
         aria-hidden
       >
-        <path d="M12 3 4.5 6v5.5c0 4.4 3.1 7.7 7.5 9.5 4.4-1.8 7.5-5.1 7.5-9.5V6L12 3Z" />
-        <path d="m8.7 12 2.1 2.1 4.5-4.6" />
+        <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+        <path d="m9 9-3 3 3 3M15 9l3 3-3 3" />
       </svg>
     ),
   },
@@ -916,7 +918,7 @@ const proofItems = [
     ),
   },
   {
-    label: "Policy-bound sandboxes",
+    label: "Per-run sandboxes",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -935,7 +937,7 @@ const proofItems = [
     ),
   },
   {
-    label: "Cost-attributed traces",
+    label: "Itemized run costs",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -990,62 +992,27 @@ const traceRows = [
   },
 ] as const;
 
-/* The native harness runs any top model — the yaml panel cycles through
-   them, credentials vault kept in sync with the provider. */
-export const nativeModelRotation = [
-  ["claude-opus-5", "vault://platform/anthropic"],
-  ["gpt-5.6-sol", "vault://platform/openai"],
-  ["kimi-k3", "vault://platform/moonshot"],
-] as const;
-
-export function nextNativeModelIndex(index: number): number {
-  return (index + 1) % nativeModelRotation.length;
-}
-
 const harnesses = [
-  {
-    id: "mogplex",
-    label: "Mogplex native",
-    status: "VALID POLICY",
-    kicker: "NATIVE ORCHESTRATION",
-    name: "Mogplex harness",
-    chip: "M",
-    chipTone: "is-orange",
-    description:
-      "Full planner-to-deploy orchestration with review fan-out, durable checkpoints, and policy-aware retries.",
-    bullets: [
-      "Multi-agent planning and execution",
-      "Native approvals and checkpoints",
-      "End-to-end trace and cost graph",
-    ],
-    yaml: [
-      ["harness", "mogplex", true],
-      ["model", "claude-opus-5", false],
-      ["credentials", "vault://platform/anthropic", false],
-      ["sandbox", "enterprise-restricted", false],
-      ["policy", "production-default", false],
-    ],
-  },
   {
     id: "claude",
     label: "Claude Code",
     status: "HARNESS READY",
-    kicker: "MANAGED HARNESS",
+    kicker: "HARNESS READY",
     name: "Claude Code",
     chip: "CC",
     chipTone: "is-beige",
     description:
-      "Keep the Claude Code workflow developers know, wrapped in enterprise sandboxing, BYOK, approvals, and complete run telemetry.",
+      "Keep the Claude Code workflow you know. Mogplex adds the sandbox, the gates, and the run telemetry.",
     bullets: [
       "Existing CLAUDE.md behavior preserved",
-      "Provider key remains in your vault",
-      "Central policy without workflow changes",
+      "Keys stay in your vault",
+      "Full run telemetry",
     ],
     yaml: [
       ["harness", "claude-code", true],
       ["model", "claude-opus-5", false],
       ["credentials", "vault://platform/anthropic", false],
-      ["sandbox", "enterprise-restricted", false],
+      ["sandbox", "per-run", false],
       ["telemetry", "full", false],
     ],
   },
@@ -1053,98 +1020,25 @@ const harnesses = [
     id: "codex",
     label: "Codex",
     status: "HARNESS READY",
-    kicker: "MANAGED HARNESS",
+    kicker: "HARNESS READY",
     name: "Codex",
     chip: "CX",
     chipTone: "is-white",
     description:
-      "Run Codex against approved repositories and models while Mogplex captures every tool call, diff, token, and approval.",
+      "Run Codex against your repos while Mogplex records every tool call, diff, token, and approval.",
     bullets: [
       "OpenAI keys routed through your vault",
-      "Repository and command allowlists",
+      "Repository allowlists",
       "Unified spend and audit reporting",
     ],
     yaml: [
       ["harness", "codex", true],
       ["model", "gpt-5.6-sol", false],
       ["credentials", "vault://platform/openai", false],
-      ["sandbox", "enterprise-restricted", false],
+      ["sandbox", "per-run", false],
       ["telemetry", "full", false],
     ],
   },
-] as const;
-
-const enterpriseTiles = [
-  {
-    title: "SSO / SAML + SCIM",
-    sub: "Identity and provisioning",
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        aria-hidden
-      >
-        <path d="M12 3 4.5 6v5.5c0 4.4 3.1 7.7 7.5 9.5 4.4-1.8 7.5-5.1 7.5-9.5V6L12 3Z" />
-      </svg>
-    ),
-  },
-  {
-    title: "VPC or self-hosted",
-    sub: "Your network boundary",
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        aria-hidden
-      >
-        <path d="M4 12h16M12 4v16" />
-        <circle cx="12" cy="12" r="8" />
-      </svg>
-    ),
-  },
-  {
-    title: "Immutable audit export",
-    sub: "SIEM and object storage",
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        aria-hidden
-      >
-        <path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />
-      </svg>
-    ),
-  },
-  {
-    title: "Enterprise SLA",
-    sub: "Support and onboarding",
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        aria-hidden
-      >
-        <path d="m5 12 4 4L19 6" />
-      </svg>
-    ),
-  },
-] as const;
-
-const connectors = [
-  ["SOURCE", "GitHub + GitLab"],
-  ["IDENTITY", "Okta + Entra ID"],
-  ["SECRETS", "Vault + KMS"],
-  ["TELEMETRY", "OTel + Datadog"],
-  ["WORKFLOW", "Slack + Jira"],
-  ["DELIVERY", "CI + Kubernetes"],
 ] as const;
 
 /* ── page ─────────────────────────────────────────────────────── */
@@ -1152,17 +1046,7 @@ const connectors = [
 export function MarketingLandingPage() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeHarness, setActiveHarness] = useState(0);
-  const [nativeModel, setNativeModel] = useState(0);
   const harnessRefs = useRef<Array<HTMLButtonElement | null>>([]);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(
-      () => setNativeModel(nextNativeModelIndex),
-      2600
-    );
-    return () => window.clearInterval(timer);
-  }, []);
 
   /* corner brackets fade in while scrolling, matching the blueprint frame */
   useEffect(() => {
@@ -1216,17 +1100,20 @@ export function MarketingLandingPage() {
         <section className="mpx-hero" data-testid="landing-hero">
           <div className="mpx-hero-copy">
             <div className="mpx-rise" style={{ animationDelay: ".05s" }}>
-              <Eyebrow large>OPEN-SOURCE AGENTIC SOFTWARE FACTORY</Eyebrow>
+              <Eyebrow large>
+                OPEN SOURCE · APACHE-2.0 · GENERALLY AVAILABLE
+              </Eyebrow>
             </div>
             <h1 className="mpx-rise" style={{ animationDelay: ".14s" }}>
-              The open-source
-              <br className="mpx-lg-break" /> agentic software
-              <br className="mpx-lg-break" /> factory
+              The system that
+              <br className="mpx-lg-break" /> builds and maintains
+              <br className="mpx-lg-break" /> your software
               <AccentPeriod />
             </h1>
             <p className="mpx-rise" style={{ animationDelay: ".24s" }}>
-              Mogplex coordinates agents that plan, build, review, and ship code
-              through one inspectable pipeline.
+              Events go in: issues, CI failures, schedules, and Slack asks.
+              Agents plan, build, test, and review in per-run sandboxes. PRs
+              come out behind your gates.
             </p>
             <div
               className="mpx-hero-actions mpx-rise"
@@ -1239,10 +1126,10 @@ export function MarketingLandingPage() {
                 rel="noreferrer noopener"
                 data-testid="landing-primary-cta"
               >
-                View on GitHub
+                Read the code
               </a>
               <a className="mpx-text-link" href="#run">
-                See how it works
+                Watch one run
                 <ArrowRight className="mpx-arrow" />
               </a>
             </div>
@@ -1259,8 +1146,7 @@ export function MarketingLandingPage() {
                 RUNNING CODE
               </p>
               <p>
-                <span aria-hidden>+</span>&nbsp;&nbsp;CONTROLLED. OBSERVABLE.
-                AGENTIC.
+                <span aria-hidden>+</span>&nbsp;&nbsp;WIRED. WATCHED. GATED.
               </p>
             </div>
           </div>
@@ -1273,8 +1159,8 @@ export function MarketingLandingPage() {
           </div>
         </section>
 
-        <section className="mpx-proof" aria-label="Enterprise defaults">
-          <Eyebrow>GOVERNED BY DEFAULT</Eyebrow>
+        <section className="mpx-proof" aria-label="System properties">
+          <Eyebrow>OPEN AND INSPECTABLE</Eyebrow>
           {proofItems.map(({ label, icon }) => (
             <div key={label}>
               <i>{icon}</i>
@@ -1283,27 +1169,76 @@ export function MarketingLandingPage() {
           ))}
         </section>
 
-        <section id="capabilities" className="mpx-capabilities">
+        <section id="build-maintain" className="mpx-capabilities">
           <div className="mpx-section-intro">
             <div>
-              <Eyebrow large>ENTERPRISE CONTROL PLANE</Eyebrow>
+              <Eyebrow large>BUILD AND MAINTAIN</Eyebrow>
               <h2>
-                Move at agent speed.
-                <br />
-                Keep enterprise control
+                Shipping is half the job
                 <AccentPeriod />
               </h2>
             </div>
             <div>
               <p>
-                Standardize how every agent accesses models, code, credentials,
-                and infrastructure—without slowing down the teams doing the
-                work.
+                Software rots the day it ships. Dependencies age, CI breaks,
+                docs drift, and coverage decays. Mogplex runs pipelines against
+                both halves of the job.
               </p>
-              <a className="mpx-text-link is-semibold" href="#enterprise">
-                Explore enterprise deployment
+              <Link className="mpx-text-link is-semibold" href="/workflows">
+                All 8 starter pipelines
                 <ArrowRight className="mpx-arrow" />
-              </a>
+              </Link>
+            </div>
+          </div>
+
+          <div className="mpx-cap-grid">
+            <article className="mpx-cap is-zdr">
+              <p className="mpx-cap-kicker">BUILD</p>
+              <h3>
+                Turn an issue into a tested draft PR
+                <AccentPeriod />
+              </h3>
+              <p className="mpx-cap-description">
+                Label an issue. A draft PR comes back with the plan, the diff,
+                and the test run. Ask in Slack, and the PR link lands in the
+                same thread.
+              </p>
+            </article>
+            <article className="mpx-cap is-byok">
+              <p className="mpx-cap-kicker">MAINTAIN</p>
+              <h3>
+                Wake up to fixes, not a red wall
+                <AccentPeriod />
+              </h3>
+              <p className="mpx-cap-description">
+                A run can test dependency bumps each night, diagnose a failed
+                CI job, or open a docs PR when your API changes. You wire each
+                pipeline once.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="capabilities" className="mpx-capabilities">
+          <div className="mpx-section-intro">
+            <div>
+              <Eyebrow large>YOUR GATES HOLD</Eyebrow>
+              <h2>
+                Autonomy is a dial.
+                <br />
+                You set it per pipeline
+                <AccentPeriod />
+              </h2>
+            </div>
+            <div>
+              <p>
+                Every run ends at your branch protections, required checks,
+                and required reviews. Mogplex cannot bypass them.
+              </p>
+              <Link className="mpx-text-link is-semibold" href="/how-it-works">
+                Follow one run
+                <ArrowRight className="mpx-arrow" />
+              </Link>
             </div>
           </div>
 
@@ -1326,33 +1261,32 @@ export function MarketingLandingPage() {
                     <path d="M8 12h8M12 8v8" />
                   </svg>
                 </span>
-                <span className="mpx-default-pill">DEFAULT ON</span>
+                <span className="mpx-default-pill">FRESH PER RUN</span>
               </div>
-              <p className="mpx-cap-kicker">ZDR / ZERO TRAINING DATA</p>
+              <p className="mpx-cap-kicker">PER-RUN ISOLATION</p>
               <h3>
-                Your code is never model training data
+                Every run gets a fresh microVM
                 <AccentPeriod />
               </h3>
               <p className="mpx-cap-description">
-                Provider-side retention and training are disabled by default.
-                Prompts, source, and outputs stay ephemeral while the audit
-                metadata you choose remains inspectable.
+                It holds a clone of your repo. Runs share nothing. The sandbox
+                dies when the run ends.
               </p>
               <div className="mpx-zdr-flow">
                 <div>
-                  <small>01 / INGRESS</small>
-                  <b>Encrypted context</b>
-                  <span>TLS 1.3 in transit</span>
+                  <small>01 / BOOT</small>
+                  <b>Fresh sandbox</b>
+                  <span>One run only</span>
                 </div>
                 <div>
                   <small>02 / EXECUTION</small>
-                  <b>Ephemeral runtime</b>
-                  <span>No provider retention</span>
+                  <b>Scoped workspace</b>
+                  <span>Repo clone and tools</span>
                 </div>
                 <div>
-                  <small>03 / EGRESS</small>
-                  <b>Policy-filtered output</b>
-                  <span>Secrets redacted</span>
+                  <small>03 / STOP</small>
+                  <b>Sandbox ends</b>
+                  <span>Nothing carries over</span>
                 </div>
               </div>
             </article>
@@ -1373,23 +1307,24 @@ export function MarketingLandingPage() {
                     <path d="m11 12 8-8M15 4h4v4M5 18l-2 2" />
                   </svg>
                 </span>
-                <span className="mpx-cap-stamp">CUSTOMER OWNED</span>
+                <span className="mpx-cap-stamp">YOUR CHOICE</span>
               </div>
               <p className="mpx-cap-kicker">BYOK / KEY ROUTING</p>
               <h3>
-                Your providers. Your contracts. Your keys
+                Use hosted models or your own keys
                 <AccentPeriod />
               </h3>
               <p className="mpx-cap-description">
-                Route every request through credentials stored in your vault.
-                Mogplex never becomes the system of record for model keys.
+                Hosted model access uses your Mogplex balance. Or route each
+                call through your own Anthropic, OpenAI, OpenRouter, or AI
+                Gateway key. Your vault stores it.
               </p>
               <div className="mpx-vault">
                 <small>
                   <i aria-hidden />
                   VAULT://PLATFORM/PRODUCTION
                 </small>
-                {(["Anthropic", "OpenAI", "AWS Bedrock"] as const).map(
+                {(["Anthropic", "OpenAI", "OpenRouter"] as const).map(
                   (provider, index) => (
                     <p key={provider}>
                       <span>{provider}</span>
@@ -1418,19 +1353,20 @@ export function MarketingLandingPage() {
                     <circle cx="12" cy="12" r="2.5" />
                   </svg>
                 </span>
-                <p className="mpx-cap-kicker">COMPLETE OBSERVABILITY</p>
+                <p className="mpx-cap-kicker">EVERY CALL, EVERY CENT</p>
                 <h3>
                   Trace every decision down to the dollar
                   <AccentPeriod />
                 </h3>
                 <p className="mpx-cap-description">
-                  Replay prompts, tool calls, file changes, approvals, model
-                  routes, token usage, and cost from intent to deployment.
+                  Open any run call-by-call: model calls, tool calls, diffs,
+                  approvals, tokens, and cost. Approve the next call, redirect
+                  the plan, or stop the run.
                 </p>
                 <div className="mpx-chips">
-                  <span>OTEL EXPORT</span>
                   <span>LIVE REPLAY</span>
                   <span>COST ATTRIBUTION</span>
+                  <span>RUN CONTROLS</span>
                 </div>
               </div>
               <div className="mpx-trace">
@@ -1487,14 +1423,14 @@ export function MarketingLandingPage() {
                   <path d="m7 10 2.5 2.5L7 15M13 15h4" />
                 </svg>
               </span>
-              <p className="mpx-cap-kicker">SANDBOX CONTROLS</p>
+              <p className="mpx-cap-kicker">RUN POLICIES</p>
               <h3>
-                Define exactly where agents can go
+                Your gates hold at every step
                 <AccentPeriod />
               </h3>
               <p className="mpx-cap-description">
-                Attach network, filesystem, secret, compute, and timeout
-                policies to every run.
+                Network, filesystem, secret, and runtime policies apply to each
+                run. Your repository rules still decide what can ship.
               </p>
               <div className="mpx-policy">
                 <p>
@@ -1511,29 +1447,26 @@ export function MarketingLandingPage() {
                 </p>
                 <p>
                   <span>Max runtime</span>
-                  <b className="is-plain">20 MIN</b>
+                  <b className="is-plain">30 MIN</b>
                 </p>
               </div>
             </article>
 
             <article className="mpx-cap is-small-cap">
               <div className="mpx-harness-stack">
-                <i>M</i>
-                <i>CC</i>
-                <i>CX</i>
+                <i>MCP</i>
+                <i>API</i>
+                <i>+</i>
               </div>
-              <p className="mpx-cap-kicker">MULTI-HARNESS</p>
+              <p className="mpx-cap-kicker">MCP CONNECTIONS</p>
               <h3>
-                One factory. Every harness
+                Your tools ride along
                 <AccentPeriod />
               </h3>
               <p className="mpx-cap-description">
-                Run Mogplex native, Claude Code, and Codex through the same
-                controls, telemetry, and approval gates.
+                Connect MCP servers and REST APIs to a pipeline: Linear,
+                Notion, Sentry, Supabase, Zapier, Browserbase, and your own.
               </p>
-              <a className="mpx-text-link is-semibold is-sm" href="#harnesses">
-                Compare harnesses <ArrowRight className="mpx-arrow" />
-              </a>
             </article>
 
             <article className="mpx-cap is-small-cap">
@@ -1552,81 +1485,22 @@ export function MarketingLandingPage() {
                     <path d="M3.5 19c.6-3.3 2.7-5 5.5-5s4.9 1.7 5.5 5M16 7h5M18.5 4.5v5" />
                   </svg>
                 </span>
-                <span className="mpx-cap-stamp">$18,420 / $25,000</span>
+                <span className="mpx-cap-stamp">NO SEAT FEES</span>
               </div>
-              <p className="mpx-cap-kicker">TEAM CONTROLS</p>
+              <p className="mpx-cap-kicker">ROLES / BILLING</p>
               <h3>
-                Budgets and models, set once
+                Four roles. One pooled balance
                 <AccentPeriod />
               </h3>
               <p className="mpx-cap-description">
-                Set spend caps, model allowlists, concurrency, and approval
-                thresholds by team or workspace.
+                Owner, admin, developer, viewer. Team usage stays in one
+                prepaid balance, with the cost for each run and member.
               </p>
-              <div className="mpx-budget">
-                <i />
-              </div>
               <div className="mpx-models">
-                <span>
-                  <b className="is-openai">G</b>GPT 5.6 SOL ✓
-                </span>
-                <span>
-                  <b className="is-anthropic">O</b>OPUS 5 ✓
-                </span>
-                <span>
-                  <b className="is-kimi">K</b>KIMI K3 ✓
-                </span>
-                <span className="is-locked">OTHER MODELS LOCKED</span>
-              </div>
-            </article>
-
-            <article className="mpx-cap is-small-cap">
-              <span className="mpx-cap-icon">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <circle cx="12" cy="8" r="3" />
-                  <path d="M6.5 20v-2.2c0-3.2 2.2-5 5.5-5s5.5 1.8 5.5 5V20M18.5 6.5 20 8l2.5-3" />
-                </svg>
-              </span>
-              <p className="mpx-cap-kicker">RBAC / APPROVALS</p>
-              <h3>
-                The right access at every step
-                <AccentPeriod />
-              </h3>
-              <p className="mpx-cap-description">
-                Map identity groups to granular permissions and require human
-                approval for sensitive actions.
-              </p>
-              <div className="mpx-rbac">
-                <small>
-                  <span>ROLE</span>
-                  <b>RUN</b>
-                  <b>SHIP</b>
-                  <b>ADMIN</b>
-                </small>
-                {(
-                  [
-                    ["Developer", true, false, false],
-                    ["Release lead", true, true, false],
-                    ["Platform admin", true, true, true],
-                  ] as const
-                ).map(([role, run, ship, admin]) => (
-                  <p key={role}>
-                    <span>{role}</span>
-                    {[run, ship, admin].map((on, index) => (
-                      <b key={index} className={on ? "is-on" : ""}>
-                        ●
-                      </b>
-                    ))}
-                  </p>
-                ))}
+                <span>OWNER</span>
+                <span>ADMIN</span>
+                <span>DEVELOPER</span>
+                <span>VIEWER</span>
               </div>
             </article>
           </div>
@@ -1638,14 +1512,14 @@ export function MarketingLandingPage() {
               <div>
                 <Eyebrow large>HARNESS LAYER</Eyebrow>
                 <h2>
-                  Any harness.
+                  Two harnesses.
                   <br />
-                  <span>Same factory.</span>
+                  <span>Same gates.</span>
                 </h2>
               </div>
               <p className="mpx-harness-lede">
-                Let every team use the coding agent they prefer while security
-                and platform teams keep one policy, telemetry, and cost layer.
+                Pick the coding agent for each pipeline. Both run in the same
+                sandboxes, behind the same gates, on the same meter.
               </p>
             </div>
             <div
@@ -1690,32 +1564,16 @@ export function MarketingLandingPage() {
                   <code>
                     <span className="t-root">run:</span>
                     {"\n"}
-                    {harness.yaml.map(([key, value, hot]) => {
-                      const rotates =
-                        harness.id === "mogplex" &&
-                        (key === "model" || key === "credentials");
-                      const display = rotates
-                        ? nativeModelRotation[nativeModel][
-                            key === "model" ? 0 : 1
-                          ]
-                        : value;
-                      return (
-                        <Fragment key={key}>
-                          {"  "}
-                          {key}:{" "}
-                          <span className={hot ? "t-hot" : "t-val"}>
-                            {rotates ? (
-                              <span key={display} className="mpx-model-swap">
-                                {display}
-                              </span>
-                            ) : (
-                              display
-                            )}
-                          </span>
-                          {"\n"}
-                        </Fragment>
-                      );
-                    })}
+                    {harness.yaml.map(([key, value, hot]) => (
+                      <Fragment key={key}>
+                        {"  "}
+                        {key}:{" "}
+                        <span className={hot ? "t-hot" : "t-val"}>
+                          {value}
+                        </span>
+                        {"\n"}
+                      </Fragment>
+                    ))}
                   </code>
                 </pre>
               </div>
@@ -1743,65 +1601,68 @@ export function MarketingLandingPage() {
           </div>
         </section>
 
-        <section id="enterprise" className="mpx-enterprise">
+        <section id="open-source" className="mpx-enterprise">
           <div className="mpx-enterprise-card">
             <div className="mpx-enterprise-copy">
-              <Eyebrow large>BUILT FOR YOUR ENVIRONMENT</Eyebrow>
+              <Eyebrow large>READ IT FIRST</Eyebrow>
               <h2>
-                Standardize agents across the enterprise
+                Read it before you run it
                 <AccentPeriod />
               </h2>
               <p>
-                Connect the identity, source control, secrets, telemetry, and
-                communication systems you already trust. Deploy in Mogplex
-                Cloud, your VPC, or fully self-hosted.
+                Code that authenticates against your repos must be readable
+                before you run it. The platform is Apache-2.0 on GitHub. Read
+                it, file issues, and send patches.
+              </p>
+              <p>
+                Need the system inside your own network? Self-host it. The docs
+                explain what that takes.
               </p>
               <div className="mpx-enterprise-actions">
                 <a
                   className="mpx-button is-primary"
-                  href="mailto:enterprise@mogplex.com"
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
                 >
-                  Talk to enterprise
+                  Read the code
                 </a>
-                <a className="mpx-button is-secondary" href="#capabilities">
-                  Review controls
+                <a
+                  className="mpx-button is-secondary"
+                  href={SELF_HOSTING_URL}
+                >
+                  Self-hosting docs
                 </a>
-              </div>
-              <div className="mpx-enterprise-tiles">
-                {enterpriseTiles.map(({ title, sub, icon }) => (
-                  <div key={title}>
-                    <span>{icon}</span>
-                    <div>
-                      <b>{title}</b>
-                      <small>{sub}</small>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
             <div className="mpx-connectors">
               <header>
-                <p className="mpx-cap-kicker">CONNECTORS</p>
-                <span>ALL SYSTEMS NOMINAL</span>
+                <p className="mpx-cap-kicker">START HERE</p>
+                <span>NO SALES CALL</span>
               </header>
-              <h3>Fits the stack you already run.</h3>
+              <h3>Wire your first pipeline tonight.</h3>
               <div>
-                {connectors.map(([label, value]) => (
-                  <p key={label}>
-                    <small>{label}</small>
-                    <b>{value}</b>
-                  </p>
-                ))}
+                <p>
+                  <small>PRICE</small>
+                  <b>No monthly fee on PAYG</b>
+                </p>
+                <p>
+                  <small>METER</small>
+                  <b>Published rates only</b>
+                </p>
+                <p>
+                  <small>PLATFORM</small>
+                  <b>github.com/mogplex/mogplex</b>
+                </p>
+                <p>
+                  <small>DOCS</small>
+                  <b>docs.mogplex.com/quickstart</b>
+                </p>
               </div>
               <aside>
-                <b>
-                  <i aria-hidden />
-                  POLICY SYNCED
-                </b>
-                <p>
-                  Every connector inherits workspace RBAC, secret scopes, audit
-                  rules, and data controls automatically.
-                </p>
+                <Link className="mpx-button is-primary" href="/signup">
+                  Start now
+                </Link>
               </aside>
             </div>
           </div>

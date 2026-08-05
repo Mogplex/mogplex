@@ -13,6 +13,10 @@ import {
   successTone,
 } from "@/lib/observability/stat-card-tone"
 import {
+  getAutomationHealthStatus,
+  type AutomationHealthStatus,
+} from "@/lib/observability/automation-health"
+import {
   formatCostUsd,
   formatDuration,
   formatSandboxTime,
@@ -27,6 +31,23 @@ type InspectRuns = (target: RunDrilldown) => void
 type HealthState = {
   label: string
   className: string
+}
+
+const HEALTH_STATES: Record<AutomationHealthStatus, HealthState> = {
+  healthy: {
+    label: "Healthy",
+    className:
+      "border-[var(--accent-green)]/20 bg-[var(--accent-green)]/5 text-[var(--accent-green)]",
+  },
+  needs_attention: {
+    label: "Needs attention",
+    className:
+      "border-[var(--accent-red)]/20 bg-[var(--accent-red)]/5 text-[var(--accent-red)]",
+  },
+  no_activity: {
+    label: "No activity yet",
+    className: "border-border bg-secondary/40 text-muted-foreground",
+  },
 }
 
 function MetricLabel({ label, info }: { label: string; info: string }) {
@@ -115,44 +136,6 @@ function countLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`
 }
 
-function getHealthState({
-  hasCurrentIssue,
-  hasRecentPressure,
-  runSuccessRate,
-  runSuccessTone,
-}: {
-  hasCurrentIssue: boolean
-  hasRecentPressure: boolean
-  runSuccessRate: number | null
-  runSuccessTone?: StatTone
-}): HealthState {
-  if (hasCurrentIssue || runSuccessTone === "failure") {
-    return {
-      label: "Needs attention",
-      className:
-        "border-[var(--accent-red)]/20 bg-[var(--accent-red)]/5 text-[var(--accent-red)]",
-    }
-  }
-  if (hasRecentPressure || runSuccessTone === "warn") {
-    return {
-      label: "Recent pressure",
-      className:
-        "border-[var(--accent-amber)]/20 bg-[var(--accent-amber)]/5 text-[var(--accent-amber)]",
-    }
-  }
-  if (runSuccessRate === null) {
-    return {
-      label: "No conclusions",
-      className: "border-border bg-secondary/40 text-muted-foreground",
-    }
-  }
-  return {
-    label: "Operating normally",
-    className:
-      "border-[var(--accent-green)]/20 bg-[var(--accent-green)]/5 text-[var(--accent-green)]",
-  }
-}
-
 function hasCurrentRunIssue(failedInRange: number, stalePending: number) {
   return failedInRange > 0 || stalePending > 0
 }
@@ -166,14 +149,12 @@ function shouldReviewRunSuccess(
 
 function hasAttentionItems({
   hasCurrentIssue,
-  startFailedInRange,
   successNeedsReview,
 }: {
   hasCurrentIssue: boolean
-  startFailedInRange: number
   successNeedsReview: boolean
 }) {
-  return hasCurrentIssue || startFailedInRange > 0 || successNeedsReview
+  return hasCurrentIssue || successNeedsReview
 }
 
 function CurrentAttention({
@@ -183,7 +164,6 @@ function CurrentAttention({
   deferredInRange,
   oldestPendingMs,
   runSuccessTone,
-  onInspectPressure,
   onInspectRuns,
 }: {
   failedInRange: number
@@ -192,7 +172,6 @@ function CurrentAttention({
   deferredInRange: number
   oldestPendingMs: number
   runSuccessTone?: StatTone
-  onInspectPressure: InspectPressure
   onInspectRuns: InspectRuns
 }) {
   const hasCurrentIssue = hasCurrentRunIssue(failedInRange, stalePending)
@@ -202,7 +181,6 @@ function CurrentAttention({
   )
   const hasAttentionItem = hasAttentionItems({
     hasCurrentIssue,
-    startFailedInRange,
     successNeedsReview,
   })
 
@@ -210,85 +188,73 @@ function CurrentAttention({
     <div className="border-t border-border bg-secondary/10 px-4 py-3">
       <div className="grid gap-2 lg:grid-cols-[9rem_minmax(0,1fr)] lg:items-start">
         <div className="pt-1.5 text-xs font-medium text-foreground">
-          Current attention
+          Action required
         </div>
         <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
-        {failedInRange > 0 ? (
-          <button
-            type="button"
-            className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => onInspectRuns("failed")}
-          >
-            <span className="block text-xs font-medium text-[var(--accent-red)]">
-              {countLabel(
-                failedInRange,
-                "run remains failed",
-                "runs remain failed"
-              )}
-            </span>
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              Inspect the run, owner, and latest automation outcome.
-            </span>
-          </button>
-        ) : null}
-        {stalePending > 0 ? (
-          <button
-            type="button"
-            className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => onInspectRuns("repairable_pending")}
-          >
-            <span className="block text-xs font-medium text-[var(--accent-amber)]">
-              {countLabel(
-                stalePending,
-                "pending run needs recovery",
-                "pending runs need recovery"
-              )}
-            </span>
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              Oldest has waited {formatDuration(oldestPendingMs)}.
-            </span>
-          </button>
-        ) : null}
-        {startFailedInRange > 0 ? (
-          <button
-            type="button"
-            className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => onInspectPressure("start_failed")}
-          >
-            <span className="block text-xs font-medium text-foreground">
-              Review recent start failures
-            </span>
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              Confirm retries recovered and no provider pattern remains.
-            </span>
-          </button>
-        ) : null}
-        {successNeedsReview ? (
-          <button
-            type="button"
-            className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => onInspectRuns("failed")}
-          >
-            <span className="block text-xs font-medium text-[var(--accent-red)]">
-              Run success needs review
-            </span>
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              Inspect failed verdicts in the selected range.
-            </span>
-          </button>
-        ) : null}
-        {!hasAttentionItem ? (
-          <div className="rounded-sm px-2 py-1.5">
-            <span className="block text-xs font-medium text-[var(--accent-green)]">
-              No current run issues
-            </span>
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              {deferredInRange > 0
-                ? `${countLabel(deferredInRange, "delayed attempt")} with no stale backlog.`
-                : "No failed or stale pending runs need action."}
-            </span>
-          </div>
-        ) : null}
+          {failedInRange > 0 ? (
+            <button
+              type="button"
+              className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onInspectRuns("failed")}
+            >
+              <span className="block text-xs font-medium text-[var(--accent-red)]">
+                {countLabel(
+                  failedInRange,
+                  "run remains failed",
+                  "runs remain failed"
+                )}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                Inspect the run, owner, and latest automation outcome.
+              </span>
+            </button>
+          ) : null}
+          {stalePending > 0 ? (
+            <button
+              type="button"
+              className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onInspectRuns("repairable_pending")}
+            >
+              <span className="block text-xs font-medium text-[var(--accent-amber)]">
+                {countLabel(
+                  stalePending,
+                  "pending run needs recovery",
+                  "pending runs need recovery"
+                )}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                Oldest has waited {formatDuration(oldestPendingMs)}.
+              </span>
+            </button>
+          ) : null}
+          {successNeedsReview ? (
+            <button
+              type="button"
+              className="block w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onInspectRuns("failed")}
+            >
+              <span className="block text-xs font-medium text-[var(--accent-red)]">
+                Run success needs review
+              </span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                Inspect failed verdicts in the selected range.
+              </span>
+            </button>
+          ) : null}
+          {!hasAttentionItem ? (
+            <div className="rounded-sm px-2 py-1.5">
+              <span className="block text-xs font-medium text-[var(--accent-green)]">
+                No action needed
+              </span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                {deferredInRange > 0
+                  ? `${countLabel(deferredInRange, "delayed start attempt")} retried automatically; no failed or stale runs need attention.`
+                  : startFailedInRange > 0
+                    ? "No failed or stale runs need action. Recent start failures remain available in operational history."
+                    : "No failed or stale pending runs need action."}
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -567,14 +533,17 @@ export function ObservabilitySummary({
 
   const runSuccessTone =
     runSuccessRate === null ? undefined : successTone(runSuccessRate)
-  const hasCurrentIssue = hasCurrentRunIssue(failedInRange, stalePending)
-  const hasRecentPressure = deferredInRange > 0 || startFailedInRange > 0
-  const healthState = getHealthState({
-    hasCurrentIssue,
-    hasRecentPressure,
+  const healthStatus = getAutomationHealthStatus({
+    failedInRange,
+    stalePending,
     runSuccessRate,
-    runSuccessTone,
   })
+  const healthState = HEALTH_STATES[healthStatus]
+  const healthSummary = healthStatus === "needs_attention"
+    ? `Some runs need review in ${rangeLabel}. Past start attempts and prevented runs are listed separately.`
+    : runSuccessRate === null
+      ? `No runs reached a verdict in ${rangeLabel}. Nothing currently needs action.`
+      : "No failed or stuck runs need action. Past start attempts and prevented runs are shown below as history."
 
   return (
     <div className="space-y-4">
@@ -595,8 +564,7 @@ export function ObservabilitySummary({
               </span>
             </div>
             <p className="max-w-2xl text-xs text-muted-foreground">
-              Delivery reliability and controls across {rangeLabel}. Current
-              issues are separated from prevented events and recovered pressure.
+              {healthSummary}
             </p>
             <p className="text-xs text-muted-foreground">
               {countLabel(summary.job_runs_running, "running run")} ·{" "}
@@ -632,7 +600,6 @@ export function ObservabilitySummary({
             deferredInRange={deferredInRange}
             oldestPendingMs={oldestPendingMs}
             runSuccessTone={runSuccessTone}
-            onInspectPressure={onInspectPressure}
             onInspectRuns={onInspectRuns}
           />
         </div>

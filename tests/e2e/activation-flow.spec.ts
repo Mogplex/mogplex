@@ -16,7 +16,7 @@ import { buildSandboxBackedCall } from "./helpers/sandbox-fixtures";
 
 const workspacePath = `/${connectedUser.username}/projects/workspace`;
 
-test("public landing shows the agentic software factory and primary CTA", async ({
+test("public landing shows the build-and-maintain system and primary CTA", async ({
   page,
 }) => {
   await page.goto("/");
@@ -25,13 +25,13 @@ test("public landing shows the agentic software factory and primary CTA", async 
   await expect(page.getByTestId("landing-hero")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: /The open-source agentic software factory\./,
+      name: /The system that builds and maintains your software\./,
     })
   ).toBeVisible();
   await expect(page.getByTestId("landing-primary-cta")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: /Move at agent speed\. Keep enterprise control\./,
+      name: /Autonomy is a dial\. You set it per pipeline\./,
     })
   ).toBeVisible();
 
@@ -47,6 +47,48 @@ test("public landing shows the agentic software factory and primary CTA", async 
   for (const fontFamily of headingFamilies) {
     expect(fontFamily).toContain("Inter Tight");
   }
+});
+
+test("retired access request route redirects to the rate card", async ({
+  request,
+}) => {
+  const response = await request.get("/request-access", {
+    maxRedirects: 0,
+  });
+
+  expect(response.status()).toBe(301);
+  expect(response.headers().location).toBe("/pricing");
+});
+
+test("public marketing pages use the GA and PAYG copy", async ({ page }) => {
+  const pages = [
+    ["/workflows", "Pipelines worth stealing."],
+    ["/how-it-works", "One run, drawn to scale."],
+    ["/pricing", "Tokens at cost. Compute by the minute."],
+    ["/faq", "Fair questions."],
+    ["/company", "The company behind the system."],
+    ["/signup", "Start now."],
+  ] as const;
+
+  for (const [path, heading] of pages) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(page.getByText(/private beta/i)).toHaveCount(0);
+  }
+
+  await page.goto("/pricing");
+  await expect(page.getByText("TIER 00 — PAYG")).toBeVisible();
+  await expect(page.getByText(/optional auto top-up/i)).toHaveCount(0);
+  await expect(page.getByText(/custom \(min/i)).toHaveCount(0);
+
+  await page.goto("/");
+  await expect(
+    page.getByRole("link", { name: "Self-hosting docs" })
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/mogplex/mogplex/blob/main/docs/self-hosting.md"
+  );
+  await expect(page.getByText("github.com/Mogplex/cli")).toHaveCount(0);
 });
 
 test("beta login page shows the waitlist gate form ready for input", async ({

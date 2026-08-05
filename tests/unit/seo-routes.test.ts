@@ -20,6 +20,7 @@ test("sitemap exposes only public content routes", async () => {
   assert.ok(!urls.some((url) => url.includes("/login")));
   assert.ok(!urls.some((url) => url.includes("/api/")));
   assert.ok(!urls.some((url) => url.includes("/invite/")));
+  assert.ok(!urls.some((url) => url.includes("/request-access")));
 });
 
 test("sitemap routes stay aligned with the public route policy", () => {

@@ -28,17 +28,3 @@ test("GitHub star count formatting and visibility handle API edge cases", async 
     globalThis.fetch = originalFetch;
   }
 });
-
-test("native model rotation wraps through each provider pair", async () => {
-  const { nativeModelRotation, nextNativeModelIndex } =
-    await import("../../components/marketing/landing-v2");
-
-  assert.deepEqual(nativeModelRotation, [
-    ["claude-opus-5", "vault://platform/anthropic"],
-    ["gpt-5.6-sol", "vault://platform/openai"],
-    ["kimi-k3", "vault://platform/moonshot"],
-  ]);
-  assert.equal(nextNativeModelIndex(0), 1);
-  assert.equal(nextNativeModelIndex(1), 2);
-  assert.equal(nextNativeModelIndex(2), 0);
-});
