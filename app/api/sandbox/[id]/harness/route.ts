@@ -347,6 +347,7 @@ export function createSandboxHarnessPostHandler(
       resumeSessionId?: string | null;
       mode?: string | null;
       aiCallId?: string | null;
+      prepareOnly?: boolean;
       slackImageAttachments?: unknown;
     };
     try {
@@ -423,9 +424,18 @@ export function createSandboxHarnessPostHandler(
     if (existingAiCallId && !existingAiCall) {
       return NextResponse.json({ error: "ai_call not found" }, { status: 404 });
     }
-    if (existingAiCall && existingAiCall.metadata?.source !== "external-api") {
+    const isPreparedCliCall =
+      existingAiCall?.metadata?.source === "cli" &&
+      existingAiCall.metadata?.prepared === true &&
+      existingAiCall.metadata?.sandbox_record_id === id &&
+      existingAiCall.metadata?.harness_id === harnessId;
+    if (
+      existingAiCall &&
+      existingAiCall.metadata?.source !== "external-api" &&
+      !isPreparedCliCall
+    ) {
       return NextResponse.json(
-        { error: "ai_call is not external-api owned" },
+        { error: "ai_call is not available for this harness run" },
         { status: 409 }
       );
     }
@@ -448,6 +458,7 @@ export function createSandboxHarnessPostHandler(
     const createdAiCallMetadata = {
       ...existingAiCall?.metadata,
       ...harnessMetadataPatch,
+      prepared: body.prepareOnly === true,
     };
 
     const aiCall = existingAiCall
@@ -476,6 +487,10 @@ export function createSandboxHarnessPostHandler(
         { error: "Harness initialization failed" },
         { status: 500 }
       );
+    }
+
+    if (body.prepareOnly === true) {
+      return NextResponse.json({ aiCallId: aiCall.id });
     }
 
     await deps.safeAppendAiCallEvent({

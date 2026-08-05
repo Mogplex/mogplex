@@ -521,6 +521,7 @@ function AgentPane({
   const [activeHarnessCallId, setActiveHarnessCallId] = useState<string | null>(
     null
   );
+  const activeHarnessCallIdRef = useRef<string | null>(null);
   const liveConversationRuns = useMemo(
     () =>
       conversationRuns.filter(
@@ -703,6 +704,38 @@ function AgentPane({
         setStopError(null);
 
         try {
+          const prepareRes = await fetch(`/api/sandbox/${sandboxId}/harness`, {
+            method: "POST",
+            headers: getActiveTeamRequestHeaders({
+              "Content-Type": "application/json",
+            }),
+            body: JSON.stringify({
+              harness: harnessId,
+              prompt: input,
+              conversationId: pane.id,
+              workspaceSessionId: activeSessionId,
+              resumeSessionId,
+              mode,
+              prepareOnly: true,
+            }),
+            signal: controller.signal,
+          });
+          const prepared = (await prepareRes.json().catch(() => ({}))) as {
+            aiCallId?: string;
+            error?: string;
+          };
+          if (!prepareRes.ok || !prepared.aiCallId) {
+            updateLocalMsg(
+              pane.id,
+              outputMsgId,
+              prepared.error || "Harness initialization failed"
+            );
+            return;
+          }
+
+          activeHarnessCallIdRef.current = prepared.aiCallId;
+          setActiveHarnessCallId(prepared.aiCallId);
+
           const res = await fetch(`/api/sandbox/${sandboxId}/harness`, {
             method: "POST",
             headers: getActiveTeamRequestHeaders({
@@ -715,6 +748,7 @@ function AgentPane({
               workspaceSessionId: activeSessionId,
               resumeSessionId,
               mode,
+              aiCallId: prepared.aiCallId,
             }),
             signal: controller.signal,
           });
@@ -810,6 +844,7 @@ function AgentPane({
                   sessionId?: string;
                 };
                 if (event.type === "run" && event.ai_call_id) {
+                  activeHarnessCallIdRef.current = event.ai_call_id;
                   setActiveHarnessCallId(event.ai_call_id);
                 } else if (event.type === "session" && event.sessionId) {
                   setHarnessState(
@@ -850,6 +885,7 @@ function AgentPane({
                     : "[cancelled]";
                   output += "\n[cancelled]";
                   wasCancelled = true;
+                  activeHarnessCallIdRef.current = null;
                   setActiveHarnessCallId(null);
                 } else if (event.type === "done") {
                   const rendered = outputRenderer.flush();
@@ -871,6 +907,7 @@ function AgentPane({
                     ? `${trailerText}\n${doneMarker}`
                     : doneMarker;
                   output += `\n${doneMarker}`;
+                  activeHarnessCallIdRef.current = null;
                   setActiveHarnessCallId(null);
                 } else if (event.type === "error") {
                   const rendered = outputRenderer.flush();
@@ -889,6 +926,7 @@ function AgentPane({
                     ? `${trailerText}\n${errorMarker}`
                     : errorMarker;
                   output += `\n${errorMarker}`;
+                  activeHarnessCallIdRef.current = null;
                   setActiveHarnessCallId(null);
                 }
               } catch {
@@ -990,6 +1028,7 @@ function AgentPane({
         await executeHarnessRun(input);
       } finally {
         setIsHarnessRunning(false);
+        activeHarnessCallIdRef.current = null;
         setActiveHarnessCallId(null);
       }
     },
@@ -999,7 +1038,10 @@ function AgentPane({
   const handleStopRun = useCallback(async () => {
     setStopError(null);
 
-    const harnessCallId = activeHarnessCallId ?? activeHarnessRun?.id;
+    const harnessCallId =
+      activeHarnessCallIdRef.current ??
+      activeHarnessCallId ??
+      activeHarnessRun?.id;
     if (harnessCallId) {
       const res = await fetch(
         `/api/observability/calls/${harnessCallId}/cancel`,

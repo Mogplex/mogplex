@@ -164,6 +164,69 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
   });
 });
 
+test("POST /api/sandbox/[id]/harness prepares a cancellable call before starting the harness", async () => {
+  const { createSandboxHarnessPostHandler } =
+    await loadSandboxHarnessRouteModule();
+  const aiCall = buildAiCall({ metadata: { source: "cli", prepared: true } });
+  let runHarnessCalled = false;
+
+  const handler = createSandboxHarnessPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    resolveSandboxAiAccess: async () =>
+      buildSandboxServiceAiAccess({
+        aiBillingSource: "user_ai_gateway",
+        gatewayApiKey: "gateway-key",
+      }),
+    getSandbox: async () => ({}) as never,
+    runHarness: async () => {
+      runHarnessCalled = true;
+      throw new Error("runHarness should not be called while preparing");
+    },
+    renewSandboxActivityLease: async () => 0,
+    stopSandboxRecord: async () => null,
+    touchSandboxLastActive: async () => {},
+    resolveRepoSandboxEnv: async () => ({
+      envVars: {},
+      sync: { mode: "sandbox-only", source: "manual", warning: null },
+    }),
+    createAiCall: async (input) => {
+      assert.equal(input.metadata?.prepared, true);
+      return aiCall;
+    },
+    loadOwnedAiCall: async () => null,
+    mergeAiCallMetadata: async () => {
+      throw new Error("mergeAiCallMetadata should not be called");
+    },
+    updateAiCall: async () => {},
+    finalizeAiCallAsCancelledIfActive: async () => null,
+    finalizeAiCallIfNotCancelled: async () => null,
+    safeAppendAiCallEvent: async () => null,
+    loadHarnessPromptWithMemoryContext: async (_userId, prompt) => prompt,
+    persistHarnessMemory: async () => {},
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/harness",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          harness: "codex",
+          prompt: "Review this repo",
+          prepareOnly: true,
+        }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { aiCallId: aiCall.id });
+  assert.equal(runHarnessCalled, false);
+});
+
 test("POST /api/sandbox/[id]/harness sanitizes a closed sandbox stream", async (t) => {
   const { createSandboxHarnessPostHandler } =
     await loadSandboxHarnessRouteModule();

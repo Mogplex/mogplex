@@ -179,6 +179,11 @@ test("composer shows agent activity immediately and clears it after completion",
   await expect(runningComposer).toHaveValue("/");
   expect(chatRequests).toBe(1);
 
+  await runningComposer.fill("queue this next");
+  await page.keyboard.press("Enter");
+  await expect(runningComposer).toHaveValue("queue this next");
+  expect(chatRequests).toBe(1);
+
   releaseResponse?.();
   await expect(page.getByText("Finished the work.")).toBeVisible();
   await expect(indicator).toHaveCount(0);
