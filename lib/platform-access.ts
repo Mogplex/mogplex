@@ -29,6 +29,11 @@ type LoadUserPlatformAccessDeps = {
   ) => Promise<boolean>;
 };
 
+type LoadExplicitPlatformAccessDeps = Pick<
+  LoadUserPlatformAccessDeps,
+  "env" | "loadProfile"
+>;
+
 type BillingAccessCacheEntry = {
   expiresAt: number;
   value: Promise<boolean>;
@@ -146,6 +151,40 @@ async function loadPlatformAccessProfile(
   return (data ?? null) as PlatformAccessProfile | null;
 }
 
+async function resolveExplicitPlatformAccess(
+  userId: string,
+  deps: LoadExplicitPlatformAccessDeps
+): Promise<PlatformAccess> {
+  const profile = await deps.loadProfile(userId);
+  return derivePlatformAccess(
+    profile ?? {
+      id: userId,
+      email: null,
+      allow_platform_ai: false,
+      allow_platform_sandbox: false,
+    },
+    deps.env
+  );
+}
+
+export function createLoadExplicitPlatformAccess(
+  overrides: Partial<LoadExplicitPlatformAccessDeps> = {}
+) {
+  const deps: LoadExplicitPlatformAccessDeps = {
+    env: process.env,
+    loadProfile: loadPlatformAccessProfile,
+    ...overrides,
+  };
+
+  return async function loadExplicitPlatformAccess(
+    userId: string
+  ): Promise<PlatformAccess> {
+    return resolveExplicitPlatformAccess(userId, deps);
+  };
+}
+
+export const loadExplicitPlatformAccess = createLoadExplicitPlatformAccess();
+
 async function loadBillingAccess(
   userId: string,
   productTeamId?: string | null
@@ -233,16 +272,7 @@ export function createLoadUserPlatformAccess(
     userId: string,
     productTeamId?: string | null
   ): Promise<PlatformAccess> {
-    const profile = await deps.loadProfile(userId);
-    const allowlistedAccess = derivePlatformAccess(
-      profile ?? {
-        id: userId,
-        email: null,
-        allow_platform_ai: false,
-        allow_platform_sandbox: false,
-      },
-      deps.env
-    );
+    const allowlistedAccess = await resolveExplicitPlatformAccess(userId, deps);
     if (
       allowlistedAccess.allowPlatformAi &&
       allowlistedAccess.allowPlatformSandbox
