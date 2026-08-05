@@ -1,13 +1,5 @@
 import type { SandboxUiState } from "@/lib/sandbox/ui-state";
 
-export type SandboxChipTimeInfo = {
-  remainingMin: number;
-  remainingMs: number;
-};
-
-const LIVE_CRITICAL_MS = 30_000;
-const LIVE_WARNING_MS = 120_000;
-
 type SandboxChipTone = "neutral" | "green" | "amber" | "red" | "muted";
 
 const TONE_CLASSES: Record<SandboxChipTone, { shell: string; dot: string }> = {
@@ -52,42 +44,18 @@ const DEGRADED_PRESENTATION = {
   { label: string; tone: SandboxChipTone }
 >;
 
-function resolveLiveSandboxChipPresentation(
-  timeInfo?: SandboxChipTimeInfo | null
-): SandboxChipPresentation {
-  if (!timeInfo) return { label: "live", tone: "green" };
-  const label = `live · ${formatMinutesLeft(timeInfo)}`;
-  if (timeInfo.remainingMs < LIVE_CRITICAL_MS) {
-    return { label, tone: "red" };
-  }
-  if (timeInfo.remainingMs < LIVE_WARNING_MS) {
-    return { label, tone: "amber", pulse: true };
-  }
-  return { label, tone: "green" };
-}
-
-function formatMinutesLeft(timeInfo?: SandboxChipTimeInfo | null) {
-  return `${timeInfo?.remainingMin ?? 0}m left`;
-}
-
 function resolveDegradedSandboxChipPresentation(
-  state: Extract<SandboxUiState, { kind: "degraded" }>,
-  timeInfo?: SandboxChipTimeInfo | null
+  state: Extract<SandboxUiState, { kind: "degraded" }>
 ) {
   if (state.reason === "idle_warning") {
-    return {
-      label: timeInfo ? `idle · ${formatMinutesLeft(timeInfo)}` : "idle",
-      tone: "amber" as const,
-      pulse: true,
-    };
+    return { label: "ready", tone: "green" as const };
   }
 
   return DEGRADED_PRESENTATION[state.reason];
 }
 
 function resolveSandboxChipPresentation(
-  state: SandboxUiState,
-  timeInfo?: SandboxChipTimeInfo | null
+  state: SandboxUiState
 ): SandboxChipPresentation | null {
   switch (state.kind) {
     case "booting":
@@ -98,9 +66,9 @@ function resolveSandboxChipPresentation(
     case "starting":
       return { label: "starting dev server", tone: "neutral" };
     case "live":
-      return resolveLiveSandboxChipPresentation(timeInfo);
+      return { label: "ready", tone: "green" };
     case "degraded":
-      return resolveDegradedSandboxChipPresentation(state, timeInfo);
+      return resolveDegradedSandboxChipPresentation(state);
     case "paused":
       return { label: "paused · resume", tone: "neutral" };
     case "stopped":
@@ -120,12 +88,10 @@ function resolveSandboxChipPresentation(
 
 export function SandboxChip({
   state,
-  timeInfo,
 }: {
   state: SandboxUiState;
-  timeInfo?: SandboxChipTimeInfo | null;
 }) {
-  const presentation = resolveSandboxChipPresentation(state, timeInfo);
+  const presentation = resolveSandboxChipPresentation(state);
   if (!presentation) return null;
 
   const tone = TONE_CLASSES[presentation.tone];

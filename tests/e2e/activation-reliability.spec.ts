@@ -251,12 +251,13 @@ test("sandbox stop reconciles preview and chrome without stale live state", asyn
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
 
-  const liveBadges = page.getByText(/live · \d+m left/i);
-  await expect(liveBadges.first()).toBeVisible();
+  const readyBadges = page.getByText("ready", { exact: true });
+  await expect(readyBadges.first()).toBeVisible();
+  await expect(page.getByText(/\d+m left/i)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Health", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Stop Sandbox" })
+    page.getByRole("button", { name: "Stop environment" })
   ).toBeVisible();
 
   const stopResponse = page.waitForResponse(
@@ -264,7 +265,7 @@ test("sandbox stop reconciles preview and chrome without stale live state", asyn
       /\/api(?:\/sandbox){2}-record-repo-1\/stop$/.test(response.url()) &&
       response.request().method() === "POST"
   );
-  await page.getByRole("button", { name: "Stop Sandbox" }).click();
+  await page.getByRole("button", { name: "Stop environment" }).click();
   await stopResponse;
 
   await page.getByRole("button", { name: "Preview", exact: true }).click();
@@ -274,7 +275,7 @@ test("sandbox stop reconciles preview and chrome without stale live state", asyn
     .first();
   await expect(stoppedChip).toBeVisible();
   await expect(stoppedChip).toHaveText("stopped");
-  await expect(liveBadges).toHaveCount(0);
+  await expect(readyBadges).toHaveCount(0);
 
   // PR6: stopped overlay exposes both restart-on-branch and start-fresh.
   await expect(
@@ -300,7 +301,7 @@ test("fresh Start fresh failures from the stopped overlay render inline", async 
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
 
-  await expect(page.getByText(/live · \d+m left/i).first()).toBeVisible();
+  await expect(page.getByText("ready", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Health", exact: true }).click();
 
   const stopResponse = page.waitForResponse(
@@ -308,7 +309,7 @@ test("fresh Start fresh failures from the stopped overlay render inline", async 
       /\/api(?:\/sandbox){2}-record-repo-1\/stop$/.test(response.url()) &&
       response.request().method() === "POST"
   );
-  await page.getByRole("button", { name: "Stop Sandbox" }).click();
+  await page.getByRole("button", { name: "Stop environment" }).click();
   await stopResponse;
 
   await page.getByRole("button", { name: "Preview", exact: true }).click();
@@ -345,7 +346,7 @@ test("session overflow menu offers a Start fresh sandbox affordance", async ({
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
 
-  await expect(page.getByText(/live · \d+m left/i).first()).toBeVisible();
+  await expect(page.getByText("ready", { exact: true }).first()).toBeVisible();
 
   await page.getByTestId("session-tab-1").click({
     button: "right",
@@ -369,8 +370,9 @@ test("server-side sandbox stops propagate on health reconciliation", async ({
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
 
-  const liveBadges = page.getByText(/live · \d+m left/i);
-  await expect(liveBadges.first()).toBeVisible();
+  const readyBadges = page.getByText("ready", { exact: true });
+  await expect(readyBadges.first()).toBeVisible();
+  await expect(page.getByText(/\d+m left/i)).toHaveCount(0);
 
   harness.setSandboxState("repo-1", {
     status: "stopped",
@@ -385,7 +387,7 @@ test("server-side sandbox stops propagate on health reconciliation", async ({
   await expect(
     page.getByText("stopped", { exact: true }).first()
   ).toBeVisible();
-  await expect(liveBadges).toHaveCount(0);
+  await expect(readyBadges).toHaveCount(0);
 });
 
 test("preview app errors surface recovery UI and clear live chrome", async ({
@@ -400,8 +402,8 @@ test("preview app errors surface recovery UI and clear live chrome", async ({
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
 
-  const liveBadges = page.getByText(/live · \d+m left/i);
-  await expect(liveBadges.first()).toBeVisible();
+  const readyBadges = page.getByText("ready", { exact: true });
+  await expect(readyBadges.first()).toBeVisible();
 
   harness.setSandboxState("repo-1", {
     status: "running",
@@ -421,7 +423,7 @@ test("preview app errors surface recovery UI and clear live chrome", async ({
   await expect(
     page.getByRole("button", { name: "Restart preview" })
   ).toBeVisible();
-  await expect(liveBadges).toHaveCount(0);
+  await expect(readyBadges).toHaveCount(0);
 });
 
 test("preview build failures surface Vercel deployment diagnostics in preview and health", async ({
@@ -521,8 +523,8 @@ test("running VM with a non-listening dev server labels the chip as starting", a
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
 
-  const liveBadges = page.getByText(/live · \d+m left/i);
-  await expect(liveBadges.first()).toBeVisible();
+  const readyBadges = page.getByText("ready", { exact: true });
+  await expect(readyBadges.first()).toBeVisible();
 
   harness.setSandboxState("repo-1", {
     status: "running",
@@ -537,7 +539,7 @@ test("running VM with a non-listening dev server labels the chip as starting", a
   });
 
   await expect(page.getByText("starting dev server").first()).toBeVisible();
-  await expect(liveBadges).toHaveCount(0);
+  await expect(readyBadges).toHaveCount(0);
   await expect(page.getByText(/sandbox live/i)).toHaveCount(0);
 });
 
@@ -638,8 +640,8 @@ test("preview unreachable state surfaces warning UI and clears live chrome", asy
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
 
-  const liveBadges = page.getByText(/live · \d+m left/i);
-  await expect(liveBadges.first()).toBeVisible();
+  const readyBadges = page.getByText("ready", { exact: true });
+  await expect(readyBadges.first()).toBeVisible();
 
   harness.setSandboxState("repo-1", {
     status: "running",
@@ -657,10 +659,10 @@ test("preview unreachable state surfaces warning UI and clears live chrome", asy
     page.getByRole("button", { name: "Restart preview" })
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Open health" })).toBeVisible();
-  await expect(liveBadges).toHaveCount(0);
+  await expect(readyBadges).toHaveCount(0);
 });
 
-test("idle-warning state shows warning chrome from summary-backed sandbox data", async ({
+test("idle-warning state stays behind a stable ready state", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
@@ -690,5 +692,6 @@ test("idle-warning state shows warning chrome from summary-backed sandbox data",
   await page.goto(scopedPath("projects/repositories"));
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Idle soon")).toBeVisible();
+  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+  await expect(page.getByText(/idle soon|\d+m left/i)).toHaveCount(0);
 });

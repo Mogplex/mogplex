@@ -85,42 +85,6 @@ interface Props {
   onPopOut?: (activeFile?: string) => void;
 }
 
-function formatSandboxTimeRemaining(msLeft: number): string {
-  if (msLeft <= 0) return "Expiring";
-  const totalMinutes = Math.floor(msLeft / 60_000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours > 0) return `${hours}h ${minutes}m left`;
-  if (minutes > 0) return `${minutes}m left`;
-  return "<1m left";
-}
-
-function useSandboxTimeRemaining(
-  baseTimestamp: string | null | undefined,
-  effectiveTimeoutMs: number | null | undefined
-): string | null {
-  const [now, setNow] = useState(() => Date.now());
-  const hasInput =
-    typeof effectiveTimeoutMs === "number" &&
-    effectiveTimeoutMs > 0 &&
-    typeof baseTimestamp === "string" &&
-    baseTimestamp.length > 0;
-
-  useEffect(() => {
-    if (!hasInput) return;
-    const tick = () => setNow(Date.now());
-    tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
-  }, [hasInput]);
-
-  if (!hasInput) return null;
-  const baseMs = new Date(baseTimestamp as string).getTime();
-  if (!Number.isFinite(baseMs)) return null;
-  const msLeft = baseMs + (effectiveTimeoutMs as number) - now;
-  return formatSandboxTimeRemaining(msLeft);
-}
-
 function formatPreviewToolbarStatus(status: PreviewOverlayStatus) {
   switch (status) {
     case "starting":
@@ -270,7 +234,6 @@ export function StatusOverlay({
   onRestart,
   onRetryHealth,
   onOpenHealth,
-  onExtend,
   onResume,
   onStartFresh,
   workingBranch,
@@ -289,7 +252,6 @@ export function StatusOverlay({
   onRestart?: () => void;
   onRetryHealth?: () => void;
   onOpenHealth?: () => void;
-  onExtend?: () => void;
   onResume?: () => void;
   onStartFresh?: () => void;
   workingBranch?: string | null;
@@ -885,36 +847,7 @@ export function StatusOverlay({
     );
   }
 
-  if (status === "idle_warning") {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-amber-300">
-        <div className="text-foreground text-sm">
-          Sandbox is about to idle out
-        </div>
-        <div className="text-muted-foreground text-[11px]">
-          Extend it to keep the preview available.
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {onExtend && (
-            <button
-              onClick={onExtend}
-              className="border-border text-foreground hover:bg-secondary rounded border px-3 py-1.5 text-[11px]"
-            >
-              Extend sandbox
-            </button>
-          )}
-          {onOpenHealth && (
-            <button
-              onClick={onOpenHealth}
-              className="border-border text-muted-foreground hover:text-foreground hover:bg-secondary rounded border px-3 py-1.5 text-[11px]"
-            >
-              Open health
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  if (status === "idle_warning") return null;
 
   // not_available
   return (
@@ -1185,7 +1118,6 @@ export function PreviewPane({
   const stopSandbox = useSandboxStore((s) => s.stop);
   const pauseSandbox = useSandboxStore((s) => s.pause);
   const resumeSandbox = useSandboxStore((s) => s.resume);
-  const extendSandbox = useSandboxStore((s) => s.extend);
   const launchLogs = useSandboxStore((s) => {
     if (!repoId) return undefined;
     return s.getLaunchLogs(
@@ -1283,15 +1215,8 @@ export function PreviewPane({
     preResolverOverride === null && isSandboxUiRuntimeRunning(sandboxUiState);
   const isPaused =
     preResolverOverride === null && sandboxUiState.kind === "paused";
-  const showOverlay = overlayStatus !== "running";
-
-  // Idle timeout resets on activity, so the toolbar countdown must measure from
-  // last_active_at (matching getLiveExpiresAt); fall back to created_at for
-  // records without activity yet.
-  const timeRemainingLabel = useSandboxTimeRemaining(
-    sandboxRecord?.last_active_at ?? sandboxRecord?.created_at,
-    sandboxRecord?.runtime_summary.effective_timeout_ms
-  );
+  const showOverlay =
+    overlayStatus !== "running" && overlayStatus !== "idle_warning";
 
   const handlePause = useCallback(async () => {
     if (!sandboxRecordId) return;
@@ -1301,7 +1226,7 @@ export function PreviewPane({
   const handleStop = useCallback(async () => {
     if (!sandboxRecordId) return;
     const confirmed = window.confirm(
-      "Stop this sandbox? The VM will be destroyed and any unsaved state lost."
+      "Stop this development environment? Unsaved state will be lost."
     );
     if (!confirmed) return;
     await stopSandbox(sandboxRecordId);
@@ -1661,20 +1586,11 @@ export function PreviewPane({
                 {formatPreviewToolbarStatus(overlayStatus)}
               </span>
             )}
-            {isRunning && timeRemainingLabel && (
-              <span
-                data-testid="preview-time-remaining"
-                className="text-muted-foreground/70 font-mono text-[10px]"
-                title="Approximate time until the sandbox VM reaches its lifetime. Extend in the Health panel to keep it alive."
-              >
-                {timeRemainingLabel}
-              </span>
-            )}
             {sandboxRecord?.runtime_summary.persistent && (
               <span
                 data-testid="preview-persistent-badge"
                 className="text-muted-foreground/80 border-border/50 rounded-sm border px-1.5 py-[1px] font-mono text-[9px] tracking-wide uppercase"
-                title="Persistent sandbox — pause auto-saves state, resume wakes the same VM."
+                title="Pause saves this development environment so you can resume it later."
               >
                 Persistent
               </span>
@@ -1857,13 +1773,6 @@ export function PreviewPane({
                       void reconcileHealth();
                     }}
                     onOpenHealth={() => handleTabChange("health")}
-                    onExtend={
-                      sandboxRecordId
-                        ? () => {
-                            void extendSandbox(sandboxRecordId, 30);
-                          }
-                        : undefined
-                    }
                     onResume={
                       sandboxRecordId && isPaused
                         ? () => {
@@ -1914,13 +1823,6 @@ export function PreviewPane({
                 void reconcileHealth();
               }}
               onOpenHealth={() => handleTabChange("health")}
-              onExtend={
-                sandboxRecordId
-                  ? () => {
-                      void extendSandbox(sandboxRecordId, 30);
-                    }
-                  : undefined
-              }
               onResume={
                 sandboxRecordId && isPaused
                   ? () => {
@@ -1993,10 +1895,6 @@ export function PreviewPane({
               await handleRestart();
             }}
             onReconcile={handleReconcile}
-            onExtend={async (minutes) => {
-              if (sandboxRecordId)
-                await extendSandbox(sandboxRecordId, minutes);
-            }}
             onOpenObservability={handleOpenObservability}
           />
         </div>

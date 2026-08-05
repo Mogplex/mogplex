@@ -5,11 +5,8 @@ import type { Repo } from "@/lib/types";
 import {
   DEFAULT_DEV_PORT,
   DEFAULT_ENV_SYNC_MODE,
-  MAX_SANDBOX_TIMEOUT_MS,
-  MIN_SANDBOX_TIMEOUT_MS,
   formatEnvVars,
   parseEnvVarsText,
-  resolveEffectiveSandboxTimeoutMs,
 } from "@/lib/repo-settings";
 import {
   INHERITED_WORKSPACE_TEAM_OPTION,
@@ -71,19 +68,6 @@ export function RepoSettingsForm({
   const [devPortAuto, setDevPortAuto] = useState(repo.dev_port_auto ?? true);
   const [devPort, setDevPort] = useState(
     String(repo.dev_port || DEFAULT_DEV_PORT)
-  );
-  const [timeoutMode, setTimeoutMode] = useState<"inherit" | "override">(
-    repo.sandbox_timeout_ms == null ? "inherit" : "override"
-  );
-  const [timeoutMinutes, setTimeoutMinutes] = useState(
-    String(
-      Math.round(
-        resolveEffectiveSandboxTimeoutMs({
-          repoTimeoutMs: repo.sandbox_timeout_ms,
-          workspaceTimeoutMs: repo.workspace?.sandbox_timeout_ms,
-        }) / 60000
-      )
-    )
   );
   const [envVarsText, setEnvVarsText] = useState(
     formatEnvVars(repo.sandbox_env_vars)
@@ -156,12 +140,6 @@ export function RepoSettingsForm({
     repo.full_name.split("/")[1] ||
     "mogplex-sandbox"
   ).trim();
-  const inheritedTimeoutMinutes = Math.round(
-    resolveEffectiveSandboxTimeoutMs({
-      workspaceTimeoutMs: repo.workspace?.sandbox_timeout_ms,
-    }) / 60000
-  );
-
   const buildRepo = () => {
     const sandboxEnvVars = parseEnvVarsText(envVarsText);
     return {
@@ -175,8 +153,6 @@ export function RepoSettingsForm({
       dev_command: devCommand.trim() || null,
       dev_port: Number(devPort),
       dev_port_auto: devPortAuto,
-      sandbox_timeout_ms:
-        timeoutMode === "inherit" ? null : Number(timeoutMinutes) * 60 * 1000,
       sandbox_env_vars: sandboxEnvVars,
     } satisfies Repo;
   };
@@ -248,44 +224,6 @@ export function RepoSettingsForm({
           ))}
         </select>
       </label>
-
-      <div className="space-y-2 md:col-span-2">
-        <div className="ui-label">Sandbox Timeout</div>
-        <div className="border-border bg-card/40 flex flex-col gap-2 rounded-md border p-3">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setTimeoutMode("inherit")}
-              className={`rounded-sm border px-2.5 py-1 text-xs ${timeoutMode === "inherit" ? "border-foreground bg-accent text-foreground" : "border-border text-muted-foreground"}`}
-            >
-              Inherit workspace default ({inheritedTimeoutMinutes}m)
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeoutMode("override")}
-              className={`rounded-sm border px-2.5 py-1 text-xs ${timeoutMode === "override" ? "border-foreground bg-accent text-foreground" : "border-border text-muted-foreground"}`}
-            >
-              Override
-            </button>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min={MIN_SANDBOX_TIMEOUT_MS / 60000}
-              max={MAX_SANDBOX_TIMEOUT_MS / 60000}
-              step={5}
-              value={timeoutMinutes}
-              onChange={(e) => setTimeoutMinutes(e.target.value)}
-              disabled={timeoutMode !== "override"}
-              className="border-border bg-input text-foreground w-28 border px-2 py-1 disabled:opacity-50"
-            />
-            <span className="text-muted-foreground text-xs">
-              Sandbox lifetime. Allowed range: {MIN_SANDBOX_TIMEOUT_MS / 60000}-
-              {MAX_SANDBOX_TIMEOUT_MS / 60000} minutes.
-            </span>
-          </div>
-        </div>
-      </div>
 
       <label className="space-y-1">
         <div className="ui-label">Sandbox Billing</div>

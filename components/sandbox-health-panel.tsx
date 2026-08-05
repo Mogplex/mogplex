@@ -17,7 +17,6 @@ interface Props {
   onStop: () => Promise<void>
   onRestart: () => Promise<void>
   onReconcile?: () => Promise<void>
-  onExtend?: (minutes: number) => Promise<void>
   onOpenObservability?: () => void
 }
 
@@ -28,7 +27,6 @@ export function SandboxHealthPanel({
   onStop,
   onRestart,
   onReconcile,
-  onExtend,
   onOpenObservability,
 }: Props) {
   const [acting, setActing] = useState<"launch" | "stop" | "restart" | "reconcile" | null>(null)
@@ -141,7 +139,7 @@ export function SandboxHealthPanel({
           disabled={acting !== null}
           className="border border-border px-3 py-1 text-foreground disabled:opacity-50"
         >
-          {acting === "launch" ? "Launching..." : runtime?.status === "running" ? "Relaunch" : "Launch Sandbox"}
+          {acting === "launch" ? "Starting..." : runtime?.status === "running" ? "Relaunch" : "Start environment"}
         </button>
         <button
           onClick={() => runAction("restart", onRestart)}
@@ -164,7 +162,7 @@ export function SandboxHealthPanel({
           disabled={acting !== null || !sandbox}
           className="border border-border px-3 py-1 text-foreground disabled:opacity-50"
         >
-          {acting === "stop" ? "Stopping..." : "Stop Sandbox"}
+          {acting === "stop" ? "Stopping..." : "Stop environment"}
         </button>
         {onOpenObservability && (
           <button
@@ -173,24 +171,6 @@ export function SandboxHealthPanel({
           >
             Open in Observability
           </button>
-        )}
-        {onExtend && runtime?.status === "running" && (
-          <>
-            <button
-              onClick={() => onExtend(30)}
-              disabled={acting !== null}
-              className="border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              +30m
-            </button>
-            <button
-              onClick={() => onExtend(60)}
-              disabled={acting !== null}
-              className="border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              +1h
-            </button>
-          </>
         )}
       </div>
 

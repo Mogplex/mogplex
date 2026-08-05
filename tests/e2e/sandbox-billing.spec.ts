@@ -434,6 +434,9 @@ test("workspace user billing persists after creating a linked Vercel project", a
   await page.getByRole("button", { name: "Manage" }).click();
   await page.getByText("Rename project").click();
 
+  await expect(page.getByText("Default Sandbox Lifetime")).toHaveCount(0);
+  await expect(page.getByText("Default Sandbox Idle Timeout")).toHaveCount(0);
+
   await page
     .getByRole("combobox", { name: "Default Sandbox Billing" })
     .selectOption("user_vercel_project");
@@ -492,6 +495,8 @@ test("repo project pinning persists inherited workspace team and can be cleared 
 
   await page.getByRole("button", { name: "Repo actions" }).click();
   await page.getByText("Space Settings").click();
+
+  await expect(page.getByText("Sandbox Timeout")).toHaveCount(0);
 
   await expect(
     page.getByText("Effective owner: Your Vercel project.")
