@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
-import { config, proxy } from "../../proxy";
+import { buildLoginRedirectUrl, config, proxy } from "../../proxy";
 import {
   isCliPatApiRequest,
   isMogplexBearerApiRequest,
@@ -15,6 +15,21 @@ test("proxy module preserves the root matcher", () => {
   assert.deepEqual(config.matcher, [
     String.raw`/((?!_next/static|_next/image|favicon.ico|fonts/|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)`,
   ]);
+});
+
+test("anonymous login redirects preserve the original path and query", () => {
+  const request = new NextRequest(
+    "https://mogplex.com/cli-auth?callback=http%3A%2F%2Flocalhost%3A45454%2Fcallback&nonce=abc123&name=CLI"
+  );
+
+  assert.equal(
+    buildLoginRedirectUrl(request, false).toString(),
+    "https://mogplex.com/login?next=%2Fcli-auth%3Fcallback%3Dhttp%253A%252F%252Flocalhost%253A45454%252Fcallback%26nonce%3Dabc123%26name%3DCLI"
+  );
+  assert.equal(
+    buildLoginRedirectUrl(request, true).toString(),
+    "https://mogplex.com/login?expired=true&next=%2Fcli-auth%3Fcallback%3Dhttp%253A%252F%252Flocalhost%253A45454%252Fcallback%26nonce%3Dabc123%26name%3DCLI"
+  );
 });
 
 function makeRequest(headers: Record<string, string> = {}) {

@@ -1,15 +1,15 @@
-// better-auth foundation (Supabase-auth replacement, Neon-backed).
+// Neon-backed Better Auth for browser sessions and hosted MCP OAuth.
 //
-// This instance is NOT wired into the UI yet — Supabase auth remains the live
-// sign-in path until the Neon cutover. The handler is mounted at
-// /api/auth/[...all]; existing static /api/auth/* routes (login, logout,
-// waitlist, …) take precedence over the catch-all, so both stacks coexist.
+// The handler is mounted at /api/auth/[...all]. Existing static /api/auth/*
+// routes take precedence over the catch-all where legacy integrations still
+// coexist during the remaining Supabase retirement work.
 //
 // Module load must stay side-effect-free: the pg Pool does not connect until
 // first query, so importing this file without DATABASE_URL (CI builds) is safe.
 
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { mcp } from "better-auth/plugins";
 import { sso } from "@better-auth/sso";
 import { dash } from "@better-auth/infra";
 import { Pool } from "pg";
@@ -20,6 +20,9 @@ const baseURL =
   process.env.BETTER_AUTH_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
   "http://localhost:3000";
+const mcpResource =
+  process.env.MOGPLEX_MCP_RESOURCE_URL?.trim() ||
+  new URL("/api/v1/mogplex/mcp", baseURL).toString();
 
 const socialProviders: NonNullable<
   Parameters<typeof betterAuth>[0]["socialProviders"]
@@ -143,6 +146,16 @@ export const auth = betterAuth({
   },
   socialProviders,
   plugins: [
+    mcp({
+      loginPage: "/login",
+      resource: mcpResource,
+      oidcConfig: {
+        loginPage: "/login",
+        defaultScope: "read write",
+        scopes: ["read", "write"],
+        requirePKCE: true,
+      },
+    }),
     sso(),
     // Better Auth cloud dashboard (ownership verification + remote admin).
     // Every dash endpoint requires a signed payload matched against

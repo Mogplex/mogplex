@@ -27,6 +27,11 @@ test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavi
     ),
     true
   );
+  assert.equal(
+    isPublicRoutePath("/.well-known/oauth-authorization-server"),
+    true
+  );
+  assert.equal(isPublicRoutePath("/.well-known/openid-configuration"), true);
 
   assert.equal(isPublicRoutePath("/install.shXXX"), false);
   assert.equal(isPublicRoutePath("/slack/link/anything"), false);
@@ -36,6 +41,7 @@ test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavi
   assert.equal(isPublicRoutePath("/privacy-policy"), false);
   assert.equal(isPublicRoutePath("/api/agents"), false);
   assert.equal(isPublicRoutePath("/api/v1/mogplex/mcp/servers"), false);
+  assert.equal(isPublicRoutePath("/.well-knownish/metadata"), false);
 });
 
 test("allowsDelegatedInternalApiPath is limited to sandbox routes", () => {

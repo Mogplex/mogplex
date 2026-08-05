@@ -1,33 +1,27 @@
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import type { ApiKeyResolution } from "@/lib/auth/api-key";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import {
-  getMogplexMcpResourceUrl,
-  getSupabaseOAuthIssuer,
-  getSupabaseOAuthJwksUrl,
-} from "@/lib/mogplex-api/oauth-config";
+
+const MOGPLEX_OAUTH_SCOPES = ["read", "write"] as const;
+type MogplexOAuthScope = (typeof MOGPLEX_OAUTH_SCOPES)[number];
+
+type BetterAuthMcpSession = {
+  clientId?: string | null;
+  userId?: string | null;
+  scopes?: string | null;
+};
 
 type MogplexOAuthVerifierDependencies = {
-  verifyJwt: typeof jwtVerify;
-  getVerificationKey: () => JWTVerifyGetKey;
-  isClientAllowed: (clientId: string) => Promise<boolean>;
+  getMcpSession: (
+    authorization: string
+  ) => Promise<BetterAuthMcpSession | null>;
   resolveProfileId: (authUserId: string) => Promise<string | null>;
 };
 
-let remoteJwks: JWTVerifyGetKey | null = null;
-
-function getVerificationKey() {
-  remoteJwks ??= createRemoteJWKSet(new URL(getSupabaseOAuthJwksUrl()));
-  return remoteJwks;
-}
-
-async function isClientAllowed(clientId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("mcp_oauth_clients")
-    .select("client_id")
-    .eq("client_id", clientId)
-    .maybeSingle();
-  return !error && Boolean(data);
+async function getMcpSession(authorization: string) {
+  const { auth } = await import("@/lib/better-auth/server");
+  return auth.api.getMcpSession({
+    headers: new Headers({ authorization }),
+  });
 }
 
 async function resolveProfileId(authUserId: string) {
@@ -41,13 +35,30 @@ async function resolveProfileId(authUserId: string) {
 }
 
 const defaultDependencies: MogplexOAuthVerifierDependencies = {
-  verifyJwt: jwtVerify,
-  getVerificationKey,
-  isClientAllowed,
+  getMcpSession,
   resolveProfileId,
 };
 
 let dependencies = defaultDependencies;
+
+function isMogplexOAuthScope(value: string): value is MogplexOAuthScope {
+  return (MOGPLEX_OAUTH_SCOPES as readonly string[]).includes(value);
+}
+
+function parseMcpSession(session: BetterAuthMcpSession | null) {
+  if (!session?.userId || !session.clientId) return null;
+
+  const scopes = (session.scopes ?? "")
+    .split(/\s+/)
+    .filter(isMogplexOAuthScope);
+  if (scopes.length === 0) return null;
+
+  return {
+    authUserId: session.userId,
+    clientId: session.clientId,
+    scopes,
+  };
+}
 
 export async function resolveMogplexOAuthToken(
   authorization: string | null
@@ -62,38 +73,19 @@ export async function resolveMogplexOAuthToken(
   }
 
   try {
-    const { payload } = await dependencies.verifyJwt(
-      token,
-      dependencies.getVerificationKey(),
-      {
-        issuer: getSupabaseOAuthIssuer(),
-        audience: getMogplexMcpResourceUrl(),
-      }
-    );
-    const authUserId = payload.sub;
-    const clientId =
-      typeof payload.client_id === "string"
-        ? payload.client_id
-        : typeof payload.azp === "string"
-          ? payload.azp
-          : null;
+    const session = await dependencies.getMcpSession(authorization);
+    const parsed = parseMcpSession(session);
+    if (!parsed) return { ok: false, reason: "invalid" };
 
-    if (!authUserId || !clientId || typeof payload.exp !== "number") {
-      return { ok: false, reason: "invalid" };
-    }
-    if (!(await dependencies.isClientAllowed(clientId))) {
-      return { ok: false, reason: "invalid" };
-    }
-
-    const profileId = await dependencies.resolveProfileId(authUserId);
+    const profileId = await dependencies.resolveProfileId(parsed.authUserId);
     if (!profileId) return { ok: false, reason: "invalid" };
 
     return {
       ok: true,
       auth: {
         userId: profileId,
-        keyId: clientId,
-        scopes: ["read", "write"],
+        keyId: parsed.clientId,
+        scopes: parsed.scopes,
       },
     };
   } catch {
@@ -109,5 +101,4 @@ export function __setMogplexOAuthVerifierDependenciesForTesting(
 
 export function __resetMogplexOAuthVerifierForTesting() {
   dependencies = defaultDependencies;
-  remoteJwks = null;
 }

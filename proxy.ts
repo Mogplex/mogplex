@@ -68,6 +68,21 @@ function notFoundResponse(request: NextRequest) {
   });
 }
 
+export function buildLoginRedirectUrl(
+  request: NextRequest,
+  isAppNavigation: boolean
+) {
+  const loginUrl = new URL("/login", request.url);
+  if (isAppNavigation) {
+    loginUrl.searchParams.set("expired", "true");
+  }
+  loginUrl.searchParams.set(
+    "next",
+    `${request.nextUrl.pathname}${request.nextUrl.search}`
+  );
+  return loginUrl;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -171,12 +186,9 @@ export async function proxy(request: NextRequest) {
       /* malformed referer */
     }
 
-    const loginUrl = new URL("/login", request.url);
-    if (isAppNavigation) {
-      loginUrl.searchParams.set("expired", "true");
-    }
-
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(
+      buildLoginRedirectUrl(request, isAppNavigation)
+    );
   }
 
   // API routes are authed but unscoped — no slug resolution.

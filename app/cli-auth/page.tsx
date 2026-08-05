@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -36,10 +37,16 @@ export default async function CliAuthPage({
   const returnUrl = buildCliAuthReturnUrl(params);
 
   // Auth check: redirect to login if no session
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: { email?: string | null } | null;
+  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+    const { auth } = await import("@/lib/better-auth/server");
+    const session = await auth.api.getSession({ headers: await headers() });
+    user = session?.user ?? null;
+  } else {
+    const supabase = await createClient();
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  }
 
   if (!user) {
     redirect(`/login?next=${encodeURIComponent(returnUrl)}`);

@@ -6,7 +6,7 @@ Local Codex, Claude Code, and other MCP clients can operate Mogplex through one 
 https://mogplex.com/api/v1/mogplex/mcp
 ```
 
-OAuth 2.1 authorization code flow with PKCE is the preferred authentication method. Tokens are issued by Mogplex's Supabase Auth server and are accepted only when their issuer, signature, expiry, approved client id, and MCP resource audience all validate.
+OAuth authorization code flow with PKCE is the preferred authentication method. Tokens are issued by Mogplex's Better Auth server and are accepted only while the provider session is valid, its client and user are present, and the user resolves to a Mogplex profile with the requested API scopes.
 
 ## Install in Codex
 
