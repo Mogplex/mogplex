@@ -48,6 +48,7 @@ type ChatRequestBody = {
   repoOwner?: string | null;
   repoName?: string | null;
   repoBranch?: string | null;
+  repoBaseBranch?: string | null;
   conversationId?: string | null;
   repoId?: string | null;
   workspaceSessionId?: string | null;
@@ -686,6 +687,7 @@ async function executeChatRequest(input: {
         repoOwner: input.body.repoOwner,
         repoName: input.body.repoName,
         repoBranch: input.body.repoBranch,
+        repoBaseBranch: input.body.repoBaseBranch,
         repoFullName: input.body.repoFullName,
         sandboxId: input.body.sandboxId,
         workspaceSessionId: input.body.workspaceSessionId,

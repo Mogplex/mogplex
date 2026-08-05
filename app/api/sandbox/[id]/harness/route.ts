@@ -19,8 +19,16 @@ import {
 } from "@/lib/harness/failure";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
-import { ensureDevTools } from "@/lib/sandbox/dev-tools";
+import {
+  ensureDevTools,
+  syncTerminalRuntimeAuth,
+} from "@/lib/sandbox/dev-tools";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
+import {
+  buildHarnessDeliveryPrompt,
+  publishHarnessPullRequest,
+  syncHarnessGitWorkspace,
+} from "@/lib/harness/git-delivery";
 import {
   stopSandboxRecord,
   touchSandboxLastActive,
@@ -55,7 +63,7 @@ import type { MemoryScope } from "@/lib/memories-client";
 const VALID_HARNESSES = new Set<HarnessId>(["claude-code", "codex"]);
 const MAX_LOG_EVENT_LENGTH = 4000;
 const HARNESS_ROUTE_SELECT =
-  "repo_id, sandbox_id, root_directory, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(full_name, root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id, github_installation_id)";
+  "repo_id, sandbox_id, root_directory, base_branch, working_branch, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(full_name, root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id, github_installation_id)";
 
 type HarnessRepoRecord = {
   full_name: string | null;
@@ -70,6 +78,8 @@ type HarnessRepoRecord = {
 type HarnessSandboxRecord = {
   repo_id: string | null;
   sandbox_id: string;
+  base_branch: string;
+  working_branch: string;
   billing_source?: string | null;
   billing_team_id?: string | null;
   billing_project_id?: string | null;
@@ -88,6 +98,9 @@ type SandboxHarnessPostDeps = {
   resolveSandboxAiAccess: typeof resolveSandboxAiAccess;
   getSandbox: typeof getSandbox;
   runHarness: typeof runHarness;
+  getGithubAccessTokenForRepo: typeof getGithubAccessTokenForRepo;
+  resolveSandboxGitAuthor: typeof resolveSandboxGitAuthor;
+  ensureDevTools: typeof ensureDevTools;
   getResolvedConnections: typeof getResolvedConnections;
   injectClaudeMcpConfig: typeof injectClaudeMcpConfig;
   renewSandboxActivityLease: typeof renewSandboxActivityLease;
@@ -103,6 +116,15 @@ type SandboxHarnessPostDeps = {
   safeAppendAiCallEvent: typeof safeAppendAiCallEvent;
   loadHarnessPromptWithMemoryContext: typeof loadHarnessPromptWithMemoryContext;
   persistHarnessMemory: typeof persistHarnessMemory;
+  syncTerminalRuntimeAuth: typeof syncTerminalRuntimeAuth;
+  syncHarnessGitWorkspace: typeof syncHarnessGitWorkspace;
+  publishHarnessPullRequest: typeof publishHarnessPullRequest;
+  updateSandboxWorkingBranch: (input: {
+    recordId: string;
+    userId: string;
+    sandboxId: string;
+    workingBranch: string;
+  }) => Promise<void>;
   getSlackBotToken: typeof getSlackBotToken;
   fetchSlackAttachment: (input: {
     botToken: string;
@@ -126,6 +148,9 @@ const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   resolveSandboxAiAccess,
   getSandbox,
   runHarness,
+  getGithubAccessTokenForRepo,
+  resolveSandboxGitAuthor,
+  ensureDevTools,
   getResolvedConnections,
   injectClaudeMcpConfig,
   renewSandboxActivityLease,
@@ -141,6 +166,20 @@ const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   safeAppendAiCallEvent,
   loadHarnessPromptWithMemoryContext,
   persistHarnessMemory,
+  syncTerminalRuntimeAuth,
+  syncHarnessGitWorkspace,
+  publishHarnessPullRequest,
+  async updateSandboxWorkingBranch(input) {
+    const { error } = await supabaseAdmin
+      .from("sandboxes")
+      .update({ working_branch: input.workingBranch })
+      .eq("id", input.recordId)
+      .eq("user_id", input.userId)
+      .eq("sandbox_id", input.sandboxId);
+    if (error) {
+      throw new Error(`Failed to persist agent branch: ${error.message}`);
+    }
+  },
   getSlackBotToken,
   fetchSlackAttachment: ({ botToken, url, signal }) =>
     fetch(url, {
@@ -582,19 +621,18 @@ export function createSandboxHarnessPostHandler(
       // `curl` against the GitHub API. The token is installation-scoped to
       // the GH App's permissions on this repo's installation, not a user
       // PAT. It expires shortly after the run ends, and is never returned
-      // to the client or logged. If minting fails, the harness run proceeds
-      // without GH access rather than blocking the user.
-      let githubTokenMinted = false;
+      // to the client or logged. Delivery is part of a successful harness
+      // run, so missing GitHub access fails before the agent edits files.
+      let githubToken: string | null = null;
       if (repoRecord?.github_installation_id) {
         try {
-          const githubToken = await getGithubAccessTokenForRepo({
+          githubToken = await deps.getGithubAccessTokenForRepo({
             user_id: creds.userId,
             github_installation_id: repoRecord.github_installation_id,
           });
           if (githubToken) {
             runtimeEnv.GITHUB_TOKEN = githubToken;
             runtimeEnv.GH_TOKEN = githubToken;
-            githubTokenMinted = true;
           }
         } catch (err) {
           console.warn("[harness] failed to mint github installation token", {
@@ -606,11 +644,10 @@ export function createSandboxHarnessPostHandler(
 
       // Make the sandbox capable of GH work: install gh CLI and wire git
       // to use the injected installation token for HTTPS auth. Idempotent
-      // so it's cheap on subsequent runs of the same sandbox, and never
-      // blocks the harness if it fails.
-      if (githubTokenMinted) {
-        const gitAuthor = await resolveSandboxGitAuthor(creds.userId);
-        const devToolsResult = await ensureDevTools(sandbox, {
+      // so it's cheap on subsequent runs of the same sandbox.
+      if (githubToken) {
+        const gitAuthor = await deps.resolveSandboxGitAuthor(creds.userId);
+        const devToolsResult = await deps.ensureDevTools(sandbox, {
           agentName: gitAuthor.name,
           agentEmail: gitAuthor.email,
         });
@@ -620,7 +657,49 @@ export function createSandboxHarnessPostHandler(
             error: devToolsResult.error,
           });
         }
+        const authSync = await deps.syncTerminalRuntimeAuth(sandbox, {
+          githubToken,
+        });
+        if (!authSync.ok) {
+          throw new Error(
+            authSync.error || "Failed to configure GitHub delivery access"
+          );
+        }
+      } else {
+        throw new Error(
+          "GitHub access is required before an agent can deliver changes. Reconnect the repository, then retry."
+        );
       }
+
+      const gitWorkspace = await deps.syncHarnessGitWorkspace(sandbox, {
+        aiCallId: aiCall.id,
+        baseBranch: record.base_branch,
+        workingBranch: record.working_branch,
+        cwd: sandboxData.rootDirectory || undefined,
+        env: runtimeEnv,
+      });
+      if (gitWorkspace.createdBranch) {
+        await deps.updateSandboxWorkingBranch({
+          recordId: id,
+          userId: creds.userId,
+          sandboxId: record.sandbox_id,
+          workingBranch: gitWorkspace.workingBranch,
+        });
+      }
+      await deps.safeAppendAiCallEvent({
+        aiCallId: aiCall.id,
+        userId: creds.userId,
+        conversationId: body.conversationId || null,
+        repoId: record.repo_id || null,
+        eventType: "log",
+        message: `Synchronized ${gitWorkspace.workingBranch}`,
+        payload: {
+          stage: "git_sync",
+          base_branch: gitWorkspace.baseBranch,
+          working_branch: gitWorkspace.workingBranch,
+          created_branch: gitWorkspace.createdBranch,
+        },
+      });
 
       // Inject user-connected MCP servers for Claude Code. Always overwrites
       // .mogplex/mcp.json so bearer tokens from prior runs can't outlive the
@@ -734,6 +813,11 @@ export function createSandboxHarnessPostHandler(
           trimmedPrompt,
           memoryScope
         );
+      const deliveryPrompt = buildHarnessDeliveryPrompt({
+        prompt: promptWithMemoryContext,
+        baseBranch: gitWorkspace.baseBranch,
+        workingBranch: gitWorkspace.workingBranch,
+      });
 
       void deps.persistHarnessMemory({
         userId: creds.userId,
@@ -751,7 +835,7 @@ export function createSandboxHarnessPostHandler(
       const result = await deps.runHarness(
         sandbox,
         harnessId,
-        promptWithMemoryContext,
+        deliveryPrompt,
         harnessAiEnv.env,
         {
           continue: body.continue,
@@ -828,6 +912,7 @@ export function createSandboxHarnessPostHandler(
           let failureStderr = "";
           let finalFailure: ReturnType<typeof presentHarnessFailure> | null =
             null;
+          let pullRequestUrl: string | null = null;
 
           try {
             const runEvent = `data: ${JSON.stringify({ type: "run", ai_call_id: aiCall.id })}\n\n`;
@@ -877,6 +962,33 @@ export function createSandboxHarnessPostHandler(
             const cancelled = isCancellationRequested(currentCall);
 
             if (!cancelled) {
+              if (exitResult.exitCode === 0) {
+                const delivery = await deps.publishHarnessPullRequest(sandbox, {
+                  prompt: trimmedPrompt,
+                  baseBranch: gitWorkspace.baseBranch,
+                  workingBranch: gitWorkspace.workingBranch,
+                  cwd: sandboxData.rootDirectory || undefined,
+                  env: runtimeEnv,
+                });
+                pullRequestUrl = delivery.pullRequestUrl;
+                await deps.safeAppendAiCallEvent({
+                  aiCallId: aiCall.id,
+                  userId: creds.userId,
+                  conversationId: body.conversationId || null,
+                  repoId: record.repo_id || null,
+                  eventType: "log",
+                  message: pullRequestUrl
+                    ? "Pull request ready"
+                    : "No code changes to deliver",
+                  payload: {
+                    stage: "git_delivery",
+                    changed: delivery.changed,
+                    pull_request_url: pullRequestUrl,
+                    base_branch: gitWorkspace.baseBranch,
+                    working_branch: gitWorkspace.workingBranch,
+                  },
+                });
+              }
               const status = exitResult.exitCode === 0 ? "success" : "failed";
               finalFailure =
                 exitResult.exitCode === 0
@@ -897,7 +1009,12 @@ export function createSandboxHarnessPostHandler(
                   status,
                   error,
                   runtimeCommandId: result.command.cmdId,
-                  metadata: currentCall?.metadata ?? aiCall.metadata,
+                  metadata: {
+                    ...(currentCall?.metadata ?? aiCall.metadata),
+                    base_branch: gitWorkspace.baseBranch,
+                    working_branch: gitWorkspace.workingBranch,
+                    pull_request_url: pullRequestUrl,
+                  },
                 })
               );
               if (finalizedCall) {
@@ -950,6 +1067,7 @@ export function createSandboxHarnessPostHandler(
                 exitCode: exitResult.exitCode,
                 error: finalFailure?.message ?? null,
                 failureCode: finalFailure?.code ?? null,
+                ...(pullRequestUrl ? { pullRequestUrl } : {}),
               })}\n\n`;
               controller.enqueue(encoder.encode(doneEvent));
             }

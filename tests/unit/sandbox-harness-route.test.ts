@@ -7,6 +7,7 @@ import {
 import {
   buildSandboxServiceAiAccess,
   buildOwnedSandboxServiceRecord,
+  buildSandboxServiceRecordRepo,
   buildSandboxServiceRouteAuth,
   loadSandboxHarnessRouteModule,
 } from "./sandbox-service-route-test-harness";
@@ -17,6 +18,7 @@ import {
 } from "../../lib/slack/run-attachments";
 import { isClosedSandboxStreamError } from "../../app/api/sandbox/[id]/harness/route";
 import type { AiCall } from "../../lib/types";
+import type { Sandbox } from "@vercel/sandbox";
 
 function buildAiCall(overrides: Partial<AiCall> = {}): AiCall {
   return {
@@ -63,6 +65,31 @@ function parseSseEvents(body: string) {
     );
 }
 
+function buildHarnessGitDeliveryDeps() {
+  return {
+    getGithubAccessTokenForRepo: async () => "github-token",
+    resolveSandboxGitAuthor: async () => ({
+      name: "Mogplex Agent",
+      email: "agent@example.com",
+    }),
+    ensureDevTools: async () => ({ ok: true, logs: "" }),
+    syncTerminalRuntimeAuth: async () => ({ ok: true, logs: "" }),
+    syncHarnessGitWorkspace: async (
+      _sandbox: Sandbox,
+      input: { baseBranch: string; workingBranch: string }
+    ) => ({
+      baseBranch: input.baseBranch,
+      workingBranch: input.workingBranch,
+      createdBranch: false,
+    }),
+    publishHarnessPullRequest: async () => ({
+      pullRequestUrl: null,
+      changed: false,
+    }),
+    updateSandboxWorkingBranch: async () => {},
+  };
+}
+
 test("closed sandbox streams are recognized for lifecycle reconciliation", () => {
   assert.equal(
     isClosedSandboxStreamError(
@@ -84,8 +111,14 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
   let persistedError: string | null | undefined;
 
   const handler = createSandboxHarnessPostHandler({
+    ...buildHarnessGitDeliveryDeps(),
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
-    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    loadOwnedSandboxRecord: async () =>
+      buildOwnedSandboxServiceRecord({
+        repo: buildSandboxServiceRecordRepo({
+          github_installation_id: 123,
+        }),
+      }),
     resolveSandboxAiAccess: async () =>
       buildSandboxServiceAiAccess({
         aiBillingSource: "user_ai_gateway",
@@ -164,6 +197,101 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
   });
 });
 
+test("POST /api/sandbox/[id]/harness delivers successful changes through a pull request", async () => {
+  const { createSandboxHarnessPostHandler } =
+    await loadSandboxHarnessRouteModule();
+  const aiCall = buildAiCall();
+  const pullRequestUrl = "https://github.com/acme/repo/pull/42";
+  let completionMetadata: Record<string, unknown> | undefined;
+
+  const handler = createSandboxHarnessPostHandler({
+    ...buildHarnessGitDeliveryDeps(),
+    publishHarnessPullRequest: async () => ({
+      pullRequestUrl,
+      changed: true,
+    }),
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () =>
+      buildOwnedSandboxServiceRecord({
+        repo: buildSandboxServiceRecordRepo({
+          github_installation_id: 123,
+        }),
+      }),
+    resolveSandboxAiAccess: async () =>
+      buildSandboxServiceAiAccess({
+        aiBillingSource: "user_ai_gateway",
+        gatewayApiKey: "gateway-key",
+      }),
+    getSandbox: async () => ({}) as never,
+    runHarness: async () =>
+      ({
+        installed: false,
+        installLogs: "",
+        command: {
+          cmdId: "cmd-success",
+          async *logs() {
+            yield { stream: "stdout" as const, data: "Implemented fix\n" };
+          },
+          wait: async () => ({ exitCode: 0 }),
+          kill: async () => {},
+        },
+      }) as never,
+    renewSandboxActivityLease: async () => 0,
+    stopSandboxRecord: async () => null,
+    touchSandboxLastActive: async () => {},
+    resolveRepoSandboxEnv: async () => ({
+      envVars: {},
+      sync: { mode: "sandbox-only", source: "manual", warning: null },
+    }),
+    createAiCall: async () => aiCall,
+    loadOwnedAiCall: async () => aiCall,
+    mergeAiCallMetadata: async () => {
+      throw new Error("mergeAiCallMetadata should not be called");
+    },
+    updateAiCall: async () => {},
+    finalizeAiCallAsCancelledIfActive: async () => {
+      throw new Error("cancel finalization should not be called");
+    },
+    finalizeAiCallIfNotCancelled: async (_aiCallId, update) => {
+      completionMetadata = update.metadata;
+      return buildAiCall({ status: "success", metadata: update.metadata });
+    },
+    safeAppendAiCallEvent: async () => null,
+    loadHarnessPromptWithMemoryContext: async (_userId, prompt) => prompt,
+    persistHarnessMemory: async () => {},
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/harness",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          harness: "codex",
+          prompt: "Fix checkout",
+        }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  const events = parseSseEvents(await response.text());
+  assert.deepEqual(
+    events.find((event) => event.type === "done"),
+    {
+      type: "done",
+      exitCode: 0,
+      error: null,
+      failureCode: null,
+      pullRequestUrl,
+    }
+  );
+  assert.equal(completionMetadata?.pull_request_url, pullRequestUrl);
+  assert.equal(completionMetadata?.working_branch, "mogplex/test-branch");
+});
+
 test("POST /api/sandbox/[id]/harness prepares a cancellable call before starting the harness", async () => {
   const { createSandboxHarnessPostHandler } =
     await loadSandboxHarnessRouteModule();
@@ -171,8 +299,14 @@ test("POST /api/sandbox/[id]/harness prepares a cancellable call before starting
   let runHarnessCalled = false;
 
   const handler = createSandboxHarnessPostHandler({
+    ...buildHarnessGitDeliveryDeps(),
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
-    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    loadOwnedSandboxRecord: async () =>
+      buildOwnedSandboxServiceRecord({
+        repo: buildSandboxServiceRecordRepo({
+          github_installation_id: 123,
+        }),
+      }),
     resolveSandboxAiAccess: async () =>
       buildSandboxServiceAiAccess({
         aiBillingSource: "user_ai_gateway",
@@ -240,8 +374,14 @@ test("POST /api/sandbox/[id]/harness sanitizes a closed sandbox stream", async (
   });
 
   const handler = createSandboxHarnessPostHandler({
+    ...buildHarnessGitDeliveryDeps(),
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
-    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    loadOwnedSandboxRecord: async () =>
+      buildOwnedSandboxServiceRecord({
+        repo: buildSandboxServiceRecordRepo({
+          github_installation_id: 123,
+        }),
+      }),
     resolveSandboxAiAccess: async () =>
       buildSandboxServiceAiAccess({
         aiBillingSource: "user_ai_gateway",

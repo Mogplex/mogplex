@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   getSandboxServiceCredentials,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/sandbox/route-context";
 import { detectInteractiveInvocation } from "@/lib/sandbox/interactive-guard";
 import { startExecStream } from "@/lib/sandbox/exec-stream";
+import { syncTerminalRuntimeAuth } from "@/lib/sandbox/dev-tools";
 import {
   TERMINAL_EXEC_MODE_HEADER,
   TERMINAL_EXEC_MODE_IMMEDIATE,
@@ -53,6 +55,10 @@ function immediateExecJson(body: Record<string, unknown>, init?: ResponseInit) {
     ...init,
     headers: buildImmediateExecHeaders(init?.headers),
   });
+}
+
+function commandMayNeedGithubAuth(command: string) {
+  return /(?:^|[^\w-])(?:git|gh)(?:\s|$)/.test(command);
 }
 
 /** Map of CLI binary name → harness ID for auto-install detection. */
@@ -102,6 +108,7 @@ type ExecSandboxRecord = {
         env_sync_mode?: unknown;
         vercel_project_id?: string | null;
         vercel_team_id?: string | null;
+        github_installation_id?: number | null;
       }
     | Array<{
         root_directory?: string | null;
@@ -109,6 +116,7 @@ type ExecSandboxRecord = {
         env_sync_mode?: unknown;
         vercel_project_id?: string | null;
         vercel_team_id?: string | null;
+        github_installation_id?: number | null;
       }>
     | null;
 };
@@ -125,6 +133,8 @@ type SandboxExecPostDeps = {
   releaseSandboxExecLock: typeof releaseSandboxExecLock;
   getSandbox: typeof getSandbox;
   resolveSandboxAiAccess: typeof resolveSandboxAiAccess;
+  getGithubAccessTokenForRepo: typeof getGithubAccessTokenForRepo;
+  syncTerminalRuntimeAuth: typeof syncTerminalRuntimeAuth;
   touchSandboxLastActive: typeof touchSandboxLastActive;
   renewSandboxActivityLease: typeof renewSandboxActivityLease;
 };
@@ -135,7 +145,7 @@ const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
     const { data } = await supabaseAdmin
       .from("sandboxes")
       .select(
-        "sandbox_id, root_directory, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id)"
+        "sandbox_id, root_directory, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id, github_installation_id)"
       )
       .eq("id", sandboxId)
       .eq("user_id", userId)
@@ -149,6 +159,8 @@ const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
   releaseSandboxExecLock,
   getSandbox,
   resolveSandboxAiAccess,
+  getGithubAccessTokenForRepo,
+  syncTerminalRuntimeAuth,
   touchSandboxLastActive,
   renewSandboxActivityLease,
 };
@@ -195,7 +207,7 @@ export function createSandboxExecPostHandler(
       id,
       {
         select:
-          "sandbox_id, root_directory, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id)",
+          "sandbox_id, root_directory, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id, github_installation_id)",
         includeAi: true,
         hydrateSandboxClient: false,
       },
@@ -280,6 +292,38 @@ export function createSandboxExecPostHandler(
           : repoRootDirectory || undefined;
 
       const trimmed = String(command).trim();
+      const repoRecord = Array.isArray(sandboxData.record.repo)
+        ? sandboxData.record.repo[0]
+        : sandboxData.record.repo;
+      if (
+        commandMayNeedGithubAuth(trimmed) &&
+        repoRecord?.github_installation_id
+      ) {
+        try {
+          const githubToken = await deps.getGithubAccessTokenForRepo({
+            user_id: creds.userId,
+            github_installation_id: repoRecord.github_installation_id,
+          });
+          if (githubToken) {
+            envVars.GITHUB_TOKEN = githubToken;
+            envVars.GH_TOKEN = githubToken;
+            const authSync = await deps.syncTerminalRuntimeAuth(sandbox, {
+              githubToken,
+            });
+            if (!authSync.ok) {
+              console.warn("[sandbox/exec] GitHub auth refresh failed", {
+                sandboxId: id,
+                error: authSync.error,
+              });
+            }
+          }
+        } catch (error) {
+          console.warn("[sandbox/exec] GitHub token refresh failed", {
+            sandboxId: id,
+            error,
+          });
+        }
+      }
       const harnessId = BINARY_TO_HARNESS[trimmed.split(/\s/)[0]];
       Object.assign(envVars, context.ai.terminalEnv);
       if (harnessId) {

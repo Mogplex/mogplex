@@ -206,19 +206,20 @@ export function buildSuggestedSandboxBranchName(
     .toISOString()
     .replace(/[:-]/g, "")
     .replace(/\.\d{3}Z$/, "");
-  return `mogplex/${repoName}-${isoStamp.slice(0, 13).toLowerCase()}`;
+  return `mogplex/${repoName}-${isoStamp.slice(0, 15).toLowerCase()}`;
 }
 
 export function buildDefaultSandboxLaunchChoice(
-  repo: Pick<Repo, "id" | "default_branch">
+  repo: Pick<Repo, "id" | "full_name" | "default_branch">,
+  now = new Date()
 ): SandboxLaunchRequestInput {
   const defaultBranch =
     normalizeSandboxBranchName(repo.default_branch) || DEFAULT_BRANCH;
   return {
     repoId: repo.id,
     baseBranch: defaultBranch,
-    workingBranch: defaultBranch,
-    createBranch: false,
+    workingBranch: buildSuggestedSandboxBranchName(repo.full_name, now),
+    createBranch: true,
   };
 }
 

@@ -27,5 +27,6 @@ export function buildChatRequestBody(
     repoOwner,
     repoName,
     repoBranch: repo?.working_branch || repo?.default_branch || "main",
+    repoBaseBranch: repo?.default_branch || "main",
   };
 }

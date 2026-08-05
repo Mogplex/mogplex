@@ -50,6 +50,7 @@ export type ChatAgentContext = {
   repoOwner?: string | null;
   repoName?: string | null;
   repoBranch?: string | null;
+  repoBaseBranch?: string | null;
   repoFullName?: string | null;
   sandboxId?: string | null;
   workspaceSessionId?: string | null;
@@ -148,6 +149,7 @@ function buildToolsInput(context: ChatAgentContext) {
     repoOwner: context.repoOwner ?? undefined,
     repoName: context.repoName ?? undefined,
     repoBranch: context.repoBranch ?? undefined,
+    repoBaseBranch: context.repoBaseBranch ?? undefined,
     workspaceSessionId: context.workspaceSessionId ?? null,
     conversationId: context.conversationId ?? null,
     teamId: context.teamId ?? null,
@@ -164,6 +166,7 @@ function buildPromptContextInput(
     repoOwner: context.repoOwner ?? undefined,
     repoName: context.repoName ?? undefined,
     repoBranch: context.repoBranch ?? undefined,
+    repoBaseBranch: context.repoBaseBranch ?? undefined,
     repoId: context.repoId ?? undefined,
     sandboxId: context.sandboxId ?? undefined,
     connections,

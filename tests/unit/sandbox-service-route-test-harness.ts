@@ -11,11 +11,14 @@ type SandboxServiceRecordRepoFixture = {
   env_sync_mode: string | null;
   vercel_project_id: string | null;
   vercel_team_id: string | null;
+  github_installation_id?: number | null;
 };
 
 type SandboxServiceRouteRecordFixture = {
   repo_id: string | null;
   sandbox_id: string;
+  base_branch: string;
+  working_branch: string;
   billing_source: string | null;
   billing_team_id: string | null;
   billing_project_id: string | null;
@@ -89,6 +92,8 @@ const defaultSandboxServiceRecordRepo: SandboxServiceRecordRepoFixture = {
 const defaultSandboxServiceRouteRecord: SandboxServiceRouteRecordFixture = {
   repo_id: "repo-123",
   sandbox_id: "sandbox-runtime-123",
+  base_branch: "main",
+  working_branch: "mogplex/test-branch",
   billing_source: "platform",
   billing_team_id: null,
   billing_project_id: "project-123",

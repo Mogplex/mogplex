@@ -119,6 +119,7 @@ export const SLACK_STATIC_MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "add_memory",
   "bash",
   "github_create_issue",
+  "github_create_pull_request",
   "start_sandbox",
   "stop_sandbox",
   "virtual_exec",

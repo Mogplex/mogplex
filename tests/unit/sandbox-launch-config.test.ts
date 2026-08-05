@@ -5,6 +5,25 @@ async function loadSandboxLaunchConfig() {
   return import("../../lib/sandbox/launch-config");
 }
 
+test("default sandbox launches create an isolated delivery branch", async () => {
+  const { buildDefaultSandboxLaunchChoice } = await loadSandboxLaunchConfig();
+  const choice = buildDefaultSandboxLaunchChoice(
+    {
+      id: "repo-1",
+      full_name: "acme/demo",
+      default_branch: "trunk",
+    },
+    new Date("2026-08-05T12:34:56.000Z")
+  );
+
+  assert.deepEqual(choice, {
+    repoId: "repo-1",
+    baseBranch: "trunk",
+    workingBranch: "mogplex/demo-20260805t123456",
+    createBranch: true,
+  });
+});
+
 test("resolveSandboxLaunchRequest defaults to the repo branch for standard launches", async () => {
   const { resolveSandboxLaunchRequest } = await loadSandboxLaunchConfig();
 

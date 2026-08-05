@@ -5,6 +5,7 @@ type PromptContext = {
   repoOwner?: string;
   repoName?: string;
   repoBranch?: string;
+  repoBaseBranch?: string;
   repoId?: string;
   sandboxId?: string;
   connections?: Connection[];
@@ -16,11 +17,13 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     repoOwner,
     repoName,
     repoBranch,
+    repoBaseBranch,
     repoId,
     sandboxId,
     connections,
   } = ctx;
   const branch = repoBranch || "main";
+  const baseBranch = repoBaseBranch || "main";
   const hasSandbox = Boolean(sandboxId);
   const hasRepo = Boolean(repoFullName);
 
@@ -47,6 +50,8 @@ A live sandbox microVM is running for this repository (sandbox ID: ${sandboxId})
 Prefer sandbox tools (bash, write_file) over GitHub API tools (read_file, list_files) when a sandbox is available. The sandbox gives you real-time execution — use it.
 
 When editing files, read the current content first with bash (e.g. \`cat src/app/page.tsx\`), then use write_file to apply changes. For multi-file changes, batch them and verify with bash.
+
+Before changing code, synchronize the sandbox with \`git fetch origin && git checkout ${branch} && git pull --ff-only origin ${branch}\`. If you make code changes, run the relevant tests, commit and push ${branch}, then call github_create_pull_request with base ${baseBranch}. Include the pull request URL in your final response. Never leave completed work only inside the sandbox.
 
 You can stop the sandbox with stop_sandbox when the user is done.
 </sandbox>

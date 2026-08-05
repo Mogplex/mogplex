@@ -45,6 +45,7 @@ export const TOOL_CAPABILITY: Record<string, Capability> = {
   // authenticated org/user/repo PR inventory using the user's own GitHub auth.
   github_pr_search: "tools.github_api",
   github_create_issue: "tools.github_api",
+  github_create_pull_request: "tools.github_api",
   write_file: "tools.write_file",
   add_memory: "tools.memories",
   search_memories: "tools.memories",
@@ -89,6 +90,7 @@ type RepoToolDefaults = {
   owner?: string;
   repo?: string;
   branch?: string;
+  baseBranch?: string;
   rootDirectory?: string | null;
 };
 
@@ -1491,6 +1493,110 @@ export function createGithubApi(
   });
 }
 
+const githubCreatePullRequestParams = z
+  .object({
+    title: z.string().trim().min(1).max(256),
+    body: z.string().max(20_000).default(""),
+    head: z.string().trim().min(1).max(255).optional(),
+    base: z.string().trim().min(1).max(255).optional(),
+  })
+  .strict();
+
+export function createGithubPullRequestTool(
+  githubToken?: string | null,
+  repoDefaults?: RepoToolDefaults
+) {
+  return defineTool({
+    description:
+      "Open a pull request for the current workspace repository after committing and pushing the sandbox branch. Returns an existing open pull request for the same head and base instead of creating a duplicate.",
+    inputSchema: githubCreatePullRequestParams,
+    execute: async ({
+      title,
+      body,
+      head,
+      base,
+    }: z.infer<typeof githubCreatePullRequestParams>) => {
+      const context = resolveGithubApiContext(githubToken, repoDefaults);
+      if ("error" in context) return { error: context.error };
+
+      const resolvedHead = head ?? repoDefaults?.branch;
+      const resolvedBase = base ?? repoDefaults?.baseBranch ?? "main";
+      if (!resolvedHead) {
+        return { error: "Missing sandbox branch for pull request delivery." };
+      }
+      if (resolvedHead === resolvedBase) {
+        return {
+          error:
+            "Pull requests require a working branch different from the base branch.",
+        };
+      }
+
+      const headers = {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${githubToken}`,
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "mogplex-agent",
+      };
+      const listUrl = new URL(
+        `/repos/${encodeURIComponent(context.owner)}/${encodeURIComponent(context.repo)}/pulls`,
+        GITHUB_API_ORIGIN
+      );
+      listUrl.searchParams.set("state", "open");
+      listUrl.searchParams.set("head", `${context.owner}:${resolvedHead}`);
+      listUrl.searchParams.set("base", resolvedBase);
+      const existingResponse = await fetch(listUrl, { headers });
+      if (!existingResponse.ok) {
+        return {
+          error: `GitHub could not check existing pull requests (${existingResponse.status}).`,
+        };
+      }
+      const existing = (await existingResponse.json()) as Array<{
+        number?: number;
+        html_url?: string;
+      }>;
+      if (existing[0]?.html_url) {
+        return {
+          ok: true,
+          created: false,
+          pullRequestNumber: existing[0].number ?? null,
+          pullRequestUrl: existing[0].html_url,
+        };
+      }
+
+      const createResponse = await fetch(listUrl.origin + listUrl.pathname, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title,
+          body,
+          head: resolvedHead,
+          base: resolvedBase,
+        }),
+      });
+      const created = (await createResponse.json().catch(() => ({}))) as {
+        number?: number;
+        html_url?: string;
+        message?: string;
+      };
+      if (!createResponse.ok || !created.html_url) {
+        return {
+          error:
+            created.message ||
+            `GitHub could not create the pull request (${createResponse.status}).`,
+        };
+      }
+
+      return {
+        ok: true,
+        created: true,
+        pullRequestNumber: created.number ?? null,
+        pullRequestUrl: created.html_url,
+      };
+    },
+  });
+}
+
 /** Validate the caller-supplied identifiers before they reach the query. */
 function normalizeGithubPrSearchInputs(input: {
   owner?: string;
@@ -1999,7 +2105,13 @@ export function buildStaticTools(
         }
       : {}),
     ...(githubToken
-      ? { github_api: createGithubApi(githubToken, repoDefaults) }
+      ? {
+          github_api: createGithubApi(githubToken, repoDefaults),
+          github_create_pull_request: createGithubPullRequestTool(
+            githubToken,
+            repoDefaults
+          ),
+        }
       : {}),
     ...(sandboxId ? { write_file: createWriteFile(userId) } : {}),
   };
@@ -2274,6 +2386,7 @@ export async function buildTools(opts: {
   repoOwner?: string;
   repoName?: string;
   repoBranch?: string;
+  repoBaseBranch?: string;
   workspaceSessionId?: string | null;
   conversationId?: string | null;
   /** Team scope, if the caller is acting inside a team. Null = solo. */
@@ -2317,6 +2430,7 @@ export async function buildTools(opts: {
       owner: opts.repoOwner,
       repo: opts.repoName,
       branch: opts.repoBranch,
+      baseBranch: opts.repoBaseBranch,
       rootDirectory,
     },
     opts.repoId,
