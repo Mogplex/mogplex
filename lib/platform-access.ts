@@ -270,9 +270,12 @@ export function createLoadUserPlatformAccess(
 
   return async function loadUserPlatformAccess(
     userId: string,
-    productTeamId?: string | null
+    productTeamId?: string | null,
+    loadedProfile?: PlatformAccessProfile | null
   ): Promise<PlatformAccess> {
-    const allowlistedAccess = await resolveExplicitPlatformAccess(userId, deps);
+    const allowlistedAccess = loadedProfile
+      ? derivePlatformAccess(loadedProfile, deps.env)
+      : await resolveExplicitPlatformAccess(userId, deps);
     if (
       allowlistedAccess.allowPlatformAi &&
       allowlistedAccess.allowPlatformSandbox

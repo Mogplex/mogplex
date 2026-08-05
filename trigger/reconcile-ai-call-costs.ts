@@ -158,6 +158,24 @@ function captureUpdateGuardNoop(
   );
 }
 
+function captureMissingBillingAccountWarning(
+  deps: Pick<AiCallCostReconciliationDeps, "sentry">,
+  row: AiCallCostReconciliationRow
+) {
+  deps.sentry.captureMessage(
+    "[ai-cost-reconciliation] billing account not found",
+    {
+      level: "warning",
+      fingerprint: ["ai-cost-reconciliation", "no-billing-account", row.id],
+      extra: {
+        ai_call_id: row.id,
+        user_id: row.user_id,
+        completed_at: row.completed_at,
+      },
+    }
+  );
+}
+
 /**
  * Fetch cost from Gateway for multiple generation IDs and sum them.
  * Returns null if any ID returns 404 (incomplete data).
@@ -367,9 +385,10 @@ async function reconcileAiCallCostRow(
       metadata: row.metadata,
     });
     if (metering.reason === "no_billing_account") {
-      throw new Error(
-        `Cannot finalize Gateway cost for ai_call ${row.id}: billing account not found`
-      );
+      if (shouldWarnStale(row, now)) {
+        captureMissingBillingAccountWarning(deps, row);
+      }
+      return "skipped";
     }
 
     const updated = await persistGatewayAiCallCost(deps, {

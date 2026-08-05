@@ -196,11 +196,24 @@ export function createAuthUserHandler(
     }
 
     const explicitPlatformAccess = derivePlatformAccess(user);
-    const platformAccess =
-      explicitPlatformAccess.allowPlatformAi &&
-      explicitPlatformAccess.allowPlatformSandbox
-        ? explicitPlatformAccess
-        : await deps.loadUserPlatformAccess(profileId);
+    let platformAccess = explicitPlatformAccess;
+    if (
+      !explicitPlatformAccess.allowPlatformAi ||
+      !explicitPlatformAccess.allowPlatformSandbox
+    ) {
+      try {
+        platformAccess = await deps.loadUserPlatformAccess(
+          profileId,
+          undefined,
+          user
+        );
+      } catch (error) {
+        console.error("[auth-user] platform access resolution failed", {
+          profileId,
+          error,
+        });
+      }
+    }
 
     try {
       await deps.migrateLegacyOAuthTokensForUser(profileId);

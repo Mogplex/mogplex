@@ -32,6 +32,10 @@ describe("billing ledger migration", () => {
   beforeAll(async () => {
     db = new PGlite();
     await db.exec(`
+      create role anon;
+      create role authenticated;
+      create role service_role;
+
       create table public.sandboxes (
         id uuid primary key,
         user_id uuid not null,
@@ -406,6 +410,35 @@ describe("billing ledger migration", () => {
         token_usage_remainder_cost_units: 340_000,
         accrued_cost_units: 9_340_000,
       },
+    ]);
+  });
+
+  it("restricts exact token accruals to the service role", async () => {
+    const privileges = await db.query<{
+      anon: boolean;
+      authenticated: boolean;
+      service_role: boolean;
+    }>(`
+      select
+        has_function_privilege(
+          'anon',
+          'public.accrue_token_usage(uuid,bigint,text,text,jsonb)',
+          'EXECUTE'
+        ) as anon,
+        has_function_privilege(
+          'authenticated',
+          'public.accrue_token_usage(uuid,bigint,text,text,jsonb)',
+          'EXECUTE'
+        ) as authenticated,
+        has_function_privilege(
+          'service_role',
+          'public.accrue_token_usage(uuid,bigint,text,text,jsonb)',
+          'EXECUTE'
+        ) as service_role
+    `);
+
+    expect(privileges.rows).toEqual([
+      { anon: false, authenticated: false, service_role: true },
     ]);
   });
 

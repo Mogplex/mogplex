@@ -142,6 +142,7 @@ test("GET /api/auth/user derives connected state from vault-backed OAuth storage
 
 test("GET /api/auth/user treats covered repos as app-connected even when installation rows are missing", async () => {
   const { createAuthUserHandler } = await loadAuthUserRoute();
+  let accessProfileId: string | null = null;
 
   const response = await createAuthUserHandler({
     getResolvedAuth: async () => ({
@@ -179,10 +180,13 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
     getOAuthToken: async () => null,
     hasOAuthToken: async () => false,
     migrateLegacyOAuthTokensForUser: async () => undefined,
-    loadUserPlatformAccess: async () => ({
-      allowPlatformAi: true,
-      allowPlatformSandbox: true,
-    }),
+    loadUserPlatformAccess: async (_userId, _productTeamId, profile) => {
+      accessProfileId = profile?.id ?? null;
+      return {
+        allowPlatformAi: true,
+        allowPlatformSandbox: true,
+      };
+    },
     getPlatformVercelServiceState: () => ({
       platformState: "not_configured",
       canUsePlatformOps: false,
@@ -190,6 +194,7 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
   })();
 
   assert.equal(response.status, 200);
+  assert.equal(accessProfileId, "user-123");
   assert.deepEqual(await response.json(), {
     user: {
       id: "user-123",
@@ -230,4 +235,69 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
       account_vercel_team_id: null,
     },
   });
+});
+
+test("GET /api/auth/user keeps explicit access when billing access resolution fails", async () => {
+  const { createAuthUserHandler } = await loadAuthUserRoute();
+  const loggedErrors: unknown[] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    loggedErrors.push(args);
+  };
+
+  try {
+    const response = await createAuthUserHandler({
+      getResolvedAuth: async () => ({
+        profileId: "user-123",
+        authUserId: "auth-123",
+        source: "supabase",
+      }),
+      getCookies: async () => ({
+        get: () => undefined,
+        set: () => {},
+        delete: () => {},
+      }),
+      loadUserProfile: async () => ({
+        id: "user-123",
+        email: "dev@example.com",
+        username: "dev",
+        name: "Dev User",
+        avatar_url: null,
+        github_username: null,
+        allow_platform_ai: true,
+        allow_platform_sandbox: false,
+      }),
+      loadInstallationCount: async () => 0,
+      loadSyncedRepoCount: async () => 0,
+      loadCoveredRepoCount: async () => 0,
+      loadRepoLinkedProjectCount: async () => 0,
+      loadWorkspaceLinkedProjectCount: async () => 0,
+      loadAccountDefaultVercelProject: async () => null,
+      hasGithubAppConfig: () => false,
+      getOAuthToken: async () => null,
+      hasOAuthToken: async () => false,
+      migrateLegacyOAuthTokensForUser: async () => undefined,
+      loadUserPlatformAccess: async () => {
+        throw new Error("billing unavailable");
+      },
+      getPlatformVercelServiceState: () => ({
+        platformState: "not_configured",
+        canUsePlatformOps: false,
+      }),
+    })();
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload.user.platform_access, {
+      allowPlatformAi: true,
+      allowPlatformSandbox: false,
+    });
+    assert.equal(loggedErrors.length, 1);
+    assert.equal(
+      (loggedErrors[0] as unknown[])[0],
+      "[auth-user] platform access resolution failed"
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
 });

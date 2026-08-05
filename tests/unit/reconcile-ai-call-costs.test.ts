@@ -234,17 +234,24 @@ test("posts the exact Gateway token cost before marking it reconciled", async ()
 test("does not finalize Gateway cost when token metering cannot find an account", async () => {
   const { runAiCallCostReconciliation } = await loadReconcileModule();
   const { client, updates } = createReconcileSupabase([createRow()]);
-  const captured: unknown[] = [];
+  const capturedExceptions: unknown[] = [];
+  const capturedMessages: Array<{
+    message: string;
+    context: unknown;
+  }> = [];
 
   const summary = await runAiCallCostReconciliation({
     supabase: client as never,
-    now: () => new Date("2026-05-16T11:00:00.000Z"),
+    now: () => new Date("2026-05-17T00:00:00.000Z"),
     sentry: {
       captureException: (error) => {
-        captured.push(error);
+        capturedExceptions.push(error);
         return "event-id";
       },
-      captureMessage: () => undefined,
+      captureMessage: (message, context) => {
+        capturedMessages.push({ message, context });
+        return "event-id";
+      },
     },
     gateway: {
       getGenerationInfo: async () => ({ cost: 0.0834 }),
@@ -260,11 +267,16 @@ test("does not finalize Gateway cost when token metering cannot find an account"
   assert.deepEqual(summary, {
     scanned: 1,
     reconciled: 0,
-    skipped: 0,
-    errored: 1,
+    skipped: 1,
+    errored: 0,
   });
   assert.equal(updates.length, 0);
-  assert.match(String(captured[0]), /billing account not found/);
+  assert.deepEqual(capturedExceptions, []);
+  assert.equal(capturedMessages[0]?.message.includes("billing account"), true);
+  assert.deepEqual(
+    (capturedMessages[0]?.context as { fingerprint?: string[] }).fingerprint,
+    ["ai-cost-reconciliation", "no-billing-account", "call_1"]
+  );
 });
 
 test("uses the captured generation id when Gateway cost has no id field", async () => {

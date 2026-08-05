@@ -62,6 +62,8 @@ begin
   from public.token_usage_accruals
   where source_ref = trim(p_source_ref);
   if found then
+    -- Gateway costs are final once reported. A retry may repeat that value but
+    -- must never rewrite a previously accrued call with a different identity.
     if v_existing.account_id <> p_account
       or v_existing.cost_units <> p_cost_units
       or v_existing.period <> trim(p_period)
@@ -117,3 +119,8 @@ begin
   return query select true, v_debit_cents, v_remainder;
 end;
 $$;
+
+revoke all on function public.accrue_token_usage(uuid, bigint, text, text, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.accrue_token_usage(uuid, bigint, text, text, jsonb)
+  to service_role;
