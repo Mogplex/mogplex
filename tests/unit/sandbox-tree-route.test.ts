@@ -44,6 +44,7 @@ test("GET /api/sandbox/[id]/tree returns canonical repo-relative paths", async (
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
     },
+    renewSandboxActivityLease: async () => 0,
   });
 
   const response = await handler(
@@ -113,6 +114,7 @@ test("write /api/sandbox/[id]/tree methods require file-write capability", async
       return context;
     },
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
   };
 
   await createSandboxTreePostHandler(deps as never)(
@@ -192,6 +194,7 @@ test("POST /api/sandbox/[id]/tree creates files under the repo root", async () =
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
     },
+    renewSandboxActivityLease: async () => 0,
   });
 
   const response = await handler(
@@ -258,6 +261,7 @@ test("PATCH /api/sandbox/[id]/tree moves files without overwriting destinations"
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
     },
+    renewSandboxActivityLease: async () => 0,
   });
 
   const response = await handler(
@@ -324,6 +328,7 @@ test("PATCH /api/sandbox/[id]/tree rejects moving a directory into itself", asyn
         },
       }) as never,
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
   });
 
   const response = await handler(
@@ -380,6 +385,7 @@ test("PATCH /api/sandbox/[id]/tree returns 409 when destination exists", async (
         },
       }) as never,
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
   });
 
   const response = await handler(
@@ -425,6 +431,7 @@ test("POST /api/sandbox/[id]/tree rejects path traversal", async () => {
         },
       }) as never,
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
   });
 
   const response = await handler(
@@ -482,6 +489,7 @@ test("DELETE /api/sandbox/[id]/tree removes directories recursively", async () =
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
     },
+    renewSandboxActivityLease: async () => 0,
   });
 
   const response = await handler(

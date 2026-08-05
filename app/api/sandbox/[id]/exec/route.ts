@@ -6,6 +6,7 @@ import {
 } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getSandbox } from "@/lib/sandbox/client";
+import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
 import {
   acquireSandboxExecLock,
@@ -125,6 +126,7 @@ type SandboxExecPostDeps = {
   getSandbox: typeof getSandbox;
   resolveSandboxAiAccess: typeof resolveSandboxAiAccess;
   touchSandboxLastActive: typeof touchSandboxLastActive;
+  renewSandboxActivityLease: typeof renewSandboxActivityLease;
 };
 
 const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
@@ -148,6 +150,7 @@ const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
   getSandbox,
   resolveSandboxAiAccess,
   touchSandboxLastActive,
+  renewSandboxActivityLease,
 };
 
 export function createSandboxExecPostHandler(
@@ -255,6 +258,7 @@ export function createSandboxExecPostHandler(
         vercelTeamId: context.credentials.vercelTeamId,
         vercelProjectId: context.credentials.vercelProjectId,
       });
+      await deps.renewSandboxActivityLease(sandbox);
 
       const repoRootDirectory = sandboxData.rootDirectory;
       const envResolution = await resolveRepoSandboxEnv({
@@ -373,6 +377,9 @@ export function createSandboxExecPostHandler(
           cwd: commandCwd,
           env: envVars,
           reportedCwd: commandCwd || repoRootDirectory || ".",
+          onActivity: async () => {
+            await deps.renewSandboxActivityLease(sandbox);
+          },
           onComplete: async () => {
             try {
               await releaseLock(sandboxId, execLockToken);

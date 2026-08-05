@@ -20,6 +20,8 @@ export type StartExecStreamOptions = {
   reportedCwd: string;
   /** Invoked when the stream completes — for releasing exec locks etc. */
   onComplete?: () => Promise<void> | void;
+  /** Invoked when command output proves the sandbox is still active. */
+  onActivity?: () => Promise<void> | void;
 };
 
 function encode(event: ExecStreamEvent) {
@@ -32,7 +34,7 @@ function encode(event: ExecStreamEvent) {
 export async function startExecStream(
   opts: StartExecStreamOptions
 ): Promise<Response> {
-  const { sandbox, run, cwd, env, reportedCwd, onComplete } = opts;
+  const { sandbox, run, cwd, env, reportedCwd, onComplete, onActivity } = opts;
 
   const detachedCmd =
     run.kind === "raw"
@@ -62,6 +64,7 @@ export async function startExecStream(
         );
 
         for await (const log of detachedCmd.logs()) {
+          if (onActivity) await onActivity();
           controller.enqueue(
             encoder.encode(
               encode({ type: "log", stream: log.stream, data: log.data })

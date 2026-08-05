@@ -6,6 +6,7 @@ import {
 } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getSandbox } from "@/lib/sandbox/client";
+import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
 import { getHarnessConfig } from "@/lib/harness/config";
 import { normalizeHarnessExecutionMode } from "@/lib/harness/claude-permissions";
 import { HarnessCancelRequestedError, runHarness } from "@/lib/harness/runner";
@@ -16,7 +17,10 @@ import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { ensureDevTools } from "@/lib/sandbox/dev-tools";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
-import { touchSandboxLastActive } from "@/lib/sandbox/records";
+import {
+  stopSandboxRecord,
+  touchSandboxLastActive,
+} from "@/lib/sandbox/records";
 import { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
 import { getSlackBotToken } from "@/lib/slack/client";
 import {
@@ -82,6 +86,8 @@ type SandboxHarnessPostDeps = {
   runHarness: typeof runHarness;
   getResolvedConnections: typeof getResolvedConnections;
   injectClaudeMcpConfig: typeof injectClaudeMcpConfig;
+  renewSandboxActivityLease: typeof renewSandboxActivityLease;
+  stopSandboxRecord: typeof stopSandboxRecord;
   getSlackBotToken: typeof getSlackBotToken;
   fetchSlackAttachment: (input: {
     botToken: string;
@@ -107,6 +113,8 @@ const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   runHarness,
   getResolvedConnections,
   injectClaudeMcpConfig,
+  renewSandboxActivityLease,
+  stopSandboxRecord,
   getSlackBotToken,
   fetchSlackAttachment: ({ botToken, url, signal }) =>
     fetch(url, {
@@ -119,6 +127,13 @@ const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
 function truncateLogEvent(value: string) {
   if (value.length <= MAX_LOG_EVENT_LENGTH) return value;
   return `${value.slice(0, MAX_LOG_EVENT_LENGTH)}\n...[truncated ${value.length - MAX_LOG_EVENT_LENGTH} chars]`;
+}
+
+export function isClosedSandboxStreamError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /sandbox stream was closed|not accepting commands|sandbox.*(?:stopped|gone)|session.*(?:stopped|gone)/i.test(
+    message
+  );
 }
 
 function isCancellationRequested(
@@ -396,6 +411,7 @@ export function createSandboxHarnessPostHandler(
     }
 
     const harnessMetadataPatch = {
+      source: "cli",
       harness_id: harnessId,
       harness_mode: normalizedMode,
       sandbox_record_id: id,
@@ -502,6 +518,9 @@ export function createSandboxHarnessPostHandler(
         vercelTeamId: context.credentials.vercelTeamId,
         vercelProjectId: context.credentials.vercelProjectId,
       });
+
+      await deps.renewSandboxActivityLease(sandbox);
+      await touchSandboxLastActive(id);
 
       const envResolution = await resolveRepoSandboxEnv({
         repo: repoRecord ?? {},
@@ -776,6 +795,7 @@ export function createSandboxHarnessPostHandler(
 
             // Stream command output
             for await (const log of result.command.logs()) {
+              await deps.renewSandboxActivityLease(sandbox);
               const sessionId = sessionParser.push(log.stream, log.data);
               if (sessionId) {
                 const sessionEvent = `data: ${JSON.stringify({ type: "session", sessionId })}\n\n`;
@@ -863,6 +883,39 @@ export function createSandboxHarnessPostHandler(
           } catch (err) {
             const errorMsg =
               err instanceof Error ? err.message : "Stream error";
+            const sandboxStreamClosed = isClosedSandboxStreamError(err);
+            console.error("[harness] command stream failed", {
+              aiCallId: aiCall.id,
+              sandboxRecordId: id,
+              sandboxId: record.sandbox_id,
+              harnessId,
+              runtimeCommandId: result.command.cmdId,
+              sandboxStreamClosed,
+              error: errorMsg,
+            });
+            if (sandboxStreamClosed) {
+              await deps
+                .stopSandboxRecord(id, {
+                  expectedSandboxId: record.sandbox_id,
+                  stopReason: "vm_gone",
+                  additionalUpdates: {
+                    last_preview_error:
+                      "Development environment stopped during the agent run",
+                    error: errorMsg,
+                  },
+                })
+                .catch((stopError) => {
+                  console.error(
+                    "[harness] failed to reconcile closed sandbox stream",
+                    {
+                      aiCallId: aiCall.id,
+                      sandboxRecordId: id,
+                      sandboxId: record.sandbox_id,
+                      error: stopError,
+                    }
+                  );
+                });
+            }
             const currentCall = await loadOwnedAiCall(creds.userId, aiCall.id);
             if (isCancellationRequested(currentCall)) {
               await finalizeCancelledRun({

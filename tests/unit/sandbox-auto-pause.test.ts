@@ -197,13 +197,11 @@ function createReleaseRpcClient(input: { rpcResults: ReleaseRpcResult[] }) {
   return {
     state,
     client: {
-      rpc(name: string, args: Record<string, unknown>) {
+      async rpc(name: string, args: Record<string, unknown>) {
         state.rpcCalls.push({ name, args });
         return {
-          maybeSingle: async () => ({
-            data: input.rpcResults[rpcIndex++] ?? null,
-            error: null,
-          }),
+          data: [input.rpcResults[rpcIndex++] ?? null],
+          error: null,
         };
       },
     },

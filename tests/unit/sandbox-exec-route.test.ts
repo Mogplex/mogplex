@@ -47,6 +47,7 @@ test("POST /api/sandbox/[id]/exec returns 429 when exec limits are exceeded", as
       releasedLock = { sandboxId, token };
     },
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
     resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
     getSandbox: async () => {
       throw new Error("getSandbox should not be called");
@@ -108,6 +109,7 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock for unauthorized reque
       releaseAttempted = true;
     },
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
     getSandbox: async () => {
       throw new Error("getSandbox should not be called");
     },
@@ -157,6 +159,7 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock when the sandbox is mi
       callOrder.push("release");
     },
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
     getSandbox: async () => {
       throw new Error("getSandbox should not be called");
     },
@@ -216,6 +219,7 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock when sandbox credentia
       callOrder.push("release");
     },
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
     getSandbox: async () => {
       throw new Error("getSandbox should not be called");
     },
@@ -260,6 +264,7 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
     recordLimitDecision: async () => {},
     releaseSandboxExecLock: async () => {},
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
     resolveSandboxAiAccess: async () =>
       buildSandboxServiceAiAccess({
         aiBillingSource: "user_ai_gateway",
@@ -325,6 +330,7 @@ test("POST /api/sandbox/[id]/exec injects Claude-compatible gateway env only for
     recordLimitDecision: async () => {},
     releaseSandboxExecLock: async () => {},
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
     resolveSandboxAiAccess: async () =>
       buildSandboxServiceAiAccess({
         aiBillingSource: "user_ai_gateway",
@@ -392,6 +398,7 @@ test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", a
     recordLimitDecision: async () => {},
     releaseSandboxExecLock: async () => {},
     touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
     resolveSandboxAiAccess: async () =>
       buildSandboxServiceAiAccess({
         aiBillingSource: "user_ai_gateway",

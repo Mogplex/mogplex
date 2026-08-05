@@ -269,16 +269,19 @@ type SandboxAutoPauseRpcClient = {
   rpc: (
     fn: string,
     args: Record<string, unknown>
-  ) => {
-    maybeSingle: () => Promise<{
-      data: unknown;
-      error: { message: string } | null;
-    }>;
-  };
+  ) => Promise<{
+    data: unknown;
+    error: { message: string } | null;
+  }>;
 };
 
 const defaultSandboxAutoPauseRpcClient =
   supabaseAdmin as unknown as SandboxAutoPauseRpcClient;
+
+function firstRpcRow<T>(data: unknown): T | null {
+  const row = Array.isArray(data) ? data[0] : data;
+  return row && typeof row === "object" ? (row as T) : null;
+}
 
 type ClaimRpcResult = {
   claimed?: boolean | null;
@@ -287,15 +290,16 @@ type ClaimRpcResult = {
 };
 
 export async function recordSandboxClientAttach(input: SandboxPresenceInput) {
-  const { data, error } = await supabaseAdmin
-    .rpc("record_sandbox_client_attach_event", {
+  const { data, error } = await defaultSandboxAutoPauseRpcClient.rpc(
+    "record_sandbox_client_attach_event",
+    {
       p_sandbox_record_id: input.sandboxRecordId,
       p_user_id: input.userId,
       p_tab_id: input.tabId,
       p_session_id: input.sessionId,
       p_event_seq: input.eventSeq,
-    })
-    .maybeSingle();
+    }
+  );
 
   if (error) {
     throw new Error(
@@ -303,7 +307,7 @@ export async function recordSandboxClientAttach(input: SandboxPresenceInput) {
     );
   }
 
-  const result = data as AttachRpcResult | null;
+  const result = firstRpcRow<AttachRpcResult>(data);
   if (!result?.applied) return;
 
   await recordSandboxLifecycleEvent({
@@ -323,16 +327,17 @@ export async function recordSandboxClientRelease(
   input: SandboxReleaseInput,
   client: SandboxAutoPauseRpcClient = defaultSandboxAutoPauseRpcClient
 ): Promise<SandboxClientReleaseResult> {
-  const { data, error } = await client
-    .rpc("record_sandbox_client_release_event", {
+  const { data, error } = await client.rpc(
+    "record_sandbox_client_release_event",
+    {
       p_sandbox_record_id: input.sandboxRecordId,
       p_user_id: input.userId,
       p_tab_id: input.tabId,
       p_session_id: input.sessionId,
       p_event_seq: input.eventSeq,
       p_release_reason: input.releaseReason ?? null,
-    })
-    .maybeSingle();
+    }
+  );
 
   if (error) {
     throw new Error(
@@ -340,7 +345,7 @@ export async function recordSandboxClientRelease(
     );
   }
 
-  const result = data as ReleaseRpcResult | null;
+  const result = firstRpcRow<ReleaseRpcResult>(data);
   const sessionRowId = result?.session_row_id ?? undefined;
   const releasedAt = result?.released_at ?? undefined;
   const releaseEventId = result?.release_event_id ?? undefined;
