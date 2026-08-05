@@ -23,6 +23,9 @@ test("public landing shows the open-source software engine and primary CTA", asy
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("landing-hero")).toBeVisible();
+  await expect(page).toHaveTitle(
+    "Mogplex | The open-source engine for building and maintaining software"
+  );
   await expect(
     page.getByRole("heading", {
       name: /The open-source engine for building and maintaining software\./,
