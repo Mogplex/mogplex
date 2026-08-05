@@ -144,7 +144,9 @@ test("composer shows agent activity immediately and clears it after completion",
   const responseReleased = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  let chatRequests = 0;
   await page.route("**/api/chat", async (route) => {
+    chatRequests += 1;
     await responseReleased;
     await route.fulfill({
       status: 200,
@@ -159,16 +161,23 @@ test("composer shows agent activity immediately and clears it after completion",
   await page.goto(scopedPath("projects/workspace"));
   await page.waitForLoadState("networkidle");
   await page.getByTestId(`home-open-workspace-${repo.id}`).click();
-  await page
-    .getByRole("textbox", {
-      name: "Ask the agent what to build, fix, or explain. Type / for commands or drop files here.",
-    })
-    .fill("do the work");
+  const composer = page.getByRole("textbox", {
+    name: "Ask the agent what to build, fix, or explain. Type / for commands or drop files here.",
+  });
+  await composer.fill("do the work");
   await page.keyboard.press("Enter");
 
   const indicator = page.getByTestId("agent-running-indicator");
   await expect(indicator).toContainText("Agent is working");
   await expect(indicator.getByRole("button", { name: "Stop" })).toBeVisible();
+
+  const runningComposer = page.getByRole("textbox", {
+    name: "Agent is working. You can draft the next message here.",
+  });
+  await runningComposer.fill("/");
+  await page.keyboard.press("Tab");
+  await expect(runningComposer).toHaveValue("/");
+  expect(chatRequests).toBe(1);
 
   releaseResponse?.();
   await expect(page.getByText("Finished the work.")).toBeVisible();

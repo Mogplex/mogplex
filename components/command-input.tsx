@@ -132,7 +132,7 @@ export function CommandInput({
       e.preventDefault()
       return
     }
-    if (showMenu) {
+    if (showMenu && !isRunning) {
       if (e.key === "ArrowDown") {
         e.preventDefault()
         setSelectedIdx(i => Math.min(i + 1, filtered.length - 1))

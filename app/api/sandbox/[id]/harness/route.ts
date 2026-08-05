@@ -92,6 +92,17 @@ type SandboxHarnessPostDeps = {
   injectClaudeMcpConfig: typeof injectClaudeMcpConfig;
   renewSandboxActivityLease: typeof renewSandboxActivityLease;
   stopSandboxRecord: typeof stopSandboxRecord;
+  touchSandboxLastActive: typeof touchSandboxLastActive;
+  resolveRepoSandboxEnv: typeof resolveRepoSandboxEnv;
+  createAiCall: typeof createAiCall;
+  loadOwnedAiCall: typeof loadOwnedAiCall;
+  mergeAiCallMetadata: typeof mergeAiCallMetadata;
+  updateAiCall: typeof updateAiCall;
+  finalizeAiCallAsCancelledIfActive: typeof finalizeAiCallAsCancelledIfActive;
+  finalizeAiCallIfNotCancelled: typeof finalizeAiCallIfNotCancelled;
+  safeAppendAiCallEvent: typeof safeAppendAiCallEvent;
+  loadHarnessPromptWithMemoryContext: typeof loadHarnessPromptWithMemoryContext;
+  persistHarnessMemory: typeof persistHarnessMemory;
   getSlackBotToken: typeof getSlackBotToken;
   fetchSlackAttachment: (input: {
     botToken: string;
@@ -119,6 +130,17 @@ const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   injectClaudeMcpConfig,
   renewSandboxActivityLease,
   stopSandboxRecord,
+  touchSandboxLastActive,
+  resolveRepoSandboxEnv,
+  createAiCall,
+  loadOwnedAiCall,
+  mergeAiCallMetadata,
+  updateAiCall,
+  finalizeAiCallAsCancelledIfActive,
+  finalizeAiCallIfNotCancelled,
+  safeAppendAiCallEvent,
+  loadHarnessPromptWithMemoryContext,
+  persistHarnessMemory,
   getSlackBotToken,
   fetchSlackAttachment: ({ botToken, url, signal }) =>
     fetch(url, {
@@ -396,7 +418,7 @@ export function createSandboxHarnessPostHandler(
     }
 
     const existingAiCall = existingAiCallId
-      ? await loadOwnedAiCall(creds.userId, existingAiCallId)
+      ? await deps.loadOwnedAiCall(creds.userId, existingAiCallId)
       : null;
     if (existingAiCallId && !existingAiCall) {
       return NextResponse.json({ error: "ai_call not found" }, { status: 404 });
@@ -429,12 +451,12 @@ export function createSandboxHarnessPostHandler(
     };
 
     const aiCall = existingAiCall
-      ? await mergeAiCallMetadata({
+      ? await deps.mergeAiCallMetadata({
           userId: creds.userId,
           aiCallId: existingAiCall.id,
           metadata: harnessMetadataPatch,
         })
-      : await createAiCall({
+      : await deps.createAiCall({
           userId: creds.userId,
           type: "agent",
           model: `harness:${harnessId}`,
@@ -456,7 +478,7 @@ export function createSandboxHarnessPostHandler(
       );
     }
 
-    await safeAppendAiCallEvent({
+    await deps.safeAppendAiCallEvent({
       aiCallId: aiCall.id,
       userId: creds.userId,
       conversationId: body.conversationId || null,
@@ -469,7 +491,7 @@ export function createSandboxHarnessPostHandler(
       },
     });
 
-    const loadCurrentCall = () => loadOwnedAiCall(creds.userId, aiCall.id);
+    const loadCurrentCall = () => deps.loadOwnedAiCall(creds.userId, aiCall.id);
     const finalizeCancelledRun = async (input?: {
       runtimeCommandId?: string | null;
       installLogs?: string;
@@ -478,7 +500,7 @@ export function createSandboxHarnessPostHandler(
       const cancelRequestedAt =
         currentCall?.cancel_requested_at ?? new Date().toISOString();
 
-      const cancelledCall = await finalizeAiCallAsCancelledIfActive(
+      const cancelledCall = await deps.finalizeAiCallAsCancelledIfActive(
         aiCall.id,
         buildAiCallCompletionUpdate({
           startedAt: aiCall.started_at,
@@ -493,7 +515,7 @@ export function createSandboxHarnessPostHandler(
 
       if (!cancelledCall) return false;
 
-      await safeAppendAiCallEvent({
+      await deps.safeAppendAiCallEvent({
         aiCallId: aiCall.id,
         userId: creds.userId,
         conversationId: body.conversationId || null,
@@ -524,9 +546,9 @@ export function createSandboxHarnessPostHandler(
       });
 
       await deps.renewSandboxActivityLease(sandbox);
-      await touchSandboxLastActive(id);
+      await deps.touchSandboxLastActive(id);
 
-      const envResolution = await resolveRepoSandboxEnv({
+      const envResolution = await deps.resolveRepoSandboxEnv({
         repo: repoRecord ?? {},
         userId: creds.userId,
       });
@@ -601,7 +623,7 @@ export function createSandboxHarnessPostHandler(
           if (injection.ok) {
             mcpConfigPath = injection.mcpConfigPath;
             if (injection.serverCount > 0) {
-              await safeAppendAiCallEvent({
+              await deps.safeAppendAiCallEvent({
                 aiCallId: aiCall.id,
                 userId: creds.userId,
                 conversationId: body.conversationId || null,
@@ -626,7 +648,7 @@ export function createSandboxHarnessPostHandler(
               sandboxId: record.sandbox_id,
               error: injection.error,
             });
-            await safeAppendAiCallEvent({
+            await deps.safeAppendAiCallEvent({
               aiCallId: aiCall.id,
               userId: creds.userId,
               conversationId: body.conversationId || null,
@@ -665,7 +687,7 @@ export function createSandboxHarnessPostHandler(
         slackAttachmentMaterialization.droppedCount > 0 ||
         slackAttachmentMaterialization.unavailableCount > 0
       ) {
-        await safeAppendAiCallEvent({
+        await deps.safeAppendAiCallEvent({
           aiCallId: aiCall.id,
           userId: creds.userId,
           conversationId: body.conversationId || null,
@@ -691,13 +713,14 @@ export function createSandboxHarnessPostHandler(
         prompt.trim(),
         slackAttachmentMaterialization.promptSection
       );
-      const promptWithMemoryContext = await loadHarnessPromptWithMemoryContext(
-        creds.userId,
-        trimmedPrompt,
-        memoryScope
-      );
+      const promptWithMemoryContext =
+        await deps.loadHarnessPromptWithMemoryContext(
+          creds.userId,
+          trimmedPrompt,
+          memoryScope
+        );
 
-      void persistHarnessMemory({
+      void deps.persistHarnessMemory({
         userId: creds.userId,
         lane: "session",
         content: trimmedPrompt,
@@ -748,11 +771,11 @@ export function createSandboxHarnessPostHandler(
         });
       }
 
-      await updateAiCall(aiCall.id, {
+      await deps.updateAiCall(aiCall.id, {
         status: "streaming",
         runtime_command_id: result.command.cmdId,
       });
-      await safeAppendAiCallEvent({
+      await deps.safeAppendAiCallEvent({
         aiCallId: aiCall.id,
         userId: creds.userId,
         conversationId: body.conversationId || null,
@@ -767,7 +790,7 @@ export function createSandboxHarnessPostHandler(
       });
 
       if (result.installed && result.installLogs) {
-        await safeAppendAiCallEvent({
+        await deps.safeAppendAiCallEvent({
           aiCallId: aiCall.id,
           userId: creds.userId,
           conversationId: body.conversationId || null,
@@ -786,7 +809,8 @@ export function createSandboxHarnessPostHandler(
       const stream = new ReadableStream({
         async start(controller) {
           const sessionParser = createHarnessSessionParser(harnessId);
-          let failureOutput = "";
+          let failureStdout = "";
+          let failureStderr = "";
           let finalFailure: ReturnType<typeof presentHarnessFailure> | null =
             null;
 
@@ -803,10 +827,17 @@ export function createSandboxHarnessPostHandler(
             // Stream command output
             for await (const log of result.command.logs()) {
               await deps.renewSandboxActivityLease(sandbox);
-              failureOutput = appendHarnessFailureOutput(
-                failureOutput,
-                log.data
-              );
+              if (log.stream === "stderr") {
+                failureStderr = appendHarnessFailureOutput(
+                  failureStderr,
+                  log.data
+                );
+              } else {
+                failureStdout = appendHarnessFailureOutput(
+                  failureStdout,
+                  log.data
+                );
+              }
               const sessionId = sessionParser.push(log.stream, log.data);
               if (sessionId) {
                 const sessionEvent = `data: ${JSON.stringify({ type: "session", sessionId })}\n\n`;
@@ -824,7 +855,10 @@ export function createSandboxHarnessPostHandler(
 
             // Send completion
             const exitResult = await result.command.wait();
-            const currentCall = await loadOwnedAiCall(creds.userId, aiCall.id);
+            const currentCall = await deps.loadOwnedAiCall(
+              creds.userId,
+              aiCall.id
+            );
             const cancelled = isCancellationRequested(currentCall);
 
             if (!cancelled) {
@@ -835,11 +869,13 @@ export function createSandboxHarnessPostHandler(
                   : presentHarnessFailure({
                       harnessId,
                       exitCode: exitResult.exitCode,
-                      output: failureOutput,
+                      output: failureStderr.trim()
+                        ? failureStderr
+                        : failureStdout,
                     });
               const error = finalFailure?.message ?? null;
 
-              const finalizedCall = await finalizeAiCallIfNotCancelled(
+              const finalizedCall = await deps.finalizeAiCallIfNotCancelled(
                 aiCall.id,
                 buildAiCallCompletionUpdate({
                   startedAt: aiCall.started_at,
@@ -850,7 +886,7 @@ export function createSandboxHarnessPostHandler(
                 })
               );
               if (finalizedCall) {
-                await safeAppendAiCallEvent({
+                await deps.safeAppendAiCallEvent({
                   aiCallId: aiCall.id,
                   userId: creds.userId,
                   conversationId: body.conversationId || null,
@@ -867,7 +903,7 @@ export function createSandboxHarnessPostHandler(
                 });
               }
 
-              await persistHarnessMemory({
+              await deps.persistHarnessMemory({
                 userId: creds.userId,
                 lane: "episodic",
                 content:
@@ -941,7 +977,10 @@ export function createSandboxHarnessPostHandler(
                   );
                 });
             }
-            const currentCall = await loadOwnedAiCall(creds.userId, aiCall.id);
+            const currentCall = await deps.loadOwnedAiCall(
+              creds.userId,
+              aiCall.id
+            );
             if (isCancellationRequested(currentCall)) {
               await finalizeCancelledRun({
                 runtimeCommandId:
@@ -952,7 +991,7 @@ export function createSandboxHarnessPostHandler(
               controller.enqueue(encoder.encode(cancelledEvent));
               return;
             }
-            const finalizedCall = await finalizeAiCallIfNotCancelled(
+            const finalizedCall = await deps.finalizeAiCallIfNotCancelled(
               aiCall.id,
               buildAiCallCompletionUpdate({
                 startedAt: aiCall.started_at,
@@ -962,7 +1001,7 @@ export function createSandboxHarnessPostHandler(
               })
             );
             if (finalizedCall) {
-              await safeAppendAiCallEvent({
+              await deps.safeAppendAiCallEvent({
                 aiCallId: aiCall.id,
                 userId: creds.userId,
                 conversationId: body.conversationId || null,
@@ -982,7 +1021,7 @@ export function createSandboxHarnessPostHandler(
       });
 
       // Touch last_active_at (best-effort, don't block response)
-      void touchSandboxLastActive(id).catch((error) => {
+      void deps.touchSandboxLastActive(id).catch((error) => {
         console.warn("[harness] failed to touch sandbox last_active_at", {
           sandboxId: id,
           error,
@@ -1037,7 +1076,7 @@ export function createSandboxHarnessPostHandler(
               console.warn("Failed to mark sandbox stopped:", error.message);
           });
 
-        await finalizeAiCallIfNotCancelled(
+        await deps.finalizeAiCallIfNotCancelled(
           aiCall.id,
           buildAiCallCompletionUpdate({
             startedAt: aiCall.started_at,
@@ -1051,7 +1090,7 @@ export function createSandboxHarnessPostHandler(
           { status: 410 }
         );
       }
-      const finalizedCall = await finalizeAiCallIfNotCancelled(
+      const finalizedCall = await deps.finalizeAiCallIfNotCancelled(
         aiCall.id,
         buildAiCallCompletionUpdate({
           startedAt: aiCall.started_at,
@@ -1061,7 +1100,7 @@ export function createSandboxHarnessPostHandler(
         })
       );
       if (finalizedCall) {
-        await safeAppendAiCallEvent({
+        await deps.safeAppendAiCallEvent({
           aiCallId: aiCall.id,
           userId: creds.userId,
           conversationId: body.conversationId || null,
