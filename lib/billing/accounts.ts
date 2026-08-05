@@ -12,13 +12,14 @@ export type BillingAccount = {
   period_anchor: string | null;
   subscription_checkout_generation: number;
   status: "active" | "past_due" | "frozen_topups";
+  created_at?: string;
   updated_at?: string;
 };
 
 const UNIQUE_VIOLATION = "23505";
 
 const ACCOUNT_COLUMNS =
-  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, subscription_checkout_generation, status, updated_at";
+  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, subscription_checkout_generation, status, created_at, updated_at";
 
 export async function findBillingAccountForScope(
   scope: ProductResourceScope

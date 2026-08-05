@@ -63,7 +63,7 @@ import type { MemoryScope } from "@/lib/memories-client";
 const VALID_HARNESSES = new Set<HarnessId>(["claude-code", "codex"]);
 const MAX_LOG_EVENT_LENGTH = 4000;
 const HARNESS_ROUTE_SELECT =
-  "repo_id, sandbox_id, root_directory, base_branch, working_branch, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(full_name, root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id, github_installation_id)";
+  "repo_id, product_team_id, sandbox_id, root_directory, base_branch, working_branch, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, preview_url, repo:repos(full_name, root_directory, sandbox_env_vars, env_sync_mode, vercel_project_id, vercel_team_id, github_installation_id)";
 
 type HarnessRepoRecord = {
   full_name: string | null;
@@ -77,6 +77,7 @@ type HarnessRepoRecord = {
 
 type HarnessSandboxRecord = {
   repo_id: string | null;
+  product_team_id?: string | null;
   sandbox_id: string;
   base_branch: string;
   working_branch: string;
@@ -492,6 +493,7 @@ export function createSandboxHarnessPostHandler(
       sandbox_record_id: id,
       sandbox_id: record.sandbox_id,
       repo: repoRecord?.full_name ?? null,
+      product_team_id: record.product_team_id ?? null,
       ai_billing_source: harnessAiEnv.aiBillingSource,
     };
     const createdAiCallMetadata = {
