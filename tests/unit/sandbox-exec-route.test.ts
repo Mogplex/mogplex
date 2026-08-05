@@ -371,6 +371,8 @@ test("POST /api/sandbox/[id]/exec refreshes repo-scoped GitHub auth before git c
   );
 
   assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  assert.equal((await response.clone().json()).exitCode, 0);
   assert.equal(syncedToken, "fresh-github-token");
   assert.equal(capturedEnv?.["GITHUB_TOKEN"], "fresh-github-token");
   assert.equal(capturedEnv?.["GH_TOKEN"], "fresh-github-token");

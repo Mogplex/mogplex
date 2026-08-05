@@ -56,6 +56,10 @@ test("default-branch harness runs move onto a deterministic delivery branch", as
     "mogplex/agent-12345678abcd"
   );
   assert.equal(commands[0]?.env?.MOGPLEX_CREATE_BRANCH, "1");
+  assert.equal(
+    commands[0]?.env?.MOGPLEX_FALLBACK_BRANCH,
+    "mogplex/agent-12345678abcd"
+  );
 });
 
 test("existing delivery branches are fetched, checked out, and fast-forwarded", async () => {
@@ -78,6 +82,37 @@ test("existing delivery branches are fetched, checked out, and fast-forwarded", 
   assert.equal(commands[0]?.env?.MOGPLEX_BASE_BRANCH, "main");
   assert.equal(commands[0]?.env?.MOGPLEX_WORKING_BRANCH, "mogplex/feature");
   assert.equal(commands[0]?.env?.MOGPLEX_CREATE_BRANCH, "0");
+  assert.equal(
+    commands[0]?.env?.MOGPLEX_FALLBACK_BRANCH,
+    "mogplex/agent-call1"
+  );
+});
+
+test("merged or deleted delivery branches rotate to the current run branch", async () => {
+  const commands: Array<{
+    command: string;
+    env?: Record<string, string>;
+  }> = [];
+  const workspace = await syncHarnessGitWorkspace(
+    sandboxWithResult({
+      commands,
+      stdout: "MOGPLEX_SYNCED_BRANCH=mogplex/agent-call2\n",
+    }),
+    {
+      aiCallId: "call-2",
+      baseBranch: "main",
+      workingBranch: "mogplex/merged-work",
+    }
+  );
+
+  assert.deepEqual(workspace, {
+    baseBranch: "main",
+    workingBranch: "mogplex/agent-call2",
+    createdBranch: true,
+  });
+  assert.match(commands[0]?.command ?? "", /gh pr list --head/);
+  assert.match(commands[0]?.command ?? "", /MERGED/);
+  assert.match(commands[0]?.command ?? "", /CLOSED/);
 });
 
 test("delivery prompt requires tests, commit, push, and a pull request", () => {
@@ -92,6 +127,7 @@ test("delivery prompt requires tests, commit, push, and a pull request", () => {
   assert.match(prompt, /Push mogplex\/fix-checkout/);
   assert.match(prompt, /pull request into main/);
   assert.match(prompt, /Leave no untracked files/);
+  assert.match(prompt, /Never commit files under \.mogplex/);
   assert.ok(prompt.endsWith("Fix the checkout bug"));
 });
 
@@ -117,6 +153,8 @@ test("successful code changes are committed, pushed, and return a PR URL", async
   });
   assert.match(commands[0]?.command ?? "", /git status --porcelain/);
   assert.match(commands[0]?.command ?? "", /git ls-files --others/);
+  assert.match(commands[0]?.command ?? "", /tracked_runtime_files/);
+  assert.match(commands[0]?.command ?? "", /':\(exclude\)\.mogplex'/);
   assert.match(commands[0]?.command ?? "", /git diff --name-only HEAD/);
   assert.match(commands[0]?.command ?? "", /git add -u/);
   assert.doesNotMatch(commands[0]?.command ?? "", /git add -A/);
@@ -171,4 +209,29 @@ test("untracked files fail delivery with an actionable file list", async () => {
   );
   assert.match(commands[0]?.command ?? "", /git ls-files --others/);
   assert.match(commands[0]?.command ?? "", /exit 1/);
+});
+
+test("tracked Mogplex runtime files fail delivery before auto-commit", async () => {
+  const commands: Array<{ command: string; env?: Record<string, string> }> = [];
+  await assert.rejects(
+    () =>
+      publishHarnessPullRequest(
+        sandboxWithResult({
+          commands,
+          exitCode: 1,
+          stderr:
+            "Refusing to deliver tracked Mogplex runtime files:\n.mogplex/mcp.json",
+        }),
+        {
+          prompt: "Fix it",
+          baseBranch: "main",
+          workingBranch: buildHarnessWorkingBranch("call-123"),
+        }
+      ),
+    /Refusing to deliver tracked Mogplex runtime files[\s\S]*mcp\.json/
+  );
+  assert.match(
+    commands[0]?.command ?? "",
+    /git diff --name-only HEAD -- \.mogplex/
+  );
 });

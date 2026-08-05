@@ -23,6 +23,7 @@ export type HarnessPullRequestDelivery = {
 const PULL_REQUEST_MARKER = "MOGPLEX_PULL_REQUEST_URL=";
 const CHANGED_MARKER = "MOGPLEX_CHANGED=";
 const AUTO_COMMITTED_FILE_MARKER = "MOGPLEX_AUTO_COMMITTED_FILE=";
+const SYNCED_BRANCH_MARKER = "MOGPLEX_SYNCED_BRANCH=";
 
 async function runShell(
   sandbox: Sandbox,
@@ -62,6 +63,7 @@ If you change code, you must finish the delivery loop before declaring success:
 4. Open or update a pull request into ${input.baseBranch} and include its URL in your final response.
 
 Leave no untracked files in the repository. Commit intended new files, add disposable files to .gitignore, or delete scratch files before finishing; otherwise delivery fails closed.
+Never commit files under .mogplex; they contain runtime configuration and delivery refuses them.
 
 Do not leave completed work only in the sandbox. If GitHub delivery is blocked, state the exact blocker instead of claiming the work is finished.
 </delivery-contract>
@@ -79,10 +81,11 @@ export async function syncHarnessGitWorkspace(
     env?: Record<string, string>;
   }
 ): Promise<HarnessGitWorkspace> {
-  const createdBranch = input.workingBranch === input.baseBranch;
-  const workingBranch = createdBranch
-    ? buildHarnessWorkingBranch(input.aiCallId)
-    : input.workingBranch;
+  const initialWorkingBranch =
+    input.workingBranch === input.baseBranch
+      ? buildHarnessWorkingBranch(input.aiCallId)
+      : input.workingBranch;
+  const fallbackBranch = buildHarnessWorkingBranch(input.aiCallId);
   const command = buildAgentGitSyncScript();
 
   const result = await runShell(sandbox, command, {
@@ -90,21 +93,30 @@ export async function syncHarnessGitWorkspace(
     env: {
       ...input.env,
       MOGPLEX_BASE_BRANCH: input.baseBranch,
-      MOGPLEX_WORKING_BRANCH: workingBranch,
-      MOGPLEX_CREATE_BRANCH: createdBranch ? "1" : "0",
+      MOGPLEX_WORKING_BRANCH: initialWorkingBranch,
+      MOGPLEX_CREATE_BRANCH:
+        input.workingBranch === input.baseBranch ? "1" : "0",
+      MOGPLEX_FALLBACK_BRANCH: fallbackBranch,
     },
   });
   if (result.exitCode !== 0) {
     const detail = [result.stdout, result.stderr].filter(Boolean).join("\n");
     throw new Error(
-      `Could not synchronize ${workingBranch} before the agent run${detail.trim() ? `: ${detail.trim()}` : ""}. Resolve the branch in Terminal or start a new sandbox, then retry.`
+      `Could not synchronize ${initialWorkingBranch} before the agent run${detail.trim() ? `: ${detail.trim()}` : ""}. Resolve the branch in Terminal or start a new sandbox, then retry.`
     );
   }
+
+  const workingBranch =
+    result.stdout
+      .split("\n")
+      .find((line) => line.startsWith(SYNCED_BRANCH_MARKER))
+      ?.slice(SYNCED_BRANCH_MARKER.length)
+      .trim() || initialWorkingBranch;
 
   return {
     baseBranch: input.baseBranch,
     workingBranch,
-    createdBranch,
+    createdBranch: workingBranch !== input.workingBranch,
   };
 }
 
@@ -136,16 +148,22 @@ if [ "$current_branch" != "$MOGPLEX_WORKING_BRANCH" ]; then
 fi
 changed=false
 if [ -n "$(git status --porcelain)" ]; then
+  tracked_runtime_files="$(git diff --name-only HEAD -- .mogplex)"
+  if [ -n "$tracked_runtime_files" ]; then
+    echo "Refusing to deliver tracked Mogplex runtime files:" >&2
+    echo "$tracked_runtime_files" >&2
+    exit 1
+  fi
   untracked_files="$(git ls-files --others --exclude-standard)"
   if [ -n "$untracked_files" ]; then
     echo "Untracked files remain after the agent run; commit intended new files explicitly before delivery:" >&2
     echo "$untracked_files" >&2
     exit 1
   fi
-  git diff --name-only HEAD | while IFS= read -r file; do
+  git diff --name-only HEAD -- . ':(exclude).mogplex' | while IFS= read -r file; do
     printf '${AUTO_COMMITTED_FILE_MARKER}%s\n' "$file"
   done
-  git add -u
+  git add -u -- . ':(exclude).mogplex'
   if ! git diff --cached --quiet; then
     git commit -m "$MOGPLEX_PR_TITLE"
     changed=true

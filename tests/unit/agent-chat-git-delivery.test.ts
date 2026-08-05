@@ -8,6 +8,7 @@ import {
 test("chat git delivery checks out and publishes the isolated branch before the model runs", async () => {
   let requestUrl = "";
   let requestBody: { command?: string } = {};
+  let requestAccept = "";
   const prepare = createChatGitDeliveryPreparer({
     buildInternalApiHeaders: () => ({
       "Content-Type": "application/json",
@@ -16,6 +17,7 @@ test("chat git delivery checks out and publishes the isolated branch before the 
     fetch: async (input, init) => {
       requestUrl = String(input);
       requestBody = JSON.parse(String(init?.body)) as { command?: string };
+      requestAccept = new Headers(init?.headers).get("Accept") ?? "";
       return Response.json({ exitCode: 0, stdout: "", stderr: "" });
     },
   });
@@ -31,6 +33,7 @@ test("chat git delivery checks out and publishes the isolated branch before the 
     requestUrl,
     "http://localhost:3000/api/sandbox/sandbox%2Flegacy/exec"
   );
+  assert.equal(requestAccept, "application/json");
   assert.match(requestBody.command ?? "", /MOGPLEX_BASE_BRANCH='main'/);
   assert.match(
     requestBody.command ?? "",

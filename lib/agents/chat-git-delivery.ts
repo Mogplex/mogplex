@@ -37,6 +37,7 @@ export function buildChatGitDeliveryCommand(input: {
 MOGPLEX_BASE_BRANCH=${baseBranch}
 MOGPLEX_WORKING_BRANCH=${workingBranch}
 MOGPLEX_CREATE_BRANCH=1
+MOGPLEX_FALLBACK_BRANCH=''
 ${buildAgentGitSyncScript()}`.trim();
 }
 
@@ -52,11 +53,13 @@ export function createChatGitDeliveryPreparer(
   return async function prepareChatGitDelivery(
     input: ChatGitDeliveryInput
   ): Promise<void> {
+    const headers = new Headers(deps.buildInternalApiHeaders(input.userId));
+    headers.set("Accept", "application/json");
     const response = await deps.fetch(
       `${resolveAppBaseUrl()}/api/sandbox/${encodeURIComponent(input.sandboxId)}/exec`,
       {
         method: "POST",
-        headers: deps.buildInternalApiHeaders(input.userId),
+        headers,
         body: JSON.stringify({
           command: buildChatGitDeliveryCommand(input),
         }),
