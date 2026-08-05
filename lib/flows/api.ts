@@ -1417,6 +1417,7 @@ export async function streamFlowAssistantChat(input: {
         error: finishReason === "error" ? "Flow assistant stream failed" : null,
         metadata: {
           surface: "flow_assistant",
+          team_id: input.teamId ?? null,
           flow_id: input.flowId,
           mode: "chat",
           finish_reason: finishReason,
@@ -1611,6 +1612,7 @@ export async function generateFlowAssistantSuggestion(input: {
     status: "success",
     metadata: {
       surface: "flow_assistant",
+      team_id: input.teamId ?? null,
       flow_id: input.flowId,
       mode: "suggestion",
       finish_reason: generation.finishReason,

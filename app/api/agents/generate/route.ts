@@ -190,6 +190,7 @@ export function createAgentGeneratePostHandler(
     const modelId =
       generatorModel || (await deps.resolveUserDefaultModelId(userId, null));
 
+    const teamId = readActiveTeamIdHeader(req);
     let resolved;
     try {
       resolved = await deps.resolveUserLanguageModel(userId, modelId, {
@@ -197,7 +198,7 @@ export function createAgentGeneratePostHandler(
           userId,
           tags: ["surface:agent_generator"],
         },
-        teamId: readActiveTeamIdHeader(req),
+        teamId,
       });
     } catch (err) {
       return Response.json(
@@ -249,6 +250,7 @@ export function createAgentGeneratePostHandler(
             finishReason === "error" ? "Agent generator stream failed" : null,
           metadata: {
             surface: "agent_generator",
+            team_id: teamId,
             finish_reason: finishReason,
           },
           logPrefix: "[agent-generate]",

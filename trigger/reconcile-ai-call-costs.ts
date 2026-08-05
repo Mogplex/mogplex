@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { logger, metadata, schedules } from "@trigger.dev/sdk/v3";
+import { meterReconciledTokenUsage } from "@/lib/billing/token-usage";
 import { createObservabilityGatewayClient } from "@/lib/observability/gateway-client";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
@@ -14,12 +15,15 @@ const STALE_WARNING_MS = 12 * 60 * 60 * 1000;
 
 export type AiCallCostReconciliationRow = {
   id: string;
+  user_id: string;
+  model: string;
   /** @deprecated Use gateway_generation_ids array instead. Kept for backward compat. */
   gateway_generation_id: string;
   /** All gateway generation IDs across tool-loop steps. W11 sums cost across all. */
   gateway_generation_ids: string[] | null;
   cost_source: "trigger" | "gateway" | "manual" | null;
   completed_at: string;
+  metadata: Record<string, unknown> | null;
 };
 
 export type AiCallCostReconciliationSummary = {
@@ -49,6 +53,7 @@ type AiCallCostReconciliationDeps = {
   supabase: typeof supabaseAdmin;
   sentry: SentryClient;
   now: () => Date;
+  meterReconciledTokenUsage: typeof meterReconciledTokenUsage;
 };
 
 type AiCallCostReconciliationOutcome = "reconciled" | "skipped" | "errored";
@@ -57,6 +62,7 @@ const defaultDeps: AiCallCostReconciliationDeps = {
   supabase: supabaseAdmin,
   sentry: Sentry,
   now: () => new Date(),
+  meterReconciledTokenUsage,
 };
 
 function getGatewayCost(info: unknown): number | null {
@@ -261,7 +267,7 @@ export async function loadAiCallCostReconciliationRows(
   const { data, error } = await deps.supabase
     .from("ai_calls")
     .select(
-      "id, gateway_generation_id, gateway_generation_ids, cost_source, completed_at"
+      "id, user_id, model, gateway_generation_id, gateway_generation_ids, cost_source, completed_at, metadata"
     )
     .not("gateway_generation_id", "is", null)
     .isDistinct("cost_source", "gateway")
@@ -314,7 +320,10 @@ export async function persistGatewayAiCallCost(
 }
 
 async function reconcileAiCallCostRow(
-  deps: Pick<AiCallCostReconciliationDeps, "supabase" | "sentry">,
+  deps: Pick<
+    AiCallCostReconciliationDeps,
+    "supabase" | "sentry" | "meterReconciledTokenUsage"
+  >,
   gateway: GatewayGenerationInfoClient,
   row: AiCallCostReconciliationRow,
   now: Date
@@ -343,6 +352,20 @@ async function reconcileAiCallCostRow(
       }
       return "skipped";
     }
+
+    // A cost resolved by the platform Gateway is a platform-billed call. BYOK
+    // calls are not visible to this Gateway client and remain unreconciled.
+    // Post the idempotent debit before marking the cost reconciled: if the DB
+    // update fails, the next run safely sees the duplicate debit and retries it.
+    await deps.meterReconciledTokenUsage({
+      aiCallId: row.id,
+      userId: row.user_id,
+      model: row.model,
+      costUsd: result.totalCost,
+      completedAt: row.completed_at,
+      generationIds,
+      metadata: row.metadata,
+    });
 
     const updated = await persistGatewayAiCallCost(deps, {
       rowId: row.id,

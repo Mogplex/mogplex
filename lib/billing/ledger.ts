@@ -46,6 +46,22 @@ export type IncludedCreditExpiry = {
   sourceRef: string;
 };
 
+export type BillingUsageDebit = {
+  accountId: string;
+  amountCents: number;
+  kind: Extract<LedgerKind, "usage_tokens" | "usage_sandbox">;
+  sourceRef: string;
+  period: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type BillingUsageDebitResult = {
+  posted: boolean;
+  debitedCents: number;
+  includedDebitedCents: number;
+  purchasedDebitedCents: number;
+};
+
 export async function postLedgerEntry(
   entry: LedgerEntry,
   client: SupabaseClient = supabaseAdmin
@@ -112,6 +128,40 @@ export async function expireIncludedCredit(
     throw new Error(`included credit expiry failed: ${error.message}`);
   }
   return Number(data ?? 0);
+}
+
+export async function postBillingUsageDebit(
+  debit: BillingUsageDebit,
+  client: SupabaseClient = supabaseAdmin
+): Promise<BillingUsageDebitResult> {
+  if (!Number.isInteger(debit.amountCents) || debit.amountCents <= 0) {
+    throw new TypeError(
+      `billing usage debit must be a positive integer cents amount, got ${debit.amountCents}`
+    );
+  }
+  const { data, error } = await client.rpc("post_billing_usage_debit", {
+    p_account: debit.accountId,
+    p_amount: debit.amountCents,
+    p_kind: debit.kind,
+    p_source_ref: debit.sourceRef,
+    p_period: debit.period,
+    p_metadata: debit.metadata ?? {},
+  });
+  if (error) {
+    throw new Error(`billing usage debit failed: ${error.message}`);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    posted?: boolean;
+    debited_cents?: number | string;
+    included_debited_cents?: number | string;
+    purchased_debited_cents?: number | string;
+  } | null;
+  return {
+    posted: row?.posted === true,
+    debitedCents: Number(row?.debited_cents ?? 0),
+    includedDebitedCents: Number(row?.included_debited_cents ?? 0),
+    purchasedDebitedCents: Number(row?.purchased_debited_cents ?? 0),
+  };
 }
 
 export async function getBillingBalance(

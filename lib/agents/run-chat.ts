@@ -358,6 +358,7 @@ function recordRunChatAiCall(input: {
       repo_id: input.context.repoId ?? null,
       metadata: {
         surface: "slack",
+        team_id: input.context.teamId ?? null,
         repo: input.context.repoFullName ?? null,
         repo_owner: input.context.repoOwner ?? null,
         repo_name: input.context.repoName ?? null,

@@ -16,10 +16,13 @@ function createRow(
 ): AiCallCostReconciliationRow {
   return {
     id: "call_1",
+    user_id: "user-1",
+    model: "anthropic/claude-sonnet-4",
     gateway_generation_id: "gen_x",
     gateway_generation_ids: null,
     cost_source: "trigger",
     completed_at: "2026-05-16T10:00:00.000Z",
+    metadata: null,
     ...overrides,
   };
 }
@@ -62,7 +65,7 @@ function createReconcileSupabase(
           }
           assert.equal(
             columns,
-            "id, gateway_generation_id, gateway_generation_ids, cost_source, completed_at"
+            "id, user_id, model, gateway_generation_id, gateway_generation_ids, cost_source, completed_at, metadata"
           );
           return builder;
         },
@@ -158,6 +161,54 @@ test("reconciles a trigger-owned row with the full gateway cost contract", async
       eq: ["id", "call_1"],
       or: "cost_source.isdistinct.gateway,gateway_generation_id.isdistinct.gen_x",
       select: "id",
+    },
+  ]);
+});
+
+test("posts the exact Gateway token cost before marking it reconciled", async () => {
+  const { runAiCallCostReconciliation } = await loadReconcileModule();
+  const events: string[] = [];
+  const { client } = createReconcileSupabase([createRow()]);
+  const originalFrom = client.from;
+  client.from = ((table: string) => {
+    const builder = originalFrom(table);
+    const originalUpdate = builder.update;
+    builder.update = ((payload: Record<string, unknown>) => {
+      events.push("persist");
+      return originalUpdate(payload);
+    }) as typeof builder.update;
+    return builder;
+  }) as typeof client.from;
+
+  const metered: unknown[] = [];
+  const summary = await runAiCallCostReconciliation({
+    supabase: client as never,
+    now: () => new Date("2026-05-16T11:00:00.000Z"),
+    sentry: {
+      captureException: () => undefined,
+      captureMessage: () => undefined,
+    },
+    gateway: {
+      getGenerationInfo: async () => ({ cost: 0.0834 }),
+    },
+    meterReconciledTokenUsage: async (value) => {
+      events.push("debit");
+      metered.push(value);
+      return { metered: true, reason: "posted", amountCents: 8 };
+    },
+  });
+
+  assert.equal(summary.reconciled, 1);
+  assert.deepEqual(events, ["debit", "persist"]);
+  assert.deepEqual(metered, [
+    {
+      aiCallId: "call_1",
+      userId: "user-1",
+      model: "anthropic/claude-sonnet-4",
+      costUsd: 0.0834,
+      completedAt: "2026-05-16T10:00:00.000Z",
+      generationIds: ["gen_x"],
+      metadata: null,
     },
   ]);
 });

@@ -7,6 +7,8 @@ const ACCOUNT_ID = "00000000-0000-4000-8000-000000000001";
 const USER_ID = "00000000-0000-4000-8000-000000000002";
 const CANCELLATION_ACCOUNT_ID = "00000000-0000-4000-8000-000000000003";
 const CANCELLATION_USER_ID = "00000000-0000-4000-8000-000000000004";
+const USAGE_ACCOUNT_ID = "00000000-0000-4000-8000-000000000005";
+const USAGE_USER_ID = "00000000-0000-4000-8000-000000000006";
 
 describe("billing ledger migration", () => {
   let db: PGlite;
@@ -16,6 +18,7 @@ describe("billing ledger migration", () => {
     for (const migrationName of [
       "20260804200000_billing_foundation.sql",
       "20260804210000_atomic_billing_cancellation_expiry.sql",
+      "20260805060000_billing_usage_debits.sql",
     ]) {
       const migration = await readFile(
         path.resolve(
@@ -28,8 +31,15 @@ describe("billing ledger migration", () => {
     }
     await db.query(
       `insert into billing_accounts (id, owner_type, owner_user_id)
-       values ($1, 'user', $2), ($3, 'user', $4)`,
-      [ACCOUNT_ID, USER_ID, CANCELLATION_ACCOUNT_ID, CANCELLATION_USER_ID]
+       values ($1, 'user', $2), ($3, 'user', $4), ($5, 'user', $6)`,
+      [
+        ACCOUNT_ID,
+        USER_ID,
+        CANCELLATION_ACCOUNT_ID,
+        CANCELLATION_USER_ID,
+        USAGE_ACCOUNT_ID,
+        USAGE_USER_ID,
+      ]
     );
   });
 
@@ -150,5 +160,89 @@ describe("billing ledger migration", () => {
       [ACCOUNT_ID]
     );
     expect(spend.rows[0]?.billing_monthly_spend).toBe(125);
+  });
+
+  it("burns included credit before purchased credit and deduplicates usage", async () => {
+    await db.query(
+      `select post_credit_ledger_entry(
+         $1, 75, 'included', 'grant', 'grant:usage', '2026-08', '{}'
+       )`,
+      [USAGE_ACCOUNT_ID]
+    );
+    await db.query(
+      `select post_credit_ledger_entry(
+         $1, 100, 'purchased', 'topup', 'topup:usage', null, '{}'
+       )`,
+      [USAGE_ACCOUNT_ID]
+    );
+
+    const debit = await db.query<{
+      posted: boolean;
+      debited_cents: number;
+      included_debited_cents: number;
+      purchased_debited_cents: number;
+    }>(
+      `select * from post_billing_usage_debit(
+         $1, 125, 'usage_tokens', 'tok:call-1', '2026-08',
+         '{"ai_call_id":"call-1"}'
+       )`,
+      [USAGE_ACCOUNT_ID]
+    );
+    expect(debit.rows).toEqual([
+      {
+        posted: true,
+        debited_cents: 125,
+        included_debited_cents: 75,
+        purchased_debited_cents: 50,
+      },
+    ]);
+
+    const duplicate = await db.query<{
+      posted: boolean;
+      debited_cents: number;
+    }>(
+      `select posted, debited_cents from post_billing_usage_debit(
+         $1, 125, 'usage_tokens', 'tok:call-1', '2026-08', '{}'
+       )`,
+      [USAGE_ACCOUNT_ID]
+    );
+    expect(duplicate.rows).toEqual([{ posted: false, debited_cents: 0 }]);
+
+    const balance = await db.query<{
+      included_cents: number;
+      purchased_cents: number;
+      total_cents: number;
+    }>("select * from billing_balance($1)", [USAGE_ACCOUNT_ID]);
+    expect(balance.rows).toEqual([
+      { included_cents: 0, purchased_cents: 50, total_cents: 50 },
+    ]);
+  });
+
+  it("allows an in-flight usage debit to finish into a negative balance", async () => {
+    const debit = await db.query<{
+      posted: boolean;
+      debited_cents: number;
+      included_debited_cents: number;
+      purchased_debited_cents: number;
+    }>(
+      `select * from post_billing_usage_debit(
+         $1, 80, 'usage_tokens', 'tok:call-2', '2026-08', '{}'
+       )`,
+      [USAGE_ACCOUNT_ID]
+    );
+    expect(debit.rows).toEqual([
+      {
+        posted: true,
+        debited_cents: 80,
+        included_debited_cents: 0,
+        purchased_debited_cents: 80,
+      },
+    ]);
+
+    const balance = await db.query<{ total_cents: number }>(
+      "select total_cents from billing_balance($1)",
+      [USAGE_ACCOUNT_ID]
+    );
+    expect(balance.rows[0]?.total_cents).toBe(-30);
   });
 });

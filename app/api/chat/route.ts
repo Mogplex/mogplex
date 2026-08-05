@@ -65,6 +65,7 @@ type ChatRunMetadata = {
   repo_owner: string | null;
   repo_name: string | null;
   repo_branch: string | null;
+  team_id: string | null;
 };
 
 type ChatMemoryContext = {
@@ -117,13 +118,17 @@ function getChatRunScope(body: ChatRequestBody): ChatRunScope {
   };
 }
 
-function buildChatRunMetadata(body: ChatRequestBody): ChatRunMetadata {
+function buildChatRunMetadata(
+  body: ChatRequestBody,
+  teamId: string | null
+): ChatRunMetadata {
   return {
     sandbox_id: body.sandboxId ?? null,
     repo: body.repoFullName ?? null,
     repo_owner: body.repoOwner ?? null,
     repo_name: body.repoName ?? null,
     repo_branch: body.repoBranch ?? null,
+    team_id: teamId,
   };
 }
 
@@ -612,6 +617,7 @@ async function executeChatRequest(input: {
   callStartedAt: string;
 }) {
   const scope = getChatRunScope(input.body);
+  const teamId = readActiveTeamIdHeader(input.req);
   let aiCall: ActiveChatCall | null = null;
 
   try {
@@ -624,7 +630,7 @@ async function executeChatRequest(input: {
       limitClaimId: input.limitClaimId,
       startedAt: input.callStartedAt,
       status: "pending",
-      metadata: buildChatRunMetadata(input.body),
+      metadata: buildChatRunMetadata(input.body, teamId),
     });
     const activeCall = aiCall;
 
@@ -693,7 +699,7 @@ async function executeChatRequest(input: {
         workspaceSessionId: input.body.workspaceSessionId,
         conversationId: input.body.conversationId,
         enableTools: input.body.enableTools,
-        teamId: readActiveTeamIdHeader(input.req),
+        teamId,
       },
       resolvedModel: input.resolvedModel,
       uiMessages: input.body.messages as Parameters<
