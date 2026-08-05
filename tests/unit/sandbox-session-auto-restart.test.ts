@@ -4,13 +4,16 @@ import { getSessionSandboxRestartCandidate } from "../../lib/sandbox/session-aut
 import { sandboxRecord } from "../../lib/sandbox/test-fixtures";
 import type { StopReason } from "../../lib/types";
 
-function candidateForStopReason(stopReason: StopReason | null) {
+function candidateForStopReason(
+  stopReason: StopReason | null,
+  status: "stopped" | "error" = "stopped"
+) {
   return getSessionSandboxRestartCandidate({
     activeRepoId: "repo-1",
     activeSessionId: "session-1",
     activeSessionSandbox: sandboxRecord({
-      status: "stopped",
-      healthStatus: "stopped",
+      status,
+      healthStatus: status,
       stopReason,
     }),
     activeSessionSandboxId: "record-1",
@@ -25,6 +28,10 @@ test("manual sandbox stops stay stopped until an explicit restart", () => {
 
 test("billing-depleted sandboxes cannot auto-restart", () => {
   assert.equal(candidateForStopReason("billing_depleted"), null);
+});
+
+test("errored records from a manual stop stay terminal", () => {
+  assert.equal(candidateForStopReason("manual", "error"), null);
 });
 
 test("unexpected provider loss can still recover the restored session", () => {

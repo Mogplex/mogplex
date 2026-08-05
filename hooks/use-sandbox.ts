@@ -960,7 +960,12 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
         state,
         mergeSandboxRecord(
           existing,
-          { id: recordId, status: "stopped", health_status: "stopped" },
+          {
+            id: recordId,
+            status: "stopped",
+            health_status: "stopped",
+            stop_reason: "manual",
+          },
           existing.repo_id
         )
       );
