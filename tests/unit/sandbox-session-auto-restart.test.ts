@@ -35,3 +35,7 @@ test("unexpected provider loss can still recover the restored session", () => {
     pendingSandboxBranch: "feature/chip",
   });
 });
+
+test("legacy stopped records without a reason keep recovery behavior", () => {
+  assert.ok(candidateForStopReason(null));
+});

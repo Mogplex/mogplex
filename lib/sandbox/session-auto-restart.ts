@@ -51,6 +51,8 @@ export function getSessionSandboxRestartCandidate({
 
   // Stop is an explicit terminal action. Billing-depleted records must also
   // remain terminal so a stale workspace cannot relaunch unfunded compute.
+  // The stop store waits for the server response, which supplies this reason,
+  // before publishing the stopped record.
   if (blocksImplicitRestart(activeSessionSandbox)) {
     return null;
   }
