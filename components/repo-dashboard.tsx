@@ -19,7 +19,6 @@ import {
   type SandboxUiState,
 } from "@/lib/sandbox/ui-state"
 import { cn } from "@/lib/utils"
-import { resolveEffectiveSandboxTimeoutMs } from "@/lib/repo-settings"
 import { RepoSettingsDialog } from "./repo-settings-dialog"
 import { WorkspaceDialog } from "./workspace-dialog"
 import { CreateWorkspaceRepoDialog } from "./create-workspace-repo-dialog"
@@ -86,13 +85,6 @@ function getRepoOwner(repo: Repo) {
 
 function getRepoName(repo: Repo) {
   return repo.name || repo.full_name.split("/")[1] || repo.full_name
-}
-
-function formatTimeoutLabel(repo: Repo) {
-  return `${Math.round(resolveEffectiveSandboxTimeoutMs({
-    repoTimeoutMs: repo.sandbox_timeout_ms,
-    workspaceTimeoutMs: repo.workspace?.sandbox_timeout_ms,
-  }) / 60000)}m timeout`
 }
 
 function RepoPill({
@@ -1959,7 +1951,7 @@ function SandboxStatusBadge({
     )
   }
   if (isSandboxUiIdleWarning(sandboxUiState)) {
-    return <RepoPill dotClassName="bg-amber-300">Idle soon</RepoPill>
+    return <RepoPill dotClassName="bg-emerald-300">Ready</RepoPill>
   }
   if (sandboxUiState.kind === "degraded" && sandboxUiState.reason === "app_error") {
     return renderSandboxErrorPill(
@@ -1973,7 +1965,7 @@ function SandboxStatusBadge({
   if (sandboxUiState.kind === "degraded" && sandboxUiState.reason === "unreachable") {
     return <RepoPill dotClassName="bg-amber-300">Unreachable</RepoPill>
   }
-  if (isSandboxUiRuntimeRunning(sandboxUiState)) return <RepoPill dotClassName="bg-emerald-300">Live preview</RepoPill>
+  if (isSandboxUiRuntimeRunning(sandboxUiState)) return <RepoPill dotClassName="bg-emerald-300">Ready</RepoPill>
   if (sandboxUiState.kind === "errored") {
     return renderSandboxErrorPill(
       "Error",
@@ -2345,7 +2337,6 @@ function getRepoCardMetaChips(repo: Repo, sandbox?: SandboxRecord | null) {
       ? `${displayedBranch} branch`
       : `${displayedBranch} active branch`,
     repo.dev_port_auto === false ? `preview :${repo.dev_port || 3000}` : "preview auto",
-    formatTimeoutLabel(repo),
   ]
 }
 

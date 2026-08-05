@@ -22,11 +22,6 @@ import {
 import {
   DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
   DEFAULT_SANDBOX_TIMEOUT_MS,
-  MAX_SANDBOX_TIMEOUT_MS,
-  MIN_SANDBOX_IDLE_TIMEOUT_MS,
-  MIN_SANDBOX_TIMEOUT_MS,
-  normalizeSandboxIdleTimeoutMs,
-  normalizeSandboxTimeoutMs,
 } from "@/lib/repo-settings";
 import { useVercelTargets } from "@/hooks/use-vercel-targets";
 import { useUser } from "@/hooks/use-user";
@@ -50,21 +45,6 @@ export function WorkspaceDialog({ workspace, onClose, onSaved }: Props) {
   const [billingMode, setBillingMode] = useState(
     createWorkspaceSandboxSettingsDraft(workspace).billingMode
   );
-  const [timeoutMinutes, setTimeoutMinutes] = useState(
-    String(
-      Math.round(
-        (workspace?.sandbox_timeout_ms ?? DEFAULT_SANDBOX_TIMEOUT_MS) / 60000
-      )
-    )
-  );
-  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(
-    String(
-      Math.round(
-        (workspace?.sandbox_idle_timeout_ms ??
-          DEFAULT_SANDBOX_IDLE_TIMEOUT_MS) / 60000
-      )
-    )
-  );
   const [vercelTeamId, setVercelTeamId] = useState(
     createWorkspaceSandboxSettingsDraft(workspace).vercelTeamId
   );
@@ -81,28 +61,16 @@ export function WorkspaceDialog({ workspace, onClose, onSaved }: Props) {
     setName(workspace?.name || "");
     setDescription(workspace?.description || "");
     setBillingMode(draft.billingMode);
-    setTimeoutMinutes(
-      String(
-        Math.round((draft.timeoutMs ?? DEFAULT_SANDBOX_TIMEOUT_MS) / 60000)
-      )
-    );
-    setIdleTimeoutMinutes(
-      String(
-        Math.round(
-          (draft.idleTimeoutMs ?? DEFAULT_SANDBOX_IDLE_TIMEOUT_MS) / 60000
-        )
-      )
-    );
     setVercelTeamId(draft.vercelTeamId);
     setVercelProjectId(draft.vercelProjectId);
   }, [workspace]);
 
   const draft = {
     billingMode,
-    timeoutMs: normalizeSandboxTimeoutMs(Number(timeoutMinutes) * 60 * 1000),
-    idleTimeoutMs: normalizeSandboxIdleTimeoutMs(
-      Number(idleTimeoutMinutes) * 60 * 1000
-    ),
+    timeoutMs:
+      workspace?.sandbox_timeout_ms ?? DEFAULT_SANDBOX_TIMEOUT_MS,
+    idleTimeoutMs:
+      workspace?.sandbox_idle_timeout_ms ?? DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
     vercelTeamId,
     vercelProjectId,
   };
@@ -269,48 +237,6 @@ export function WorkspaceDialog({ workspace, onClose, onSaved }: Props) {
               Repos in this project inherit this billing mode unless they
               explicitly override it. Effective owner:{" "}
               {sandboxModel.effectiveOwnerLabel}.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-foreground text-xs font-medium">
-              Default Sandbox Lifetime
-            </label>
-            <Input
-              type="number"
-              min={MIN_SANDBOX_TIMEOUT_MS / 60000}
-              max={MAX_SANDBOX_TIMEOUT_MS / 60000}
-              step={5}
-              value={timeoutMinutes}
-              onChange={(event) => setTimeoutMinutes(event.target.value)}
-              className="h-9"
-            />
-            <p className="text-muted-foreground text-[11px]">
-              How long a sandbox VM stays alive before Vercel tears it down.
-              Repos inherit this unless they override it. Allowed range:{" "}
-              {MIN_SANDBOX_TIMEOUT_MS / 60000}-{MAX_SANDBOX_TIMEOUT_MS / 60000}{" "}
-              minutes.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-foreground text-xs font-medium">
-              Default Sandbox Idle Timeout
-            </label>
-            <Input
-              type="number"
-              min={MIN_SANDBOX_IDLE_TIMEOUT_MS / 60000}
-              max={MAX_SANDBOX_TIMEOUT_MS / 60000}
-              step={5}
-              value={idleTimeoutMinutes}
-              onChange={(event) => setIdleTimeoutMinutes(event.target.value)}
-              className="h-9"
-            />
-            <p className="text-muted-foreground text-[11px]">
-              How long a sandbox can sit untouched before it is stopped
-              automatically. Use Pause in the preview toolbar to stop sooner.
-              Allowed range: {MIN_SANDBOX_IDLE_TIMEOUT_MS / 60000}-
-              {MAX_SANDBOX_TIMEOUT_MS / 60000} minutes.
             </p>
           </div>
 

@@ -1,10 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import {
-  SandboxChip,
-  type SandboxChipTimeInfo,
-} from "@/components/sandbox-chip";
+import { SandboxChip } from "@/components/sandbox-chip";
 import type { Session } from "@/hooks/use-sessions";
 import { sandboxRecord } from "@/lib/sandbox/test-fixtures";
 import {
@@ -40,11 +37,8 @@ export function stateWith(
   return state;
 }
 
-export function renderChip(
-  state: SandboxUiState,
-  timeInfo?: SandboxChipTimeInfo | null
-) {
-  return renderToStaticMarkup(createElement(SandboxChip, { state, timeInfo }));
+export function renderChip(state: SandboxUiState) {
+  return renderToStaticMarkup(createElement(SandboxChip, { state }));
 }
 
 describe("SandboxChip", () => {
@@ -95,8 +89,7 @@ describe("SandboxChip", () => {
               record: sandboxRecord({ healthStatus: "starting" }),
             }),
             isSandboxUiStarting
-          ),
-          { remainingMin: 10, remainingMs: 600_000 }
+          )
         ),
       ],
       [
@@ -108,8 +101,7 @@ describe("SandboxChip", () => {
               record: sandboxRecord({ healthStatus: "running" }),
             }),
             isSandboxUiLive
-          ),
-          { remainingMin: 10, remainingMs: 600_000 }
+          )
         ),
       ],
       [
@@ -121,8 +113,7 @@ describe("SandboxChip", () => {
               record: sandboxRecord({ healthStatus: "idle_warning" }),
             }),
             isSandboxUiDegraded
-          ),
-          { remainingMin: 2, remainingMs: 120_000 }
+          )
         ),
       ],
       [
@@ -231,11 +222,11 @@ describe("SandboxChip", () => {
         ],
         [
           "live",
-          "<span class="inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] border-accent-green/20 bg-accent-green/[0.06] text-accent-green"><span class="h-1.5 w-1.5 rounded-full bg-accent-green"></span>live · 10m left</span>",
+          "<span class="inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] border-accent-green/20 bg-accent-green/[0.06] text-accent-green"><span class="h-1.5 w-1.5 rounded-full bg-accent-green"></span>ready</span>",
         ],
         [
           "degraded:idle_warning",
-          "<span class="inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] border-amber-400/20 bg-amber-400/[0.06] text-amber-400"><span class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>idle · 2m left</span>",
+          "<span class="inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] border-accent-green/20 bg-accent-green/[0.06] text-accent-green"><span class="h-1.5 w-1.5 rounded-full bg-accent-green"></span>ready</span>",
         ],
         [
           "degraded:app_error",
@@ -269,7 +260,7 @@ describe("SandboxChip", () => {
     `);
   });
 
-  it("falls back to bare label when timeInfo is missing", () => {
+  it("keeps runtime policy hidden behind a stable ready state", () => {
     const liveState = stateWith(
       resolveSandboxUiState({
         session: null,
@@ -285,57 +276,9 @@ describe("SandboxChip", () => {
       isSandboxUiDegraded
     );
 
-    expect(renderChip(liveState)).toContain(">live</span>");
-    expect(renderChip(liveState)).not.toContain("0m left");
-    expect(renderChip(idleState)).toContain(">idle</span>");
-    expect(renderChip(idleState)).not.toContain("0m left");
-  });
-
-  it("escalates the live chip color as the timeout approaches", () => {
-    const liveState = stateWith(
-      resolveSandboxUiState({
-        session: null,
-        record: sandboxRecord({ healthStatus: "running" }),
-      }),
-      isSandboxUiLive
-    );
-
-    const normal = renderChip(liveState, {
-      remainingMin: 10,
-      remainingMs: 600_000,
-    });
-    expect(normal).toContain("text-accent-green");
-    expect(normal).not.toContain("animate-pulse");
-
-    const warning = renderChip(liveState, {
-      remainingMin: 1,
-      remainingMs: 90_000,
-    });
-    expect(warning).toContain("text-amber-400");
-    expect(warning).toContain("animate-pulse");
-
-    const critical = renderChip(liveState, {
-      remainingMin: 1,
-      remainingMs: 15_000,
-    });
-    expect(critical).toContain("text-red-500");
-    expect(critical).not.toContain("animate-pulse");
-  });
-
-  it("pulses the idle chip dot", () => {
-    const idleState = stateWith(
-      resolveSandboxUiState({
-        session: null,
-        record: sandboxRecord({ healthStatus: "idle_warning" }),
-      }),
-      isSandboxUiDegraded
-    );
-
-    const rendered = renderChip(idleState, {
-      remainingMin: 2,
-      remainingMs: 120_000,
-    });
-    expect(rendered).toContain("text-amber-400");
-    expect(rendered).toContain("animate-pulse");
+    for (const rendered of [renderChip(liveState), renderChip(idleState)]) {
+      expect(rendered).toContain(">ready</span>");
+      expect(rendered).not.toMatch(/\d+m left|idle|animate-pulse/);
+    }
   });
 });

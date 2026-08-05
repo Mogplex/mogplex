@@ -10,16 +10,12 @@ import {
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { useSessionsStore } from "@/hooks/use-sessions";
-import {
-  resolveEffectiveSandboxTimeoutMs,
-  resolveSandboxRootDirectory,
-} from "@/lib/repo-settings";
+import { resolveSandboxRootDirectory } from "@/lib/repo-settings";
 import {
   presentSandboxError,
   type SandboxError,
 } from "@/lib/sandbox/error-state";
 import {
-  isSandboxUiIdleWarning,
   isSandboxUiRuntimeRunning,
   resolveSandboxUiState,
   type SandboxUiState,
@@ -322,49 +318,6 @@ function buildSplitSandboxOverrides(
   return undefined;
 }
 
-function useTimeRemaining(sandbox?: { id: string } | null) {
-  const [now, setNow] = useState(() => Date.now());
-
-  const sandboxRecord = useSandboxStore((s) => {
-    if (!sandbox) return null;
-    return s.getSandboxById(sandbox.id);
-  });
-
-  const activeRepo = useSessionsStore((s) => {
-    const session =
-      s.sessions.find((sess) => sess.id === s.activeSessionId) || s.sessions[0];
-    return session?.activeRepo ?? null;
-  });
-
-  const timeoutMs = resolveEffectiveSandboxTimeoutMs({
-    repoTimeoutMs: activeRepo?.sandbox_timeout_ms,
-    workspaceTimeoutMs: activeRepo?.workspace?.sandbox_timeout_ms,
-  });
-  const sandboxUiState = resolveSandboxUiState({
-    session: null,
-    record: sandboxRecord,
-  });
-  const runtimeRunning = isSandboxUiRuntimeRunning(sandboxUiState);
-  const recordId = sandboxRecord?.id;
-
-  useEffect(() => {
-    if (!runtimeRunning) return;
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [recordId, runtimeRunning]);
-
-  if (!sandboxRecord || !isSandboxUiRuntimeRunning(sandboxUiState)) return null;
-
-  const lastActive = new Date(
-    sandboxRecord.last_active_at || sandboxRecord.created_at
-  ).getTime();
-  const remainingMs = timeoutMs - (now - lastActive);
-  const remainingMin = Math.max(0, Math.ceil(remainingMs / 60_000));
-  const isIdleWarning = isSandboxUiIdleWarning(sandboxUiState);
-
-  return { remainingMs, remainingMin, isIdleWarning };
-}
-
 /**
  * Subtle monospaced tag advertising the workspace path the sandbox is
  * actually running at. Renders only when the path is a non-empty string —
@@ -394,8 +347,6 @@ function SandboxIndicator({
   sandbox?: { id: string } | null;
   creating?: boolean;
 }) {
-  const timeInfo = useTimeRemaining(sandbox);
-
   const sandboxRecord = useSandboxStore((s) => {
     if (!sandbox) return null;
     return s.getSandboxById(sandbox.id);
@@ -411,10 +362,10 @@ function SandboxIndicator({
       sandboxId: sandbox?.id ?? "pending",
       phase: "creating",
     };
-    return <SandboxChip state={creatingState} timeInfo={timeInfo} />;
+    return <SandboxChip state={creatingState} />;
   }
 
-  return <SandboxChip state={sandboxUiState} timeInfo={timeInfo} />;
+  return <SandboxChip state={sandboxUiState} />;
 }
 
 function PaneBadge({ status }: { status?: string }) {

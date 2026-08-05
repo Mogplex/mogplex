@@ -434,6 +434,9 @@ test("workspace user billing persists after creating a linked Vercel project", a
   await page.getByRole("button", { name: "Manage" }).click();
   await page.getByText("Rename project").click();
 
+  await expect(page.getByText("Default Sandbox Lifetime")).toHaveCount(0);
+  await expect(page.getByText("Default Sandbox Idle Timeout")).toHaveCount(0);
+
   await page
     .getByRole("combobox", { name: "Default Sandbox Billing" })
     .selectOption("user_vercel_project");
@@ -493,6 +496,8 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   await page.getByRole("button", { name: "Repo actions" }).click();
   await page.getByText("Space Settings").click();
 
+  await expect(page.getByText("Sandbox Timeout")).toHaveCount(0);
+
   await expect(
     page.getByText("Effective owner: Your Vercel project.")
   ).toBeVisible();
@@ -506,9 +511,15 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   await page
     .getByRole("combobox", { name: "Repo-linked Vercel Project" })
     .selectOption("repo-app");
+  const pinProjectResponse = page.waitForResponse(
+    (response) =>
+      /\/api\/repos(?:\?.*)?$/.test(response.url()) &&
+      response.request().method() === "PATCH"
+  );
   await page
     .getByRole("button", { name: "Save Settings" })
     .evaluate((el: HTMLElement) => el.click());
+  await pinProjectResponse;
   await expect(page.getByText("Space Settings")).not.toBeVisible();
 
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
@@ -537,9 +548,15 @@ test("repo project pinning persists inherited workspace team and can be cleared 
   await page
     .getByRole("combobox", { name: "Repo-linked Vercel Project" })
     .selectOption("");
+  const clearProjectResponse = page.waitForResponse(
+    (response) =>
+      /\/api\/repos(?:\?.*)?$/.test(response.url()) &&
+      response.request().method() === "PATCH"
+  );
   await page
     .getByRole("button", { name: "Save Settings" })
     .evaluate((el: HTMLElement) => el.click());
+  await clearProjectResponse;
 
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
     sandbox_billing_mode_override: "user_vercel_project",
