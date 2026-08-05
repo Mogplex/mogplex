@@ -729,7 +729,7 @@ async function handleSandboxCreateContextFailure(input: {
   };
 }
 
-async function validateLinkedProjectAccessOrResponse(input: {
+async function validateSandboxProjectAccessOrResponse(input: {
   deps: SandboxPostDeps;
   creds: SandboxServiceCredentials;
   repo: SandboxRepoRecord;
@@ -737,12 +737,11 @@ async function validateLinkedProjectAccessOrResponse(input: {
   linkedProject: ReturnType<typeof resolveBillingLinkedProjectSelection>;
   createContext: ResolvedSandboxCreateContext;
 }): Promise<SandboxCreateContextResolution> {
-  if (input.createContext.ownership.credentialSource !== "user") {
-    return { createContext: input.createContext };
-  }
-
   const access = await input.deps.validateVercelProjectAccess({
-    authMode: "personal",
+    authMode:
+      input.createContext.ownership.credentialSource === "user"
+        ? "personal"
+        : "platform",
     vercelToken: input.createContext.credentials.vercelToken,
     teamId: input.createContext.credentials.vercelTeamId,
     projectId: input.createContext.credentials.vercelProjectId,
@@ -750,6 +749,23 @@ async function validateLinkedProjectAccessOrResponse(input: {
 
   if (access.ok) {
     return { createContext: input.createContext };
+  }
+
+  if (input.createContext.ownership.credentialSource === "platform") {
+    console.error("[sandbox/launch] hosted Vercel project preflight failed", {
+      code: access.error.code,
+      status: access.error.status,
+    });
+    return {
+      response: NextResponse.json(
+        {
+          error:
+            "Hosted sandbox service is temporarily unavailable. Please try again shortly.",
+          code: "SANDBOX_SERVICE_UNAVAILABLE",
+        },
+        { status: 503 }
+      ),
+    };
   }
 
   if (shouldPersistLinkedProjectAccessFailure(access.error.code)) {
@@ -828,7 +844,7 @@ async function resolveSandboxCreateContextOrResponse(input: {
     });
   }
 
-  return validateLinkedProjectAccessOrResponse({
+  return validateSandboxProjectAccessOrResponse({
     deps: input.deps,
     creds: input.creds,
     repo: input.repo,
