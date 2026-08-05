@@ -88,6 +88,39 @@ test("derivePlatformAccess allows both platform resources for domain-allowlisted
   });
 });
 
+test("loadExplicitPlatformAccess returns only profile and allowlist access", async () => {
+  const { createLoadExplicitPlatformAccess } = await loadPlatformAccess();
+  const loadAccess = createLoadExplicitPlatformAccess({
+    env: {} as NodeJS.ProcessEnv,
+    loadProfile: async () => ({
+      id: "user-comped",
+      email: "comped@example.com",
+      allow_platform_ai: true,
+      allow_platform_sandbox: false,
+    }),
+  });
+
+  assert.deepEqual(await loadAccess("user-comped"), {
+    allowPlatformAi: true,
+    allowPlatformSandbox: false,
+  });
+});
+
+test("loadExplicitPlatformAccess recognizes env allowlists without billing", async () => {
+  const { createLoadExplicitPlatformAccess } = await loadPlatformAccess();
+  const loadAccess = createLoadExplicitPlatformAccess({
+    env: {
+      PLATFORM_ACCESS_USER_IDS: "user-comped",
+    } as unknown as NodeJS.ProcessEnv,
+    loadProfile: async () => null,
+  });
+
+  assert.deepEqual(await loadAccess("user-comped"), {
+    allowPlatformAi: true,
+    allowPlatformSandbox: true,
+  });
+});
+
 test("loadUserPlatformAccess grants hosted resources to a funded personal account", async () => {
   const { createLoadUserPlatformAccess } = await loadPlatformAccess();
   const billingLookups: Array<{

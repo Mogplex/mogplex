@@ -1,6 +1,7 @@
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
 import { postBillingUsageDebit } from "@/lib/billing/ledger";
 import { isBillingEnabled } from "@/lib/billing/stripe";
+import { loadExplicitPlatformAccess } from "@/lib/platform-access";
 
 export type TokenUsageMeteringInput = {
   aiCallId: string;
@@ -18,6 +19,7 @@ export type TokenUsageMeteringResult = {
     | "posted"
     | "duplicate"
     | "billing_disabled"
+    | "allowlisted"
     | "no_billing_account"
     | "before_billing_account"
     | "below_one_cent";
@@ -26,12 +28,14 @@ export type TokenUsageMeteringResult = {
 
 type TokenUsageMeteringDeps = {
   isBillingEnabled: typeof isBillingEnabled;
+  loadExplicitPlatformAccess: typeof loadExplicitPlatformAccess;
   findBillingAccountForScope: typeof findBillingAccountForScope;
   postBillingUsageDebit: typeof postBillingUsageDebit;
 };
 
 const defaultDeps: TokenUsageMeteringDeps = {
   isBillingEnabled,
+  loadExplicitPlatformAccess,
   findBillingAccountForScope,
   postBillingUsageDebit,
 };
@@ -68,6 +72,10 @@ export async function meterReconciledTokenUsage(
   }
   if (amountCents === 0) {
     return { metered: false, reason: "below_one_cent", amountCents };
+  }
+  const explicitAccess = await deps.loadExplicitPlatformAccess(input.userId);
+  if (explicitAccess.allowPlatformAi) {
+    return { metered: false, reason: "allowlisted", amountCents };
   }
 
   const productTeamId = readMetadataTeamId(input.metadata);

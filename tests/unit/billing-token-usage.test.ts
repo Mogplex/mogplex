@@ -73,6 +73,10 @@ test("personal usage posts an idempotent token debit", async () => {
   const debits: unknown[] = [];
   const result = await meterReconciledTokenUsage(input(), {
     isBillingEnabled: () => true,
+    loadExplicitPlatformAccess: async () => ({
+      allowPlatformAi: false,
+      allowPlatformSandbox: false,
+    }),
     findBillingAccountForScope: async (scope) => {
       scopes.push(scope);
       return account;
@@ -120,6 +124,10 @@ test("team metadata charges the team account", async () => {
     input({ metadata: { product_team_id: "team-1" } }),
     {
       isBillingEnabled: () => true,
+      loadExplicitPlatformAccess: async () => ({
+        allowPlatformAi: false,
+        allowPlatformSandbox: false,
+      }),
       findBillingAccountForScope: async (value) => {
         scope = value;
         return { ...account, owner_type: "team", product_team_id: "team-1" };
@@ -145,6 +153,10 @@ test("pre-account calls and sub-cent calls are not debited", async () => {
   let debitCalls = 0;
   const deps = {
     isBillingEnabled: () => true,
+    loadExplicitPlatformAccess: async () => ({
+      allowPlatformAi: false,
+      allowPlatformSandbox: false,
+    }),
     findBillingAccountForScope: async () => account,
     postBillingUsageDebit: async () => {
       debitCalls += 1;
@@ -164,4 +176,31 @@ test("pre-account calls and sub-cent calls are not debited", async () => {
   assert.equal(beforeAccount.reason, "before_billing_account");
   assert.equal(belowOneCent.reason, "below_one_cent");
   assert.equal(debitCalls, 0);
+});
+
+test("explicitly allowlisted users are not debited from funded accounts", async () => {
+  const { meterReconciledTokenUsage } = await loadTokenUsage();
+  let billingCalls = 0;
+  const result = await meterReconciledTokenUsage(input(), {
+    isBillingEnabled: () => true,
+    loadExplicitPlatformAccess: async () => ({
+      allowPlatformAi: true,
+      allowPlatformSandbox: false,
+    }),
+    findBillingAccountForScope: async () => {
+      billingCalls += 1;
+      return account;
+    },
+    postBillingUsageDebit: async () => {
+      billingCalls += 1;
+      throw new Error("should not post");
+    },
+  });
+
+  assert.deepEqual(result, {
+    metered: false,
+    reason: "allowlisted",
+    amountCents: 8,
+  });
+  assert.equal(billingCalls, 0);
 });
