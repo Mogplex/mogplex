@@ -30,6 +30,7 @@ import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
   requireSandboxBillingSession,
+  sandboxBillingAdmissionHttpStatus,
 } from "@/lib/billing/sandbox-usage";
 
 /**
@@ -290,12 +291,18 @@ export function createSandboxResumeHandler(
       .catch((err: unknown) => {
         const message =
           err instanceof Error ? err.message : "Failed to resume sandbox";
-        return { __error: message } as const;
+        return {
+          __error: message,
+          __status: sandboxBillingAdmissionHttpStatus(err) ?? 502,
+        } as const;
       });
 
     if ("__error" in sandbox) {
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-      return NextResponse.json({ error: sandbox.__error }, { status: 502 });
+      return NextResponse.json(
+        { error: sandbox.__error },
+        { status: sandbox.__status }
+      );
     }
 
     try {
@@ -304,7 +311,10 @@ export function createSandboxResumeHandler(
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
       const message =
         error instanceof Error ? error.message : "Sandbox metering failed";
-      return NextResponse.json({ error: message }, { status: 402 });
+      return NextResponse.json(
+        { error: message },
+        { status: sandboxBillingAdmissionHttpStatus(error) ?? 503 }
+      );
     }
 
     // Transition to installing so UI overlays/spinners kick in while

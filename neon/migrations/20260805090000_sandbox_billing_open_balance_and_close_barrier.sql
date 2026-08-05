@@ -1,3 +1,5 @@
+-- Intentionally Neon-only: the billing foundation tables and RPCs live in
+-- neon/migrations during the data-backend transition.
 -- Opening and accrual share the billing-account row lock used by every ledger
 -- mutation. This makes positive-balance admission atomic and turns
 -- request-close into a hard barrier against scheduled non-final accruals.
@@ -81,7 +83,9 @@ begin
   from public.credit_ledger
   where account_id = p_account;
   if v_balance <= 0 then
-    raise exception 'positive billing balance required for sandbox session';
+    raise exception using
+      errcode = 'MP001',
+      message = 'positive billing balance required for sandbox session';
   end if;
 
   insert into public.sandbox_billing_sessions (

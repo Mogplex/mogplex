@@ -730,7 +730,10 @@ describe("billing ledger migration", () => {
          )`,
         [NEGATIVE_SANDBOX_ID, NEGATIVE_ACCOUNT_ID, NEGATIVE_USER_ID]
       )
-    ).rejects.toThrow(/positive billing balance required/);
+    ).rejects.toMatchObject({
+      code: "MP001",
+      message: expect.stringContaining("positive billing balance required"),
+    });
   });
 
   it("recovery candidates exclude more than one full batch of metered rows", async () => {

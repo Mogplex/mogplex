@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
 import { loadSandboxHealthRouteModule } from "./sandbox-record-route-test-harness/loaders";
 import {
   buildLoadedSandboxHealthRouteContext,
@@ -66,6 +67,35 @@ test("GET /api/sandbox/[id]/health returns normalized summaries for user-billed 
   );
   assert.equal("status" in payload.sandbox, false);
   assert.equal("preview_url" in payload.sandbox, false);
+});
+
+test("GET /api/sandbox/[id]/health returns 402 when dev-log access resumes an unfunded sandbox", async () => {
+  const { createSandboxHealthGetHandler } =
+    await loadSandboxHealthRouteModule();
+  const handler = createSandboxHealthGetHandler({
+    loadOwnedSandboxRouteContext: async () =>
+      buildLoadedSandboxHealthRouteContext() as never,
+    readDevLog: async () => {
+      throw new SandboxBillingAdmissionError(
+        "Hosted sandbox compute requires a positive billing balance",
+        "no_billing_account"
+      );
+    },
+    checkSandboxHealth: async () =>
+      ({ status: "running", statusCode: 200, message: null }) as never,
+    loadVercelDiagnostics: async () => null,
+    updateSandboxRecord: async () => ({ id: "sandbox-1" }) as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ suffix: "/health" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 402);
+  assert.deepEqual(await response.json(), {
+    error: "Hosted sandbox compute requires a positive billing balance",
+  });
 });
 
 test("GET /api/sandbox/[id]/health renders personal billing fallback in normalized summaries", async () => {

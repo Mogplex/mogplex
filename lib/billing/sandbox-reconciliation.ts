@@ -1,6 +1,7 @@
 import {
   accrueSandboxBillingSession,
   finalizeSandboxBillingClose,
+  isSandboxBillingBalanceRequiredError,
   isSandboxProviderSessionTerminal,
   prepareSandboxBillingClose,
   readSandboxProviderSession,
@@ -205,7 +206,10 @@ async function stopDepletedSandbox(input: {
     vercelProjectId: input.credentials.vercelProjectId!,
   });
   if (!observed) {
-    await input.deps.finalizeClose(attempt, requestedAt);
+    await input.deps.finalizeClose(
+      attempt,
+      attempt?.meteredThroughAt ?? new Date(input.session.metered_through_at)
+    );
     await markDepletedRecord(input.record, input.deps);
     return;
   }
@@ -289,9 +293,7 @@ async function reconcileActiveSession(input: {
         credentials,
         deps,
       });
-      const depleted =
-        error instanceof Error &&
-        error.message.includes("positive billing balance required");
+      const depleted = isSandboxBillingBalanceRequiredError(error);
       await deps.stopRecord(record.id, {
         expectedSandboxId: record.sandbox_id,
         stopReason: depleted ? "billing_depleted" : "unknown",
@@ -348,7 +350,7 @@ async function reconcileActiveSession(input: {
       }
       const endedAt = observed
         ? safeProviderEnd(readSandboxProviderSession(observed), deps.now())
-        : deps.now();
+        : new Date(session.metered_through_at);
       await deps.finalizeClose(closeAttemptForSession(session), endedAt);
       return "finalized";
     }
@@ -431,9 +433,7 @@ export async function reconcileSandboxBillingSessions(
           credentials,
           deps,
         });
-        const depleted =
-          error instanceof Error &&
-          error.message.includes("positive billing balance required");
+        const depleted = isSandboxBillingBalanceRequiredError(error);
         await deps.stopRecord(record.id, {
           expectedSandboxId: record.sandbox_id,
           stopReason: depleted ? "billing_depleted" : "unknown",

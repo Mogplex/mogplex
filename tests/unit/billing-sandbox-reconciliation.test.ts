@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { reconcileSandboxBillingSessions } from "@/lib/billing/sandbox-reconciliation";
+import { sandboxBillingBalanceRequiredError } from "@/lib/billing/sandbox-usage";
 import type { ActiveSandboxBillingSession } from "@/lib/billing/sandbox-usage";
 
 const NOW = new Date("2026-08-05T11:05:00.000Z");
@@ -219,7 +220,7 @@ test("a replacement provider session is stopped immediately when metering cannot
     ...baseDeps(),
     getSandbox: async () => replacement as never,
     syncSession: async () => {
-      throw new Error("positive billing balance required for sandbox session");
+      throw sandboxBillingBalanceRequiredError();
     },
     stopRecord: async (id, options) => {
       stoppedRecords.push([id, options]);
@@ -400,7 +401,7 @@ test("an unfunded backfill confirms a lost stop response before stopping the rec
     loadActivePlatformRecords: async () => [record()],
     getSandbox: async () => runningSandbox as never,
     syncSession: async () => {
-      throw new Error("positive billing balance required for sandbox session");
+      throw sandboxBillingBalanceRequiredError();
     },
     stopRecord: async (id, options) => {
       stoppedRecords.push([id, options]);
@@ -479,6 +480,36 @@ test("a depleted balance stops compute, finalizes billing, and stops the record"
       },
     ],
   ]);
+  assert.equal(summary.depleted, 1);
+});
+
+test("a depleted sandbox missing after stop closes at the confirmed meter time", async () => {
+  const finalizedAt: Date[] = [];
+  let providerLookups = 0;
+  const summary = await reconcileSandboxBillingSessions({
+    ...baseDeps(),
+    getSandbox: async () => {
+      providerLookups += 1;
+      return providerLookups === 1 ? providerSession() : null;
+    },
+    getBalance: async () => ({
+      includedCents: 0,
+      purchasedCents: 0,
+      totalCents: 0,
+    }),
+    prepareClose: async () => ({
+      sessionId: "billing-session-1",
+      closeGeneration: 1,
+      actorUserId: "actor-1",
+      meteredThroughAt: STARTED_AT,
+    }),
+    finalizeClose: async (_attempt, endedAt) => {
+      finalizedAt.push(endedAt);
+      return { finalized: true, metered: true };
+    },
+  });
+
+  assert.deepEqual(finalizedAt, [STARTED_AT]);
   assert.equal(summary.depleted, 1);
 });
 

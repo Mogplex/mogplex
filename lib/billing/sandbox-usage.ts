@@ -9,6 +9,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 // micro-USD so elapsed milliseconds can be accumulated without floating-point
 // rounding. Stripe price and product IDs never participate in compute billing.
 export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
+export const SANDBOX_BALANCE_REQUIRED_SQLSTATE = "MP001";
 
 export type ActiveSandboxBillingSession = {
   id: string;
@@ -69,6 +70,27 @@ export class SandboxBillingAdmissionError extends Error {
     super(message);
     this.name = "SandboxBillingAdmissionError";
   }
+}
+
+export function sandboxBillingBalanceRequiredError(
+  message = "Hosted sandbox compute requires a positive balance"
+) {
+  return Object.assign(new Error(message), {
+    code: SANDBOX_BALANCE_REQUIRED_SQLSTATE,
+  });
+}
+
+export function isSandboxBillingBalanceRequiredError(error: unknown) {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === SANDBOX_BALANCE_REQUIRED_SQLSTATE
+  );
+}
+
+export function sandboxBillingAdmissionHttpStatus(error: unknown) {
+  if (!(error instanceof SandboxBillingAdmissionError)) return null;
+  return error.reason === "no_billing_account" ? 402 : 503;
 }
 
 type SandboxBillingProvider = Pick<Sandbox, "name" | "currentSession">;
@@ -194,6 +216,9 @@ export async function openSandboxBillingSession(input: {
     }
   );
   if (error) {
+    if (error.code === SANDBOX_BALANCE_REQUIRED_SQLSTATE) {
+      throw sandboxBillingBalanceRequiredError(error.message);
+    }
     throw new Error(`sandbox billing session open failed: ${error.message}`);
   }
   if (typeof data !== "string" || !data) {
@@ -405,10 +430,7 @@ export async function syncSandboxBillingSession(
 }
 
 function isBalanceAdmissionFailure(error: unknown) {
-  return (
-    error instanceof Error &&
-    error.message.includes("positive billing balance required")
-  );
+  return isSandboxBillingBalanceRequiredError(error);
 }
 
 async function stopSandboxAfterBillingAdmissionFailure(input: {

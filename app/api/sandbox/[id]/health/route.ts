@@ -16,7 +16,10 @@ import { loadSandboxVercelDiagnostics } from "@/lib/vercel/load-sandbox-diagnost
 import { reconcileSandboxReadiness } from "@/lib/sandbox/readiness-reconciliation";
 import type { VercelAuthMode } from "@/lib/vercel/service";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes/types";
-import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
+import {
+  createSandboxBillingOnResume,
+  sandboxBillingAdmissionHttpStatus,
+} from "@/lib/billing/sandbox-usage";
 
 type SandboxHealthRecord = {
   id: string;
@@ -167,7 +170,8 @@ async function readCompatibilityDevLog(
 ) {
   try {
     return await deps.readDevLog(record, credentials);
-  } catch {
+  } catch (error) {
+    if (sandboxBillingAdmissionHttpStatus(error)) throw error;
     return record.dev_log || "";
   }
 }
@@ -392,15 +396,25 @@ export function createSandboxHealthGetHandler(
       });
       if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
-      const result = await reconcileSandboxReadiness(
-        {
-          sandboxRecordId: id,
-          source: "health",
-        },
-        {
-          includeDiagnostics: true,
-        }
-      );
+      let result;
+      try {
+        result = await reconcileSandboxReadiness(
+          {
+            sandboxRecordId: id,
+            source: "health",
+          },
+          {
+            includeDiagnostics: true,
+          }
+        );
+      } catch (error) {
+        const status = sandboxBillingAdmissionHttpStatus(error);
+        if (!status) throw error;
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Billing failed" },
+          { status }
+        );
+      }
 
       if (!result) {
         return NextResponse.json(
@@ -432,8 +446,9 @@ export function createSandboxHealthGetHandler(
       );
     if (!sandboxData.ok) return buildSandboxRouteErrorResponse(sandboxData);
 
-    const { nextRecord, vercelDiagnostics } =
-      await refreshCompatibilitySandboxHealth({
+    let refreshed: RefreshedCompatibilityHealth;
+    try {
+      refreshed = await refreshCompatibilitySandboxHealth({
         deps,
         record: sandboxData.record,
         sandbox: sandboxData.sandbox,
@@ -444,6 +459,15 @@ export function createSandboxHealthGetHandler(
         },
         credentialSource: sandboxData.context.ownership.credentialSource,
       });
+    } catch (error) {
+      const status = sandboxBillingAdmissionHttpStatus(error);
+      if (!status) throw error;
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Billing failed" },
+        { status }
+      );
+    }
+    const { nextRecord, vercelDiagnostics } = refreshed;
 
     return buildSandboxHealthResponse(nextRecord, vercelDiagnostics);
   };

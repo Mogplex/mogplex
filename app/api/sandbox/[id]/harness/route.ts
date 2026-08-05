@@ -59,7 +59,10 @@ import {
 } from "@/lib/sandbox/route-context";
 import type { HarnessId } from "@/lib/harness/config";
 import type { MemoryScope } from "@/lib/memories-client";
-import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
+import {
+  createSandboxBillingOnResume,
+  sandboxBillingAdmissionHttpStatus,
+} from "@/lib/billing/sandbox-usage";
 
 const VALID_HARNESSES = new Set<HarnessId>(["claude-code", "codex"]);
 const MAX_LOG_EVENT_LENGTH = 4000;
@@ -1267,7 +1270,10 @@ export function createSandboxHarnessPostHandler(
           payload: { error: message },
         });
       }
-      return NextResponse.json({ error: message }, { status: 500 });
+      return NextResponse.json(
+        { error: message },
+        { status: sandboxBillingAdmissionHttpStatus(err) ?? 500 }
+      );
     }
   };
 }

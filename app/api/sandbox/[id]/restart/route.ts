@@ -36,6 +36,7 @@ import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
   requireSandboxBillingSession,
+  sandboxBillingAdmissionHttpStatus,
 } from "@/lib/billing/sandbox-usage";
 
 // ---- Legacy restart record (non-persistent path, re-POSTs /api/sandbox) ----
@@ -335,6 +336,8 @@ async function handlePersistentRestart(
     }
 
     if (!needsWakeAdmission) {
+      // Restart immediately rotates this live provider session. Require the
+      // close barrier before stop so scheduled accrual cannot cross sessions.
       await deps.prepareSandboxBillingClose(record.id);
       try {
         await currentVm.stop();
@@ -359,7 +362,10 @@ async function handlePersistentRestart(
     await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
     const message =
       err instanceof Error ? err.message : "Failed to wake sandbox for restart";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json(
+      { error: message },
+      { status: sandboxBillingAdmissionHttpStatus(err) ?? 502 }
+    );
   }
 
   // Step 2: transition the record to installing so UI overlays show

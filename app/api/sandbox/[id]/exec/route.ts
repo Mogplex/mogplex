@@ -26,7 +26,10 @@ import {
 } from "@/lib/harness/install";
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
-import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
+import {
+  createSandboxBillingOnResume,
+  sandboxBillingAdmissionHttpStatus,
+} from "@/lib/billing/sandbox-usage";
 import {
   buildSandboxRouteErrorResponse,
   loadOwnedSandboxRouteContext,
@@ -511,7 +514,10 @@ export function createSandboxExecPostHandler(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Execution failed";
-      return NextResponse.json({ error: message }, { status: 500 });
+      return NextResponse.json(
+        { error: message },
+        { status: sandboxBillingAdmissionHttpStatus(err) ?? 500 }
+      );
     } finally {
       if (!lockReleaseHandedOff) {
         try {
