@@ -355,12 +355,42 @@ test("resolveSandboxRecordCredentials blocks existing platform sandboxes for non
 
 test("getPlatformSandboxCredentials returns a null project ID instead of throwing when VERCEL_PROJECT_ID is unset", async () => {
   const { getPlatformSandboxCredentials } = await loadSandboxCredentials();
-  const saved = process.env.VERCEL_PROJECT_ID;
+  const savedVercelProjectId = process.env.VERCEL_PROJECT_ID;
+  const savedPlatformProjectId = process.env.PLATFORM_VERCEL_PROJECT_ID;
   delete process.env.VERCEL_PROJECT_ID;
+  delete process.env.PLATFORM_VERCEL_PROJECT_ID;
   try {
     assert.equal(getPlatformSandboxCredentials().vercelProjectId, null);
   } finally {
-    if (saved !== undefined) process.env.VERCEL_PROJECT_ID = saved;
+    if (savedVercelProjectId !== undefined) {
+      process.env.VERCEL_PROJECT_ID = savedVercelProjectId;
+    }
+    if (savedPlatformProjectId !== undefined) {
+      process.env.PLATFORM_VERCEL_PROJECT_ID = savedPlatformProjectId;
+    }
+  }
+});
+
+test("getPlatformSandboxCredentials supports the platform project ID alias", async () => {
+  const { getPlatformSandboxCredentials } = await loadSandboxCredentials();
+  const savedVercelProjectId = process.env.VERCEL_PROJECT_ID;
+  const savedPlatformProjectId = process.env.PLATFORM_VERCEL_PROJECT_ID;
+  delete process.env.VERCEL_PROJECT_ID;
+  process.env.PLATFORM_VERCEL_PROJECT_ID = "platform-project";
+  try {
+    assert.equal(
+      getPlatformSandboxCredentials().vercelProjectId,
+      "platform-project"
+    );
+  } finally {
+    if (savedVercelProjectId !== undefined) {
+      process.env.VERCEL_PROJECT_ID = savedVercelProjectId;
+    }
+    if (savedPlatformProjectId === undefined) {
+      delete process.env.PLATFORM_VERCEL_PROJECT_ID;
+    } else {
+      process.env.PLATFORM_VERCEL_PROJECT_ID = savedPlatformProjectId;
+    }
   }
 });
 
