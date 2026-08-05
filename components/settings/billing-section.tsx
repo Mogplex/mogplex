@@ -8,7 +8,12 @@ import {
   getActiveTeamRequestHeaders,
   useActiveTeamId,
 } from "@/components/active-scope-provider";
-import { PLAN_PRICES, TOPUP_PRESETS } from "@/lib/billing/catalog";
+import {
+  PLAN_PRICES,
+  TOPUP_PRESETS,
+  type PlanInterval,
+  type PlanTier,
+} from "@/lib/billing/catalog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +38,29 @@ type BillingSummary = {
     totalCents: number;
   };
 };
+
+const PLAN_DETAILS: ReadonlyArray<{
+  tier: PlanTier;
+  name: string;
+  description: string;
+}> = [
+  {
+    tier: "pro",
+    name: "Pro",
+    description: "For individual developers running agents every day.",
+  },
+  {
+    tier: "team",
+    name: "Team",
+    description: "Shared billing and pooled usage for unlimited members.",
+  },
+];
+
+function planName(tier: BillingSummary["tier"]): string {
+  if (tier === "pro") return "Pro";
+  if (tier === "team") return "Team";
+  return "Pay as you go";
+}
 
 function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -64,6 +92,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [planInterval, setPlanInterval] = useState<PlanInterval>("month");
   const topupAttemptIds = useRef(new Map<string, string>());
   const checkoutResult = searchParams.get("billing");
   const returnPath = embedded ? `${pathname}?tab=billing` : pathname;
@@ -155,6 +184,8 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const paymentSubmitted =
     checkoutResult === "topup" || checkoutResult === "subscribed";
   const canManageBilling = data.canManageBilling !== false;
+  const hasPaidPlan = data.hasSubscription || data.tier !== "free";
+  const currentPlanName = planName(data.tier);
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,87 +204,206 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
       ) : null}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Balance
-            <Badge variant="secondary" className="uppercase">
-              {data.tier}
-            </Badge>
-            {data.status !== "active" ? (
-              <Badge variant="destructive">{data.status}</Badge>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                <h2>{currentPlanName}</h2>
+                <Badge variant="secondary">Current plan</Badge>
+                {data.status !== "active" ? (
+                  <Badge variant="destructive">{data.status}</Badge>
+                ) : null}
+              </CardTitle>
+              <CardDescription>
+                {data.tier === "free"
+                  ? "No subscription. Add prepaid usage whenever you need it."
+                  : "Included usage resets monthly. Purchased balance never expires."}
+              </CardDescription>
+            </div>
+            {canManageBilling && hasPaidPlan ? (
+              <Button
+                className="self-start"
+                disabled={pendingAction !== null}
+                onClick={() => redirectTo("portal", "/api/stripe/portal", {})}
+              >
+                {pendingAction === "portal" ? "Opening…" : "Manage plan"}
+              </Button>
             ) : null}
-          </CardTitle>
-          <CardDescription>
-            Included usage resets each billing period; purchased balance never
-            expires.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-8">
-          <div>
-            <p className="text-2xl font-semibold">
-              {formatUsd(balance.includedCents)}
-            </p>
-            <p className="text-sm text-muted-foreground">Included remaining</p>
           </div>
-          <div>
-            <p className="text-2xl font-semibold">
-              {formatUsd(balance.purchasedCents)}
-            </p>
-            <p className="text-sm text-muted-foreground">Purchased balance</p>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm font-medium">Usage balance</p>
+          <div className="flex flex-wrap gap-x-10 gap-y-4">
+            <div>
+              <p className="text-2xl font-semibold">
+                {formatUsd(balance.includedCents)}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Included remaining
+              </p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold">
+                {formatUsd(balance.purchasedCents)}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Purchased balance
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Plan</CardTitle>
-          <CardDescription>
-            {!canManageBilling
-              ? "Only a team owner or admin can change this plan."
-              : data.hasSubscription
-              ? "Change plan, update payment methods, or cancel from the billing portal."
-              : "Tokens at provider list price with 0% markup. No seats."}
-          </CardDescription>
+        <CardHeader className="border-b">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <CardTitle>
+                <h2>Plans</h2>
+              </CardTitle>
+              <CardDescription>
+                {!canManageBilling
+                  ? "Only a team owner or admin can change this plan."
+                  : hasPaidPlan
+                    ? "Plan changes and cancellation are managed securely in Stripe."
+                    : "Stay on PAYG, or subscribe for usage included every month."}
+              </CardDescription>
+            </div>
+            <div
+              aria-label="Billing period"
+              className="flex w-fit shrink-0 rounded-md border bg-muted/30 p-1"
+              role="group"
+            >
+              <Button
+                aria-pressed={planInterval === "month"}
+                aria-label="Monthly billing"
+                className="h-7"
+                onClick={() => setPlanInterval("month")}
+                size="sm"
+                type="button"
+                variant={planInterval === "month" ? "secondary" : "ghost"}
+              >
+                Monthly
+              </Button>
+              <Button
+                aria-pressed={planInterval === "year"}
+                aria-label="Annual billing"
+                className="h-7"
+                onClick={() => setPlanInterval("year")}
+                size="sm"
+                type="button"
+                variant={planInterval === "year" ? "secondary" : "ghost"}
+              >
+                Annual · save 20%
+              </Button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
+        <CardContent className="divide-y">
+          <div className="grid gap-4 py-5 first:pt-0 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
+            <div>
+              <h3 className="font-semibold">Pay as you go</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                No subscription. Buy prepaid usage only when you need it.
+              </p>
+            </div>
+            <div>
+              <p className="font-medium">$0/month</p>
+              <p className="text-xs text-muted-foreground">No commitment</p>
+            </div>
+            {data.tier === "free" ? (
+              <Badge variant="outline">Current</Badge>
+            ) : null}
+          </div>
+
+          {PLAN_DETAILS.map((details) => {
+            const plan = PLAN_PRICES.find(
+              (candidate) =>
+                candidate.tier === details.tier &&
+                candidate.interval === planInterval
+            );
+            if (!plan) return null;
+
+            return (
+              <div
+                className="grid gap-4 py-5 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center"
+                key={details.tier}
+              >
+                <div>
+                  <h3 className="font-semibold">{details.name}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {details.description}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">
+                    {formatUsd(plan.amountCents)}/
+                    {plan.interval === "month" ? "month" : "year"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatUsd(plan.includedUsageCents)} usage included monthly
+                  </p>
+                </div>
+                {canManageBilling && !hasPaidPlan ? (
+                  <Button
+                    disabled={pendingAction !== null}
+                    onClick={() =>
+                      redirectTo(plan.lookupKey, "/api/stripe/checkout", {
+                        kind: "subscribe",
+                        plan: plan.lookupKey,
+                      })
+                    }
+                    variant="outline"
+                  >
+                    {pendingAction === plan.lookupKey
+                      ? "Redirecting…"
+                      : `Choose ${details.name}`}
+                  </Button>
+                ) : data.tier === details.tier ? (
+                  <Badge variant="outline">Current</Badge>
+                ) : null}
+              </div>
+            );
+          })}
+
+          <div className="grid gap-4 py-5 pb-0 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
+            <div>
+              <h3 className="font-semibold">Enterprise</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Dedicated infrastructure, enterprise identity, audit exports,
+                and SLA.
+              </p>
+            </div>
+            <div>
+              <p className="font-medium">Custom</p>
+              <p className="text-xs text-muted-foreground">
+                Hosted or self-managed
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <a href="mailto:enterprise@mogplex.com?subject=Mogplex%20Enterprise">
+                Contact enterprise
+              </a>
+            </Button>
+          </div>
+
           {!canManageBilling ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="pt-5 text-sm text-muted-foreground">
               Your team&apos;s balance and plan are visible here. Ask a team
               owner or admin to make billing changes.
             </p>
-          ) : data.hasSubscription || data.tier !== "free" ? (
-            <Button
-              disabled={pendingAction !== null}
-              onClick={() => redirectTo("portal", "/api/stripe/portal", {})}
-            >
-              {pendingAction === "portal" ? "Opening…" : "Manage plan"}
-            </Button>
-          ) : (
-            PLAN_PRICES.map((plan) => (
-              <Button
-                key={plan.lookupKey}
-                variant={plan.interval === "month" ? "default" : "outline"}
-                disabled={pendingAction !== null}
-                onClick={() =>
-                  redirectTo(plan.lookupKey, "/api/stripe/checkout", {
-                    kind: "subscribe",
-                    plan: plan.lookupKey,
-                  })
-                }
-              >
-                {pendingAction === plan.lookupKey
-                  ? "Redirecting…"
-                  : `${plan.productName.replace("Mogplex ", "")} ${formatUsd(plan.amountCents)}/${plan.interval === "month" ? "mo" : "yr"}`}
-              </Button>
-            ))
-          )}
+          ) : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Top up</CardTitle>
+          <CardTitle>
+            <h2>
+              {data.tier === "free" ? "Top up PAYG balance" : "Add balance"}
+            </h2>
+          </CardTitle>
           <CardDescription>
-            Prepaid usage balance — never expires.
+            Prepaid usage credits. Purchased balance never expires.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">

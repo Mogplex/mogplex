@@ -98,6 +98,16 @@ test("billing is a first-class personal Settings tab with live checkout actions"
     "active"
   );
   await expect(page.getByText("$25.00", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Pay as you go" }).first()
+  ).toBeVisible();
+  await expect(page.getByText("Current plan", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pro" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Enterprise" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Contact enterprise" })
+  ).toHaveAttribute("href", /mailto:enterprise@mogplex\.com/);
   await expect(page.getByRole("button", { name: "Add $10.00" })).toBeVisible();
 
   await page.getByRole("button", { name: "Add $10.00" }).click();
@@ -144,11 +154,27 @@ test("subscription checkout and existing-plan portal preserve the Billing tab re
   });
 
   await page.goto(scopedPath("settings?tab=billing"));
-  await page.getByRole("button", { name: "Pro $20.00/mo" }).click();
+  await expect(
+    page.getByRole("button", { name: "Monthly billing" })
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Choose Pro" }).click();
   await expect.poll(() => checkoutBodies.length).toBe(1);
+  await page.waitForURL("about:blank");
   expect(checkoutBodies[0]).toEqual({
     kind: "subscribe",
     plan: "pro_monthly",
+    returnPath: scopedPath("settings?tab=billing"),
+  });
+
+  await page.goto(scopedPath("settings?tab=billing"));
+  await page.getByRole("button", { name: "Annual billing" }).click();
+  await expect(page.getByText("$192.00/year", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Choose Pro" }).click();
+  await expect.poll(() => checkoutBodies.length).toBe(2);
+  await page.waitForURL("about:blank");
+  expect(checkoutBodies[1]).toEqual({
+    kind: "subscribe",
+    plan: "pro_annual",
     returnPath: scopedPath("settings?tab=billing"),
   });
 
