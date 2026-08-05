@@ -9,6 +9,7 @@ import {
   useActiveTeamId,
 } from "@/components/active-scope-provider";
 import {
+  formatUsd,
   PLAN_PRICES,
   TOPUP_PRESETS,
   type PlanInterval,
@@ -60,10 +61,6 @@ function planName(tier: BillingSummary["tier"]): string {
   if (tier === "pro") return "Pro";
   if (tier === "team") return "Team";
   return "Pay as you go";
-}
-
-function formatUsd(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 async function loadBillingSummary([

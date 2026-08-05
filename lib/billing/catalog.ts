@@ -73,6 +73,10 @@ export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
 export const TOPUP_MIN_CENTS = 1000;
 export const TOPUP_MAX_CENTS = 500000;
 
+export function formatUsd(amountCents: number): string {
+  return `$${(amountCents / 100).toFixed(2)}`;
+}
+
 export function findPlanPrice(lookupKey: string): PlanPrice | null {
   return PLAN_PRICES.find((plan) => plan.lookupKey === lookupKey) ?? null;
 }
