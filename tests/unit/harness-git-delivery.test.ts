@@ -74,7 +74,7 @@ test("existing delivery branches are fetched, checked out, and fast-forwarded", 
 
   assert.equal(workspace.createdBranch, false);
   assert.match(commands[0]?.command ?? "", /git fetch origin/);
-  assert.match(commands[0]?.command ?? "", /git pull --ff-only origin/);
+  assert.match(commands[0]?.command ?? "", /git merge --ff-only/);
   assert.equal(commands[0]?.env?.MOGPLEX_BASE_BRANCH, "main");
   assert.equal(commands[0]?.env?.MOGPLEX_WORKING_BRANCH, "mogplex/feature");
   assert.equal(commands[0]?.env?.MOGPLEX_CREATE_BRANCH, "0");
@@ -91,6 +91,7 @@ test("delivery prompt requires tests, commit, push, and a pull request", () => {
   assert.match(prompt, /Commit every intended change/);
   assert.match(prompt, /Push mogplex\/fix-checkout/);
   assert.match(prompt, /pull request into main/);
+  assert.match(prompt, /Leave no untracked files/);
   assert.ok(prompt.endsWith("Fix the checkout bug"));
 });
 
@@ -147,4 +148,27 @@ test("delivery failures surface the git or GitHub error", async () => {
       ),
     /GitHub delivery failed.*Resource not accessible/
   );
+});
+
+test("untracked files fail delivery with an actionable file list", async () => {
+  const commands: Array<{ command: string; env?: Record<string, string> }> = [];
+  await assert.rejects(
+    () =>
+      publishHarnessPullRequest(
+        sandboxWithResult({
+          commands,
+          exitCode: 1,
+          stderr:
+            "Untracked files remain after the agent run; commit intended new files explicitly before delivery:\n.tmp/debug.log",
+        }),
+        {
+          prompt: "Fix it",
+          baseBranch: "main",
+          workingBranch: buildHarnessWorkingBranch("call-123"),
+        }
+      ),
+    /commit intended new files[\s\S]*\.tmp\/debug\.log/
+  );
+  assert.match(commands[0]?.command ?? "", /git ls-files --others/);
+  assert.match(commands[0]?.command ?? "", /exit 1/);
 });

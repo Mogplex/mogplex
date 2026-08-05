@@ -223,6 +223,11 @@ async function prepareChatContextForDelivery(context: ChatAgentContext) {
   }
 
   const baseBranch = context.repoBaseBranch || "main";
+  const currentBranch = context.repoBranch || baseBranch;
+  // Standard launches already check out their isolated working branch. The
+  // server-side repair is only needed for legacy sandboxes that still point at
+  // the base branch; persisting the repaired branch makes this a one-time cost.
+  if (currentBranch !== baseBranch) return context;
   const workingBranch = resolveAgentDeliveryBranch({
     repoBranch: context.repoBranch,
     repoBaseBranch: baseBranch,

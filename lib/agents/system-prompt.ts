@@ -20,7 +20,7 @@ export function resolveAgentDeliveryBranch(input: {
   const currentBranch = input.repoBranch || baseBranch;
   if (currentBranch !== baseBranch || !input.sandboxId) return currentBranch;
 
-  const sandboxSlug = (input.sandboxId || "workspace")
+  const sandboxSlug = input.sandboxId
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")

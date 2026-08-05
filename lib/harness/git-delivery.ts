@@ -1,4 +1,5 @@
 import type { Sandbox } from "@vercel/sandbox";
+import { buildAgentGitSyncScript } from "@/lib/sandbox/agent-git-sync";
 
 type CommandResult = {
   exitCode: number;
@@ -14,6 +15,7 @@ export type HarnessGitWorkspace = {
 
 export type HarnessPullRequestDelivery = {
   pullRequestUrl: string | null;
+  /** Whether the delivery branch currently contains commits ahead of base. */
   changed: boolean;
   autoCommittedFiles: string[];
 };
@@ -59,6 +61,8 @@ If you change code, you must finish the delivery loop before declaring success:
 3. Push ${input.workingBranch} to origin without force-pushing.
 4. Open or update a pull request into ${input.baseBranch} and include its URL in your final response.
 
+Leave no untracked files in the repository. Commit intended new files, add disposable files to .gitignore, or delete scratch files before finishing; otherwise delivery fails closed.
+
 Do not leave completed work only in the sandbox. If GitHub delivery is blocked, state the exact blocker instead of claiming the work is finished.
 </delivery-contract>
 
@@ -79,32 +83,7 @@ export async function syncHarnessGitWorkspace(
   const workingBranch = createdBranch
     ? buildHarnessWorkingBranch(input.aiCallId)
     : input.workingBranch;
-  const command = `
-set -eu
-git check-ref-format --branch "$MOGPLEX_BASE_BRANCH" >/dev/null
-git check-ref-format --branch "$MOGPLEX_WORKING_BRANCH" >/dev/null
-git fetch origin "$MOGPLEX_BASE_BRANCH"
-remote_branch=false
-if git ls-remote --exit-code --heads origin "$MOGPLEX_WORKING_BRANCH" >/dev/null 2>&1; then
-  remote_branch=true
-fi
-if git show-ref --verify --quiet "refs/heads/$MOGPLEX_WORKING_BRANCH"; then
-  git checkout "$MOGPLEX_WORKING_BRANCH"
-elif [ "$remote_branch" = true ]; then
-  git fetch origin "$MOGPLEX_WORKING_BRANCH"
-  git checkout -b "$MOGPLEX_WORKING_BRANCH" "origin/$MOGPLEX_WORKING_BRANCH"
-elif [ "$MOGPLEX_CREATE_BRANCH" = 1 ]; then
-  git checkout -b "$MOGPLEX_WORKING_BRANCH" "origin/$MOGPLEX_BASE_BRANCH"
-else
-  echo "Working branch is unavailable on origin" >&2
-  exit 1
-fi
-if [ "$remote_branch" = true ]; then
-  git pull --ff-only origin "$MOGPLEX_WORKING_BRANCH"
-else
-  git push -u origin "$MOGPLEX_WORKING_BRANCH"
-fi
-`;
+  const command = buildAgentGitSyncScript();
 
   const result = await runShell(sandbox, command, {
     cwd: input.cwd,

@@ -1,4 +1,5 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
+import { buildAgentGitSyncScript } from "@/lib/sandbox/agent-git-sync";
 
 type ChatGitDeliveryInput = {
   userId: string;
@@ -35,27 +36,8 @@ export function buildChatGitDeliveryCommand(input: {
   return `
 MOGPLEX_BASE_BRANCH=${baseBranch}
 MOGPLEX_WORKING_BRANCH=${workingBranch}
-set -eu
-git check-ref-format --branch "$MOGPLEX_BASE_BRANCH" >/dev/null
-git check-ref-format --branch "$MOGPLEX_WORKING_BRANCH" >/dev/null
-git fetch origin "$MOGPLEX_BASE_BRANCH:refs/remotes/origin/$MOGPLEX_BASE_BRANCH"
-if git ls-remote --exit-code --heads origin "$MOGPLEX_WORKING_BRANCH" >/dev/null 2>&1; then
-  git fetch origin "$MOGPLEX_WORKING_BRANCH:refs/remotes/origin/$MOGPLEX_WORKING_BRANCH"
-  if git show-ref --verify --quiet "refs/heads/$MOGPLEX_WORKING_BRANCH"; then
-    git checkout "$MOGPLEX_WORKING_BRANCH"
-  else
-    git checkout -b "$MOGPLEX_WORKING_BRANCH" "origin/$MOGPLEX_WORKING_BRANCH"
-  fi
-  git merge --ff-only "origin/$MOGPLEX_WORKING_BRANCH"
-else
-  if git show-ref --verify --quiet "refs/heads/$MOGPLEX_WORKING_BRANCH"; then
-    git checkout "$MOGPLEX_WORKING_BRANCH"
-  else
-    git checkout -b "$MOGPLEX_WORKING_BRANCH" "origin/$MOGPLEX_BASE_BRANCH"
-  fi
-  git push -u origin "$MOGPLEX_WORKING_BRANCH"
-fi
-`.trim();
+MOGPLEX_CREATE_BRANCH=1
+${buildAgentGitSyncScript()}`.trim();
 }
 
 export function createChatGitDeliveryPreparer(
