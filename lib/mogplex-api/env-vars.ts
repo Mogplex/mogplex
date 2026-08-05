@@ -44,6 +44,16 @@ type EnvVarDeps = {
   deleteVercelProjectEnvVar: typeof deleteVercelProjectEnvVar;
 };
 
+export const MOGPLEX_VERCEL_ENV_API_AVAILABLE = false;
+
+function integrationRequired() {
+  return envVarError(
+    "SERVICE_UNAVAILABLE",
+    "Vercel project environment variables require an API-capable Vercel integration and are not available.",
+    501
+  );
+}
+
 type RepoWithVercel = {
   id: string;
   env_sync_mode: string | null;
@@ -229,6 +239,7 @@ export async function listMogplexApiRepoEnvVars(
   repoId: string,
   overrides: Partial<EnvVarDeps> = {}
 ): Promise<MogplexApiEnvVarResult<{ envVars: MogplexApiEnvVar[] }>> {
+  if (!MOGPLEX_VERCEL_ENV_API_AVAILABLE) return integrationRequired();
   const deps = { ...defaultDeps, ...overrides };
   const access = await resolveRepoEnvAccess(userId, repoId, deps);
   if (!access.ok) return access;
@@ -258,6 +269,7 @@ export async function upsertMogplexApiRepoEnvVar(
     updatedCount: number;
   }>
 > {
+  if (!MOGPLEX_VERCEL_ENV_API_AVAILABLE) return integrationRequired();
   const deps = { ...defaultDeps, ...overrides };
   const access = await resolveRepoEnvAccess(userId, repoId, deps);
   if (!access.ok) return access;
@@ -332,6 +344,7 @@ export async function deleteMogplexApiRepoEnvVar(
   input: { key: string },
   overrides: Partial<EnvVarDeps> = {}
 ): Promise<MogplexApiEnvVarResult<{ key: string; deletedCount: number }>> {
+  if (!MOGPLEX_VERCEL_ENV_API_AVAILABLE) return integrationRequired();
   const deps = { ...defaultDeps, ...overrides };
   const access = await resolveRepoEnvAccess(userId, repoId, deps);
   if (!access.ok) return access;

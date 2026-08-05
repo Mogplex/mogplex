@@ -6,6 +6,7 @@ import { isStaleLiveInteractiveCall } from "@/lib/interactive-runs";
 import type { NextRequest } from "next/server";
 import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import type { AiCall, SandboxCallContext } from "@/lib/types";
+import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
 
 type AiCallRow = Record<string, unknown>;
 type QueryResult = {
@@ -414,7 +415,9 @@ export function createObservabilityCallsGetHandler(
         (page - 1) * limit,
         page * limit
       );
-      const calls = await attachSandboxContexts(userId, pagedCalls, deps);
+      const calls = (await attachSandboxContexts(userId, pagedCalls, deps)).map(
+        (call) => sanitizeObservabilityPayload(call, "CALL", call.id)
+      );
 
       return NextResponse.json({
         calls,
@@ -438,11 +441,13 @@ export function createObservabilityCallsGetHandler(
       );
     }
 
-    const calls = await attachSandboxContexts(
-      userId,
-      (data as AiCallRow[] | null) ?? [],
-      deps
-    );
+    const calls = (
+      await attachSandboxContexts(
+        userId,
+        (data as AiCallRow[] | null) ?? [],
+        deps
+      )
+    ).map((call) => sanitizeObservabilityPayload(call, "CALL", call.id));
 
     return NextResponse.json({
       calls,

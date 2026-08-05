@@ -4,6 +4,7 @@ import { logConnectionEvent } from "@/lib/connections/logging";
 import {
   ACTIVE_CHAT_STALE_THRESHOLD_MS,
   ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS,
+  PREPARED_HARNESS_STALE_THRESHOLD_MS,
   isStaleLiveInteractiveCall,
 } from "@/lib/interactive-runs";
 import {
@@ -118,6 +119,7 @@ type AiCallZombieRow = {
   user_id: string;
   conversation_id: string | null;
   repo_id: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 /**
@@ -144,11 +146,17 @@ async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
   const interactiveCutoffIso = new Date(
     now - ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS
   ).toISOString();
+  const preparedCutoffIso = new Date(
+    now - PREPARED_HARNESS_STALE_THRESHOLD_MS
+  ).toISOString();
 
-  const [chatResult, interactiveResult] = await Promise.all([
+  const selection =
+    "id, type, status, started_at, user_id, conversation_id, repo_id, metadata";
+
+  const [chatResult, interactiveResult, preparedResult] = await Promise.all([
     supabaseAdmin
       .from("ai_calls")
-      .select("id, type, status, started_at, user_id, conversation_id, repo_id")
+      .select(selection)
       .eq("type", "chat")
       .in("status", ["pending", "streaming"])
       .lt("started_at", chatCutoffIso)
@@ -156,10 +164,18 @@ async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
       .limit(AI_CALL_CHAT_PAGE_LIMIT),
     supabaseAdmin
       .from("ai_calls")
-      .select("id, type, status, started_at, user_id, conversation_id, repo_id")
+      .select(selection)
       .neq("type", "chat")
       .in("status", ["pending", "streaming"])
       .lt("started_at", interactiveCutoffIso)
+      .order("started_at", { ascending: true })
+      .limit(AI_CALL_INTERACTIVE_PAGE_LIMIT),
+    supabaseAdmin
+      .from("ai_calls")
+      .select(selection)
+      .in("status", ["pending", "streaming"])
+      .contains("metadata", { prepared: true })
+      .lt("started_at", preparedCutoffIso)
       .order("started_at", { ascending: true })
       .limit(AI_CALL_INTERACTIVE_PAGE_LIMIT),
   ]);
@@ -167,13 +183,21 @@ async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
   if (chatResult.error) return { ok: false, error: chatResult.error.message };
   if (interactiveResult.error)
     return { ok: false, error: interactiveResult.error.message };
+  if (preparedResult.error)
+    return { ok: false, error: preparedResult.error.message };
+
+  const unique = new Map<string, AiCallZombieRow>();
+  for (const row of [
+    ...((chatResult.data ?? []) as AiCallZombieRow[]),
+    ...((interactiveResult.data ?? []) as AiCallZombieRow[]),
+    ...((preparedResult.data ?? []) as AiCallZombieRow[]),
+  ]) {
+    unique.set(row.id, row);
+  }
 
   return {
     ok: true,
-    rows: [
-      ...((chatResult.data ?? []) as AiCallZombieRow[]),
-      ...((interactiveResult.data ?? []) as AiCallZombieRow[]),
-    ],
+    rows: [...unique.values()],
   };
 }
 
@@ -203,6 +227,7 @@ async function defaultReapStaleAiCalls(): Promise<ZombieReaperTableSummary> {
           type: row.type as never,
           status: row.status as never,
           started_at: row.started_at,
+          metadata: row.metadata ?? {},
         },
         now
       )

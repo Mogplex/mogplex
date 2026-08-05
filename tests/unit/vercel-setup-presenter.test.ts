@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { presentVercelSetup } from "../../lib/activation/setup-state";
+import {
+  presentSandboxEmptyState,
+  presentVercelSetup,
+} from "../../lib/activation/setup-state";
 import type { VercelCapability } from "../../lib/vercel/capabilities";
 
 function capability(
@@ -19,7 +22,7 @@ function capability(
   };
 }
 
-test("presentVercelSetup: platform-billed users skip the connect prompt", () => {
+test("presentVercelSetup lets platform-billed users launch", () => {
   const result = presentVercelSetup({
     vercel: capability(),
     platform_access: { allowPlatformSandbox: true, allowPlatformAi: true },
@@ -30,7 +33,7 @@ test("presentVercelSetup: platform-billed users skip the connect prompt", () => 
   assert.equal(result.primaryAction, null);
 });
 
-test("presentVercelSetup: fully linked users see no action", () => {
+test("presentVercelSetup sends users without platform access to billing", () => {
   const result = presentVercelSetup({
     vercel: capability({
       personalState: "linked",
@@ -40,59 +43,21 @@ test("presentVercelSetup: fully linked users see no action", () => {
     }),
   });
 
-  assert.equal(result.state, "linked");
-  assert.equal(result.canLaunchSandbox, true);
-  assert.equal(result.primaryAction, null);
-});
-
-test("presentVercelSetup: oauth-connected without project prompts to select one", () => {
-  const result = presentVercelSetup({
-    vercel: capability({
-      personalState: "linked",
-      linkedProjectState: "none",
-      canLinkUserBillingProject: true,
-      canUseUserBilling: false,
-    }),
-  });
-
-  assert.equal(result.state, "oauth_connected_needs_project");
+  assert.equal(result.state, "billing_required");
   assert.equal(result.canLaunchSandbox, false);
   assert.deepEqual(result.primaryAction, {
-    kind: "link_project",
-    label: "Create project with Vercel billing",
-    href: "/api/auth/vercel",
+    kind: "billing",
+    label: "Open billing settings",
+    href: "/settings?section=billing",
+  });
+  assert.deepEqual(presentSandboxEmptyState(result), {
+    title: "Add sandbox billing",
+    detail: "Add funds or choose a plan in Billing before launching a sandbox.",
   });
 });
 
-test("presentVercelSetup: account default counts as fully linked", () => {
-  const result = presentVercelSetup({
-    vercel: capability({
-      personalState: "linked",
-      linkedProjectState: "account",
-      canLinkUserBillingProject: true,
-      canUseUserBilling: true,
-    }),
-  });
-
-  assert.equal(result.state, "linked");
-  assert.equal(result.canLaunchSandbox, true);
-  assert.equal(result.primaryAction, null);
-});
-
-test("presentVercelSetup: disconnected users see the connect CTA", () => {
-  const result = presentVercelSetup({ vercel: capability() });
-
-  assert.equal(result.state, "disconnected");
-  assert.equal(result.canLaunchSandbox, false);
-  assert.deepEqual(result.primaryAction, {
-    kind: "connect",
-    label: "Connect Vercel",
-    href: "/api/auth/vercel",
-  });
-});
-
-test("presentVercelSetup: missing user falls back to disconnected", () => {
+test("presentVercelSetup does not offer an impossible connection path", () => {
   const result = presentVercelSetup(null);
-  assert.equal(result.state, "disconnected");
-  assert.equal(result.canLaunchSandbox, false);
+  assert.equal(result.state, "billing_required");
+  assert.doesNotMatch(result.detail, /connect vercel/i);
 });

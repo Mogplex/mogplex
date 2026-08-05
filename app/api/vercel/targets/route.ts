@@ -19,6 +19,22 @@ type TargetsRouteDeps = {
   fetch: typeof fetch;
 };
 
+// Sign in with Vercel is an identity grant, not an API-capable integration.
+// Keep every project-list/create entry point closed until Mogplex has a grant
+// that explicitly includes the required Vercel API scopes.
+export const PERSONAL_VERCEL_TARGETS_AVAILABLE = false;
+
+function integrationRequiredResponse() {
+  return NextResponse.json(
+    {
+      error: "VERCEL_INTEGRATION_REQUIRED",
+      message:
+        "Vercel project actions require an API-capable Vercel integration and are not available.",
+    },
+    { status: 501 }
+  );
+}
+
 const defaultDeps: TargetsRouteDeps = {
   getUserCredentials,
   fetch,
@@ -177,6 +193,10 @@ export function createVercelTargetsGetHandler(
   };
 
   return async function GET(request: Request) {
+    if (!PERSONAL_VERCEL_TARGETS_AVAILABLE) {
+      return integrationRequiredResponse();
+    }
+
     const creds = await deps.getUserCredentials();
     const { searchParams } = new URL(request.url);
     const teamId = searchParams.get("teamId") || "personal";
@@ -301,6 +321,10 @@ export function createVercelTargetsPostHandler(
   };
 
   return async function POST(request: Request) {
+    if (!PERSONAL_VERCEL_TARGETS_AVAILABLE) {
+      return integrationRequiredResponse();
+    }
+
     const creds = await deps.getUserCredentials();
     if (!creds?.vercelToken) {
       return NextResponse.json(

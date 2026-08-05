@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { SANDBOX_BILLING_SANDBOX_STUB_SQL } from "./harness";
 
 const databaseUrl = process.env.SANDBOX_BILLING_TEST_DATABASE_URL;
 const describeWithPostgres = databaseUrl ? describe : describe.skip;
@@ -35,24 +36,14 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       max: 4,
     });
     await pool.query("drop schema public cascade; create schema public");
-    await pool.query(`
-      create table public.sandboxes (
-        id uuid primary key,
-        user_id uuid not null,
-        actor_user_id uuid,
-        product_team_id uuid,
-        sandbox_id text not null,
-        billing_source text,
-        status text not null default 'stopped',
-        last_active_at timestamptz not null default now()
-      )
-    `);
+    await pool.query(SANDBOX_BILLING_SANDBOX_STUB_SQL);
     for (const migrationName of [
       "20260804200000_billing_foundation.sql",
       "20260804210000_atomic_billing_cancellation_expiry.sql",
       "20260805060000_billing_usage_debits.sql",
       "20260805070000_sandbox_billing_sessions.sql",
       "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
+      "20260805190000_harden_sandbox_billing_close_contract.sql",
     ]) {
       const migration = await readFile(
         path.resolve(

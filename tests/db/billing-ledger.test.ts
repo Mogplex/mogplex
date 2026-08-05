@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { SANDBOX_BILLING_SANDBOX_STUB_SQL } from "./harness";
 
 const ACCOUNT_ID = "00000000-0000-4000-8000-000000000001";
 const USER_ID = "00000000-0000-4000-8000-000000000002";
@@ -41,18 +42,8 @@ describe("billing ledger migration", () => {
       create role anon;
       create role authenticated;
       create role service_role;
-
-      create table public.sandboxes (
-        id uuid primary key,
-        user_id uuid not null,
-        actor_user_id uuid,
-        product_team_id uuid,
-        sandbox_id text not null,
-        billing_source text,
-        status text not null default 'stopped',
-        last_active_at timestamptz not null default now()
-      )
     `);
+    await db.exec(SANDBOX_BILLING_SANDBOX_STUB_SQL);
     for (const migrationName of [
       "20260804200000_billing_foundation.sql",
       "20260804210000_atomic_billing_cancellation_expiry.sql",
@@ -60,6 +51,7 @@ describe("billing ledger migration", () => {
       "20260805070000_sandbox_billing_sessions.sql",
       "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
       "20260805140000_exact_token_usage_accrual.sql",
+      "20260805190000_harden_sandbox_billing_close_contract.sql",
     ]) {
       const migration = await readFile(
         path.resolve(
@@ -1131,9 +1123,10 @@ describe("billing ledger migration", () => {
       [MINIMUM_SANDBOX_ONE_ID, MINIMUM_ACCOUNT_ID, MINIMUM_USER_ID]
     );
     const sessionId = opened.rows[0]!.open_sandbox_billing_session;
-    await db.query("select request_sandbox_billing_session_close($1)", [
-      sessionId,
-    ]);
+    const requested = await db.query<{
+      request_sandbox_billing_session_close: number;
+    }>("select request_sandbox_billing_session_close($1)", [sessionId]);
+    const generation = requested.rows[0]!.request_sandbox_billing_session_close;
     const accrued = await db.query<{
       accrued: boolean;
       debited_cents: number;
@@ -1148,5 +1141,33 @@ describe("billing ledger migration", () => {
     expect(accrued.rows).toEqual([
       { accrued: false, debited_cents: 0, session_state: "closing" },
     ]);
+
+    await db.query(
+      `select * from accrue_sandbox_billing_session(
+         $1, '2026-08-05T08:05:00.000Z', true, $2
+       )`,
+      [sessionId, generation]
+    );
+    const terminalRetry = await db.query<{
+      request_sandbox_billing_session_close: number;
+    }>("select request_sandbox_billing_session_close($1)", [sessionId]);
+    expect(terminalRetry.rows[0]!.request_sandbox_billing_session_close).toBe(
+      generation
+    );
+
+    await expect(
+      db.query("select request_sandbox_billing_session_close($1)", [
+        "00000000-0000-4000-8000-ffffffffffff",
+      ])
+    ).rejects.toThrow(/not found/);
+    await expect(
+      db.query(
+        `select open_sandbox_billing_session(
+           $1, 'sbx_min_1', 'ses_close_barrier', $2, $3, null,
+           '2026-08-05T08:00:00.000Z', 5000
+         )`,
+        [MINIMUM_SANDBOX_ONE_ID, MINIMUM_ACCOUNT_ID, MINIMUM_USER_ID]
+      )
+    ).rejects.toThrow(/already closed/);
   });
 });

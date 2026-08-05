@@ -700,8 +700,29 @@ function AgentPane({
         options?: { allowResumeRetry?: boolean; retryNotice?: string }
       ): Promise<void> => {
         const controller = new AbortController();
+        let preparedAiCallId: string | null = null;
         harnessAbortRef.current = controller;
         setStopError(null);
+
+        const cancelPreparedCall = async () => {
+          if (!preparedAiCallId) return;
+          const callId = preparedAiCallId;
+          preparedAiCallId = null;
+          if (activeHarnessCallIdRef.current === callId) {
+            activeHarnessCallIdRef.current = null;
+            setActiveHarnessCallId(null);
+          }
+          try {
+            await fetch(`/api/observability/calls/${callId}/cancel`, {
+              method: "POST",
+              headers: getActiveTeamRequestHeaders(),
+              keepalive: true,
+            });
+          } catch {
+            // Best effort. The prepared-row reaper is the final safety net if
+            // navigation or a network outage prevents this cleanup request.
+          }
+        };
 
         try {
           const prepareRes = await fetch(`/api/sandbox/${sandboxId}/harness`, {
@@ -735,6 +756,7 @@ function AgentPane({
 
           activeHarnessCallIdRef.current = prepared.aiCallId;
           setActiveHarnessCallId(prepared.aiCallId);
+          preparedAiCallId = prepared.aiCallId;
 
           const res = await fetch(`/api/sandbox/${sandboxId}/harness`, {
             method: "POST",
@@ -759,6 +781,7 @@ function AgentPane({
               typeof data.error === "string"
                 ? data.error
                 : "Harness request failed";
+            await cancelPreparedCall();
 
             if (
               options?.allowResumeRetry &&
@@ -781,6 +804,7 @@ function AgentPane({
           }
 
           if (!res.body) {
+            await cancelPreparedCall();
             updateLocalMsg(pane.id, outputMsgId, "No response stream");
             return;
           }
@@ -986,6 +1010,7 @@ function AgentPane({
           });
           await syncConversation(pane.id);
         } catch (err) {
+          await cancelPreparedCall();
           if (err instanceof DOMException && err.name === "AbortError") {
             updateLocalMsg(pane.id, outputMsgId, {
               text: "[cancelled]",

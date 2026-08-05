@@ -8,7 +8,7 @@ async function loadWorkspaceRoute() {
   return import("../../app/api/workspaces/[id]/route");
 }
 
-test("PATCH /api/workspaces/[id] persists sandbox billing settings", async () => {
+test("PATCH /api/workspaces/[id] normalizes disabled user billing to platform", async () => {
   const { createWorkspacePatchHandler } = await loadWorkspaceRoute();
   let receivedUpdates: Record<string, unknown> | null = null;
 
@@ -24,9 +24,9 @@ test("PATCH /api/workspaces/[id] persists sandbox billing settings", async () =>
           name: "Workspace A",
           description: "Notes",
           is_default: false,
-          sandbox_billing_mode: "user_vercel_project",
-          sandbox_vercel_project_id: "prj_123",
-          sandbox_vercel_team_id: "team_123",
+          sandbox_billing_mode: "platform",
+          sandbox_vercel_project_id: null,
+          sandbox_vercel_team_id: null,
           vercel_link_status: "unknown",
           vercel_link_checked_at: null,
           vercel_link_error_code: null,
@@ -54,12 +54,9 @@ test("PATCH /api/workspaces/[id] persists sandbox billing settings", async () =>
   );
 
   assert.equal(response.status, 200);
-  assert.equal(
-    receivedUpdates?.["sandbox_billing_mode"],
-    "user_vercel_project"
-  );
-  assert.equal(receivedUpdates?.["sandbox_vercel_project_id"], "prj_123");
-  assert.equal(receivedUpdates?.["sandbox_vercel_team_id"], "team_123");
+  assert.equal(receivedUpdates?.["sandbox_billing_mode"], "platform");
+  assert.equal(receivedUpdates?.["sandbox_vercel_project_id"], null);
+  assert.equal(receivedUpdates?.["sandbox_vercel_team_id"], null);
   assert.equal(receivedUpdates?.["vercel_link_status"], "unknown");
   assert.equal(receivedUpdates?.["vercel_link_checked_at"], null);
   assert.equal(receivedUpdates?.["vercel_link_error_code"], null);
@@ -70,9 +67,9 @@ test("PATCH /api/workspaces/[id] persists sandbox billing settings", async () =>
     name: "Workspace A",
     description: "Notes",
     is_default: false,
-    sandbox_billing_mode: "user_vercel_project",
-    sandbox_vercel_project_id: "prj_123",
-    sandbox_vercel_team_id: "team_123",
+    sandbox_billing_mode: "platform",
+    sandbox_vercel_project_id: null,
+    sandbox_vercel_team_id: null,
     vercel_link_status: "unknown",
     vercel_link_checked_at: null,
     vercel_link_error_code: null,

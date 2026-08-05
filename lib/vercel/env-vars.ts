@@ -1,6 +1,6 @@
 import { getOAuthToken } from "@/lib/oauth-tokens";
 import {
-  normalizeEnvSyncMode,
+  resolveEffectiveEnvSyncMode,
   normalizeEnvVars,
   normalizeRootDirectory,
   resolveSandboxPath,
@@ -285,7 +285,7 @@ export function getRepoLinkedVercelProject(
   repo: RepoSandboxEnvRepo
 ): LinkedVercelProject | null {
   if (
-    normalizeEnvSyncMode(repo.env_sync_mode) !== "vercel-project" ||
+    resolveEffectiveEnvSyncMode(repo.env_sync_mode) !== "vercel-project" ||
     !repo.vercel_project_id
   ) {
     return null;
@@ -301,7 +301,7 @@ export async function resolveRepoSandboxEnv(opts: {
   repo: RepoSandboxEnvRepo;
   userId: string;
 }): Promise<RepoSandboxEnvResolution> {
-  const mode = normalizeEnvSyncMode(opts.repo.env_sync_mode);
+  const mode = resolveEffectiveEnvSyncMode(opts.repo.env_sync_mode);
   const manualEnvVars = normalizeEnvVars(opts.repo.sandbox_env_vars);
 
   if (mode !== "vercel-project") {
@@ -379,7 +379,7 @@ export async function prepareSandboxVercelLink(
     linkedProject?: LinkedVercelProject | null;
   }
 ): Promise<PrepareSandboxVercelLinkResult> {
-  const mode = normalizeEnvSyncMode(opts.envSyncMode);
+  const mode = resolveEffectiveEnvSyncMode(opts.envSyncMode);
   if (mode !== "vercel-project" || !opts.linkedProject?.projectId) {
     return {
       applied: false,

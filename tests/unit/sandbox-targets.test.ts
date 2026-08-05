@@ -12,7 +12,7 @@ async function loadSandboxBilling() {
   return import("../../lib/sandbox/billing");
 }
 
-test("resolveSandboxTarget uses repo-linked Vercel projects when user billing is active", async () => {
+test("resolveSandboxTarget ignores a legacy repo user-billing selection", async () => {
   const { resolveSandboxTarget } = await loadSandboxCredentials();
 
   assert.deepEqual(
@@ -24,15 +24,15 @@ test("resolveSandboxTarget uses repo-linked Vercel projects when user billing is
     }),
     {
       ok: true,
-      billingSource: "user_vercel_project",
-      credentialSource: "user",
-      projectId: "prj_linked",
-      teamId: "team_linked",
+      billingSource: "platform",
+      credentialSource: "platform",
+      projectId: null,
+      teamId: null,
     }
   );
 });
 
-test("resolveSandboxTarget rejects user billing without a linked repo or workspace project", async () => {
+test("resolveSandboxTarget cannot activate user billing through a stale setting", async () => {
   const { resolveSandboxTarget } = await loadSandboxCredentials();
 
   assert.deepEqual(
@@ -41,10 +41,11 @@ test("resolveSandboxTarget rejects user billing without a linked repo or workspa
       repoBillingModeOverrideInput: "user_vercel_project",
     }),
     {
-      ok: false,
-      billingSource: "user_vercel_project",
-      error:
-        "Select or create a Vercel project for user-owned sandbox billing.",
+      ok: true,
+      billingSource: "platform",
+      credentialSource: "platform",
+      projectId: null,
+      teamId: null,
     }
   );
 });
@@ -199,7 +200,7 @@ test("resolveSandboxRecordCredentials fails closed for user-billed sandboxes mis
   );
 });
 
-test("resolveSandboxTarget falls back to account default when no repo or workspace project is set", async () => {
+test("resolveSandboxTarget does not activate user billing from an account default", async () => {
   const { resolveSandboxTarget } = await loadSandboxCredentials();
 
   assert.deepEqual(
@@ -211,15 +212,15 @@ test("resolveSandboxTarget falls back to account default when no repo or workspa
     }),
     {
       ok: true,
-      billingSource: "user_vercel_project",
-      credentialSource: "user",
-      projectId: "prj_account",
-      teamId: "team_account",
+      billingSource: "platform",
+      credentialSource: "platform",
+      projectId: null,
+      teamId: null,
     }
   );
 });
 
-test("resolveSandboxTarget prefers workspace override over account default", async () => {
+test("resolveSandboxTarget ignores legacy workspace and account billing targets", async () => {
   const { resolveSandboxTarget } = await loadSandboxCredentials();
 
   assert.deepEqual(
@@ -232,15 +233,15 @@ test("resolveSandboxTarget prefers workspace override over account default", asy
     }),
     {
       ok: true,
-      billingSource: "user_vercel_project",
-      credentialSource: "user",
-      projectId: "prj_workspace",
-      teamId: "team_workspace",
+      billingSource: "platform",
+      credentialSource: "platform",
+      projectId: null,
+      teamId: null,
     }
   );
 });
 
-test("resolveSandboxTarget uses workspace-linked Vercel projects when repo inherits user billing", async () => {
+test("resolveSandboxTarget keeps inherited legacy user billing on platform", async () => {
   const { resolveSandboxTarget } = await loadSandboxCredentials();
 
   assert.deepEqual(
@@ -252,10 +253,10 @@ test("resolveSandboxTarget uses workspace-linked Vercel projects when repo inher
     }),
     {
       ok: true,
-      billingSource: "user_vercel_project",
-      credentialSource: "user",
-      projectId: "prj_workspace",
-      teamId: "team_workspace",
+      billingSource: "platform",
+      credentialSource: "platform",
+      projectId: null,
+      teamId: null,
     }
   );
 });
@@ -317,7 +318,7 @@ test("resolveSandboxTargetCredentials blocks platform billing for non-allowliste
     {
       ok: false,
       error:
-        "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or link Personal Vercel and select a billing project.",
+        "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.",
       status: 403,
     }
   );
@@ -347,7 +348,7 @@ test("resolveSandboxRecordCredentials blocks existing platform sandboxes for non
     {
       ok: false,
       error:
-        "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.",
+        "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.",
       status: 403,
     }
   );
@@ -391,6 +392,27 @@ test("getPlatformSandboxCredentials supports the platform project ID alias", asy
     } else {
       process.env.PLATFORM_VERCEL_PROJECT_ID = savedPlatformProjectId;
     }
+  }
+});
+
+test("VERCEL_PROJECT_ID takes precedence over the platform alias", async () => {
+  const { getPlatformSandboxCredentials } = await loadSandboxCredentials();
+  const savedVercelProjectId = process.env.VERCEL_PROJECT_ID;
+  const savedPlatformProjectId = process.env.PLATFORM_VERCEL_PROJECT_ID;
+  process.env.VERCEL_PROJECT_ID = "canonical-project";
+  process.env.PLATFORM_VERCEL_PROJECT_ID = "alias-project";
+  try {
+    assert.equal(
+      getPlatformSandboxCredentials().vercelProjectId,
+      "canonical-project"
+    );
+  } finally {
+    if (savedVercelProjectId === undefined)
+      delete process.env.VERCEL_PROJECT_ID;
+    else process.env.VERCEL_PROJECT_ID = savedVercelProjectId;
+    if (savedPlatformProjectId === undefined)
+      delete process.env.PLATFORM_VERCEL_PROJECT_ID;
+    else process.env.PLATFORM_VERCEL_PROJECT_ID = savedPlatformProjectId;
   }
 });
 

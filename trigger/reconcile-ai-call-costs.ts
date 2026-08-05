@@ -10,6 +10,11 @@ const BATCH_LIMIT = 500;
 // Keep full batches inside the Trigger maxDuration without firing 500 Gateway calls at once.
 const RECONCILE_CONCURRENCY = 20;
 const RECONCILE_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Deliberate no-retroactive-billing policy: this scheduled reconciler repairs
+// recent Gateway finalization lag only. It must never expand into an unbounded
+// historical debit after billing is enabled for an existing account.
+export const AI_COST_RECONCILIATION_BACKFILL_POLICY =
+  "no-retroactive-billing" as const;
 const GATEWAY_FINALIZATION_DELAY_MS = 30 * 1000;
 const STALE_WARNING_MS = 12 * 60 * 60 * 1000;
 

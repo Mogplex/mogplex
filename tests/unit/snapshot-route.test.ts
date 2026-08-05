@@ -92,7 +92,7 @@ test("resolveSnapshotCredentialsForRepo prefers stored snapshot ownership over c
   });
 });
 
-test("resolveSnapshotCredentialsForRepo falls back to current repo/workspace billing for legacy snapshots", async () => {
+test("resolveSnapshotCredentialsForRepo ignores disabled user billing for legacy snapshots", async () => {
   const { resolveSnapshotCredentialsForRepo } = await loadSnapshotRouteModule();
 
   const resolved = await resolveSnapshotCredentialsForRepo(
@@ -120,9 +120,9 @@ test("resolveSnapshotCredentialsForRepo falls back to current repo/workspace bil
 
   assert.deepEqual(resolved, {
     ok: true,
-    vercelToken: "user-token",
-    vercelTeamId: "repo-team",
-    vercelProjectId: "repo-project",
+    vercelToken: "platform-token",
+    vercelTeamId: "platform-team",
+    vercelProjectId: "platform-project",
   });
 });
 
@@ -186,7 +186,7 @@ test("resolveSnapshotCredentialsForRepo blocks platform-billed snapshots for use
   assert.deepEqual(resolved, {
     ok: false,
     error:
-      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or relaunch this repo with a personal Vercel billing project.",
+      "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing.",
     status: 403,
   });
 });

@@ -92,6 +92,18 @@ test("presentSandboxError returns action-oriented titles and CTAs", () => {
   assert.equal(generic?.title, "Sandbox launch failed");
   assert.equal(generic?.cta, null);
 
+  const billingRequired = presentSandboxError(
+    "Hosted sandbox compute requires a positive billing balance. Add funds or choose a plan in Settings > Billing."
+  );
+  assert.equal(
+    billingRequired?.title,
+    "Add sandbox billing to launch this preview"
+  );
+  assert.deepEqual(billingRequired?.cta, {
+    label: "Open billing settings",
+    href: "/settings?section=billing",
+  });
+
   const platformBlocked = presentSandboxError(
     "Platform sandbox billing is not enabled for this account. Link Personal Vercel and select a billing project to launch sandboxes."
   );

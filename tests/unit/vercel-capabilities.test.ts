@@ -15,7 +15,7 @@ test("resolveLinkedProjectState prioritizes repo-linked projects over workspace-
   );
 });
 
-test("deriveVercelCapability reports user billing readiness only when a personal link and billing project both exist", () => {
+test("deriveVercelCapability keeps user billing unavailable for identity-only Vercel links", () => {
   assert.deepEqual(
     deriveVercelCapability({
       platformState: "ready",
@@ -27,11 +27,11 @@ test("deriveVercelCapability reports user billing readiness only when a personal
       personalState: "linked",
       linkedProjectState: "workspace",
       canUsePlatformOps: true,
-      canLinkUserBillingProject: true,
-      canUseUserBilling: true,
+      canLinkUserBillingProject: false,
+      canUseUserBilling: false,
       statusLabel: "Platform ready",
       statusDetail:
-        "Mogplex platform Vercel is ready. Personal Vercel is linked and at least one project billing link is selected.",
+        "Mogplex platform Vercel is ready. Sign in with Vercel is identity-only; user-owned compute requires a future API-capable integration.",
     }
   );
 });
@@ -58,12 +58,13 @@ test("resolveLinkedProjectState prefers workspace overrides over account default
   );
 });
 
-test("deriveVercelCapability treats account default as billable", () => {
+test("deriveVercelCapability does not revive a stale account default", () => {
   const capability = deriveVercelCapability({
     platformState: "ready",
     personalState: "linked",
     linkedProjectState: "account",
   });
-  assert.equal(capability.canUseUserBilling, true);
-  assert.match(capability.statusDetail, /default billing project is set/);
+  assert.equal(capability.canLinkUserBillingProject, false);
+  assert.equal(capability.canUseUserBilling, false);
+  assert.match(capability.statusDetail, /identity-only/);
 });

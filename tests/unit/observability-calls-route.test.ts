@@ -201,6 +201,42 @@ test("GET /api/observability/calls preserves gateway cost source fields", async 
   assert.equal(payload.calls[0].gateway_generation_id, "gen_123");
 });
 
+test("GET /api/observability/calls removes raw errors and error metadata", async () => {
+  const { createObservabilityCallsGetHandler } =
+    await loadObservabilityCallsRoute();
+  const handler = createObservabilityCallsGetHandler({
+    requireUserId: async () => "user-123",
+    buildQuery: () =>
+      new FakeQuery({
+        data: [
+          {
+            id: "call-sensitive",
+            type: "agent",
+            status: "failed",
+            started_at: "2026-08-05T00:00:00.000Z",
+            error: "INTERNAL_API_SECRET is required",
+            metadata: {
+              stack: "Error: db\n    at execute (/srv/app.ts:42:1)",
+            },
+            tool_calls: [],
+          },
+        ],
+        count: 1,
+        error: null,
+      }) as never,
+  });
+
+  const response = await handler(
+    new NextRequest("http://localhost/api/observability/calls")
+  );
+  const payload = await response.json();
+  const serialized = JSON.stringify(payload);
+
+  assert.equal(serialized.includes("INTERNAL_API_SECRET"), false);
+  assert.equal(serialized.includes("/srv/app.ts"), false);
+  assert.match(payload.calls[0].error, /Incident MOG-/);
+});
+
 test("GET /api/observability/calls leaves sandbox_context null when the sandbox record is missing", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();

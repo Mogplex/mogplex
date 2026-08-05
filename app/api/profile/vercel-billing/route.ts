@@ -12,6 +12,8 @@ type PatchBody = {
   teamId?: unknown;
 };
 
+export const PERSONAL_VERCEL_BILLING_CONFIGURATION_AVAILABLE = false;
+
 type ProfileVercelBillingDeps = {
   requireUserId: typeof requireUserId;
   loadUserVercelCredentials: typeof loadUserVercelCredentials;
@@ -150,6 +152,17 @@ export function createProfileVercelBillingPatchHandler(
         teamId: null,
         projectName: null,
       });
+    }
+
+    if (!PERSONAL_VERCEL_BILLING_CONFIGURATION_AVAILABLE) {
+      return NextResponse.json(
+        {
+          error: "VERCEL_INTEGRATION_REQUIRED",
+          message:
+            "User-owned Vercel billing requires an API-capable Vercel integration and is not available.",
+        },
+        { status: 501 }
+      );
     }
 
     const creds = await deps.loadUserVercelCredentials(userId);

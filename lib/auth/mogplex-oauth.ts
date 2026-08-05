@@ -1,5 +1,6 @@
 import type { ApiKeyResolution } from "@/lib/auth/api-key";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import * as Sentry from "@sentry/nextjs";
 
 const MOGPLEX_OAUTH_SCOPES = ["read", "write"] as const;
 type MogplexOAuthScope = (typeof MOGPLEX_OAUTH_SCOPES)[number];
@@ -15,6 +16,7 @@ type MogplexOAuthVerifierDependencies = {
     authorization: string
   ) => Promise<BetterAuthMcpSession | null>;
   resolveProfileId: (authUserId: string) => Promise<string | null>;
+  captureException: typeof Sentry.captureException;
 };
 
 async function getMcpSession(authorization: string) {
@@ -37,6 +39,7 @@ async function resolveProfileId(authUserId: string) {
 const defaultDependencies: MogplexOAuthVerifierDependencies = {
   getMcpSession,
   resolveProfileId,
+  captureException: Sentry.captureException,
 };
 
 let dependencies = defaultDependencies;
@@ -88,7 +91,12 @@ export async function resolveMogplexOAuthToken(
         scopes: parsed.scopes,
       },
     };
-  } catch {
+  } catch (error) {
+    // Validation failures are operationally useful, but bearer credentials
+    // are not: intentionally omit the Authorization header from telemetry.
+    dependencies.captureException(error, {
+      tags: { auth_surface: "mogplex_mcp_oauth" },
+    });
     return { ok: false, reason: "invalid" };
   }
 }

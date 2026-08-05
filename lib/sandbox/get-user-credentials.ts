@@ -59,10 +59,9 @@ export function isSandboxCapabilityDeniedError(
  * the production project is never baked into the (public) source tree. Read
  * lazily so test suites can set the env var after module load.
  *
- * Deployments without platform sandbox config (self-hosted BYO Vercel) leave
- * the var unset: the ID stays null and only the platform-billing branches of
- * resolveSandboxTargetCredentials / resolveSandboxRecordCredentials reject —
- * personal-billing and env-var flows must keep working without it.
+ * Deployments without platform sandbox config leave the value unset and new
+ * launches fail closed. Historical user-billed sandbox records still retain
+ * their stored ownership so cleanup and recovery can use the original target.
  */
 function readDefaultVercelProjectId(): string | null {
   return (
@@ -73,7 +72,7 @@ function readDefaultVercelProjectId(): string | null {
 }
 
 export const PLATFORM_VERCEL_PROJECT_NOT_CONFIGURED_ERROR =
-  "Sandbox service not configured — set VERCEL_PROJECT_ID (see .env.example)";
+  "Sandbox service not configured — set VERCEL_PROJECT_ID or PLATFORM_VERCEL_PROJECT_ID (see .env.example)";
 
 /** Platform-level Vercel credentials for Mogplex-managed sandboxes. */
 const PLATFORM_VERCEL_TOKEN = process.env.PLATFORM_VERCEL_TOKEN?.trim() || null;

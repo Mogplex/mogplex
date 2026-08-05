@@ -8,6 +8,7 @@ import {
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { NextRequest } from "next/server";
 import type { ObservabilityJob } from "@/lib/types";
+import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
 
 type JobsFilters = {
   page: number;
@@ -154,14 +155,19 @@ export async function GET(req: NextRequest) {
     ]);
 
     if (aiCallsError) {
+      console.error("observability ai call summary query failed", aiCallsError);
       return NextResponse.json(
-        { error: aiCallsError.message },
+        { error: "Failed to fetch job details" },
         { status: 500 }
       );
     }
     if (dispatchEventsError) {
+      console.error(
+        "observability dispatch event query failed",
+        dispatchEventsError
+      );
       return NextResponse.json(
-        { error: dispatchEventsError.message },
+        { error: "Failed to fetch job details" },
         { status: 500 }
       );
     }
@@ -196,7 +202,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    jobs: paged,
+    jobs: paged.map((job) => sanitizeObservabilityPayload(job, "JOB", job.id)),
     total,
     page: filters.page,
     limit: filters.limit,

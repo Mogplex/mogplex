@@ -23,12 +23,15 @@ type UserVercelCredentialsFixture = Pick<
 
 type ReaperSandboxRecordRepoFixture = {
   sandbox_timeout_ms: number | null;
+  sandbox_idle_timeout_ms?: number | null;
   workspace:
     | {
         sandbox_timeout_ms: number | null;
+        sandbox_idle_timeout_ms?: number | null;
       }
     | Array<{
         sandbox_timeout_ms: number | null;
+        sandbox_idle_timeout_ms?: number | null;
       }>
     | null;
 };
@@ -95,7 +98,11 @@ const defaultReaperSandboxRecord: ReaperSandboxRecordFixture = {
   persistent: false,
   repo: {
     sandbox_timeout_ms: 600_000,
-    workspace: null,
+    sandbox_idle_timeout_ms: 600_000,
+    workspace: {
+      sandbox_timeout_ms: 600_000,
+      sandbox_idle_timeout_ms: 600_000,
+    },
   },
 };
 

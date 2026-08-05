@@ -9,7 +9,7 @@ async function loadRepoEnvVarsRoute() {
   return import("../../app/api/repos/[id]/env-vars/route");
 }
 
-test("GET /api/repos/[id]/env-vars uses personal auth for repo-linked env sync projects", async () => {
+test("GET /api/repos/[id]/env-vars clearly rejects disabled project env import", async () => {
   const { createRepoEnvVarsGetHandler } = await loadRepoEnvVarsRoute();
   const calls: Array<Record<string, unknown>> = [];
 
@@ -54,25 +54,13 @@ test("GET /api/repos/[id]/env-vars uses personal auth for repo-linked env sync p
     }
   );
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls, [
-    {
-      authMode: "personal",
-      vercelToken: "user-token",
-      projectId: "repo-project",
-      teamId: "team-acme",
-      decrypt: true,
-    },
-  ]);
-  assert.deepEqual(await response.json(), [
-    {
-      id: "env_1",
-      key: "DATABASE_URL",
-      value: "postgres://db",
-      target: ["preview"],
-      type: "encrypted",
-    },
-  ]);
+  assert.equal(response.status, 501);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(await response.json(), {
+    error: "VERCEL_INTEGRATION_REQUIRED",
+    message:
+      "Vercel project environment import requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
+  });
 });
 
 test("GET /api/repos/[id]/env-vars blocks platform-managed access even for platform-enabled users", async () => {
@@ -113,15 +101,15 @@ test("GET /api/repos/[id]/env-vars blocks platform-managed access even for platf
     }
   );
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 501);
   assert.deepEqual(await response.json(), {
-    error: "NO_LINKED_PROJECT",
+    error: "VERCEL_INTEGRATION_REQUIRED",
     message:
-      "Select or create a repo-linked or workspace-linked Vercel project, then link Personal Vercel to manage env vars. Platform-backed env var management is disabled.",
+      "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
   });
 });
 
-test("GET /api/repos/[id]/env-vars requires Personal Vercel for user-billed projects", async () => {
+test("GET /api/repos/[id]/env-vars ignores legacy user-billed workspace selection", async () => {
   const { createRepoEnvVarsGetHandler } = await loadRepoEnvVarsRoute();
 
   const handler = createRepoEnvVarsGetHandler({
@@ -154,10 +142,11 @@ test("GET /api/repos/[id]/env-vars requires Personal Vercel for user-billed proj
     }
   );
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 501);
   assert.deepEqual(await response.json(), {
-    error: "PERSONAL_VERCEL_REQUIRED",
-    message: "Link Personal Vercel to access the selected billing project.",
+    error: "VERCEL_INTEGRATION_REQUIRED",
+    message:
+      "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
   });
 });
 
@@ -194,14 +183,15 @@ test("GET /api/repos/[id]/env-vars requires a repo-linked project when env sync 
     }
   );
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 501);
   assert.deepEqual(await response.json(), {
-    error: "NO_LINKED_PROJECT",
-    message: "Link a repo-linked Vercel project to sync env vars from Vercel.",
+    error: "VERCEL_INTEGRATION_REQUIRED",
+    message:
+      "Vercel project environment import requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
   });
 });
 
-test("GET /api/repos/[id]/env-vars falls back to the account-default project when no repo or workspace project is linked", async () => {
+test("GET /api/repos/[id]/env-vars does not use an account default from disabled user billing", async () => {
   const { createRepoEnvVarsGetHandler } = await loadRepoEnvVarsRoute();
   const calls: Array<Record<string, unknown>> = [];
 
@@ -239,16 +229,13 @@ test("GET /api/repos/[id]/env-vars falls back to the account-default project whe
     }
   );
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls, [
-    {
-      authMode: "personal",
-      vercelToken: "user-token",
-      projectId: "account-project",
-      teamId: "account-team",
-      decrypt: true,
-    },
-  ]);
+  assert.equal(response.status, 501);
+  assert.deepEqual(await response.json(), {
+    error: "VERCEL_INTEGRATION_REQUIRED",
+    message:
+      "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
+  });
+  assert.deepEqual(calls, []);
 });
 
 test("GET /api/repos/[id]/env-vars blocks platform-managed access for users without platform sandbox access", async () => {
@@ -289,10 +276,10 @@ test("GET /api/repos/[id]/env-vars blocks platform-managed access for users with
     }
   );
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 501);
   assert.deepEqual(await response.json(), {
-    error: "NO_LINKED_PROJECT",
+    error: "VERCEL_INTEGRATION_REQUIRED",
     message:
-      "Select or create a repo-linked or workspace-linked Vercel project, then link Personal Vercel to manage env vars. Platform-backed env var management is disabled.",
+      "Vercel project environment management requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
   });
 });

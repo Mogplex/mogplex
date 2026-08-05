@@ -15,6 +15,7 @@ export const DEFAULT_SANDBOX_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 export const MIN_SANDBOX_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 export const DEFAULT_SANDBOX_BILLING_TARGET = "personal";
 export const DEFAULT_ENV_SYNC_MODE = "sandbox-only";
+export const VERCEL_PROJECT_ENV_SYNC_AVAILABLE = false;
 
 export type RepoEnvVars = Record<string, string>;
 export type SandboxBillingTarget = "personal" | "team";
@@ -98,9 +99,9 @@ export function resolveEffectiveSandboxTimeoutMs(input: {
   repoTimeoutMs?: unknown;
   workspaceTimeoutMs?: unknown;
 }) {
-  const repoTimeoutMs = normalizeOptionalSandboxTimeoutMs(input.repoTimeoutMs);
-  if (repoTimeoutMs != null) return repoTimeoutMs;
-
+  // Repo timeout fields are retained for wire/database compatibility but are
+  // no longer applied: there is no repo-level control that can expose them,
+  // so honoring old hidden values produced unexplained non-uniform lifetimes.
   const workspaceTimeoutMs = normalizeOptionalSandboxTimeoutMs(
     input.workspaceTimeoutMs
   );
@@ -127,7 +128,7 @@ export function normalizeOptionalSandboxIdleTimeoutMs(value: unknown) {
 
 /**
  * Resolves the effective idle-timeout threshold used by the reaper.
- * Repo override → workspace setting → app default. Also clamped to the
+ * Workspace setting → app default. Also clamped to the
  * lifetime timeout so "idle > lifetime" can never happen.
  */
 export function resolveEffectiveSandboxIdleTimeoutMs(input: {
@@ -135,13 +136,10 @@ export function resolveEffectiveSandboxIdleTimeoutMs(input: {
   workspaceIdleTimeoutMs?: unknown;
   lifetimeTimeoutMs?: number;
 }) {
-  const repoIdle = normalizeOptionalSandboxIdleTimeoutMs(
-    input.repoIdleTimeoutMs
-  );
   const workspaceIdle = normalizeOptionalSandboxIdleTimeoutMs(
     input.workspaceIdleTimeoutMs
   );
-  const idle = repoIdle ?? workspaceIdle ?? DEFAULT_SANDBOX_IDLE_TIMEOUT_MS;
+  const idle = workspaceIdle ?? DEFAULT_SANDBOX_IDLE_TIMEOUT_MS;
   const lifetime = input.lifetimeTimeoutMs;
   if (
     typeof lifetime === "number" &&
@@ -163,6 +161,13 @@ export function normalizeEnvSyncMode(value: unknown): EnvSyncMode {
   if (value === "sandbox-and-preview") return "sandbox-and-preview";
   if (value === "vercel-project") return "vercel-project";
   return DEFAULT_ENV_SYNC_MODE;
+}
+
+export function resolveEffectiveEnvSyncMode(value: unknown): EnvSyncMode {
+  const mode = normalizeEnvSyncMode(value);
+  return mode === "vercel-project" && !VERCEL_PROJECT_ENV_SYNC_AVAILABLE
+    ? DEFAULT_ENV_SYNC_MODE
+    : mode;
 }
 
 function normalizeEnvVarValue(value: unknown) {
@@ -237,7 +242,7 @@ export function hasConfiguredSandboxEnv(repo: {
 }): boolean {
   const manual = normalizeEnvVars(repo.sandbox_env_vars);
   if (Object.keys(manual).length > 0) return true;
-  const mode = normalizeEnvSyncMode(repo.env_sync_mode);
+  const mode = resolveEffectiveEnvSyncMode(repo.env_sync_mode);
   return mode === "vercel-project" && Boolean(repo.vercel_project_id);
 }
 
@@ -382,10 +387,13 @@ export function normalizeRepoSettings(input: {
     sandbox_billing_target: normalizeSandboxBillingTarget(
       input.sandbox_billing_target
     ),
-    sandbox_billing_mode_override: normalizeRepoSandboxBillingModeOverride(
-      input.sandbox_billing_mode_override
-    ),
-    env_sync_mode: normalizeEnvSyncMode(input.env_sync_mode),
+    sandbox_billing_mode_override:
+      normalizeRepoSandboxBillingModeOverride(
+        input.sandbox_billing_mode_override
+      ) === "platform"
+        ? "platform"
+        : null,
+    env_sync_mode: resolveEffectiveEnvSyncMode(input.env_sync_mode),
     root_directory: normalizeRootDirectory(input.root_directory),
     install_command: normalizeText(input.install_command),
     dev_command: normalizeText(input.dev_command),
@@ -436,24 +444,24 @@ export function normalizeRepoSettingsPatch(input: {
     updates.default_branch = normalizeText(input.default_branch) || "main";
   }
   if ("vercel_team_id" in input) {
-    updates.vercel_team_id = normalizeText(input.vercel_team_id);
+    updates.vercel_team_id = null;
   }
   if ("vercel_project_id" in input) {
-    updates.vercel_project_id = normalizeText(input.vercel_project_id);
+    updates.vercel_project_id = null;
   }
   if ("sandbox_billing_target" in input) {
-    updates.sandbox_billing_target = normalizeSandboxBillingTarget(
-      input.sandbox_billing_target
-    );
+    updates.sandbox_billing_target = "personal";
   }
   if ("sandbox_billing_mode_override" in input) {
     updates.sandbox_billing_mode_override =
       normalizeRepoSandboxBillingModeOverride(
         input.sandbox_billing_mode_override
-      );
+      ) === "platform"
+        ? "platform"
+        : null;
   }
   if ("env_sync_mode" in input) {
-    updates.env_sync_mode = normalizeEnvSyncMode(input.env_sync_mode);
+    updates.env_sync_mode = resolveEffectiveEnvSyncMode(input.env_sync_mode);
   }
   if ("root_directory" in input) {
     updates.root_directory = normalizeRootDirectory(input.root_directory);

@@ -121,6 +121,42 @@ test("loadExplicitPlatformAccess recognizes env allowlists without billing", asy
   });
 });
 
+test("loadExplicitPlatformAccess caches successful profile reads", async () => {
+  const { createLoadExplicitPlatformAccess } = await loadPlatformAccess();
+  let profileReads = 0;
+  const loadAccess = createLoadExplicitPlatformAccess({
+    env: {} as NodeJS.ProcessEnv,
+    loadProfile: async () => {
+      profileReads += 1;
+      return {
+        id: "user-1",
+        email: "user@example.com",
+        allow_platform_ai: false,
+        allow_platform_sandbox: false,
+      };
+    },
+  });
+
+  await Promise.all([loadAccess("user-1"), loadAccess("user-1")]);
+  assert.equal(profileReads, 1);
+});
+
+test("loadExplicitPlatformAccess does not turn profile read errors into debits", async () => {
+  const { createLoadExplicitPlatformAccess } = await loadPlatformAccess();
+  let profileReads = 0;
+  const loadAccess = createLoadExplicitPlatformAccess({
+    env: {} as NodeJS.ProcessEnv,
+    loadProfile: async () => {
+      profileReads += 1;
+      throw new Error("profile database unavailable");
+    },
+  });
+
+  await assert.rejects(loadAccess("user-1"), /profile database unavailable/);
+  await assert.rejects(loadAccess("user-1"), /profile database unavailable/);
+  assert.equal(profileReads, 2);
+});
+
 test("loadUserPlatformAccess grants hosted resources to a funded personal account", async () => {
   const { createLoadUserPlatformAccess } = await loadPlatformAccess();
   const billingLookups: Array<{
@@ -283,5 +319,32 @@ test("loadUserPlatformAccess skips billing for allowlisted users", async () => {
     allowPlatformAi: true,
     allowPlatformSandbox: true,
   });
+  assert.equal(billingLookups, 0);
+});
+
+test("explicit actor grants remain valid inside a team scope", async () => {
+  const { createLoadUserPlatformAccess } = await loadPlatformAccess();
+  let membershipLookups = 0;
+  let billingLookups = 0;
+  const loadAccess = createLoadUserPlatformAccess({
+    env: {
+      PLATFORM_ACCESS_USER_IDS: "operator",
+    } as unknown as NodeJS.ProcessEnv,
+    loadProfile: async () => ({ id: "operator", email: null }),
+    loadTeamMembership: async () => {
+      membershipLookups += 1;
+      return false;
+    },
+    loadBillingAccess: async () => {
+      billingLookups += 1;
+      return false;
+    },
+  });
+
+  assert.deepEqual(await loadAccess("operator", "team-1"), {
+    allowPlatformAi: true,
+    allowPlatformSandbox: true,
+  });
+  assert.equal(membershipLookups, 0);
   assert.equal(billingLookups, 0);
 });

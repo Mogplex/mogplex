@@ -1,4 +1,5 @@
 import { loadUserVercelCredentials } from "@/lib/sandbox/get-user-credentials";
+import { resolveEffectiveSandboxBillingMode } from "@/lib/sandbox/billing";
 import {
   resolveBillingLinkedProjectOwner,
   resolveBillingLinkedProjectSelection,
@@ -178,7 +179,11 @@ export async function reconcileStoredWorkspaceVercelLink(
 ): Promise<ReconciledVercelLink> {
   const deps = { ...defaultDeps, ...overrides };
 
-  if (workspace.sandbox_billing_mode !== "user_vercel_project") {
+  if (
+    resolveEffectiveSandboxBillingMode({
+      workspaceBillingModeInput: workspace.sandbox_billing_mode,
+    }) !== "user_vercel_project"
+  ) {
     return { outcome: "updated", state: buildUnknownVercelLinkState() };
   }
 

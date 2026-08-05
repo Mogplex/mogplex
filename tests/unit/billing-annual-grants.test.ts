@@ -50,6 +50,75 @@ test("month-end anchors clamp to the last UTC day", async () => {
   );
 });
 
+test("annual grant scheduling backfills every missed due month", async () => {
+  const { annualGrantPeriodsDue } = await loadAnnualGrants();
+
+  assert.deepEqual(
+    annualGrantPeriodsDue("2026-01-31", new Date("2026-05-31T12:00:00.000Z")),
+    ["2026-02", "2026-03", "2026-04", "2026-05"]
+  );
+  assert.equal(
+    annualGrantPeriodsDue(
+      "2026-01-31",
+      new Date("2027-01-31T12:00:00.000Z")
+    ).includes("2027-01"),
+    false
+  );
+});
+
+test("annual grant run skips Stripe when every due period is already posted", async () => {
+  const { runAnnualIncludedUsageGrants } = await loadAnnualGrants();
+  let stripeCalls = 0;
+  const result = await runAnnualIncludedUsageGrants(
+    new Date("2026-10-15T12:00:00Z"),
+    {
+      isBillingEnabled: () => true,
+      loadCandidates: async () => [
+        {
+          id: "account-1",
+          stripe_subscription_id: "sub-1",
+          period_anchor: "2026-08-15",
+          granted_periods: ["2026-09", "2026-10"],
+        },
+      ],
+      retrieveSubscription: async () => {
+        stripeCalls += 1;
+        return subscription("pro_annual");
+      },
+    }
+  );
+
+  assert.equal(stripeCalls, 0);
+  assert.equal(result.skipped, 1);
+});
+
+test("annual grant run posts missing periods oldest first", async () => {
+  const { runAnnualIncludedUsageGrants } = await loadAnnualGrants();
+  const periods: string[] = [];
+  const result = await runAnnualIncludedUsageGrants(
+    new Date("2026-11-15T12:00:00Z"),
+    {
+      isBillingEnabled: () => true,
+      loadCandidates: async () => [
+        {
+          id: "account-1",
+          stripe_subscription_id: "sub-1",
+          period_anchor: "2026-08-15",
+          granted_periods: ["2026-09"],
+        },
+      ],
+      retrieveSubscription: async () => subscription("pro_annual"),
+      postBillingPeriodGrant: async (grant) => {
+        periods.push(grant.period);
+        return { posted: true, expiredCents: 0 };
+      },
+    }
+  );
+
+  assert.deepEqual(periods, ["2026-10", "2026-11"]);
+  assert.equal(result.granted, 1);
+});
+
 test("daily annual run grants due active plans and remains idempotent", async () => {
   const { runAnnualIncludedUsageGrants } = await loadAnnualGrants();
   const grants: unknown[] = [];

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { loadOwnedAiCall, loadOwnedAiCallEvents } from "@/lib/interactive-runs";
 import type { NextRequest } from "next/server";
+import { sanitizeObservabilityEvent } from "@/lib/observability/user-facing-errors";
 
 export async function GET(req: NextRequest) {
   const userId = await requireUserId();
@@ -18,5 +19,9 @@ export async function GET(req: NextRequest) {
   }
 
   const events = await loadOwnedAiCallEvents(userId, aiCallId);
-  return NextResponse.json({ events });
+  return NextResponse.json({
+    events: events.map((event) =>
+      sanitizeObservabilityEvent(event as unknown as Record<string, unknown>)
+    ),
+  });
 }

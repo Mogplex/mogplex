@@ -29,23 +29,7 @@ function buildStatusDetail(input: DeriveVercelCapabilityInput) {
       ? "Mogplex platform Vercel is ready."
       : "Mogplex platform Vercel is not configured.";
 
-  if (input.personalState === "not_linked") {
-    return `${platformPrefix} Link Personal Vercel only if you want to bill sandboxes to your own Vercel project.`;
-  }
-
-  if (input.linkedProjectState === "account") {
-    return `${platformPrefix} Personal Vercel is linked and a default billing project is set. Workspaces and repos can override it.`;
-  }
-
-  if (input.linkedProjectState === "repo") {
-    return `${platformPrefix} Personal Vercel is linked and at least one repo billing link is selected.`;
-  }
-
-  if (input.linkedProjectState === "workspace") {
-    return `${platformPrefix} Personal Vercel is linked and at least one project billing link is selected.`;
-  }
-
-  return `${platformPrefix} Personal Vercel is linked, but no billing project is selected yet.`;
+  return `${platformPrefix} Sign in with Vercel is identity-only; user-owned compute requires a future API-capable integration.`;
 }
 
 export function resolveLinkedProjectState(input: {
@@ -72,12 +56,8 @@ export function deriveVercelCapability(
   input: DeriveVercelCapabilityInput
 ): VercelCapability {
   const canUsePlatformOps = input.platformState === "ready";
-  const canLinkUserBillingProject = input.personalState === "linked";
-  const canUseUserBilling =
-    canLinkUserBillingProject &&
-    (input.linkedProjectState === "repo" ||
-      input.linkedProjectState === "workspace" ||
-      input.linkedProjectState === "account");
+  const canLinkUserBillingProject = false;
+  const canUseUserBilling = false;
 
   return {
     ...input,

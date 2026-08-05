@@ -31,7 +31,7 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
     name: "Claude Code",
     provider: "anthropic",
     package: "@anthropic-ai/claude-code",
-    version: "2.1.220",
+    version: "2.1.222",
     binary: "claude",
     envVar: "ANTHROPIC_API_KEY",
     buildCommand: (prompt, opts) => {
@@ -72,7 +72,7 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
     name: "Codex",
     provider: "openai",
     package: "@openai/codex",
-    version: "0.145.0",
+    version: "0.146.1",
     binary: "codex",
     envVar: "CODEX_API_KEY",
     buildCommand: (prompt, opts) => ({
