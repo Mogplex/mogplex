@@ -3,9 +3,9 @@ import type { Metadata, MetadataRoute } from "next";
 export const SITE_URL = "https://mogplex.com";
 export const SITE_NAME = "Mogplex";
 export const DEFAULT_TITLE =
-  "Mogplex | The open-source agentic software factory";
+  "Mogplex | The system that builds and maintains your software";
 export const DEFAULT_DESCRIPTION =
-  "Mogplex coordinates agents that plan, build, review, and ship code through one inspectable pipeline.";
+  "Mogplex runs agents that plan, build, test, and review code in per-run sandboxes. Pull requests come out behind your gates.";
 
 type PublicContentRoute = {
   path: `/${string}`;
@@ -21,45 +21,39 @@ type PublicContentRoute = {
 export const PUBLIC_CONTENT_ROUTES = [
   {
     path: "/",
-    lastModified: "2026-08-04",
+    lastModified: "2026-08-05",
     changeFrequency: "weekly",
     priority: 1,
   },
   {
     path: "/workflows",
-    lastModified: "2026-07-21",
+    lastModified: "2026-08-05",
     changeFrequency: "monthly",
     priority: 0.9,
   },
   {
     path: "/how-it-works",
-    lastModified: "2026-07-21",
+    lastModified: "2026-08-05",
     changeFrequency: "monthly",
     priority: 0.8,
   },
   {
     path: "/faq",
-    lastModified: "2026-07-21",
+    lastModified: "2026-08-05",
     changeFrequency: "monthly",
     priority: 0.7,
   },
   {
     path: "/pricing",
-    lastModified: "2026-08-04",
+    lastModified: "2026-08-05",
     changeFrequency: "monthly",
     priority: 0.9,
   },
   {
     path: "/company",
-    lastModified: "2026-08-04",
+    lastModified: "2026-08-05",
     changeFrequency: "monthly",
     priority: 0.6,
-  },
-  {
-    path: "/request-access",
-    lastModified: "2026-05-19",
-    changeFrequency: "monthly",
-    priority: 0.8,
   },
   {
     path: "/privacy",

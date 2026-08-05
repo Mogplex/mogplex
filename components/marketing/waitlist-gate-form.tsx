@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/marketing/icons";
 import { trackActivation } from "@/lib/activation-tracking";
 import { LOGIN_NEXT_FALLBACK, buildGithubLoginHref } from "@/lib/login-next";
@@ -119,12 +120,9 @@ export function WaitlistGateForm({ next, initialError }: Props) {
               ? "Validating…"
               : "Continue with GitHub"}
         </button>
-        <a
-          href="mailto:charles@webrenew.io?subject=Mogplex%20access"
-          className="mpx-auth-minor"
-        >
-          No code? Request access →
-        </a>
+        <Link href="/signup" className="mpx-auth-minor">
+          No code? Create an account →
+        </Link>
       </div>
       {error ? (
         <p

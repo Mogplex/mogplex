@@ -6,7 +6,7 @@ import { buildMarketingMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Company — Mogplex",
   description:
-    "Mogplex Inc. builds the open-source agentic software factory: agents that plan, build, review, and ship code through one inspectable pipeline, behind your gates.",
+    "Mogplex Inc. makes the open-source system that builds and maintains software. Agents plan, build, review, and ship code through one inspectable pipeline, behind your gates.",
   path: "/company",
 });
 
@@ -16,35 +16,35 @@ const PRINCIPLES = [
   {
     num: "PRINCIPLE 01",
     name: "Agents are infrastructure, not assistants.",
-    desc: "Delegation is a transaction: you ask, it answers, and when you stop asking, everything stops. A factory is infrastructure: you wire it once and work keeps flowing through it — while you sleep, while you build something else. We build the second thing.",
+    desc: "Delegation is a transaction: you ask, it answers, and when you stop asking, everything stops. Infrastructure is different. You wire it once. Work continues while you sleep or build something else. We build the second thing.",
   },
   {
     num: "PRINCIPLE 02",
     name: "Autonomy is a dial, not a default.",
-    desc: "Every run ends at your gates. Branch protections rule, required reviews hold, and approval is designed into the pipeline — not bolted on after an incident. Teams start at draft-PR-only and loosen exactly as far as the audit trail earns it.",
+    desc: "Every run ends at your gates. Branch protections rule, required reviews hold, and approval lives in the pipeline design. Teams start with draft PRs only. They loosen the gates only when the audit trail earns it.",
   },
   {
     num: "PRINCIPLE 03",
     name: "Trust requires inspection.",
-    desc: "You wouldn't trust a deploy pipeline you couldn't inspect, and an agent pipeline deserves more scrutiny, not less. Every model call and tool call is metered and logged; every run answers “what asked for this, what did the work, what did it cost, who approved it.”",
+    desc: "You would not trust a deploy pipeline you could not inspect. An agent pipeline needs more scrutiny, not less. The system meters and logs every model call and tool call. Every run shows what asked for the work, what did it, what it cost, and who approved it.",
   },
   {
     num: "PRINCIPLE 04",
     name: "Open source is the trust model.",
-    desc: "Code that authenticates against your repositories should be readable before you run it. The factory is Apache-2.0 on GitHub — read it, file issues against it, send patches to it. Scrutiny is the point.",
+    desc: "Code that authenticates against your repositories must be readable before you run it. The system is Apache-2.0 on GitHub. Read it, file issues, and send patches. Scrutiny is the point.",
   },
 ];
 
 const FACTS = [
   {
     k: "COMPANY",
-    v: <>Mogplex Inc. Builders of the open-source agentic software factory.</>,
+    v: <>Mogplex Inc. Builders of the open-source system that builds and maintains software.</>,
   },
   {
     k: "CODE",
     v: (
       <>
-        Apache-2.0, at <a href={GITHUB_URL}>github.com/mogplex/mogplex</a>.
+        Apache-2.0: <a href={GITHUB_URL}>github.com/mogplex/mogplex</a>.
       </>
     ),
   },
@@ -52,8 +52,7 @@ const FACTS = [
     k: "STATUS",
     v: (
       <>
-        Private beta — approving teams in batches.{" "}
-        <Link href="/request-access">Request access</Link>.
+        Generally available. <Link href="/signup">Sign up and wire a run</Link>.
       </>
     ),
   },
@@ -62,8 +61,8 @@ const FACTS = [
     v: (
       <>
         <a href="mailto:enterprise@mogplex.com">enterprise@mogplex.com</a> for
-        sales; <a href={`${GITHUB_URL}/issues`}>GitHub issues</a> for everything
-        else.
+        commercial questions. <a href={`${GITHUB_URL}/issues`}>GitHub issues</a>{" "}
+        for everything else.
       </>
     ),
   },
@@ -75,7 +74,7 @@ export default function CompanyPage() {
       close={{
         kicker: "SHEET 05 — END",
         lines: ["Read the code.", "Then wire a run."],
-        note: "the factory is open source. the beta is gated. both on purpose.",
+        note: "the system is open source. read it before you run it. then run it.",
       }}
     >
       <header className="sub-hero">
@@ -85,18 +84,18 @@ export default function CompanyPage() {
           <span>SHEET 05 — COMPANY</span>
         </div>
         <h1 className="sub-title">
-          The company behind the <em className="grad">factory</em>.
+          The company behind the <em className="grad">system</em>.
         </h1>
         <p className="sub-lede">
-          Mogplex Inc. builds the open-source agentic software factory:
-          infrastructure that takes intent — GitHub events, schedules, Slack
-          asks — and turns it into <strong>reviewed, running code</strong>{" "}
-          through agents your policies control. Not a coding assistant, not a
-          CI add-on: the full pipeline from plan to deploy, inspectable at
-          every station.
+          Mogplex Inc. builds an open-source system that builds and maintains
+          software. Intent goes in: GitHub events, schedules, and Slack asks.
+          Reviewed, running code comes out through agents that your policies
+          control. It is not a coding assistant or a CI add-on. It is the full
+          pipeline from plan to deploy, visible at every station. It still
+          works after the feature ships.
         </p>
         <p className="mono micro">
-          MOGPLEX INC. · OPEN SOURCE · PRIVATE BETA
+          MOGPLEX INC. · OPEN SOURCE · GENERALLY AVAILABLE
         </p>
       </header>
 

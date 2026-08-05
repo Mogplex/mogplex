@@ -7,7 +7,7 @@ import { buildMarketingMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMarketingMetadata({
   title: "FAQ — Mogplex",
   description:
-    "What Mogplex runs, what it costs, where your code executes, and what an agent can and can't ship without you. The questions skeptical engineers ask before wiring agents into their repos.",
+    "What Mogplex runs, what it costs, where your code runs, and what an agent can and can't ship without you. The questions skeptical engineers ask before they wire agents into their repos.",
   path: "/faq",
 });
 
@@ -22,53 +22,57 @@ type Faq = {
 const FAQS: Faq[] = [
   {
     q: "What is Mogplex, in one sentence?",
-    a: "The open-source agentic software factory: intent goes in — GitHub events, schedules, Slack asks — and agents plan, build, review, and ship it through one inspectable pipeline, so what comes out the other side is reviewed, running code.",
+    a: "A system that builds and maintains software. Events go in: GitHub events, schedules, and Slack asks. Agents plan, build, test, and review the work in sandboxes. Reviewed, running code comes out through your gates.",
   },
   {
     q: "Which agents does it run?",
-    a: "Claude Code and Codex today, with your MCP tools available inside every run. You pick the agent and model per pipeline; Mogplex provides the model access, so there are no API keys to set up. Prefer your own model billing? Add your own AI Gateway key in Settings → API Keys and your runs use it instead.",
+    a: "Claude Code and Codex today, with your MCP tools available inside every run. You pick the harness and model per pipeline. Hosted model access uses your Mogplex balance, so you do not need to set up API keys. Prefer your own model billing? Add your AI Gateway key in Settings → API Keys. Your runs then use it.",
   },
   {
     q: "Can an agent merge to main without a human?",
-    a: "Only if you configure a pipeline that way — and even then your branch protections still rule. Mogplex cannot bypass required reviews, required checks, or protected branches. Most teams start with draft-PR-only gates and loosen from there.",
+    a: "Only if you configure a pipeline that way. Your branch protections still rule. Mogplex cannot bypass required reviews, required checks, or protected branches. Most teams start with draft-PR-only gates and loosen from there.",
   },
   {
-    q: "Where does the code actually execute?",
-    a: "In a fresh microVM per run — a Vercel Sandbox holding a clone of your repo. Nothing is shared between runs, nothing runs on your machines, and the sandbox is destroyed when the run ends.",
+    q: "Where does the code run?",
+    a: "In a fresh microVM for each run: a Vercel Sandbox that holds a clone of your repo. Runs share nothing. Nothing runs on your machines. The sandbox dies when the run ends.",
   },
   {
     q: "What does it cost?",
-    a: "Nothing, during the private beta — model usage and sandbox compute are covered for approved teams while we finalize pricing. You'll know what Mogplex costs before anything changes for your team.",
+    a: "There is no monthly fee to start. PAYG bills only what you use: tokens at provider list price with no markup and sandbox compute at half a cent a minute. Pro is $20 a month with $20 of usage included. Team is $100 a month with unlimited members. Every run shows its exact cost.",
   },
   {
     q: "What can trigger a run?",
-    a: "GitHub events (issues, PRs, pushes, labels), CI failures, schedules, Slack mentions, and standing assignments — recurring jobs you define once, like “keep the docs matching the API.”",
+    a: "GitHub events can start a run: issues, comments, mentions, pushes, pull requests, CI failures, labels, and tag pushes. Schedules, Slack mentions, signed webhooks, and standing assignments can also start runs.",
   },
   {
     q: "Can I see what an agent did — or stop it?",
-    a: "Every run is inspectable call-by-call: each model call and tool call, metered and logged. You can step into a live run to approve the next tool call, redirect the plan, or kill it from the web app or CLI.",
+    a: "Every run is visible call-by-call. The system meters and logs each model call and tool call. You can enter a live run to approve the next tool call, redirect the plan, or stop it from the web app or CLI.",
   },
   {
     q: "How is this different from assigning tasks to an AI teammate?",
-    a: "Delegation is a transaction: you ask, it answers, and when you stop asking, everything stops. A pipeline is infrastructure: you wire it once and work keeps flowing through it — while you sleep, while you build something else.",
+    a: "Delegation is a transaction: you ask, it answers, and when you stop asking, everything stops. A pipeline is infrastructure. You wire it once. Work continues while you sleep or build something else.",
+  },
+  {
+    q: 'What does "maintains" mean, concretely?',
+    a: "It is the work nobody staffs. A run bumps your dependencies each night and tests the result. Another run reproduces and bisects CI failures. Other runs open docs PRs when your API drifts, backfill tests, or draft release notes. You wire each pipeline once.",
   },
   {
     q: "Is it open source?",
-    a: "The CLI is Apache-2.0-licensed and the source is on GitHub at github.com/Mogplex/cli, so you can read exactly what authenticates against your repositories before running it.",
+    a: "Yes. The platform at github.com/mogplex/mogplex is Apache-2.0. You can read what authenticates against your repositories before you run it. You can also self-host it.",
     aRich: (
       <>
-        The CLI is Apache-2.0-licensed and the source is on GitHub at{" "}
-        <a href="https://github.com/Mogplex/cli">
-          github.com/Mogplex/cli
-        </a>
-        , so you can read exactly what authenticates against your repositories
-        before running it.
+        Yes. The platform at{" "}
+        <a href="https://github.com/mogplex/mogplex">
+          github.com/mogplex/mogplex
+        </a>{" "}
+        is Apache-2.0. You can read what authenticates against your repositories
+        before you run it. You can also self-host it.
       </>
     ),
   },
   {
-    q: "How do I get access?",
-    a: "Mogplex is in private beta and approving teams in batches. Request an access code, tell us how you'd use it, and we'll get you in as capacity opens up.",
+    q: "How do I start?",
+    a: "Sign up, connect a repo, and wire a pipeline. Start on PAYG with no monthly fee. You pay only the meter. There is no sales call, demo, or hidden rate. Your first run explains the rest.",
   },
 ];
 
@@ -88,7 +92,7 @@ export default function FaqPage() {
       close={{
         kicker: "SHEET 04 — END",
         lines: ["Still skeptical?", "Good. Bring that."],
-        note: "the best beta feedback comes from people who don't trust us yet.",
+        note: "the best feedback comes from people who don't trust us yet.",
       }}
     >
       <header className="sub-hero">
@@ -101,8 +105,8 @@ export default function FaqPage() {
           Fair <em className="grad">questions</em>.
         </h1>
         <p className="sub-lede">
-          The ten things skeptical engineers ask before wiring an agent into their repo.
-          Short answers here; the long ones live in the{" "}
+          The 11 things skeptical engineers ask before they wire an agent into
+          their repo. Short answers live here. The long answers live in the{" "}
           <a href="https://docs.mogplex.com">docs</a> and in{" "}
           <Link href="/how-it-works">the anatomy of a run</Link>.
         </p>

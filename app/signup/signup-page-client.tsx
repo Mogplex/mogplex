@@ -15,14 +15,19 @@ function SignupContent() {
 
   return (
     <AuthShell
-      eyebrow="Create account"
+      eyebrow="Generally available"
       title={
         <>
-          Create your{" "}
-          <em className="grad">Mogplex</em> account.
+          Start <em className="grad">now</em>.
         </>
       }
-      subtitle="Sign up with your email and password, or continue with a provider."
+      subtitle={
+        <>
+          Connect a repo and wire your first pipeline. PAYG has no monthly fee.
+          Tokens pass through at cost, and compute bills by the minute.{" "}
+          <Link href="/pricing">See the full rate card.</Link>
+        </>
+      }
       footer={
         <div>
           Already have an account?{" "}
@@ -39,6 +44,12 @@ function SignupContent() {
         <AuthDivider />
         <SocialButtons next={next} source="signup_page" />
       </div>
+      <p className="mpx-auth-foot">
+        Prefer to read the code first?{" "}
+        <a href="https://github.com/mogplex/mogplex">
+          github.com/mogplex/mogplex →
+        </a>
+      </p>
     </AuthShell>
   );
 }

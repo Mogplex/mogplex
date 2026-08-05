@@ -35,6 +35,7 @@ export const interTight = Inter_Tight({
 });
 
 export const GITHUB_URL = "https://github.com/mogplex/mogplex";
+export const SELF_HOSTING_URL = `${GITHUB_URL}/blob/main/docs/self-hosting.md`;
 
 /* ── shared icons ─────────────────────────────────────────────── */
 
@@ -207,28 +208,28 @@ export function BlueprintOverlay() {
 
 const platformLinks = [
   {
-    label: "Control Planes",
+    label: "Control plane",
     description:
-      "Observe and steer every agent, run, and policy from one inspectable dashboard.",
+      "Watch and steer every run, agent, and policy from one dashboard.",
     href: "/#control-planes",
   },
   {
     label: "Harnesses",
     description:
-      "Sandboxed execution rigs where agents plan, build, and test code safely.",
+      "Sandboxed rigs where agents plan, build, and test code. Nothing runs on your machines.",
     href: "/#harnesses",
   },
   {
     label: "CLI",
     description:
-      "Trigger runs, stream logs, and inspect pipelines without leaving the terminal.",
+      "Start runs, stream logs, and inspect pipelines from the terminal.",
     href: "/#run",
   },
   {
     label: "Connectors",
     description:
       "Wire GitHub, Slack, and CI into the pipeline with a few lines of config.",
-    href: "/#enterprise",
+    href: "/#capabilities",
   },
 ] as const;
 
@@ -237,7 +238,7 @@ function PlatformGlyph({
 }: {
   label: (typeof platformLinks)[number]["label"];
 }) {
-  if (label === "Control Planes") {
+  if (label === "Control plane") {
     return (
       <svg
         viewBox="0 0 24 24"
@@ -420,11 +421,11 @@ export function MpxHeader() {
           CONTROL&nbsp;PLANE <b>v0.9.14</b>
         </span>
         <Link className="mpx-live-link" href="/#run">
-          View a live run
+          Watch a live run
         </Link>
         <GithubPill />
         <Link className="mpx-button is-primary is-small" href="/signup">
-          Start building
+          Start now
         </Link>
         <button
           type="button"
@@ -510,7 +511,7 @@ export function MpxHeader() {
         </a>
         <div className="mpx-mobile-foot">
           <Link href="/#run" onClick={() => setMobileOpen(false)}>
-            View a live run →
+            Watch a live run →
           </Link>
           <GithubPill small />
         </div>
@@ -636,27 +637,26 @@ export function MpxFooter() {
             mogplex
           </Link>
           <p>
-            The open-source control plane for building, governing, and scaling
-            agentic software delivery.
+            The open-source system that builds and maintains software with
+            agents.
           </p>
           <span className="mpx-system-status">
-            <i /> ALL SYSTEMS OPERATIONAL
+            <i /> APACHE-2.0 · PUBLIC SOURCE
           </span>
         </div>
         <nav aria-label="Footer navigation">
           <div>
             <b>PLATFORM</b>
-            <Link href="/#control-planes">Control planes</Link>
+            <Link href="/#control-planes">Control plane</Link>
             <Link href="/#harnesses">Harnesses</Link>
             <Link href="/#run">CLI</Link>
-            <Link href="/#enterprise">Connectors</Link>
+            <Link href="/#capabilities">Connectors</Link>
           </div>
           <div>
-            <b>ENTERPRISE</b>
+            <b>OPEN SOURCE</b>
             <Link href="/#capabilities">Security</Link>
-            <Link href="/#capabilities">Governance</Link>
-            <Link href="/#enterprise">Deployment</Link>
-            <a href="mailto:enterprise@mogplex.com">Contact sales</a>
+            <a href={SELF_HOSTING_URL}>Self-hosting</a>
+            <a href="https://docs.mogplex.com">Docs</a>
           </div>
           <div>
             <b>DEVELOPERS</b>
@@ -669,9 +669,8 @@ export function MpxFooter() {
             <b>COMPANY</b>
             <Link href="/company">About</Link>
             <Link href="/pricing">Pricing</Link>
-            <Link href="/company">Careers</Link>
-            <a href="https://docs.mogplex.com/security">Security</a>
-            <a href="https://status.mogplex.com">Status</a>
+            <Link href="/faq">FAQ</Link>
+            <a href={`${GITHUB_URL}/security/policy`}>Security</a>
           </div>
         </nav>
       </div>
@@ -680,7 +679,7 @@ export function MpxFooter() {
         <div>
           <Link href="/privacy">PRIVACY</Link>
           <Link href="/terms">TERMS</Link>
-          <a href="https://docs.mogplex.com/security">SECURITY</a>
+          <a href={`${GITHUB_URL}/security/policy`}>SECURITY</a>
           <ThemeMenu />
         </div>
       </div>

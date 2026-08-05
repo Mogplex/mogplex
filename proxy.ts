@@ -71,6 +71,10 @@ function notFoundResponse(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname === "/request-access") {
+    return NextResponse.redirect(new URL("/pricing", request.url), 301);
+  }
+
   if (hasPlaywrightAuthBypass(request)) {
     return NextResponse.next();
   }

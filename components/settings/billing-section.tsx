@@ -168,8 +168,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         <CardHeader>
           <CardTitle>Billing</CardTitle>
           <CardDescription>
-            Billing is not enabled on this deployment. Usage is on us during
-            the beta.
+            Billing is not enabled on this deployment.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -369,19 +368,17 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
             <div>
               <h3 className="font-semibold">Enterprise</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Dedicated infrastructure, enterprise identity, audit exports,
-                and SLA.
+                Run the Apache-2.0 platform inside your network. The docs
+                explain the operational work.
               </p>
             </div>
             <div>
-              <p className="font-medium">Custom</p>
-              <p className="text-xs text-muted-foreground">
-                Hosted or self-managed
-              </p>
+              <p className="font-medium">Self-hosted</p>
+              <p className="text-xs text-muted-foreground">No license fee</p>
             </div>
             <Button asChild variant="outline">
-              <a href="mailto:enterprise@mogplex.com?subject=Mogplex%20Enterprise">
-                Contact enterprise
+              <a href="https://github.com/mogplex/mogplex/blob/main/docs/self-hosting.md">
+                Self-hosting docs
               </a>
             </Button>
           </div>

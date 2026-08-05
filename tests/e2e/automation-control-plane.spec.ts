@@ -477,6 +477,77 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   expect(new URL(callsRequest.url()).searchParams.get("page")).toBe("1");
 });
 
+test("recovered delays remain healthy and require no action", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+
+  await page.route("**/api/observability/stats*", (route) =>
+    fulfillJson(route, {
+      summary: {
+        total_calls: 4,
+        total_tokens: 12000,
+        total_cost: 0.32,
+        cost_today: 0.08,
+        reconciliation_pending: 0,
+        avg_duration_ms: 1820,
+        success_rate: 100,
+        calls_today: 2,
+        tokens_today: 4000,
+        sandbox_time_ms: 600000,
+        sandbox_active: 0,
+        sandbox_total: 2,
+        job_runs_total: 7626,
+        job_runs_running: 0,
+        job_runs_pending: 0,
+        job_runs_stale_pending: 0,
+        job_runs_failed_in_range: 0,
+        job_runs_repaired_in_range: 19,
+        job_runs_concluded_in_range: 804,
+        job_runs_success_rate_in_range: 100,
+        suppressed_in_range: 5,
+        deferred_in_range: 3,
+        start_failed_in_range: 2,
+        limit_allowed_in_range: 0,
+        limit_denied_in_range: 0,
+        oldest_pending_age_ms: 0,
+      },
+      by_model: [],
+      by_type: [],
+    })
+  );
+  await page.route("**/api/observability/jobs?*", (route) =>
+    fulfillJson(route, { jobs: [], total: 0, page: 1, limit: 25 })
+  );
+  await page.route("**/api/observability/calls?*", (route) =>
+    fulfillJson(route, { calls: [], total: 0, page: 1, limit: 50 })
+  );
+  await page.route("**/api/observability/automation-events?*", (route) =>
+    fulfillJson(route, { events: [], total: 0, page: 1, limit: 25 })
+  );
+  await page.route(
+    /\/api\/observability\/automation-failures(?:\?.*)?$/,
+    (route) => fulfillJson(route, emptyAutomationFailuresResponse)
+  );
+
+  await page.goto(scopedPath("observability"));
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.getByText("Healthy", { exact: true })).toBeVisible();
+  await expect(page.getByText("Recent pressure", { exact: true })).toHaveCount(
+    0
+  );
+  await expect(page.getByText("No action needed")).toBeVisible();
+  await expect(page.getByText("Start failures", { exact: true })).toBeVisible();
+  await expect(page.getByText("2 failed start attempts")).toBeVisible();
+  await expect(
+    page.getByText(
+      "3 delayed start attempts retried automatically; no failed or stale runs need attention."
+    )
+  ).toBeVisible();
+});
+
 test("assignments show last run health inline and triggers surface loads", async ({
   page,
 }) => {

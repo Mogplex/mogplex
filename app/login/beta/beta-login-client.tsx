@@ -31,7 +31,7 @@ function LoginNotice({
       ) : null}
       {error === "waitlist_required" ? (
         <div className="mpx-auth-alert is-accent">
-          private beta — access code required
+          legacy sign-in — access code required
         </div>
       ) : error ? (
         <div className="mpx-auth-alert is-error">
@@ -57,17 +57,12 @@ function LoginContent() {
           <em className="grad">Mogplex</em>.
         </>
       }
-      subtitle="Private beta. Enter your access code, then continue with GitHub."
+      subtitle="Legacy access-code sign-in. New users can create an account without a code."
       notice={<LoginNotice expired={expired} error={error} />}
       footer={
         <div className="flex flex-col items-center gap-1.5">
           <div>
-            No code yet?{" "}
-            <Link
-              href="/request-access"
-            >
-              Request access
-            </Link>
+            No code? <Link href="/signup">Create an account</Link>
           </div>
           <div>
             Signed in elsewhere?{" "}

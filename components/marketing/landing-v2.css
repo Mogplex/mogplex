@@ -2299,7 +2299,7 @@ path.mpx-dag-line,
 }
 
 .mpx-cap.is-small-cap {
-  grid-column: span 4;
+  grid-column: span 6;
 }
 
 .mpx-harness-stack {
