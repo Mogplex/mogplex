@@ -377,7 +377,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await expect(page.getByText("2 events not run")).toBeVisible();
   await expect(page.getByText("1 start attempt retried")).toBeVisible();
   await expect(page.getByText("1 failed start attempt")).toBeVisible();
-  await expect(page.getByText("Current attention")).toBeVisible();
+  await expect(page.getByText("Action required")).toBeVisible();
   await expect(page.getByText("1 run remains failed")).toBeVisible();
   await expect(page.getByText("1 pending run needs recovery")).toBeVisible();
 
