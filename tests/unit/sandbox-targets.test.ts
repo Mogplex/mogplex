@@ -139,6 +139,36 @@ test("resolveSandboxRecordCredentials falls back to user-linked project context"
   );
 });
 
+test("resolveSandboxRecordCredentials refreshes platform-owned targets from current platform credentials", async () => {
+  const { resolveSandboxRecordCredentials } = await loadSandboxCredentials();
+
+  assert.deepEqual(
+    resolveSandboxRecordCredentials(
+      {
+        vercelToken: "platform-token",
+        vercelTeamId: "current-platform-team",
+        vercelProjectId: "current-platform-project",
+        allowPlatformSandbox: true,
+        userVercelToken: null,
+        userVercelTeamId: null,
+      },
+      {
+        billing_source: "platform",
+        billing_project_id: "stale-platform-project",
+        billing_team_id: "stale-platform-team",
+        vercel_project_id: "stale-platform-project",
+        vercel_team_id: "stale-platform-team",
+      }
+    ),
+    {
+      ok: true,
+      vercelToken: "platform-token",
+      vercelTeamId: "current-platform-team",
+      vercelProjectId: "current-platform-project",
+    }
+  );
+});
+
 test("resolveSandboxRecordCredentials fails closed for user-billed sandboxes missing a stored project", async () => {
   const { resolveSandboxRecordCredentials } = await loadSandboxCredentials();
 
