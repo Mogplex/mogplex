@@ -16,7 +16,7 @@ import { buildSandboxBackedCall } from "./helpers/sandbox-fixtures";
 
 const workspacePath = `/${connectedUser.username}/projects/workspace`;
 
-test("public landing shows the build-and-maintain system and primary CTA", async ({
+test("public landing shows the open-source software engine and primary CTA", async ({
   page,
 }) => {
   await page.goto("/");
@@ -25,7 +25,7 @@ test("public landing shows the build-and-maintain system and primary CTA", async
   await expect(page.getByTestId("landing-hero")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: /The system that builds and maintains your software\./,
+      name: /The open-source engine for building and maintaining software\./,
     })
   ).toBeVisible();
   await expect(page.getByTestId("landing-primary-cta")).toBeVisible();
