@@ -150,6 +150,30 @@ test("loadUserPlatformAccess grants hosted resources to a funded personal accoun
   ]);
 });
 
+test("loadUserPlatformAccess reuses a profile already loaded by the caller", async () => {
+  const { createLoadUserPlatformAccess } = await loadPlatformAccess();
+  const loadAccess = createLoadUserPlatformAccess({
+    env: {} as NodeJS.ProcessEnv,
+    loadProfile: async () => {
+      throw new Error("profile should not be loaded twice");
+    },
+    loadBillingAccess: async () => true,
+  });
+
+  assert.deepEqual(
+    await loadAccess("user-paid", undefined, {
+      id: "user-paid",
+      email: "paid@example.com",
+      allow_platform_ai: false,
+      allow_platform_sandbox: false,
+    }),
+    {
+      allowPlatformAi: true,
+      allowPlatformSandbox: true,
+    }
+  );
+});
+
 test("loadUserPlatformAccess resolves the active team's billing balance", async () => {
   const { createLoadUserPlatformAccess } = await loadPlatformAccess();
   let resolvedTeamId: string | null | undefined;

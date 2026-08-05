@@ -9,7 +9,10 @@ import {
   hasOAuthToken,
   migrateLegacyOAuthTokensForUser,
 } from "@/lib/oauth-tokens";
-import { derivePlatformAccess } from "@/lib/platform-access";
+import {
+  derivePlatformAccess,
+  loadUserPlatformAccess,
+} from "@/lib/platform-access";
 import { getResolvedAuth } from "@/lib/auth";
 import {
   deriveVercelCapability,
@@ -54,6 +57,7 @@ type AuthUserRouteDeps = {
   hasOAuthToken: typeof hasOAuthToken;
   migrateLegacyOAuthTokensForUser: typeof migrateLegacyOAuthTokensForUser;
   getPlatformVercelServiceState: typeof getPlatformVercelServiceState;
+  loadUserPlatformAccess: typeof loadUserPlatformAccess;
 };
 
 async function loadUserProfile(userId: string) {
@@ -153,6 +157,7 @@ export function createAuthUserHandler(
     hasOAuthToken,
     migrateLegacyOAuthTokensForUser,
     getPlatformVercelServiceState,
+    loadUserPlatformAccess,
     ...overrides,
   };
 
@@ -190,7 +195,27 @@ export function createAuthUserHandler(
       return NextResponse.json({ user: null });
     }
 
-    const platformAccess = derivePlatformAccess(user);
+    const explicitPlatformAccess = derivePlatformAccess(user);
+    let platformAccess = explicitPlatformAccess;
+    if (
+      !explicitPlatformAccess.allowPlatformAi ||
+      !explicitPlatformAccess.allowPlatformSandbox
+    ) {
+      try {
+        // This session payload is personal-scope. Team-scoped enforcement
+        // resolves access separately with the active product team id.
+        platformAccess = await deps.loadUserPlatformAccess(
+          profileId,
+          undefined,
+          user
+        );
+      } catch (error) {
+        console.error("[auth-user] platform access resolution failed", {
+          profileId,
+          error,
+        });
+      }
+    }
 
     try {
       await deps.migrateLegacyOAuthTokensForUser(profileId);

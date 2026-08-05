@@ -8,7 +8,20 @@ async function loadReconcileModule(): Promise<ReconcileModule> {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../trigger/reconcile-ai-call-costs");
+  const reconcileModule = await import("../../trigger/reconcile-ai-call-costs");
+  return {
+    ...reconcileModule,
+    runAiCallCostReconciliation: (overrides) =>
+      reconcileModule.runAiCallCostReconciliation({
+        meterReconciledTokenUsage: async () => ({
+          metered: true,
+          reason: "posted",
+          amountCents: 8,
+          costUnits: 8_340_000,
+        }),
+        ...overrides,
+      }),
+  };
 }
 
 function createRow(
@@ -194,7 +207,12 @@ test("posts the exact Gateway token cost before marking it reconciled", async ()
     meterReconciledTokenUsage: async (value) => {
       events.push("debit");
       metered.push(value);
-      return { metered: true, reason: "posted", amountCents: 8 };
+      return {
+        metered: true,
+        reason: "posted",
+        amountCents: 8,
+        costUnits: 8_340_000,
+      };
     },
   });
 
@@ -211,6 +229,54 @@ test("posts the exact Gateway token cost before marking it reconciled", async ()
       metadata: null,
     },
   ]);
+});
+
+test("does not finalize Gateway cost when token metering cannot find an account", async () => {
+  const { runAiCallCostReconciliation } = await loadReconcileModule();
+  const { client, updates } = createReconcileSupabase([createRow()]);
+  const capturedExceptions: unknown[] = [];
+  const capturedMessages: Array<{
+    message: string;
+    context: unknown;
+  }> = [];
+
+  const summary = await runAiCallCostReconciliation({
+    supabase: client as never,
+    now: () => new Date("2026-05-17T00:00:00.000Z"),
+    sentry: {
+      captureException: (error) => {
+        capturedExceptions.push(error);
+        return "event-id";
+      },
+      captureMessage: (message, context) => {
+        capturedMessages.push({ message, context });
+        return "event-id";
+      },
+    },
+    gateway: {
+      getGenerationInfo: async () => ({ cost: 0.0834 }),
+    },
+    meterReconciledTokenUsage: async () => ({
+      metered: false,
+      reason: "no_billing_account",
+      amountCents: 0,
+      costUnits: 8_340_000,
+    }),
+  });
+
+  assert.deepEqual(summary, {
+    scanned: 1,
+    reconciled: 0,
+    skipped: 1,
+    errored: 0,
+  });
+  assert.equal(updates.length, 0);
+  assert.deepEqual(capturedExceptions, []);
+  assert.equal(capturedMessages[0]?.message.includes("billing account"), true);
+  assert.deepEqual(
+    (capturedMessages[0]?.context as { fingerprint?: string[] }).fingerprint,
+    ["ai-cost-reconciliation", "no-billing-account", "call_1"]
+  );
 });
 
 test("uses the captured generation id when Gateway cost has no id field", async () => {

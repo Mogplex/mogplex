@@ -113,6 +113,79 @@ test("usage debits reject non-positive or fractional cents", async () => {
   }
 });
 
+test("token usage accrues exact Gateway cost units", async () => {
+  const { accrueTokenUsage } = await loadLedger();
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const client = {
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args });
+      return {
+        data: [
+          {
+            posted: true,
+            debited_cents: "8",
+            remainder_cost_units: "340000",
+          },
+        ],
+        error: null,
+      };
+    },
+  };
+
+  const result = await accrueTokenUsage(
+    {
+      accountId: "account-1",
+      costUnits: 8_340_000,
+      sourceRef: "tok:call-1",
+      period: "2026-08",
+      metadata: { cost_usd: 0.0834 },
+    },
+    client as never
+  );
+
+  assert.deepEqual(result, {
+    posted: true,
+    debitedCents: 8,
+    remainderCostUnits: 340_000,
+  });
+  assert.deepEqual(calls, [
+    {
+      name: "accrue_token_usage",
+      args: {
+        p_account: "account-1",
+        p_cost_units: 8_340_000,
+        p_source_ref: "tok:call-1",
+        p_period: "2026-08",
+        p_metadata: { cost_usd: 0.0834 },
+      },
+    },
+  ]);
+});
+
+test("token usage rejects non-positive or fractional cost units", async () => {
+  const { accrueTokenUsage } = await loadLedger();
+  const client = {
+    rpc: async () => {
+      throw new Error("rpc should not be called");
+    },
+  };
+
+  for (const costUnits of [0, -1, 1.5]) {
+    await assert.rejects(
+      accrueTokenUsage(
+        {
+          accountId: "account-1",
+          costUnits,
+          sourceRef: "tok:call-1",
+          period: "2026-08",
+        },
+        client as never
+      ),
+      /positive integer cost units/
+    );
+  }
+});
+
 test("period grants use one atomic grant-and-expiry RPC", async () => {
   const { postBillingPeriodGrant } = await loadLedger();
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];

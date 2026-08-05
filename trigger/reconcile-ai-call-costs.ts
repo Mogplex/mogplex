@@ -158,6 +158,24 @@ function captureUpdateGuardNoop(
   );
 }
 
+function captureMissingBillingAccountWarning(
+  deps: Pick<AiCallCostReconciliationDeps, "sentry">,
+  row: AiCallCostReconciliationRow
+) {
+  deps.sentry.captureMessage(
+    "[ai-cost-reconciliation] billing account not found",
+    {
+      level: "warning",
+      fingerprint: ["ai-cost-reconciliation", "no-billing-account", row.id],
+      extra: {
+        ai_call_id: row.id,
+        user_id: row.user_id,
+        completed_at: row.completed_at,
+      },
+    }
+  );
+}
+
 /**
  * Fetch cost from Gateway for multiple generation IDs and sum them.
  * Returns null if any ID returns 404 (incomplete data).
@@ -357,7 +375,7 @@ async function reconcileAiCallCostRow(
     // calls are not visible to this Gateway client and remain unreconciled.
     // Post the idempotent debit before marking the cost reconciled: if the DB
     // update fails, the next run safely sees the duplicate debit and retries it.
-    await deps.meterReconciledTokenUsage({
+    const metering = await deps.meterReconciledTokenUsage({
       aiCallId: row.id,
       userId: row.user_id,
       model: row.model,
@@ -366,6 +384,15 @@ async function reconcileAiCallCostRow(
       generationIds,
       metadata: row.metadata,
     });
+    if (metering.reason === "no_billing_account") {
+      // Keep the row retryable for the 24-hour reconciliation window and do
+      // not persist an unbilled final cost. The 12-hour warning leaves an
+      // operational response window without weakening billing enforcement.
+      if (shouldWarnStale(row, now)) {
+        captureMissingBillingAccountWarning(deps, row);
+      }
+      return "skipped";
+    }
 
     const updated = await persistGatewayAiCallCost(deps, {
       rowId: row.id,
