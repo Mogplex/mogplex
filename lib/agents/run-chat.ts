@@ -4,6 +4,7 @@ import {
   buildSystemPrompt,
   resolveAgentDeliveryBranch,
 } from "@/lib/agents/system-prompt";
+import { prepareChatGitDelivery } from "@/lib/agents/chat-git-delivery";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 import { resolveUserDefaultModelId } from "@/lib/models/default-model";
 import {
@@ -212,6 +213,45 @@ export type CreateChatModelStreamResult = {
   cleanup: () => Promise<void>;
 };
 
+async function prepareChatContextForDelivery(context: ChatAgentContext) {
+  if (
+    context.enableTools === false ||
+    !context.sandboxId ||
+    !context.repoFullName
+  ) {
+    return context;
+  }
+
+  const baseBranch = context.repoBaseBranch || "main";
+  const workingBranch = resolveAgentDeliveryBranch({
+    repoBranch: context.repoBranch,
+    repoBaseBranch: baseBranch,
+    sandboxId: context.sandboxId,
+  });
+  await prepareChatGitDelivery({
+    userId: context.userId,
+    sandboxId: context.sandboxId,
+    baseBranch,
+    workingBranch,
+  });
+  if (workingBranch !== context.repoBranch) {
+    const { error } = await supabaseAdmin
+      .from("sandboxes")
+      .update({ working_branch: workingBranch })
+      .eq("id", context.sandboxId)
+      .eq("user_id", context.userId);
+    if (error) {
+      console.warn("[chat] failed to persist isolated working branch", {
+        sandboxId: context.sandboxId,
+        workingBranch,
+        error,
+      });
+    }
+  }
+
+  return { ...context, repoBranch: workingBranch };
+}
+
 /**
  * The single source of truth for how a chat turn is streamed: model resolution,
  * tool wiring, system prompt, message conversion, and `stopWhen`. Every chat
@@ -220,18 +260,20 @@ export type CreateChatModelStreamResult = {
 export async function createChatModelStream(
   input: CreateChatModelStreamInput
 ): Promise<CreateChatModelStreamResult> {
-  const gatewayContext = buildChatGatewayContext(input.context);
+  const context = await prepareChatContextForDelivery(input.context);
+
+  const gatewayContext = buildChatGatewayContext(context);
   const { model, providerOptions } = await resolveUserLanguageModel(
-    input.context.userId,
+    context.userId,
     input.resolvedModel,
     {
       gatewayContext,
-      teamId: input.context.teamId ?? null,
+      teamId: context.teamId ?? null,
     }
   );
 
   const { tools, connections, cleanup } = await buildTools(
-    buildToolsInput(input.context)
+    buildToolsInput(context)
   );
   let cleanedUp = false;
   const cleanupTools = async () => {
@@ -240,7 +282,7 @@ export async function createChatModelStream(
     await cleanup();
   };
   const baseSystemPrompt = buildSystemPrompt(
-    buildPromptContextInput(input.context, connections)
+    buildPromptContextInput(context, connections)
   );
   const systemPrompt = input.systemSuffix
     ? `${baseSystemPrompt}\n\n${input.systemSuffix}`
@@ -270,7 +312,7 @@ export async function createChatModelStream(
       system: withGatewaySystemCaching(systemPrompt, gatewayContext),
       messages: await convertToModelMessages(input.uiMessages),
       abortSignal: input.abortSignal,
-      tools: input.context.enableTools === false ? undefined : tools,
+      tools: context.enableTools === false ? undefined : tools,
       stopWhen: CHAT_STOP_WHEN,
       ...hooks,
     });

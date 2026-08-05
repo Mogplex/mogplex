@@ -66,6 +66,10 @@ const REMOTE_GIT_COMMANDS = new Set([
 ]);
 
 function commandMayNeedGithubAuth(command: string) {
+  // Best-effort optimization for ordinary terminal commands. Agent delivery
+  // preparation starts with an explicit remote git operation, while unusual
+  // wrappers such as `sh -c` may need the user to retry without the wrapper if
+  // their cached credential has expired.
   const tokens = command
     .split(/\s+/)
     .map((token) => token.replace(/^[;&|()]+|[;&|()]+$/g, ""));

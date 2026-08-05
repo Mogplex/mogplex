@@ -100,7 +100,7 @@ test("successful code changes are committed, pushed, and return a PR URL", async
     sandboxWithResult({
       commands,
       stdout:
-        "MOGPLEX_CHANGED=true\nMOGPLEX_PULL_REQUEST_URL=https://github.com/acme/repo/pull/42\n",
+        "MOGPLEX_AUTO_COMMITTED_FILE=components/checkout.tsx\nMOGPLEX_CHANGED=true\nMOGPLEX_PULL_REQUEST_URL=https://github.com/acme/repo/pull/42\n",
     }),
     {
       prompt: "Fix the checkout bug\nwith details",
@@ -112,9 +112,11 @@ test("successful code changes are committed, pushed, and return a PR URL", async
   assert.deepEqual(delivered, {
     changed: true,
     pullRequestUrl: "https://github.com/acme/repo/pull/42",
+    autoCommittedFiles: ["components/checkout.tsx"],
   });
   assert.match(commands[0]?.command ?? "", /git status --porcelain/);
   assert.match(commands[0]?.command ?? "", /git ls-files --others/);
+  assert.match(commands[0]?.command ?? "", /git diff --name-only HEAD/);
   assert.match(commands[0]?.command ?? "", /git add -u/);
   assert.doesNotMatch(commands[0]?.command ?? "", /git add -A/);
   assert.match(commands[0]?.command ?? "", /git commit/);

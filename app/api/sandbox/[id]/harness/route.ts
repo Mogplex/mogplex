@@ -913,6 +913,7 @@ export function createSandboxHarnessPostHandler(
           let finalFailure: ReturnType<typeof presentHarnessFailure> | null =
             null;
           let pullRequestUrl: string | null = null;
+          let deliveryAutoCommittedFiles: string[] = [];
 
           try {
             const runEvent = `data: ${JSON.stringify({ type: "run", ai_call_id: aiCall.id })}\n\n`;
@@ -971,6 +972,17 @@ export function createSandboxHarnessPostHandler(
                   env: runtimeEnv,
                 });
                 pullRequestUrl = delivery.pullRequestUrl;
+                deliveryAutoCommittedFiles = delivery.autoCommittedFiles;
+                if (delivery.autoCommittedFiles.length > 0) {
+                  const autoCommitEvent = `data: ${JSON.stringify({
+                    type: "log",
+                    stream: "stdout",
+                    data: `Delivered tracked changes in an automatic commit:\n${delivery.autoCommittedFiles
+                      .map((file) => `- ${file}`)
+                      .join("\n")}\n`,
+                  })}\n\n`;
+                  controller.enqueue(encoder.encode(autoCommitEvent));
+                }
                 await deps.safeAppendAiCallEvent({
                   aiCallId: aiCall.id,
                   userId: creds.userId,
@@ -986,6 +998,7 @@ export function createSandboxHarnessPostHandler(
                     pull_request_url: pullRequestUrl,
                     base_branch: gitWorkspace.baseBranch,
                     working_branch: gitWorkspace.workingBranch,
+                    auto_committed_files: delivery.autoCommittedFiles,
                   },
                 });
               }
@@ -1014,6 +1027,10 @@ export function createSandboxHarnessPostHandler(
                     base_branch: gitWorkspace.baseBranch,
                     working_branch: gitWorkspace.workingBranch,
                     pull_request_url: pullRequestUrl,
+                    auto_committed_files:
+                      exitResult.exitCode === 0
+                        ? deliveryAutoCommittedFiles
+                        : [],
                   },
                 })
               );

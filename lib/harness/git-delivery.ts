@@ -15,10 +15,12 @@ export type HarnessGitWorkspace = {
 export type HarnessPullRequestDelivery = {
   pullRequestUrl: string | null;
   changed: boolean;
+  autoCommittedFiles: string[];
 };
 
 const PULL_REQUEST_MARKER = "MOGPLEX_PULL_REQUEST_URL=";
 const CHANGED_MARKER = "MOGPLEX_CHANGED=";
+const AUTO_COMMITTED_FILE_MARKER = "MOGPLEX_AUTO_COMMITTED_FILE=";
 
 async function runShell(
   sandbox: Sandbox,
@@ -161,6 +163,9 @@ if [ -n "$(git status --porcelain)" ]; then
     echo "$untracked_files" >&2
     exit 1
   fi
+  git diff --name-only HEAD | while IFS= read -r file; do
+    printf '${AUTO_COMMITTED_FILE_MARKER}%s\n' "$file"
+  done
   git add -u
   if ! git diff --cached --quiet; then
     git commit -m "$MOGPLEX_PR_TITLE"
@@ -204,6 +209,10 @@ echo "${PULL_REQUEST_MARKER}$pull_request_url"
       ?.slice(PULL_REQUEST_MARKER.length)
       .trim() || null;
   const changed = result.stdout.split("\n").includes(`${CHANGED_MARKER}true`);
+  const autoCommittedFiles = result.stdout
+    .split("\n")
+    .filter((line) => line.startsWith(AUTO_COMMITTED_FILE_MARKER))
+    .map((line) => line.slice(AUTO_COMMITTED_FILE_MARKER.length));
 
-  return { pullRequestUrl, changed };
+  return { pullRequestUrl, changed, autoCommittedFiles };
 }
