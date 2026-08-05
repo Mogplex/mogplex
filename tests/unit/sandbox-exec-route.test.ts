@@ -311,6 +311,131 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
   assert.equal(capturedEnv?.["MOGPLEX_AI_BILLING_SOURCE"], "user_ai_gateway");
 });
 
+test("POST /api/sandbox/[id]/exec refreshes repo-scoped GitHub auth before git commands", async () => {
+  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  let capturedEnv: Record<string, string> | null = null;
+  let syncedToken: string | null = null;
+
+  const handler = createSandboxExecPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () =>
+      buildOwnedSandboxServiceRecord({
+        repo: {
+          full_name: "acme/repo",
+          root_directory: null,
+          sandbox_env_vars: null,
+          env_sync_mode: "sandbox-only",
+          vercel_project_id: null,
+          vercel_team_id: null,
+          github_installation_id: 42,
+        },
+      }),
+    acquireSandboxExecLock: async () => ({
+      acquired: true as const,
+      token: "lock-github",
+    }),
+    enforceSandboxExecLimits: async () => ({ allowed: true, status: 200 }),
+    recordLimitDecision: async () => {},
+    releaseSandboxExecLock: async () => {},
+    touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
+    resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
+    getGithubAccessTokenForRepo: async () => "fresh-github-token",
+    syncTerminalRuntimeAuth: async (_sandbox, options) => {
+      syncedToken = options.githubToken ?? null;
+      return { ok: true, logs: "" };
+    },
+    getSandbox: async () =>
+      ({
+        runCommand: async (input: { env?: Record<string, string> }) => {
+          capturedEnv = input.env ?? null;
+          return {
+            exitCode: 0,
+            stdout: async () => "pushed",
+            stderr: async () => "",
+          };
+        },
+      }) as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/exec",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "git push origin feature" }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  assert.equal((await response.clone().json()).exitCode, 0);
+  assert.equal(syncedToken, "fresh-github-token");
+  assert.equal(capturedEnv?.["GITHUB_TOKEN"], "fresh-github-token");
+  assert.equal(capturedEnv?.["GH_TOKEN"], "fresh-github-token");
+});
+
+test("POST /api/sandbox/[id]/exec skips GitHub auth refresh for local git commands", async () => {
+  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  let tokenRequested = false;
+
+  const handler = createSandboxExecPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () =>
+      buildOwnedSandboxServiceRecord({
+        repo: {
+          full_name: "acme/repo",
+          root_directory: null,
+          sandbox_env_vars: null,
+          env_sync_mode: "sandbox-only",
+          vercel_project_id: null,
+          vercel_team_id: null,
+          github_installation_id: 42,
+        },
+      }),
+    acquireSandboxExecLock: async () => ({
+      acquired: true as const,
+      token: "lock-local-git",
+    }),
+    enforceSandboxExecLimits: async () => ({ allowed: true, status: 200 }),
+    recordLimitDecision: async () => {},
+    releaseSandboxExecLock: async () => {},
+    touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
+    resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
+    getGithubAccessTokenForRepo: async () => {
+      tokenRequested = true;
+      return "unused-token";
+    },
+    getSandbox: async () =>
+      ({
+        runCommand: async () => ({
+          exitCode: 0,
+          stdout: async () => "clean",
+          stderr: async () => "",
+        }),
+      }) as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/exec",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "git status --short" }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(tokenRequested, false);
+});
+
 test("POST /api/sandbox/[id]/exec injects Claude-compatible gateway env only for the Claude harness", async () => {
   const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
 

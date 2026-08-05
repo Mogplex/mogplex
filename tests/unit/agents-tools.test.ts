@@ -423,6 +423,67 @@ test("buildStaticTools exposes inputSchema for every built-in tool", async () =>
   }
 });
 
+test("github_create_pull_request opens a scoped PR from the sandbox branch", async () => {
+  const calls: Array<{
+    method: string;
+    path: string;
+    query: string;
+    body?: unknown;
+  }> = [];
+
+  await withPatchedFetch(
+    async (url, init) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        method: init?.method ?? "GET",
+        path: parsed.pathname,
+        query: parsed.search,
+        body: parseJsonRequestBody(init?.body),
+      });
+      if ((init?.method ?? "GET") === "GET") {
+        return Response.json([]);
+      }
+      return Response.json({
+        number: 42,
+        html_url: "https://github.com/acme/demo/pull/42",
+      });
+    },
+    async () => {
+      const { createGithubPullRequestTool } = await loadToolsModule();
+      const tool = createGithubPullRequestTool("github-token", {
+        owner: "acme",
+        repo: "demo",
+        branch: "mogplex/fix-checkout",
+        baseBranch: "main",
+      }) as unknown as {
+        execute: (input: { title: string; body: string }) => Promise<unknown>;
+      };
+
+      assert.deepEqual(
+        await tool.execute({
+          title: "Fix checkout",
+          body: "Keeps the sandbox branch synchronized.",
+        }),
+        {
+          ok: true,
+          created: true,
+          pullRequestNumber: 42,
+          pullRequestUrl: "https://github.com/acme/demo/pull/42",
+        }
+      );
+    }
+  );
+
+  assert.equal(calls[0]?.path, "/repos/acme/demo/pulls");
+  assert.match(calls[0]?.query ?? "", /head=acme%3Amogplex%2Ffix-checkout/);
+  assert.deepEqual(calls[1]?.body, {
+    title: "Fix checkout",
+    body: "Keeps the sandbox branch synchronized.",
+    head: "mogplex/fix-checkout",
+    base: "main",
+  });
+});
+
 test("github_pr_search uses one authenticated GraphQL search and returns draft status", async () => {
   const calls: Array<{
     url: string;

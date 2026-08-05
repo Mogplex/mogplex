@@ -842,6 +842,7 @@ function AgentPane({
                   failureCode?: string | null;
                   ai_call_id?: string;
                   sessionId?: string;
+                  pullRequestUrl?: string;
                 };
                 if (event.type === "run" && event.ai_call_id) {
                   activeHarnessCallIdRef.current = event.ai_call_id;
@@ -907,6 +908,11 @@ function AgentPane({
                     ? `${trailerText}\n${doneMarker}`
                     : doneMarker;
                   output += `\n${doneMarker}`;
+                  if (event.pullRequestUrl) {
+                    const pullRequestMarker = `[Open pull request](${event.pullRequestUrl})`;
+                    trailerText = `${trailerText}\n${pullRequestMarker}`;
+                    output += `\n${pullRequestMarker}`;
+                  }
                   activeHarnessCallIdRef.current = null;
                   setActiveHarnessCallId(null);
                 } else if (event.type === "error") {

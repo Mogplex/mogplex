@@ -250,7 +250,7 @@ export function SandboxLaunchProvider({ children }: { children: ReactNode }) {
       return new Promise<SandboxLaunchChoice | null>((resolve) => {
         const hasExistingSandbox = listSandboxesForRepo(repo.id).length > 0;
         const repoDefault = normalizeRootDirectory(repo.root_directory);
-        setLaunchMode(hasExistingSandbox ? "workspace" : "default");
+        setLaunchMode(hasExistingSandbox ? "workspace" : "new");
         setBranchName(buildSuggestedSandboxBranchName(repo.full_name));
         setBranchError(null);
         setPathSelection(buildInitialPathSelection(repoDefault));

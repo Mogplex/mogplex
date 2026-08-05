@@ -16,5 +16,6 @@ test("buildChatRequestBody prefers the active working branch over the repo defau
   );
 
   assert.equal(payload.repoBranch, "feature/manual-override");
+  assert.equal(payload.repoBaseBranch, "main");
   assert.equal(payload.sandboxId, "sandbox-1");
 });

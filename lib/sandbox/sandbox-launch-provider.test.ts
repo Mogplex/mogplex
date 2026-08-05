@@ -112,4 +112,25 @@ describe("SandboxLaunchProvider", () => {
       }
     `);
   });
+
+  it("selects an isolated branch for a repo's first sandbox", async () => {
+    render(
+      createElement(
+        SandboxLaunchProvider,
+        null,
+        createElement(LaunchModalTrigger)
+      )
+    );
+
+    fireEvent.click(screen.getByTestId("trigger-launch"));
+    await screen.findByRole("heading", {
+      level: 2,
+      name: "Start a new sandbox",
+    });
+
+    const selected = screen
+      .getAllByText("On")
+      .map((node) => node.parentElement?.textContent ?? "");
+    expect(selected).toEqual([expect.stringContaining("Create New Branch")]);
+  });
 });
