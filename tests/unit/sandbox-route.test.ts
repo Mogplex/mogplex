@@ -9,6 +9,25 @@ import {
   loadSandboxRouteModule,
 } from "./sandbox-service-route-test-harness";
 
+type SandboxPostHandlerOverrides = NonNullable<
+  Parameters<
+    (typeof import("../../app/api/sandbox/route"))["createSandboxPostHandler"]
+  >[0]
+>;
+
+async function createSandboxPostTestHandler(
+  overrides: SandboxPostHandlerOverrides = {}
+) {
+  const routeModule = await loadSandboxRouteModule();
+  return routeModule.createSandboxPostHandler({
+    validateVercelProjectAccess: async (input) => ({
+      ok: true as const,
+      data: { projectId: input.projectId },
+    }),
+    ...overrides,
+  });
+}
+
 test("interactive sandbox launches only auto-queue snapshot warmup when the feature flag is enabled", async () => {
   const { shouldQueueSnapshotWarmupOnSandboxLaunch } =
     await loadSandboxRouteModule();
@@ -284,11 +303,10 @@ test("resolvePendingSandboxPersistenceFlag mirrors the sandbox create persistenc
 });
 
 test("POST /api/sandbox returns 404 for repo IDs the caller does not own", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   let accessLookups = 0;
   let sandboxCreations = 0;
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async (repoId, userId, options) => {
       accessLookups += 1;
@@ -327,10 +345,9 @@ test("POST /api/sandbox returns 404 for repo IDs the caller does not own", async
 });
 
 test("POST /api/sandbox returns 400 when an owned repo has no GitHub token", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   let sandboxCreations = 0;
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess({
@@ -365,9 +382,7 @@ test("POST /api/sandbox returns 400 when an owned repo has no GitHub token", asy
 });
 
 test("POST /api/sandbox blocks platform-billed launches for users without platform sandbox access", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
-
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () =>
       buildSandboxServiceRouteAuth({ allowPlatformSandbox: false }),
     getOwnedRepoWithGithubAccessToken: async () =>
@@ -403,12 +418,82 @@ test("POST /api/sandbox blocks platform-billed launches for users without platfo
   });
 });
 
+test("POST /api/sandbox rejects an inaccessible hosted Vercel project before creating a sandbox", async () => {
+  let sandboxCreations = 0;
+  let activeSandboxLookups = 0;
+  const accessChecks: Array<Record<string, unknown>> = [];
+
+  const handler = await createSandboxPostTestHandler({
+    getSandboxServiceCredentials: async () =>
+      buildSandboxServiceRouteAuth({
+        vercelToken: "platform-vercel-token",
+        vercelTeamId: "platform-team",
+        vercelProjectId: "stale-platform-project",
+      }),
+    getOwnedRepoWithGithubAccessToken: async () =>
+      buildOwnedRepoWithGithubAccess({
+        workspace: buildSandboxServiceWorkspace({
+          sandbox_billing_mode: "platform",
+        }),
+      }),
+    validateVercelProjectAccess: async (input) => {
+      accessChecks.push(input);
+      return {
+        ok: false as const,
+        error: {
+          code: "PROJECT_NOT_FOUND",
+          status: 404,
+          message: "Could not find project: stale-platform-project",
+        },
+      };
+    },
+    getActiveSandboxForRepo: async () => {
+      activeSandboxLookups += 1;
+      return null;
+    },
+    createSandboxForRepo: async () => {
+      sandboxCreations += 1;
+      throw new Error("createSandboxForRepo should not be called");
+    },
+    createSandboxFromSnapshot: async () => {
+      sandboxCreations += 1;
+      throw new Error("createSandboxFromSnapshot should not be called");
+    },
+  });
+
+  const response = await handler(
+    buildSandboxCollectionRequest({
+      method: "POST",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoId: "repo-123" }),
+      },
+    })
+  );
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error:
+      "Hosted sandbox service is temporarily unavailable. Please try again shortly.",
+    code: "SANDBOX_SERVICE_UNAVAILABLE",
+  });
+  assert.deepEqual(accessChecks, [
+    {
+      authMode: "platform",
+      vercelToken: "platform-vercel-token",
+      teamId: "platform-team",
+      projectId: "stale-platform-project",
+    },
+  ]);
+  assert.equal(activeSandboxLookups, 0);
+  assert.equal(sandboxCreations, 0);
+});
+
 test("POST /api/sandbox returns linked-project repair guidance when a user-billed Vercel project is inaccessible", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   let sandboxCreations = 0;
   const persistedRepoStates: Array<Record<string, unknown>> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () =>
       buildSandboxServiceRouteAuth({
         vercelToken: "platform-vercel-token",
@@ -487,10 +572,9 @@ test("POST /api/sandbox returns linked-project repair guidance when a user-bille
 });
 
 test("POST /api/sandbox persists missing_project on the owning workspace before blocking user-billed launch", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const persistedWorkspaceStates: Array<Record<string, unknown>> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () =>
       buildSandboxServiceRouteAuth({
         vercelToken: "platform-vercel-token",
@@ -547,10 +631,9 @@ test("POST /api/sandbox persists missing_project on the owning workspace before 
 });
 
 test("POST /api/sandbox returns 429 when sandbox boot limits are exceeded", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   let sandboxCreations = 0;
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess(),
@@ -604,7 +687,6 @@ test("POST /api/sandbox returns 429 when sandbox boot limits are exceeded", asyn
 });
 
 test("POST /api/sandbox returns the matched record when name collision resolves to resume", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const released: Array<{ userId: string; claimId: string | null }> = [];
   let sandboxCreations = 0;
 
@@ -649,7 +731,7 @@ test("POST /api/sandbox returns the matched record when name collision resolves 
     },
   };
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess(),
@@ -694,7 +776,6 @@ test("POST /api/sandbox returns the matched record when name collision resolves 
 });
 
 test("POST /api/sandbox enforces boot limits and threads the claim id through the adopt path", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   let sandboxCreations = 0;
   let observedClaimId: string | null | undefined;
 
@@ -739,7 +820,7 @@ test("POST /api/sandbox enforces boot limits and threads the claim id through th
     },
   };
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess(),
@@ -784,13 +865,12 @@ test("POST /api/sandbox enforces boot limits and threads the claim id through th
 });
 
 test("POST /api/sandbox scopes deterministic names by launch rootDirectory", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const collisionInputs: Array<{
     name: string;
     rootDirectory: string | null;
   }> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess(),
@@ -857,7 +937,6 @@ test("POST /api/sandbox scopes deterministic names by launch rootDirectory", asy
 });
 
 test("POST /api/sandbox scopes active lookups and deterministic names by active team", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const lookupCalls: Array<{
     productTeamId: string | null | undefined;
   }> = [];
@@ -867,7 +946,7 @@ test("POST /api/sandbox scopes active lookups and deterministic names by active 
     actorUserId: string | null | undefined;
   }> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async (_request, options) => {
       assert.equal(options?.teamId, "00000000-0000-4000-8000-000000123456");
       assert.equal(options?.requireCapability, "tools.bash");
@@ -937,10 +1016,9 @@ test("POST /api/sandbox scopes active lookups and deterministic names by active 
 });
 
 test("POST /api/sandbox returns 429 before doing collision lookup when boot limits are exceeded", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   let collisionCalls = 0;
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess(),
@@ -989,7 +1067,6 @@ test("POST /api/sandbox returns 429 before doing collision lookup when boot limi
 });
 
 test("POST /api/sandbox returns an existing running sandbox with normalized summaries", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   let sandboxCreations = 0;
 
   const existing = {
@@ -1010,7 +1087,7 @@ test("POST /api/sandbox returns an existing running sandbox with normalized summ
     last_active_at: "2026-04-01T10:01:00.000Z",
   };
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess(),
@@ -1055,13 +1132,12 @@ test("POST /api/sandbox returns an existing running sandbox with normalized summ
 });
 
 test("POST /api/sandbox scopes the active-sandbox lookup by the launch-time rootDirectory override", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const lookupCalls: Array<{
     workingBranch: string | null | undefined;
     rootDirectory: string | null | undefined;
   }> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess({
@@ -1131,10 +1207,9 @@ test("POST /api/sandbox preserves repo.root_directory for non-monorepo repos whe
   // accidentally spread rootDirectory: null into the payload, the route
   // would have switched to "explicit repo root" and broken the
   // sandbox's working directory.
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const lookupCalls: Array<{ rootDirectory: string | null | undefined }> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess({
@@ -1194,10 +1269,9 @@ test("POST /api/sandbox honours an explicit null rootDirectory override (repo-ro
   // rootDirectory: null, the route must treat it as an explicit "repo
   // root" choice and override repos.root_directory rather than
   // collapsing back to the repo default.
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const lookupCalls: Array<{ rootDirectory: string | null | undefined }> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess({
@@ -1253,13 +1327,12 @@ test("POST /api/sandbox honours an explicit null rootDirectory override (repo-ro
 });
 
 test("POST /api/sandbox falls back to repo.root_directory when launch omits rootDirectory", async () => {
-  const { createSandboxPostHandler } = await loadSandboxRouteModule();
   const lookupCalls: Array<{
     workingBranch: string | null | undefined;
     rootDirectory: string | null | undefined;
   }> = [];
 
-  const handler = createSandboxPostHandler({
+  const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess({
