@@ -12,6 +12,7 @@ const oauthHookFixMigrationUrl = new URL(
 );
 
 function configureEnv() {
+  delete process.env.BETTER_AUTH_URL;
   process.env.NEXT_PUBLIC_APP_URL = "https://mogplex.com";
   process.env.MOGPLEX_MCP_RESOURCE_URL =
     "https://mogplex.com/api/v1/mogplex/mcp";
@@ -21,44 +22,40 @@ function configureEnv() {
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
 }
 
-test("Mogplex MCP protected-resource metadata points to Supabase OAuth", async () => {
+test("Mogplex MCP protected-resource metadata points to Better Auth OAuth", async () => {
   configureEnv();
   const { buildMogplexMcpProtectedResourceMetadata } =
     await import("../../lib/mogplex-api/oauth-config");
 
   assert.deepEqual(buildMogplexMcpProtectedResourceMetadata(), {
     resource: "https://mogplex.com/api/v1/mogplex/mcp",
-    authorization_servers: ["https://testprojectref000000.supabase.co/auth/v1"],
+    authorization_servers: ["https://mogplex.com"],
+    scopes_supported: ["read", "write"],
     resource_documentation:
       "https://github.com/mogplex/mogplex/blob/main/docs/mogplex-api-mcp/local-agent-automation.md",
   });
 });
 
-test("Mogplex OAuth verifier requires audience, issuer, client approval, and a linked profile", async () => {
+test("Mogplex OAuth verifier resolves a Better Auth MCP session to a linked profile", async () => {
   configureEnv();
   const {
     __resetMogplexOAuthVerifierForTesting,
     __setMogplexOAuthVerifierDependenciesForTesting,
     resolveMogplexOAuthToken,
   } = await import("../../lib/auth/mogplex-oauth");
-  const verifierCalls: unknown[] = [];
+  const sessionCalls: string[] = [];
 
   __setMogplexOAuthVerifierDependenciesForTesting({
-    verifyJwt: async (_token, _key, options) => {
-      verifierCalls.push(options);
+    getMcpSession: async (authorization) => {
+      sessionCalls.push(authorization);
       return {
-        payload: {
-          sub: "auth-user-1",
-          client_id: "oauth-client-1",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        },
-        protectedHeader: { alg: "ES256" },
-      } as never;
+        userId: "auth-user-1",
+        clientId: "oauth-client-1",
+        scopes: "openid read write offline_access",
+      };
     },
-    isClientAllowed: async (clientId) => clientId === "oauth-client-1",
     resolveProfileId: async (authUserId) =>
       authUserId === "auth-user-1" ? "profile-1" : null,
-    getVerificationKey: () => ({}) as never,
   });
 
   try {
@@ -71,18 +68,13 @@ test("Mogplex OAuth verifier requires audience, issuer, client approval, and a l
         scopes: ["read", "write"],
       },
     });
-    assert.deepEqual(verifierCalls, [
-      {
-        issuer: "https://testprojectref000000.supabase.co/auth/v1",
-        audience: "https://mogplex.com/api/v1/mogplex/mcp",
-      },
-    ]);
+    assert.deepEqual(sessionCalls, ["Bearer oauth.jwt.token"]);
   } finally {
     __resetMogplexOAuthVerifierForTesting();
   }
 });
 
-test("Mogplex OAuth verifier rejects unapproved clients", async () => {
+test("Mogplex OAuth verifier rejects missing or expired Better Auth sessions", async () => {
   configureEnv();
   const {
     __resetMogplexOAuthVerifierForTesting,
@@ -92,21 +84,11 @@ test("Mogplex OAuth verifier rejects unapproved clients", async () => {
   let profileLookups = 0;
 
   __setMogplexOAuthVerifierDependenciesForTesting({
-    verifyJwt: async () =>
-      ({
-        payload: {
-          sub: "auth-user-1",
-          client_id: "unapproved-client",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        },
-        protectedHeader: { alg: "ES256" },
-      }) as never,
-    isClientAllowed: async () => false,
+    getMcpSession: async () => null,
     resolveProfileId: async () => {
       profileLookups += 1;
       return "profile-1";
     },
-    getVerificationKey: () => ({}) as never,
   });
 
   try {
@@ -120,26 +102,25 @@ test("Mogplex OAuth verifier rejects unapproved clients", async () => {
   }
 });
 
-test("Mogplex OAuth verifier rejects tokens without an expiry", async () => {
+test("Mogplex OAuth verifier rejects sessions without Mogplex API scopes", async () => {
   configureEnv();
   const {
     __resetMogplexOAuthVerifierForTesting,
     __setMogplexOAuthVerifierDependenciesForTesting,
     resolveMogplexOAuthToken,
   } = await import("../../lib/auth/mogplex-oauth");
-  let allowlistLookups = 0;
+  let profileLookups = 0;
 
   __setMogplexOAuthVerifierDependenciesForTesting({
-    verifyJwt: async () =>
-      ({
-        payload: { sub: "auth-user-1", client_id: "oauth-client-1" },
-        protectedHeader: { alg: "ES256" },
-      }) as never,
-    isClientAllowed: async () => {
-      allowlistLookups += 1;
-      return true;
+    getMcpSession: async () => ({
+      userId: "auth-user-1",
+      clientId: "oauth-client-1",
+      scopes: "openid profile email",
+    }),
+    resolveProfileId: async () => {
+      profileLookups += 1;
+      return "profile-1";
     },
-    getVerificationKey: () => ({}) as never,
   });
 
   try {
@@ -147,7 +128,7 @@ test("Mogplex OAuth verifier rejects tokens without an expiry", async () => {
       ok: false,
       reason: "invalid",
     });
-    assert.equal(allowlistLookups, 0);
+    assert.equal(profileLookups, 0);
   } finally {
     __resetMogplexOAuthVerifierForTesting();
   }

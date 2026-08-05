@@ -1,6 +1,6 @@
 // better-auth handler. Static /api/auth/* siblings (login, logout, waitlist,
-// github, vercel, user) take precedence over this catch-all, so the Supabase
-// auth stack keeps working during the transition.
+// github, vercel, user) take precedence over this catch-all while those legacy
+// integrations finish moving off Supabase.
 
 import { toNextJsHandler } from "better-auth/next-js";
 import { auth } from "@/lib/better-auth/server";

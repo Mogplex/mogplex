@@ -15,7 +15,10 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/auth/error", match: "subtree" },
   { path: "/oauth/consent", match: "subtree" },
   { path: "/api/oauth/decision", match: "exact" },
-  { path: "/.well-known/oauth-protected-resource", match: "subtree" },
+  // OAuth/OIDC discovery must never depend on a browser session. Keep the
+  // whole standards namespace outside the auth redirect path so clients
+  // always receive machine-readable metadata rather than /login HTML.
+  { path: "/.well-known/", match: "prefix" },
   // The MCP route owns its bearer validation and must be able to return the
   // RFC 9728 WWW-Authenticate challenge before a client has a token.
   { path: "/api/v1/mogplex/mcp", match: "exact" },

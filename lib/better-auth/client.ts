@@ -1,5 +1,4 @@
-// Client half of the better-auth foundation. Not used by any UI surface yet —
-// Supabase auth remains the live sign-in path until the Neon cutover.
+// Client half of the Neon-backed Better Auth browser sign-in flow.
 
 import { createAuthClient } from "better-auth/react";
 import { ssoClient } from "@better-auth/sso/client";

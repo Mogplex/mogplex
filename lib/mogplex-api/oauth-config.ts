@@ -4,16 +4,6 @@ const MOGPLEX_MCP_PATH = "/api/v1/mogplex/mcp";
 const MOGPLEX_MCP_PROTECTED_RESOURCE_PATH =
   "/.well-known/oauth-protected-resource/api/v1/mogplex/mcp";
 
-function requireSupabaseUrl() {
-  const value =
-    process.env.SUPABASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  if (!value) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL is required for Mogplex OAuth");
-  }
-  return new URL(value);
-}
-
 export function getMogplexMcpResourceUrl(request?: Request) {
   const configured = process.env.MOGPLEX_MCP_RESOURCE_URL?.trim();
   if (configured) return new URL(configured).toString();
@@ -27,14 +17,10 @@ export function getMogplexMcpProtectedResourceMetadataUrl(request: Request) {
   ).toString();
 }
 
-export function getSupabaseOAuthIssuer() {
-  return new URL("/auth/v1", requireSupabaseUrl())
-    .toString()
-    .replace(/\/$/, "");
-}
-
-export function getSupabaseOAuthJwksUrl() {
-  return `${getSupabaseOAuthIssuer()}/.well-known/jwks.json`;
+export function getMogplexOAuthIssuer(request?: Request) {
+  const configured = process.env.BETTER_AUTH_URL?.trim();
+  if (configured) return new URL(configured).origin;
+  return getCanonicalAppUrl(request).origin;
 }
 
 export function buildMogplexMcpBearerChallenge(request: Request) {
@@ -44,7 +30,8 @@ export function buildMogplexMcpBearerChallenge(request: Request) {
 export function buildMogplexMcpProtectedResourceMetadata(request?: Request) {
   return {
     resource: getMogplexMcpResourceUrl(request),
-    authorization_servers: [getSupabaseOAuthIssuer()],
+    authorization_servers: [getMogplexOAuthIssuer(request)],
+    scopes_supported: ["read", "write"],
     resource_documentation:
       "https://github.com/mogplex/mogplex/blob/main/docs/mogplex-api-mcp/local-agent-automation.md",
   };

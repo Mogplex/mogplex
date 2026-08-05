@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { sendAuthActionEmail } from "../../lib/email/send-auth-action-email";
 
@@ -10,6 +11,119 @@ test("should construct the better-auth instance when no auth env is set", async 
 
   assert.equal(typeof auth.handler, "function");
   assert.equal(typeof auth.api.getSession, "function");
+  assert.equal(typeof auth.api.getMcpSession, "function");
+});
+
+test("should serve Better Auth MCP authorization-server metadata", async () => {
+  const { GET } = await import("../../app/api/auth/[...all]/route");
+  const response = await GET(
+    new Request(
+      "http://localhost:3000/api/auth/.well-known/oauth-authorization-server"
+    )
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    issuer: "http://localhost:3000",
+    authorization_endpoint: "http://localhost:3000/api/auth/mcp/authorize",
+    token_endpoint: "http://localhost:3000/api/auth/mcp/token",
+    userinfo_endpoint: "http://localhost:3000/api/auth/mcp/userinfo",
+    jwks_uri: "http://localhost:3000/api/auth/mcp/jwks",
+    registration_endpoint: "http://localhost:3000/api/auth/mcp/register",
+    scopes_supported: ["openid", "profile", "email", "offline_access"],
+    response_types_supported: ["code"],
+    response_modes_supported: ["query"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    acr_values_supported: [
+      "urn:mace:incommon:iap:silver",
+      "urn:mace:incommon:iap:bronze",
+    ],
+    subject_types_supported: ["public"],
+    id_token_signing_alg_values_supported: ["RS256"],
+    token_endpoint_auth_methods_supported: [
+      "client_secret_basic",
+      "client_secret_post",
+      "none",
+    ],
+    code_challenge_methods_supported: ["S256"],
+    claims_supported: [
+      "sub",
+      "iss",
+      "aud",
+      "exp",
+      "nbf",
+      "iat",
+      "jti",
+      "email",
+      "email_verified",
+      "name",
+    ],
+  });
+});
+
+test("should expose Better Auth metadata at the issuer root with Mogplex scopes", async () => {
+  const { GET } =
+    await import("../../app/.well-known/oauth-authorization-server/route");
+  const response = await GET(
+    new Request("http://localhost:3000/.well-known/oauth-authorization-server")
+  );
+  const metadata = (await response.json()) as {
+    issuer: string;
+    authorization_endpoint: string;
+    token_endpoint: string;
+    registration_endpoint: string;
+    scopes_supported: string[];
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(metadata.issuer, "http://localhost:3000");
+  assert.equal(
+    metadata.authorization_endpoint,
+    "http://localhost:3000/api/auth/mcp/authorize"
+  );
+  assert.equal(
+    metadata.token_endpoint,
+    "http://localhost:3000/api/auth/mcp/token"
+  );
+  assert.equal(
+    metadata.registration_endpoint,
+    "http://localhost:3000/api/auth/mcp/register"
+  );
+  assert.deepEqual(metadata.scopes_supported, [
+    "openid",
+    "profile",
+    "email",
+    "offline_access",
+    "read",
+    "write",
+  ]);
+});
+
+test("should migrate Better Auth MCP OAuth tables with UUID user references", async () => {
+  const sql = await readFile(
+    new URL(
+      "../../neon/migrations/20260805183000_better_auth_mcp_oauth.sql",
+      import.meta.url
+    ),
+    "utf8"
+  );
+
+  for (const table of [
+    "oauthApplication",
+    "oauthAccessToken",
+    "oauthConsent",
+  ]) {
+    assert.match(sql, new RegExp(`create table "${table}"`, "i"));
+  }
+  assert.match(sql, /"id" uuid not null primary key/i);
+  assert.match(
+    sql,
+    /"userId" uuid(?: not null)? references "user" \("id"\) on delete cascade/i
+  );
+  assert.match(
+    sql,
+    /"clientId" text not null references "oauthApplication" \("clientId"\) on delete cascade/i
+  );
 });
 
 test("should exclude social providers when their env vars are unset", async () => {

@@ -40,6 +40,7 @@ test.describe("better-auth against real Neon", () => {
   });
 
   test("email/password journey writes real rows and enforces verification", async ({
+    page,
     request,
   }) => {
     // Sign-up succeeds (the e2e server logs the verification email instead of
@@ -82,12 +83,32 @@ test.describe("better-auth against real Neon", () => {
     });
     expect(wrongPassword.status()).toBe(401);
 
-    const signIn = await request.post("/api/auth/sign-in/email", {
-      data: { email, password },
-    });
-    expect(signIn.status(), await signIn.text()).toBe(200);
+    const cliAuthPath =
+      "/cli-auth?callback=http%3A%2F%2Flocalhost%3A45454%2Fcallback&nonce=0123456789abcdef0123456789abcdef&name=E2E+CLI";
 
-    const session = await request.get("/api/auth/get-session");
+    // Exercise the browser round trip as the CLI invokes it: the proxy must
+    // preserve every callback parameter through /login, and the sign-in form
+    // must navigate back to the exact consent URL with the fresh session.
+    await page.goto(cliAuthPath);
+    const loginUrl = new URL(page.url());
+    expect(loginUrl.pathname).toBe("/login");
+    expect(loginUrl.searchParams.get("next")).toBe(cliAuthPath);
+
+    await page.getByTestId("signin-email").fill(email);
+    await page.getByTestId("signin-password").fill(password);
+    await page.getByTestId("signin-submit").click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === "/cli-auth" &&
+        url.searchParams.get("callback") ===
+          "http://localhost:45454/callback" &&
+        url.searchParams.get("nonce") === "0123456789abcdef0123456789abcdef" &&
+        url.searchParams.get("name") === "E2E CLI"
+    );
+    await expect(page.getByText("Grant mogplex CLI access?")).toBeVisible();
+
+    const browserRequest = page.context().request;
+    const session = await browserRequest.get("/api/auth/get-session");
     expect(session.status()).toBe(200);
     const sessionBody = (await session.json()) as {
       user?: { email?: string };
@@ -100,19 +121,33 @@ test.describe("better-auth against real Neon", () => {
     );
     expect(sessionRows.rowCount).toBeGreaterThan(0);
 
+    const cliAuth = await browserRequest.get(cliAuthPath, { maxRedirects: 0 });
+    const cliAuthBody = await cliAuth.text();
+    expect(cliAuth.status(), cliAuthBody).toBe(200);
+    expect(cliAuth.headers().location).toBeUndefined();
+    expect(cliAuthBody).toContain("Grant mogplex CLI access?");
+
     // Sign-out invalidates the session server-side, not just the cookie. The
     // Origin header satisfies better-auth's CSRF check for cookie-backed
     // POSTs (browsers send it automatically; the API context does not).
-    const signOut = await request.post("/api/auth/sign-out", {
+    const signOut = await browserRequest.post("/api/auth/sign-out", {
       data: {},
       headers: { origin: new URL(signUp.url()).origin },
     });
     expect(signOut.status()).toBe(200);
 
-    const afterSignOut = await request.get("/api/auth/get-session");
+    const afterSignOut = await browserRequest.get("/api/auth/get-session");
     const afterBody = (await afterSignOut.json().catch(() => null)) as {
       user?: { email?: string };
     } | null;
     expect(afterBody?.user?.email ?? null).toBeNull();
+
+    const loggedOutCliAuth = await browserRequest.get(cliAuthPath, {
+      maxRedirects: 0,
+    });
+    expect(loggedOutCliAuth.status()).toBe(307);
+    expect(loggedOutCliAuth.headers().location).toBe(
+      `/login?next=${encodeURIComponent(cliAuthPath)}`
+    );
   });
 });
