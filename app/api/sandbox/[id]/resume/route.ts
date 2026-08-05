@@ -26,6 +26,12 @@ import { recordSandboxLifecycleEvent } from "@/lib/sandbox/auto-pause";
 import { NextResponse } from "next/server";
 import type { SandboxEvent } from "@/lib/sandbox/events";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
+import {
+  finalizeSandboxBillingClose,
+  prepareSandboxBillingClose,
+  presentSandboxBillingAdmissionError,
+  requireSandboxBillingSession,
+} from "@/lib/billing/sandbox-usage";
 
 /**
  * toSandboxClientRecord expects non-null base_branch/working_branch. Our
@@ -115,6 +121,9 @@ type SandboxResumeDeps = {
   enforceSandboxBootLimits: typeof enforceSandboxBootLimits;
   releaseLimitClaim: typeof releaseLimitClaim;
   recordSandboxLifecycleEvent: typeof recordSandboxLifecycleEvent;
+  requireSandboxBillingSession: typeof requireSandboxBillingSession;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
 };
 
 function sseEncode(
@@ -125,15 +134,49 @@ function sseEncode(
 
 async function stopSandboxAfterLifecycleConflict(
   sandbox: Awaited<ReturnType<typeof getSandbox>>,
-  label: string
+  sandboxRecordId: string,
+  label: string,
+  deps: Pick<
+    SandboxResumeDeps,
+    "prepareSandboxBillingClose" | "finalizeSandboxBillingClose"
+  >
 ) {
+  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+    null;
   try {
-    await sandbox.stop();
+    billingClose = await deps.prepareSandboxBillingClose(sandboxRecordId);
+  } catch (billingError) {
+    console.warn(
+      `[sandbox/resume] Billing close preparation failed after ${label} CAS conflict; reconciliation will recover:`,
+      billingError
+    );
+  }
+  let providerEndedAt: Date;
+  try {
+    await sandbox.stop({ blocking: true });
+    // Conflict cleanup is best-effort and also accepts the lightweight
+    // handles used by lifecycle recovery tests. Primary lifecycle paths use a
+    // fully typed SDK Sandbox and call currentSession directly.
+    const providerSession =
+      typeof sandbox.currentSession === "function"
+        ? sandbox.currentSession()
+        : null;
+    providerEndedAt =
+      providerSession?.stoppedAt ?? providerSession?.updatedAt ?? new Date();
   } catch (stopErr) {
     console.warn(
       `[sandbox/resume] stop() after ${label} CAS conflict surfaced: ${
         stopErr instanceof Error ? stopErr.message : String(stopErr)
       }`
+    );
+    return;
+  }
+  try {
+    await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
+  } catch (billingError) {
+    console.warn(
+      `[sandbox/resume] VM stopped after ${label} CAS conflict, but billing finalization failed; reconciliation will retry:`,
+      billingError
     );
   }
 }
@@ -147,6 +190,9 @@ const defaultSandboxResumeDeps: SandboxResumeDeps = {
   enforceSandboxBootLimits,
   releaseLimitClaim,
   recordSandboxLifecycleEvent,
+  requireSandboxBillingSession,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
 };
 
 function releaseSandboxBootLimitClaim(
@@ -239,16 +285,43 @@ export function createSandboxResumeHandler(
     // Wake the VM. Filesystem is restored from the auto-snapshot; the
     // dev server process is not — we restart it via bootstrap below.
     const sandbox = await deps
-      .getSandbox(record.sandbox_id, context.credentials, { resume: true })
+      .getSandbox(record.sandbox_id, context.credentials, {
+        resume: true,
+        onResume: async (resumedSandbox) => {
+          await deps.requireSandboxBillingSession(record.id, resumedSandbox);
+        },
+      })
       .catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : "Failed to resume sandbox";
-        return { __error: message } as const;
+        const billingError = presentSandboxBillingAdmissionError(err);
+        return {
+          __error:
+            billingError?.message ??
+            (err instanceof Error ? err.message : "Failed to resume sandbox"),
+          __status: billingError?.status ?? 502,
+        } as const;
       });
 
     if ("__error" in sandbox) {
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-      return NextResponse.json({ error: sandbox.__error }, { status: 502 });
+      return NextResponse.json(
+        { error: sandbox.__error },
+        { status: sandbox.__status }
+      );
+    }
+
+    try {
+      await deps.requireSandboxBillingSession(record.id, sandbox);
+    } catch (error) {
+      await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+      const billingError = presentSandboxBillingAdmissionError(error);
+      return NextResponse.json(
+        {
+          error:
+            billingError?.message ??
+            "Sandbox billing is temporarily unavailable",
+        },
+        { status: billingError?.status ?? 503 }
+      );
     }
 
     // Transition to installing so UI overlays/spinners kick in while
@@ -278,7 +351,12 @@ export function createSandboxResumeHandler(
 
     if (!installingRecord) {
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-      await stopSandboxAfterLifecycleConflict(sandbox, "resume");
+      await stopSandboxAfterLifecycleConflict(
+        sandbox,
+        record.id,
+        "resume",
+        deps
+      );
       return buildLifecycleConflictResponse(
         "Sandbox resume was cancelled before it started."
       );
@@ -403,7 +481,12 @@ export function createSandboxResumeHandler(
                   }
                 )) as SandboxResumeRecord | null;
                 if (!previewRecord) {
-                  await stopSandboxAfterLifecycleConflict(sandbox, "preview");
+                  await stopSandboxAfterLifecycleConflict(
+                    sandbox,
+                    record.id,
+                    "preview",
+                    deps
+                  );
                   emit({
                     type: "cancelled",
                     reason: "conflict",
@@ -442,7 +525,12 @@ export function createSandboxResumeHandler(
                     }
                   )) as SandboxResumeRecord | null;
                   if (!runningRecord) {
-                    await stopSandboxAfterLifecycleConflict(sandbox, "running");
+                    await stopSandboxAfterLifecycleConflict(
+                      sandbox,
+                      record.id,
+                      "running",
+                      deps
+                    );
                     emit({
                       type: "cancelled",
                       reason: "conflict",
@@ -473,6 +561,12 @@ export function createSandboxResumeHandler(
           const message =
             err instanceof Error ? err.message : "Resume bootstrap failed";
           console.error("[sandbox/resume] bootstrap error:", err);
+          await stopSandboxAfterLifecycleConflict(
+            sandbox,
+            record.id,
+            "bootstrap failure",
+            deps
+          );
           const failedRecord = await deps.updateSandboxRecord(
             record.id,
             {

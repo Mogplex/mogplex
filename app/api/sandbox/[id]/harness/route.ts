@@ -59,6 +59,10 @@ import {
 } from "@/lib/sandbox/route-context";
 import type { HarnessId } from "@/lib/harness/config";
 import type { MemoryScope } from "@/lib/memories-client";
+import {
+  createSandboxBillingOnResume,
+  presentSandboxBillingAdmissionError,
+} from "@/lib/billing/sandbox-usage";
 
 const VALID_HARNESSES = new Set<HarnessId>(["claude-code", "codex"]);
 const MAX_LOG_EVENT_LENGTH = 4000;
@@ -595,11 +599,15 @@ export function createSandboxHarnessPostHandler(
         );
       }
 
-      const sandbox = await deps.getSandbox(record.sandbox_id, {
-        vercelToken: context.credentials.vercelToken,
-        vercelTeamId: context.credentials.vercelTeamId,
-        vercelProjectId: context.credentials.vercelProjectId,
-      });
+      const sandbox = await deps.getSandbox(
+        record.sandbox_id,
+        {
+          vercelToken: context.credentials.vercelToken,
+          vercelTeamId: context.credentials.vercelTeamId,
+          vercelProjectId: context.credentials.vercelProjectId,
+        },
+        { onResume: createSandboxBillingOnResume(id) }
+      );
 
       await deps.renewSandboxActivityLease(sandbox);
       await deps.touchSandboxLastActive(id);
@@ -1199,8 +1207,10 @@ export function createSandboxHarnessPostHandler(
         });
       }
 
+      const billingError = presentSandboxBillingAdmissionError(err);
       const rawMessage =
-        err instanceof Error ? err.message : "Harness execution failed";
+        billingError?.message ??
+        (err instanceof Error ? err.message : "Harness execution failed");
       const apiDetail = extractVercelApiErrorDetail(err);
       const message = apiDetail ? `${rawMessage} — ${apiDetail}` : rawMessage;
 
@@ -1262,7 +1272,10 @@ export function createSandboxHarnessPostHandler(
           payload: { error: message },
         });
       }
-      return NextResponse.json({ error: message }, { status: 500 });
+      return NextResponse.json(
+        { error: message },
+        { status: billingError?.status ?? 500 }
+      );
     }
   };
 }

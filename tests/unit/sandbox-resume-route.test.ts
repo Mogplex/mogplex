@@ -532,6 +532,8 @@ test("POST /api/sandbox/[id]/resume guards bootstrap error writes after late sto
     updates: Record<string, unknown>;
     options: Record<string, unknown> | undefined;
   }> = [];
+  let providerStops = 0;
+  let billingFinalizations = 0;
 
   const handler = createSandboxResumeHandler({
     loadOwnedSandboxRouteContext: (async () =>
@@ -543,7 +545,24 @@ test("POST /api/sandbox/[id]/resume guards bootstrap error writes after late sto
     releaseLimitClaim: (async () => {
       throw new Error("bootstrap errors should preserve consumed claims");
     }) as never,
-    getSandbox: (async () => ({}) as never) as never,
+    getSandbox: (async () =>
+      ({
+        stop: async () => {
+          providerStops += 1;
+        },
+        currentSession: () => ({
+          stoppedAt: new Date("2026-08-05T11:10:00.000Z"),
+        }),
+      }) as never) as never,
+    prepareSandboxBillingClose: async () => ({
+      sessionId: "billing-session-1",
+      closeGeneration: 1,
+      actorUserId: "user-1",
+    }),
+    finalizeSandboxBillingClose: async () => {
+      billingFinalizations += 1;
+      return { finalized: true, metered: true };
+    },
     updateSandboxRecord: (async (
       _id: string,
       updates: Record<string, unknown>,
@@ -580,4 +599,6 @@ test("POST /api/sandbox/[id]/resume guards bootstrap error writes after late sto
   });
   assert.match(body, /"type":"cancelled"/);
   assert.doesNotMatch(body, /"type":"error"/);
+  assert.equal(providerStops, 1);
+  assert.equal(billingFinalizations, 1);
 });

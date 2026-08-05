@@ -9,6 +9,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import type { SandboxVmCredentials } from "@/lib/sandbox/liveness";
 import type { SandboxLifecycleStatus } from "@/lib/types";
+import {
+  finalizeSandboxBillingClose,
+  prepareSandboxBillingClose,
+} from "@/lib/billing/sandbox-usage";
 
 export const DEFAULT_SANDBOX_AUTO_PAUSE_GRACE_PERIOD_MS = 90_000;
 
@@ -145,6 +149,8 @@ type SandboxAutoPauseRunnerDeps = {
   getSandbox: typeof getSandbox;
   updateSandboxRecord: typeof updateSandboxRecord;
   recordLifecycleEvent: (input: LifecycleEventInput) => Promise<string | null>;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
   resolveMode: (record: SandboxAutoPauseRecord) => SandboxAutoPauseMode;
   nowMs: () => number;
 };
@@ -605,6 +611,8 @@ const defaultSandboxAutoPauseRunnerDeps: SandboxAutoPauseRunnerDeps = {
   getSandbox,
   updateSandboxRecord,
   recordLifecycleEvent: recordSandboxLifecycleEvent,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
   resolveMode: (record) => resolveSandboxAutoPauseMode(record.user_id),
   nowMs: () => Date.now(),
 };
@@ -928,9 +936,19 @@ export async function runSandboxAutoPauseCheck(
   const previousHealthStatus =
     claimResult.previousHealthStatus ?? finalRecord.health_status ?? "running";
   let sandbox: Awaited<ReturnType<typeof getSandbox>>;
+  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+    null;
+  try {
+    billingClose = await deps.prepareSandboxBillingClose(finalRecord.id);
+  } catch (billingError) {
+    console.warn(
+      "[sandbox/auto-pause] Billing close preparation failed; stopping idle compute and leaving ledger closure to reconciliation:",
+      billingError
+    );
+  }
   try {
     sandbox = await deps.getSandbox(finalRecord.sandbox_id, credentials);
-    await sandbox.stop();
+    await sandbox.stop({ blocking: true });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Auto-pause failed";
@@ -963,6 +981,19 @@ export async function runSandboxAutoPauseCheck(
       }
     );
     return buildAutoPauseResult("auto_pause_failed", message);
+  }
+
+  try {
+    const providerSession = sandbox.currentSession();
+    await deps.finalizeSandboxBillingClose(
+      billingClose,
+      providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date()
+    );
+  } catch (billingError) {
+    console.warn(
+      "[sandbox/auto-pause] Sandbox stopped, but billing finalization failed; reconciliation will retry:",
+      billingError
+    );
   }
 
   const snapshotId = sandbox.currentSnapshotId ?? null;

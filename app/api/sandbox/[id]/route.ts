@@ -17,6 +17,10 @@ import type {
   SandboxRouteRecordLike,
 } from "@/lib/sandbox/route-context";
 import type { SandboxRecord } from "@/lib/types";
+import {
+  finalizeSandboxBillingClose,
+  prepareSandboxBillingClose,
+} from "@/lib/billing/sandbox-usage";
 
 type SandboxStatusRecord = {
   id: string;
@@ -83,6 +87,8 @@ type SandboxDeleteDeps = {
   stopSandboxRecord: typeof stopSandboxRecord;
   updateSandboxRecord: typeof updateSandboxRecord;
   deleteSandboxRecord: typeof deleteSandboxRecord;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
 };
 
 const defaultSandboxDetailGetDeps: SandboxDetailGetDeps = {
@@ -100,6 +106,8 @@ const defaultSandboxDeleteDeps: SandboxDeleteDeps = {
   stopSandboxRecord,
   updateSandboxRecord,
   deleteSandboxRecord,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
 };
 
 function resolveSandboxDetailLiveStatus(
@@ -125,8 +133,13 @@ const DELETE_ACTIVE_FROM_STATUSES = [
 ] as const;
 
 type RemoteDeleteOutcome =
-  | { verified: true; stoppedRemote?: boolean }
-  | { verified: false; warning: string; error: string };
+  | { verified: true; stoppedRemote?: boolean; endedAt?: Date }
+  | {
+      verified: false;
+      warning: string;
+      error: string;
+      endedAt?: Date;
+    };
 
 function formatRemoteDeleteError(error: unknown) {
   return error instanceof Error ? error.message : "unknown error";
@@ -140,7 +153,7 @@ async function deleteRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
   >
 ): Promise<RemoteDeleteOutcome> {
   if (loaded.record.sandbox_id === "pending") {
-    return { verified: true };
+    return { verified: true, endedAt: new Date() };
   }
 
   const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
@@ -186,7 +199,7 @@ async function deleteRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
   if (typeof sandbox.delete === "function") {
     try {
       await sandbox.delete();
-      return { verified: true };
+      return { verified: true, endedAt: new Date() };
     } catch (error) {
       if (isNotFoundError(error)) {
         return { verified: true };
@@ -207,16 +220,19 @@ async function deleteRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
   }
 
   try {
-    await sandbox.stop();
+    await sandbox.stop({ blocking: true });
+    const session = sandbox.currentSession();
+    const endedAt = session.stoppedAt ?? session.updatedAt ?? new Date();
     if (loaded.record.persistent === true) {
       return {
         verified: false,
         warning:
           "Remote VM was stopped but persistent resources could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
         error: `Remote VM ${loaded.record.sandbox_id} could not be deleted because delete() is unavailable. VM was stopped, but persistent resources may remain. Record kept for reaper cleanup.`,
+        endedAt,
       };
     }
-    return { verified: true, stoppedRemote: true };
+    return { verified: true, stoppedRemote: true, endedAt };
   } catch (error) {
     if (isNotFoundError(error)) {
       return { verified: true };
@@ -365,31 +381,84 @@ export function createSandboxDeleteHandler(
     );
     if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
+    let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+      null;
+    try {
+      billingClose = await deps.prepareSandboxBillingClose(id);
+    } catch (billingError) {
+      console.warn(
+        `[sandbox/delete] Billing close preparation failed for ${id}; reconciliation will recover:`,
+        billingError
+      );
+    }
     const remoteDelete = await deleteRemoteSandboxBestEffort(loaded, deps);
+    const billingEndedAt =
+      remoteDelete.endedAt ??
+      (remoteDelete.verified ? (billingClose?.meteredThroughAt ?? null) : null);
+    let billingFinalizationConfirmed = billingClose === null;
+    if (billingClose && billingEndedAt) {
+      try {
+        const finalized = await deps.finalizeSandboxBillingClose(
+          billingClose,
+          billingEndedAt
+        );
+        billingFinalizationConfirmed = finalized.finalized;
+      } catch (billingError) {
+        console.warn(
+          `[sandbox/delete] VM stopped but billing finalization failed for ${id}; reconciliation will retry:`,
+          billingError
+        );
+      }
+    }
+
+    if (remoteDelete.verified && !billingFinalizationConfirmed) {
+      const warning =
+        "Remote sandbox is gone. Billing closure is still reconciling; retry delete shortly.";
+      try {
+        await deps.updateSandboxRecord(
+          id,
+          {
+            status: "error",
+            health_status: "stopped",
+            error: warning,
+          },
+          {
+            expectedSandboxId: loaded.record.sandbox_id,
+            fromStatuses: DELETE_ACTIVE_FROM_STATUSES,
+          }
+        );
+      } catch (cleanupError) {
+        console.error(
+          `[sandbox/delete] Failed to preserve row ${id} while billing closes:`,
+          cleanupError
+        );
+      }
+      return NextResponse.json(
+        { ok: true, sandboxId: id, warning },
+        { status: 202 }
+      );
+    }
 
     if (!remoteDelete.verified) {
       try {
-        await (loaded.record.persistent === true
-          ? deps.updateSandboxRecord(
-              id,
-              {
+        await deps.updateSandboxRecord(
+          id,
+          loaded.record.persistent === true
+            ? {
                 status: "paused",
                 health_status: "paused",
                 error: remoteDelete.error,
-              },
-              {
-                expectedSandboxId: loaded.record.sandbox_id,
-                fromStatuses: DELETE_ACTIVE_FROM_STATUSES,
               }
-            )
-          : deps.stopSandboxRecord(id, {
-              healthStatus: "stopped",
-              stopReason: "manual",
-              fromStatuses: DELETE_ACTIVE_FROM_STATUSES,
-              additionalUpdates: {
+            : {
+                status: "error",
+                health_status: "error",
                 error: remoteDelete.error,
               },
-            }));
+          {
+            expectedSandboxId: loaded.record.sandbox_id,
+            fromStatuses: DELETE_ACTIVE_FROM_STATUSES,
+          }
+        );
       } catch (cleanupError) {
         console.error(
           `[sandbox/delete] Failed to mark row ${id} for reaper cleanup:`,

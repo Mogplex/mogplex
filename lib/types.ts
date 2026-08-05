@@ -1077,6 +1077,7 @@ export type StopReason =
   | "stuck_boot"
   | "vm_gone"
   | "auto_pause"
+  | "billing_depleted"
   | "unknown";
 
 export type SandboxRecordRow = {

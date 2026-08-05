@@ -95,6 +95,9 @@ test("stopSandbox soft-pauses a persistent sandbox on idle timeout (state preser
     {
       getSandbox: (async () => ({
         stop: async () => {},
+        currentSession: () => ({
+          updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+        }),
         currentSnapshotId: "snap_idle",
       })) as never,
       updateSandboxRecord: async (_id, updates) => {
@@ -133,6 +136,9 @@ test("stopSandbox hard-stops a non-persistent sandbox on idle timeout (no soft-p
     {
       getSandbox: (async () => ({
         stop: async () => {},
+        currentSession: () => ({
+          updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+        }),
         currentSnapshotId: undefined,
       })) as never,
       updateSandboxRecord: async () => {

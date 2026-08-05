@@ -110,6 +110,7 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
   const aiCall = buildAiCall();
   let persistedStatus: string | undefined;
   let persistedError: string | null | undefined;
+  let billingResumeHookAttached = false;
 
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
@@ -125,7 +126,10 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
         aiBillingSource: "user_ai_gateway",
         gatewayApiKey: "gateway-key",
       }),
-    getSandbox: async () => ({}) as never,
+    getSandbox: async (_name, _credentials, options) => {
+      billingResumeHookAttached = typeof options?.onResume === "function";
+      return {} as never;
+    },
     runHarness: async () =>
       ({
         installed: false,
@@ -190,6 +194,7 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
     "OpenAI rate-limited this run. Wait a moment, then try again.";
   assert.equal(persistedStatus, "failed");
   assert.equal(persistedError, expectedError);
+  assert.equal(billingResumeHookAttached, true);
   assert.deepEqual(done, {
     type: "done",
     exitCode: 1,

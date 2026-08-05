@@ -16,6 +16,10 @@ import { loadSandboxVercelDiagnostics } from "@/lib/vercel/load-sandbox-diagnost
 import { reconcileSandboxReadiness } from "@/lib/sandbox/readiness-reconciliation";
 import type { VercelAuthMode } from "@/lib/vercel/service";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes/types";
+import {
+  createSandboxBillingOnResume,
+  presentSandboxBillingAdmissionError,
+} from "@/lib/billing/sandbox-usage";
 
 type SandboxHealthRecord = {
   id: string;
@@ -83,6 +87,7 @@ type RefreshedCompatibilityHealth = {
 
 async function readDevLog(
   record: {
+    id: string;
     sandbox_id: string;
     root_directory?: string | null;
     repo?:
@@ -97,11 +102,15 @@ async function readDevLog(
   }
 ) {
   const repo = Array.isArray(record.repo) ? record.repo[0] : record.repo;
-  const sandbox = await getSandbox(record.sandbox_id, {
-    vercelToken: credentials.vercelToken,
-    vercelTeamId: credentials.vercelTeamId,
-    vercelProjectId: credentials.vercelProjectId,
-  });
+  const sandbox = await getSandbox(
+    record.sandbox_id,
+    {
+      vercelToken: credentials.vercelToken,
+      vercelTeamId: credentials.vercelTeamId,
+      vercelProjectId: credentials.vercelProjectId,
+    },
+    { onResume: createSandboxBillingOnResume(record.id) }
+  );
 
   // Read dev.log from the workspace the sandbox actually booted in,
   // not the repo's persistent default. A monorepo user who launched
@@ -161,7 +170,8 @@ async function readCompatibilityDevLog(
 ) {
   try {
     return await deps.readDevLog(record, credentials);
-  } catch {
+  } catch (error) {
+    if (presentSandboxBillingAdmissionError(error)) throw error;
     return record.dev_log || "";
   }
 }
@@ -386,15 +396,25 @@ export function createSandboxHealthGetHandler(
       });
       if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
-      const result = await reconcileSandboxReadiness(
-        {
-          sandboxRecordId: id,
-          source: "health",
-        },
-        {
-          includeDiagnostics: true,
-        }
-      );
+      let result;
+      try {
+        result = await reconcileSandboxReadiness(
+          {
+            sandboxRecordId: id,
+            source: "health",
+          },
+          {
+            includeDiagnostics: true,
+          }
+        );
+      } catch (error) {
+        const billingError = presentSandboxBillingAdmissionError(error);
+        if (!billingError) throw error;
+        return NextResponse.json(
+          { error: billingError.message },
+          { status: billingError.status }
+        );
+      }
 
       if (!result) {
         return NextResponse.json(
@@ -426,8 +446,9 @@ export function createSandboxHealthGetHandler(
       );
     if (!sandboxData.ok) return buildSandboxRouteErrorResponse(sandboxData);
 
-    const { nextRecord, vercelDiagnostics } =
-      await refreshCompatibilitySandboxHealth({
+    let refreshed: RefreshedCompatibilityHealth;
+    try {
+      refreshed = await refreshCompatibilitySandboxHealth({
         deps,
         record: sandboxData.record,
         sandbox: sandboxData.sandbox,
@@ -438,6 +459,15 @@ export function createSandboxHealthGetHandler(
         },
         credentialSource: sandboxData.context.ownership.credentialSource,
       });
+    } catch (error) {
+      const billingError = presentSandboxBillingAdmissionError(error);
+      if (!billingError) throw error;
+      return NextResponse.json(
+        { error: billingError.message },
+        { status: billingError.status }
+      );
+    }
+    const { nextRecord, vercelDiagnostics } = refreshed;
 
     return buildSandboxHealthResponse(nextRecord, vercelDiagnostics);
   };

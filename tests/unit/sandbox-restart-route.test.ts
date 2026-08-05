@@ -486,6 +486,9 @@ test("POST /api/sandbox/[id]/restart emits cancelled when installing CAS fails",
         stop: async () => {
           stopCalls += 1;
         },
+        currentSession: () => ({
+          stoppedAt: new Date("2026-08-05T11:10:00.000Z"),
+        }),
       }) as never,
     updateSandboxRecord: async () => null,
     resolveRepoSandboxEnv: (async () => {
@@ -581,6 +584,83 @@ test("POST /api/sandbox/[id]/restart allows stopped persistent records to restar
   assert.equal(updateOptions[0]?.expectedSandboxId, "vm_123");
 });
 
+test("POST /api/sandbox/[id]/restart finalizes the old session before waking the replacement", async () => {
+  const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
+  const stoppedAt = new Date("2026-08-05T11:10:00.000Z");
+  const events: unknown[] = [];
+
+  const handler = createSandboxRestartHandler({
+    loadOwnedSandboxRouteRecord: (async () => ({
+      ok: true as const,
+      auth: { userId: "user-1" },
+      repo: null,
+      rootDirectory: undefined,
+      record: { id: "sandbox-1", sandbox_id: "vm_123", persistent: true },
+    })) as never,
+    loadOwnedSandboxRouteContext: (async () =>
+      buildLoadedPersistentRestartContext()) as never,
+    getSandbox: (async (
+      _id: string,
+      _credentials: unknown,
+      options?: { resume?: boolean }
+    ) => {
+      events.push(["get", options?.resume]);
+      return {
+        stop: async () => {
+          events.push(["stop"]);
+        },
+        currentSession: () => ({ stoppedAt }),
+      };
+    }) as never,
+    prepareSandboxBillingClose: async () => {
+      events.push(["prepare"]);
+      return {
+        sessionId: "billing-session-1",
+        closeGeneration: 1,
+        actorUserId: "user-1",
+      };
+    },
+    finalizeSandboxBillingClose: async (_attempt, endedAt) => {
+      events.push(["finalize", endedAt]);
+      return { finalized: true, metered: true };
+    },
+    requireSandboxBillingSession: async () => {
+      events.push(["admit-replacement"]);
+      return { metered: true, reason: "opened", sessionId: "billing-2" };
+    },
+    updateSandboxRecord: (async (
+      _id: string,
+      updates: Record<string, unknown>
+    ) =>
+      buildPersistedPersistentRestartRecord(
+        updates as Partial<PersistentRestartRecord>
+      )) as never,
+    resolveRepoSandboxEnv: (async () => ({
+      envVars: {},
+      sync: { mode: "sandbox-only" },
+    })) as never,
+    bootstrapFromSnapshotStreaming: async function* bootstrapMock() {
+      yield { type: "status", status: "running" };
+    } as never,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "POST", suffix: "/restart" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  await readStreamBody(response);
+  assert.deepEqual(events.slice(0, 6), [
+    ["get", false],
+    ["prepare"],
+    ["stop"],
+    ["finalize", stoppedAt],
+    ["get", true],
+    ["admit-replacement"],
+  ]);
+});
+
 test("POST /api/sandbox/[id]/restart emits cancelled and not ready when running CAS fails", async () => {
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   let stopCalls = 0;
@@ -600,6 +680,9 @@ test("POST /api/sandbox/[id]/restart emits cancelled and not ready when running 
         stop: async () => {
           stopCalls += 1;
         },
+        currentSession: () => ({
+          stoppedAt: new Date("2026-08-05T11:10:00.000Z"),
+        }),
       }) as never,
     updateSandboxRecord: (async (
       _id: string,
@@ -652,6 +735,9 @@ test("POST /api/sandbox/[id]/restart emits cancelled and not ready when preview_
         stop: async () => {
           stopCalls += 1;
         },
+        currentSession: () => ({
+          stoppedAt: new Date("2026-08-05T11:10:00.000Z"),
+        }),
       }) as never,
     updateSandboxRecord: (async (
       _id: string,
@@ -693,6 +779,8 @@ test("POST /api/sandbox/[id]/restart guards bootstrap error writes after late st
     updates: Record<string, unknown>;
     options: Record<string, unknown> | undefined;
   }> = [];
+  let providerStops = 0;
+  let billingFinalizations = 0;
 
   const handler = createSandboxRestartHandler({
     loadOwnedSandboxRouteRecord: (async () => ({
@@ -713,8 +801,22 @@ test("POST /api/sandbox/[id]/restart guards bootstrap error writes after late st
     }) as never,
     getSandbox: async () =>
       ({
-        stop: async () => {},
+        stop: async () => {
+          providerStops += 1;
+        },
+        currentSession: () => ({
+          stoppedAt: new Date("2026-08-05T11:10:00.000Z"),
+        }),
       }) as never,
+    prepareSandboxBillingClose: async () => ({
+      sessionId: "billing-session-1",
+      closeGeneration: 1,
+      actorUserId: "user-1",
+    }),
+    finalizeSandboxBillingClose: async () => {
+      billingFinalizations += 1;
+      return { finalized: true, metered: true };
+    },
     updateSandboxRecord: (async (
       _id: string,
       updates: Record<string, unknown>,
@@ -753,4 +855,6 @@ test("POST /api/sandbox/[id]/restart guards bootstrap error writes after late st
   });
   assert.match(body, /"type":"cancelled"/);
   assert.doesNotMatch(body, /"type":"error"/);
+  assert.equal(providerStops, 1);
+  assert.equal(billingFinalizations, 1);
 });

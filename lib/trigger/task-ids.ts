@@ -7,6 +7,7 @@ export const TRIGGER_TASK_IDS = {
   sandboxAutoPause: "sandbox-auto-pause",
   sandboxBaselineSnapshotReaper: "reap-baseline-snapshots",
   sandboxReadinessReconciliation: "reconcile-sandbox-readiness",
+  sandboxBillingReconciliation: "reconcile-sandbox-billing",
   vercelLinkReconciliation: "reconcile-vercel-links",
   aiCallCostReconciliation: "reconcile-ai-call-costs",
   annualIncludedUsageGrant: "grant-annual-included-usage",

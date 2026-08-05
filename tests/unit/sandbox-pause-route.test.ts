@@ -33,6 +33,9 @@ test("POST /api/sandbox/[id]/pause stops the VM (auto-snapshot) and marks record
         stop: async () => {
           stopCount += 1;
         },
+        currentSession: () => ({
+          updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+        }),
         currentSnapshotId: "snap_abc",
       }) as never,
     updateSandboxRecord: async (_id, updates) => {

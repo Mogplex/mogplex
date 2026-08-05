@@ -26,6 +26,7 @@ const input = {
 describe("resolveNameCollision", () => {
   it("creates when Vercel has no sandbox for the deterministic name", async () => {
     const result = await resolveNameCollision(input, {
+      loadMatchingRecord: async () => null,
       getSandbox: async () => {
         throw Object.assign(new Error("Sandbox not found"), { status: 404 });
       },
@@ -54,9 +55,11 @@ describe("resolveNameCollision", () => {
     expect(getSandbox).toHaveBeenCalledWith(input.name, input.credentials, {
       resume: false,
     });
-    expect(getSandbox).toHaveBeenCalledWith(input.name, input.credentials, {
-      resume: true,
-    });
+    expect(getSandbox).toHaveBeenCalledWith(
+      input.name,
+      input.credentials,
+      expect.objectContaining({ resume: true, onResume: expect.any(Function) })
+    );
     expect(result).toEqual({ kind: "resume", record });
   });
 
@@ -89,6 +92,32 @@ describe("resolveNameCollision", () => {
       },
     });
 
+    expect(result).toEqual({ kind: "resume", record });
+  });
+
+  it("attaches billing admission before a paused platform collision is revived", async () => {
+    const record = sandboxRecord({ status: "paused" });
+    const admitted: unknown[] = [];
+    const resumed = { name: input.name, status: "running" };
+    const getSandbox = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Sandbox not found"), { status: 404 })
+      )
+      .mockImplementationOnce(async (_name, _credentials, options) => {
+        await options.onResume(resumed);
+        return resumed;
+      });
+
+    const result = await resolveNameCollision(input, {
+      getSandbox,
+      loadMatchingRecord: async () => record,
+      requireBillingSession: async (recordId, sandbox) => {
+        admitted.push([recordId, sandbox]);
+      },
+    });
+
+    expect(admitted).toEqual([[record.id, resumed]]);
     expect(result).toEqual({ kind: "resume", record });
   });
 

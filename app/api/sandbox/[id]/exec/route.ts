@@ -27,6 +27,10 @@ import {
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import {
+  createSandboxBillingOnResume,
+  presentSandboxBillingAdmissionError,
+} from "@/lib/billing/sandbox-usage";
+import {
   buildSandboxRouteErrorResponse,
   loadOwnedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
@@ -290,11 +294,15 @@ export function createSandboxExecPostHandler(
         );
       }
 
-      const sandbox = await deps.getSandbox(sandboxData.record.sandbox_id, {
-        vercelToken: context.credentials.vercelToken,
-        vercelTeamId: context.credentials.vercelTeamId,
-        vercelProjectId: context.credentials.vercelProjectId,
-      });
+      const sandbox = await deps.getSandbox(
+        sandboxData.record.sandbox_id,
+        {
+          vercelToken: context.credentials.vercelToken,
+          vercelTeamId: context.credentials.vercelTeamId,
+          vercelProjectId: context.credentials.vercelProjectId,
+        },
+        { onResume: createSandboxBillingOnResume(id) }
+      );
       await deps.renewSandboxActivityLease(sandbox);
 
       const repoRootDirectory = sandboxData.rootDirectory;
@@ -505,8 +513,14 @@ export function createSandboxExecPostHandler(
         cwd: commandCwd || repoRootDirectory || ".",
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Execution failed";
-      return NextResponse.json({ error: message }, { status: 500 });
+      const billingError = presentSandboxBillingAdmissionError(err);
+      const message =
+        billingError?.message ??
+        (err instanceof Error ? err.message : "Execution failed");
+      return NextResponse.json(
+        { error: message },
+        { status: billingError?.status ?? 500 }
+      );
     } finally {
       if (!lockReleaseHandedOff) {
         try {

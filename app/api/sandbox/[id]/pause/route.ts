@@ -7,6 +7,10 @@ import {
   resolveLoadedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
+import {
+  finalizeSandboxBillingClose,
+  prepareSandboxBillingClose,
+} from "@/lib/billing/sandbox-usage";
 
 type SandboxPauseRecord = {
   id: string;
@@ -29,6 +33,8 @@ type SandboxPauseDeps = {
   resolveLoadedSandboxRouteContext: typeof resolveLoadedSandboxRouteContext;
   getSandbox: typeof getSandbox;
   updateSandboxRecord: typeof updateSandboxRecord;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
 };
 
 const defaultSandboxPauseDeps: SandboxPauseDeps = {
@@ -36,6 +42,8 @@ const defaultSandboxPauseDeps: SandboxPauseDeps = {
   resolveLoadedSandboxRouteContext,
   getSandbox,
   updateSandboxRecord,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
 };
 
 export function createSandboxPauseHandler(
@@ -82,6 +90,17 @@ export function createSandboxPauseHandler(
     if (!resolved.ok) return buildSandboxRouteErrorResponse(resolved);
 
     let snapshotId: string | null;
+    let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+      null;
+    try {
+      billingClose = await deps.prepareSandboxBillingClose(record.id);
+    } catch (billingError) {
+      console.warn(
+        `[sandbox/pause] Billing close preparation failed for ${record.id}; reconciliation will recover:`,
+        billingError
+      );
+    }
+    let providerEndedAt: Date;
     try {
       const sandbox = await deps.getSandbox(record.sandbox_id, {
         vercelToken: resolved.context.credentials.vercelToken,
@@ -93,12 +112,24 @@ export function createSandboxPauseHandler(
       // Sandbox.get({ name, resume: true }) wakes it from the same state.
       // We still capture currentSnapshotId for backward compat with the
       // existing resume-from-snapshot path, which creates a fresh sandbox.
-      await sandbox.stop();
+      await sandbox.stop({ blocking: true });
+      const providerSession = sandbox.currentSession();
+      providerEndedAt =
+        providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
       snapshotId = sandbox.currentSnapshotId ?? null;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to pause sandbox";
       return NextResponse.json({ error: message }, { status: 500 });
+    }
+
+    try {
+      await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
+    } catch (billingError) {
+      console.warn(
+        `[sandbox/pause] VM stopped but billing finalization failed for ${record.id}; reconciliation will retry:`,
+        billingError
+      );
     }
 
     // Phase 7 — snapshot_id semantics audit.

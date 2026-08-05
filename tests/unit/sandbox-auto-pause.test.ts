@@ -85,6 +85,7 @@ function buildDeps(
     activeAiCallSequence?: boolean[];
     runningAutomation?: boolean;
     claimResult?: boolean;
+    billingCloseError?: Error;
     stopError?: Error;
     mode?: "observe" | "enabled";
     updateResult?: unknown;
@@ -150,6 +151,9 @@ function buildDeps(
             stopCalls += 1;
             if (input.stopError) throw input.stopError;
           },
+          currentSession: () => ({
+            updatedAt: new Date("2026-05-20T12:05:00.000Z"),
+          }),
           currentSnapshotId: Object.hasOwn(input, "currentSnapshotId")
             ? input.currentSnapshotId
             : "snap_123",
@@ -174,6 +178,14 @@ function buildDeps(
         events.push(event);
         return `event-${events.length}`;
       },
+      prepareSandboxBillingClose: async () => {
+        if (input.billingCloseError) throw input.billingCloseError;
+        return null;
+      },
+      finalizeSandboxBillingClose: async () => ({
+        finalized: false,
+        metered: false,
+      }),
       resolveMode: () => input.mode ?? "observe",
       nowMs: () => nowMs,
     },
@@ -540,6 +552,30 @@ test("auto-pause restores running state when remote stop fails after claim", asy
     expectedSandboxId: "vm_123",
     fromStatuses: "pausing",
   });
+});
+
+test("auto-pause still stops idle compute when billing close preparation fails", async () => {
+  const { runSandboxAutoPauseCheck } = await loadAutoPauseModule();
+  const harness = buildDeps({
+    mode: "enabled",
+    billingCloseError: new Error("billing RPC unavailable"),
+  });
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...args: unknown[]) => warnings.push(args);
+
+  try {
+    const result = await runSandboxAutoPauseCheck(
+      buildPayload(),
+      harness.deps as never
+    );
+
+    assert.equal(result.decisionCode, "auto_pause_succeeded");
+    assert.equal(harness.stopCalls, 1);
+    assert.match(String(warnings[0]?.[0]), /stopping idle compute/);
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test("auto-pause duplicate worker runs no-op when claim fails", async () => {

@@ -25,6 +25,10 @@ import type {
   StaleStoppedSandboxRecord,
 } from "@/lib/sandbox/reaper-helpers";
 import type { SandboxLifecycleStatus, StopReason } from "@/lib/types";
+import {
+  finalizeSandboxBillingClose,
+  prepareSandboxBillingClose,
+} from "@/lib/billing/sandbox-usage";
 
 /** How long a sandbox can be stuck in creating/installing before we clean it up */
 const STUCK_BOOT_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
@@ -126,12 +130,27 @@ type StopSandboxDeps = {
   getSandbox: typeof getSandbox;
   stopSandboxRecord: typeof stopSandboxRecord;
   updateSandboxRecord: typeof updateSandboxRecord;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
 };
+
+type StopSandboxOverrides = Omit<
+  StopSandboxDeps,
+  "prepareSandboxBillingClose" | "finalizeSandboxBillingClose"
+> &
+  Partial<
+    Pick<
+      StopSandboxDeps,
+      "prepareSandboxBillingClose" | "finalizeSandboxBillingClose"
+    >
+  >;
 
 const defaultStopSandboxDeps: StopSandboxDeps = {
   getSandbox,
   stopSandboxRecord,
   updateSandboxRecord,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
 };
 
 export type AbandonedPausedSandboxRecord = {
@@ -160,6 +179,8 @@ export type SandboxReaperRunnerDeps = {
   deleteAbandonedPausedSandbox: typeof deleteAbandonedPausedSandbox;
   updateSandboxRecord: typeof updateSandboxRecord;
   loadFreshIdleState: (sandboxId: string) => Promise<FreshIdleState | null>;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
   nowMs: () => number;
 };
 
@@ -304,10 +325,15 @@ async function loadAbandonedPausedSandboxes(): Promise<
 
 const defaultDeleteAbandonedPausedDeps: Pick<
   StopSandboxDeps,
-  "getSandbox" | "stopSandboxRecord"
+  | "getSandbox"
+  | "stopSandboxRecord"
+  | "prepareSandboxBillingClose"
+  | "finalizeSandboxBillingClose"
 > = {
   getSandbox,
   stopSandboxRecord,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
 };
 
 export async function deleteAbandonedPausedSandbox(
@@ -315,7 +341,10 @@ export async function deleteAbandonedPausedSandbox(
   credentials: ReaperSandboxCredentials,
   deps: Pick<
     StopSandboxDeps,
-    "getSandbox" | "stopSandboxRecord"
+    | "getSandbox"
+    | "stopSandboxRecord"
+    | "prepareSandboxBillingClose"
+    | "finalizeSandboxBillingClose"
   > = defaultDeleteAbandonedPausedDeps
 ): Promise<ReaperResult> {
   if (
@@ -323,6 +352,7 @@ export async function deleteAbandonedPausedSandbox(
     sandbox.sandbox_id &&
     sandbox.sandbox_id !== "pending"
   ) {
+    const billingClose = await deps.prepareSandboxBillingClose(sandbox.id);
     try {
       const vm = await deps.getSandbox(sandbox.sandbox_id, {
         vercelToken: credentials.vercelToken,
@@ -330,12 +360,16 @@ export async function deleteAbandonedPausedSandbox(
         vercelProjectId: credentials.vercelProjectId,
       });
       await vm.delete();
+      await deps.finalizeSandboxBillingClose(billingClose, new Date());
     } catch (err) {
       console.warn(
-        `[sandbox-reaper] Failed to delete abandoned paused VM ${sandbox.sandbox_id}; will still mark record stopped:`,
+        `[sandbox-reaper] Failed to delete abandoned paused VM ${sandbox.sandbox_id}; keeping the record visible for retry:`,
         err
       );
+      return { id: sandbox.id, action: "skipped_delete_failed" };
     }
+  } else if (sandbox.sandbox_id && sandbox.sandbox_id !== "pending") {
+    return { id: sandbox.id, action: "skipped_delete_failed" };
   }
 
   await deps.stopSandboxRecord(sandbox.id, {
@@ -362,6 +396,8 @@ const defaultSandboxReaperRunnerDeps: SandboxReaperRunnerDeps = {
   deleteAbandonedPausedSandbox,
   updateSandboxRecord,
   loadFreshIdleState,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
   nowMs: () => Date.now(),
 };
 
@@ -827,13 +863,44 @@ async function tryReconcileStalePausingSandbox(
     );
   }
 
+  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>>;
+  let vm: Awaited<ReturnType<typeof getSandbox>>;
   try {
-    const vm = await deps.getSandbox(sandbox.sandbox_id, {
+    billingClose = await deps.prepareSandboxBillingClose(sandbox.id);
+    vm = await deps.getSandbox(sandbox.sandbox_id, {
       vercelToken: evaluation.credentials.vercelToken,
       vercelTeamId: evaluation.credentials.vercelTeamId ?? null,
       vercelProjectId: evaluation.credentials.vercelProjectId,
     });
-    await vm.stop();
+    await vm.stop({ blocking: true });
+  } catch (error) {
+    console.warn(
+      `[sandbox-reaper] Failed to finish stale pausing sandbox ${sandbox.id}; restoring running state:`,
+      error
+    );
+    const restored = await restoreStalePausingAsRunning(sandbox, deps);
+    return handledReaperDecision(
+      buildReaperResult(
+        sandbox.id,
+        restored ? "restored_stale_pausing" : "stale_pausing_already_converged"
+      )
+    );
+  }
+
+  try {
+    const providerSession = vm.currentSession();
+    await deps.finalizeSandboxBillingClose(
+      billingClose,
+      providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date()
+    );
+  } catch (billingError) {
+    console.warn(
+      `[sandbox-reaper] Stale pausing VM ${sandbox.sandbox_id} stopped, but billing finalization failed; reconciliation will retry:`,
+      billingError
+    );
+  }
+
+  try {
     const finalized = await finalizeStalePausingAsPaused(
       sandbox,
       deps,
@@ -1166,8 +1233,12 @@ export async function stopSandbox(
     confirmedGone?: boolean;
     fromStatuses?: SandboxLifecycleStatus | readonly SandboxLifecycleStatus[];
   },
-  deps: StopSandboxDeps = defaultStopSandboxDeps
+  overrides: StopSandboxOverrides = defaultStopSandboxDeps
 ) {
+  const deps: StopSandboxDeps = {
+    ...defaultStopSandboxDeps,
+    ...overrides,
+  };
   // Soft-pause path: persistent sandboxes keep their auto-snapshot so
   // the user can resume. We only soft-pause for user-recoverable causes
   // (idle, lifetime) — stuck-boot and vm-gone still hard-stop.
@@ -1194,6 +1265,13 @@ export async function stopSandbox(
   }
 
   if (sandbox.sandbox_id === "pending" || options.confirmedGone) {
+    if (options.confirmedGone) {
+      // The liveness pass already proved the provider session is gone. Move
+      // the ledger into closing before changing the record so scheduled
+      // accrual cannot run past that observation. Reconciliation will use its
+      // last confirmed provider timestamp for the final debit.
+      await deps.prepareSandboxBillingClose(sandbox.id);
+    }
     await deps.stopSandboxRecord(sandbox.id, {
       expectedSandboxId: sandbox.sandbox_id,
       expectedHealthStatus: options.expectedHealthStatus,
@@ -1215,13 +1293,19 @@ export async function stopSandbox(
   }
 
   let currentSnapshotId: string | null;
+  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>>;
+  let providerEndedAt: Date;
   try {
+    billingClose = await deps.prepareSandboxBillingClose(sandbox.id);
     const vm = await deps.getSandbox(sandbox.sandbox_id, {
       vercelToken: credentials.vercelToken,
       vercelTeamId: credentials.vercelTeamId,
       vercelProjectId: credentials.vercelProjectId,
     });
-    await vm.stop();
+    await vm.stop({ blocking: true });
+    const providerSession = vm.currentSession();
+    providerEndedAt =
+      providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
     currentSnapshotId = vm.currentSnapshotId ?? null;
   } catch (err) {
     console.warn(
@@ -1246,6 +1330,15 @@ export async function stopSandbox(
       stopped: false as const,
       action: "skipped_stop_failed",
     };
+  }
+
+  try {
+    await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
+  } catch (billingError) {
+    console.warn(
+      `[sandbox-reaper] VM ${sandbox.sandbox_id} stopped, but billing finalization failed; reconciliation will retry:`,
+      billingError
+    );
   }
 
   if (softPauseEligible) {

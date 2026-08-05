@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
 import {
   buildSandboxRouteParams,
   buildSandboxRouteRequest,
@@ -249,6 +250,7 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
   const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
 
   let capturedEnv: Record<string, string> | null = null;
+  let hasBillingOnResume = false;
 
   const handler = createSandboxExecPostHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
@@ -270,8 +272,9 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
         aiBillingSource: "user_ai_gateway",
         gatewayApiKey: "gateway-key-123",
       }),
-    getSandbox: async () =>
-      ({
+    getSandbox: async (_sandboxId, _credentials, options) => {
+      hasBillingOnResume = typeof options?.onResume === "function";
+      return {
         runCommand: async (input: { env?: Record<string, string> }) => {
           capturedEnv = input.env ?? null;
           return {
@@ -284,7 +287,8 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
           throw new Error("missing");
         },
         writeFiles: async () => {},
-      }) as never,
+      } as never;
+    },
   });
 
   const response = await handler(
@@ -309,6 +313,48 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
   assert.equal(capturedEnv?.["ANTHROPIC_BASE_URL"], undefined);
   assert.equal(capturedEnv?.["ANTHROPIC_AUTH_TOKEN"], undefined);
   assert.equal(capturedEnv?.["MOGPLEX_AI_BILLING_SOURCE"], "user_ai_gateway");
+  assert.equal(hasBillingOnResume, true);
+});
+
+test("POST /api/sandbox/[id]/exec returns 402 when resume billing admission is denied", async () => {
+  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  const handler = createSandboxExecPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    acquireSandboxExecLock: async () => ({
+      acquired: true as const,
+      token: "lock-billing",
+    }),
+    enforceSandboxExecLimits: async () => ({ allowed: true, status: 200 }),
+    recordLimitDecision: async () => {},
+    releaseSandboxExecLock: async () => {},
+    touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
+    resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
+    getSandbox: async () => {
+      throw new SandboxBillingAdmissionError(
+        "Hosted sandbox compute requires a positive billing balance",
+        "no_billing_account"
+      );
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/exec",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "echo hello" }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 402);
+  assert.deepEqual(await response.json(), {
+    error: "Hosted sandbox compute requires a positive billing balance",
+  });
 });
 
 test("POST /api/sandbox/[id]/exec refreshes repo-scoped GitHub auth before git commands", async () => {
