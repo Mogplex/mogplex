@@ -52,6 +52,7 @@ const STOP_REASON_TEXT = {
   stuck_boot: "Boot didn't complete",
   vm_gone: "The VM expired",
   auto_pause: "Auto-paused after you left",
+  billing_depleted: "Balance depleted — add funds to restart",
   unknown: null,
 } as const satisfies Record<StopReason, string | null>;
 

@@ -57,17 +57,18 @@ test("DELETE /api/sandbox/[id] keeps the row for reaper cleanup when remote cont
 
   assert.equal(response.status, 200);
   assert.deepEqual(deleted, []);
-  assert.deepEqual(stopped, [
+  assert.deepEqual(stopped, []);
+  assert.deepEqual(updates, [
     {
       id: "sandbox-1",
-      healthStatus: "stopped",
-      additionalUpdates: {
+      updates: {
+        status: "error",
+        health_status: "error",
         error:
           "Remote VM vm_123 could not be deleted: credentials unresolvable. Record kept for reaper cleanup.",
       },
     },
   ]);
-  assert.deepEqual(updates, []);
   assert.deepEqual(await response.json(), {
     ok: true,
     sandboxId: "sandbox-1",
@@ -136,6 +137,9 @@ test("DELETE /api/sandbox/[id] deletes the remote sandbox before deleting the ro
           remoteStopCount += 1;
           events.push("remote-stop");
         },
+        currentSession: () => ({
+          updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+        }),
       }) as never,
     deleteSandboxRecord: (async () => {
       events.push("db-delete");
@@ -154,6 +158,45 @@ test("DELETE /api/sandbox/[id] deletes the remote sandbox before deleting the ro
   assert.deepEqual(events, ["remote-delete", "db-delete"]);
 });
 
+test("DELETE /api/sandbox/[id] caps provider-not-found billing before deleting the row", async () => {
+  const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
+  const meteredThroughAt = new Date("2026-08-05T11:04:00.000Z");
+  const finalizedAt: Date[] = [];
+  let deleted = false;
+  const handler = createSandboxDeleteHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxDeleteRecord()) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () => {
+      throw Object.assign(new Error("Sandbox not found"), { status: 404 });
+    },
+    prepareSandboxBillingClose: async () => ({
+      sessionId: "billing-session-1",
+      closeGeneration: 1,
+      actorUserId: "user-1",
+      meteredThroughAt,
+    }),
+    finalizeSandboxBillingClose: async (_attempt, endedAt) => {
+      finalizedAt.push(endedAt);
+      return { finalized: true, metered: true };
+    },
+    deleteSandboxRecord: async () => {
+      deleted = true;
+      return { id: "sandbox-1" } as never;
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "DELETE" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(finalizedAt, [meteredThroughAt]);
+  assert.equal(deleted, true);
+});
+
 test("DELETE /api/sandbox/[id] falls back to stop when delete is unavailable", async () => {
   const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
   const events: string[] = [];
@@ -170,6 +213,9 @@ test("DELETE /api/sandbox/[id] falls back to stop when delete is unavailable", a
           remoteStopCount += 1;
           events.push("remote-stop");
         },
+        currentSession: () => ({
+          updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+        }),
       }) as never,
     stopSandboxRecord: async () => {
       events.push("db-stop");
@@ -205,6 +251,9 @@ test("DELETE /api/sandbox/[id] still deletes the row when stop bookkeeping fails
         stop: async () => {
           events.push("remote-stop");
         },
+        currentSession: () => ({
+          updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+        }),
       }) as never,
     stopSandboxRecord: async () => {
       events.push("db-stop");
@@ -247,6 +296,9 @@ test("DELETE /api/sandbox/[id] preserves persistent rows when only stop fallback
         stop: async () => {
           remoteStopCount += 1;
         },
+        currentSession: () => ({
+          updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+        }),
       }) as never,
     deleteSandboxRecord: (async (
       id: string,
@@ -464,17 +516,18 @@ test("DELETE /api/sandbox/[id] preserves the row when remote delete cannot be ve
 
   assert.equal(response.status, 200);
   assert.deepEqual(deleted, []);
-  assert.deepEqual(stopped, [
+  assert.deepEqual(stopped, []);
+  assert.deepEqual(updates, [
     {
       id: "sandbox-1",
-      healthStatus: "stopped",
-      additionalUpdates: {
+      updates: {
+        status: "error",
+        health_status: "error",
         error:
           "Remote VM vm_123 could not be deleted: delete failed. Record kept for reaper cleanup.",
       },
     },
   ]);
-  assert.deepEqual(updates, []);
   assert.deepEqual(await response.json(), {
     ok: true,
     sandboxId: "sandbox-1",

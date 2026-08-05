@@ -117,7 +117,37 @@ function ensureSandboxReaperTestEnv() {
 
 export async function loadSandboxReaperRouteModule() {
   ensureSandboxReaperTestEnv();
-  return import("../../app/api/cron/sandbox-reaper/route");
+  const routeModule = await import("../../app/api/cron/sandbox-reaper/route");
+  return {
+    ...routeModule,
+    createSandboxReaperGetHandler: (
+      overrides: Parameters<
+        typeof routeModule.createSandboxReaperGetHandler
+      >[0] = {}
+    ) =>
+      routeModule.createSandboxReaperGetHandler({
+        prepareSandboxBillingClose: async () => null,
+        finalizeSandboxBillingClose: async () => ({
+          finalized: false,
+          metered: false,
+        }),
+        ...overrides,
+      }),
+    stopSandbox: (
+      sandbox: Parameters<typeof routeModule.stopSandbox>[0],
+      credentials: Parameters<typeof routeModule.stopSandbox>[1],
+      options: Parameters<typeof routeModule.stopSandbox>[2],
+      deps: NonNullable<Parameters<typeof routeModule.stopSandbox>[3]>
+    ) =>
+      routeModule.stopSandbox(sandbox, credentials, options, {
+        prepareSandboxBillingClose: async () => null,
+        finalizeSandboxBillingClose: async () => ({
+          finalized: false,
+          metered: false,
+        }),
+        ...deps,
+      }),
+  };
 }
 
 export function buildSandboxReaperRequest() {

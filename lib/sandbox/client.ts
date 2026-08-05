@@ -65,6 +65,7 @@ type CreateSandboxOpts = {
    * 7 days. Use 0 for no expiration.
    */
   snapshotExpirationMs?: number;
+  onResume?: (sandbox: Sandbox) => Promise<void>;
 };
 
 // 7 days — long enough for a vacation, short enough to not leak
@@ -708,6 +709,7 @@ export async function createSandboxForRepo(opts: CreateSandboxOpts) {
           ...persistenceOpts,
           persistent,
           ...(opts.networkPolicy ? { networkPolicy: opts.networkPolicy } : {}),
+          ...(opts.onResume ? { onResume: opts.onResume } : {}),
         }),
         BOOTSTRAP_STEP_TIMEOUT_MS,
         "Sandbox.create"
@@ -733,7 +735,10 @@ export async function getSandbox(
     vercelTeamId?: string | null;
     vercelProjectId: string;
   },
-  opts: { resume?: boolean } = {}
+  opts: {
+    resume?: boolean;
+    onResume?: (sandbox: Sandbox) => Promise<void>;
+  } = {}
 ) {
   return Sandbox.get({
     name: sandboxId,
@@ -741,6 +746,7 @@ export async function getSandbox(
     token: credentials.vercelToken,
     projectId: credentials.vercelProjectId,
     ...(credentials.vercelTeamId ? { teamId: credentials.vercelTeamId } : {}),
+    ...(opts.onResume ? { onResume: opts.onResume } : {}),
   });
 }
 
@@ -757,6 +763,7 @@ type CreateFromSnapshotOpts = {
   name?: string;
   persistent?: boolean;
   snapshotExpirationMs?: number;
+  onResume?: (sandbox: Sandbox) => Promise<void>;
 };
 
 /**
@@ -798,6 +805,7 @@ export async function createSandboxFromSnapshot(opts: CreateFromSnapshotOpts) {
           ...persistenceOpts,
           persistent,
           ...(opts.networkPolicy ? { networkPolicy: opts.networkPolicy } : {}),
+          ...(opts.onResume ? { onResume: opts.onResume } : {}),
         }),
         BOOTSTRAP_STEP_TIMEOUT_MS,
         "Sandbox.create (snapshot)"

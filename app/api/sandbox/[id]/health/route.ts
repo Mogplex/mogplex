@@ -16,6 +16,7 @@ import { loadSandboxVercelDiagnostics } from "@/lib/vercel/load-sandbox-diagnost
 import { reconcileSandboxReadiness } from "@/lib/sandbox/readiness-reconciliation";
 import type { VercelAuthMode } from "@/lib/vercel/service";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes/types";
+import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 
 type SandboxHealthRecord = {
   id: string;
@@ -83,6 +84,7 @@ type RefreshedCompatibilityHealth = {
 
 async function readDevLog(
   record: {
+    id: string;
     sandbox_id: string;
     root_directory?: string | null;
     repo?:
@@ -97,11 +99,15 @@ async function readDevLog(
   }
 ) {
   const repo = Array.isArray(record.repo) ? record.repo[0] : record.repo;
-  const sandbox = await getSandbox(record.sandbox_id, {
-    vercelToken: credentials.vercelToken,
-    vercelTeamId: credentials.vercelTeamId,
-    vercelProjectId: credentials.vercelProjectId,
-  });
+  const sandbox = await getSandbox(
+    record.sandbox_id,
+    {
+      vercelToken: credentials.vercelToken,
+      vercelTeamId: credentials.vercelTeamId,
+      vercelProjectId: credentials.vercelProjectId,
+    },
+    { onResume: createSandboxBillingOnResume(record.id) }
+  );
 
   // Read dev.log from the workspace the sandbox actually booted in,
   // not the repo's persistent default. A monorepo user who launched

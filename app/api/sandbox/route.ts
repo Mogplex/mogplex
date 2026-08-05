@@ -79,6 +79,11 @@ import {
 import { resolveNameCollision } from "@/lib/sandbox/launch";
 import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
 import { readSandboxPersistentFlag } from "@/lib/sandbox/persistence";
+import {
+  createSandboxBillingOnResume,
+  prepareSandboxBillingClose,
+  requireSandboxBillingSession,
+} from "@/lib/billing/sandbox-usage";
 import type { PersistedVercelLinkState } from "@/lib/vercel/reconciliation";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import type {
@@ -521,6 +526,8 @@ type SandboxPostDeps = {
   stopSandboxRecord: typeof stopSandboxRecord;
   createSandboxForRepo: typeof createSandboxForRepo;
   createSandboxFromSnapshot: typeof createSandboxFromSnapshot;
+  requireSandboxBillingSession: typeof requireSandboxBillingSession;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
   resolveNameCollision: typeof resolveNameCollision;
   enforceSandboxBootLimits: typeof enforceSandboxBootLimits;
   startDeferredRepoSnapshotBuild: typeof startDeferredRepoSnapshotBuild;
@@ -598,6 +605,8 @@ const defaultSandboxPostDeps: SandboxPostDeps = {
   stopSandboxRecord,
   createSandboxForRepo,
   createSandboxFromSnapshot,
+  requireSandboxBillingSession,
+  prepareSandboxBillingClose,
   resolveNameCollision,
   enforceSandboxBootLimits,
   startDeferredRepoSnapshotBuild,
@@ -1426,6 +1435,7 @@ async function restoreSandboxFromSnapshotIfAvailable(input: {
   launch: SandboxLaunchPreparation;
   environment: SandboxLaunchEnvironment;
   emit: (event: SandboxEvent) => void;
+  sandboxRecordId: string;
 }) {
   const effectiveSnapshotId = resolveEffectiveSnapshotId(input.launch);
   if (!effectiveSnapshotId) {
@@ -1453,6 +1463,7 @@ async function restoreSandboxFromSnapshotIfAvailable(input: {
       timeoutMs: input.launch.effectiveSandboxTimeoutMs,
       envVars: input.environment.envResolution.envVars,
       networkPolicy: input.environment.networkPolicy,
+      onResume: createSandboxBillingOnResume(input.sandboxRecordId),
     });
     return {
       sandbox,
@@ -1489,6 +1500,7 @@ async function provisionSandboxForLaunch(input: {
   environment: SandboxLaunchEnvironment;
   emit: (event: SandboxEvent) => void;
   sandboxName?: string;
+  sandboxRecordId: string;
 }) {
   const restored = await restoreSandboxFromSnapshotIfAvailable(input);
   if (restored.sandbox) {
@@ -1508,6 +1520,7 @@ async function provisionSandboxForLaunch(input: {
     envVars: input.environment.envResolution.envVars,
     networkPolicy: input.environment.networkPolicy,
     ...(input.sandboxName ? { name: input.sandboxName } : {}),
+    onResume: createSandboxBillingOnResume(input.sandboxRecordId),
   });
 
   return {
@@ -1797,6 +1810,9 @@ async function activateRunningSandboxRecord(input: {
   );
 
   if (!activated) {
+    await input.deps
+      .prepareSandboxBillingClose(input.state.streamSandboxRecord.id)
+      .catch(() => null);
     await stopSandboxInstanceBestEffort(input.state.sandbox);
     input.emit({
       type: "error",
@@ -1860,6 +1876,9 @@ async function fallbackFromBaselineToGit(input: {
   environment: SandboxLaunchEnvironment;
   emit: (event: SandboxEvent) => void;
 }) {
+  await input.deps
+    .prepareSandboxBillingClose(input.state.streamSandboxRecord.id)
+    .catch(() => null);
   await stopSandboxInstanceBestEffort(input.state.sandbox);
   if (input.launch.repo.snapshot_id) {
     await clearRepoSnapshotIfCurrent(
@@ -1889,10 +1908,15 @@ async function fallbackFromBaselineToGit(input: {
       productTeamId: input.launch.productTeamId,
       rootDirectory: input.launch.effectiveRootDirectory,
     }),
+    onResume: createSandboxBillingOnResume(input.state.streamSandboxRecord.id),
   });
   input.state.sandbox = fresh;
   input.state.restoredFromSnapshot = false;
   input.state.restoredFromBaselineSnapshot = false;
+  await input.deps.requireSandboxBillingSession(
+    input.state.streamSandboxRecord.id,
+    fresh
+  );
   await configureSandboxGitAccess({
     sandbox: fresh,
     githubToken: input.launch.githubToken,
@@ -2102,10 +2126,14 @@ async function handleSandboxLaunchFailure(input: {
   err: unknown;
   state: SandboxLaunchState;
   launch: SandboxLaunchPreparation;
+  deps: SandboxPostDeps;
   emit: (event: SandboxEvent) => void;
 }) {
   const failureState = await resolveSandboxLaunchFailureState(input);
 
+  await input.deps
+    .prepareSandboxBillingClose(input.state.streamSandboxRecord.id)
+    .catch(() => null);
   await stopSandboxInstanceBestEffort(input.state.sandbox);
 
   const failed = await updateSandboxRecord(
@@ -2178,6 +2206,7 @@ async function executeSandboxLaunchStream(input: {
       launch: input.launch,
       environment,
       emit: input.emit,
+      sandboxRecordId: input.record.id,
       sandboxName: buildSandboxName({
         repoId: input.launch.repoId,
         workingBranch: input.launch.launchRequest.workingBranch,
@@ -2194,6 +2223,32 @@ async function executeSandboxLaunchStream(input: {
       provisioned.restoredFromBaselineSnapshot;
     state.shouldQueueDeferredSnapshot = provisioned.shouldQueueDeferredSnapshot;
 
+    const installing = await transitionSandboxRecordToInstalling({
+      recordId: input.record.id,
+      sandboxId: state.sandbox.name,
+      sandbox: state.sandbox,
+    });
+    if (!installing) {
+      await input.deps
+        .prepareSandboxBillingClose(input.record.id)
+        .catch(() => null);
+      await stopSandboxInstanceBestEffort(state.sandbox);
+      input.emit({
+        type: "error",
+        message: "Sandbox creation was superseded by a newer state change.",
+        phase: "create",
+      });
+      return;
+    }
+
+    state.streamSandboxRecord = installing;
+    await input.deps.requireSandboxBillingSession(
+      input.record.id,
+      state.sandbox
+    );
+
+    // No file or command operation may run before the provider session is
+    // either metered, explicitly comped, BYO-billed, or billing-disabled.
     await configureSandboxGitAccess({
       sandbox: state.sandbox,
       githubToken: input.launch.githubToken,
@@ -2215,22 +2270,6 @@ async function executeSandboxLaunchStream(input: {
       });
     }
 
-    const installing = await transitionSandboxRecordToInstalling({
-      recordId: input.record.id,
-      sandboxId: state.sandbox.name,
-      sandbox: state.sandbox,
-    });
-    if (!installing) {
-      await stopSandboxInstanceBestEffort(state.sandbox);
-      input.emit({
-        type: "error",
-        message: "Sandbox creation was superseded by a newer state change.",
-        phase: "create",
-      });
-      return;
-    }
-
-    state.streamSandboxRecord = installing;
     input.emit({
       type: "sandbox_created",
       sandboxId: state.sandbox.name,
@@ -2261,6 +2300,7 @@ async function executeSandboxLaunchStream(input: {
       err,
       state,
       launch: input.launch,
+      deps: input.deps,
       emit: input.emit,
     });
   }

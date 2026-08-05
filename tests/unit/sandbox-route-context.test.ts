@@ -26,6 +26,7 @@ function buildSandboxRouteContextAuth(
 
 function buildSandboxRouteContextRecord(
   overrides: {
+    id?: string;
     sandbox_id?: string;
     root_directory?: string | null;
     repo?:
@@ -153,6 +154,8 @@ test("loadOwnedSandboxRouteContext normalizes the repo relation and hydrates the
     sandboxId: string;
     projectId: string;
     teamId: string | null | undefined;
+    resume: boolean | undefined;
+    hasOnResume: boolean;
   }> = [];
 
   const result = await loadOwnedSandboxRouteContext(
@@ -163,6 +166,7 @@ test("loadOwnedSandboxRouteContext normalizes the repo relation and hydrates the
       getSandboxServiceCredentials: async () => buildSandboxRouteContextAuth(),
       loadOwnedSandboxRecord: async () =>
         buildSandboxRouteContextRecord({
+          id: "sb-1",
           repo: [{ root_directory: "apps/web" }],
         }),
       resolveSandboxRecordContext: async (input) => {
@@ -185,11 +189,13 @@ test("loadOwnedSandboxRouteContext normalizes the repo relation and hydrates the
           },
         };
       },
-      getSandbox: async (sandboxId, options) => {
+      getSandbox: async (sandboxId, options, runtimeOptions) => {
         sandboxCalls.push({
           sandboxId,
           projectId: options.vercelProjectId,
           teamId: options.vercelTeamId,
+          resume: runtimeOptions?.resume,
+          hasOnResume: typeof runtimeOptions?.onResume === "function",
         });
         return { status: "running" } as never;
       },
@@ -200,6 +206,7 @@ test("loadOwnedSandboxRouteContext normalizes the repo relation and hydrates the
   if (!result.ok) return;
 
   assert.equal(result.rootDirectory, "apps/web");
+  assert.equal(result.record.id, "sb-1");
   assert.deepEqual(result.repo, { root_directory: "apps/web" });
   assert.equal(result.sandbox?.status, "running");
   assert.deepEqual(resolveCalls, [true]);
@@ -208,6 +215,8 @@ test("loadOwnedSandboxRouteContext normalizes the repo relation and hydrates the
       sandboxId: "sandbox-live",
       projectId: "project-123",
       teamId: null,
+      resume: false,
+      hasOnResume: true,
     },
   ]);
 });

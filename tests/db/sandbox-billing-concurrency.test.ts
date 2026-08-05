@@ -42,7 +42,9 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
         actor_user_id uuid,
         product_team_id uuid,
         sandbox_id text not null,
-        billing_source text
+        billing_source text,
+        status text not null default 'stopped',
+        last_active_at timestamptz not null default now()
       )
     `);
     for (const migrationName of [
@@ -50,6 +52,7 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       "20260804210000_atomic_billing_cancellation_expiry.sql",
       "20260805060000_billing_usage_debits.sql",
       "20260805070000_sandbox_billing_sessions.sql",
+      "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
     ]) {
       const migration = await readFile(
         path.resolve(

@@ -150,6 +150,9 @@ function buildDeps(
             stopCalls += 1;
             if (input.stopError) throw input.stopError;
           },
+          currentSession: () => ({
+            updatedAt: new Date("2026-05-20T12:05:00.000Z"),
+          }),
           currentSnapshotId: Object.hasOwn(input, "currentSnapshotId")
             ? input.currentSnapshotId
             : "snap_123",
@@ -174,6 +177,11 @@ function buildDeps(
         events.push(event);
         return `event-${events.length}`;
       },
+      prepareSandboxBillingClose: async () => null,
+      finalizeSandboxBillingClose: async () => ({
+        finalized: false,
+        metered: false,
+      }),
       resolveMode: () => input.mode ?? "observe",
       nowMs: () => nowMs,
     },

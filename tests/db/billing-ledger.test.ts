@@ -21,6 +21,8 @@ const MINIMUM_SANDBOX_TWO_ID = "00000000-0000-4000-8000-000000000015";
 const NEGATIVE_SANDBOX_ID = "00000000-0000-4000-8000-000000000016";
 const LIFECYCLE_SANDBOX_ID = "00000000-0000-4000-8000-000000000017";
 const MISMATCH_SANDBOX_ID = "00000000-0000-4000-8000-000000000018";
+const RECOVERY_SANDBOX_ID = "00000000-0000-4000-8000-000000000019";
+const RECOVERY_CURSOR_TARGET_ID = "00000000-0000-4000-8000-000000000020";
 
 describe("billing ledger migration", () => {
   let db: PGlite;
@@ -34,7 +36,9 @@ describe("billing ledger migration", () => {
         actor_user_id uuid,
         product_team_id uuid,
         sandbox_id text not null,
-        billing_source text
+        billing_source text,
+        status text not null default 'stopped',
+        last_active_at timestamptz not null default now()
       )
     `);
     for (const migrationName of [
@@ -42,6 +46,7 @@ describe("billing ledger migration", () => {
       "20260804210000_atomic_billing_cancellation_expiry.sql",
       "20260805060000_billing_usage_debits.sql",
       "20260805070000_sandbox_billing_sessions.sql",
+      "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
     ]) {
       const migration = await readFile(
         path.resolve(
@@ -452,6 +457,12 @@ describe("billing ledger migration", () => {
   });
 
   it("combines one-minute minimum carry across short provider sessions", async () => {
+    await db.query(
+      `select post_credit_ledger_entry(
+         $1, 100, 'purchased', 'topup', 'topup:sandbox-minimum', null, '{}'
+       )`,
+      [MINIMUM_ACCOUNT_ID]
+    );
     const firstOpen = await db.query<{
       open_sandbox_billing_session: string;
     }>(
@@ -698,5 +709,135 @@ describe("billing ledger migration", () => {
       "2026-08-05T04:00:10.000Z"
     );
     expect(session.rows[0]!.usage_units).toBe(0);
+
+    await expect(
+      db.query(
+        `select open_sandbox_billing_session(
+           $1, 'sbx_lifecycle', 'ses_lifecycle', $2, $3, null,
+           '2026-08-05T04:00:00.000Z', 5000
+         )`,
+        [LIFECYCLE_SANDBOX_ID, SANDBOX_ACCOUNT_ID, SANDBOX_USER_ID]
+      )
+    ).rejects.toThrow(/billing row is already closed/);
+  });
+
+  it("requires positive balance when a sandbox billing session opens", async () => {
+    await expect(
+      db.query(
+        `select open_sandbox_billing_session(
+           $1, 'sbx_negative', 'ses_zero_balance', $2, $3, null,
+           '2026-08-05T07:00:00.000Z', 5000
+         )`,
+        [NEGATIVE_SANDBOX_ID, NEGATIVE_ACCOUNT_ID, NEGATIVE_USER_ID]
+      )
+    ).rejects.toThrow(/positive billing balance required/);
+  });
+
+  it("recovery candidates exclude more than one full batch of metered rows", async () => {
+    await db.query(
+      `insert into sandboxes (
+         id, user_id, actor_user_id, product_team_id, sandbox_id,
+         billing_source, status, last_active_at
+       )
+       select gen_random_uuid(), $1, $1, null,
+              'batch_metered_' || candidate::text, 'platform', 'running', now()
+       from generate_series(1, 251) candidate`,
+      [SANDBOX_USER_ID]
+    );
+    await db.query(
+      `insert into sandbox_billing_sessions (
+         sandbox_record_id, vercel_sandbox_id, vercel_session_id, account_id,
+         actor_user_id, started_at, metered_through_at,
+         rate_micro_usd_per_minute
+       )
+       select id, sandbox_id, 'session_' || sandbox_id, $1, $2,
+              now(), now(), 5000
+       from sandboxes
+       where sandbox_id like 'batch_metered_%'`,
+      [SANDBOX_ACCOUNT_ID, SANDBOX_USER_ID]
+    );
+    await db.query(
+      `insert into sandboxes (
+         id, user_id, actor_user_id, product_team_id, sandbox_id,
+         billing_source, status, last_active_at
+       ) values (
+         $1, $2, $2, null, 'batch_unmetered', 'platform', 'running',
+         '2026-08-05T00:00:00.000Z'
+       )`,
+      [RECOVERY_SANDBOX_ID, SANDBOX_USER_ID]
+    );
+
+    const candidates = await db.query<{ id: string; sandbox_id: string }>(
+      "select id, sandbox_id from list_unmetered_platform_sandboxes(250)"
+    );
+    expect(candidates.rows).toEqual([
+      { id: RECOVERY_SANDBOX_ID, sandbox_id: "batch_unmetered" },
+    ]);
+  });
+
+  it("recovery cursor advances past a full batch of skipped candidates", async () => {
+    await db.query(
+      `insert into sandboxes (
+         id, user_id, actor_user_id, product_team_id, sandbox_id,
+         billing_source, status, last_active_at
+       )
+       select gen_random_uuid(), $1, $1, null,
+              'cursor_skipped_' || candidate::text, 'platform', 'paused',
+              '2026-08-05T12:00:00.000Z'
+       from generate_series(1, 251) candidate`,
+      [SANDBOX_USER_ID]
+    );
+    await db.query(
+      `insert into sandboxes (
+         id, user_id, actor_user_id, product_team_id, sandbox_id,
+         billing_source, status, last_active_at
+       ) values (
+         $1, $2, $2, null, 'cursor_older_live', 'platform', 'running',
+         '2026-08-05T00:00:00.000Z'
+       )`,
+      [RECOVERY_CURSOR_TARGET_ID, SANDBOX_USER_ID]
+    );
+
+    const first = await db.query<{ id: string }>(
+      "select id from list_unmetered_platform_sandboxes(250)"
+    );
+    expect(first.rows.some((row) => row.id === RECOVERY_CURSOR_TARGET_ID)).toBe(
+      false
+    );
+
+    const second = await db.query<{ id: string }>(
+      "select id from list_unmetered_platform_sandboxes(250)"
+    );
+    expect(
+      second.rows.some((row) => row.id === RECOVERY_CURSOR_TARGET_ID)
+    ).toBe(true);
+  });
+
+  it("makes request-close a barrier against non-final accrual", async () => {
+    const opened = await db.query<{ open_sandbox_billing_session: string }>(
+      `select open_sandbox_billing_session(
+         $1, 'sbx_min_1', 'ses_close_barrier', $2, $3, null,
+         '2026-08-05T08:00:00.000Z', 5000
+       )`,
+      [MINIMUM_SANDBOX_ONE_ID, MINIMUM_ACCOUNT_ID, MINIMUM_USER_ID]
+    );
+    const sessionId = opened.rows[0]!.open_sandbox_billing_session;
+    await db.query("select request_sandbox_billing_session_close($1)", [
+      sessionId,
+    ]);
+    const accrued = await db.query<{
+      accrued: boolean;
+      debited_cents: number;
+      session_state: string;
+    }>(
+      `select accrued, debited_cents, session_state
+       from accrue_sandbox_billing_session(
+         $1, '2026-08-05T08:05:00.000Z', false
+       )`,
+      [sessionId]
+    );
+    expect(accrued.rows).toEqual([
+      { accrued: false, debited_cents: 0, session_state: "closing" },
+    ]);
   });
 });

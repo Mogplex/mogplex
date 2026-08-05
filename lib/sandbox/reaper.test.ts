@@ -51,12 +51,20 @@ describe("stopSandbox", () => {
           getSandbox: async () =>
             ({
               stop: async () => {},
+              currentSession: () => ({
+                updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+              }),
               currentSnapshotId: null,
             }) as never,
           stopSandboxRecord,
           updateSandboxRecord: async () => {
             throw new Error("updateSandboxRecord should not be called");
           },
+          prepareSandboxBillingClose: async () => null,
+          finalizeSandboxBillingClose: async () => ({
+            finalized: false,
+            metered: false,
+          }),
         }
       );
 
@@ -101,10 +109,18 @@ describe("stopSandbox", () => {
           getSandbox: async () =>
             ({
               stop: async () => {},
+              currentSession: () => ({
+                updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+              }),
               currentSnapshotId: "snap-1",
             }) as never,
           stopSandboxRecord,
           updateSandboxRecord,
+          prepareSandboxBillingClose: async () => null,
+          finalizeSandboxBillingClose: async () => ({
+            finalized: false,
+            metered: false,
+          }),
         }
       );
 
@@ -152,10 +168,18 @@ describe("stopSandbox", () => {
         getSandbox: async () =>
           ({
             stop: async () => {},
+            currentSession: () => ({
+              updatedAt: new Date("2026-04-01T10:05:00.000Z"),
+            }),
             currentSnapshotId: null,
           }) as never,
         stopSandboxRecord,
         updateSandboxRecord,
+        prepareSandboxBillingClose: async () => null,
+        finalizeSandboxBillingClose: async () => ({
+          finalized: false,
+          metered: false,
+        }),
       }
     );
 

@@ -9,25 +9,18 @@ import {
   buildSandboxRouteRequest,
 } from "./sandbox-record-route-test-harness";
 
-test("POST /api/sandbox/[id]/stop marks the sandbox stopped even when remote control cannot be resolved", async () => {
+test("POST /api/sandbox/[id]/stop keeps an unconfirmed VM visible for reconciliation", async () => {
   const { createSandboxStopHandler } = await loadSandboxStopRouteModule();
-  let loadCount = 0;
   const stopCalls: Array<{
     id: string;
     sandboxId?: string;
     stopReason?: string | null;
   }> = [];
+  const updates: Record<string, unknown>[] = [];
 
   const handler = createSandboxStopHandler({
-    loadOwnedSandboxRouteRecord: (async () => {
-      loadCount += 1;
-      return loadCount === 1
-        ? buildLoadedSandboxStopRecord()
-        : buildLoadedSandboxStopRecord({
-            status: "stopped",
-            health_status: "stopped",
-          });
-    }) as never,
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxStopRecord()) as never,
     resolveLoadedSandboxRouteContext: async () =>
       buildSandboxRouteContextFailure() as never,
     stopSandboxRecord: async (id, options) => {
@@ -38,7 +31,10 @@ test("POST /api/sandbox/[id]/stop marks the sandbox stopped even when remote con
       });
       return { id } as never;
     },
-    updateSandboxRecord: async () => ({ id: "sandbox-1" }) as never,
+    updateSandboxRecord: async (_id, nextUpdates) => {
+      updates.push(nextUpdates);
+      return { id: "sandbox-1" } as never;
+    },
   });
 
   const response = await handler(
@@ -47,15 +43,19 @@ test("POST /api/sandbox/[id]/stop marks the sandbox stopped even when remote con
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(stopCalls, [
-    { id: "sandbox-1", sandboxId: "vm_123", stopReason: "manual" },
+  assert.deepEqual(stopCalls, []);
+  assert.deepEqual(updates, [
+    {
+      error:
+        "Remote VM vm_123 could not be stopped: credentials unresolvable. VM may continue running until the next reaper cycle.",
+    },
   ]);
   const payload = await response.json();
-  assert.equal(payload.sandbox.runtime_summary.status, "stopped");
-  assert.equal(payload.sandbox.runtime_summary.health_status, "stopped");
+  assert.equal(payload.sandbox.runtime_summary.status, "running");
+  assert.equal(payload.sandbox.runtime_summary.health_status, "running");
 });
 
-test("POST /api/sandbox/[id]/stop falls back to a row-only stop when sandbox id drifted", async () => {
+test("POST /api/sandbox/[id]/stop does not hide an unconfirmed VM after sandbox id drift", async () => {
   const { createSandboxStopHandler } = await loadSandboxStopRouteModule();
   const stopCalls: Array<{
     id: string;
@@ -88,12 +88,9 @@ test("POST /api/sandbox/[id]/stop falls back to a row-only stop when sandbox id 
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(stopCalls, [
-    { id: "sandbox-1", sandboxId: "vm_123", stopReason: "manual" },
-    { id: "sandbox-1", sandboxId: undefined, stopReason: "manual" },
-  ]);
+  assert.deepEqual(stopCalls, []);
   const payload = await response.json();
-  assert.equal(payload.sandbox.runtime_summary.status, "stopped");
+  assert.equal(payload.sandbox.runtime_summary.status, "running");
 });
 
 test("POST /api/sandbox/[id]/stop best-effort stops the remote sandbox before updating the row", async () => {

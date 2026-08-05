@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSandbox } from "@/lib/sandbox/client";
+import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 // route-context keeps the direct getSandbox import because callers pass
 // their own `{ resume }` option; the sdk-adapter helpers lock that to
 // specific values (getSandboxByName=false, resumeSandboxByName=true).
@@ -28,6 +29,7 @@ type SandboxRouteRepoRelation =
   | undefined;
 
 export type SandboxRouteRecordLike = {
+  id?: string;
   sandbox_id: string;
   /**
    * Per-launch working subdirectory snapshot. Routes whose SELECT
@@ -191,6 +193,14 @@ export async function loadOwnedSandboxRouteRecord<
     };
   }
 
+  // Narrow route SELECTs often omit `id`, but the canonical record id is
+  // already known from the URL and ownership query. Keep it on the normalized
+  // record so every hydrated SDK handle can attach billing admission before an
+  // implicit provider resume.
+  if (typeof record.id !== "string") {
+    record.id = sandboxId;
+  }
+
   const repo = normalizeRouteRepo(record.repo);
 
   // Resolve the working subdirectory for this route operation:
@@ -276,11 +286,22 @@ export async function resolveLoadedSandboxRouteContext<
     loaded.record.sandbox_id !== "pending"
   ) {
     try {
-      sandbox = await deps.getSandbox(loaded.record.sandbox_id, {
-        vercelToken: contextResult.context.credentials.vercelToken,
-        vercelTeamId: contextResult.context.credentials.vercelTeamId,
-        vercelProjectId: contextResult.context.credentials.vercelProjectId,
-      });
+      const recordId =
+        typeof loaded.record.id === "string" ? loaded.record.id : null;
+      sandbox = await deps.getSandbox(
+        loaded.record.sandbox_id,
+        {
+          vercelToken: contextResult.context.credentials.vercelToken,
+          vercelTeamId: contextResult.context.credentials.vercelTeamId,
+          vercelProjectId: contextResult.context.credentials.vercelProjectId,
+        },
+        {
+          resume: false,
+          ...(recordId
+            ? { onResume: createSandboxBillingOnResume(recordId) }
+            : {}),
+        }
+      );
     } catch (error) {
       return {
         ok: false,

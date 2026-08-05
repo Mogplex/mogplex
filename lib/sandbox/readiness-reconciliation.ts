@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadUserPlatformAccess } from "@/lib/platform-access";
 import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
 import { getSandbox, previewAllowsRoot404 } from "@/lib/sandbox/client";
+import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import {
   getPlatformSandboxCredentials,
@@ -435,11 +436,18 @@ export async function reconcileSandboxReadiness(
   let resolvedPreviewUrl = record.preview_url;
   const liveSandboxStatus: "running" | "pending" | "stopped" =
     await (async () => {
-      const sandbox = await deps.getSandbox(record.sandbox_id, {
-        vercelToken: credentials.vercelToken,
-        vercelTeamId: credentials.vercelTeamId,
-        vercelProjectId: credentials.vercelProjectId,
-      });
+      const sandbox = await deps.getSandbox(
+        record.sandbox_id,
+        {
+          vercelToken: credentials.vercelToken,
+          vercelTeamId: credentials.vercelTeamId,
+          vercelProjectId: credentials.vercelProjectId,
+        },
+        {
+          resume: false,
+          onResume: createSandboxBillingOnResume(record.id),
+        }
+      );
       const nextStatus =
         sandbox.status === "running"
           ? "running"

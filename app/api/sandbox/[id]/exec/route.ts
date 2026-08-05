@@ -26,6 +26,7 @@ import {
 } from "@/lib/harness/install";
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
+import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 import {
   buildSandboxRouteErrorResponse,
   loadOwnedSandboxRouteContext,
@@ -290,11 +291,15 @@ export function createSandboxExecPostHandler(
         );
       }
 
-      const sandbox = await deps.getSandbox(sandboxData.record.sandbox_id, {
-        vercelToken: context.credentials.vercelToken,
-        vercelTeamId: context.credentials.vercelTeamId,
-        vercelProjectId: context.credentials.vercelProjectId,
-      });
+      const sandbox = await deps.getSandbox(
+        sandboxData.record.sandbox_id,
+        {
+          vercelToken: context.credentials.vercelToken,
+          vercelTeamId: context.credentials.vercelTeamId,
+          vercelProjectId: context.credentials.vercelProjectId,
+        },
+        { onResume: createSandboxBillingOnResume(id) }
+      );
       await deps.renewSandboxActivityLease(sandbox);
 
       const repoRootDirectory = sandboxData.rootDirectory;

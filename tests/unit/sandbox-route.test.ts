@@ -24,6 +24,12 @@ async function createSandboxPostTestHandler(
       ok: true as const,
       data: { projectId: input.projectId },
     }),
+    requireSandboxBillingSession: async () => ({
+      metered: true,
+      reason: "opened",
+      sessionId: "billing-session-1",
+    }),
+    prepareSandboxBillingClose: async () => null,
     ...overrides,
   });
 }

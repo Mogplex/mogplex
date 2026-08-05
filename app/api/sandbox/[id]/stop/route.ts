@@ -15,6 +15,11 @@ import {
   resolveLoadedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
+import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
+import {
+  finalizeSandboxBillingClose,
+  prepareSandboxBillingClose,
+} from "@/lib/billing/sandbox-usage";
 import type {
   LoadedSandboxRouteRecord,
   SandboxRouteRecordLike,
@@ -50,6 +55,8 @@ type SandboxStopDeps = {
   getSandbox: typeof getSandbox;
   stopSandboxRecord: typeof stopSandboxRecord;
   updateSandboxRecord: typeof updateSandboxRecord;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
 };
 
 const defaultSandboxStopDeps: SandboxStopDeps = {
@@ -58,11 +65,15 @@ const defaultSandboxStopDeps: SandboxStopDeps = {
   getSandbox,
   stopSandboxRecord,
   updateSandboxRecord,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
 };
 
 type RemoteStopOutcome = {
   snapshotId: string | null;
   credentialFailure: boolean;
+  confirmedStopped: boolean;
+  endedAt: Date | null;
 };
 
 async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
@@ -70,7 +81,12 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
   deps: Pick<SandboxStopDeps, "resolveLoadedSandboxRouteContext" | "getSandbox">
 ): Promise<RemoteStopOutcome> {
   if (loaded.record.sandbox_id === "pending") {
-    return { snapshotId: null, credentialFailure: false };
+    return {
+      snapshotId: null,
+      credentialFailure: false,
+      confirmedStopped: true,
+      endedAt: new Date(),
+    };
   }
 
   const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
@@ -80,7 +96,12 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
     console.error(
       `[sandbox/stop] Credential resolution failed for VM ${loaded.record.sandbox_id} — remote VM may continue running`
     );
-    return { snapshotId: null, credentialFailure: true };
+    return {
+      snapshotId: null,
+      credentialFailure: true,
+      confirmedStopped: false,
+      endedAt: null,
+    };
   }
 
   try {
@@ -102,20 +123,45 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
     // the semantic the Stop button conveys ("I'm done with this").
     try {
       await sandbox.delete();
+      return {
+        snapshotId: null,
+        credentialFailure: false,
+        confirmedStopped: true,
+        endedAt: new Date(),
+      };
     } catch (error) {
       console.warn(
         `[sandbox/stop] sandbox.delete() failed for ${loaded.record.sandbox_id}; falling back to stop()`,
         error
       );
       try {
-        await sandbox.stop();
+        await sandbox.stop({ blocking: true });
+        const session = sandbox.currentSession();
+        return {
+          snapshotId: null,
+          credentialFailure: false,
+          confirmedStopped: true,
+          endedAt: session.stoppedAt ?? session.updatedAt ?? new Date(),
+        };
       } catch {
-        // swallow — record-level stop still happens below
+        return {
+          snapshotId: null,
+          credentialFailure: false,
+          confirmedStopped: false,
+          endedAt: null,
+        };
       }
     }
-    return { snapshotId: null, credentialFailure: false };
-  } catch {
-    return { snapshotId: null, credentialFailure: false };
+  } catch (error) {
+    return {
+      snapshotId: null,
+      credentialFailure: false,
+      confirmedStopped: isNotFoundError(error),
+      // Provider-not-found proves the VM is gone, but not when it ended. Leave
+      // the exact end unknown so reconciliation caps billing at the ledger's
+      // last confirmed meter timestamp instead of charging through now.
+      endedAt: null,
+    };
   }
 }
 
@@ -143,22 +189,45 @@ export function createSandboxStopHandler(
     );
     if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
-    const { snapshotId, credentialFailure } = await stopRemoteSandboxBestEffort(
-      loaded,
-      deps
-    );
-    const stopped = await deps.stopSandboxRecord(id, {
-      expectedSandboxId: loaded.record.sandbox_id,
-      healthStatus: "stopped",
-      fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-      stopReason: "manual",
-    });
-    if (!stopped) {
-      await deps.stopSandboxRecord(id, {
+    let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+      null;
+    try {
+      billingClose = await deps.prepareSandboxBillingClose(id);
+    } catch (billingError) {
+      console.warn(
+        `[sandbox/stop] Billing close preparation failed for ${id}; reconciliation will recover:`,
+        billingError
+      );
+    }
+    const { snapshotId, credentialFailure, confirmedStopped, endedAt } =
+      await stopRemoteSandboxBestEffort(loaded, deps);
+    const billingEndedAt =
+      endedAt ??
+      (confirmedStopped ? (billingClose?.meteredThroughAt ?? null) : null);
+    if (confirmedStopped && billingEndedAt) {
+      try {
+        await deps.finalizeSandboxBillingClose(billingClose, billingEndedAt);
+      } catch (billingError) {
+        console.warn(
+          `[sandbox/stop] VM stopped but billing finalization failed for ${id}; reconciliation will retry:`,
+          billingError
+        );
+      }
+    }
+    if (confirmedStopped) {
+      const stopped = await deps.stopSandboxRecord(id, {
+        expectedSandboxId: loaded.record.sandbox_id,
         healthStatus: "stopped",
         fromStatuses: STOPPABLE_SANDBOX_STATUSES,
         stopReason: "manual",
       });
+      if (!stopped) {
+        await deps.stopSandboxRecord(id, {
+          healthStatus: "stopped",
+          fromStatuses: STOPPABLE_SANDBOX_STATUSES,
+          stopReason: "manual",
+        });
+      }
     }
 
     const recordUpdates: Record<string, unknown> = {};
@@ -171,6 +240,8 @@ export function createSandboxStopHandler(
     }
     if (credentialFailure) {
       recordUpdates.error = `Remote VM ${loaded.record.sandbox_id} could not be stopped: credentials unresolvable. VM may continue running until the next reaper cycle.`;
+    } else if (!confirmedStopped) {
+      recordUpdates.error = `Remote VM ${loaded.record.sandbox_id} could not be confirmed stopped. The record remains active for reconciliation.`;
     }
     if (Object.keys(recordUpdates).length > 0) {
       try {

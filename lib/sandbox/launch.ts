@@ -1,4 +1,5 @@
 import { getSandbox } from "@/lib/sandbox/client";
+import { requireSandboxBillingSession } from "@/lib/billing/sandbox-usage";
 import { applyProductTeamScope } from "@/lib/sandbox/product-team-scope";
 import {
   isSandboxExplicitlyNonPersistent,
@@ -64,6 +65,10 @@ type ResolveNameCollisionDeps = {
     record: Pick<SandboxRecord, "id" | "sandbox_id">
   ) => Promise<unknown>;
   deleteSandbox: (sandbox: VercelSandboxHandle) => Promise<void>;
+  requireBillingSession: (
+    sandboxRecordId: string,
+    sandbox: VercelSandboxHandle
+  ) => Promise<unknown>;
 };
 
 const SANDBOX_COLLISION_SELECT =
@@ -173,11 +178,15 @@ const defaultResolveNameCollisionDeps: ResolveNameCollisionDeps = {
   async deleteSandbox(sandbox) {
     await sandbox.delete?.();
   },
+  requireBillingSession(sandboxRecordId, sandbox) {
+    return requireSandboxBillingSession(sandboxRecordId, sandbox as never);
+  },
 };
 
 async function getSandboxForNameCollision(
   deps: ResolveNameCollisionDeps,
-  input: ResolveNameCollisionInput
+  input: ResolveNameCollisionInput,
+  matchingRecord: SandboxRecord | null
 ): Promise<{
   sandbox: VercelSandboxHandle;
   revived: boolean;
@@ -197,6 +206,16 @@ async function getSandboxForNameCollision(
     return {
       sandbox: (await deps.getSandbox(input.name, input.credentials, {
         resume: true,
+        ...(matchingRecord?.billing_summary.source === "platform"
+          ? {
+              onResume: async (sandbox) => {
+                await deps.requireBillingSession(
+                  matchingRecord.id,
+                  sandbox as unknown as VercelSandboxHandle
+                );
+              },
+            }
+          : {}),
       })) as unknown as VercelSandboxHandle,
       revived: true,
     };
@@ -215,12 +234,14 @@ export async function resolveNameCollision(
   | { kind: "resume"; record: SandboxRecord }
 > {
   const deps = { ...defaultResolveNameCollisionDeps, ...overrides };
-  const probe = await getSandboxForNameCollision(deps, input);
+  // Load the canonical record before a resume probe so provider admission can
+  // be attached before that probe is allowed to wake a paid sandbox.
+  const matchingRecord = await deps.loadMatchingRecord(input);
+  const probe = await getSandboxForNameCollision(deps, input, matchingRecord);
   if (!probe) return { kind: "create" };
   const { sandbox, revived } = probe;
 
   const vercelStatus = normalizeVercelSandboxStatus(sandbox);
-  const matchingRecord = await deps.loadMatchingRecord(input);
   const matchingRecordMatchesRoot =
     matchingRecord &&
     (matchingRecord.root_directory ?? null) === input.rootDirectory;
@@ -260,5 +281,8 @@ export async function resolveNameCollision(
     ...input,
     persistent: readSandboxPersistentFlag(sandbox) ?? false,
   });
+  if (input.billingSource === "platform") {
+    await deps.requireBillingSession(adopted.id, sandbox);
+  }
   return { kind: "adopt", record: adopted };
 }

@@ -59,6 +59,7 @@ import {
 } from "@/lib/sandbox/route-context";
 import type { HarnessId } from "@/lib/harness/config";
 import type { MemoryScope } from "@/lib/memories-client";
+import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 
 const VALID_HARNESSES = new Set<HarnessId>(["claude-code", "codex"]);
 const MAX_LOG_EVENT_LENGTH = 4000;
@@ -595,11 +596,15 @@ export function createSandboxHarnessPostHandler(
         );
       }
 
-      const sandbox = await deps.getSandbox(record.sandbox_id, {
-        vercelToken: context.credentials.vercelToken,
-        vercelTeamId: context.credentials.vercelTeamId,
-        vercelProjectId: context.credentials.vercelProjectId,
-      });
+      const sandbox = await deps.getSandbox(
+        record.sandbox_id,
+        {
+          vercelToken: context.credentials.vercelToken,
+          vercelTeamId: context.credentials.vercelTeamId,
+          vercelProjectId: context.credentials.vercelProjectId,
+        },
+        { onResume: createSandboxBillingOnResume(id) }
+      );
 
       await deps.renewSandboxActivityLease(sandbox);
       await deps.touchSandboxLastActive(id);

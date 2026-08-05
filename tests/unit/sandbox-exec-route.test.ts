@@ -249,6 +249,7 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
   const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
 
   let capturedEnv: Record<string, string> | null = null;
+  let hasBillingOnResume = false;
 
   const handler = createSandboxExecPostHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
@@ -270,8 +271,9 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
         aiBillingSource: "user_ai_gateway",
         gatewayApiKey: "gateway-key-123",
       }),
-    getSandbox: async () =>
-      ({
+    getSandbox: async (_sandboxId, _credentials, options) => {
+      hasBillingOnResume = typeof options?.onResume === "function";
+      return {
         runCommand: async (input: { env?: Record<string, string> }) => {
           capturedEnv = input.env ?? null;
           return {
@@ -284,7 +286,8 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
           throw new Error("missing");
         },
         writeFiles: async () => {},
-      }) as never,
+      } as never;
+    },
   });
 
   const response = await handler(
@@ -309,6 +312,7 @@ test("POST /api/sandbox/[id]/exec injects only OpenAI-compatible AI Gateway env 
   assert.equal(capturedEnv?.["ANTHROPIC_BASE_URL"], undefined);
   assert.equal(capturedEnv?.["ANTHROPIC_AUTH_TOKEN"], undefined);
   assert.equal(capturedEnv?.["MOGPLEX_AI_BILLING_SOURCE"], "user_ai_gateway");
+  assert.equal(hasBillingOnResume, true);
 });
 
 test("POST /api/sandbox/[id]/exec refreshes repo-scoped GitHub auth before git commands", async () => {

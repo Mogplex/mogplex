@@ -32,6 +32,11 @@ import {
 import { isSandboxExplicitlyNonPersistent } from "@/lib/sandbox/persistence";
 import type { SandboxEvent } from "@/lib/sandbox/events";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
+import {
+  finalizeSandboxBillingClose,
+  prepareSandboxBillingClose,
+  requireSandboxBillingSession,
+} from "@/lib/billing/sandbox-usage";
 
 // ---- Legacy restart record (non-persistent path, re-POSTs /api/sandbox) ----
 
@@ -96,15 +101,46 @@ function sseEncode(
 
 async function stopSandboxAfterLifecycleConflict(
   sandbox: Awaited<ReturnType<typeof getSandbox>>,
-  label: string
+  sandboxRecordId: string,
+  label: string,
+  deps: Pick<
+    SandboxRestartDeps,
+    "prepareSandboxBillingClose" | "finalizeSandboxBillingClose"
+  >
 ) {
+  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+    null;
   try {
-    await sandbox.stop();
+    billingClose = await deps.prepareSandboxBillingClose(sandboxRecordId);
+  } catch (billingError) {
+    console.warn(
+      `[sandbox/restart] Billing close preparation failed after ${label} CAS conflict; reconciliation will recover:`,
+      billingError
+    );
+  }
+  let providerEndedAt: Date;
+  try {
+    await sandbox.stop({ blocking: true });
+    const providerSession =
+      typeof sandbox.currentSession === "function"
+        ? sandbox.currentSession()
+        : null;
+    providerEndedAt =
+      providerSession?.stoppedAt ?? providerSession?.updatedAt ?? new Date();
   } catch (stopErr) {
     console.warn(
       `[sandbox/restart] stop() after ${label} CAS conflict surfaced: ${
         stopErr instanceof Error ? stopErr.message : String(stopErr)
       }`
+    );
+    return;
+  }
+  try {
+    await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
+  } catch (billingError) {
+    console.warn(
+      `[sandbox/restart] VM stopped after ${label} CAS conflict, but billing finalization failed; reconciliation will retry:`,
+      billingError
     );
   }
 }
@@ -186,6 +222,9 @@ type SandboxRestartDeps = {
   enforceSandboxBootLimits: typeof enforceSandboxBootLimits;
   releaseLimitClaim: typeof releaseLimitClaim;
   fetchImpl: typeof fetch;
+  requireSandboxBillingSession: typeof requireSandboxBillingSession;
+  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
 };
 
 const defaultSandboxRestartDeps: SandboxRestartDeps = {
@@ -200,6 +239,9 @@ const defaultSandboxRestartDeps: SandboxRestartDeps = {
   enforceSandboxBootLimits,
   releaseLimitClaim,
   fetchImpl: fetch,
+  requireSandboxBillingSession,
+  prepareSandboxBillingClose,
+  finalizeSandboxBillingClose,
 };
 
 function isActiveSandboxStatus(status: string) {
@@ -278,7 +320,12 @@ async function handlePersistentRestart(
     const currentVm = await deps.getSandbox(
       record.sandbox_id,
       context.credentials,
-      { resume: false }
+      {
+        resume: false,
+        onResume: async (resumedSandbox) => {
+          await deps.requireSandboxBillingSession(record.id, resumedSandbox);
+        },
+      }
     );
 
     if (isSandboxExplicitlyNonPersistent(currentVm)) {
@@ -288,6 +335,7 @@ async function handlePersistentRestart(
     }
 
     if (!needsWakeAdmission) {
+      await deps.prepareSandboxBillingClose(record.id);
       try {
         await currentVm.stop();
       } catch (stopErr) {
@@ -302,7 +350,11 @@ async function handlePersistentRestart(
 
     sandbox = await deps.getSandbox(record.sandbox_id, context.credentials, {
       resume: true,
+      onResume: async (resumedSandbox) => {
+        await deps.requireSandboxBillingSession(record.id, resumedSandbox);
+      },
     });
+    await deps.requireSandboxBillingSession(record.id, sandbox);
   } catch (err) {
     await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
     const message =
@@ -339,7 +391,12 @@ async function handlePersistentRestart(
 
   if (!installingRecord) {
     await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-    await stopSandboxAfterLifecycleConflict(sandbox, "restart");
+    await stopSandboxAfterLifecycleConflict(
+      sandbox,
+      record.id,
+      "restart",
+      deps
+    );
     return buildLifecycleConflictResponse(
       "Sandbox restart was cancelled before it started."
     );
@@ -430,7 +487,12 @@ async function handlePersistentRestart(
                 }
               )) as PersistentRestartRecord | null;
               if (!previewRecord) {
-                await stopSandboxAfterLifecycleConflict(sandbox, "preview");
+                await stopSandboxAfterLifecycleConflict(
+                  sandbox,
+                  record.id,
+                  "preview",
+                  deps
+                );
                 emit({
                   type: "cancelled",
                   reason: "conflict",
@@ -469,7 +531,12 @@ async function handlePersistentRestart(
                   }
                 )) as PersistentRestartRecord | null;
                 if (!runningRecord) {
-                  await stopSandboxAfterLifecycleConflict(sandbox, "running");
+                  await stopSandboxAfterLifecycleConflict(
+                    sandbox,
+                    record.id,
+                    "running",
+                    deps
+                  );
                   emit({
                     type: "cancelled",
                     reason: "conflict",
@@ -500,6 +567,12 @@ async function handlePersistentRestart(
         const message =
           err instanceof Error ? err.message : "Restart bootstrap failed";
         console.error("[sandbox/restart] bootstrap error:", err);
+        await stopSandboxAfterLifecycleConflict(
+          sandbox,
+          record.id,
+          "bootstrap failure",
+          deps
+        );
         const failedRecord = await deps.updateSandboxRecord(
           record.id,
           {
@@ -576,8 +649,14 @@ async function handleLegacyRestart(
           vercelTeamId: resolved.context.credentials.vercelTeamId,
           vercelProjectId: resolved.context.credentials.vercelProjectId,
         },
-        { resume: false }
+        {
+          resume: false,
+          onResume: async (resumedSandbox) => {
+            await deps.requireSandboxBillingSession(record.id, resumedSandbox);
+          },
+        }
       );
+      await deps.prepareSandboxBillingClose(record.id);
       try {
         const snapshot = await sandbox.snapshot();
         restoreSnapshotId = snapshot.snapshotId;
