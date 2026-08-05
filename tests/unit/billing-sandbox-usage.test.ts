@@ -6,6 +6,7 @@ import {
   presentSandboxBillingAdmissionError,
   readSandboxProviderSession,
   SandboxBillingAdmissionError,
+  SANDBOX_BALANCE_REQUIRED_MESSAGE,
   SANDBOX_BILLING_UNAVAILABLE_MESSAGE,
   syncSandboxBillingSession,
   type ActiveSandboxBillingSession,
@@ -109,6 +110,20 @@ test("metering failures expose a generic 503 message", () => {
   assert.deepEqual(presented, {
     status: 503,
     message: SANDBOX_BILLING_UNAVAILABLE_MESSAGE,
+  });
+});
+
+test("balance admission exposes a fixed user-safe 402 message", () => {
+  const presented = presentSandboxBillingAdmissionError(
+    new SandboxBillingAdmissionError(
+      "billing account internal-id personal scope mismatch",
+      "no_billing_account"
+    )
+  );
+
+  assert.deepEqual(presented, {
+    status: 402,
+    message: SANDBOX_BALANCE_REQUIRED_MESSAGE,
   });
 });
 

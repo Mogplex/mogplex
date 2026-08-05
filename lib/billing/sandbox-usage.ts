@@ -10,6 +10,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 // rounding. Stripe price and product IDs never participate in compute billing.
 export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
 export const SANDBOX_BALANCE_REQUIRED_SQLSTATE = "MP001";
+export const SANDBOX_BALANCE_REQUIRED_MESSAGE =
+  "Hosted sandbox compute requires a positive billing balance";
 export const SANDBOX_BILLING_UNAVAILABLE_MESSAGE =
   "Sandbox billing is temporarily unavailable. Please try again.";
 
@@ -94,7 +96,7 @@ export function isSandboxBillingBalanceRequiredError(error: unknown) {
 export function presentSandboxBillingAdmissionError(error: unknown) {
   if (!(error instanceof SandboxBillingAdmissionError)) return null;
   return error.reason === "no_billing_account"
-    ? { status: 402, message: error.message }
+    ? { status: 402, message: SANDBOX_BALANCE_REQUIRED_MESSAGE }
     : { status: 503, message: SANDBOX_BILLING_UNAVAILABLE_MESSAGE };
 }
 
@@ -533,7 +535,7 @@ export async function requireSandboxBillingSession(
       reason: "billing_depleted",
     });
     throw new SandboxBillingAdmissionError(
-      "Hosted sandbox compute requires a positive billing balance",
+      SANDBOX_BALANCE_REQUIRED_MESSAGE,
       "no_billing_account"
     );
   }

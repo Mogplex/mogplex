@@ -341,9 +341,11 @@ async function handlePersistentRestart(
     if (!needsWakeAdmission) {
       // Restart immediately rotates this live provider session. Require the
       // close barrier before stop so scheduled accrual cannot cross sessions.
-      await deps.prepareSandboxBillingClose(record.id);
+      const billingClose = await deps.prepareSandboxBillingClose(record.id);
+      let stopSucceeded = false;
       try {
-        await currentVm.stop();
+        await currentVm.stop({ blocking: true });
+        stopSucceeded = true;
       } catch (stopErr) {
         // Already stopped (e.g. user paused first) is fine; surface anything else.
         console.warn(
@@ -351,6 +353,15 @@ async function handlePersistentRestart(
             stopErr instanceof Error ? stopErr.message : String(stopErr)
           }`
         );
+      }
+      if (stopSucceeded) {
+        const providerSession = currentVm.currentSession();
+        const providerEndedAt =
+          providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
+        // Finalize before waking the replacement so stopped boot time can
+        // never be charged to the predecessor. Failure remains fail-closed:
+        // the VM is stopped and reconciliation can finish this generation.
+        await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
       }
     }
 
