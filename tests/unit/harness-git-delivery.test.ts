@@ -60,6 +60,7 @@ test("default-branch harness runs move onto a deterministic delivery branch", as
     commands[0]?.env?.MOGPLEX_FALLBACK_BRANCH,
     "mogplex/agent-12345678abcd"
   );
+  assert.equal(commands[0]?.env?.MOGPLEX_REQUIRE_CLEAN, "1");
 });
 
 test("existing delivery branches are fetched, checked out, and fast-forwarded", async () => {
@@ -161,6 +162,9 @@ test("successful code changes are committed, pushed, and return a PR URL", async
   assert.match(commands[0]?.command ?? "", /git commit/);
   assert.match(commands[0]?.command ?? "", /git push -u origin/);
   assert.match(commands[0]?.command ?? "", /gh pr create/);
+  assert.match(commands[0]?.command ?? "", /gh pr list --head/);
+  assert.match(commands[0]?.command ?? "", /--state open/);
+  assert.doesNotMatch(commands[0]?.command ?? "", /gh pr view/);
   assert.equal(commands[0]?.env?.MOGPLEX_BASE_BRANCH, "main");
   assert.equal(
     commands[0]?.env?.MOGPLEX_WORKING_BRANCH,
@@ -185,6 +189,26 @@ test("delivery failures surface the git or GitHub error", async () => {
         }
       ),
     /GitHub delivery failed.*Resource not accessible/
+  );
+});
+
+test("pre-existing workspace changes fail before a harness run", async () => {
+  await assert.rejects(
+    () =>
+      syncHarnessGitWorkspace(
+        sandboxWithResult({
+          commands: [],
+          exitCode: 1,
+          stderr:
+            "The sandbox workspace is not clean before the agent run. Commit, discard, or move the existing changes, then retry.\n M src/user-work.ts",
+        }),
+        {
+          aiCallId: "call-123",
+          baseBranch: "main",
+          workingBranch: "mogplex/current-work",
+        }
+      ),
+    /workspace is not clean[\s\S]*src\/user-work\.ts/
   );
 });
 

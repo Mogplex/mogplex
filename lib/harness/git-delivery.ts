@@ -97,6 +97,7 @@ export async function syncHarnessGitWorkspace(
       MOGPLEX_CREATE_BRANCH:
         input.workingBranch === input.baseBranch ? "1" : "0",
       MOGPLEX_FALLBACK_BRANCH: fallbackBranch,
+      MOGPLEX_REQUIRE_CLEAN: "1",
     },
   });
   if (result.exitCode !== 0) {
@@ -176,7 +177,7 @@ if [ "$ahead" -eq 0 ]; then
   echo "${PULL_REQUEST_MARKER}"
   exit 0
 fi
-pull_request_url="$(gh pr view "$MOGPLEX_WORKING_BRANCH" --json url --jq .url 2>/dev/null || true)"
+pull_request_url="$(gh pr list --head "$MOGPLEX_WORKING_BRANCH" --base "$MOGPLEX_BASE_BRANCH" --state open --limit 1 --json url --jq '.[0].url // ""' 2>/dev/null || true)"
 if [ -z "$pull_request_url" ]; then
   pull_request_url="$(gh pr create --base "$MOGPLEX_BASE_BRANCH" --head "$MOGPLEX_WORKING_BRANCH" --title "$MOGPLEX_PR_TITLE" --body "Created by a Mogplex agent run.")"
 fi

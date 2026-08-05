@@ -12,6 +12,11 @@ git check-ref-format --branch "$MOGPLEX_WORKING_BRANCH" >/dev/null
 if [ -n "$MOGPLEX_FALLBACK_BRANCH" ]; then
   git check-ref-format --branch "$MOGPLEX_FALLBACK_BRANCH" >/dev/null
 fi
+if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ] && [ -n "$(git status --porcelain)" ]; then
+  echo "The sandbox workspace is not clean before the agent run. Commit, discard, or move the existing changes, then retry." >&2
+  git status --short >&2
+  exit 1
+fi
 git fetch origin "$MOGPLEX_BASE_BRANCH:refs/remotes/origin/$MOGPLEX_BASE_BRANCH"
 remote_branch=false
 if git ls-remote --exit-code --heads origin "$MOGPLEX_WORKING_BRANCH" >/dev/null 2>&1; then

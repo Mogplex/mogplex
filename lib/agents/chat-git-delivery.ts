@@ -38,6 +38,7 @@ MOGPLEX_BASE_BRANCH=${baseBranch}
 MOGPLEX_WORKING_BRANCH=${workingBranch}
 MOGPLEX_CREATE_BRANCH=1
 MOGPLEX_FALLBACK_BRANCH=''
+MOGPLEX_REQUIRE_CLEAN=0
 ${buildAgentGitSyncScript()}`.trim();
 }
 
@@ -60,6 +61,7 @@ export function createChatGitDeliveryPreparer(
       {
         method: "POST",
         headers,
+        signal: AbortSignal.timeout(30_000),
         body: JSON.stringify({
           command: buildChatGitDeliveryCommand(input),
         }),
