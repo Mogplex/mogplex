@@ -92,6 +92,7 @@ test("readSandboxProviderSession uses the provider start and identifiers", () =>
     sessionId: "provider-session-1",
     status: "running",
     startedAt: STARTED_AT,
+    hasReliableStartedAt: true,
     stoppedAt: null,
     updatedAt: STARTED_AT,
   });
@@ -230,6 +231,12 @@ test("syncSandboxBillingSession is idempotent for the current provider session",
     {
       ...baseDeps(),
       loadActiveSession: async () => active(),
+      loadExplicitPlatformAccess: async () => {
+        throw new Error("already-open sync must not load access");
+      },
+      findBillingAccountForScope: async () => {
+        throw new Error("already-open sync must not load an account");
+      },
       openSession: async () => {
         opened = true;
         return "unexpected";
@@ -242,6 +249,35 @@ test("syncSandboxBillingSession is idempotent for the current provider session",
     sessionId: "billing-session-1",
   });
   assert.equal(opened, false);
+});
+
+test("rotation with missing provider timestamps caps the predecessor at its meter cursor", async () => {
+  const finalizedAt: Date[] = [];
+  const missingTimestamps = {
+    name: "provider-sandbox-1",
+    currentSession: () => ({
+      sessionId: "provider-session-2",
+      status: "running",
+    }),
+  } as never;
+
+  await assert.rejects(
+    syncSandboxBillingSession(
+      { record: record(), sandbox: missingTimestamps },
+      {
+        ...baseDeps(),
+        loadActiveSession: async () => active(),
+        requestClose: async () => 1,
+        finalizeMetered: async (_attempt, endedAt) => {
+          finalizedAt.push(endedAt);
+          return { accrued: true, debitedCents: 0 };
+        },
+      }
+    ),
+    /provider session start timestamp is unavailable/
+  );
+
+  assert.deepEqual(finalizedAt, [STARTED_AT]);
 });
 
 test("syncSandboxBillingSession finalizes a rotated provider session before opening the replacement", async () => {

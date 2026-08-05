@@ -122,6 +122,9 @@ async function stopSandboxAfterLifecycleConflict(
   let providerEndedAt: Date;
   try {
     await sandbox.stop({ blocking: true });
+    // Conflict cleanup is best-effort and also accepts the lightweight
+    // handles used by lifecycle recovery tests. Primary lifecycle paths use a
+    // fully typed SDK Sandbox and call currentSession directly.
     const providerSession =
       typeof sandbox.currentSession === "function"
         ? sandbox.currentSession()

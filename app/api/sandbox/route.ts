@@ -1581,6 +1581,21 @@ async function stopSandboxInstanceBestEffort(sandbox: SandboxInstance | null) {
   }
 }
 
+async function prepareSandboxLaunchBillingCloseBestEffort(input: {
+  deps: Pick<SandboxPostDeps, "prepareSandboxBillingClose">;
+  recordId: string;
+  phase: string;
+}) {
+  try {
+    await input.deps.prepareSandboxBillingClose(input.recordId);
+  } catch (error) {
+    console.warn(
+      `[sandbox/create] Billing close preparation failed during ${input.phase}; reconciliation will recover:`,
+      error
+    );
+  }
+}
+
 async function transitionSandboxRecordToInstalling(input: {
   recordId: string;
   sandboxId: string;
@@ -1810,9 +1825,11 @@ async function activateRunningSandboxRecord(input: {
   );
 
   if (!activated) {
-    await input.deps
-      .prepareSandboxBillingClose(input.state.streamSandboxRecord.id)
-      .catch(() => null);
+    await prepareSandboxLaunchBillingCloseBestEffort({
+      deps: input.deps,
+      recordId: input.state.streamSandboxRecord.id,
+      phase: "activation conflict",
+    });
     await stopSandboxInstanceBestEffort(input.state.sandbox);
     input.emit({
       type: "error",
@@ -1876,9 +1893,11 @@ async function fallbackFromBaselineToGit(input: {
   environment: SandboxLaunchEnvironment;
   emit: (event: SandboxEvent) => void;
 }) {
-  await input.deps
-    .prepareSandboxBillingClose(input.state.streamSandboxRecord.id)
-    .catch(() => null);
+  await prepareSandboxLaunchBillingCloseBestEffort({
+    deps: input.deps,
+    recordId: input.state.streamSandboxRecord.id,
+    phase: "baseline fallback",
+  });
   await stopSandboxInstanceBestEffort(input.state.sandbox);
   if (input.launch.repo.snapshot_id) {
     await clearRepoSnapshotIfCurrent(
@@ -2131,9 +2150,11 @@ async function handleSandboxLaunchFailure(input: {
 }) {
   const failureState = await resolveSandboxLaunchFailureState(input);
 
-  await input.deps
-    .prepareSandboxBillingClose(input.state.streamSandboxRecord.id)
-    .catch(() => null);
+  await prepareSandboxLaunchBillingCloseBestEffort({
+    deps: input.deps,
+    recordId: input.state.streamSandboxRecord.id,
+    phase: "launch failure",
+  });
   await stopSandboxInstanceBestEffort(input.state.sandbox);
 
   const failed = await updateSandboxRecord(
@@ -2229,9 +2250,11 @@ async function executeSandboxLaunchStream(input: {
       sandbox: state.sandbox,
     });
     if (!installing) {
-      await input.deps
-        .prepareSandboxBillingClose(input.record.id)
-        .catch(() => null);
+      await prepareSandboxLaunchBillingCloseBestEffort({
+        deps: input.deps,
+        recordId: input.record.id,
+        phase: "install transition conflict",
+      });
       await stopSandboxInstanceBestEffort(state.sandbox);
       input.emit({
         type: "error",

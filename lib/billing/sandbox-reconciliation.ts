@@ -277,11 +277,14 @@ async function reconcileActiveSession(input: {
 
   const provider = readSandboxProviderSession(sandbox);
   if (provider.sessionId !== session.vercel_session_id) {
+    const replacementBoundary = provider.hasReliableStartedAt
+      ? provider.startedAt
+      : new Date(session.metered_through_at);
     const attempt = await deps.prepareClose(
       session.sandbox_record_id,
-      provider.startedAt
+      replacementBoundary
     );
-    await deps.finalizeClose(attempt, provider.startedAt);
+    await deps.finalizeClose(attempt, replacementBoundary);
     if (isSandboxProviderSessionTerminal(provider)) return "rotated";
     let synced;
     try {

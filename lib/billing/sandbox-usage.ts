@@ -39,6 +39,7 @@ export type SandboxProviderSession = {
   sessionId: string;
   status: string;
   startedAt: Date;
+  hasReliableStartedAt: boolean;
   stoppedAt: Date | null;
   updatedAt: Date;
 };
@@ -127,27 +128,27 @@ function singleRpcRow<T>(data: unknown): T | null {
   return (Array.isArray(data) ? data[0] : data) as T | null;
 }
 
-function validDate(value: Date | undefined, fallback: Date): Date {
-  return value instanceof Date && !Number.isNaN(value.getTime())
-    ? value
-    : fallback;
+function validDate(value: Date | undefined): Date | null {
+  return value instanceof Date && !Number.isNaN(value.getTime()) ? value : null;
 }
 
 export function readSandboxProviderSession(
   sandbox: SandboxBillingProvider
 ): SandboxProviderSession {
   const session = sandbox.currentSession();
-  const createdAt = validDate(session.createdAt, new Date());
+  const createdAt = validDate(session.createdAt);
+  const providerStartedAt = validDate(session.startedAt) ?? createdAt;
+  // An unknown start must never become `now`: rotation uses this timestamp as
+  // the predecessor's billing end. Epoch is an explicit conservative sentinel
+  // that downstream opening rejects and closing clamps to meteredThroughAt.
+  const startedAt = providerStartedAt ?? new Date(0);
   return {
     sessionId: session.sessionId,
     status: String(session.status ?? "unknown").toLowerCase(),
-    startedAt: validDate(session.startedAt, createdAt),
-    stoppedAt:
-      session.stoppedAt instanceof Date &&
-      !Number.isNaN(session.stoppedAt.getTime())
-        ? session.stoppedAt
-        : null,
-    updatedAt: validDate(session.updatedAt, createdAt),
+    startedAt,
+    hasReliableStartedAt: providerStartedAt !== null,
+    stoppedAt: validDate(session.stoppedAt),
+    updatedAt: validDate(session.updatedAt) ?? startedAt,
   };
 }
 
@@ -370,6 +371,25 @@ export async function syncSandboxBillingSession(
   const active = await deps.loadActiveSession(input.record.id);
   const platformBilled = input.record.billing_source === "platform";
   const billingEnabled = deps.isBillingEnabled();
+  if (active && active.vercel_session_id !== provider.sessionId) {
+    await closeActiveSession({
+      session: active,
+      endedAt: provider.hasReliableStartedAt
+        ? provider.startedAt
+        : new Date(active.metered_through_at),
+      // Opening freezes the decision that this provider session is paid.
+      // A later allowlist change applies to the replacement session, not the
+      // already-incurred tail and one-minute minimum on this one.
+      deps,
+    });
+  } else if (active) {
+    return {
+      metered: true,
+      reason: "already_open",
+      sessionId: active.id,
+    };
+  }
+
   const explicitAccess = platformBilled
     ? await deps.loadExplicitPlatformAccess(actorUserId)
     : null;
@@ -391,22 +411,6 @@ export async function syncSandboxBillingSession(
               }
         )
       : null;
-  if (active && active.vercel_session_id !== provider.sessionId) {
-    await closeActiveSession({
-      session: active,
-      endedAt: provider.startedAt,
-      // Opening freezes the decision that this provider session is paid.
-      // A later allowlist change applies to the replacement session, not the
-      // already-incurred tail and one-minute minimum on this one.
-      deps,
-    });
-  } else if (active) {
-    return {
-      metered: true,
-      reason: "already_open",
-      sessionId: active.id,
-    };
-  }
 
   if (!platformBilled) {
     return { metered: false, reason: "not_platform_billed", sessionId: null };
@@ -419,6 +423,9 @@ export async function syncSandboxBillingSession(
   }
   if (!account) {
     return { metered: false, reason: "no_billing_account", sessionId: null };
+  }
+  if (!provider.hasReliableStartedAt) {
+    throw new Error("provider session start timestamp is unavailable");
   }
 
   const sessionId = await deps.openSession({
