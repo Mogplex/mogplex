@@ -18,6 +18,9 @@ test("resolveLoginNext falls back to the sentinel for missing or unsafe values",
   assert.equal(resolveLoginNext("/%2e%2e/settings"), LOGIN_NEXT_FALLBACK);
   assert.equal(resolveLoginNext("/has whitespace"), LOGIN_NEXT_FALLBACK);
   assert.equal(resolveLoginNext("/has%20whitespace"), LOGIN_NEXT_FALLBACK);
+  assert.equal(resolveLoginNext("/\\\\evil.test"), LOGIN_NEXT_FALLBACK);
+  assert.equal(resolveLoginNext("/%5C%5Cevil.test"), LOGIN_NEXT_FALLBACK);
+  assert.equal(resolveLoginNext("/has\0control"), LOGIN_NEXT_FALLBACK);
   assert.equal(resolveLoginNext("/broken-%"), LOGIN_NEXT_FALLBACK);
 });
 
