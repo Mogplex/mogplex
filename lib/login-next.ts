@@ -9,6 +9,13 @@ export const LOGIN_NEXT_FALLBACK = "/";
 const ERROR_CODE = /^[a-z][a-z_]{0,63}$/;
 const PARENT_PATH_SEGMENT = /(?:^|\/)\.\.(?:$|\/)/;
 
+function hasControlOrBackslash(value: string) {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return character === "\\" || code <= 31 || code === 127;
+  });
+}
+
 export function defaultLoginNext(slug: string): string {
   return `/${slug}/projects/workspace`;
 }
@@ -27,6 +34,7 @@ export function resolveLoginNext(raw: string | null | undefined): string {
     return LOGIN_NEXT_FALLBACK;
   }
   if (/\s/.test(decoded)) return LOGIN_NEXT_FALLBACK;
+  if (hasControlOrBackslash(decoded)) return LOGIN_NEXT_FALLBACK;
   if (PARENT_PATH_SEGMENT.test(decoded)) return LOGIN_NEXT_FALLBACK;
 
   return raw;
