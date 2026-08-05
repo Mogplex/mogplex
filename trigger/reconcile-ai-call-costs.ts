@@ -385,6 +385,9 @@ async function reconcileAiCallCostRow(
       metadata: row.metadata,
     });
     if (metering.reason === "no_billing_account") {
+      // Keep the row retryable for the 24-hour reconciliation window and do
+      // not persist an unbilled final cost. The 12-hour warning leaves an
+      // operational response window without weakening billing enforcement.
       if (shouldWarnStale(row, now)) {
         captureMissingBillingAccountWarning(deps, row);
       }

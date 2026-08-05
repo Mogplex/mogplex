@@ -202,6 +202,8 @@ export function createAuthUserHandler(
       !explicitPlatformAccess.allowPlatformSandbox
     ) {
       try {
+        // This session payload is personal-scope. Team-scoped enforcement
+        // resolves access separately with the active product team id.
         platformAccess = await deps.loadUserPlatformAccess(
           profileId,
           undefined,
