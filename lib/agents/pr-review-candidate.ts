@@ -72,13 +72,23 @@ export type PrReviewCandidateResult = {
 };
 
 function countPatchLines(patch: string, prefix: "+" | "-") {
-  return patch
-    .split(/\r?\n/)
-    .filter(
-      (line) =>
-        line.startsWith(prefix) &&
-        !line.startsWith(`${prefix}${prefix}${prefix}`)
-    ).length;
+  return patch.split(/\r?\n/).filter((line) => {
+    const isFileHeader =
+      prefix === "+" ? line.startsWith("+++ ") : line.startsWith("--- ");
+    return line.startsWith(prefix) && !isFileHeader;
+  }).length;
+}
+
+function isGitPatchMetadataLine(line: string) {
+  return [
+    "diff --git ",
+    "index ",
+    "new file mode ",
+    "deleted file mode ",
+    "similarity index ",
+    "rename from ",
+    "rename to ",
+  ].some((prefix) => line.startsWith(prefix));
 }
 
 function reconstructFileFromPatch(patch: string) {
@@ -87,9 +97,10 @@ function reconstructFileFromPatch(patch: string) {
     .filter(
       (line) =>
         !line.startsWith("-") &&
-        !line.startsWith("+++") &&
+        !line.startsWith("+++ ") &&
         !line.startsWith("@@") &&
-        line !== "\\ No newline at end of file"
+        line !== "\\ No newline at end of file" &&
+        !isGitPatchMetadataLine(line)
     )
     .map((line) =>
       line.startsWith("+") || line.startsWith(" ") ? line.slice(1) : line

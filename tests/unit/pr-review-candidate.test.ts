@@ -70,11 +70,14 @@ test("candidate reconstruction omits unified diff metadata", async () => {
         {
           path: "src/widget.ts",
           patch: [
+            "diff --git a/src/widget.ts b/src/widget.ts",
+            "index 1234567..7654321 100644",
             "--- a/src/widget.ts",
             "+++ b/src/widget.ts",
-            "@@ -1 +1 @@",
+            "@@ -1,2 +1,2 @@",
             "-export const enabled = false;",
             "+export const enabled = true;",
+            "+  ++index;",
             "\\ No newline at end of file",
           ].join("\n"),
         },
@@ -89,7 +92,11 @@ test("candidate reconstruction omits unified diff metadata", async () => {
   ).json()) as { content: string };
   const content = Buffer.from(file.content, "base64").toString("utf8");
   assert.match(content, /export const enabled = true/);
-  assert.doesNotMatch(content, /\+\+\+|---|@@|No newline/);
+  assert.match(content, /\+\+index/);
+  assert.doesNotMatch(
+    content,
+    /diff --git|index 123|\+\+\+ b\/|--- a\/|@@|No newline/
+  );
 });
 
 test("candidate runner returns the structured production review contract", async () => {
@@ -112,6 +119,11 @@ test("candidate runner returns the structured production review contract", async
         baseRef: "main",
         baseSha: "0".repeat(40),
       });
+      const fileContent = await tools.fetchFile?.execute(
+        { path: "app/api/memories/route.ts" },
+        {}
+      );
+      assert.equal(fileContent, 'return admin.from("memories").select("*");');
       return {
         text: "One material issue found.",
         steps: [
