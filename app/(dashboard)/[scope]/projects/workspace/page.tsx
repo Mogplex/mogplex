@@ -296,6 +296,13 @@ function WorkspaceShell() {
   useEffect(() => {
     if (justSwitchedRef.current) {
       justSwitchedRef.current = false
+      const pendingSync = pendingPaneTreeSyncRef.current
+      if (pendingSync) {
+        updatePaneTree(pendingSync.root, pendingSync.activeId, {
+          sessionId: pendingSync.sessionId,
+        })
+        pendingPaneTreeSyncRef.current = null
+      }
       return
     }
     const pendingSync = {
