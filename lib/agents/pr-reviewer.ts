@@ -26,6 +26,7 @@ function githubHeaders(token: string) {
 }
 
 export function buildPRReviewTools(config: {
+  fetch?: typeof fetch;
   githubToken: string;
   owner: string;
   repo: string;
@@ -35,6 +36,7 @@ export function buildPRReviewTools(config: {
   defaultRef?: string;
   allowPostComment?: boolean;
 }) {
+  const request = config.fetch ?? fetch;
   const contentOwner = config.headOwner ?? config.owner;
   const contentRepo = config.headRepo ?? config.repo;
   let returnedPatchContextCharacters = 0;
@@ -98,7 +100,7 @@ export function buildPRReviewTools(config: {
         "Fetch pull request metadata, including title, body, and head/base refs",
       inputSchema: z.object({}),
       execute: async () => {
-        const res = await fetch(
+        const res = await request(
           `https://api.github.com/repos/${config.owner}/${config.repo}/pulls/${config.prNumber}`,
           { headers: githubHeaders(config.githubToken) }
         );
@@ -135,7 +137,7 @@ export function buildPRReviewTools(config: {
       }),
       execute: async ({ limit }) => {
         const perPage = Math.min(limit, 100);
-        const res = await fetch(
+        const res = await request(
           `https://api.github.com/repos/${config.owner}/${config.repo}/pulls/${config.prNumber}/files?per_page=${perPage}`,
           { headers: githubHeaders(config.githubToken) }
         );
@@ -178,7 +180,7 @@ export function buildPRReviewTools(config: {
         const query = effectiveRef
           ? `?ref=${encodeURIComponent(effectiveRef)}`
           : "";
-        const res = await fetch(
+        const res = await request(
           `https://api.github.com/repos/${contentOwner}/${contentRepo}/contents/${encodePath(path)}${query}`,
           { headers: githubHeaders(config.githubToken) }
         );
@@ -222,7 +224,7 @@ export function buildPRReviewTools(config: {
         "Post a top-level review comment on the pull request when you find issues worth flagging",
       inputSchema: z.object({ body: z.string() }),
       execute: async ({ body }) => {
-        const res = await fetch(
+        const res = await request(
           `https://api.github.com/repos/${config.owner}/${config.repo}/issues/${config.prNumber}/comments`,
           {
             method: "POST",
