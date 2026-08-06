@@ -33,6 +33,23 @@ async function getCanvasScale(page: Page) {
   });
 }
 
+async function normalizeCssColors(page: Page, colors: string[]) {
+  return page.evaluate((values) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw new Error("Canvas 2D context unavailable");
+
+    return values.map((value) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = value;
+      context.fillRect(0, 0, 1, 1);
+      return Array.from(context.getImageData(0, 0, 1, 1).data).join(",");
+    });
+  }, colors);
+}
+
 const flowPayload = {
   id: "flow-1",
   installation_id: 101,
@@ -246,6 +263,77 @@ async function setupWorkflowsPage(page: Page, theme: "light" | "dark") {
   );
 }
 
+test("app sidebar owns primary navigation and supports drag and keyboard resize", async ({
+  page,
+}) => {
+  await setupWorkflowsPage(page, "light");
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+
+  const sidebar = page.getByTestId("app-sidebar");
+  await expect(sidebar).toBeVisible();
+  for (const destination of [
+    "projects",
+    "agents",
+    "workflows",
+    "observability",
+    "settings",
+  ]) {
+    await expect(page.getByTestId(`app-nav-${destination}`)).toBeVisible();
+  }
+  await expect(page.getByTestId("app-nav-workflows")).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+
+  const initialBox = await sidebar.boundingBox();
+  expect(initialBox).not.toBeNull();
+  expect(initialBox!.width).toBeGreaterThan(120);
+  await expect(page.getByTestId("app-sidebar-toggle")).toHaveCount(0);
+
+  const resizer = page.getByTestId("app-sidebar-resizer");
+  await expect(resizer).toBeVisible();
+  const widthBeforeKeyboardResize = (await sidebar.boundingBox())!.width;
+  await resizer.press("ArrowRight");
+  const widthAfterKeyboardResize = (await sidebar.boundingBox())!.width;
+  expect(widthAfterKeyboardResize).toBe(widthBeforeKeyboardResize + 8);
+
+  const resizerBox = await resizer.boundingBox();
+  expect(resizerBox).not.toBeNull();
+  await page.mouse.move(
+    resizerBox!.x + resizerBox!.width / 2,
+    resizerBox!.y + 80
+  );
+  await page.mouse.down();
+  await page.mouse.move(56, resizerBox!.y + 80, { steps: 8 });
+  await page.mouse.up();
+  const widthAfterDrag = (await sidebar.boundingBox())!.width;
+  expect(widthAfterDrag).toBe(56);
+  await expect(sidebar).toHaveAttribute("data-compact", "true");
+  await expect(page.getByTestId("app-nav-workflows")).toHaveAttribute(
+    "aria-label",
+    "Workflows"
+  );
+  for (const compactLabel of [
+    ".app-sidebar-title",
+    ".app-sidebar-section-label",
+    ".app-sidebar-link-label",
+    ".app-sidebar-footer-label",
+  ]) {
+    await expect(sidebar.locator(compactLabel)).toHaveCount(0);
+  }
+  const compactSidebarBox = await sidebar.boundingBox();
+  const compactLogoBox = await sidebar
+    .locator(".app-sidebar-logo")
+    .boundingBox();
+  expect(compactSidebarBox).not.toBeNull();
+  expect(compactLogoBox).not.toBeNull();
+  expect(compactLogoBox!.x + compactLogoBox!.width).toBeLessThanOrEqual(
+    compactSidebarBox!.x + compactSidebarBox!.width
+  );
+});
+
 test("workflows pane keeps canvas chrome and native controls in dark mode", async ({
   page,
 }, testInfo) => {
@@ -350,7 +438,13 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
   expect(canvasThemeColors.canvasBackground).toBe(
     canvasThemeColors.themeBackground
   );
-  expect(canvasBackgroundLayers.backgroundColor).toBe("rgb(10, 10, 10)");
+  const [expectedDarkBackground, actualDarkBackground, expectedDarkCard] =
+    await normalizeCssColors(page, [
+      "#0b0c0b",
+      canvasBackgroundLayers.backgroundColor,
+      "#111210",
+    ]);
+  expect(actualDarkBackground).toBe(expectedDarkBackground);
   expect(canvasBackgroundLayers.dotsClass).toContain("dots");
   expect(canvasBackgroundLayers.dotFill).toBe("rgba(255, 255, 255, 0.2)");
   expect(canvasBackgroundLayers.vignetteBackground).toContain(
@@ -364,8 +458,14 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
     canvasBackgroundLayers.viewportZIndex
   );
   expect(nodeCardBackgrounds.length).toBeGreaterThan(0);
+  const normalizedDarkNodeCards = await normalizeCssColors(
+    page,
+    nodeCardBackgrounds
+  );
   expect(
-    nodeCardBackgrounds.every((background) => background.startsWith("rgb("))
+    normalizedDarkNodeCards.every(
+      (background) => background === expectedDarkCard
+    )
   ).toBe(true);
   expect(nodeTypeClasses.every(Boolean)).toBe(true);
   expect(
@@ -1028,12 +1128,27 @@ test("workflows builder and portalled surfaces follow the light app theme", asyn
     const styles = getComputedStyle(node);
     return {
       themeBackground: styles.getPropertyValue("--background").trim(),
+      backgroundColor: styles.backgroundColor,
       color: styles.color,
       colorScheme: styles.colorScheme,
     };
   });
-  expect(paneStyles.themeBackground).toBe("#fafafa");
-  expect(paneStyles.color).toBe("rgb(24, 24, 27)");
+  const [
+    expectedLightBackground,
+    actualLightBackground,
+    expectedLightForeground,
+    actualLightForeground,
+    expectedLightCard,
+  ] = await normalizeCssColors(page, [
+    "#f7f5ef",
+    paneStyles.backgroundColor,
+    "#191712",
+    paneStyles.color,
+    "#fdfcf9",
+  ]);
+  expect(paneStyles.themeBackground).not.toBe("");
+  expect(actualLightBackground).toBe(expectedLightBackground);
+  expect(actualLightForeground).toBe(expectedLightForeground);
   expect(paneStyles.colorScheme).toBe("light");
 
   const canvasThemeColors = await page
@@ -1053,7 +1168,9 @@ test("workflows builder and portalled surfaces follow the light app theme", asyn
   const canvasBg = await page
     .locator(".react-flow__background")
     .evaluate((node) => getComputedStyle(node).backgroundColor);
-  expect(canvasBg).toBe("rgb(250, 250, 250)");
+  expect((await normalizeCssColors(page, [canvasBg]))[0]).toBe(
+    expectedLightBackground
+  );
 
   // Node cards must sit on a light surface too — they are the one place that
   // still paints its own background rather than inheriting the canvas.
@@ -1063,9 +1180,13 @@ test("workflows builder and portalled surfaces follow the light app theme", asyn
       nodes.map((node) => getComputedStyle(node).backgroundColor)
     );
   expect(nodeCardBackgrounds.length).toBeGreaterThan(0);
+  const normalizedLightNodeCards = await normalizeCssColors(
+    page,
+    nodeCardBackgrounds
+  );
   expect(
-    nodeCardBackgrounds.every(
-      (background) => background === "rgb(255, 255, 255)"
+    normalizedLightNodeCards.every(
+      (background) => background === expectedLightCard
     )
   ).toBe(true);
   await page.screenshot({
@@ -1092,9 +1213,11 @@ test("workflows builder and portalled surfaces follow the light app theme", asyn
   });
   expect(menuStyles.insidePane).toBe(false);
   expect(menuStyles.hasFlowsTheme).toBe(true);
-  expect(menuStyles.themeBackground).toBe("#fafafa");
+  expect(menuStyles.themeBackground).not.toBe("");
   expect(menuStyles.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
-  expect(menuStyles.color).toBe("rgb(24, 24, 27)");
+  expect((await normalizeCssColors(page, [menuStyles.color]))[0]).toBe(
+    expectedLightForeground
+  );
   await page.keyboard.press("Escape");
   await expect(contextMenu).not.toBeVisible();
 
@@ -1116,6 +1239,10 @@ test("workflows builder and portalled surfaces follow the light app theme", asyn
   });
   expect(dialogStyles.insidePane).toBe(false);
   expect(dialogStyles.hasFlowsTheme).toBe(true);
-  expect(dialogStyles.backgroundColor).toBe("rgb(250, 250, 250)");
-  expect(dialogStyles.color).toBe("rgb(24, 24, 27)");
+  const [dialogBackground, dialogForeground] = await normalizeCssColors(page, [
+    dialogStyles.backgroundColor,
+    dialogStyles.color,
+  ]);
+  expect(dialogBackground).toBe(expectedLightBackground);
+  expect(dialogForeground).toBe(expectedLightForeground);
 });

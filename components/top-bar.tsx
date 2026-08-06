@@ -5,8 +5,7 @@ import { useParams, usePathname, useRouter } from "next/navigation"
 import { scopedHref } from "@/lib/scoped-href"
 import useSWR from "swr"
 import { useUser } from "@/hooks/use-user"
-import { useIsMobile } from "@/hooks/use-mobile"
-import { MogplexWordmark } from "@/components/brand/mogplex-wordmark"
+import { MogplexMark } from "@/components/brand/mogplex-mark"
 import { ScopeMenuItems } from "@/components/scope-switcher"
 import { SlackFill } from "@/components/settings/icons"
 import { ThemeSwitcher } from "@/components/theme-switcher"
@@ -24,25 +23,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useCommandPalette } from "@/components/command-palette-provider"
+import { buildAppNavItems, isAppNavItemActive } from "@/lib/app-navigation"
 
 const DOCS_URL = "https://docs.mogplex.com/"
-
-const NAV_ITEM_DEFS = [
-  { id: "projects", label: "Projects", path: "/projects/workspace", subpath: "/projects" },
-  { id: "agents", label: "Agents", path: "/agents/roster", subpath: "/agents" },
-  { id: "workflows", label: "Workflows", path: "/workflows", subpath: "/workflows" },
-  { id: "observability", label: "Observability", path: "/observability", subpath: "/observability" },
-  { id: "settings", label: "Settings", path: "/settings", subpath: "/settings" },
-] as const
-
-function buildNavItems(scope: string) {
-  return NAV_ITEM_DEFS.map((item) => ({
-    id: item.id,
-    label: item.label,
-    href: scopedHref(scope, item.path),
-    match: scopedHref(scope, item.subpath),
-  }))
-}
 
 type SlackInstallationsResponse = {
   installations: Array<{ teamId: string; teamName: string | null }>
@@ -59,8 +42,10 @@ export function TopBar() {
   const pathname = usePathname()
   const router = useRouter()
   const { scope } = useParams<{ scope: string }>()
-  const navItems = useMemo(() => buildNavItems(scope), [scope])
-  const isMobile = useIsMobile()
+  const navItems = useMemo(() => buildAppNavItems(scope), [scope])
+  const activeNavItem = navItems.find((item) =>
+    isAppNavItemActive(pathname, item.match)
+  )
   const { open: openCommandPalette } = useCommandPalette()
   const {
     data: slackInstallationsData,
@@ -91,33 +76,32 @@ export function TopBar() {
       : null)
 
   return (
-    <div className="flex h-12 items-center gap-1 border-b border-border bg-background/88 px-3 backdrop-blur-xl supports-[backdrop-filter]:bg-background/78">
+    <header className="app-topbar flex h-12 items-center gap-1 border-b border-border bg-card px-3">
       <Link
         href={scopedHref(scope, "/projects/workspace")}
-        className="mr-2 flex items-center text-foreground/80 transition-colors hover:text-foreground"
+        className="app-brand-mark mr-2 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-brand-accent-hover lg:hidden"
         aria-label="Mogplex home"
       >
-        <MogplexWordmark height={18} />
+        <MogplexMark className="size-5" />
       </Link>
 
-      {isMobile ? (
-        <Sheet>
+      <Sheet>
           <SheetTrigger asChild>
-            <button className="ml-2 rounded-md border border-border bg-card px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
+            <button className="rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] tracking-[0.12em] text-muted-foreground uppercase hover:bg-accent hover:text-foreground lg:hidden">
               |||
             </button>
           </SheetTrigger>
           <SheetContent side="left" className="w-56 p-0 pt-12">
             <nav className="flex flex-col">
               {navItems.map((item) => {
-                const isActive = pathname === item.match || pathname.startsWith(`${item.match}/`)
+                const isActive = isAppNavItemActive(pathname, item.match)
                 return (
                   <Link
                     key={item.id}
                     href={item.href}
                     className={`px-4 py-3 text-sm border-b border-border transition-colors ${
                       isActive
-                        ? "bg-accent text-foreground"
+                        ? "bg-primary/10 font-medium text-primary"
                         : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
                     }`}
                   >
@@ -128,31 +112,21 @@ export function TopBar() {
             </nav>
           </SheetContent>
         </Sheet>
-      ) : (
-        <nav className="flex items-center gap-0.5 ml-4">
-          {navItems.map((item) => {
-            const isActive = pathname === item.match || pathname.startsWith(`${item.match}/`)
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                className={`rounded-md px-3 py-1.5 text-[13px] transition-colors ${
-                  isActive
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
-                }`}
-              >
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-      )}
+
+      <div className="hidden min-w-0 items-center gap-2 lg:flex">
+        <span className="font-mono text-[9px] tracking-[0.14em] text-muted-foreground uppercase">
+          Mogplex
+        </span>
+        <span className="text-border">/</span>
+        <span className="truncate text-[12px] font-medium text-foreground">
+          {activeNavItem?.label || "Workspace"}
+        </span>
+      </div>
 
       <div className="ml-auto flex items-center gap-2 lg:gap-3">
         <button
           onClick={openCommandPalette}
-          className="hidden h-8 w-[150px] cursor-pointer items-center justify-between rounded-lg border border-border bg-card/60 pl-3 pr-1.5 text-sm text-muted-foreground hover:bg-accent/70 hover:text-foreground sm:inline-flex lg:w-[200px]"
+          className="app-command-search hidden h-8 w-[150px] cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 pl-3 pr-1.5 font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase hover:border-primary/40 hover:bg-accent/70 hover:text-foreground sm:inline-flex lg:w-[200px]"
         >
           Search
           <kbd className="inline-flex items-center gap-0.5 rounded bg-accent px-1.5 py-0.5 text-[11px] text-muted-foreground">
@@ -165,7 +139,7 @@ export function TopBar() {
             href={githubPrimaryAction.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center rounded-md border border-border bg-card/60 px-3 py-1.5 text-[11px] text-foreground/72 hover:bg-accent hover:text-foreground"
+          className="hidden items-center rounded-md border border-border bg-card px-3 py-1.5 font-mono text-[10px] tracking-[0.06em] text-foreground/72 uppercase hover:border-primary/40 hover:bg-accent hover:text-foreground sm:inline-flex"
           >
             {githubPrimaryAction.label}
           </a>
@@ -178,9 +152,9 @@ export function TopBar() {
             <DropdownMenuTrigger asChild>
               <button aria-label="User menu" className="rounded-md outline-none focus:ring-2 focus:ring-ring">
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt="" className="h-[26px] w-[26px] rounded-md ring-1 ring-border" />
+                  <img src={user.avatar_url} alt="" className="h-7 w-7 rounded-md ring-1 ring-border transition-shadow hover:ring-primary/60" />
                 ) : (
-                  <div className="h-[26px] w-[26px] rounded-md border border-border bg-accent" />
+                  <div className="h-7 w-7 rounded-md border border-border bg-accent" />
                 )}
               </button>
             </DropdownMenuTrigger>
@@ -251,6 +225,6 @@ export function TopBar() {
           <a href="/login" className="text-[13px] text-muted-foreground hover:text-foreground">Reconnect</a>
         )}
       </div>
-    </div>
+    </header>
   )
 }

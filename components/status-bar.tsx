@@ -90,7 +90,7 @@ export function StatusBar() {
     return (
       <Sheet>
         <SheetTrigger asChild>
-          <div className="flex min-h-8 items-center justify-between border-t border-border bg-card px-3 pb-[env(safe-area-inset-bottom)] text-[11px] text-muted-foreground">
+          <div className="app-statusbar flex min-h-8 items-center justify-between border-t border-border bg-card px-3 pb-[env(safe-area-inset-bottom)] font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
             <div className="flex items-center gap-2">
               <span className="text-accent-green">●</span>
               <span className="truncate">{activeRepo?.full_name || nextStep}</span>
@@ -124,7 +124,7 @@ export function StatusBar() {
   }
 
   return (
-    <div className="flex h-10 items-center gap-4 overflow-x-auto border-t border-border bg-card px-3 text-[12px] text-muted-foreground whitespace-nowrap">
+    <div className="app-statusbar flex h-8 items-center gap-4 overflow-x-auto border-t border-border bg-card px-3 font-mono text-[10px] tracking-wide text-muted-foreground uppercase whitespace-nowrap">
       <div className="flex shrink-0 items-center gap-[5px]">
         <span className="text-accent-green">●</span>
         <span>mogplex v0.1.0</span>

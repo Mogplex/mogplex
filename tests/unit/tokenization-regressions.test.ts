@@ -17,6 +17,19 @@ const asciiHeroUrl = new URL(
   "../../components/marketing/ascii-hero.tsx",
   import.meta.url
 );
+const dashboardLayoutUrl = new URL(
+  "../../app/(dashboard)/layout.tsx",
+  import.meta.url
+);
+const topBarUrl = new URL("../../components/top-bar.tsx", import.meta.url);
+const statusBarUrl = new URL(
+  "../../components/status-bar.tsx",
+  import.meta.url
+);
+const appSidebarUrl = new URL(
+  "../../components/app-sidebar.tsx",
+  import.meta.url
+);
 
 test("tokenized shadows preserve their pre-tokenization values", async () => {
   const [globals, modelsSection, notFound] = await Promise.all([
@@ -71,4 +84,45 @@ test("highlight.js built-ins retain their distinct fuchsia token", async () => {
     globals,
     /\.hljs-built_in \{\s*color: var\(--accent-fuchsia\);\s*\}/
   );
+});
+
+test("application theme tokens carry the Mogplex paper and orange brand roles", async () => {
+  const globals = await readFile(globalsUrl, "utf8");
+
+  assert.match(globals, /--brand-accent: oklch\(66\.57% 0\.225 36\.57\);/);
+  assert.match(globals, /--background: oklch\(95\.88% 0\.0086 84\.57\);/);
+  assert.match(globals, /--primary: var\(--brand-accent\);/);
+  assert.match(globals, /--ring: var\(--brand-accent\);/);
+  assert.match(globals, /::selection \{\s*background: var\(--brand-accent\);/);
+});
+
+test("dashboard chrome exposes the branded shell and compact navigation mark", async () => {
+  const [globals, dashboardLayout, topBar, statusBar, appSidebar] =
+    await Promise.all([
+      readFile(globalsUrl, "utf8"),
+      readFile(dashboardLayoutUrl, "utf8"),
+      readFile(topBarUrl, "utf8"),
+      readFile(statusBarUrl, "utf8"),
+      readFile(appSidebarUrl, "utf8"),
+    ]);
+
+  assert.match(dashboardLayout, /className="app-shell /);
+  assert.match(dashboardLayout, /className="app-shell-content /);
+  assert.match(topBar, /import \{ MogplexMark \}/);
+  assert.match(topBar, /className="app-brand-mark /);
+  assert.match(topBar, /className="app-topbar /);
+  assert.match(statusBar, /className="app-statusbar /);
+  assert.match(dashboardLayout, /<AppSidebar \/>/);
+  assert.match(appSidebar, /data-testid="app-sidebar"/);
+  assert.match(appSidebar, /data-testid="app-sidebar-resizer"/);
+  assert.match(appSidebar, /role="separator"/);
+  assert.match(appSidebar, /const MIN_WIDTH = 56/);
+  assert.match(appSidebar, /data-compact=\{compact \? "true" : "false"\}/);
+  assert.doesNotMatch(
+    appSidebar,
+    /Collapse navigation|Expand navigation|SIDEBAR_COLLAPSED_KEY/
+  );
+  assert.match(appSidebar, /app-nav-\$\{item\.id\}/);
+  assert.match(globals, /\.app-sidebar-link\.is-active/);
+  assert.match(globals, /\.app-sidebar\[data-compact="true"\]/);
 });
