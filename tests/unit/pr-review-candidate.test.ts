@@ -61,6 +61,37 @@ test("candidate GitHub transport serves only synthetic PR data", async () => {
   );
 });
 
+test("candidate reconstruction omits unified diff metadata", async () => {
+  const candidate = prReviewCandidateInputSchema.parse({
+    ...candidateInput,
+    input: {
+      ...candidateInput.input,
+      changedFiles: [
+        {
+          path: "src/widget.ts",
+          patch: [
+            "--- a/src/widget.ts",
+            "+++ b/src/widget.ts",
+            "@@ -1 +1 @@",
+            "-export const enabled = false;",
+            "+export const enabled = true;",
+            "\\ No newline at end of file",
+          ].join("\n"),
+        },
+      ],
+    },
+  });
+  const request = createPrReviewCandidateGithubFetch(candidate);
+  const file = (await (
+    await request(
+      "https://api.github.com/repos/mogplex-quality/candidate/contents/src/widget.ts?ref=quality-head"
+    )
+  ).json()) as { content: string };
+  const content = Buffer.from(file.content, "base64").toString("utf8");
+  assert.match(content, /export const enabled = true/);
+  assert.doesNotMatch(content, /\+\+\+|---|@@|No newline/);
+});
+
 test("candidate runner returns the structured production review contract", async () => {
   const result = await runPrReviewCandidate(candidateInput, {
     model: "test/model",
@@ -128,4 +159,11 @@ test("PR review run spec keeps static production instructions", () => {
   });
   assert.match(spec.system, /Always call reportReview exactly once/);
   assert.equal(spec.prompt, "Review PR #42.");
+});
+
+test("PR review run spec preserves legacy metadata rendering", () => {
+  assert.equal(
+    buildPrReviewRunSpec({ prNumber: undefined }).prompt,
+    "Review PR #undefined."
+  );
 });

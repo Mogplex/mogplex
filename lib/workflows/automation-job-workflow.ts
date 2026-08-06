@@ -1547,7 +1547,7 @@ function buildPromptForJob(
     // so Anthropic prompt caching can fire. See issue #530.
     return buildPrReviewRunSpec({
       flowContextBlock,
-      prNumber: Number(metadata.pr_number),
+      prNumber: metadata.pr_number,
       systemPrompt,
     });
   }

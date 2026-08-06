@@ -10,7 +10,7 @@ export const PR_REVIEW_STATIC_INSTRUCTIONS = [
 
 export function buildPrReviewRunSpec(input: {
   flowContextBlock?: string | null;
-  prNumber: number;
+  prNumber: unknown;
   systemPrompt?: string | null;
 }) {
   return {

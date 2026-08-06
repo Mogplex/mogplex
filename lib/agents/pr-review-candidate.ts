@@ -83,7 +83,13 @@ function countPatchLines(patch: string, prefix: "+" | "-") {
 function reconstructFileFromPatch(patch: string) {
   const lines = patch
     .split(/\r?\n/)
-    .filter((line) => !line.startsWith("-") && !line.startsWith("@@"))
+    .filter(
+      (line) =>
+        !line.startsWith("-") &&
+        !line.startsWith("+++") &&
+        !line.startsWith("@@") &&
+        line !== "\\ No newline at end of file"
+    )
     .map((line) =>
       line.startsWith("+") || line.startsWith(" ") ? line.slice(1) : line
     );
