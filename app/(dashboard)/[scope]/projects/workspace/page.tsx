@@ -38,6 +38,10 @@ import {
   getSessionSandboxRestartCandidate,
   type SessionSandboxRestartCandidate,
 } from "@/lib/sandbox/session-auto-restart"
+import {
+  createPaneTreeSessionSync,
+  matchesPaneTreeSession,
+} from "@/lib/pane-tree-session-sync"
 
 type ActiveRepoProps = {
   id: string
@@ -286,23 +290,15 @@ function WorkspaceShell() {
     }
   }, [activeSessionId, loadTree])
 
-  // Save pane tree changes back to session store (skip immediately after session switch)
-  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const pendingPaneTreeSyncRef = useRef<{
-    sessionId: string
-    root: typeof root
-    activeId: string
-  } | null>(null)
+  // Debounce pane-tree persistence while preserving the originating session.
+  const paneTreeSessionSync = useMemo(
+    () => createPaneTreeSessionSync({ updatePaneTree }),
+    [updatePaneTree]
+  )
   useEffect(() => {
     if (justSwitchedRef.current) {
       justSwitchedRef.current = false
-      const pendingSync = pendingPaneTreeSyncRef.current
-      if (pendingSync) {
-        updatePaneTree(pendingSync.root, pendingSync.activeId, {
-          sessionId: pendingSync.sessionId,
-        })
-        pendingPaneTreeSyncRef.current = null
-      }
+      paneTreeSessionSync.flush()
       return
     }
     const pendingSync = {
@@ -310,28 +306,19 @@ function WorkspaceShell() {
       root,
       activeId,
     }
-    pendingPaneTreeSyncRef.current = pendingSync
-    clearTimeout(syncTimeoutRef.current)
-    syncTimeoutRef.current = setTimeout(() => {
-      if (pendingPaneTreeSyncRef.current !== pendingSync) return
-      updatePaneTree(root, activeId, { sessionId: activeSessionId })
-      pendingPaneTreeSyncRef.current = null
-      syncTimeoutRef.current = undefined
-    }, 100)
-    return () => clearTimeout(syncTimeoutRef.current)
-  }, [root, activeId, activeSessionId, updatePaneTree])
+    const session = useSessionsStore
+      .getState()
+      .sessions.find((candidate) => candidate.id === activeSessionId)
+    if (matchesPaneTreeSession(pendingSync, session)) return
+    paneTreeSessionSync.schedule(pendingSync)
+    return paneTreeSessionSync.cancelTimer
+  }, [root, activeId, activeSessionId, paneTreeSessionSync])
 
   useEffect(
     () => () => {
-      clearTimeout(syncTimeoutRef.current)
-      const pendingSync = pendingPaneTreeSyncRef.current
-      if (!pendingSync) return
-      updatePaneTree(pendingSync.root, pendingSync.activeId, {
-        sessionId: pendingSync.sessionId,
-      })
-      pendingPaneTreeSyncRef.current = null
+      paneTreeSessionSync.flush()
     },
-    [updatePaneTree]
+    [paneTreeSessionSync]
   )
 
   const paneCount = countPanes(root)
