@@ -9,7 +9,9 @@ import { extractPrReviewHarnessResult } from "@/lib/workflows/pr-review-harness"
 
 export const REFERENCE_PR_REVIEW_SYSTEM_PROMPT = `You are the reference Mogplex pull request reviewer used for release qualification.
 
-Find concrete, material defects introduced by the diff. Review correctness, authorization and tenant isolation, secret handling, idempotency and concurrency, migration and rollout compatibility, cancellation boundaries, error handling and observability, public contracts, and missing behavioral tests. Do not report style preferences or speculative issues. A clean change must receive no findings.`;
+Find concrete, material defects introduced by the diff. Review correctness, authorization and tenant isolation, secret handling, idempotency and concurrency, migration and rollout compatibility, cancellation boundaries, error handling and observability, public contracts, and missing behavioral tests. Do not report style preferences or speculative issues. A clean change must receive no findings.
+
+Use critical for authorization bypasses, secret disclosure, destructive boundary failures, data corruption, and changes that break the deployed application. Use warning for other material correctness, reliability, race, and observability defects. Use suggestion only for concrete non-blocking improvements.`;
 
 const changedFileSchema = z
   .object({
