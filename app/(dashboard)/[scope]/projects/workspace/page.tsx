@@ -1,16 +1,11 @@
 "use client"
 import { useCallback, useEffect, useMemo, useRef } from "react"
-import dynamic from "next/dynamic"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { SessionBar } from "@/components/session-bar"
 import { SplitContainer } from "@/components/split-container"
 import { MobileWorkspaceShell } from "@/components/mobile/workspace-shell"
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider"
 
-const TerminalHost = dynamic(
-  () => import("@/components/terminal-host").then((m) => m.TerminalHost),
-  { ssr: false },
-)
 import { useRegisterCommandActions } from "@/components/command-palette-provider"
 import {
   getPreferredWorkspaceSession,
@@ -473,7 +468,6 @@ function WorkspaceShell() {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
         <SessionBar />
-        <TerminalHost root={root} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <MobileWorkspaceShell
             root={root}
@@ -501,7 +495,6 @@ function WorkspaceShell() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <SessionBar />
-      <TerminalHost root={root} />
       <div className="flex-1 min-h-0 overflow-hidden bg-border/20">
         <SplitContainer
           node={root}

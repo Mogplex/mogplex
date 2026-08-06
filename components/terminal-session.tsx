@@ -86,22 +86,35 @@ type PendingDevServerConfirmation = {
   previewUrl: string;
 };
 
-let fallbackContainer: HTMLDivElement | null = null;
+const fallbackContainers = new Map<string, HTMLDivElement>();
 
 // Sessions rendered by TerminalHost survive pane remounts, but when no pane
 // currently mounts a terminal we still need a valid DOM target for createPortal
-// to avoid React warnings. An offscreen fallback keeps the wterm state alive
-// without rendering anything visible.
-function getFallbackContainer() {
+// to avoid React warnings. The fallback retains the pane's last dimensions so
+// wterm's auto-resize does not collapse its grid and destroy the visible buffer.
+function getFallbackContainer(
+  paneId: string,
+  size: { width: number; height: number } | null
+) {
   if (typeof document === "undefined") return null;
-  if (fallbackContainer && fallbackContainer.isConnected) return fallbackContainer;
-  const el = document.createElement("div");
-  el.setAttribute("data-terminal-session-fallback", "");
-  el.style.cssText =
-    "position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;visibility:hidden;";
-  document.body.appendChild(el);
-  fallbackContainer = el;
-  return el;
+  let fallback = fallbackContainers.get(paneId);
+  if (!fallback?.isConnected) {
+    fallback = document.createElement("div");
+    fallback.setAttribute("data-terminal-session-fallback", paneId);
+    fallback.style.cssText =
+      "position:fixed;left:-100000px;top:0;overflow:hidden;pointer-events:none;visibility:hidden;";
+    document.body.appendChild(fallback);
+    fallbackContainers.set(paneId, fallback);
+  }
+  fallback.style.width = `${size?.width ?? 1}px`;
+  fallback.style.height = `${size?.height ?? 1}px`;
+  return fallback;
+}
+
+function removeFallbackContainer(paneId: string) {
+  const fallback = fallbackContainers.get(paneId);
+  fallback?.remove();
+  fallbackContainers.delete(paneId);
 }
 
 function describeExecFallback(
@@ -872,9 +885,11 @@ export function TerminalSession({ paneId }: { paneId: string }) {
 
   // When XTermPane remounts (e.g. root-pane split restructures the tree), anchor
   // briefly becomes null before the new div registers. Using the last non-null
-  // anchor prevents portaling into the 0×0 hidden fallback which corrupts the
-  // xterm buffer on resize.
+  // anchor avoids an unnecessary fallback handoff while React replaces the div.
   const lastAnchorRef = useRef<HTMLElement | null>(null);
+  const lastAnchorSizeRef = useRef<{ width: number; height: number } | null>(
+    null
+  );
   const hasConnectedAnchorRef = useRef(false);
   const lastPortalBindingKeyRef = useRef<string | null>(null);
   const portalBindingKey = `${paneId}:${terminalSessionKey}:${sandboxId ?? ""}:${repoId ?? ""}:${workingBranch ?? ""}`;
@@ -888,6 +903,22 @@ export function TerminalSession({ paneId }: { paneId: string }) {
     hasConnectedAnchorRef.current = true;
   }
 
+  useLayoutEffect(() => {
+    if (!anchor?.isConnected) return;
+    const rememberAnchorSize = () => {
+      if (!anchor.isConnected) return;
+      const width = anchor.clientWidth;
+      const height = anchor.clientHeight;
+      if (width > 0 && height > 0) {
+        lastAnchorSizeRef.current = { width, height };
+      }
+    };
+    rememberAnchorSize();
+    const observer = new ResizeObserver(rememberAnchorSize);
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, [anchor]);
+
   const portalTarget = useMemo(
     () => {
       if (!hasConnectedAnchorRef.current && !anchor?.isConnected) {
@@ -897,10 +928,10 @@ export function TerminalSession({ paneId }: { paneId: string }) {
       return resolveTerminalPortalTarget({
         anchor,
         lastAnchor: lastAnchorRef.current,
-        fallback: getFallbackContainer(),
+        fallback: getFallbackContainer(paneId, lastAnchorSizeRef.current),
       });
     },
-    [anchor]
+    [anchor, paneId]
   );
 
   useLayoutEffect(() => {
@@ -913,14 +944,16 @@ export function TerminalSession({ paneId }: { paneId: string }) {
   useEffect(() => {
     return () => {
       lastAnchorRef.current = null;
+      lastAnchorSizeRef.current = null;
       hasConnectedAnchorRef.current = false;
       lastPortalBindingKeyRef.current = null;
       const host = portalHostRef.current;
       if (host?.parentElement) {
         host.parentElement.removeChild(host);
       }
+      removeFallbackContainer(paneId);
     };
-  }, []);
+  }, [paneId]);
 
   const portalHost = portalHostRef.current;
 
