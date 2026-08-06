@@ -76,8 +76,9 @@ test("candidate reconstruction omits unified diff metadata", async () => {
             "+++ b/src/widget.ts",
             "@@ -1,2 +1,2 @@",
             "-export const enabled = false;",
+            "--- removedIndex;",
             "+export const enabled = true;",
-            "+  ++index;",
+            "+++ index;",
             "\\ No newline at end of file",
           ].join("\n"),
         },
@@ -92,11 +93,19 @@ test("candidate reconstruction omits unified diff metadata", async () => {
   ).json()) as { content: string };
   const content = Buffer.from(file.content, "base64").toString("utf8");
   assert.match(content, /export const enabled = true/);
-  assert.match(content, /\+\+index/);
+  assert.match(content, /\+\+ index/);
   assert.doesNotMatch(
     content,
     /diff --git|index 123|\+\+\+ b\/|--- a\/|@@|No newline/
   );
+
+  const files = (await (
+    await request(
+      "https://api.github.com/repos/mogplex-quality/candidate/pulls/1/files"
+    )
+  ).json()) as Array<{ additions: number; deletions: number }>;
+  assert.equal(files[0]?.additions, 2);
+  assert.equal(files[0]?.deletions, 2);
 });
 
 test("candidate runner returns the structured production review contract", async () => {
@@ -108,6 +117,7 @@ test("candidate runner returns the structured production review contract", async
         string,
         { execute: (input: unknown, options: unknown) => Promise<unknown> }
       >;
+      assert.equal(tools.postComment, undefined);
       const pullRequest = await tools.getPullRequest?.execute({}, {});
       assert.deepEqual(pullRequest, {
         number: 1,
