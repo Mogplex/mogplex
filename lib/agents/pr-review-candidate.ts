@@ -72,11 +72,21 @@ export type PrReviewCandidateResult = {
 };
 
 function countPatchLines(patch: string, prefix: "+" | "-") {
-  return patch.split(/\r?\n/).filter((line) => {
+  let inHunk = false;
+  let count = 0;
+
+  for (const line of patch.split(/\r?\n/)) {
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
     const isFileHeader =
-      prefix === "+" ? line.startsWith("+++ ") : line.startsWith("--- ");
-    return line.startsWith(prefix) && !isFileHeader;
-  }).length;
+      !inHunk &&
+      (prefix === "+" ? line.startsWith("+++ ") : line.startsWith("--- "));
+    if (line.startsWith(prefix) && !isFileHeader) count += 1;
+  }
+
+  return count;
 }
 
 function isGitPatchMetadataLine(line: string) {
@@ -92,19 +102,27 @@ function isGitPatchMetadataLine(line: string) {
 }
 
 function reconstructFileFromPatch(patch: string) {
-  const lines = patch
-    .split(/\r?\n/)
-    .filter(
-      (line) =>
-        !line.startsWith("-") &&
-        !line.startsWith("+++ ") &&
-        !line.startsWith("@@") &&
-        line !== "\\ No newline at end of file" &&
-        !isGitPatchMetadataLine(line)
-    )
-    .map((line) =>
+  let inHunk = false;
+  const lines: string[] = [];
+
+  for (const line of patch.split(/\r?\n/)) {
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    if (
+      line.startsWith("-") ||
+      (!inHunk && line.startsWith("+++ ")) ||
+      line === "\\ No newline at end of file" ||
+      isGitPatchMetadataLine(line)
+    ) {
+      continue;
+    }
+    lines.push(
       line.startsWith("+") || line.startsWith(" ") ? line.slice(1) : line
     );
+  }
+
   return [
     "// Synthetic quality fixture reconstructed from the candidate-visible patch.",
     ...lines,
