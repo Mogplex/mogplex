@@ -7,7 +7,7 @@ export const DEFAULT_TITLE =
 export const DEFAULT_DESCRIPTION =
   "Mogplex runs agents that plan, build, test, and review code in per-run sandboxes. Pull requests come out behind your gates.";
 export const SOCIAL_IMAGE = {
-  url: "/opengraph-image.png",
+  url: "/opengraph-image.png?v=20260806-1",
   width: 1200,
   height: 630,
   alt: "Mogplex open-source software engine and inspectable agent run",
