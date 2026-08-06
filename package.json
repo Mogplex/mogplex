@@ -28,6 +28,7 @@
     "harness:sync": "node scripts/sync-harness-configs.mjs --write",
     "harness:smoke": "tsx scripts/harness-smoke-test.ts",
     "mcp:smoke": "tsx scripts/smoke-mogplex-mcp.ts",
+    "quality:pr-review": "tsx scripts/run-pr-review-candidate.ts",
     "git:cleanup": "pnpm exec tsx scripts/post-merge-cleanup.ts",
     "trigger:dev": "pnpm exec tsx scripts/trigger-cli.ts dev",
     "trigger:deploy": "pnpm exec tsx scripts/trigger-cli.ts deploy",
