@@ -52,6 +52,7 @@ type CandidateProviderOptions = Parameters<
 export type PrReviewCandidateResult = {
   suite: "pr-review";
   caseId: string;
+  status: "completed" | "failed";
   hasIssues: boolean;
   summary: string;
   findings: Array<{
@@ -232,13 +233,29 @@ export async function runPrReviewCandidate(
       toolResults: step.toolResults,
     })),
   });
+  const candidateMetadata = {
+    modelId: options.modelId,
+    durationMs: Date.now() - startedAt,
+    inputTokens: result.totalUsage.inputTokens ?? null,
+    outputTokens: result.totalUsage.outputTokens ?? null,
+    execution: metadata as unknown as Record<string, unknown>,
+  };
   if (harnessResult.source !== "structured") {
-    throw new Error("PR review candidate did not call reportReview");
+    return {
+      suite: "pr-review",
+      caseId: candidate.caseId,
+      status: "failed",
+      hasIssues: false,
+      summary: "Candidate did not return structured reportReview output.",
+      findings: [],
+      metadata: candidateMetadata,
+    };
   }
 
   return {
     suite: "pr-review",
     caseId: candidate.caseId,
+    status: "completed",
     hasIssues: harnessResult.reviewOutcome.hasIssues,
     summary: harnessResult.reviewOutcome.summary,
     findings: harnessResult.reviewOutcome.findings.map((finding) => ({
@@ -248,12 +265,6 @@ export async function runPrReviewCandidate(
       ...(finding.path ? { path: finding.path } : {}),
       ...(finding.line ? { line: finding.line } : {}),
     })),
-    metadata: {
-      modelId: options.modelId,
-      durationMs: Date.now() - startedAt,
-      inputTokens: result.totalUsage.inputTokens ?? null,
-      outputTokens: result.totalUsage.outputTokens ?? null,
-      execution: metadata as unknown as Record<string, unknown>,
-    },
+    metadata: candidateMetadata,
   };
 }

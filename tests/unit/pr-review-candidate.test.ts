@@ -146,10 +146,30 @@ test("candidate runner returns the structured production review contract", async
   });
 
   assert.equal(result.caseId, "missing-tenant-filter");
+  assert.equal(result.status, "completed");
   assert.equal(result.hasIssues, true);
   assert.equal(result.findings[0]?.severity, "critical");
   assert.equal(result.metadata.inputTokens, 12);
   assert.equal(result.metadata.execution.phase, "quality_pr_review");
+});
+
+test("candidate runner records a missing structured report as failed evidence", async () => {
+  const result = await runPrReviewCandidate(candidateInput, {
+    model: "test/model",
+    modelId: "test/model",
+    generateText: (async () =>
+      ({
+        text: "Review ended without the required tool call.",
+        steps: [],
+        totalUsage: { inputTokens: 4, outputTokens: 3 },
+        providerMetadata: {},
+      }) as never) as typeof import("ai").generateText,
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.hasIssues, false);
+  assert.deepEqual(result.findings, []);
+  assert.match(result.summary, /did not return structured reportReview/);
 });
 
 test("PR review run spec keeps static production instructions", () => {
