@@ -1,16 +1,33 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { TerminalSession } from "@/components/terminal-session";
+import dynamic from "next/dynamic";
+import { useSessionsStore } from "@/hooks/use-sessions";
 import { useTerminalSessionsStore } from "@/hooks/use-terminal-sessions";
-import { collectPanes, type TreeNode } from "@/hooks/use-split-panes";
+import { collectPanes } from "@/hooks/use-split-panes";
 
-// Mounts a TerminalSession for every terminal pane id currently in the tree.
-// Sessions live at the top of the app so their React subtree (and the wterm
-// WASM instance inside it) survives any pane tree reshape. Each session
-// renders its DOM via createPortal into the anchor div managed by XTermPane.
-export function TerminalHost({ root }: { root: TreeNode }) {
+const TerminalSession = dynamic(
+  () =>
+    import("@/components/terminal-session").then((module) =>
+      module.TerminalSession
+    ),
+  { ssr: false }
+);
+
+// Mounted by the scoped layout so the active TerminalSession survives both
+// pane-tree reshapes and navigation away from the workspace route. Each
+// session renders its DOM via createPortal into the anchor managed by
+// XTermPane, or into an offscreen fallback while the workspace is hidden.
+export function TerminalHost() {
+  const root = useSessionsStore((state) => {
+    const activeSession =
+      state.sessions.find(
+        (session) => session.id === state.activeSessionId
+      ) ?? state.sessions[0];
+    return activeSession?.paneTree;
+  });
   const paneIds = useMemo(() => {
+    if (!root) return [];
     const ids = collectPanes(root)
       .filter((pane) => pane.type === "terminal")
       .map((pane) => pane.id);

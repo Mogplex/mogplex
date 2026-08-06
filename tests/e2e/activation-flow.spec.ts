@@ -464,6 +464,59 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
   await expect(page.locator('[data-pane-type="files"]')).toHaveCount(0);
 });
 
+test("terminal session survives navigation away from the workspace", async ({
+  page,
+}) => {
+  await initializeTrackedEvents(page);
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page);
+
+  await page.goto(workspacePath);
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("home-sync-repos").click();
+  await page.getByTestId("home-open-workspace-repo-1").click();
+
+  const terminal = page
+    .locator('[data-pane-type="terminal"]')
+    .locator(".wterm");
+  await expect(terminal).toContainText("Terminal Ready");
+  await terminal.focus();
+  await page.keyboard.type("route-persistence-marker");
+  await expect(terminal).toContainText("route-persistence-marker");
+
+  const terminalHost = page.locator("[data-terminal-session-host]").first();
+  const terminalHostHandle = await terminalHost.elementHandle();
+  if (!terminalHostHandle) {
+    throw new Error("Terminal session host was not mounted");
+  }
+
+  await page.getByRole("link", { name: "Repositories", exact: true }).click();
+  await expect(page).toHaveURL(
+    `/${connectedUser.username}/projects/repositories`
+  );
+  expect(
+    await terminalHostHandle.evaluate((element) => element.isConnected)
+  ).toBe(true);
+
+  await page.getByRole("link", { name: "Workspace", exact: true }).click();
+  await expect(page).toHaveURL(workspacePath);
+  await expect(terminal).toContainText("route-persistence-marker");
+
+  const returnedTerminalHostHandle = await page
+    .locator("[data-terminal-session-host]")
+    .first()
+    .elementHandle();
+  if (!returnedTerminalHostHandle) {
+    throw new Error("Terminal session host did not return to the workspace");
+  }
+  expect(
+    await page.evaluate(
+      ([before, after]) => before === after,
+      [terminalHostHandle, returnedTerminalHostHandle]
+    )
+  ).toBe(true);
+});
+
 test("workspace chat conversation persists after reload", async ({ page }) => {
   await initializeTrackedEvents(page);
   await enableScopedE2EAuth(page);

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { ActiveScopeProvider } from "@/components/active-scope-provider";
+import { TerminalHost } from "@/components/terminal-host";
 import {
   isImageAssetScopeSegment,
   parseScopeContextHeaders,
@@ -42,6 +43,7 @@ export default async function ScopeLayout({
 
   return (
     <ActiveScopeProvider teamId={scope.kind === "team" ? scope.teamId : null}>
+      <TerminalHost />
       {children}
     </ActiveScopeProvider>
   );
