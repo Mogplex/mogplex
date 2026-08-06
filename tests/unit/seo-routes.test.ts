@@ -6,7 +6,9 @@ import {
   NO_INDEX_ROBOTS,
   PRIVATE_NO_INDEX_ROBOTS,
   PUBLIC_CONTENT_ROUTES,
+  SOCIAL_IMAGE,
   absoluteUrl,
+  buildMarketingMetadata,
 } from "../../lib/seo";
 
 test("sitemap exposes only public content routes", async () => {
@@ -27,6 +29,41 @@ test("sitemap routes stay aligned with the public route policy", () => {
   for (const route of PUBLIC_CONTENT_ROUTES) {
     assert.equal(isPublicRoutePath(route.path), true, route.path);
   }
+});
+
+test("marketing metadata includes the shared Open Graph image", () => {
+  const metadata = buildMarketingMetadata({ path: "/" });
+
+  assert.deepEqual(metadata.openGraph?.images, [SOCIAL_IMAGE]);
+  assert.deepEqual(metadata.twitter?.images, [SOCIAL_IMAGE]);
+});
+
+test("web app manifest exposes installable and maskable icons", async () => {
+  const { default: manifest } = await import("../../app/manifest");
+  const metadata = manifest();
+
+  assert.equal(metadata.start_url, "/");
+  assert.equal(metadata.display, "standalone");
+  assert.deepEqual(metadata.icons, [
+    {
+      src: "/web-app-manifest-192x192.png",
+      sizes: "192x192",
+      type: "image/png",
+      purpose: "any",
+    },
+    {
+      src: "/web-app-manifest-512x512.png",
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "any",
+    },
+    {
+      src: "/web-app-manifest-512x512.png",
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "maskable",
+    },
+  ]);
 });
 
 test("robots blocks auth, API, and scoped dashboard surfaces", async () => {

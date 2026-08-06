@@ -16,6 +16,8 @@ test("isPublicRoutePath exact-matches metadata files", () => {
   assert.equal(isPublicRoutePath("/robots.txt/more"), false);
   assert.equal(isPublicRoutePath("/sitemap.xml"), true);
   assert.equal(isPublicRoutePath("/sitemap.xml/more"), false);
+  assert.equal(isPublicRoutePath("/manifest.webmanifest"), true);
+  assert.equal(isPublicRoutePath("/manifest.webmanifest/more"), false);
 });
 
 test("isPublicRoutePath exact-matches /api/cli/latest", () => {
