@@ -38,6 +38,10 @@ import {
   getSessionSandboxRestartCandidate,
   type SessionSandboxRestartCandidate,
 } from "@/lib/sandbox/session-auto-restart"
+import {
+  createPaneTreeSessionSync,
+  matchesPaneTreeSession,
+} from "@/lib/pane-tree-session-sync"
 
 type ActiveRepoProps = {
   id: string
@@ -286,19 +290,39 @@ function WorkspaceShell() {
     }
   }, [activeSessionId, loadTree])
 
-  // Save pane tree changes back to session store (skip immediately after session switch)
-  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Debounce pane-tree persistence while preserving the originating session.
+  const paneTreeSessionSync = useMemo(
+    () => createPaneTreeSessionSync({ updatePaneTree }),
+    [updatePaneTree]
+  )
   useEffect(() => {
     if (justSwitchedRef.current) {
       justSwitchedRef.current = false
+      paneTreeSessionSync.flush()
       return
     }
-    clearTimeout(syncTimeoutRef.current)
-    syncTimeoutRef.current = setTimeout(() => {
-      updatePaneTree(root, activeId)
-    }, 100)
-    return () => clearTimeout(syncTimeoutRef.current)
-  }, [root, activeId, updatePaneTree])
+    const pendingSync = {
+      sessionId: activeSessionId,
+      root,
+      activeId,
+    }
+    const session = useSessionsStore
+      .getState()
+      .sessions.find((candidate) => candidate.id === activeSessionId)
+    if (matchesPaneTreeSession(pendingSync, session)) {
+      paneTreeSessionSync.discard()
+      return
+    }
+    paneTreeSessionSync.schedule(pendingSync)
+    return paneTreeSessionSync.cancelTimer
+  }, [root, activeId, activeSessionId, paneTreeSessionSync])
+
+  useEffect(
+    () => () => {
+      paneTreeSessionSync.flush()
+    },
+    [paneTreeSessionSync]
+  )
 
   const paneCount = countPanes(root)
 

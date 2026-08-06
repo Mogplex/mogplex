@@ -86,35 +86,16 @@ type PendingDevServerConfirmation = {
   previewUrl: string;
 };
 
-const fallbackContainers = new Map<string, HTMLDivElement>();
-
 // Sessions rendered by TerminalHost survive pane remounts, but when no pane
 // currently mounts a terminal we still need a valid DOM target for createPortal
 // to avoid React warnings. The fallback retains the pane's last dimensions so
 // wterm's auto-resize does not collapse its grid and destroy the visible buffer.
-function getFallbackContainer(
-  paneId: string,
-  size: { width: number; height: number } | null
-) {
-  if (typeof document === "undefined") return null;
-  let fallback = fallbackContainers.get(paneId);
-  if (!fallback?.isConnected) {
-    fallback = document.createElement("div");
-    fallback.setAttribute("data-terminal-session-fallback", paneId);
-    fallback.style.cssText =
-      "position:fixed;left:-100000px;top:0;overflow:hidden;pointer-events:none;visibility:hidden;";
-    document.body.appendChild(fallback);
-    fallbackContainers.set(paneId, fallback);
-  }
-  fallback.style.width = `${size?.width ?? 1}px`;
-  fallback.style.height = `${size?.height ?? 1}px`;
+function createFallbackContainer(paneId: string) {
+  const fallback = document.createElement("div");
+  fallback.setAttribute("data-terminal-session-fallback", paneId);
+  fallback.style.cssText =
+    "position:fixed;left:-100000px;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none;visibility:hidden;";
   return fallback;
-}
-
-function removeFallbackContainer(paneId: string) {
-  const fallback = fallbackContainers.get(paneId);
-  fallback?.remove();
-  fallbackContainers.delete(paneId);
 }
 
 function describeExecFallback(
@@ -187,6 +168,8 @@ export function TerminalSession({ paneId }: { paneId: string }) {
   const ptyConnectedRef = useRef(false);
   const paintedBannerMessageRef = useRef<string | null>(null);
   const [ptyConnected, setPtyConnected] = useState(false);
+  const [fallbackContainer, setFallbackContainer] =
+    useState<HTMLDivElement | null>(null);
   const portalHostRef = useRef<HTMLDivElement | null>(null);
 
   if (!portalHostRef.current && typeof document !== "undefined") {
@@ -904,6 +887,13 @@ export function TerminalSession({ paneId }: { paneId: string }) {
   }
 
   useLayoutEffect(() => {
+    const fallback = createFallbackContainer(paneId);
+    document.body.appendChild(fallback);
+    setFallbackContainer(fallback);
+    return () => fallback.remove();
+  }, [paneId]);
+
+  useLayoutEffect(() => {
     if (!anchor?.isConnected) return;
     const rememberAnchorSize = () => {
       if (!anchor.isConnected) return;
@@ -911,13 +901,17 @@ export function TerminalSession({ paneId }: { paneId: string }) {
       const height = anchor.clientHeight;
       if (width > 0 && height > 0) {
         lastAnchorSizeRef.current = { width, height };
+        if (fallbackContainer) {
+          fallbackContainer.style.width = `${width}px`;
+          fallbackContainer.style.height = `${height}px`;
+        }
       }
     };
     rememberAnchorSize();
     const observer = new ResizeObserver(rememberAnchorSize);
     observer.observe(anchor);
     return () => observer.disconnect();
-  }, [anchor]);
+  }, [anchor, fallbackContainer]);
 
   const portalTarget = useMemo(
     () => {
@@ -928,10 +922,10 @@ export function TerminalSession({ paneId }: { paneId: string }) {
       return resolveTerminalPortalTarget({
         anchor,
         lastAnchor: lastAnchorRef.current,
-        fallback: getFallbackContainer(paneId, lastAnchorSizeRef.current),
+        fallback: fallbackContainer,
       });
     },
-    [anchor, paneId]
+    [anchor, fallbackContainer]
   );
 
   useLayoutEffect(() => {
@@ -951,7 +945,6 @@ export function TerminalSession({ paneId }: { paneId: string }) {
       if (host?.parentElement) {
         host.parentElement.removeChild(host);
       }
-      removeFallbackContainer(paneId);
     };
   }, [paneId]);
 
