@@ -78,6 +78,25 @@ test("pane tree sync flushes a cancelled debounce exactly once", () => {
   assert.equal(controller.flush(), false);
 });
 
+test("pane tree sync discards a cancelled snapshot without a later flush", () => {
+  const timers = createTimerHarness();
+  const updates: PendingPaneTreeSync<Tree>[] = [];
+  const controller = createPaneTreeSessionSync<Tree>({
+    updatePaneTree: (root, activeId, { sessionId }) => {
+      updates.push({ root, activeId, sessionId });
+    },
+    scheduleTimer: timers.scheduleTimer,
+    clearTimer: timers.clearTimer,
+  });
+
+  controller.schedule(buildSync("session-1", "obsolete"));
+  controller.discard();
+  timers.callbacks.get(1)?.();
+
+  assert.equal(controller.flush(), false);
+  assert.deepEqual(updates, []);
+});
+
 test("pane tree sync recognizes a tree already loaded from its session", () => {
   const pending = buildSync("session-1", "loaded");
 

@@ -66,6 +66,10 @@ export function createPaneTreeSessionSync<TTree>({
       }, delayMs);
     },
     cancelTimer,
+    discard() {
+      cancelTimer();
+      pending = null;
+    },
     flush() {
       cancelTimer();
       if (!pending) return false;

@@ -309,7 +309,10 @@ function WorkspaceShell() {
     const session = useSessionsStore
       .getState()
       .sessions.find((candidate) => candidate.id === activeSessionId)
-    if (matchesPaneTreeSession(pendingSync, session)) return
+    if (matchesPaneTreeSession(pendingSync, session)) {
+      paneTreeSessionSync.discard()
+      return
+    }
     paneTreeSessionSync.schedule(pendingSync)
     return paneTreeSessionSync.cancelTimer
   }, [root, activeId, activeSessionId, paneTreeSessionSync])
