@@ -22,7 +22,7 @@ env:
 jobs:
   migrate-production:
     name: migrate-production
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     # Migrations are optional while the database moves from Supabase to Neon:
     # without SUPABASE_DB_URL the job succeeds with a warning so the Vercel
@@ -89,7 +89,7 @@ jobs:
   deploy-production:
     name: deploy-production
     needs: migrate-production
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
       - name: Check out repository
