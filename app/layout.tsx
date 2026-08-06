@@ -12,6 +12,7 @@ import {
   DEFAULT_TITLE,
   SITE_NAME,
   SITE_URL,
+  SOCIAL_IMAGE,
 } from '@/lib/seo'
 import {
   THEME_COOKIE_NAME,
@@ -35,8 +36,11 @@ export const metadata: Metadata = {
   title: DEFAULT_TITLE,
   description: DEFAULT_DESCRIPTION,
   icons: {
-    icon: '/favicon.ico',
-    apple: '/apple-icon.png',
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon.png', type: 'image/png', sizes: '512x512' },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180' }],
   },
   openGraph: {
     title: DEFAULT_TITLE,
@@ -44,11 +48,13 @@ export const metadata: Metadata = {
     url: SITE_URL,
     siteName: SITE_NAME,
     type: 'website',
+    images: [SOCIAL_IMAGE],
   },
   twitter: {
     card: 'summary_large_image',
     title: DEFAULT_TITLE,
     description: DEFAULT_DESCRIPTION,
+    images: [SOCIAL_IMAGE],
   },
 }
 

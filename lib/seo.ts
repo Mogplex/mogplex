@@ -6,6 +6,12 @@ export const DEFAULT_TITLE =
   "Mogplex | The open-source engine for building and maintaining software";
 export const DEFAULT_DESCRIPTION =
   "Mogplex runs agents that plan, build, test, and review code in per-run sandboxes. Pull requests come out behind your gates.";
+export const SOCIAL_IMAGE = {
+  url: "/opengraph-image.png",
+  width: 1200,
+  height: 630,
+  alt: "Mogplex open-source software engine and inspectable agent run",
+} as const;
 
 type PublicContentRoute = {
   path: `/${string}`;
@@ -110,11 +116,13 @@ export function buildMarketingMetadata({
       url: absoluteUrl(path),
       siteName: SITE_NAME,
       type: "website",
+      images: [SOCIAL_IMAGE],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      images: [SOCIAL_IMAGE],
     },
   };
 }
