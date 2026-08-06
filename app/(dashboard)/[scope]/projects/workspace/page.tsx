@@ -288,17 +288,44 @@ function WorkspaceShell() {
 
   // Save pane tree changes back to session store (skip immediately after session switch)
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const pendingPaneTreeSyncRef = useRef<{
+    sessionId: string
+    root: typeof root
+    activeId: string
+  } | null>(null)
   useEffect(() => {
     if (justSwitchedRef.current) {
       justSwitchedRef.current = false
       return
     }
+    const pendingSync = {
+      sessionId: activeSessionId,
+      root,
+      activeId,
+    }
+    pendingPaneTreeSyncRef.current = pendingSync
     clearTimeout(syncTimeoutRef.current)
     syncTimeoutRef.current = setTimeout(() => {
-      updatePaneTree(root, activeId)
+      if (pendingPaneTreeSyncRef.current !== pendingSync) return
+      updatePaneTree(root, activeId, { sessionId: activeSessionId })
+      pendingPaneTreeSyncRef.current = null
+      syncTimeoutRef.current = undefined
     }, 100)
     return () => clearTimeout(syncTimeoutRef.current)
-  }, [root, activeId, updatePaneTree])
+  }, [root, activeId, activeSessionId, updatePaneTree])
+
+  useEffect(
+    () => () => {
+      clearTimeout(syncTimeoutRef.current)
+      const pendingSync = pendingPaneTreeSyncRef.current
+      if (!pendingSync) return
+      updatePaneTree(pendingSync.root, pendingSync.activeId, {
+        sessionId: pendingSync.sessionId,
+      })
+      pendingPaneTreeSyncRef.current = null
+    },
+    [updatePaneTree]
+  )
 
   const paneCount = countPanes(root)
 

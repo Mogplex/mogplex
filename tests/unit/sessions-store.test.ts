@@ -169,6 +169,35 @@ test("setPendingSessionSandboxBranch clears the bound sandbox and targets a bran
   assert.equal(useSessionsStore.getState().activeSessionId, activeSessionId);
 });
 
+test("updatePaneTree can flush a specific inactive workspace session", async () => {
+  const useSessionsStore = await resetSessionsStore();
+  const workspaceSessionId = useSessionsStore
+    .getState()
+    .openWorkspaceSession(buildRepo());
+  useSessionsStore.getState().createSession("other");
+  const { activeSessionId } = useSessionsStore.getState();
+  const flushedTree = {
+    ...createDefaultTree(),
+    name: "Flushed workspace tree",
+  };
+
+  useSessionsStore.getState().updatePaneTree(flushedTree, "p-home", {
+    sessionId: workspaceSessionId,
+  });
+
+  const state = useSessionsStore.getState();
+  const workspaceSession = state.sessions.find(
+    (session) => session.id === workspaceSessionId
+  );
+  const activeSession = state.sessions.find(
+    (session) => session.id === activeSessionId
+  );
+
+  assert.equal(workspaceSession?.paneTree, flushedTree);
+  assert.notEqual(activeSession?.paneTree, flushedTree);
+  assert.equal(state.activeSessionId, activeSessionId);
+});
+
 test("resetSessionLayout preserves repo context for workspace sessions", async () => {
   const useSessionsStore = await resetSessionsStore();
   const repo = buildRepo({ root_directory: "apps/web" });
