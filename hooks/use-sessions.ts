@@ -74,7 +74,11 @@ type SessionsState = {
   switchSession: (id: string) => void;
   renameSession: (id: string, name: string) => void;
   resetSessionLayout: (id: string) => void;
-  updatePaneTree: (tree: TreeNode, activeId: string) => void;
+  updatePaneTree: (
+    tree: TreeNode,
+    activeId: string,
+    options?: { sessionId?: string }
+  ) => void;
   getActiveSession: () => Session;
 };
 
@@ -480,10 +484,10 @@ export const useSessionsStore = create<SessionsState>()(
         }));
       },
 
-      updatePaneTree: (tree: TreeNode, activeId: string) => {
+      updatePaneTree: (tree, activeId, options) => {
         set((state) => ({
           sessions: state.sessions.map((s) =>
-            s.id === state.activeSessionId
+            s.id === (options?.sessionId ?? state.activeSessionId)
               ? { ...s, paneTree: tree, activeId }
               : s
           ),

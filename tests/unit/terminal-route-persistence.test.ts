@@ -18,6 +18,6 @@ test("the scoped layout owns the terminal host across route navigation", async (
   ]);
 
   assert.match(scopeLayout, /import \{ TerminalHost \}/);
-  assert.match(scopeLayout, /<TerminalHost \/>/);
+  assert.match(scopeLayout, /<TerminalHost(?:\s[^>]*)?\s*\/>/);
   assert.doesNotMatch(workspacePage, /TerminalHost/);
 });
