@@ -282,9 +282,25 @@ These are the repo’s expected TypeScript rules and conventions.
 
 ### Tests
 
+[TESTING.md](./TESTING.md) is the binding testing policy — required coverage
+per change class, what counts as a real test, and the public/private test
+boundary. The rules agents most often need:
+
 - Keep test fixtures typed
 - Prefer small builder helpers for repeated fixture shapes
 - When fixing a regression, add a test that would have failed before the fix
+- Before finalizing a new test, break the change under test and confirm the
+  test fails; a test that has never gone red proves nothing
+- Migrations and trigger changes require a `tests/db/` case; user-visible
+  behavior changes require an e2e regression spec
+- A behavior-changing PR with no test changes must say why with a `No-tests:`
+  line in its description (the `pr-protection` workflow blocks it otherwise)
+- Mocking internal modules fails lint (`testing/no-internal-mocks`); mockable
+  boundaries are declared in `tests/support/mockable-boundaries.mjs`
+- Public correctness tests live in this repo and must run (or self-skip
+  cleanly) without hosted-service secrets; release-qualification evals,
+  thresholds, and baselines for the hosted service are private and never go
+  here
 
 ## Working Style for Agents
 

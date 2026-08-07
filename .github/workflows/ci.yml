@@ -2,6 +2,9 @@ name: ci
 
 on:
   pull_request:
+  # Required for the merge queue: queued PRs are tested as merge groups, and
+  # required checks that never report on merge_group block the queue forever.
+  merge_group:
   push:
     branches:
       - main

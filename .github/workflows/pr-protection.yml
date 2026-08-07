@@ -1,0 +1,67 @@
+name: pr-protection
+
+# TESTING.md enforcement: a PR that changes behavior-bearing source must also
+# change tests, or say why with a "No-tests:" line in the PR body.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  # In the merge queue this check is intentionally a no-op: the PR-level run
+  # already gated queue entry, and merge groups have no PR body to inspect.
+  # The job-level `if` below skips it on merge_group, and GitHub counts a
+  # skipped job as satisfying a required check.
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-protection-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests-accompany-features:
+    name: tests-accompany-features
+    if: github.event_name == 'pull_request'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Require tests or a stated reason
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          # Passed via env so PR body content is never shell-interpolated.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+
+          source_changed=$(grep -E '^(app|lib|components|hooks|trigger)/.*\.(ts|tsx)$' <<<"$changed" \
+            | grep -Ev '\.(test|spec)\.tsx?$' || true)
+          tests_changed=$(grep -E '(^tests/|\.(test|spec)\.tsx?$)' <<<"$changed" || true)
+
+          if [ -z "$source_changed" ] || [ -n "$tests_changed" ]; then
+            echo "OK: no behavior-bearing source changed, or tests changed alongside it."
+            exit 0
+          fi
+
+          if grep -Eq '^No-tests:[[:space:]]*[^[:space:]]' <<<"$PR_BODY"; then
+            echo "OK: PR body states why no test changes accompany this change:"
+            grep -E '^No-tests:' <<<"$PR_BODY"
+            exit 0
+          fi
+
+          echo "This PR changes behavior-bearing source but no test files:"
+          echo ""
+          sed 's/^/  /' <<<"$source_changed"
+          echo ""
+          echo "Per TESTING.md, add or update tests in the tier where the behavior"
+          echo "lives, or add a line to the PR body explaining why none are needed:"
+          echo ""
+          echo "  No-tests: <reason, naming the existing suite if one covers this>"
+          exit 1

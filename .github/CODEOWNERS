@@ -6,3 +6,6 @@
 /lib/connections/ @charlesrhoward
 /lib/platform-access.ts @charlesrhoward
 /supabase/migrations/ @charlesrhoward
+
+# Widening the mock boundary allowlist weakens the testing policy (TESTING.md).
+/tests/support/mockable-boundaries.mjs @charlesrhoward
