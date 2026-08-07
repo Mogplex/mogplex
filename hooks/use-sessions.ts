@@ -2,287 +2,41 @@
 import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import {
-  createDefaultTree,
-  collectPaneIds,
-  createWorkspaceTree,
-  findFirstPaneIdByType,
-  retargetSandboxPanes,
-  updatePaneNode,
-} from "./use-split-panes";
-import type { PaneType, PreviewPaneTab, TreeNode } from "./use-split-panes";
 import type { Repo } from "@/lib/types";
+import type { PersistedSessionsState, SessionsState } from "./session-types";
+import {
+  applyWorkspaceSessionRepoState,
+  buildWorkspaceSession,
+  findExistingWorkspaceSession,
+  getPreferredWorkspaceSession,
+  isWorkspaceSession,
+  makeSession,
+  resolveWorkspaceSessionFocus,
+} from "./session-helpers";
+import {
+  migratePersistedSessionsV0,
+  migratePersistedSessionsV1,
+  migratePersistedSessionsV2,
+} from "./session-migrations";
+import {
+  collectPaneIds,
+  createDefaultTree,
+  createWorkspaceTree,
+  retargetSandboxPanes,
+} from "./use-split-panes";
 
-const SESSION_COLORS = [
-  "green",
-  "blue",
-  "amber",
-  "violet",
-  "cyan",
-  "rose",
-  "orange",
-  "teal",
-] as const;
-type SessionColor = (typeof SESSION_COLORS)[number];
-
-export type Session = {
-  id: string;
-  index: number;
-  name: string;
-  color: SessionColor;
-  paneTree: TreeNode;
-  activeId: string;
-  activeRepoId?: string;
-  activeRepo?: Repo | null;
-  activeSandboxId?: string | null;
-  pendingSandboxBranch?: string | null;
-};
-
-type WorkspaceSessionOptions = {
-  previewTab?: PreviewPaneTab;
-  focusPaneType?: PaneType;
-  sandboxId?: string | null;
-  pendingSandboxBranch?: string | null;
-};
-
-type SessionsState = {
-  sessions: Session[];
-  activeSessionId: string;
-  createSession: (name?: string) => void;
-  createWorkspaceSession: (
-    repo: Repo,
-    tree: TreeNode,
-    options?: WorkspaceSessionOptions
-  ) => string;
-  openWorkspaceSession: (
-    repo: Repo,
-    options?: WorkspaceSessionOptions
-  ) => string;
-  setPendingSessionSandboxBranch: (
-    pendingSandboxBranch: string | null,
-    options?: { sessionId?: string | null }
-  ) => void;
-  setActiveSessionSandbox: (
-    sandboxId: string | null,
-    options?: {
-      previousSandboxId?: string | null;
-      replacePaneSandboxIds?: boolean;
-      sessionId?: string | null;
-    }
-  ) => void;
-  closeSession: (id: string) => void;
-  switchSession: (id: string) => void;
-  renameSession: (id: string, name: string) => void;
-  resetSessionLayout: (id: string) => void;
-  updatePaneTree: (
-    tree: TreeNode,
-    activeId: string,
-    options?: { sessionId?: string }
-  ) => void;
-  getActiveSession: () => Session;
-};
-
-function makeSession(index: number, name?: string): Session {
-  return {
-    id: crypto.randomUUID(),
-    index,
-    name: name || `session-${index}`,
-    color: SESSION_COLORS[index % SESSION_COLORS.length],
-    paneTree: createDefaultTree(),
-    activeId: "p-home",
-  };
-}
+export type {
+  Session,
+  SessionColor,
+  WorkspaceSessionOptions,
+} from "./session-types";
+export { SESSION_COLORS } from "./session-types";
+export {
+  getPreferredWorkspaceSession,
+  isWorkspaceSession,
+} from "./session-helpers";
 
 const initialSession = makeSession(0, "main");
-
-export function isWorkspaceSession(
-  session: Session | null | undefined
-): session is Session & {
-  activeRepoId: string;
-  activeRepo: Repo;
-} {
-  return Boolean(session?.activeRepoId && session.activeRepo);
-}
-
-export function getPreferredWorkspaceSession(
-  sessions: Session[],
-  activeSessionId: string
-): Session | null {
-  const activeSession =
-    sessions.find((session) => session.id === activeSessionId) || sessions[0];
-  if (isWorkspaceSession(activeSession)) return activeSession;
-  return sessions.find((session) => isWorkspaceSession(session)) || null;
-}
-
-function matchesSessionSandbox(
-  session: Session,
-  repoId: string,
-  sandboxId?: string | null,
-  pendingSandboxBranch?: string | null
-) {
-  if (session.activeRepoId !== repoId) return false;
-  if (sandboxId) return session.activeSandboxId === sandboxId;
-  if (pendingSandboxBranch) {
-    return (
-      !session.activeSandboxId &&
-      session.pendingSandboxBranch === pendingSandboxBranch
-    );
-  }
-  return !session.activeSandboxId;
-}
-
-function getWorkspaceFocusPaneType(options?: {
-  previewTab?: PreviewPaneTab;
-  focusPaneType?: PaneType;
-}) {
-  return (
-    options?.focusPaneType ?? (options?.previewTab ? "preview" : undefined)
-  );
-}
-
-function applyPreviewTabToWorkspaceTree(
-  tree: TreeNode,
-  previewTab?: PreviewPaneTab
-) {
-  if (!previewTab) {
-    return tree;
-  }
-
-  const previewPaneId = findFirstPaneIdByType(tree, "preview");
-  return previewPaneId
-    ? updatePaneNode(tree, previewPaneId, { previewTab })
-    : tree;
-}
-
-function resolveWorkspaceActivePaneId(
-  tree: TreeNode,
-  focusPaneType?: PaneType
-) {
-  const fallbackPaneId = collectPaneIds(tree)[0] ?? "p1";
-  return focusPaneType
-    ? (findFirstPaneIdByType(tree, focusPaneType) ?? fallbackPaneId)
-    : fallbackPaneId;
-}
-
-function resolveWorkspaceSessionFocus(
-  tree: TreeNode,
-  options?: { previewTab?: PreviewPaneTab; focusPaneType?: PaneType }
-) {
-  const focusPaneType = getWorkspaceFocusPaneType(options);
-  const nextTree = applyPreviewTabToWorkspaceTree(tree, options?.previewTab);
-  const activeId = resolveWorkspaceActivePaneId(nextTree, focusPaneType);
-
-  return { tree: nextTree, activeId };
-}
-
-function getNextSessionIndex(sessions: Session[]) {
-  return sessions.length > 0
-    ? Math.max(...sessions.map((session) => session.index)) + 1
-    : 0;
-}
-
-function buildWorkspaceSessionName(repo: Repo) {
-  const repoShort = repo.full_name.split("/").pop() || repo.full_name;
-  return repo.root_directory
-    ? `${repoShort}:${repo.root_directory.split("/").pop()}`
-    : repoShort;
-}
-
-function deriveWorkspaceSessionSandboxState(options?: WorkspaceSessionOptions) {
-  const activeSandboxId = options?.sandboxId ?? null;
-  return {
-    activeSandboxId,
-    pendingSandboxBranch: activeSandboxId
-      ? null
-      : (options?.pendingSandboxBranch ?? null),
-  };
-}
-
-function findExistingWorkspaceSession(
-  sessions: Session[],
-  repo: Repo,
-  options?: WorkspaceSessionOptions
-) {
-  return sessions.find((session) =>
-    matchesSessionSandbox(
-      session,
-      repo.id,
-      options?.sandboxId,
-      options?.pendingSandboxBranch
-    )
-  );
-}
-
-function applyWorkspaceSessionRepoState(
-  session: Session,
-  repo: Repo,
-  options?: WorkspaceSessionOptions
-) {
-  return {
-    ...session,
-    activeRepo: repo,
-    ...deriveWorkspaceSessionSandboxState(options),
-  };
-}
-
-function buildWorkspaceSession(
-  repo: Repo,
-  sessions: Session[],
-  paneTree: TreeNode,
-  activeId: string,
-  options?: WorkspaceSessionOptions
-): Session {
-  const nextIndex = getNextSessionIndex(sessions);
-  return {
-    id: crypto.randomUUID(),
-    index: nextIndex,
-    name: buildWorkspaceSessionName(repo),
-    color: SESSION_COLORS[nextIndex % SESSION_COLORS.length],
-    paneTree,
-    activeId,
-    activeRepoId: repo.id,
-    activeRepo: repo,
-    ...deriveWorkspaceSessionSandboxState(options),
-  };
-}
-
-type PersistedSessionsState = {
-  sessions: Session[];
-  activeSessionId: string;
-};
-
-function normalizeSessionSandboxFields(session: Session) {
-  session.activeSandboxId = session.activeSandboxId ?? null;
-  session.pendingSandboxBranch = session.pendingSandboxBranch ?? null;
-}
-
-function migratePersistedSessionsV0(state: PersistedSessionsState) {
-  for (const session of state.sessions) {
-    if (!session.activeRepoId) {
-      session.paneTree = createDefaultTree();
-      session.activeId = "p-home";
-    }
-    normalizeSessionSandboxFields(session);
-  }
-
-  return state;
-}
-
-function migratePersistedSessionsV1(state: PersistedSessionsState) {
-  for (const session of state.sessions) {
-    normalizeSessionSandboxFields(session);
-  }
-
-  return state;
-}
-
-function migratePersistedSessionsV2(state: PersistedSessionsState) {
-  for (const session of state.sessions) {
-    session.pendingSandboxBranch = session.pendingSandboxBranch ?? null;
-  }
-
-  return state;
-}
 
 export const useSessionsStore = create<SessionsState>()(
   persist(
@@ -303,7 +57,7 @@ export const useSessionsStore = create<SessionsState>()(
         });
       },
 
-      createWorkspaceSession: (repo: Repo, tree: TreeNode, options) => {
+      createWorkspaceSession: (repo: Repo, tree, options) => {
         const { sessions } = get();
         const existing = findExistingWorkspaceSession(sessions, repo, options);
         if (existing) {

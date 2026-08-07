@@ -1,57 +1,37 @@
 "use client";
 import { create } from "zustand";
-import type { UIMessage } from "ai";
 import { DEFAULT_NEW_AGENT_MODEL_ID } from "@/lib/agents/model-options";
+import type {
+  ConversationListItem,
+  ConversationState,
+  HarnessId,
+  HarnessSessionState,
+  HarnessState,
+  LocalMessage,
+  Message,
+} from "./conversation-types";
+import {
+  normalizeHarnessState,
+  normalizeLocalMessages,
+} from "./conversation-normalizers";
+import {
+  extractTitle,
+  messagesEqual,
+  queueConversationSync,
+} from "./conversation-utils";
 
-type Message = UIMessage;
-type HarnessId = "claude-code" | "codex";
-
-export type LocalToolCallState = "running" | "done" | "error" | "denied";
-
-export type LocalToolCall = {
-  id: string;
-  name: string;
-  input?: unknown;
-  output?: unknown;
-  state: LocalToolCallState;
-};
-
-export type LocalMessageSegment =
-  | { type: "text"; text: string }
-  | { type: "tool-call"; toolCall: LocalToolCall };
-
-export type LocalMessage = {
-  id: string;
-  text: string;
-  toolCalls?: LocalToolCall[];
-  segments?: LocalMessageSegment[];
-};
-
-type HarnessSessionState = {
-  sessionId: string;
-  sandboxId?: string | null;
-};
-
-type HarnessState = Partial<Record<HarnessId, HarnessSessionState>>;
-
-type ConversationState = {
-  messages: Message[];
-  localMsgs: LocalMessage[];
-  harnessState: HarnessState;
-  model: string;
-  mode: "AUTO" | "YOLO" | "SAFE";
-  title?: string;
-  updatedAt?: string | null;
-};
-
-export type ConversationListItem = {
-  id: string;
-  model: string;
-  mode: string;
-  title: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type {
+  ConversationListItem,
+  ConversationState,
+  HarnessId,
+  HarnessSessionState,
+  HarnessState,
+  LocalMessage,
+  LocalMessageSegment,
+  LocalToolCall,
+  LocalToolCallState,
+  Message,
+} from "./conversation-types";
 
 type ConversationsStore = {
   conversations: Record<string, ConversationState>;
@@ -101,150 +81,6 @@ const defaultState = (model: string): ConversationState => ({
   mode: "AUTO",
   updatedAt: null,
 });
-
-const syncChains = new Map<string, Promise<void>>();
-
-async function queueConversationSync(
-  paneId: string,
-  task: () => Promise<void>
-) {
-  const previous = syncChains.get(paneId) ?? Promise.resolve();
-  const next = previous.catch(() => {}).then(task);
-
-  syncChains.set(paneId, next);
-
-  try {
-    await next;
-  } finally {
-    if (syncChains.get(paneId) === next) {
-      syncChains.delete(paneId);
-    }
-  }
-}
-
-function messagesEqual(a: Message[], b: Message[]) {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function extractTitle(messages: Message[]): string | undefined {
-  const firstUser = messages.find((m) => m.role === "user");
-  if (!firstUser?.parts) return undefined;
-  const text = firstUser.parts
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-  if (!text) return undefined;
-  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
-}
-
-function normalizeLocalToolCall(value: unknown): LocalToolCall | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  if (typeof record.id !== "string" || typeof record.name !== "string")
-    return null;
-
-  const { state } = record;
-  const normalizedState: LocalToolCallState =
-    state === "done" || state === "error" || state === "denied"
-      ? state
-      : "running";
-
-  return {
-    id: record.id,
-    name: record.name,
-    input: record.input,
-    output: record.output,
-    state: normalizedState,
-  };
-}
-
-function normalizeLocalMessageSegment(
-  value: unknown
-): LocalMessageSegment | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  if (record.type === "text") {
-    return {
-      type: "text",
-      text: typeof record.text === "string" ? record.text : "",
-    };
-  }
-  if (record.type === "tool-call") {
-    const toolCall = normalizeLocalToolCall(record.toolCall);
-    if (!toolCall) return null;
-    return { type: "tool-call", toolCall };
-  }
-  return null;
-}
-
-function normalizeLocalMessage(value: unknown): LocalMessage | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  if (typeof record.id !== "string") return null;
-
-  const toolCalls = Array.isArray(record.toolCalls)
-    ? record.toolCalls
-        .map(normalizeLocalToolCall)
-        .filter((toolCall): toolCall is LocalToolCall => toolCall !== null)
-    : undefined;
-
-  const segments = Array.isArray(record.segments)
-    ? record.segments
-        .map(normalizeLocalMessageSegment)
-        .filter((segment): segment is LocalMessageSegment => segment !== null)
-    : undefined;
-
-  return {
-    id: record.id,
-    text: typeof record.text === "string" ? record.text : "",
-    ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
-    ...(segments && segments.length > 0 ? { segments } : {}),
-  };
-}
-
-function normalizeLocalMessages(value: unknown): LocalMessage[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter(Boolean)
-    .map(normalizeLocalMessage)
-    .filter((message): message is LocalMessage => message !== null);
-}
-
-function normalizeHarnessSessionState(
-  value: unknown
-): HarnessSessionState | null {
-  if (!value || typeof value !== "object") return null;
-
-  const record = value as Record<string, unknown>;
-  if (typeof record.sessionId !== "string" || !record.sessionId.trim())
-    return null;
-
-  return {
-    sessionId: record.sessionId.trim(),
-    sandboxId:
-      typeof record.sandboxId === "string"
-        ? record.sandboxId.trim() || null
-        : null,
-  };
-}
-
-function normalizeHarnessState(value: unknown): HarnessState {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-
-  const normalized: HarnessState = {};
-  for (const harnessId of ["claude-code", "codex"] as const) {
-    const session = normalizeHarnessSessionState(
-      (value as Record<string, unknown>)[harnessId]
-    );
-    if (session) {
-      normalized[harnessId] = session;
-    }
-  }
-
-  return normalized;
-}
 
 export function getHarnessResumeSessionId(
   harnessState: HarnessState,
