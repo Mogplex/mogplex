@@ -86,13 +86,23 @@ test("topup should accept presets and valid custom amounts", async () => {
     }).ok,
     true
   );
+  // $1,000 is the signed-off cap (Charles, Aug 7 2026); above it the
+  // checkout error routes users to support.
   assert.equal(
     route.validateCheckoutRequest({
       kind: "topup",
-      amountCents: 500000,
+      amountCents: 100000,
       attemptId: ATTEMPT_ID,
     }).ok,
     true
+  );
+  assert.equal(
+    route.validateCheckoutRequest({
+      kind: "topup",
+      amountCents: 100001,
+      attemptId: ATTEMPT_ID,
+    }).ok,
+    false
   );
   assert.equal(
     route.validateCheckoutRequest({

@@ -104,7 +104,12 @@ test("billing is a first-class personal Settings tab with live checkout actions"
   await expect(page.getByText("Current plan", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pro" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mog Mode" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Enterprise" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Email us" })).toHaveAttribute(
+    "href",
+    "mailto:enterprise@mogplex.com"
+  );
   await expect(
     page.getByRole("link", { name: "Self-hosting docs" })
   ).toHaveAttribute(
