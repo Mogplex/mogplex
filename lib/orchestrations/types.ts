@@ -10,6 +10,7 @@ import type {
 
 export type OrchestrationRunDTO = {
   id: string;
+  user_id: string;
   workspace_id: string | null;
   repo_id: string;
   title: string;
