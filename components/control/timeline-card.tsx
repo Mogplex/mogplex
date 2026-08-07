@@ -162,7 +162,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
             <div className="mt-2 flex flex-wrap gap-1.5">
               <button className="flex items-center gap-1.5 rounded border border-accent-red/30 bg-accent-red/5 px-2 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10">
                 <span className="size-1.5 rounded-full bg-accent-red" />
-                Retry with 4 GB sandbox
+                Retry run
               </button>
               <button className="rounded border border-border px-2 py-1 text-[10px] font-medium hover:bg-secondary">
                 Open terminal
@@ -177,12 +177,6 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
             <button className="flex items-center gap-1.5 rounded border border-accent-red/30 bg-accent-red/5 px-2 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10">
               <span className="size-1.5 rounded-full bg-accent-red" />
               Resolve conflict
-            </button>
-            <button
-              onClick={() => onSelectWorktree("wt-d", "files")}
-              className="rounded border border-border px-2 py-1 text-[10px] font-medium hover:bg-secondary"
-            >
-              Inspect wt-d
             </button>
           </div>
         )}
@@ -203,14 +197,8 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
                   </div>
                   <div className="space-y-1 text-[10px]">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">p95 after</span>
-                      <span className={colId === "wt-a" ? "text-accent-green" : "text-accent-amber"}>
-                        {colId === "wt-a" ? "392ms" : "418ms"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Diff size</span>
-                      <span>+{colId === "wt-a" ? 388 : 214}</span>
+                      <span className="text-muted-foreground">Files changed</span>
+                      <span>{wt.files}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Checks</span>
