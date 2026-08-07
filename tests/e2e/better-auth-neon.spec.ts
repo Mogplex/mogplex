@@ -87,6 +87,26 @@ test.describe("better-auth against real Neon", () => {
     // authorize (no session) → /login carrying the authorize query → sign-in
     // → top-level navigation back through authorize → 302 to the loopback
     // redirect with an authorization code → PKCE token exchange.
+    //
+    // CI's database may not have pending migrations applied (they run on
+    // deploy), so self-provision the CLI's public OAuth client with the
+    // same idempotent upsert as neon/migrations/20260806100000.
+    await pool.query(`
+      insert into "oauthApplication" (
+        "id", "name", "clientId", "clientSecret", "redirectUrls",
+        "type", "disabled", "createdAt", "updatedAt"
+      ) values (
+        gen_random_uuid(), 'Mogplex CLI', 'mogplex-cli', '',
+        'http://127.0.0.1:24816/auth/callback,http://127.0.0.1:24818/auth/callback,http://localhost:24816/auth/callback,http://localhost:24818/auth/callback',
+        'public', false, now(), now()
+      )
+      on conflict ("clientId") do update set
+        "redirectUrls" = excluded."redirectUrls",
+        "type" = excluded."type",
+        "disabled" = excluded."disabled",
+        "updatedAt" = now()
+    `);
+
     const verifier = crypto.randomBytes(64).toString("base64url");
     const challenge = crypto
       .createHash("sha256")
