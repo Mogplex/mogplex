@@ -14,28 +14,15 @@ import type {
   BulkInviteRole,
 } from "@/app/api/teams/[teamId]/invites/bulk/route";
 import { MAX_BULK_INVITE_EMAILS } from "@/lib/team-bulk-invite";
-import type { OrgMembersResponse } from "@/app/api/github/installations/[installationId]/org-members/route";
 
-type SlugStatus =
-  | { state: "idle" }
-  | { state: "checking" }
-  | { state: "available" }
-  | { state: "unavailable"; reason: SlugCheckResponse["reason"] };
-
-type Installation = {
-  installation_id: number;
-  account_login: string | null;
-  account_type: string | null;
-  target_type: string | null;
-  scope_label: string;
-};
-
-type SubmitProgress = "idle" | "creating" | "attaching" | "inviting";
-
-function isOrgInstallation(installation: Installation | undefined | null) {
-  const raw = (installation?.target_type || installation?.account_type || "").toLowerCase();
-  return raw.includes("org");
-}
+import type {
+  Installation,
+  SlugStatus,
+  SubmitProgress,
+  OrgMembersResponse,
+} from "./types";
+import { isOrgInstallation, getSlugHelp, getSubmitLabel } from "./helpers";
+import { InstallationSection } from "./_components/installation-section";
 
 export default function NewTeamPage() {
   const router = useRouter();
@@ -62,9 +49,8 @@ export default function NewTeamPage() {
   const [attachInstallation, setAttachInstallation] = useState(true);
 
   const [bulkInvite, setBulkInvite] = useState(false);
-  const [bulkInviteRole, setBulkInviteRole] = useState<BulkInviteRole>(
-    "developer"
-  );
+  const [bulkInviteRole, setBulkInviteRole] =
+    useState<BulkInviteRole>("developer");
   const [orgMembers, setOrgMembers] = useState<OrgMembersResponse | null>(null);
   const [orgMembersLoading, setOrgMembersLoading] = useState(false);
   const [orgMembersError, setOrgMembersError] = useState<string | null>(null);
@@ -110,22 +96,12 @@ export default function NewTeamPage() {
   }, []);
 
   useEffect(() => {
-    // Any in-flight preview belongs to the previous installation — invalidate
-    // it so a late response doesn't overwrite state for the new selection.
-    // Also clear `orgMembersLoading`: the discarded request's `finally` will
-    // skip the reset because its sequence is now stale, so without this the
-    // spinner (and disabled submit) would get stuck.
     orgMembersRequestRef.current += 1;
     setOrgMembers(null);
     setOrgMembersError(null);
     setOrgMembersLoading(false);
   }, [selectedInstallationId]);
 
-  // When the attach toggle is turned off, clear the bulk-invite intent and any
-  // cached preview so a stale orgMembers list from a previous selection can't
-  // be submitted via the (now hidden) controls.
-  // Toggling only bulk-invite off/on intentionally keeps the preview cached so
-  // the user does not have to re-preview the same selected org.
   useEffect(() => {
     if (!attachInstallation || !selectedIsOrg) {
       setBulkInvite(false);
@@ -179,15 +155,12 @@ export default function NewTeamPage() {
         `/api/github/installations/${requestedInstallationId}/org-members`
       );
       if (!res.ok) {
-        const detail = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const detail = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(detail?.error || `org-members ${res.status}`);
       }
       const data = (await res.json()) as OrgMembersResponse;
-      // Discard stale responses: if the user switched installations while this
-      // request was in flight, applying it would attach one installation while
-      // inviting another installation's members.
       if (seq !== orgMembersRequestRef.current) return;
       setOrgMembers(data);
     } catch (err) {
@@ -225,9 +198,7 @@ export default function NewTeamPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: name.trim(), slug }),
       });
-      const data = (await res.json()) as
-        | CreateTeamResponse
-        | { error: string };
+      const data = (await res.json()) as CreateTeamResponse | { error: string };
       if (!res.ok || !("team" in data)) {
         setError(
           "error" in data && data.error ? data.error : "Failed to create team"
@@ -240,20 +211,17 @@ export default function NewTeamPage() {
       if (attachInstallation && selectedInstallationId) {
         setProgress("attaching");
         try {
-          const attachRes = await fetch(
-            `/api/teams/${team.id}/installations`,
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                installation_id: selectedInstallationId,
-              }),
-            }
-          );
+          const attachRes = await fetch(`/api/teams/${team.id}/installations`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              installation_id: selectedInstallationId,
+            }),
+          });
           if (!attachRes.ok) {
-            const detail = (await attachRes.json().catch(() => null)) as
-              | { error?: string }
-              | null;
+            const detail = (await attachRes.json().catch(() => null)) as {
+              error?: string;
+            } | null;
             throw new Error(detail?.error || `attach ${attachRes.status}`);
           }
         } catch (err) {
@@ -276,10 +244,10 @@ export default function NewTeamPage() {
         orgMembers
       ) {
         const allEmails = orgMembers.members
-          .filter((m): m is { login: string; email: string } => Boolean(m.email))
+          .filter((m): m is { login: string; email: string } =>
+            Boolean(m.email)
+          )
           .map((m) => m.email);
-        // Enforce the server-side per-request cap on the client too: this flow
-        // is intentionally one-time, not unbounded chunked.
         const truncatedCount = Math.max(
           0,
           allEmails.length - MAX_BULK_INVITE_EMAILS
@@ -311,8 +279,10 @@ export default function NewTeamPage() {
             }
             const s = inviteData.summary;
             const parts = [`Sent ${s.invited} invites`];
-            if (s.skipped_member > 0) parts.push(`${s.skipped_member} already members`);
-            if (s.delivery_failed > 0) parts.push(`${s.delivery_failed} delivery failed`);
+            if (s.skipped_member > 0)
+              parts.push(`${s.skipped_member} already members`);
+            if (s.delivery_failed > 0)
+              parts.push(`${s.delivery_failed} delivery failed`);
             if (truncatedCount > 0) {
               parts.push(
                 `${truncatedCount} skipped (cap ${MAX_BULK_INVITE_EMAILS})`
@@ -328,7 +298,7 @@ export default function NewTeamPage() {
               description:
                 err instanceof Error
                   ? err.message
-                  : "Check Settings → Teams for status.",
+                  : "Check Settings -> Teams for status.",
               variant: "destructive",
             });
           }
@@ -343,36 +313,20 @@ export default function NewTeamPage() {
     }
   };
 
-  const slugHelp = (() => {
-    if (slugStatus.state === "checking") return "Checking availability…";
-    if (slugStatus.state === "available") return "Slug is available";
-    if (slugStatus.state === "unavailable") {
-      if (slugStatus.reason === "reserved") return "Slug is reserved";
-      if (slugStatus.reason === "taken") return "Slug is already taken";
-      return "Slug must be 1-39 chars, [a-z0-9-], no leading/trailing/double hyphens";
-    }
-    return "Used in URLs like mogplex.com/your-slug";
-  })();
-
+  const slugHelp = getSlugHelp(slugStatus);
   const submitting = progress !== "idle";
   const bulkInviteActive =
-    bulkInvite && attachInstallation && selectedIsOrg && !!selectedInstallationId;
+    bulkInvite &&
+    attachInstallation &&
+    selectedIsOrg &&
+    !!selectedInstallationId;
   const bulkInviteNeedsPreview = bulkInviteActive && !orgMembers;
-  const submitLabel = (() => {
-    if (progress === "creating") return "Creating team…";
-    if (progress === "attaching") return "Attaching installation…";
-    if (progress === "inviting") return "Sending invites…";
-    return "Create team";
-  })();
-
-  const orgMembersWithEmail = orgMembers
-    ? orgMembers.members.filter((m) => m.email).length
-    : null;
+  const submitLabel = getSubmitLabel(progress);
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-background px-6 py-12">
+    <main className="bg-background flex min-h-dvh items-center justify-center px-6 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="text-muted-foreground mb-6 flex items-center justify-between text-xs">
           <Link href="/" className="hover:text-foreground">
             ← Back
           </Link>
@@ -380,8 +334,8 @@ export default function NewTeamPage() {
             <span>{user.email}</span>
           ) : null}
         </div>
-        <h1 className="text-2xl font-medium text-foreground">Create a team</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h1 className="text-foreground text-2xl font-medium">Create a team</h1>
+        <p className="text-muted-foreground mt-2 text-sm">
           Teams share provider keys, projects, and agent rosters.
         </p>
 
@@ -389,7 +343,7 @@ export default function NewTeamPage() {
           <div>
             <label
               htmlFor="team-name"
-              className="block text-xs font-medium text-foreground"
+              className="text-foreground block text-xs font-medium"
             >
               Team name
             </label>
@@ -400,7 +354,7 @@ export default function NewTeamPage() {
               onChange={(e) => setName(e.target.value)}
               maxLength={80}
               required
-              className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="border-border bg-card focus-visible:ring-ring mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
               placeholder="Acme Inc"
               autoFocus
             />
@@ -409,12 +363,14 @@ export default function NewTeamPage() {
           <div>
             <label
               htmlFor="team-slug"
-              className="block text-xs font-medium text-foreground"
+              className="text-foreground block text-xs font-medium"
             >
               URL slug
             </label>
-            <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-3 focus-within:ring-2 focus-within:ring-ring">
-              <span className="text-xs text-muted-foreground">mogplex.com/</span>
+            <div className="border-border bg-card focus-within:ring-ring mt-1 flex items-center gap-1 rounded-md border px-3 focus-within:ring-2">
+              <span className="text-muted-foreground text-xs">
+                mogplex.com/
+              </span>
               <input
                 id="team-slug"
                 type="text"
@@ -443,144 +399,34 @@ export default function NewTeamPage() {
           </div>
 
           {installations !== null && installations.length > 0 && (
-            <div className="space-y-3 rounded-md border border-border bg-card/40 p-3">
-              <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={attachInstallation}
-                  onChange={(e) => setAttachInstallation(e.target.checked)}
-                  className="mt-0.5"
-                />
-                <span>
-                  <span className="block text-xs font-medium text-foreground">
-                    Attach a GitHub installation
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">
-                    Lets this team see repos installed under the selected account.
-                  </span>
-                </span>
-              </label>
-
-              {attachInstallation && (
-                <select
-                  value={
-                    selectedInstallationId !== null
-                      ? String(selectedInstallationId)
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setSelectedInstallationId(
-                      e.target.value ? Number(e.target.value) : null
-                    )
-                  }
-                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {installations.map((inst) => (
-                    <option
-                      key={inst.installation_id}
-                      value={String(inst.installation_id)}
-                    >
-                      {inst.account_login ?? `Installation ${inst.installation_id}`}{" "}
-                      ({inst.scope_label || inst.target_type || "Account"})
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {attachInstallation && selectedIsOrg && (
-                <div className="space-y-2 border-t border-border pt-3">
-                  <label className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={bulkInvite}
-                      onChange={(e) => setBulkInvite(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-xs font-medium text-foreground">
-                        Send invites to org members
-                      </span>
-                      <span className="block text-[11px] text-muted-foreground">
-                        One-time. We will not keep this in sync with GitHub.
-                      </span>
-                    </span>
-                  </label>
-
-                  {bulkInvite && (
-                    <div className="space-y-2 pl-6">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground">
-                          Invite as:
-                        </span>
-                        <select
-                          value={bulkInviteRole}
-                          onChange={(e) =>
-                            setBulkInviteRole(e.target.value as BulkInviteRole)
-                          }
-                          className="rounded-md border border-border bg-card px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <option value="developer">Developer</option>
-                          <option value="viewer">Viewer</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={loadOrgMembers}
-                        disabled={orgMembersLoading}
-                        className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50"
-                      >
-                        {orgMembersLoading
-                          ? "Loading members…"
-                          : orgMembers
-                            ? "Refresh members"
-                            : "Preview members"}
-                      </button>
-
-                      {orgMembersError && (
-                        <p className="text-[11px] text-destructive">
-                          {orgMembersError}
-                        </p>
-                      )}
-
-                      {bulkInviteNeedsPreview && !orgMembersError && !orgMembersLoading && (
-                        <p className="text-[11px] text-amber-500">
-                          Preview members before creating the team so invites can be sent.
-                        </p>
-                      )}
-
-                      {orgMembers && orgMembersWithEmail !== null && (
-                        <p className="text-[11px] text-muted-foreground">
-                          {orgMembersWithEmail} member
-                          {orgMembersWithEmail === 1 ? "" : "s"} with a public email
-                          {orgMembers.no_email_count > 0 ? (
-                            <>
-                              {" · "}
-                              <span className="text-amber-500">
-                                {orgMembers.no_email_count} have no public email
-                                (invite manually)
-                              </span>
-                            </>
-                          ) : null}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <InstallationSection
+              installations={installations}
+              attachInstallation={attachInstallation}
+              onAttachInstallationChange={setAttachInstallation}
+              selectedInstallationId={selectedInstallationId}
+              onSelectedInstallationIdChange={setSelectedInstallationId}
+              selectedIsOrg={selectedIsOrg}
+              bulkInvite={bulkInvite}
+              onBulkInviteChange={setBulkInvite}
+              bulkInviteRole={bulkInviteRole}
+              onBulkInviteRoleChange={setBulkInviteRole}
+              orgMembers={orgMembers}
+              orgMembersLoading={orgMembersLoading}
+              orgMembersError={orgMembersError}
+              onLoadOrgMembers={loadOrgMembers}
+              bulkInviteNeedsPreview={bulkInviteNeedsPreview}
+            />
           )}
 
           {installationsError && (
-            <p className="text-[11px] text-muted-foreground">
-              Could not load GitHub installations ({installationsError}). You can
-              attach one later from Settings.
+            <p className="text-muted-foreground text-[11px]">
+              Could not load GitHub installations ({installationsError}). You
+              can attach one later from Settings.
             </p>
           )}
 
           {error && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <div className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-xs">
               {error}
             </div>
           )}
@@ -593,7 +439,7 @@ export default function NewTeamPage() {
               slugStatus.state === "unavailable" ||
               bulkInviteNeedsPreview
             }
-            className="w-full rounded-md bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
+            className="bg-foreground text-background hover:bg-foreground/90 w-full rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
           >
             {submitLabel}
           </button>

@@ -19,11 +19,6 @@ import {
 } from "@/lib/request-limits";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
-import { HARNESSES } from "@/lib/harness/config";
-import {
-  installHarnessPackage,
-  isHarnessInstalled,
-} from "@/lib/harness/install";
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import {
@@ -37,136 +32,13 @@ import {
 import { detectInteractiveInvocation } from "@/lib/sandbox/interactive-guard";
 import { startExecStream } from "@/lib/sandbox/exec-stream";
 import { syncTerminalRuntimeAuth } from "@/lib/sandbox/dev-tools";
+import { escapeShell, immediateExecJson } from "./_lib/shell-helpers";
 import {
-  TERMINAL_EXEC_MODE_HEADER,
-  TERMINAL_EXEC_MODE_IMMEDIATE,
-} from "@/lib/sandbox/terminal-exec-response";
-import type { HarnessId } from "@/lib/harness/config";
-import type { Sandbox } from "@vercel/sandbox";
-
-function escapeShell(value: string) {
-  return value.replace(/'/g, String.raw`'\''`);
-}
-
-function buildImmediateExecHeaders(headers?: HeadersInit) {
-  const nextHeaders = new Headers(headers);
-  nextHeaders.set(TERMINAL_EXEC_MODE_HEADER, TERMINAL_EXEC_MODE_IMMEDIATE);
-  return nextHeaders;
-}
-
-function immediateExecJson(body: Record<string, unknown>, init?: ResponseInit) {
-  return NextResponse.json(body, {
-    ...init,
-    headers: buildImmediateExecHeaders(init?.headers),
-  });
-}
-
-const REMOTE_GIT_COMMANDS = new Set([
-  "clone",
-  "fetch",
-  "pull",
-  "push",
-  "ls-remote",
-]);
-
-function commandMayNeedGithubAuth(command: string) {
-  // Best-effort optimization for ordinary terminal commands. Agent delivery
-  // preparation starts with an explicit remote git operation, while unusual
-  // wrappers such as `sh -c` may need the user to retry without the wrapper if
-  // their cached credential has expired.
-  const tokens = command
-    .split(/\s+/)
-    .map((token) => token.replace(/^[;&|()]+|[;&|()]+$/g, ""));
-
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (tokens[index] === "gh") return true;
-    if (
-      tokens[index] === "git" &&
-      tokens.slice(index + 1).some((token) => REMOTE_GIT_COMMANDS.has(token))
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** Map of CLI binary name → harness ID for auto-install detection. */
-const BINARY_TO_HARNESS: Record<string, HarnessId> = {
-  claude: "claude-code",
-  codex: "codex",
-};
-
-/**
- * If the command starts with a harness binary (claude, codex),
- * ensure it's installed in the sandbox before executing.
- */
-async function ensureHarnessInstalled(
-  sandbox: Sandbox,
-  command: string
-): Promise<string | null> {
-  const firstWord = command.split(/\s/)[0];
-  const harnessId = BINARY_TO_HARNESS[firstWord];
-  if (!harnessId) return null;
-
-  if (await isHarnessInstalled(sandbox, harnessId)) {
-    return null;
-  }
-
-  try {
-    await installHarnessPackage(sandbox, harnessId);
-    return null;
-  } catch (error) {
-    return error instanceof Error
-      ? error.message
-      : `Failed to install ${HARNESSES[harnessId].package}`;
-  }
-}
-
-type ExecSandboxRecord = {
-  sandbox_id: string;
-  billing_source?: string | null;
-  billing_team_id?: string | null;
-  billing_project_id?: string | null;
-  vercel_team_id: string | null;
-  vercel_project_id: string | null;
-  preview_url: string | null;
-  repo:
-    | {
-        root_directory?: string | null;
-        sandbox_env_vars?: unknown;
-        env_sync_mode?: unknown;
-        vercel_project_id?: string | null;
-        vercel_team_id?: string | null;
-        github_installation_id?: number | null;
-      }
-    | Array<{
-        root_directory?: string | null;
-        sandbox_env_vars?: unknown;
-        env_sync_mode?: unknown;
-        vercel_project_id?: string | null;
-        vercel_team_id?: string | null;
-        github_installation_id?: number | null;
-      }>
-    | null;
-};
-
-type SandboxExecPostDeps = {
-  getSandboxServiceCredentials: typeof getSandboxServiceCredentials;
-  loadOwnedSandboxRecord: (
-    sandboxId: string,
-    userId: string
-  ) => Promise<ExecSandboxRecord | null>;
-  enforceSandboxExecLimits: typeof enforceSandboxExecLimits;
-  acquireSandboxExecLock: typeof acquireSandboxExecLock;
-  recordLimitDecision: typeof recordLimitDecision;
-  releaseSandboxExecLock: typeof releaseSandboxExecLock;
-  getSandbox: typeof getSandbox;
-  resolveSandboxAiAccess: typeof resolveSandboxAiAccess;
-  getGithubAccessTokenForRepo: typeof getGithubAccessTokenForRepo;
-  syncTerminalRuntimeAuth: typeof syncTerminalRuntimeAuth;
-  touchSandboxLastActive: typeof touchSandboxLastActive;
-  renewSandboxActivityLease: typeof renewSandboxActivityLease;
-};
+  BINARY_TO_HARNESS,
+  commandMayNeedGithubAuth,
+  ensureHarnessInstalled,
+} from "./_lib/command-detection";
+import type { ExecSandboxRecord, SandboxExecPostDeps } from "./_lib/types";
 
 const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
   getSandboxServiceCredentials,

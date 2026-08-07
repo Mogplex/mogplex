@@ -328,23 +328,10 @@ export default defineConfig([
     // add new ones. Globs are escaped because [scope] and (dashboard) are
     // minimatch metacharacters.
     files: [
-      String.raw`app/\(dashboard\)/\[scope\]/agents/roster/page.tsx`,
-      String.raw`app/\(dashboard\)/\[scope\]/observability/_components/observability-summary.tsx`,
-      String.raw`app/\(dashboard\)/\[scope\]/projects/workspace/page.tsx`,
       String.raw`app/\(dashboard\)/\[scope\]/settings/settings-page-client.tsx`,
-      "app/api/chat/route.ts",
-      "app/api/cli/inference/chat/completions/handler.ts",
-      "app/api/cron/sync-models/route.ts",
-      "app/api/models/new-arrivals/route.ts",
-      String.raw`app/api/sandbox/\[id\]/exec/route.ts`,
       String.raw`app/api/sandbox/\[id\]/harness/route.ts`,
-      String.raw`app/api/sandbox/\[id\]/restart/route.ts`,
-      String.raw`app/api/sandbox/\[id\]/resume/route.ts`,
-      String.raw`app/api/sandbox/\[id\]/route.ts`,
       "app/api/sandbox/route.ts",
       "app/api/webhooks/github/route.ts",
-      "app/api/webhooks/slack/route.ts",
-      "app/new/team/page.tsx",
       "components/chat/mcp-status-button.tsx",
       "components/file-tree-pane.tsx",
       "components/library/context-section.tsx",
