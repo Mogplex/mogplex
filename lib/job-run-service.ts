@@ -1,16 +1,18 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
-  coerceGraph,
-  getPrimaryAgentId,
-  getStartConfig,
-} from "@/lib/flows/graph";
-import {
   getJobRunSourceKind,
   isCancelableJobRun,
   isRepairableJobRun,
   isRequeueableJobRun,
 } from "@/lib/job-runs";
 import { listJobRunReviewFindings } from "@/lib/review-findings";
+import {
+  buildUserAutomationScope,
+  createEmptyUserAutomationScope,
+  getMetadataFlowVersionId,
+  loadUserAutomationEntities,
+  resolveFlowVersionAttribution,
+} from "@/lib/user-automation-scope";
 import type { BackgroundRuntimeProvider } from "@/lib/runtime-providers";
 import type {
   FlowRunAiCallDetail,
@@ -18,54 +20,17 @@ import type {
   ObservabilityJob,
   ObservabilityJobDetail,
 } from "@/lib/types";
+import type { UserAutomationEntities } from "@/lib/user-automation-scope";
 
-type RepoRef = {
-  id: string;
-  full_name: string;
-  user_id: string;
-  github_installation_id: number | null;
-};
-
-type AssignmentRef = {
-  id: string;
-  repo_id: string;
-  agent_id: string;
-  type: string;
-};
-
-type TriggerRef = {
-  id: string;
-  agent_id: string;
-  installation_id: number;
-  event: string;
-};
-
-type FlowRef = {
-  id: string;
-  installation_id: number;
-  name: string;
-  published_version_id: string | null;
-};
-
-type FlowVersionRef = {
-  id: string;
-  flow_id: string;
-  graph: unknown;
-};
-
-export type FlowVersionAttribution = {
-  flowId: string;
-  primaryAgentId: string | null;
-  agentIds: string[];
-  sourceType: string | null;
-};
-
-type AgentRef = {
-  id: string;
-  name: string;
-  slug: string | null;
-  model: string;
-};
+// Re-export from sibling module to preserve public API
+export type {
+  FlowVersionAttribution,
+  UserAutomationScope,
+} from "@/lib/user-automation-scope";
+export {
+  loadUserAutomationScope,
+  resolveFlowVersionAttribution,
+} from "@/lib/user-automation-scope";
 
 export type JobRunRow = {
   id: string;
@@ -103,26 +68,13 @@ export type JobRunRow = {
   metadata: Record<string, unknown> | null;
 };
 
-export type UserAutomationScope = {
-  reposById: Map<string, RepoRef>;
-  assignmentsById: Map<string, AssignmentRef>;
-  triggersById: Map<string, TriggerRef>;
-  flowsById: Map<string, FlowRef>;
-  agentsById: Map<string, AgentRef>;
-  flowAttributionByVersionId: Map<string, FlowVersionAttribution>;
-  currentFlowVersionIdByFlowId: Map<string, string>;
-  assignmentIds: string[];
-  triggerIds: string[];
-  flowIds: string[];
-};
-
 const JOB_RUN_SELECT =
   "id, assignment_id, trigger_id, flow_id, flow_version_id, runtime_provider, runtime_run_id, workflow_run_id, retry_of_job_run_id, status, created_at, started_at, completed_at, input_tokens, output_tokens, cost_usd, duration_ms, error, start_attempts, last_start_attempt_at, last_start_error, last_start_source, cancel_requested_at, cancelled_at, cancel_reason, cancel_error, metadata";
 
 // PostgREST applies a server-side `db-max-rows` cap (1,000,000 on this
 // project as of 2026-07; previously 1,000) to every request. A single
-// `.limit(n)` above the cap does NOT bypass it — the response is still
-// clamped — so an account with more job runs than the cap gets a
+// `.limit(n)` above the cap does NOT bypass it - the response is still
+// clamped - so an account with more job runs than the cap gets a
 // truncated, and without an explicit order arbitrarily-ordered, slice. When
 // that slice omits the most recent runs, recency-sensitive aggregates silently
 // break: the observability "Run Success" tile reads 0% even while runs are
@@ -133,7 +85,7 @@ const JOB_RUN_SELECT =
 // returned window always starts at the most recent runs (recency metrics stay
 // correct even at the cap), and (2) page with `.range()` in chunks at or below
 // the server cap, accumulating across pages so totals are complete up to
-// JOB_RUN_QUERY_LIMIT — well above any single user's realistic run volume.
+// JOB_RUN_QUERY_LIMIT - well above any single user's realistic run volume.
 export const JOB_RUN_PAGE_SIZE = 1000;
 export const JOB_RUN_QUERY_LIMIT = 10000;
 
@@ -161,7 +113,7 @@ export async function collectPagedRows(
 
 // Merge per-scope pages into one set: dedupe by id (a run can match more than
 // one scope) and sort newest-first across all scopes. created_at alone is not a
-// total order, so id breaks ties — this keeps the merged list globally ordered
+// total order, so id breaks ties - this keeps the merged list globally ordered
 // rather than grouped by the scope it came from.
 export function mergeJobRunPages(pages: JobRunRow[][]): JobRunRow[] {
   const deduped = new Map<string, JobRunRow>();
@@ -178,37 +130,6 @@ export function mergeJobRunPages(pages: JobRunRow[][]): JobRunRow[] {
     if (a.id === b.id) return 0;
     return a.id < b.id ? 1 : -1;
   });
-}
-
-type UserAutomationEntities = {
-  repos: RepoRef[];
-  assignments: AssignmentRef[];
-  triggers: TriggerRef[];
-  flows: FlowRef[];
-};
-
-function createEmptyUserAutomationScope(): UserAutomationScope {
-  return {
-    reposById: new Map(),
-    assignmentsById: new Map(),
-    triggersById: new Map(),
-    flowsById: new Map(),
-    agentsById: new Map(),
-    flowAttributionByVersionId: new Map(),
-    currentFlowVersionIdByFlowId: new Map(),
-    assignmentIds: [],
-    triggerIds: [],
-    flowIds: [],
-  };
-}
-
-function getMetadataFlowVersionId(
-  metadata: Record<string, unknown> | null | undefined
-) {
-  return typeof metadata?.flow_version_id === "string" &&
-    metadata.flow_version_id.length > 0
-    ? metadata.flow_version_id
-    : null;
 }
 
 function normalizeOptionalFiniteNumber(value: unknown) {
@@ -255,218 +176,6 @@ function doesJobRunBelongToUserAutomationEntities(
     (run.flow_id != null &&
       entities.flows.some((flow) => flow.id === run.flow_id))
   );
-}
-
-function buildFlowVersionAttribution(
-  version: FlowVersionRef
-): FlowVersionAttribution {
-  const graph = coerceGraph(version.graph);
-  const primaryAgentId = getPrimaryAgentId(graph);
-  const agentIds = Array.from(
-    new Set(
-      graph.nodes
-        .filter((node) => node.type === "agent")
-        .map((node) => node.data.agentId)
-        .filter(
-          (agentId): agentId is string =>
-            typeof agentId === "string" && agentId.length > 0
-        )
-    )
-  );
-  const startConfig = getStartConfig(graph);
-
-  return {
-    flowId: version.flow_id,
-    primaryAgentId,
-    agentIds,
-    sourceType: startConfig?.event ?? null,
-  };
-}
-
-async function loadUserAutomationEntities(
-  userId: string
-): Promise<UserAutomationEntities> {
-  const { data: repos, error: reposError } = await supabaseAdmin
-    .from("repos")
-    .select("id, full_name, user_id, github_installation_id")
-    .eq("user_id", userId);
-
-  if (reposError) {
-    throw new Error(`Failed to load repos: ${reposError.message}`);
-  }
-
-  const repoRows = repos || [];
-  const repoIds = repoRows.map((repo) => repo.id);
-
-  const [assignmentsResult, triggersResult, flowsResult] = await Promise.all([
-    repoIds.length > 0
-      ? supabaseAdmin
-          .from("assignments")
-          .select("id, repo_id, agent_id, type")
-          .in("repo_id", repoIds)
-      : Promise.resolve({ data: [], error: null }),
-    supabaseAdmin
-      .from("triggers")
-      .select("id, agent_id, installation_id, event")
-      .eq("user_id", userId),
-    supabaseAdmin
-      .from("flows")
-      .select("id, installation_id, name, published_version_id")
-      .eq("user_id", userId),
-  ]);
-
-  if (assignmentsResult.error) {
-    throw new Error(
-      `Failed to load assignments: ${assignmentsResult.error.message}`
-    );
-  }
-
-  if (triggersResult.error) {
-    throw new Error(`Failed to load triggers: ${triggersResult.error.message}`);
-  }
-
-  if (flowsResult.error) {
-    throw new Error(`Failed to load flows: ${flowsResult.error.message}`);
-  }
-
-  return {
-    repos: repoRows,
-    assignments: assignmentsResult.data || [],
-    triggers: triggersResult.data || [],
-    flows: flowsResult.data || [],
-  };
-}
-
-async function buildUserAutomationScope(
-  entities: UserAutomationEntities,
-  options?: {
-    flowVersionIds?: string[];
-  }
-): Promise<UserAutomationScope> {
-  const publishedVersionIds = entities.flows
-    .map((flow) => flow.published_version_id)
-    .filter(
-      (value): value is string => typeof value === "string" && value.length > 0
-    );
-  const versionIds = Array.from(
-    new Set([
-      ...publishedVersionIds,
-      ...(options?.flowVersionIds || []).filter(
-        (value): value is string =>
-          typeof value === "string" && value.length > 0
-      ),
-    ])
-  );
-  const { data: flowVersions, error: flowVersionsError } =
-    versionIds.length > 0
-      ? await supabaseAdmin
-          .from("flow_versions")
-          .select("id, flow_id, graph")
-          .in("id", versionIds)
-      : { data: [], error: null };
-
-  if (flowVersionsError) {
-    throw new Error(
-      `Failed to load flow versions: ${flowVersionsError.message}`
-    );
-  }
-
-  const flowAttributionByVersionId = new Map<string, FlowVersionAttribution>();
-  for (const version of (flowVersions || []) as FlowVersionRef[]) {
-    flowAttributionByVersionId.set(
-      version.id,
-      buildFlowVersionAttribution(version)
-    );
-  }
-
-  const currentFlowVersionIdByFlowId = new Map<string, string>();
-  for (const flow of entities.flows) {
-    if (
-      typeof flow.published_version_id === "string" &&
-      flow.published_version_id.length > 0
-    ) {
-      currentFlowVersionIdByFlowId.set(flow.id, flow.published_version_id);
-    }
-  }
-
-  const agentIds = Array.from(
-    new Set([
-      ...entities.assignments.map((assignment) => assignment.agent_id),
-      ...entities.triggers.map((trigger) => trigger.agent_id),
-      ...Array.from(flowAttributionByVersionId.values()).flatMap(
-        (entry) => entry.agentIds
-      ),
-    ])
-  );
-
-  const { data: agents, error: agentsError } =
-    agentIds.length > 0
-      ? await supabaseAdmin
-          .from("agents")
-          .select("id, name, slug, model")
-          .in("id", agentIds)
-      : { data: [], error: null };
-
-  if (agentsError) {
-    throw new Error(`Failed to load agents: ${agentsError.message}`);
-  }
-
-  return {
-    reposById: new Map(entities.repos.map((repo) => [repo.id, repo])),
-    assignmentsById: new Map(
-      entities.assignments.map((assignment) => [assignment.id, assignment])
-    ),
-    triggersById: new Map(
-      entities.triggers.map((trigger) => [trigger.id, trigger])
-    ),
-    flowsById: new Map(entities.flows.map((flow) => [flow.id, flow])),
-    agentsById: new Map((agents || []).map((agent) => [agent.id, agent])),
-    flowAttributionByVersionId,
-    currentFlowVersionIdByFlowId,
-    assignmentIds: entities.assignments.map((assignment) => assignment.id),
-    triggerIds: entities.triggers.map((trigger) => trigger.id),
-    flowIds: entities.flows.map((flow) => flow.id),
-  };
-}
-
-export async function loadUserAutomationScope(
-  userId: string,
-  options?: {
-    flowVersionIds?: string[];
-  }
-): Promise<UserAutomationScope> {
-  const entities = await loadUserAutomationEntities(userId);
-  return buildUserAutomationScope(entities, options);
-}
-
-export function resolveFlowVersionAttribution(
-  scope: Pick<
-    UserAutomationScope,
-    "flowAttributionByVersionId" | "currentFlowVersionIdByFlowId"
-  >,
-  input: {
-    flowId?: string | null;
-    flowVersionId?: string | null;
-    metadata?: Record<string, unknown> | null;
-  }
-) {
-  const candidateVersionIds = [
-    input.flowVersionId,
-    getMetadataFlowVersionId(input.metadata),
-    input.flowId
-      ? (scope.currentFlowVersionIdByFlowId.get(input.flowId) ?? null)
-      : null,
-  ];
-
-  for (const versionId of candidateVersionIds) {
-    if (!versionId) continue;
-    const attribution = scope.flowAttributionByVersionId.get(versionId);
-    if (attribution) {
-      return attribution;
-    }
-  }
-
-  return null;
 }
 
 export async function loadUserJobRuns(
@@ -553,7 +262,7 @@ export async function loadUserJobRuns(
 }
 
 export function buildObservabilityJob(
-  scope: UserAutomationScope,
+  scope: import("@/lib/user-automation-scope").UserAutomationScope,
   run: JobRunRow
 ): ObservabilityJob {
   const sourceKind = getJobRunSourceKind(run);

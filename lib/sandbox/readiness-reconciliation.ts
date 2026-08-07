@@ -12,80 +12,33 @@ import {
 import { checkSandboxHealth } from "@/lib/sandbox/health-status";
 import { stopSandboxRecord, updateSandboxRecord } from "@/lib/sandbox/records";
 import {
-  normalizeDevPort,
-  resolveConfiguredDevPort,
   resolveSandboxPath,
   resolveSandboxRootDirectory,
 } from "@/lib/repo-settings";
-import { getStrategy } from "@/lib/sandbox/runtimes";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
-import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { loadSandboxVercelDiagnostics } from "@/lib/vercel/load-sandbox-diagnostics";
+import {
+  ACTIVE_RECONCILE_STATUSES,
+  SANDBOX_RECONCILE_SELECT,
+  TRANSIENT_HEALTH_STATUSES,
+  buildClientRecord,
+  getAuthModeFromBillingSource,
+  isSettledSandbox,
+  normalizeRecordedLiveSandboxStatus,
+  recoverPreviewUrlFromLiveSandbox,
+  shouldClearBootError,
+  shouldLoadProjectVercelDiagnostics,
+  toRepo,
+} from "@/lib/sandbox/readiness-helpers";
+import type { SandboxReconcileRecord } from "@/lib/sandbox/readiness-helpers";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes/types";
-import type { SandboxRecord, SandboxRecordRow } from "@/lib/types";
-import type { VercelAuthMode } from "@/lib/vercel/service";
+import type { SandboxRecord } from "@/lib/types";
 
-const SANDBOX_RECONCILE_SELECT = [
-  "id",
-  "user_id",
-  "product_team_id",
-  "repo_id",
-  "sandbox_id",
-  "base_branch",
-  "working_branch",
-  "snapshot_id",
-  "install_log",
-  "dev_log",
-  "runtime",
-  "terminal_cwd",
-  // Per-launch path snapshot — preferred over repo.root_directory when
-  // resolving paths inside the sandbox (e.g. .mogplex/dev.log reads).
-  "root_directory",
-  "status",
-  "stop_reason",
-  "preview_url",
-  "health_status",
-  "last_health_check_at",
-  "last_active_at",
-  "last_preview_http_status",
-  "last_preview_error",
-  "last_boot_error",
-  "boot_attempts",
-  "last_boot_started_at",
-  "last_boot_completed_at",
-  "billing_source",
-  "billing_team_id",
-  "billing_project_id",
-  "vercel_team_id",
-  "vercel_project_id",
-  "error",
-  "created_at",
-  "repo:repos(root_directory, dev_port, dev_port_auto)",
-].join(", ");
+import { isSnapshotNotFoundSandboxError } from "@/lib/sandbox/readiness-errors";
+// Re-export for API compatibility
+export { isSnapshotNotFoundSandboxError } from "@/lib/sandbox/readiness-errors";
 
-const ACTIVE_RECONCILE_STATUSES = [
-  "creating",
-  "installing",
-  "running",
-] as const;
-const TRANSIENT_HEALTH_STATUSES = new Set(["starting", "not_available"]);
 const DEFAULT_RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 30_000, 45_000];
-
-type SandboxReconcileRecord = SandboxRecordRow & {
-  repo?:
-    | {
-        root_directory?: string | null;
-        dev_port?: number | null;
-        dev_port_auto?: unknown;
-      }
-    | {
-        root_directory?: string | null;
-        dev_port?: number | null;
-        dev_port_auto?: unknown;
-      }[]
-    | null;
-};
-
 export type SandboxReadinessReconciliationInput = {
   sandboxRecordId: string;
   expectedSandboxId?: string | null;
@@ -96,7 +49,6 @@ type StartSandboxReadinessDeps = {
   isTriggerRuntimeConfigured: typeof isTriggerRuntimeConfigured;
   startTriggerRun: typeof tasks.trigger;
 };
-
 type ReconcileSandboxReadinessDeps = {
   loadSandboxRecord: (
     sandboxRecordId: string
@@ -169,148 +121,6 @@ const defaultReconcileDeps: ReconcileSandboxReadinessDeps = {
   stopSandboxRecord,
   loadSandboxVercelDiagnostics,
 };
-
-function toRepo(record: SandboxReconcileRecord) {
-  return Array.isArray(record.repo) ? record.repo[0] : record.repo;
-}
-
-function isSettledSandbox(record: SandboxReconcileRecord) {
-  if (record.status === "stopped" || record.status === "error") return true;
-  return !TRANSIENT_HEALTH_STATUSES.has(
-    record.health_status ?? "not_available"
-  );
-}
-
-function normalizeRecordedLiveSandboxStatus(
-  status: string
-): "running" | "pending" | "stopped" {
-  if (status === "running") return "running";
-  if (status === "creating" || status === "installing") return "pending";
-  return "stopped";
-}
-
-function shouldClearBootError(status: string, healthStatus: string) {
-  return status === "running" && !TRANSIENT_HEALTH_STATUSES.has(healthStatus);
-}
-
-function recoverPreviewUrlFromLiveSandbox(
-  record: SandboxReconcileRecord,
-  sandbox: { domain?: (port: number) => string }
-) {
-  if (record.preview_url) return record.preview_url;
-  if (typeof sandbox.domain !== "function") return null;
-
-  const repo = toRepo(record);
-  const configuredPort = resolveConfiguredDevPort(
-    repo?.dev_port,
-    repo?.dev_port_auto
-  );
-  const strategy = getStrategy(record.runtime as SandboxRuntime | null);
-  const port = normalizeDevPort(configuredPort ?? strategy.defaultPort);
-  return sandbox.domain(port);
-}
-
-function getObject(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-// Bail at 5 levels — guards against accidental cycles (e.g. error.cause === error)
-// in SDK or JSON-parsed error chains that would otherwise blow the stack.
-const MAX_ERROR_INSPECTION_DEPTH = 5;
-
-function getErrorCode(value: unknown, depth = 0): string | null {
-  if (depth > MAX_ERROR_INSPECTION_DEPTH) return null;
-  const object = getObject(value);
-  if (!object) return null;
-  if (typeof object.code === "string") return object.code;
-
-  return getErrorCode(object.error, depth + 1);
-}
-
-function getHttpStatus(error: unknown, depth = 0): number | null {
-  if (depth > MAX_ERROR_INSPECTION_DEPTH) return null;
-  const object = getObject(error);
-  if (!object) return null;
-  if (typeof object.status === "number") return object.status;
-  if (typeof object.statusCode === "number") return object.statusCode;
-  return getHttpStatus(object.response, depth + 1);
-}
-
-function bodyIncludesSnapshotNotFound(value: unknown, depth = 0): boolean {
-  if (depth > MAX_ERROR_INSPECTION_DEPTH) return false;
-  if (typeof value === "string") {
-    return value.includes("snapshot_not_found");
-  }
-
-  const object = getObject(value);
-  if (!object) return false;
-  return (
-    getErrorCode(object, depth + 1) === "snapshot_not_found" ||
-    bodyIncludesSnapshotNotFound(object.body, depth + 1) ||
-    bodyIncludesSnapshotNotFound(object.data, depth + 1)
-  );
-}
-
-// Three-level detection so we catch snapshot_not_found across the shapes the
-// Vercel sandbox SDK and REST envelopes return it in:
-//   1. SDK errors expose the code at `.json.error.code`.
-//   2. Plain errors expose `.code` directly at the top level.
-//   3. REST envelopes return HTTP 400 with the marker buried in `.body`/`.data`
-//      (string or nested object), so scan only those fields — scanning the
-//      whole error object would risk a false positive from an unrelated
-//      message/URL that happened to contain "snapshot_not_found".
-export function isSnapshotNotFoundSandboxError(error: unknown): boolean {
-  const object = getObject(error);
-  if (!object) return false;
-  if (getErrorCode(object.json) === "snapshot_not_found") return true;
-  if (object.code === "snapshot_not_found") return true;
-
-  return (
-    getHttpStatus(object) === 400 &&
-    (bodyIncludesSnapshotNotFound(object.body) ||
-      bodyIncludesSnapshotNotFound(object.data))
-  );
-}
-
-function shouldLoadProjectVercelDiagnostics(input: {
-  includeDiagnostics?: boolean;
-  recordStatus: string;
-  previewUrl: string | null;
-  previewHealthStatus: string;
-}) {
-  if (!input.includeDiagnostics) return false;
-  if (!input.previewUrl) return false;
-  if (
-    input.previewHealthStatus === "running" ||
-    input.previewHealthStatus === "idle_warning"
-  ) {
-    return false;
-  }
-  if (
-    input.recordStatus === "creating" ||
-    input.recordStatus === "installing" ||
-    TRANSIENT_HEALTH_STATUSES.has(input.previewHealthStatus)
-  ) {
-    return false;
-  }
-  return true;
-}
-
-function getAuthModeFromBillingSource(source?: string | null): VercelAuthMode {
-  return source === "user_vercel_project" ? "personal" : "platform";
-}
-
-function buildClientRecord(
-  record: SandboxReconcileRecord,
-  diagnostics?: Awaited<ReturnType<typeof loadSandboxVercelDiagnostics>> | null
-) {
-  return toSandboxClientRecord({
-    ...record,
-    ...(diagnostics ? { vercel_diagnostics: diagnostics } : {}),
-  });
-}
 
 export function createStartSandboxReadinessReconciliation(
   overrides: Partial<StartSandboxReadinessDeps> = {}
