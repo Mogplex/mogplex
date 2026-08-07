@@ -186,10 +186,20 @@ jobs:
       - name: Run production build
         run: pnpm build
 
-  e2e:
-    name: e2e
+  e2e-shard:
+    # Sharded at the spec-file level to cut merge-queue cycle time: the suite
+    # runs with workers:1 (flows-api specs share in-memory server state), so
+    # parallelism has to come from separate machines, each with its own Next
+    # server. Shards share the live Neon database — specs already self-provision
+    # their rows because speculative merge-queue builds run the suite
+    # concurrently anyway.
+    name: e2e-shard (${{ matrix.shard }}/4)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       # Not a real secret: without it the e2e server boots with an unhandled
       # BetterAuthError rejection (better-auth refuses its default secret).
@@ -245,12 +255,33 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright e2e suite
-        run: pnpm test:e2e
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/4
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
+
+  e2e:
+    # Fan-in for the shard matrix. The branch ruleset requires a check named
+    # "e2e"; matrix jobs report as "e2e-shard (n/4)", so this job carries the
+    # required context. `if: always()` makes it report even when shards fail —
+    # a required check that never reports would block the merge queue forever.
+    name: e2e
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    needs: e2e-shard
+    if: always()
+    steps:
+      - name: Check shard results
+        env:
+          SHARDS_RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "e2e shards finished with result: $SHARDS_RESULT" >&2
+            exit 1
+          fi
+          echo "All e2e shards passed."

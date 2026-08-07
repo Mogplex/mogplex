@@ -1,0 +1,99 @@
+name: mutation
+
+# Advisory incremental mutation testing (TESTING.md "must go red" rule,
+# checked by machine): Stryker mutates the lib files a PR changes and reports
+# how many mutants the vitest tier kills. The job never fails on the score
+# (thresholds.break is null in stryker.config.json) — it fails only on
+# infrastructure errors. Not a required check; treat a low score as a review
+# signal that the accompanying tests do not actually pin the behavior.
+
+on:
+  pull_request:
+    paths:
+      - "lib/**/*.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUSKY: 0
+  NODE_VERSION: 22.22.0
+  PNPM_VERSION: 10.12.4
+
+jobs:
+  mutation:
+    name: mutation
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+          pnpm --version
+
+      - name: Resolve pnpm store path
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The incremental file lets Stryker skip mutants whose code and tests
+      # are unchanged since the last run. Saved under a per-run key because
+      # cache entries are immutable; restore-keys picks up the newest one.
+      - name: Restore Stryker incremental state
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: reports/stryker-incremental.json
+          key: stryker-incremental-${{ github.run_id }}
+          restore-keys: |
+            stryker-incremental-
+
+      - name: Run Stryker on changed lib files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          changed=()
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              *.test.ts | *.d.ts) continue ;;
+            esac
+            [ -f "$file" ] || continue
+            changed+=("$file")
+          done < <(git diff -z --name-only --diff-filter=d \
+            "origin/${BASE_REF}...HEAD" -- 'lib/**/*.ts')
+
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "No mutable lib files changed; nothing to mutate."
+            exit 0
+          fi
+
+          printf 'Mutating %d changed file(s):\n' "${#changed[@]}"
+          printf '  %s\n' "${changed[@]}"
+
+          mutate=$(IFS=,; echo "${changed[*]}")
+          pnpm exec stryker run --mutate "$mutate"
