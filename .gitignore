@@ -29,3 +29,10 @@ supabase/.branches/
 
 # key-rotation ciphertext backups (scripts/rotate-connections-encryption-key.ts)
 scripts/.rotation-backup-*.json
+
+# stryker mutation testing
+.stryker-tmp/
+reports/
+
+# vitest coverage output (diff-coverage job)
+coverage/

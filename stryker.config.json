@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": { "related": false },
+  "coverageAnalysis": "perTest",
+  "mutate": ["lib/**/*.ts", "!lib/**/*.test.ts", "!lib/**/*.d.ts"],
+  "incremental": true,
+  "incrementalFile": "reports/stryker-incremental.json",
+  "reporters": ["clear-text", "progress"],
+  "ignorePatterns": [
+    "skills",
+    ".agents",
+    ".next",
+    "coverage",
+    "playwright-report",
+    "test-results",
+    "reports"
+  ],
+  "thresholds": { "high": 80, "low": 60, "break": null }
+}
