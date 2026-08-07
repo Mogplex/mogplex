@@ -4,6 +4,7 @@ import {
   LOGIN_NEXT_FALLBACK,
   buildGithubLoginHref,
   defaultLoginNext,
+  resolveAuthorizeResumeNext,
   resolveLoginError,
   resolveLoginNext,
 } from "../../lib/login-next";
@@ -29,6 +30,55 @@ test("resolveLoginNext preserves same-origin relative paths", () => {
     "/cli-auth?callback=http%3A%2F%2Flocalhost%3A45454%2Fcallback";
 
   assert.equal(resolveLoginNext(cliAuthPath), cliAuthPath);
+});
+
+test("resolveAuthorizeResumeNext rebuilds the authorize URL from an OAuth login query", () => {
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: "mogplex-cli",
+    redirect_uri: "http://127.0.0.1:24816/auth/callback",
+    scope: "openid offline_access read write",
+    state: "abc123",
+    code_challenge: "xyz",
+    code_challenge_method: "S256",
+  });
+
+  const next = resolveAuthorizeResumeNext(params);
+  assert.ok(next);
+  assert.ok(next.startsWith("/api/auth/mcp/authorize?"));
+  const rebuilt = new URLSearchParams(next.split("?")[1]);
+  assert.equal(rebuilt.get("client_id"), "mogplex-cli");
+  assert.equal(
+    rebuilt.get("redirect_uri"),
+    "http://127.0.0.1:24816/auth/callback"
+  );
+  assert.equal(rebuilt.get("scope"), "openid offline_access read write");
+  assert.equal(rebuilt.get("code_challenge_method"), "S256");
+});
+
+test("resolveAuthorizeResumeNext drops non-allowlisted params", () => {
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: "mogplex-cli",
+    redirect_uri: "http://127.0.0.1:24816/auth/callback",
+    evil: "https://attacker.example/steal",
+  });
+
+  const next = resolveAuthorizeResumeNext(params);
+  assert.ok(next);
+  assert.ok(!next.includes("evil"));
+});
+
+test("resolveAuthorizeResumeNext returns null for non-OAuth queries", () => {
+  assert.equal(resolveAuthorizeResumeNext(new URLSearchParams()), null);
+  assert.equal(
+    resolveAuthorizeResumeNext(new URLSearchParams({ next: "/dashboard" })),
+    null
+  );
+  assert.equal(
+    resolveAuthorizeResumeNext(new URLSearchParams({ client_id: "x" })),
+    null
+  );
 });
 
 test("defaultLoginNext returns the scoped workspace path", () => {

@@ -12,6 +12,7 @@ import { nextCookies } from "better-auth/next-js";
 import { mcp } from "better-auth/plugins";
 import { sso } from "@better-auth/sso";
 import { dash } from "@better-auth/infra";
+import { cliTokenTtl } from "@/lib/better-auth/cli-token-ttl";
 import { Pool } from "pg";
 import { createProfileForBetterAuthUser } from "@/lib/auth/better-auth-profile";
 import { sendAuthActionEmail } from "@/lib/email/send-auth-action-email";
@@ -154,8 +155,14 @@ export const auth = betterAuth({
         defaultScope: "read write",
         scopes: ["read", "write"],
         requirePKCE: true,
+        // Hosted MCP clients must never be forced to re-authenticate:
+        // refresh tokens rotate on use, and ~100 years is "never" without
+        // overflowing a JS Date. The mogplex CLI is the exception — the
+        // cliTokenTtl hook below clamps its refresh tokens to 30 days.
+        refreshTokenExpiresIn: 100 * 365 * 24 * 60 * 60,
       },
     }),
+    cliTokenTtl(),
     sso(),
     // Better Auth cloud dashboard (ownership verification + remote admin).
     // Every dash endpoint requires a signed payload matched against
