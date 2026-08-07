@@ -11,27 +11,14 @@ import {
   type GatewayCallContext,
   withGatewaySystemCaching,
 } from "@/lib/models/gateway-provider-routing";
-import {
-  captureUsage,
-  capturedUsageAiCallColumns,
-  EMPTY_CAPTURED_USAGE,
-  fillUsageGaps,
-  hasCapturedUsage,
-  mergeUsage,
-  type CapturedUsage,
-} from "@/lib/observability/usage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { windowMessages } from "@/lib/agents/message-window";
-import type { LanguageModelUsage, ProviderMetadata } from "ai";
+import { demoteStaleToolOutputs } from "@/lib/agents/compaction/reduce";
 
 /**
- * Non-HTTP agent runner. Drives the same `streamText` loop the chat route uses
- * — same model resolver, tools, system prompt, and stop condition — but
- * consumes the stream in-process and returns the accumulated text.
- *
- * Used by adapters like the Slack event handler that need the model's final
- * answer rather than a UI stream. The HTTP chat route shares the streaming core
- * below (`createChatModelStream`) and layers its own telemetry/UI wiring on top.
+ * The shared streaming core for every chat entry point: model resolution,
+ * tool wiring, system prompt, message conversion, and `stopWhen`. The HTTP
+ * chat route and the in-process runner (`run-chat-agent.ts`) both build on
+ * `createChatModelStream` so these cannot drift.
  */
 
 export type RunChatAgentContentPart =
@@ -72,29 +59,6 @@ export type ChatAgentContext = {
    * filtering) and resolveUserLanguageModel (for model gate + scoped key).
    */
   teamId?: string | null;
-};
-
-export type RunChatAgentInput = ChatAgentContext & {
-  messages: RunChatAgentMessage[];
-  model?: string | null;
-  systemSuffix?: string | null;
-  abortSignal?: AbortSignal;
-  /**
-   * Called whenever the model emits text. Receives the cumulative reply so far
-   * (not just the delta) — convenient for edit-in-place surfaces like Slack
-   * `chat.update`. Errors thrown by the callback are caught and logged so they
-   * cannot abort the run.
-   */
-  onTextDelta?: (accumulatedText: string) => void | Promise<void>;
-};
-
-export type RunChatAgentResult = {
-  finalText: string;
-  finishReason: string;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  stepCount: number;
 };
 
 type StreamTextOptions = Parameters<typeof streamText>[0];
@@ -179,18 +143,6 @@ function buildPromptContextInput(
     sandboxId: context.sandboxId ?? undefined,
     connections,
   };
-}
-
-// `convertToModelMessages` expects UIMessage-shaped input with a `parts`
-// array. Adapt the simpler `{ role, content }` shape into that.
-function toUIMessages(messages: RunChatAgentMessage[]) {
-  return messages.map((message) => ({
-    role: message.role,
-    parts:
-      typeof message.content === "string"
-        ? [{ type: "text" as const, text: message.content }]
-        : message.content,
-  }));
 }
 
 export type CreateChatModelStreamInput = {
@@ -319,6 +271,13 @@ export async function createChatModelStream(
       abortSignal: input.abortSignal,
       tools: context.enableTools === false ? undefined : tools,
       stopWhen: CHAT_STOP_WHEN,
+      // Step-level context reduction: within a long tool loop, demote stale
+      // oversized tool outputs to typed references so a 100-step run cannot
+      // outgrow the window on dead payloads. Deterministic — no model call.
+      prepareStep: ({ messages }) => {
+        const reduced = demoteStaleToolOutputs(messages);
+        return reduced === messages ? undefined : { messages: reduced };
+      },
       ...hooks,
     });
 
@@ -327,170 +286,4 @@ export async function createChatModelStream(
     await cleanupTools();
     throw error;
   }
-}
-
-function recordRunChatAiCall(input: {
-  context: RunChatAgentInput;
-  model: string;
-  startedAt: string;
-  startedAtMs: number;
-  status: "success" | "failed";
-  usage: CapturedUsage;
-  finishReason?: string | null;
-  error?: string | null;
-  stepCount?: number | null;
-}) {
-  const partialFailure =
-    input.status === "failed" && hasCapturedUsage(input.usage);
-  void supabaseAdmin
-    .from("ai_calls")
-    .insert({
-      user_id: input.context.userId,
-      type: "agent" as const,
-      model: input.model,
-      ...capturedUsageAiCallColumns(input.usage),
-      duration_ms: Date.now() - input.startedAtMs,
-      started_at: input.startedAt,
-      completed_at: new Date().toISOString(),
-      status: input.status,
-      error: input.error ?? null,
-      conversation_id: input.context.conversationId ?? null,
-      repo_id: input.context.repoId ?? null,
-      metadata: {
-        surface: "slack",
-        team_id: input.context.teamId ?? null,
-        repo: input.context.repoFullName ?? null,
-        repo_owner: input.context.repoOwner ?? null,
-        repo_name: input.context.repoName ?? null,
-        workspace_session_id: input.context.workspaceSessionId ?? null,
-        finish_reason: input.finishReason ?? null,
-        step_count: input.stepCount ?? null,
-        ...(partialFailure ? { failed_with_partial_usage: true } : {}),
-      },
-    })
-    .then(({ error }) => {
-      if (error) {
-        console.error("[run-chat-agent] failed to record ai_call", error);
-      }
-    });
-}
-
-async function consumeStreamWithCallback(
-  result: ReturnType<typeof streamText>,
-  onTextDelta?: RunChatAgentInput["onTextDelta"]
-) {
-  let accumulated = "";
-  for await (const delta of result.textStream) {
-    accumulated += delta;
-    if (!onTextDelta) continue;
-    try {
-      await onTextDelta(accumulated);
-    } catch (error) {
-      console.warn("[run-chat-agent] onTextDelta callback threw", error);
-    }
-  }
-}
-
-export async function runChatAgent(
-  input: RunChatAgentInput
-): Promise<RunChatAgentResult> {
-  const resolvedModel = await resolveChatModelId(input.userId, input.model);
-  const startedAtMs = Date.now();
-  const startedAt = new Date(startedAtMs).toISOString();
-  // Capture step usage as samples so overlapping callbacks cannot drop a merge.
-  // The reduced step total remains fallback-only; final stream totals win.
-  const observedStepUsages: CapturedUsage[] = [];
-  const readObservedUsage = () =>
-    observedStepUsages.reduce(
-      (usage, stepUsage) => mergeUsage(usage, stepUsage),
-      EMPTY_CAPTURED_USAGE
-    );
-
-  const { result, cleanup } = await createChatModelStream({
-    context: { ...input, surface: "slack" },
-    resolvedModel,
-    uiMessages: toUIMessages(windowMessages(input.messages)) as Parameters<
-      typeof convertToModelMessages
-    >[0],
-    systemSuffix: input.systemSuffix,
-    abortSignal: input.abortSignal,
-    hooks: {
-      async onStepFinish(event) {
-        observedStepUsages.push(
-          captureUsage(event.usage, event.providerMetadata)
-        );
-      },
-    },
-  });
-
-  try {
-    await consumeStreamWithCallback(result, input.onTextDelta);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Stream error";
-    recordRunChatAiCall({
-      context: input,
-      model: resolvedModel,
-      startedAt,
-      startedAtMs,
-      status: "failed",
-      usage: readObservedUsage(),
-      error: message,
-    });
-    throw error;
-  } finally {
-    await cleanup();
-  }
-
-  const [finalText, finishReason, totalUsage, providerMetadata, steps] =
-    await Promise.all([
-      result.text,
-      result.finishReason,
-      result.totalUsage,
-      result.providerMetadata,
-      result.steps,
-    ]);
-  const totalCapturedUsage = captureUsage(
-    totalUsage as LanguageModelUsage | undefined,
-    providerMetadata as ProviderMetadata | undefined
-  );
-  const observedUsage = readObservedUsage();
-  // Union generation IDs from both sources to capture any ID that the SDK
-  // surfaces only on the final aggregate (not per-step).
-  const usage = fillUsageGaps(
-    {
-      ...totalCapturedUsage,
-      generationId:
-        observedUsage.generationId ?? totalCapturedUsage.generationId,
-      generationIds: [
-        ...new Set([
-          ...observedUsage.generationIds,
-          ...totalCapturedUsage.generationIds,
-        ]),
-      ],
-    },
-    observedUsage
-  );
-  recordRunChatAiCall({
-    context: input,
-    model: resolvedModel,
-    startedAt,
-    startedAtMs,
-    status: finishReason === "error" ? "failed" : "success",
-    usage,
-    finishReason,
-    error: finishReason === "error" ? "Stream finished with error" : null,
-    stepCount: steps.length,
-  });
-
-  const inputTokens = usage.inputTokens ?? 0;
-  const outputTokens = usage.outputTokens ?? 0;
-
-  return {
-    finalText,
-    finishReason,
-    inputTokens,
-    outputTokens,
-    totalTokens: inputTokens + outputTokens,
-    stepCount: steps.length,
-  };
 }

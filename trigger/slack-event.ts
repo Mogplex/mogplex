@@ -12,7 +12,7 @@ import {
   stripSlackMention,
   updateSlackMessage,
 } from "@/lib/slack/client";
-import { runChatAgent } from "@/lib/agents/run-chat";
+import { runChatAgent } from "@/lib/agents/run-chat-agent";
 import { buildAppUrl } from "@/lib/app-url";
 import { dispatchSlackMentionWorkflows } from "@/lib/flows/trigger-dispatch";
 import {

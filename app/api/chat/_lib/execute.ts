@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import { getChatRunScope, buildChatRunMetadata } from "./types";
 import { buildChatMemorySuffix } from "./memory";
+import { compactChatMessagesForModel } from "./compaction";
 import { persistChatSessionMemory } from "./session-memory";
 import {
   markChatRunStreaming,
@@ -100,6 +101,19 @@ export async function executeChatRequest(input: {
       },
     };
 
+    const modelMessages = await compactChatMessagesForModel({
+      userId: input.userId,
+      conversationId: scope.conversationId ?? null,
+      repoId: scope.repoId ?? null,
+      aiCallId: activeCall.id,
+      resolvedModel: input.resolvedModel,
+      teamId: teamId ?? null,
+      uiMessages: input.body.messages as Parameters<
+        typeof compactChatMessagesForModel
+      >[0]["uiMessages"],
+      abortSignal: input.req.signal,
+    });
+
     const { result } = await createChatModelStream({
       context: {
         userId: input.userId,
@@ -116,7 +130,7 @@ export async function executeChatRequest(input: {
         teamId,
       },
       resolvedModel: input.resolvedModel,
-      uiMessages: input.body.messages as Parameters<
+      uiMessages: modelMessages as Parameters<
         typeof createChatModelStream
       >[0]["uiMessages"],
       systemSuffix,

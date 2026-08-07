@@ -2,7 +2,6 @@ import type {
   SlackChannelLinkRow,
   SlackInstallationRow,
 } from "@/lib/slack/installations";
-import { windowMessages } from "@/lib/agents/message-window";
 import {
   buildCancelRunActionsBlock,
   buildRepoAgentRunStartedText,
@@ -113,17 +112,16 @@ export async function runConversationalMode(input: {
     text: PLACEHOLDER_TEXT,
   });
 
-  // Window the thread history before sending it to the agent - a long Slack
-  // thread would otherwise grow the prompt unbounded. Full history is still
-  // persisted by `persistConversationTurn` below.
+  // Hand the agent the full thread history: the runner compacts oversized
+  // histories into a checkpoint handoff (and falls back to windowing when a
+  // history is small or compaction fails), so reuse of persisted checkpoints
+  // needs the stable full prefix. Full history is still persisted by
+  // `persistConversationTurn` below.
   const userMessage = buildSlackUserMessage({
     text: userText,
     attachments,
   });
-  const messages = windowMessages([
-    ...conversation.messages,
-    userMessage.agent,
-  ]);
+  const messages = [...conversation.messages, userMessage.agent];
 
   let agentResult: Awaited<ReturnType<typeof deps.runAgent>>;
   try {
