@@ -1,5 +1,10 @@
-import { AutomationsHub } from "@/components/automations/automations-hub"
+"use client"
+import { FlowsPane } from "@/components/panes/flows-pane"
 
 export default function AutomationsPage() {
-  return <AutomationsHub />
+  return (
+    <div className="h-full min-h-0">
+      <FlowsPane />
+    </div>
+  )
 }
