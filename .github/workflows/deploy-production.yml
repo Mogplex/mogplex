@@ -18,6 +18,7 @@ env:
   HUSKY: 0
   NODE_VERSION: 22.22.0
   PNPM_VERSION: 10.12.4
+  VERCEL_CLI_VERSION: 58.7.1
 
 jobs:
   migrate-production:
@@ -107,7 +108,7 @@ jobs:
           pnpm --version
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
 
       # --scope pins the team: the token's account belongs to multiple
       # Vercel teams since 2026-07-27, and the CLI never auto-selects a
