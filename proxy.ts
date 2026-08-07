@@ -22,11 +22,7 @@ import type { NextRequest } from "next/server";
 // Authed routes that live at the root and must NOT be treated as a scope
 // segment. Entries are also in RESERVED_SLUGS so no team/user can claim them;
 // this set short-circuits scope resolution so the real page can render.
-const UNSCOPED_AUTHED_FIRST_SEGMENT = new Set<string>([
-  "cli-auth",
-  "new",
-  "invite",
-]);
+const UNSCOPED_AUTHED_FIRST_SEGMENT = new Set<string>(["new", "invite"]);
 
 type PendingCookie = { name: string; value: string; options: CookieOptions };
 
@@ -119,6 +115,25 @@ export async function proxy(request: NextRequest) {
   // notably the post-login callback, whose fallback destination is "/" —
   // bounce to their personal scope instead of the marketing page.
   if (isPublicRoutePath(pathname) && pathname !== "/") {
+    // OAuth authorize requests that need a login land on /login carrying the
+    // raw authorize query, and Better Auth also plants an oidc_login_prompt
+    // cookie so a hook can resume authorization on the sign-in POST. That
+    // hook turns the sign-in fetch's response into a 302 to the client's
+    // redirect URI, which fetch then follows cross-origin and dies on CORS
+    // (for the CLI's loopback URI, also on Chrome's local-network gating).
+    // Drop the cookie here so the sign-in POST completes normally and the
+    // login page's `next`-based resume — a top-level navigation immune to
+    // both — carries the flow instead.
+    if (
+      pathname === "/login" &&
+      request.nextUrl.searchParams.has("client_id") &&
+      request.nextUrl.searchParams.has("redirect_uri") &&
+      request.nextUrl.searchParams.has("response_type")
+    ) {
+      const response = NextResponse.next();
+      response.cookies.set("oidc_login_prompt", "", { maxAge: 0, path: "/" });
+      return response;
+    }
     return NextResponse.next();
   }
 

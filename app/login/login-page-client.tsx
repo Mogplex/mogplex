@@ -9,7 +9,11 @@ import { SignedInPanel } from "@/components/auth/signed-in-panel";
 import { SocialButtons } from "@/components/auth/social-buttons";
 import { AuthShell } from "@/components/marketing/auth-shell";
 import { useSession } from "@/lib/better-auth/client";
-import { resolveLoginError, resolveLoginNext } from "@/lib/login-next";
+import {
+  resolveAuthorizeResumeNext,
+  resolveLoginError,
+  resolveLoginNext,
+} from "@/lib/login-next";
 
 function LoginNotice({
   expired,
@@ -52,7 +56,12 @@ function LoginNotice({
 
 function LoginContent() {
   const params = useSearchParams();
-  const next = resolveLoginNext(params.get("next"));
+  // OAuth authorize requests (mogplex CLI, hosted MCP clients) land here
+  // with the raw authorize query instead of `next` — resume them after login.
+  const next = params.get("next")
+    ? resolveLoginNext(params.get("next"))
+    : (resolveAuthorizeResumeNext(new URLSearchParams(params.toString())) ??
+      resolveLoginNext(null));
   const error = resolveLoginError(params.get("error"));
   const expired = params.get("expired") === "true";
   const verified = params.get("verified") === "1";

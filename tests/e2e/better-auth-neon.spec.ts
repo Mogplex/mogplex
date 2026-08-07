@@ -83,49 +83,146 @@ test.describe("better-auth against real Neon", () => {
     });
     expect(wrongPassword.status()).toBe(401);
 
-    const cliAuthPath =
-      "/cli-auth?callback=http%3A%2F%2Flocalhost%3A45454%2Fcallback&nonce=0123456789abcdef0123456789abcdef&name=E2E+CLI";
+    // Exercise the CLI OAuth round trip as `mogplex login` drives it:
+    // authorize (no session) → /login carrying the authorize query → sign-in
+    // → top-level navigation back through authorize → 302 to the loopback
+    // redirect with an authorization code → PKCE token exchange.
+    //
+    // CI's database may not have pending migrations applied (they run on
+    // deploy), so self-provision the CLI's public OAuth client with the
+    // same idempotent upsert as neon/migrations/20260806100000.
+    await pool.query(`
+      insert into "oauthApplication" (
+        "id", "name", "clientId", "clientSecret", "redirectUrls",
+        "type", "disabled", "createdAt", "updatedAt"
+      ) values (
+        gen_random_uuid(), 'Mogplex CLI', 'mogplex-cli', '',
+        'http://127.0.0.1:24816/auth/callback,http://127.0.0.1:24818/auth/callback,http://localhost:24816/auth/callback,http://localhost:24818/auth/callback',
+        'public', false, now(), now()
+      )
+      on conflict ("clientId") do update set
+        "redirectUrls" = excluded."redirectUrls",
+        "type" = excluded."type",
+        "disabled" = excluded."disabled",
+        "updatedAt" = now()
+    `);
 
-    // Exercise the browser round trip as the CLI invokes it: the proxy must
-    // preserve every callback parameter through /login, and the sign-in form
-    // must navigate back to the exact consent URL with the fresh session.
-    await page.goto(cliAuthPath);
-    const loginUrl = new URL(page.url());
-    expect(loginUrl.pathname).toBe("/login");
-    expect(loginUrl.searchParams.get("next")).toBe(cliAuthPath);
+    const verifier = crypto.randomBytes(64).toString("base64url");
+    const challenge = crypto
+      .createHash("sha256")
+      .update(verifier)
+      .digest("base64url");
+    const state = crypto.randomBytes(32).toString("base64url");
+    const redirectUri = "http://127.0.0.1:24816/auth/callback";
 
-    await page.getByTestId("signin-email").fill(email);
-    await page.getByTestId("signin-password").fill(password);
-    await page.getByTestId("signin-submit").click();
-    await expect(page).toHaveURL(
-      (url) =>
-        url.pathname === "/cli-auth" &&
-        url.searchParams.get("callback") ===
-          "http://localhost:45454/callback" &&
-        url.searchParams.get("nonce") === "0123456789abcdef0123456789abcdef" &&
-        url.searchParams.get("name") === "E2E CLI"
+    // Stand in for the CLI's loopback server: capture the code-bearing
+    // navigation the browser makes after the authorize redirect.
+    const { createServer } = await import("node:http");
+    let captureCallback!: (url: string) => void;
+    const captured = new Promise<string>((resolve) => {
+      captureCallback = resolve;
+    });
+    const loopback = createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("ok");
+      if (req.url?.startsWith("/auth/callback")) captureCallback(req.url);
+    });
+    await new Promise<void>((resolve) =>
+      loopback.listen(24816, "127.0.0.1", resolve)
     );
-    await expect(page.getByText("Grant mogplex CLI access?")).toBeVisible();
 
+    try {
+      const authorizeQuery = new URLSearchParams({
+        response_type: "code",
+        client_id: "mogplex-cli",
+        redirect_uri: redirectUri,
+        scope: "openid profile email offline_access read write",
+        state,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      });
+      await page.goto(`/api/auth/mcp/authorize?${authorizeQuery.toString()}`);
+      const loginUrl = new URL(page.url());
+      expect(loginUrl.pathname).toBe("/login");
+      expect(loginUrl.searchParams.get("client_id")).toBe("mogplex-cli");
+
+      await page.getByTestId("signin-email").fill(email);
+      await page.getByTestId("signin-password").fill(password);
+      await page.getByTestId("signin-submit").click();
+
+      const callbackUrl = new URL(await captured, redirectUri);
+      expect(callbackUrl.searchParams.get("state")).toBe(state);
+      const code = callbackUrl.searchParams.get("code");
+      expect(code).toBeTruthy();
+
+      const sessionRows = await pool.query(
+        'select id from "session" where "userId" = $1',
+        [created.rows[0].id]
+      );
+      expect(sessionRows.rowCount).toBeGreaterThan(0);
+
+      // Public-client token exchange: PKCE verifier, no client secret.
+      const tokenRes = await request.post("/api/auth/mcp/token", {
+        form: {
+          grant_type: "authorization_code",
+          client_id: "mogplex-cli",
+          code: code!,
+          redirect_uri: redirectUri,
+          code_verifier: verifier,
+        },
+      });
+      const tokenBody = (await tokenRes.json()) as {
+        access_token?: string;
+        refresh_token?: string;
+        id_token?: string;
+      };
+      expect(tokenRes.status(), JSON.stringify(tokenBody)).toBe(200);
+      expect(tokenBody.access_token).toBeTruthy();
+      expect(tokenBody.refresh_token).toBeTruthy();
+      expect(tokenBody.id_token).toBeTruthy();
+
+      // The rotating refresh grant works without a client secret too.
+      const refreshRes = await request.post("/api/auth/mcp/token", {
+        form: {
+          grant_type: "refresh_token",
+          client_id: "mogplex-cli",
+          refresh_token: tokenBody.refresh_token!,
+        },
+      });
+      const refreshBody = (await refreshRes.json()) as {
+        access_token?: string;
+      };
+      expect(refreshRes.status(), JSON.stringify(refreshBody)).toBe(200);
+      expect(refreshBody.access_token).toBeTruthy();
+      expect(refreshBody.access_token).not.toBe(tokenBody.access_token);
+
+      // The cliTokenTtl hook clamps CLI refresh tokens to 30 days even
+      // though the provider-wide setting is effectively-never (MCP clients).
+      const ttlRows = await pool.query(
+        `select "refreshTokenExpiresAt" from "oauthAccessToken"
+          where "clientId" = 'mogplex-cli' and "userId" = $1`,
+        [created.rows[0].id]
+      );
+      expect(ttlRows.rowCount).toBeGreaterThan(0);
+      const maxTtlMs = 31 * 24 * 60 * 60 * 1000;
+      for (const row of ttlRows.rows) {
+        const expiresAt = new Date(row.refreshTokenExpiresAt).getTime();
+        expect(expiresAt).toBeLessThan(Date.now() + maxTtlMs);
+        expect(expiresAt).toBeGreaterThan(Date.now());
+      }
+    } finally {
+      loopback.close();
+      loopback.closeAllConnections();
+    }
+
+    // Retired PAT handoff: old CLI builds hitting /cli-auth get an upgrade
+    // prompt, not a consent screen (and no login redirect loop).
     const browserRequest = page.context().request;
-    const session = await browserRequest.get("/api/auth/get-session");
-    expect(session.status()).toBe(200);
-    const sessionBody = (await session.json()) as {
-      user?: { email?: string };
-    } | null;
-    expect(sessionBody?.user?.email).toBe(email);
-
-    const sessionRows = await pool.query(
-      'select id from "session" where "userId" = $1',
-      [created.rows[0].id]
-    );
-    expect(sessionRows.rowCount).toBeGreaterThan(0);
-
-    const cliAuth = await browserRequest.get(cliAuthPath, { maxRedirects: 0 });
-    const cliAuthBody = await cliAuth.text();
-    expect(cliAuth.status(), cliAuthBody).toBe(200);
-    expect(cliAuth.headers().location).toBeUndefined();
-    expect(cliAuthBody).toContain("Grant mogplex CLI access?");
+    const cliAuth = await browserRequest.get("/cli-auth", {
+      maxRedirects: 0,
+    });
+    expect(cliAuth.status()).toBe(200);
+    expect(await cliAuth.text()).toContain("CLI login has moved");
 
     // Sign-out invalidates the session server-side, not just the cookie. The
     // Origin header satisfies better-auth's CSRF check for cookie-backed
@@ -142,12 +239,12 @@ test.describe("better-auth against real Neon", () => {
     } | null;
     expect(afterBody?.user?.email ?? null).toBeNull();
 
-    const loggedOutCliAuth = await browserRequest.get(cliAuthPath, {
+    // /cli-auth is public now (upgrade notice for pre-OAuth CLI builds) —
+    // logged-out visitors see it directly instead of a login bounce.
+    const loggedOutCliAuth = await browserRequest.get("/cli-auth", {
       maxRedirects: 0,
     });
-    expect(loggedOutCliAuth.status()).toBe(307);
-    expect(loggedOutCliAuth.headers().location).toBe(
-      `/login?next=${encodeURIComponent(cliAuthPath)}`
-    );
+    expect(loggedOutCliAuth.status()).toBe(200);
+    expect(await loggedOutCliAuth.text()).toContain("CLI login has moved");
   });
 });

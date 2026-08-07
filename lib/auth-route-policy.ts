@@ -42,6 +42,10 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/manifest.webmanifest", match: "exact" },
   { path: "/llms.txt", match: "exact" },
   { path: "/api/cli/latest", match: "subtree" },
+  // Retired PAT-handoff route: now a static "update your CLI" notice for
+  // pre-OAuth CLI builds. Requiring auth would bounce those users through
+  // /login just to read an upgrade prompt.
+  { path: "/cli-auth", match: "subtree" },
   // Invite accept page must work for logged-out recipients so we can show the
   // team name + "Continue with GitHub" CTA before auth. The page server-fetches
   // the invite (no token-derived data on the URL beyond the bearer token), and

@@ -40,6 +40,51 @@ export function resolveLoginNext(raw: string | null | undefined): string {
   return raw;
 }
 
+/**
+ * Params forwarded when resuming an OAuth authorize request after login.
+ * Allowlisted so /login can't be used to smuggle arbitrary query content
+ * into a same-origin redirect.
+ */
+const AUTHORIZE_RESUME_PARAMS = [
+  "response_type",
+  "client_id",
+  "redirect_uri",
+  "scope",
+  "state",
+  "code_challenge",
+  "code_challenge_method",
+  "prompt",
+  "resource",
+] as const;
+
+/**
+ * When Better Auth's OAuth provider (the `mcp` plugin) needs a login it
+ * redirects to `/login?<original authorize query>` — no `next` param. Losing
+ * that context after sign-in would strand OAuth clients (the mogplex CLI,
+ * hosted MCP clients) on the dashboard. Rebuild the authorize URL as the
+ * post-login destination so the whole flow stays a top-level navigation:
+ * authorize → 302 → the client's registered redirect URI.
+ *
+ * Returns null when the query is not an OAuth authorize request.
+ */
+export function resolveAuthorizeResumeNext(
+  params: URLSearchParams
+): string | null {
+  if (
+    !params.get("client_id") ||
+    !params.get("redirect_uri") ||
+    !params.get("response_type")
+  ) {
+    return null;
+  }
+  const query = new URLSearchParams();
+  for (const key of AUTHORIZE_RESUME_PARAMS) {
+    const value = params.get(key);
+    if (value) query.set(key, value);
+  }
+  return `/api/auth/mcp/authorize?${query.toString()}`;
+}
+
 export function resolveLoginError(
   raw: string | null | undefined
 ): string | null {
