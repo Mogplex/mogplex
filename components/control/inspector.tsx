@@ -163,7 +163,7 @@ export function Inspector({
           </Section>
           <Section title="GIT">
             <div className="flex flex-wrap gap-2">
-              <ActionButton label="Rebase onto main" onClick={() => onPatchWorktree(worktree.id, { behind: 0, action: "rebased onto a91f2c", state: worktree.state === "blocked" ? "implementing" : worktree.state })} />
+              <ActionButton label="Rebase onto main" onClick={() => onPatchWorktree(worktree.id, { behind: 0, action: "rebased onto main", state: worktree.state === "blocked" ? "implementing" : worktree.state })} />
               <ActionButton label="Promote to integration" primary onClick={() => {}} Icon={ArrowUp} />
               <ActionButton label="Archive" danger onClick={() => onPatchWorktree(worktree.id, { state: "archived", action: "archived" })} Icon={Archive} />
             </div>
@@ -206,17 +206,10 @@ export function Inspector({
 
   const renderTerminal = () => {
     if (!worktree) return null
-    const isFailedState = worktree.state === "failed"
-    const output = isFailedState
-      ? "$ pnpm test:migrations\npg_container | FATAL: out of memory (limit 2048 MiB)\nexit 137 after 3m41s"
-      : `$ pnpm bench pricing --iterations 200\nbench | baseline p95 812ms\nbench | candidate p95 ${worktree.id === "wt-a" ? "392ms" : "418ms"}\nbench | delta ${worktree.id === "wt-a" ? "-51.7%" : "-48.5%"}`
-
     return (
       <div className="space-y-3">
         <Section title="SANDBOX SHELL">
-          <pre className="overflow-x-auto rounded bg-[var(--terminal-background)] p-3 font-mono text-[10px] leading-relaxed text-[var(--terminal-foreground)]">
-            {output}
-          </pre>
+          <p className="text-xs text-muted-foreground">No terminal output captured yet.</p>
         </Section>
         <button
           onClick={() => onOpenDrawer("terminal")}
@@ -239,14 +232,7 @@ export function Inspector({
       case "diff":
         return (
           <Section title="UNIFIED DIFF">
-            <pre className="overflow-x-auto rounded bg-secondary p-3 font-mono text-[10px] leading-relaxed">
-              {`--- a/src/pricing/resolver.ts
-+++ b/src/pricing/resolver.ts
-@@ -41,9 +41,14 @@
--  const rows = await Promise.all(ids.map(id => db.price(id)))
-+  const rows = await db.priceBatch(ids)
-+  metrics.observe("pricing.batch", ids.length)`}
-            </pre>
+            <p className="text-xs text-muted-foreground">No diff captured yet.</p>
           </Section>
         )
       default:

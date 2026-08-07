@@ -13,12 +13,6 @@ type Props = {
 const AUTONOMY_OPTIONS = ["Read-only", "Supervised", "Autonomous"]
 const BUDGET_OPTIONS = [30, 60, 120, 250]
 
-const EXAMPLE_PROMPTS = [
-  { label: "Cut checkout p95 latency below 400ms", scope: "pricing" },
-  { label: "Move invoice tax rules behind a feature flag", scope: "ledger" },
-  { label: "Cut checkout latency and surface the new numbers on the console dashboard", scope: "2 projects" },
-]
-
 export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
   const [text, setText] = useState("")
   const [targets, setTargets] = useState<string[]>([workspaces[0]?.id || ""])
@@ -71,21 +65,6 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
           <p className="mt-1 text-sm text-muted-foreground">
             Mogplex plans it and picks the agents
           </p>
-        </div>
-
-        {/* Example prompts */}
-        <div className="flex flex-wrap justify-center gap-2">
-          {EXAMPLE_PROMPTS.map((prompt) => (
-            <button
-              key={prompt.label}
-              onClick={() => setText(prompt.label)}
-              className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-left text-xs transition-colors hover:bg-secondary"
-            >
-              <span className="size-1.5 shrink-0 rounded-full bg-primary" />
-              <span className="line-clamp-1">{prompt.label}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">{prompt.scope}</span>
-            </button>
-          ))}
         </div>
 
         {/* Targets */}

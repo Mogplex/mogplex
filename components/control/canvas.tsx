@@ -271,20 +271,22 @@ export function Canvas({ mission, worktrees, changesets, deployments, selection,
       )
     })
 
-    // Worktree to changeset
-    const wtB = wtNodes.find((n) => n.id === "wt-b")
-    const cs0 = csNodes[0]
-    if (wtB && cs0) {
+    // Each changeset connects back to the worktree it came from
+    csNodes.forEach((cs) => {
+      const source = changesets.find((c) => c.id === cs.id)
+      const wtNode = source ? wtNodes.find((n) => n.id === source.worktree) : undefined
+      if (!wtNode) return
       paths.push(
         <path
-          key="wt-cs"
-          d={`M${wtB.x + wtB.width} ${wtB.y + 60} C ${wtB.x + wtB.width + 30} ${wtB.y + 60}, ${cs0.x - 30} ${cs0.y + 50}, ${cs0.x} ${cs0.y + 50}`}
+          key={`wt-cs-${cs.id}`}
+          d={`M${wtNode.x + wtNode.width} ${wtNode.y + 60} C ${wtNode.x + wtNode.width + 30} ${wtNode.y + 60}, ${cs.x - 30} ${cs.y + 50}, ${cs.x} ${cs.y + 50}`}
           stroke="var(--accent-green)"
           strokeWidth={2}
           fill="none"
         />
       )
-    }
+    })
+    const cs0 = csNodes[0]
 
     // Changeset to env
     if (cs0 && envNodes[0]) {
@@ -328,7 +330,6 @@ export function Canvas({ mission, worktrees, changesets, deployments, selection,
           <span className="size-2 rounded-full bg-accent-green" />
           <span className="font-mono text-[11px] font-semibold">main</span>
         </div>
-        <div className="mt-1 font-mono text-[10px] text-muted-foreground">a91f2c · 12m ago</div>
         <div className="mt-1 text-[9px] text-muted-foreground">
           {worktrees.length} worktrees forked
         </div>

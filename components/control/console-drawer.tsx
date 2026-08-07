@@ -42,55 +42,23 @@ export function ConsoleDrawer({
   const [terminalInput, setTerminalInput] = useState("")
 
   // Get active worktree for terminal context
-  const scope = selection?.startsWith("wt-") ? selection : "wt-a"
-  const wt = getWorktree(scope) || worktrees[0]
+  const wt = (selection?.startsWith("wt-") ? getWorktree(selection) : undefined) || worktrees[0]
+  const scope = wt?.id ?? "no worktree"
 
+  // Logs, tests, and events have no live data source yet; only the terminal
+  // shows anything, and only what the user has typed this session.
   const getLines = (): Line[] => {
     if (tab === "terminal") {
-      const baseLines: Line[] = [
-        { gutter: "$", text: `cd /worktrees/${wt?.branch || "main"}`, color: "var(--terminal-foreground)" },
-        { gutter: "$", text: "pnpm bench pricing --iterations 200", color: "var(--terminal-foreground)" },
-        { gutter: " ", text: "bench | warmup 20 iterations", color: "var(--terminal-muted)" },
-        { gutter: " ", text: "bench | baseline p95 812ms", color: "var(--border)" },
-        { gutter: " ", text: `bench | candidate p95 ${wt?.id === "wt-a" ? "392ms" : "418ms"}`, color: "var(--accent-green)" },
-        { gutter: " ", text: `bench | delta ${wt?.id === "wt-a" ? "-51.7%" : "-48.5%"}`, color: "var(--accent-green)" },
-      ]
-      terminalLog.forEach((l) => {
-        baseLines.push({ gutter: "$", text: l, color: "var(--terminal-foreground)" })
-      })
-      return baseLines
+      return terminalLog.map((l) => ({ gutter: "$", text: l, color: "var(--terminal-foreground)" }))
     }
+    return []
+  }
 
-    if (tab === "logs") {
-      return [
-        { gutter: "12:04:11", text: "api      | GET /pricing/quote 200 486ms", color: "var(--border)" },
-        { gutter: "12:04:11", text: "cache    | miss price_book:eu-west", color: "var(--accent-amber)" },
-        { gutter: "12:04:12", text: "api      | GET /pricing/quote 200 121ms", color: "var(--border)" },
-        { gutter: "12:04:14", text: "deploy   | DEP-77 rollout 60% · error_rate 1.4%", color: "var(--accent-red)" },
-        { gutter: "12:04:15", text: "cache    | hit ratio 0.71 (target 0.85)", color: "var(--accent-amber)" },
-        { gutter: "12:04:18", text: "api      | GET /pricing/quote 200 108ms", color: "var(--border)" },
-      ]
-    }
-
-    if (tab === "tests") {
-      return [
-        { gutter: "PASS", text: "test/pricing.spec.ts · 214 assertions", color: "var(--accent-green)", tail: "46s" },
-        { gutter: "PASS", text: "test/resolver.spec.ts · 88 assertions", color: "var(--accent-green)", tail: "21s" },
-        { gutter: "FAIL", text: "test/pricing.bench.ts · p95 gate 418ms > 400ms", color: "var(--accent-red)", tail: "1m12s" },
-        { gutter: "FAIL", text: "test/migrations.spec.ts · container OOM (exit 137)", color: "var(--accent-red)", tail: "3m41s" },
-        { gutter: "SKIP", text: "test/edge-cache.spec.ts · worktree blocked", color: "var(--terminal-muted)", tail: "-" },
-      ]
-    }
-
-    // events
-    return [
-      { gutter: "12:06", text: "forge-2 requested merge approval for CS-118", color: "var(--accent-amber)" },
-      { gutter: "12:05", text: "forge-3 run failed (exit 137)", color: "var(--accent-red)" },
-      { gutter: "12:04", text: "forge-4 rebase blocked on src/pricing/resolver.ts", color: "var(--accent-red)" },
-      { gutter: "12:01", text: "forge-1 committed 4 files to agent/atlas/cache-layer", color: "var(--border)" },
-      { gutter: "11:58", text: "DEP-77 rollout advanced to 60%", color: "var(--border)" },
-      { gutter: "11:52", text: "MSN-241 created by you", color: "var(--terminal-muted)" },
-    ]
+  const EMPTY_MESSAGES: Record<Tab, string> = {
+    terminal: "No commands run yet.",
+    logs: "No logs yet.",
+    tests: "No test runs yet.",
+    events: "No events yet.",
   }
 
   const handleTerminalSubmit = (e: React.KeyboardEvent) => {
@@ -160,6 +128,11 @@ export function ConsoleDrawer({
 
           {/* Lines */}
           <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
+            {getLines().length === 0 && (
+              <div className="py-2" style={{ color: "var(--terminal-muted)" }}>
+                {EMPTY_MESSAGES[tab]}
+              </div>
+            )}
             {getLines().map((line, i) => (
               <div key={i} className="flex gap-2">
                 <span style={{ color: line.color === "var(--accent-green)" ? line.color : "var(--terminal-muted)" }} className="w-14 shrink-0 text-right">
