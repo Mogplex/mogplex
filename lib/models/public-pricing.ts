@@ -40,7 +40,13 @@ export async function getPublicModelRates(): Promise<PublicModelRate[]> {
       .order("provider")
       .order("name");
 
-    if (error || !data) return [];
+    if (error || !data) {
+      // Fail-safe for the public page, but a dropped table should be visible
+      // in logs — a broken gateway sync or schema drift would otherwise hide.
+      if (error)
+        console.warn("public model rates query failed:", error.message);
+      return [];
+    }
 
     const rates: PublicModelRate[] = [];
     for (const row of filterVisibleModelCatalog(data as PublicRateRow[])) {
@@ -56,7 +62,8 @@ export async function getPublicModelRates(): Promise<PublicModelRate[]> {
       });
     }
     return rates;
-  } catch {
+  } catch (error) {
+    console.warn("public model rates unavailable:", error);
     return [];
   }
 }

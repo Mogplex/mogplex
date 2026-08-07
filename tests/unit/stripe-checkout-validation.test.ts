@@ -9,12 +9,10 @@ const ATTEMPT_ID = "0198f3e8-9c41-4d40-8cb9-4afdfac76f01";
 
 test("subscribe should accept every catalog plan and reject unknown plans", async () => {
   const route = await loadCheckoutRoute();
-  for (const plan of [
-    "pro_monthly",
-    "pro_annual",
-    "team_monthly",
-    "team_annual",
-  ]) {
+  const { PLAN_PRICES } = await import("../../lib/billing/catalog");
+  // Iterating the catalog keeps this true as tiers are added — a hardcoded
+  // list silently went stale when business_monthly/business_annual landed.
+  for (const plan of PLAN_PRICES.map((price) => price.lookupKey)) {
     assert.equal(
       route.validateCheckoutRequest({ kind: "subscribe", plan }).ok,
       true
