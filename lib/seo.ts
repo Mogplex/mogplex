@@ -2,15 +2,14 @@ import type { Metadata, MetadataRoute } from "next";
 
 export const SITE_URL = "https://mogplex.com";
 export const SITE_NAME = "Mogplex";
-export const DEFAULT_TITLE =
-  "Mogplex | The open-source engine for building and maintaining software";
+export const DEFAULT_TITLE = "Mogplex | The open-source agent foundry";
 export const DEFAULT_DESCRIPTION =
-  "Mogplex runs agents that plan, build, test, and review code in per-run sandboxes. Pull requests come out behind your gates.";
+  "Mogplex is the open-source agent foundry. Agents build, test, and review code in sandboxes you can watch, on a platform you can read. Your gates decide what ships.";
 export const SOCIAL_IMAGE = {
   url: "/opengraph-image.png?v=20260806-1",
   width: 1200,
   height: 630,
-  alt: "Mogplex open-source software engine and inspectable agent run",
+  alt: "Mogplex open-source agent foundry and inspectable agent run",
 } as const;
 
 type PublicContentRoute = {
@@ -27,7 +26,7 @@ type PublicContentRoute = {
 export const PUBLIC_CONTENT_ROUTES = [
   {
     path: "/",
-    lastModified: "2026-08-05",
+    lastModified: "2026-08-07",
     changeFrequency: "weekly",
     priority: 1,
   },

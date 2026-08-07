@@ -335,8 +335,7 @@
 }
 
 .mpx-nav-links > a,
-.mpx-platform-wrap > button,
-.mpx-live-link {
+.mpx-platform-wrap > button {
   border: 0;
   background: transparent;
   text-decoration: none;
@@ -344,8 +343,7 @@
 }
 
 .mpx-nav-links > a:hover,
-.mpx-platform-wrap > button:hover,
-.mpx-live-link:hover {
+.mpx-platform-wrap > button:hover {
   color: var(--accent);
 }
 
@@ -374,11 +372,8 @@
   transform: rotate(180deg);
 }
 
-.mpx-live-link {
+.mpx-nav .mpx-github-pill {
   margin-left: auto;
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
 }
 
 .mpx-github-pill {
@@ -686,7 +681,7 @@
 
 .mpx-hero h1 {
   margin: 28px 0 0;
-  font-size: clamp(2.4rem, 3.85vw, 4rem);
+  font-size: clamp(2.75rem, 4.6vw, 5rem);
   font-weight: 700;
   letter-spacing: -0.032em;
   line-height: 1.04;
@@ -1791,7 +1786,7 @@ path.mpx-dag-line,
 .mpx-harnesses h2,
 .mpx-enterprise h2 {
   margin: 24px 0 0;
-  font-size: clamp(2.5rem, 5.2vw, 5.9rem);
+  font-size: clamp(2rem, 3vw, 3.4rem);
   font-weight: 800;
   letter-spacing: -0.045em;
   line-height: 0.95;
@@ -1910,8 +1905,13 @@ path.mpx-dag-line,
 
 .mpx-cap.is-zdr h3 {
   max-width: 560px;
-  font-size: clamp(1.7rem, 3vw, 2.7rem);
-  line-height: 1.04;
+  font-size: clamp(1.6rem, 2.3vw, 2.2rem);
+  line-height: 1.1;
+}
+
+.mpx-cap-grid.is-duo .mpx-cap h3 {
+  font-size: 28px;
+  line-height: 1.2;
 }
 
 .mpx-cap.is-zdr .mpx-cap-description {
@@ -1993,6 +1993,14 @@ path.mpx-dag-line,
 
 .mpx-cap.is-byok {
   grid-column: span 5;
+}
+
+.mpx-cap.is-lead {
+  grid-column: span 7;
+}
+
+.mpx-cap.is-wide {
+  grid-column: span 12;
 }
 
 .mpx-vault {
@@ -2480,7 +2488,6 @@ path.mpx-dag-line,
 
 .mpx-harnesses h2 {
   max-width: 980px;
-  font-size: clamp(2.6rem, 5.5vw, 6rem);
   line-height: 0.93;
 }
 
@@ -2740,7 +2747,6 @@ path.mpx-dag-line,
 
 .mpx-enterprise h2 {
   max-width: 760px;
-  font-size: clamp(2.5rem, 4.7vw, 5.2rem);
   line-height: 0.94;
 }
 
@@ -2750,6 +2756,12 @@ path.mpx-dag-line,
   color: var(--ink-body-2);
   font-size: 16px;
   line-height: 1.625;
+}
+
+.mpx-enterprise-copy > p a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .mpx-enterprise-actions {
@@ -3174,12 +3186,12 @@ path.mpx-dag-line,
 }
 
 @media (width <= 1240px) {
-  .mpx-live-link {
-    display: none;
-  }
-
   .mpx-nav-links {
     margin-left: auto;
+  }
+
+  .mpx-nav .mpx-github-pill {
+    margin-left: 0;
   }
 
   .mpx-hero {
@@ -3217,6 +3229,7 @@ path.mpx-dag-line,
 
   .mpx-cap.is-zdr,
   .mpx-cap.is-byok,
+  .mpx-cap.is-lead,
   .mpx-cap.is-observe,
   .mpx-cap.is-sandbox {
     grid-column: span 12;
@@ -3253,8 +3266,7 @@ path.mpx-dag-line,
   }
 
   .mpx-nav-links,
-  .mpx-nav .mpx-github-pill,
-  .mpx-nav .mpx-live-link {
+  .mpx-nav .mpx-github-pill {
     display: none;
   }
 
@@ -3424,7 +3436,7 @@ path.mpx-dag-line,
   }
 
   .mpx-hero h1 {
-    font-size: clamp(2.2rem, 10.5vw, 3.4rem);
+    font-size: clamp(2.5rem, 11.5vw, 3.6rem);
   }
 
   .mpx-hero-actions {
@@ -3451,7 +3463,7 @@ path.mpx-dag-line,
   .mpx-section-intro h2,
   .mpx-harnesses h2,
   .mpx-enterprise h2 {
-    font-size: clamp(2.4rem, 12vw, 4.2rem);
+    font-size: clamp(1.85rem, 7.5vw, 2.5rem);
   }
 
   .mpx-cap {

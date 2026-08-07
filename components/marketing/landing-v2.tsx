@@ -16,6 +16,7 @@ import {
   GatesSection,
   HarnessesSection,
   HeroSection,
+  OrchestratorSection,
   ProofSection,
 } from "./landing-v2/index";
 
@@ -57,6 +58,8 @@ export function MarketingLandingPage() {
         <HeroSection />
 
         <ProofSection />
+
+        <OrchestratorSection />
 
         <BuildMaintainSection />
 

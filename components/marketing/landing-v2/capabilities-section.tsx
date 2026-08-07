@@ -34,11 +34,11 @@ export function BuildMaintainSection() {
         </div>
       </div>
 
-      <div className="mpx-cap-grid">
+      <div className="mpx-cap-grid is-duo">
         <article className="mpx-cap is-zdr">
           <p className="mpx-cap-kicker">BUILD</p>
           <h3>
-            Turn an issue into a tested draft PR
+            PRs that ship safely to production, with guardrails you set
             <AccentPeriod />
           </h3>
           <p className="mpx-cap-description">
@@ -80,7 +80,9 @@ export function GatesSection() {
         <div>
           <p>
             Every run ends at your branch protections, required checks,
-            and required reviews. Mogplex cannot bypass them.
+            and required reviews. Mogplex cannot bypass them. The code
+            that enforces your gates is open, so read it before you
+            trust it.
           </p>
           <Link className="mpx-text-link is-semibold" href="/how-it-works">
             Follow one run
@@ -162,9 +164,9 @@ export function GatesSection() {
             <AccentPeriod />
           </h3>
           <p className="mpx-cap-description">
-            Hosted model access uses your Mogplex balance. Or route each
-            call through your own Anthropic, OpenAI, OpenRouter, or AI
-            Gateway key. Your vault stores it.
+            Hosted model access uses your Mogplex balance, at published
+            rates. Or route each call through your own Anthropic, OpenAI,
+            OpenRouter, or AI Gateway key. Your vault stores it.
           </p>
           <div className="mpx-vault">
             <small>

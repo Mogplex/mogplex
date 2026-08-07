@@ -1,4 +1,5 @@
 export { BuildMaintainSection, GatesSection } from "./capabilities-section";
+export { OrchestratorSection } from "./orchestrator-section";
 export type { TerminalLine } from "./data";
 export {
   changedFiles,

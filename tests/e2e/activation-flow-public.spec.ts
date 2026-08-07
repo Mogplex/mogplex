@@ -1,18 +1,16 @@
 import { expect, test } from "@playwright/test";
 
-test("public landing shows the open-source software engine and primary CTA", async ({
+test("public landing shows the open-source agent foundry and primary CTA", async ({
   page,
 }) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("landing-hero")).toBeVisible();
-  await expect(page).toHaveTitle(
-    "Mogplex | The open-source engine for building and maintaining software"
-  );
+  await expect(page).toHaveTitle("Mogplex | The open-source agent foundry");
   await expect(
     page.getByRole("heading", {
-      name: /The open-source engine for building and maintaining software\./,
+      name: /The open-source agent foundry\./,
     })
   ).toBeVisible();
   await expect(page.getByTestId("landing-primary-cta")).toBeVisible();
@@ -52,7 +50,7 @@ test("landing offers three harnesses and drops retired chrome and claims", async
   ).toBeVisible();
   await expect(harnessTabs.getByRole("tab", { name: "Codex" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /Choose your harness\./ })
+    page.getByRole("heading", { name: /Not locked to our agent\./ })
   ).toBeVisible();
 
   await harnessTabs.getByRole("tab", { name: "Claude Code" }).click();
