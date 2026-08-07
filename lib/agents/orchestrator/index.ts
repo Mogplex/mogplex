@@ -26,7 +26,8 @@ export {
   getApprovalRequiredTools,
   hasPendingApproval,
   type PolicyCheckResult,
-  type ApprovalRequiredResponse,
+  type PolicyDeniedResponse,
+  type PolicyApprovalDeps,
   type ToolAuditEntry,
 } from "./policy";
 
