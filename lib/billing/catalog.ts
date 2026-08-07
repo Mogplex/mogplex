@@ -78,6 +78,9 @@ export const TOPUP_PRESETS: readonly TopupPreset[] = [
   { lookupKey: "topup_10", amountCents: 1000 },
   { lookupKey: "topup_25", amountCents: 2500 },
   { lookupKey: "topup_100", amountCents: 10000 },
+  { lookupKey: "topup_250", amountCents: 25000 },
+  { lookupKey: "topup_500", amountCents: 50000 },
+  { lookupKey: "topup_1000", amountCents: 100000 },
 ];
 
 // Vercel bills active sandbox sessions at $0.005/minute. Keep the published
@@ -86,10 +89,11 @@ export const TOPUP_PRESETS: readonly TopupPreset[] = [
 export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
 
 // Fraud guardrails, not usage limits (pricing-plan 02 §3b): the cap is
-// raised on request instantly. ⚠️ Open decision #5 — both values need
-// Charles's sign-off before billing goes live (no-artificial-limits rule).
+// raised on request instantly. $10–$1,000 range signed off by Charles
+// 2026-08-07 (top-ups are manual-only at launch — auto top-up is outside
+// the Managed Payments merchant-of-record consent, pricing-plan 02 §3c).
 export const TOPUP_MIN_CENTS = 1000;
-export const TOPUP_MAX_CENTS = 500000;
+export const TOPUP_MAX_CENTS = 100000;
 
 export function formatUsd(amountCents: number): string {
   const sign = amountCents < 0 ? "-" : "";

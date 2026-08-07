@@ -64,8 +64,14 @@ test("lookup keys are unique across plans and top-up presets", () => {
 });
 
 test("top-up guardrails bracket the presets", () => {
+  // $10–$1,000 manual-only range (Charles, Aug 7 2026 — auto top-up is
+  // outside the Managed Payments MoR consent).
   assert.equal(TOPUP_MIN_CENTS, 1000);
-  assert.equal(TOPUP_MAX_CENTS, 500000);
+  assert.equal(TOPUP_MAX_CENTS, 100000);
+  assert.deepEqual(
+    TOPUP_PRESETS.map((preset) => preset.amountCents),
+    [1000, 2500, 10000, 25000, 50000, 100000]
+  );
   for (const preset of TOPUP_PRESETS) {
     assert.ok(preset.amountCents >= TOPUP_MIN_CENTS);
     assert.ok(preset.amountCents <= TOPUP_MAX_CENTS);
