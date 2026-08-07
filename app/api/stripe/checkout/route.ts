@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 import { getStripe, isBillingEnabled } from "@/lib/billing/stripe";
 import { findTopupPreset } from "@/lib/billing/catalog";
@@ -30,6 +31,18 @@ function appUrl(path: string): string {
 function billingResultPath(returnPath: string, result: string): string {
   const separator = returnPath.includes("?") ? "&" : "?";
   return `${returnPath}${separator}billing=${result}`;
+}
+
+// Best-effort: without it the customer is created email-less and Checkout
+// lets Link autofill an unrelated email from the browser.
+async function getActorEmail(userId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("email")
+    .eq("id", userId)
+    .maybeSingle<{ email: string | null }>();
+  if (error) return null;
+  return data?.email ?? null;
 }
 
 export async function POST(request: Request) {
@@ -77,7 +90,10 @@ export async function POST(request: Request) {
     );
   }
   const { returnPath } = validation.request;
-  const customerId = await ensureStripeCustomer(account);
+  const customerId = await ensureStripeCustomer(
+    account,
+    await getActorEmail(userId)
+  );
   const stripe = getStripe();
 
   if (validation.request.kind === "subscribe") {

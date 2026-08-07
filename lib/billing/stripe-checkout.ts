@@ -23,6 +23,11 @@ export type StripeCustomerDeps = {
     accountId: string,
     stripeCustomerId: string
   ) => Promise<void>;
+  // Returns null for deleted customers.
+  retrieveCustomer: (
+    customerId: string
+  ) => Promise<{ email: string | null } | null>;
+  updateCustomerEmail: (customerId: string, email: string) => Promise<void>;
 };
 
 export type StripeProductDeps = {
@@ -44,6 +49,14 @@ function defaultCustomerDeps(): StripeCustomerDeps {
       updateBillingAccount(accountId, {
         stripe_customer_id: stripeCustomerId,
       }),
+    retrieveCustomer: async (customerId) => {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer.deleted) return null;
+      return { email: customer.email };
+    },
+    updateCustomerEmail: async (customerId, email) => {
+      await stripe.customers.update(customerId, { email });
+    },
   };
 }
 
@@ -56,13 +69,30 @@ function defaultProductDeps(): StripeProductDeps {
 const topupProductLookups = new WeakMap<StripeProductDeps, Promise<string>>();
 const sharedProductDeps = defaultProductDeps();
 
+// The Stripe customer carries the acting user's login email: with an email
+// on the customer, Checkout locks its email field instead of letting Link
+// autofill an unrelated account from the browser (receipts and MoR tax
+// invoices would otherwise go to that address). Never overwrites an email
+// already on the customer.
 export async function ensureStripeCustomer(
   account: BillingAccount,
+  actorEmail: string | null = null,
   deps: StripeCustomerDeps = defaultCustomerDeps()
 ): Promise<string> {
-  if (account.stripe_customer_id) return account.stripe_customer_id;
+  if (account.stripe_customer_id) {
+    if (actorEmail) {
+      const existing = await deps.retrieveCustomer(account.stripe_customer_id);
+      if (existing && !existing.email) {
+        await deps.updateCustomerEmail(account.stripe_customer_id, actorEmail);
+      }
+    }
+    return account.stripe_customer_id;
+  }
   const customer = await deps.createCustomer(
-    { metadata: { billing_account_id: account.id } },
+    {
+      ...(actorEmail ? { email: actorEmail } : {}),
+      metadata: { billing_account_id: account.id },
+    },
     // Concurrent requests for a new account collapse to the same Stripe
     // customer instead of creating an orphan and racing the DB linkage.
     { idempotencyKey: `billing-customer:${account.id}` }
