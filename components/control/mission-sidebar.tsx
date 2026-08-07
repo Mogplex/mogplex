@@ -199,9 +199,7 @@ export function MissionSidebar({
                   <span className="text-border">|</span>
                   <span>{agentCount} agents</span>
                   <span className="text-border">|</span>
-                  <span className={m.cost > m.budget * 0.8 ? "text-accent-amber" : ""}>
-                    {formatCost(m.cost)}
-                  </span>
+                  <span>{formatCost(m.cost)}</span>
                 </div>
 
                 {/* Attention badge for non-selected items */}

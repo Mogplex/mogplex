@@ -6,12 +6,14 @@ import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import type {
   Mission,
+  MissionPermissions,
   Worktree,
   Changeset,
   Deployment,
   TimelineEvent,
   ControlSeedData,
 } from "@/lib/control/types"
+import type { ComposerSendOptions } from "./composer"
 import { generateMissionId } from "@/lib/control/utils"
 import { scopedHref } from "@/lib/scoped-href"
 import { buildCombinedTimeline } from "./build-combined-timeline"
@@ -162,7 +164,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
 
   // Handle message send
   const handleSend = useCallback(
-    async (text: string, target: string, scopeLevel: string) => {
+    async (text: string, target: string, scopeLevel: string, options: ComposerSendOptions) => {
       if (!text.trim()) return
 
       // Push user event to timeline
@@ -178,12 +180,15 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
         kind: "tool",
         label: "DISPATCHED",
         time: "now",
-        body: `Scope: ${scopeLevel} · target: ${target}.`,
+        body: `Scope: ${scopeLevel} · target: ${target} · ${options.permissions}${
+          options.model ? ` · ${options.model}` : ""
+        }.`,
       })
 
-      // Send to chat API (fail soft if endpoint doesn't exist)
+      // Send to chat API (fail soft if endpoint doesn't exist). The route
+      // resolves a missing model to the user's default server-side.
       try {
-        await sendMessage({ text })
+        await sendMessage({ text }, { body: { model: options.model ?? undefined } })
         setComposerInput("")
       } catch (err) {
         const message = err instanceof Error ? err.message : "Chat error"
@@ -199,7 +204,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
 
   // Create new mission
   const handleCreateMission = useCallback(
-    (text: string, targets: string[], autonomy: string, budget: number) => {
+    (text: string, targets: string[], permissions: MissionPermissions) => {
       const id = generateMissionId()
       const newMissionObj: Mission = {
         id,
@@ -209,17 +214,16 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
         pinned: false,
         age: "now",
         cost: 0,
-        budget,
         base: "main",
         env: "-",
-        autonomy: autonomy as Mission["autonomy"],
+        permissions,
         approval: "Human merge",
         sandbox: "container-med",
         archived: false,
         targets,
         timeline: [
           { kind: "user", label: "YOU", time: "now", body: text },
-          { kind: "tool", label: "DISPATCHED", time: "now", body: `Mogplex is planning. Autonomy: ${autonomy}. Budget: $${budget}.` },
+          { kind: "tool", label: "DISPATCHED", time: "now", body: `Mogplex is planning. Permissions: ${permissions}.` },
         ],
       }
       setMissions((prev) => [newMissionObj, ...prev])

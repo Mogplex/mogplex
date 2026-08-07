@@ -7,6 +7,14 @@
 
 export type MissionStatus = "active" | "attention" | "completed" | "archived";
 
+export type MissionPermissions = "Skip Permissions" | "Approve Edits";
+
+// Order matters: index 0 is the composer default.
+export const MISSION_PERMISSION_OPTIONS: MissionPermissions[] = [
+  "Skip Permissions",
+  "Approve Edits",
+];
+
 export type Mission = {
   id: string; // MSN-nnn
   title: string;
@@ -15,10 +23,9 @@ export type Mission = {
   pinned: boolean;
   age: string;
   cost: number;
-  budget: number;
   base: string; // base branch
   env: string;
-  autonomy: "Read-only" | "Supervised" | "Autonomous";
+  permissions: MissionPermissions;
   approval: string;
   sandbox: string;
   archived: boolean;

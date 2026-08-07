@@ -2,32 +2,25 @@
 
 import { useState, useCallback } from "react"
 import { Xmark, Plus, SendDiagonal } from "iconoir-react"
-import type { Workspace } from "@/lib/control/types"
+import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types"
+import type { MissionPermissions, Workspace } from "@/lib/control/types"
 
 type Props = {
   workspaces: Workspace[]
   onCancel?: () => void
-  onCreate: (text: string, targets: string[], autonomy: string, budget: number) => void
+  onCreate: (text: string, targets: string[], permissions: MissionPermissions) => void
 }
-
-const AUTONOMY_OPTIONS = ["Read-only", "Supervised", "Autonomous"]
-const BUDGET_OPTIONS = [30, 60, 120, 250]
 
 export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
   const [text, setText] = useState("")
   const [targets, setTargets] = useState<string[]>([workspaces[0]?.id || ""])
-  const [autonomyIdx, setAutonomyIdx] = useState(1) // Default: Supervised
-  const [budgetIdx, setBudgetIdx] = useState(1) // Default: $60
+  const [permissionsIdx, setPermissionsIdx] = useState(0) // Default: Skip Permissions
 
   const activeWorkspaces = workspaces.filter((w) => w.status === "active")
   const availableToAdd = activeWorkspaces.filter((w) => !targets.includes(w.id))
 
-  const cycleAutonomy = useCallback(() => {
-    setAutonomyIdx((i) => (i + 1) % AUTONOMY_OPTIONS.length)
-  }, [])
-
-  const cycleBudget = useCallback(() => {
-    setBudgetIdx((i) => (i + 1) % BUDGET_OPTIONS.length)
+  const cyclePermissions = useCallback(() => {
+    setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length)
   }, [])
 
   const addTarget = useCallback(() => {
@@ -42,9 +35,9 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
 
   const handleSubmit = useCallback(() => {
     if (text.trim()) {
-      onCreate(text.trim(), targets, AUTONOMY_OPTIONS[autonomyIdx], BUDGET_OPTIONS[budgetIdx])
+      onCreate(text.trim(), targets, MISSION_PERMISSION_OPTIONS[permissionsIdx])
     }
-  }, [text, targets, autonomyIdx, budgetIdx, onCreate])
+  }, [text, targets, permissionsIdx, onCreate])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -122,16 +115,10 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
           {/* Options row */}
           <div className="mt-3 flex items-center gap-3 border-t border-border pt-3">
             <button
-              onClick={cycleAutonomy}
+              onClick={cyclePermissions}
               className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-secondary"
             >
-              {AUTONOMY_OPTIONS[autonomyIdx]}
-            </button>
-            <button
-              onClick={cycleBudget}
-              className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-secondary"
-            >
-              ${BUDGET_OPTIONS[budgetIdx]} cap
+              {MISSION_PERMISSION_OPTIONS[permissionsIdx]}
             </button>
 
             <div className="ml-auto flex items-center gap-2">
