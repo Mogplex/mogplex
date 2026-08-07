@@ -1,0 +1,185 @@
+/**
+ * Orchestrator tool registry - assembles tools from category modules.
+ *
+ * This module composes the orchestrator's tool surface from category-specific
+ * modules and provides factory functions for building tool instances.
+ */
+import type { Tool } from "ai";
+import type { z } from "zod";
+import {
+  createReadFile,
+  createListFiles,
+  createWriteFile,
+  createStartSandbox,
+  createStopSandbox,
+  createGithubPullRequestTool,
+  createGithubApi,
+  webFetch,
+  createTerminalExec,
+} from "@/lib/agents/tools";
+import type {
+  OrchestratorToolDef,
+  OrchestratorToolContext,
+  OrchestratorToolCategory,
+  RepoToolDefaults,
+} from "./types";
+import { createStubTool, createTypedStub, buildRepoDefaults } from "./helpers";
+import { PLANNING_TOOLS, PLANNING_SCHEMAS } from "./tools/planning";
+import { FILESYSTEM_TOOLS, FILESYSTEM_SCHEMAS } from "./tools/filesystem";
+import { GIT_TOOLS, GIT_SCHEMAS } from "./tools/git";
+import { EXECUTION_TOOLS, EXECUTION_SCHEMAS } from "./tools/execution";
+import { MCP_TOOLS, MCP_SCHEMAS } from "./tools/mcp";
+import {
+  INFRASTRUCTURE_TOOLS,
+  INFRASTRUCTURE_SCHEMAS,
+} from "./tools/infrastructure";
+import { DELIVERY_TOOLS, DELIVERY_SCHEMAS } from "./tools/delivery";
+import { GOVERNANCE_TOOLS, GOVERNANCE_SCHEMAS } from "./tools/governance";
+import {
+  MEMORY_TOOLS,
+  COMMUNICATION_TOOLS,
+  MEMORY_COMMUNICATION_SCHEMAS,
+} from "./tools/memory-communication";
+
+// Re-export types from types module
+export type {
+  OrchestratorToolAccess,
+  OrchestratorToolCategory,
+  OrchestratorToolDef,
+  OrchestratorToolContext,
+} from "./types";
+
+/**
+ * Complete registry of orchestrator tools by category.
+ */
+export const ORCHESTRATOR_TOOLS: OrchestratorToolDef[] = [
+  ...PLANNING_TOOLS,
+  ...FILESYSTEM_TOOLS,
+  ...GIT_TOOLS,
+  ...EXECUTION_TOOLS,
+  ...MCP_TOOLS,
+  ...INFRASTRUCTURE_TOOLS,
+  ...DELIVERY_TOOLS,
+  ...GOVERNANCE_TOOLS,
+  ...MEMORY_TOOLS,
+  ...COMMUNICATION_TOOLS,
+];
+
+/**
+ * Get a tool definition by name.
+ */
+export function getToolDef(name: string): OrchestratorToolDef | undefined {
+  return ORCHESTRATOR_TOOLS.find((t) => t.name === name);
+}
+
+/**
+ * Get all tools in a category.
+ */
+export function getToolsByCategory(
+  category: OrchestratorToolCategory
+): OrchestratorToolDef[] {
+  return ORCHESTRATOR_TOOLS.filter((t) => t.category === category);
+}
+
+/**
+ * Get counts of implemented vs stub tools.
+ */
+export function getImplementationStats(): {
+  implemented: number;
+  stub: number;
+  total: number;
+} {
+  const implemented = ORCHESTRATOR_TOOLS.filter((t) => t.implemented).length;
+  const total = ORCHESTRATOR_TOOLS.length;
+  return { implemented, stub: total - implemented, total };
+}
+
+/**
+ * Schema mapping for stub tools. Assembled from category modules.
+ */
+const STUB_TOOL_SCHEMAS: Record<string, z.ZodType> = {
+  ...PLANNING_SCHEMAS,
+  ...FILESYSTEM_SCHEMAS,
+  ...GIT_SCHEMAS,
+  ...EXECUTION_SCHEMAS,
+  ...MCP_SCHEMAS,
+  ...INFRASTRUCTURE_SCHEMAS,
+  ...DELIVERY_SCHEMAS,
+  ...GOVERNANCE_SCHEMAS,
+  ...MEMORY_COMMUNICATION_SCHEMAS,
+};
+
+/**
+ * Build a tool for the given definition using the context.
+ * Implemented tools get real implementations; stubs get typed schemas.
+ */
+function buildToolForDef(
+  def: OrchestratorToolDef,
+  ctx: OrchestratorToolContext,
+  repoDefaults: RepoToolDefaults
+): Tool {
+  // Check for implemented tools with real implementations
+  if (def.implemented) {
+    if (def.name === "read_file") {
+      return createReadFile(ctx.githubToken, repoDefaults);
+    }
+    if (def.name === "list_files") {
+      return createListFiles(ctx.githubToken, repoDefaults);
+    }
+    if (def.name === "write_file") {
+      return createWriteFile(ctx.userId);
+    }
+    if (def.name === "search_repo") {
+      return ctx.githubToken
+        ? createGithubApi(ctx.githubToken, repoDefaults)
+        : createStubTool(def);
+    }
+    if (def.name === "run_command") {
+      return createTerminalExec(
+        ctx.sandboxId ?? undefined,
+        ctx.userId,
+        ctx.repoId ?? undefined
+      );
+    }
+    if (def.name === "sandbox_start") {
+      return createStartSandbox(ctx.userId);
+    }
+    if (def.name === "sandbox_stop") {
+      return createStopSandbox(ctx.userId);
+    }
+    if (def.name === "open_pr") {
+      return ctx.githubToken
+        ? createGithubPullRequestTool(ctx.githubToken, repoDefaults)
+        : createStubTool(def);
+    }
+    if (def.name === "web_fetch") {
+      return webFetch;
+    }
+  }
+
+  // Use schema map for typed stubs
+  const schema = STUB_TOOL_SCHEMAS[def.name];
+  if (schema) {
+    return createTypedStub(def, schema);
+  }
+
+  // Fallback to basic stub
+  return createStubTool(def);
+}
+
+/**
+ * Build all orchestrator tools, mapping to existing implementations where available.
+ * Returns a record keyed by tool name.
+ */
+export function buildOrchestratorTools(
+  ctx: OrchestratorToolContext
+): Record<string, Tool> {
+  const repoDefaults = buildRepoDefaults(ctx);
+  const tools: Record<string, Tool> = {};
+
+  for (const def of ORCHESTRATOR_TOOLS) {
+    tools[def.name] = buildToolForDef(def, ctx, repoDefaults);
+  }
+
+  return tools;
+}

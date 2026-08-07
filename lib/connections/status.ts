@@ -1,17 +1,10 @@
+import type { ConnectionHealthStatus } from "@/lib/connections/health-status";
 import type { Connection } from "@/lib/types";
 
-export const CONNECTION_HEALTH_STATUSES = [
-  "unknown",
-  "testing",
-  "healthy",
-  "auth_failed",
-  "unreachable",
-  "misconfigured",
-  "error",
-] as const;
-
-export type ConnectionHealthStatus =
-  (typeof CONNECTION_HEALTH_STATUSES)[number];
+export {
+  CONNECTION_HEALTH_STATUSES,
+  type ConnectionHealthStatus,
+} from "@/lib/connections/health-status";
 
 export type ConnectionTestResult = {
   healthy: boolean;

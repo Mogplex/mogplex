@@ -3,11 +3,11 @@ import { scopedHref } from "@/lib/scoped-href";
 
 type Params = { scope: string };
 
-export default async function ScopeRootPage({
+export default async function ObservePage({
   params,
 }: {
   params: Promise<Params>;
 }) {
   const { scope } = await params;
-  redirect(scopedHref(scope, "/control"));
+  redirect(scopedHref(scope, "/observability"));
 }

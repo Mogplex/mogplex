@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { useUser } from "@/hooks/use-user"
 import type { Connection } from "@/lib/types"
@@ -44,6 +45,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getPresetIcon } from "@/components/settings/preset-icons"
 import type { ScopeContext } from "@/lib/scope-context"
+import { scopedHref } from "@/lib/scoped-href"
+import { ArrowRight, User, Code, Page, Settings as SettingsIcon } from "iconoir-react"
 
 type GithubInstallationView = {
   id: string
@@ -100,7 +103,7 @@ const CONNECTION_AUTH_OPTIONS = [
   { value: "basic", label: "Basic Auth" },
 ] as const
 
-const SETTINGS_TABS = ["account", "teams", "connections", "keys", "models", "billing"] as const
+const SETTINGS_TABS = ["account", "teams", "connections", "keys", "models", "agents", "billing"] as const
 type SettingsTab = (typeof SETTINGS_TABS)[number]
 const SETTINGS_TAB_SET: ReadonlySet<string> = new Set(SETTINGS_TABS)
 
@@ -334,6 +337,94 @@ function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boolean | nu
 }
 
 const EMPTY_CONNECTIONS: Connection[] = []
+
+function AgentsSettingsSection() {
+  const { scope } = useParams<{ scope: string }>()
+
+  const agentSections = [
+    {
+      title: "Agent Definitions",
+      description: "Manage your agent roster, harness configurations, and model assignments.",
+      href: scopedHref(scope, "/agents/roster"),
+      icon: User,
+    },
+    {
+      title: "Rules",
+      description: "Repository conventions and policies that guide agent behavior.",
+      href: scopedHref(scope, "/agents/rules"),
+      icon: Page,
+    },
+    {
+      title: "Skills",
+      description: "Reusable capabilities and tools available to your agents.",
+      href: scopedHref(scope, "/agents/skills"),
+      icon: Code,
+    },
+    {
+      title: "Context",
+      description: "Global context and documentation agents use for grounding.",
+      href: scopedHref(scope, "/agents/context"),
+      icon: SettingsIcon,
+    },
+  ]
+
+  return (
+    <section className="border border-border/60 bg-card">
+      <div className="px-5 pt-5 pb-2">
+        <div className="ui-section-title">Agents &amp; Harnesses</div>
+        <div className="ui-section-caption">
+          Agent definitions, rules, skills, and context that control how agents work in your repositories.
+        </div>
+      </div>
+      <div className="px-5 pb-5 space-y-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          {agentSections.map((section) => {
+            const Icon = section.icon
+            return (
+              <Link
+                key={section.href}
+                href={section.href}
+                className="group border border-border rounded-lg bg-background/60 p-4 hover:border-primary/40 hover:bg-secondary/50 transition-colors"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 size-9 rounded-md bg-muted flex items-center justify-center">
+                    <Icon className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-foreground">{section.title}</span>
+                      <ArrowRight className="size-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    </div>
+                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                      {section.description}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+        <div className="border-t border-border pt-3 mt-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-foreground">MCP Servers</div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                External tools and APIs available to your agents.
+              </p>
+            </div>
+            <Link
+              href={scopedHref(scope, "/settings?tab=connections")}
+              className="inline-flex items-center gap-1 text-[11px] text-accent-blue hover:underline"
+            >
+              Manage connections
+              <ArrowRight className="size-3" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
 
 export function SettingsPageClient({ scope }: { scope: ScopeContext }) {
   if (scope.kind === "team") {
@@ -796,6 +887,7 @@ function PersonalSettingsClient() {
             <TabsTrigger value="connections" className="px-3 h-7 text-[13px]">Connections</TabsTrigger>
             <TabsTrigger value="keys" className="px-3 h-7 text-[13px]">Keys &amp; Tokens</TabsTrigger>
             <TabsTrigger value="models" className="px-3 h-7 text-[13px]">Models</TabsTrigger>
+            <TabsTrigger value="agents" className="px-3 h-7 text-[13px]">Agents</TabsTrigger>
             <TabsTrigger value="billing" className="px-3 h-7 text-[13px]">Billing</TabsTrigger>
           </TabsList>
           <ScrollBar orientation="horizontal" />
@@ -1389,6 +1481,10 @@ function PersonalSettingsClient() {
         onSetDefault={saveDefaultModel}
         savingDefault={saving}
       />
+        </TabsContent>
+
+        <TabsContent value="agents" className="mt-0">
+          <AgentsSettingsSection />
         </TabsContent>
 
         <TabsContent value="billing" className="mt-0">

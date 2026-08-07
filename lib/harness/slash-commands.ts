@@ -1,4 +1,4 @@
-import type { SlashCommand } from "@/lib/slash-commands";
+import type { SlashCommand } from "@/lib/slash-command-types";
 import type { HarnessId } from "@/lib/harness/config";
 
 type HarnessSlashCommandDefinition = Pick<

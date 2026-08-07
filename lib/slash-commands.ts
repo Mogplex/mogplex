@@ -3,25 +3,9 @@ import {
   buildHarnessSlashCommands,
   getHarnessIdFromModelId,
 } from "@/lib/harness/slash-commands";
+import type { CommandResult, SlashCommand } from "@/lib/slash-command-types";
 
-export type SlashCommand = {
-  name: string;
-  description: string;
-  args?: string;
-  execute: (args: string) => CommandResult;
-};
-
-export type CommandResult = {
-  output: string;
-  action?:
-    | "set_model"
-    | "set_mode"
-    | "clear"
-    | "help"
-    | "custom"
-    | "passthrough";
-  payload?: unknown;
-};
+export type { CommandResult, SlashCommand } from "@/lib/slash-command-types";
 
 export const MODES = ["AUTO", "YOLO", "SAFE"] as const;
 
