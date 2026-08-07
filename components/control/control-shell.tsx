@@ -12,7 +12,7 @@ import type {
   TimelineEvent,
   ControlSeedData,
 } from "@/lib/control/types"
-import { generateMissionId } from "@/lib/control/seed"
+import { generateMissionId } from "@/lib/control/utils"
 import { scopedHref } from "@/lib/scoped-href"
 import { buildCombinedTimeline } from "./build-combined-timeline"
 import { useMissionDerived, type MissionFilter } from "./use-mission-derived"
@@ -40,7 +40,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
   const router = useRouter()
   const scope = params.scope
 
-  // Core data state (seeded, then mutated locally)
+  // Core data state (server-provided, then mutated locally)
   const [missions, setMissions] = useState<Mission[]>(initialData.missions)
   const [worktrees, setWorktrees] = useState<Worktree[]>(initialData.worktrees)
   const [changesets] = useState<Changeset[]>(initialData.changesets)
@@ -188,7 +188,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
       } catch (err) {
         const message = err instanceof Error ? err.message : "Chat error"
         if (message.includes("404") || message.includes("Not Found")) {
-          setChatError("Control chat endpoint not yet deployed. Using seed data only.")
+          setChatError("Control chat endpoint not yet deployed.")
         } else {
           setChatError(message)
         }
@@ -204,7 +204,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
       const newMissionObj: Mission = {
         id,
         title: text.slice(0, 80),
-        ws: targets[0] || "ws-atlas",
+        ws: targets[0] ?? "",
         status: "active",
         pinned: false,
         age: "now",
@@ -250,18 +250,20 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
     setDrawerHeight((h) => (h + 1) % 3)
   }, [])
 
-  // Combined timeline: seed events + chat messages interleaved
+  // Combined timeline: mission events + chat messages interleaved
   const combinedTimeline = useMemo(
     () => buildCombinedTimeline(mission?.timeline, messages),
     [mission?.timeline, messages]
   )
 
-  if (newMission) {
+  // With no missions there is nothing to show but the composer; cancel only
+  // makes sense when there is a mission view to return to.
+  if (newMission || !mission) {
     return (
       <div className="flex h-full flex-col bg-background">
         <NewMissionComposer
           workspaces={workspaces}
-          onCancel={() => setNewMission(false)}
+          onCancel={mission ? () => setNewMission(false) : undefined}
           onCreate={handleCreateMission}
         />
       </div>

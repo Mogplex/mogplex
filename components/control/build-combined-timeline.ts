@@ -2,7 +2,7 @@ import type { TimelineEvent } from "@/lib/control/types";
 import type { UIMessage } from "ai";
 
 /**
- * Builds a combined timeline by merging seed timeline events with chat messages.
+ * Builds a combined timeline by merging mission timeline events with chat messages.
  * Chat messages from the assistant are transformed into timeline events.
  */
 export function buildCombinedTimeline(
