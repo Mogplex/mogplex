@@ -323,16 +323,6 @@ export default defineConfig([
     },
   },
   {
-    // Legacy files over the 500-line cap, grandfathered while they are
-    // refactored down. Shrink-only: remove entries as files are split; never
-    // add new ones. Globs are escaped because [scope] and (dashboard) are
-    // minimatch metacharacters.
-    files: ["components/panes/flows-pane.tsx"],
-    rules: {
-      "max-lines": ["warn", { max: 500 }],
-    },
-  },
-  {
     ignores: [
       ".agents/",
       ".claude/",
