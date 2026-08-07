@@ -29,7 +29,7 @@ export interface EditorToolbarProps {
   saveStatusTitle: string
   quietSaveStatus: boolean
   saveStatusTone: { container: string; dot?: string }
-  saveStatusAnnouncement: string
+  saveStatusAnnouncement: string | null
   saving: boolean
   publishing: boolean
   primaryModifierLabel: string
