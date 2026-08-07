@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import { includeIgnoreFile } from "@eslint/compat";
 import { defineConfig } from "eslint/config";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
@@ -38,6 +40,10 @@ const sanitizedCore = core
   );
 
 export default defineConfig([
+  // Everything git ignores, eslint must ignore too. Local build artifacts
+  // (.vercel/output alone holds ~500 minified bundles) are absent on CI, so
+  // linting them turned an 86-second lint into 75 minutes locally.
+  includeIgnoreFile(fileURLToPath(new URL(".gitignore", import.meta.url))),
   ...sanitizedCore,
   ...next,
   {
