@@ -226,6 +226,9 @@ async function stubFlowsPage(page: Page) {
 test("canvas context menu adds and configures workflow nodes, then closes on escape", async ({
   page,
 }) => {
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold.
+  await page.setViewportSize({ width: 1600, height: 900 });
   await stubFlowsPage(page);
 
   await page.goto(scopedPath("workflows"));

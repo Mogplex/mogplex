@@ -29,6 +29,9 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 test("recent runs open a detailed observability dialog", async ({ page }) => {
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold.
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.context().setExtraHTTPHeaders({
     ...buildE2EAuthHeaders(connectedUser.id),
     "x-mogplex-scope-kind": "personal",
