@@ -116,8 +116,8 @@ export function GatesSection() {
             <AccentPeriod />
           </h3>
           <p className="mpx-cap-description">
-            It holds a clone of your repo. Runs share nothing. The sandbox
-            dies when the run ends.
+            It holds a clone of your repo. Runs share nothing, and every
+            run starts clean.
           </p>
           <div className="mpx-zdr-flow">
             <div>
@@ -133,7 +133,7 @@ export function GatesSection() {
             <div>
               <small>03 / STOP</small>
               <b>Sandbox ends</b>
-              <span>Nothing carries over</span>
+              <span>Output through your gates</span>
             </div>
           </div>
         </article>

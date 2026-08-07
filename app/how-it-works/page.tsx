@@ -29,14 +29,14 @@ const STAGES: Stage[] = [
     t: "T+00:00.8",
     num: "01",
     name: "A run is queued",
-    desc: "The pipeline you wired decides everything up front: which repo, which harness (Claude Code or Codex), what context it gets, and which gates its output must pass. The system records that decision before any work starts.",
+    desc: "The pipeline you wired decides everything up front: which repo, which harness (Mogplex native, Claude Code, or Codex), what context it gets, and which gates its output must pass. The system records that decision before any work starts.",
     fact: "held — every run traces back to the exact event that caused it.",
   },
   {
     t: "T+00:04.2",
     num: "02",
     name: "A sandbox boots",
-    desc: "A fresh microVM boots with a clone of your repo. Nothing is shared between runs. The sandbox dies when the run ends. You do not need to connect a cloud account before your first run. Sandbox minutes bill on the meter, and a $10 top-up buys 2,000 minutes.",
+    desc: "A fresh microVM boots with a clone of your repo. Nothing is shared between runs. You do not need to connect a cloud account before your first run. Sandbox minutes bill on the meter, and a $10 top-up buys 2,000 minutes.",
     fact: "held — per-run isolation. Your code never executes on shared infrastructure you can't see.",
   },
   {
@@ -115,15 +115,16 @@ export default function HowItWorksPage() {
           <div className="term">
             <p className="term-k mono">HARNESSES</p>
             <p className="term-v">
-              Claude Code and Codex. Pick the harness and model per pipeline.
-              Every call is visible call-by-call.
+              The native Mogplex agent, Claude Code, and Codex. Pick the
+              harness and model per pipeline. Every call is visible
+              call-by-call.
             </p>
           </div>
           <div className="term">
             <p className="term-k mono">SANDBOX</p>
             <p className="term-v">
-              Every run gets a fresh, isolated microVM. It dies with the run.
-              Nothing is shared between runs.
+              Every run gets a fresh, isolated microVM. Nothing is shared
+              between runs.
             </p>
           </div>
           <div className="term">

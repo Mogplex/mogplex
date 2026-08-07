@@ -374,15 +374,6 @@ export function MpxHeader() {
           <a href="https://docs.mogplex.com">Docs</a>
         </div>
 
-        <span className="mpx-control-stamp">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <rect x="3" y="3" width="7" height="7" rx="1.5" />
-            <rect x="14" y="3" width="7" height="7" rx="1.5" />
-            <rect x="3" y="14" width="7" height="7" rx="1.5" />
-            <rect x="14" y="14" width="7" height="7" rx="1.5" />
-          </svg>
-          CONTROL&nbsp;PLANE <b>v0.9.14</b>
-        </span>
         <Link className="mpx-live-link" href="/#run">
           Watch a live run
         </Link>
