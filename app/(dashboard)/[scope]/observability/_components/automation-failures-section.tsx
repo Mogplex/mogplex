@@ -267,7 +267,6 @@ export function AutomationFailuresSection({
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="ui-section-title">Automation Failures</h2>
           <p className="ui-meta">Timeout, auth, provider, and configuration failures across automation entry points.</p>
         </div>
         {isLoading ? <span className="text-sm text-muted-foreground animate-pulse">Loading failures…</span> : null}

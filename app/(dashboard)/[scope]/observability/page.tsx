@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useCallback, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useObservabilityActivity, type ActivityFilters } from "@/hooks/use-observability-activity"
 import {
@@ -27,6 +27,7 @@ import {
   type ActivityDateRangeSelection,
 } from "@/lib/observability/activity-date-range"
 import { navigateToSandboxHealth } from "@/lib/sandbox/navigation"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AiCall } from "@/lib/types"
 import { ActivityDateRangeFilter } from "./_components/activity-date-range-filter"
 import { ActivitySection } from "./_components/activity-section"
@@ -45,6 +46,14 @@ const INITIAL_FILTERS: ActivityFilters = {
   limit: 50,
   sort: "started_at",
   order: "desc",
+}
+
+type TableTab = "runs" | "failures" | "pressure" | "activity"
+
+function TabCount({ value }: { value: number }) {
+  return (
+    <span className="tabular-nums text-xs text-muted-foreground">{value}</span>
+  )
 }
 
 function ObservabilityContent() {
@@ -154,10 +163,28 @@ function ObservabilityContent() {
     1,
     Math.ceil(pressureTotal / pressureFilters.limit)
   )
-  const focusSection = useCallback((sectionId: "runs" | "pressure") => {
-    const section = document.getElementById(sectionId)
+  // Call/sandbox/repo deep links (e.g. from Sandbox health) target the
+  // Activity table, so they must land on its tab rather than the default.
+  const [activeTable, setActiveTable] = useState<TableTab>(() =>
+    selectedCallId || legacyCallFilters.repoId || legacyCallFilters.sandboxRecordId
+      ? "activity"
+      : "runs"
+  )
+  // Focus runs as an effect because the target section only mounts after the
+  // tab switch renders; the seq counter re-fires it when the tab is unchanged.
+  const [tableFocusRequest, setTableFocusRequest] = useState<{
+    tab: "runs" | "pressure"
+    seq: number
+  } | null>(null)
+  useEffect(() => {
+    if (!tableFocusRequest) return
+    const section = document.getElementById(tableFocusRequest.tab)
     section?.scrollIntoView({ block: "start" })
     section?.focus({ preventScroll: true })
+  }, [tableFocusRequest])
+  const focusSection = useCallback((sectionId: "runs" | "pressure") => {
+    setActiveTable(sectionId)
+    setTableFocusRequest((prev) => ({ tab: sectionId, seq: (prev?.seq ?? 0) + 1 }))
   }, [])
   const inspectPressure = useCallback(
     (outcome: PressureOutcome) => {
@@ -295,49 +322,78 @@ function ObservabilityContent() {
 
       <PendingApprovalsSection />
 
-      <RunsSection
-        jobs={jobs}
-        jobsLoading={jobsLoading}
-        jobsTotal={jobsTotal}
-        jobsPages={jobsPages}
-        jobFilters={jobFilters}
-        isCurrentPendingView={isCurrentPendingView}
-        jobActionId={jobActionId}
-        jobActionError={jobActionError}
-        onUpdateJobFilter={updateJobFilter}
-        onRunJobAction={runJobAction}
-      />
+      <Tabs
+        value={activeTable}
+        onValueChange={(value) => setActiveTable(value as TableTab)}
+        className="gap-3"
+      >
+        <TabsList>
+          <TabsTrigger value="runs">
+            Runs <TabCount value={jobsTotal} />
+          </TabsTrigger>
+          <TabsTrigger value="failures">
+            Failures <TabCount value={failuresData?.total ?? 0} />
+          </TabsTrigger>
+          <TabsTrigger value="pressure">
+            Pressure <TabCount value={pressureTotal} />
+          </TabsTrigger>
+          <TabsTrigger value="activity">
+            Activity <TabCount value={total} />
+          </TabsTrigger>
+        </TabsList>
 
-      <AutomationFailuresSection
-        data={failuresData}
-        isLoading={failuresLoading}
-        filters={automationFailureFilters}
-        pages={failuresPages}
-        onUpdateFilter={updateAutomationFailureFilter}
-      />
+        <TabsContent value="runs">
+          <RunsSection
+            jobs={jobs}
+            jobsLoading={jobsLoading}
+            jobsTotal={jobsTotal}
+            jobsPages={jobsPages}
+            jobFilters={jobFilters}
+            isCurrentPendingView={isCurrentPendingView}
+            jobActionId={jobActionId}
+            jobActionError={jobActionError}
+            onUpdateJobFilter={updateJobFilter}
+            onRunJobAction={runJobAction}
+          />
+        </TabsContent>
 
-      <PressureSection
-        pressureEvents={pressureData?.events ?? []}
-        pressureLoading={pressureLoading}
-        pressureTotal={pressureTotal}
-        pressurePages={pressurePages}
-        pressureFilters={pressureFilters}
-        onUpdatePressureFilter={updatePressureFilter}
-      />
+        <TabsContent value="failures">
+          <AutomationFailuresSection
+            data={failuresData}
+            isLoading={failuresLoading}
+            filters={automationFailureFilters}
+            pages={failuresPages}
+            onUpdateFilter={updateAutomationFailureFilter}
+          />
+        </TabsContent>
 
-      <ActivitySection
-        calls={calls}
-        isLoading={isLoading}
-        total={total}
-        pages={pages}
-        filters={filters}
-        reposById={reposById}
-        expandedCallRowIds={expandedCallRowIds ?? []}
-        onUpdateFilter={updateFilter}
-        onExpandedRowToggle={handleExpandedRowToggle}
-        onOpenSandboxHealth={handleOpenSandboxHealth}
-        canOpenSandboxHealth={canOpenSandboxHealth}
-      />
+        <TabsContent value="pressure">
+          <PressureSection
+            pressureEvents={pressureData?.events ?? []}
+            pressureLoading={pressureLoading}
+            pressureTotal={pressureTotal}
+            pressurePages={pressurePages}
+            pressureFilters={pressureFilters}
+            onUpdatePressureFilter={updatePressureFilter}
+          />
+        </TabsContent>
+
+        <TabsContent value="activity">
+          <ActivitySection
+            calls={calls}
+            isLoading={isLoading}
+            total={total}
+            pages={pages}
+            filters={filters}
+            reposById={reposById}
+            expandedCallRowIds={expandedCallRowIds ?? []}
+            onUpdateFilter={updateFilter}
+            onExpandedRowToggle={handleExpandedRowToggle}
+            onOpenSandboxHealth={handleOpenSandboxHealth}
+            canOpenSandboxHealth={canOpenSandboxHealth}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

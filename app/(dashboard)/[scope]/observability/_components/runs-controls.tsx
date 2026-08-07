@@ -19,7 +19,6 @@ export function RunsControls({
     <>
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="ui-section-title">Runs</h2>
           <p className="ui-meta">Background runtime runs with repair and retry controls. Current failures and pending recovery appear in Automation health above.</p>
           {isCurrentPendingView ? (
             <p className="ui-meta text-foreground">
