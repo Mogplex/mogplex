@@ -451,7 +451,7 @@ export function AgentPane({
       ) : (
         <>
           <ChatMessageList
-            ref={endRef}
+            endRef={endRef}
             localMsgs={localMsgs}
             messages={messages}
             liveConversationRuns={liveConversationRuns}

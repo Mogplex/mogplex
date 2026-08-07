@@ -22,6 +22,9 @@ import type { Repo } from "@/lib/types";
 import type { HarnessId } from "@/lib/harness/config";
 import { createStreamProcessor, type StreamEvent } from "./stream-processor";
 
+// Stable empty object to avoid re-render loops in Zustand selectors
+const EMPTY_HARNESS_STATE: Record<string, unknown> = {};
+
 interface UseHarnessRunParams {
   paneId: string;
   model: string;
@@ -59,7 +62,8 @@ export function useHarnessRun({
 
   const harnessState = useConversationsStore(
     useCallback(
-      (state) => state.conversations[paneId]?.harnessState ?? {},
+      (state) =>
+        state.conversations[paneId]?.harnessState ?? EMPTY_HARNESS_STATE,
       [paneId]
     )
   );
