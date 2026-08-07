@@ -328,15 +328,7 @@ export default defineConfig([
     // add new ones. Globs are escaped because [scope] and (dashboard) are
     // minimatch metacharacters.
     files: [
-      String.raw`app/\(dashboard\)/\[scope\]/settings/settings-page-client.tsx`,
-      String.raw`app/api/sandbox/\[id\]/harness/route.ts`,
-      "app/api/sandbox/route.ts",
-      "app/api/webhooks/github/route.ts",
-      "components/marketing/landing-v2.tsx",
-      "components/pane-content.tsx",
       "components/panes/flows-pane.tsx",
-      "components/preview-pane.tsx",
-      "components/repo-dashboard.tsx",
       "hooks/use-conversations.ts",
       "hooks/use-sandbox.ts",
       "hooks/use-sessions.ts",
