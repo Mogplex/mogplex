@@ -327,10 +327,7 @@ export default defineConfig([
     // refactored down. Shrink-only: remove entries as files are split; never
     // add new ones. Globs are escaped because [scope] and (dashboard) are
     // minimatch metacharacters.
-    files: [
-      "components/panes/flows-pane.tsx",
-      "lib/workflows/automation-job-workflow.ts",
-    ],
+    files: ["components/panes/flows-pane.tsx"],
     rules: {
       "max-lines": ["warn", { max: 500 }],
     },
