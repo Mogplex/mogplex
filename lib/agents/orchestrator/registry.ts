@@ -16,6 +16,7 @@ import {
   createGithubApi,
   webFetch,
   createTerminalExec,
+  createMemoryTools,
 } from "@/lib/agents/tools";
 import type {
   OrchestratorToolDef,
@@ -154,6 +155,20 @@ function buildToolForDef(
     }
     if (def.name === "web_fetch") {
       return webFetch;
+    }
+    if (def.name === "memory_write" || def.name === "memory_search") {
+      const memoryTools = createMemoryTools(
+        ctx.userId,
+        ctx.repoId ?? undefined,
+        {
+          workspaceSessionId: ctx.workspaceSessionId ?? null,
+          conversationId: ctx.conversationId ?? null,
+          sandboxId: ctx.sandboxId ?? null,
+        }
+      );
+      return def.name === "memory_write"
+        ? memoryTools.add_memory
+        : memoryTools.search_memories;
     }
   }
 

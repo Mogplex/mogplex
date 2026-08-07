@@ -52,6 +52,11 @@ export type OrchestratorToolContext = {
   teamId?: string | null;
   missionId?: string | null;
   protectedBranches?: string[];
+  /** Scopes memory lanes; without it session/episodic writes are unscoped. */
+  conversationId?: string | null;
+  workspaceSessionId?: string | null;
+  /** Lets tool executions (audit, approvals) reference the owning ai_call. */
+  aiCallId?: string | null;
 };
 
 /**

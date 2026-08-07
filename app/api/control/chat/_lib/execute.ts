@@ -93,6 +93,8 @@ export async function executeControlChatRequest(input: {
       githubToken,
       teamId,
       missionId: input.body.missionId,
+      conversationId: scope.conversationId,
+      aiCallId: activeCall.id,
     };
 
     const promptContext: OrchestratorPromptContext = {

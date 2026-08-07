@@ -84,6 +84,10 @@ export const memoryWriteSchema = z.object({
     .enum(["session", "semantic", "episodic", "procedural"])
     .describe("Memory lane"),
   content: z.string().describe("Content to store"),
+  metadata: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe("Optional small JSON object of tags"),
 });
 
 export const memorySearchSchema = z.object({
