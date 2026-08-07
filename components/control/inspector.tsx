@@ -2,7 +2,7 @@
 
 import { Xmark, PlaySolid, PauseSolid, RefreshDouble, GitFork, ArrowSeparateVertical, ArrowUp, Archive } from "iconoir-react"
 import type { Mission, Worktree, Changeset, Deployment, TimelineEvent } from "@/lib/control/types"
-import { formatCost } from "@/lib/control/seed"
+import { formatCost } from "@/lib/control/utils"
 
 type Props = {
   selection: string

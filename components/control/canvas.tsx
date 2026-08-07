@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useMemo } from "react"
 import { ZoomIn, ZoomOut, Expand, Refresh } from "iconoir-react"
 import type { Mission, Worktree, Changeset, Deployment } from "@/lib/control/types"
-import { formatCost } from "@/lib/control/seed"
+import { formatCost } from "@/lib/control/utils"
 
 type Props = {
   mission: Mission | undefined

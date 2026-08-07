@@ -6,7 +6,7 @@ import type { Workspace } from "@/lib/control/types"
 
 type Props = {
   workspaces: Workspace[]
-  onCancel: () => void
+  onCancel?: () => void
   onCreate: (text: string, targets: string[], autonomy: string, budget: number) => void
 }
 
@@ -156,12 +156,14 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
             </button>
 
             <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={onCancel}
-                className="rounded border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary"
-              >
-                Cancel
-              </button>
+              {onCancel ? (
+                <button
+                  onClick={onCancel}
+                  className="rounded border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary"
+                >
+                  Cancel
+                </button>
+              ) : null}
               <button
                 onClick={handleSubmit}
                 disabled={!text.trim()}

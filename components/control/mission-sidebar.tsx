@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Plus, Search, MoreVert, Pin } from "iconoir-react"
 import type { Mission, Workspace, Worktree } from "@/lib/control/types"
-import { formatCost } from "@/lib/control/seed"
+import { formatCost } from "@/lib/control/utils"
 
 type MissionFilter = "active" | "attention" | "done" | "archive"
 

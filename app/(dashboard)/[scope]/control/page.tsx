@@ -1,6 +1,6 @@
 import { Suspense } from "react"
 import { ControlShell } from "@/components/control/control-shell"
-import { getControlSeedData } from "@/lib/control/seed"
+import { emptyControlData } from "@/lib/control/utils"
 
 type Props = {
   params: Promise<{ scope: string }>
@@ -10,7 +10,9 @@ type Props = {
 export default async function ControlPage({ params, searchParams }: Props) {
   const { scope: _scope } = await params
   const { mission } = await searchParams
-  const seedData = getControlSeedData()
+  // Missions are not DB-backed yet (lib/orchestrations); until they are, the
+  // surface starts empty instead of rendering demo content.
+  const initialData = emptyControlData()
 
   return (
     <Suspense
@@ -20,7 +22,7 @@ export default async function ControlPage({ params, searchParams }: Props) {
         </div>
       }
     >
-      <ControlShell initialData={seedData} initialMissionId={mission} />
+      <ControlShell initialData={initialData} initialMissionId={mission} />
     </Suspense>
   )
 }

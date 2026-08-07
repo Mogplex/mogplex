@@ -2,7 +2,7 @@
 
 import { NavArrowDown, NavArrowUp } from "iconoir-react"
 import type { Worktree, Changeset, Deployment } from "@/lib/control/types"
-import { formatCost } from "@/lib/control/seed"
+import { formatCost } from "@/lib/control/utils"
 
 type Props = {
   stats: {
