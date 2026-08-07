@@ -1,4 +1,5 @@
 import { isUuid } from "@/lib/uuid";
+import { logAllowlistFailureOnce } from "@/lib/team-allowlist-throttle";
 
 /**
  * Capability strings are dot-namespaced. Wildcards match any suffix at their
@@ -328,213 +329,18 @@ function teamAllowlistStateFromResult(
   return { status: "restricted", models: result.allowlist };
 }
 
-// Jittered so a fleet-wide blip does not produce a synchronized retry wave
-// arriving at the database in lockstep.
-const ALLOWLIST_RETRY_BASE_DELAY_MS = 50;
-const ALLOWLIST_RETRY_JITTER_MS = 50;
+// Jittered so a fleet-wide blip does not produce a synchronized retry wave.
+// eslint-disable-next-line sonarjs/pseudo-random
+const allowlistRetryDelayMs = () => 50 + Math.floor(Math.random() * 50);
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-function allowlistRetryDelayMs() {
-  // Retry jitter, not a security decision: nothing is derived from this value
-  // and predicting it gains an attacker nothing. node:crypto is avoided because
-  // this module is reachable from client bundles.
-  // eslint-disable-next-line sonarjs/pseudo-random
-  const jitter = Math.floor(Math.random() * ALLOWLIST_RETRY_JITTER_MS);
-  return ALLOWLIST_RETRY_BASE_DELAY_MS + jitter;
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-// This read is on the critical path of every team-scoped invocation and a
-// failure denies the call, so a sustained outage would otherwise log once per
-// request. Dedupe over a short window: enough to keep a repeated failure
-// represented in the logs without flooding them at request rate.
-//
-// Per process, not global. On horizontally-scaled serverless the effective rate
-// is one emission per (scope, team, cause) per window *per instance*, so an
-// operator counting rows is counting instances that saw the failure, not
-// distinct denials — the audit row's `throttled` marker says the same thing.
-// Deliberate: a shared counter would mean a coordination round-trip on the
-// failure path, which is the last place to add one.
-export const ALLOWLIST_FAILURE_LOG_TTL_MS = 60 * 1000;
-const ALLOWLIST_FAILURE_LOG_MAX_ENTRIES = 128;
-// One map per scope. A single shared map lets one noisy surface — or one team
-// churning distinct causes — consume the whole budget and hard-suppress first
-// occurrences for every other scope, which is the opposite of what a diagnostic
-// should do under a broad incident. Per-scope caps make starvation impossible
-// across surfaces; within a scope the cap still applies.
-type AllowlistSignalSlot = {
-  claimedAt: number;
-  /** Emissions refused since this slot was last granted. */
-  suppressed: number;
-};
-
-const allowlistFailureLogsByScope = new Map<
-  string,
-  Map<string, AllowlistSignalSlot>
->();
-
-function allowlistFailureLogFor(scope: string) {
-  const existing = allowlistFailureLogsByScope.get(scope);
-  if (existing) return existing;
-  const created = new Map<string, AllowlistSignalSlot>();
-  allowlistFailureLogsByScope.set(scope, created);
-  return created;
-}
-
-/**
- * Module-level state, so a test asserting on the log would otherwise be
- * order-dependent within a process: a second failing read for the same team and
- * message inside the TTL window logs nothing.
- */
-export function __resetAllowlistFailureLogForTests() {
-  allowlistFailureLogsByScope.clear();
-}
-
-/**
- * Shared suppression for allowlist-degradation logs. Exported so surfaces that
- * degrade rather than deny (new-arrivals drops a scope) get the same anti-flood
- * treatment — they are polled, so an un-deduped line there floods at request
- * rate just as badly as one on the read itself.
- *
- * `scope` separates each surface's lines so one cannot suppress another's.
- */
-export function logAllowlistDegradationOnce(
-  scope: string,
-  teamId: string,
-  message: string,
-  log: (message: string, fields: Record<string, unknown>) => void
-) {
-  const slot = claimAllowlistSignalSlot(scope, teamId, message);
-  if (!slot.emit) return;
-  log(`[${scope}] allowlist unavailable`, {
-    teamId,
-    reason: message,
-    ...(slot.suppressedSinceLast > 0
-      ? { suppressedSinceLast: slot.suppressedSinceLast }
-      : {}),
-  });
-}
-
-/**
- * Claims the emission slot for one (scope, team, cause) per window: grants at
- * most once per window and **records the claim as it does so**. Named `claim…`
- * rather than `shouldEmit…` because it mutates — calling it twice to decide two
- * side effects would silently suppress the second, so a single call must gate
- * everything that fires together.
- *
- * A granted slot reports `suppressedSinceLast`: how many emissions the previous
- * window refused. Without it a throttled row is a sample of unknown size, and
- * an operator cannot tell one denial from a thousand.
- *
- * Shared with the logs above so one window governs all of them.
- *
- * Exists because the denial path was amplifying load against the very
- * dependency that had just failed: during a sustained outage every team-scoped
- * invocation wrote an audit row back to the same Supabase instance whose read
- * had failed — a write that is least likely to succeed at exactly that moment —
- * plus an un-deduped log line. `model_not_in_allowlist` deliberately does NOT
- * use this: that is a real policy decision about a specific call, not a
- * repeated symptom of one outage.
- */
-export function claimAllowlistSignalSlot(
-  scope: string,
-  teamId: string,
-  message: string
-) {
-  return shouldLogAllowlistFailure(scope, teamId, message);
-}
-
-/**
- * Reduce a failure message to its cause. Postgres text routinely embeds
- * variable detail — timeout values, backend PIDs, connection ids, statement
- * fragments — so keying the throttle on the raw string would give every attempt
- * a distinct key: the throttle would stop throttling exactly during the outage
- * it exists for, and one noisy team could fill the shared cap and suppress
- * first occurrences for everyone else.
- *
- * Digits, UUIDs and quoted fragments go; the remaining shape is what
- * distinguishes "connection reset" from "permission denied", which is the
- * distinction the key is there to preserve.
- */
-function allowlistFailureCauseKey(message: string) {
-  return message
-    .toLowerCase()
-    .replaceAll(
-      /[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}/g,
-      "<uuid>"
-    )
-    .replaceAll(/"[^"]*"/g, "<q>")
-    .replaceAll(/\d+/g, "<n>")
-    .replaceAll(/\s+/g, " ")
-    .trim()
-    .slice(0, 120);
-}
-
-/**
- * True when this (subject, cause) pair has not been logged inside the TTL.
- * Records it as logged when it returns true.
- *
- * Keyed on subject *and* cause: a team that hits a connection error and then a
- * permission error inside the same window should surface both — the second
- * cause is usually the informative one. Keying on the subject alone would
- * suppress it while still calling the flood solved. Keying on the raw message
- * would do the opposite; see allowlistFailureCauseKey.
- */
-function shouldLogAllowlistFailure(
-  scope: string,
-  subject: string,
-  message: string
-): { emit: false } | { emit: true; suppressedSinceLast: number } {
-  const loggedAllowlistFailures = allowlistFailureLogFor(scope);
-  const now = Date.now();
-  const key = `${subject}\u0000${allowlistFailureCauseKey(message)}`;
-  const held = loggedAllowlistFailures.get(key);
-  if (held && held.claimedAt > now - ALLOWLIST_FAILURE_LOG_TTL_MS) {
-    // Count what the window is hiding so the next emission can report it. A
-    // throttled compliance row that cannot say how much it stands for is a
-    // sample of unknown size.
-    held.suppressed += 1;
-    return { emit: false };
-  }
-  // Sweep expired entries before deciding whether there is room. Only expired
-  // ones — evicting a live claim would re-open its slot and let the next call
-  // emit again, which under a broad multi-team outage partially restores the
-  // very amplification this exists to prevent.
-  if (loggedAllowlistFailures.size >= ALLOWLIST_FAILURE_LOG_MAX_ENTRIES) {
-    for (const [entryKey, at] of loggedAllowlistFailures) {
-      if (at.claimedAt <= now - ALLOWLIST_FAILURE_LOG_TTL_MS) {
-        loggedAllowlistFailures.delete(entryKey);
-      }
-    }
-  }
-
-  // Still full of live claims: suppress rather than evict. A throttle exists to
-  // bound writes, so under pressure it must fail toward emitting less, never
-  // more. The cost is that a 129th distinct (scope, team, cause) inside one
-  // window goes unlogged until a slot expires — acceptable, because reaching
-  // that means a broad incident which the first 128 lines already describe.
-  if (loggedAllowlistFailures.size >= ALLOWLIST_FAILURE_LOG_MAX_ENTRIES) {
-    return { emit: false };
-  }
-
-  const suppressedSinceLast = held?.suppressed ?? 0;
-  loggedAllowlistFailures.set(key, { claimedAt: now, suppressed: 0 });
-  return { emit: true, suppressedSinceLast };
-}
-
-function logAllowlistFailureOnce(teamId: string, message: string) {
-  const slot = shouldLogAllowlistFailure("read", teamId, message);
-  if (!slot.emit) return;
-  console.error("Team model allowlist lookup failed", {
-    teamId,
-    message,
-    ...(slot.suppressedSinceLast > 0
-      ? { suppressedSinceLast: slot.suppressedSinceLast }
-      : {}),
-  });
-}
+// Re-export throttle infrastructure for public API compatibility
+export {
+  ALLOWLIST_FAILURE_LOG_TTL_MS,
+  __resetAllowlistFailureLogForTests,
+  claimAllowlistSignalSlot,
+  logAllowlistDegradationOnce,
+} from "@/lib/team-allowlist-throttle";
 
 /**
  * Allowlist read that keeps the failure case distinguishable. A missing team

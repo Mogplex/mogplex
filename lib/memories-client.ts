@@ -1,10 +1,20 @@
 import { createGateway, embed } from "ai";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getProviderKey } from "@/lib/vault";
+import { MemoryNotFoundError } from "@/lib/memories-errors";
 import {
-  InvalidMetadataError,
-  MemoryNotFoundError,
-} from "@/lib/memories-errors";
+  applyScopeFilters,
+  compactMemoryScope,
+  getMemoryScopeForLane,
+  getRepoScopedSearchScope,
+  memoryMatchesScope,
+} from "@/lib/memories-scope";
+
+// Re-export validation utilities for API compatibility
+export {
+  MAX_METADATA_BYTES,
+  validateMetadata,
+} from "@/lib/memories-validation";
 
 export type MemoryLane = "session" | "semantic" | "episodic" | "procedural";
 export type MemoryResourceScope = "personal" | "team";
@@ -37,7 +47,6 @@ export type MemoryScope = {
 };
 
 export const MAX_CONTENT_LENGTH = 16_000;
-export const MAX_METADATA_BYTES = 4_096;
 export const MAX_CHECKPOINT_LABEL_LENGTH = 512;
 const EMBEDDING_MODEL_ID = "openai/text-embedding-3-small";
 // Must stay in sync with the `vector(1536)` column in
@@ -56,31 +65,6 @@ const SESSION_VACUUM_DAYS = 30;
 type AddMemoryOptions = {
   skipEmbedding?: boolean;
 };
-
-/**
- * Validate untrusted metadata before it reaches the DB. Accepts plain
- * objects only and bounds the serialised size. Throws InvalidMetadataError
- * on violation so API routes can map to 400 without leaking internals.
- */
-export function validateMetadata(
-  value: unknown
-): Record<string, unknown> | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.getPrototypeOf(value) !== Object.prototype
-  ) {
-    throw new InvalidMetadataError("metadata must be a plain object");
-  }
-  const serialised = JSON.stringify(value);
-  if (serialised.length > MAX_METADATA_BYTES) {
-    throw new InvalidMetadataError(
-      `metadata exceeds ${MAX_METADATA_BYTES} bytes`
-    );
-  }
-  return value as Record<string, unknown>;
-}
 
 export function isValidLane(lane: unknown): lane is MemoryLane {
   return typeof lane === "string" && VALID_LANES.has(lane as MemoryLane);
@@ -199,184 +183,15 @@ export function createMemoriesClient(
   };
 }
 
-function normalizeScopeValue(value: string | null | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-function compactMemoryScope(scope?: MemoryScope): MemoryScope | undefined {
-  if (!scope) return undefined;
-
-  const normalized: MemoryScope = {};
-
-  const repoId = normalizeScopeValue(scope.repoId);
-  if (repoId) normalized.repoId = repoId;
-
-  const workspaceSessionId = normalizeScopeValue(scope.workspaceSessionId);
-  if (workspaceSessionId) {
-    normalized.workspaceSessionId = workspaceSessionId;
-  }
-
-  const conversationId = normalizeScopeValue(scope.conversationId);
-  if (conversationId) normalized.conversationId = conversationId;
-
-  if (scope.resourceScope === "personal" || scope.resourceScope === "team") {
-    normalized.resourceScope = scope.resourceScope;
-  }
-
-  const productTeamId = normalizeScopeValue(scope.productTeamId);
-  if (productTeamId) normalized.productTeamId = productTeamId;
-
-  const sandboxId = normalizeScopeValue(scope.sandboxId);
-  if (sandboxId) normalized.sandboxId = sandboxId;
-
-  const source = normalizeScopeValue(scope.source);
-  if (source) normalized.source = source;
-
-  const agent = normalizeScopeValue(scope.agent);
-  if (agent) normalized.agent = agent;
-
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
-}
-
-function applyScopeFilters<
-  Query extends {
-    contains: (column: string, value: Record<string, unknown>) => Query;
-    is: (column: string, value: null) => Query;
-  },
->(query: Query, scope?: MemoryScope): Query {
-  const normalized = compactMemoryScope(scope);
-  if (!normalized) return query;
-
-  const metadataFilter: Record<string, unknown> = {};
-  if (normalized.repoId) metadataFilter.repo_id = normalized.repoId;
-  if (normalized.workspaceSessionId) {
-    metadataFilter.workspace_session_id = normalized.workspaceSessionId;
-  }
-  if (normalized.conversationId) {
-    metadataFilter.conversation_id = normalized.conversationId;
-  }
-  if (normalized.productTeamId) {
-    metadataFilter.product_team_id = normalized.productTeamId;
-  }
-
-  const scopedQuery =
-    Object.keys(metadataFilter).length > 0
-      ? query.contains("metadata", metadataFilter)
-      : query;
-
-  if (normalized.resourceScope === "personal") {
-    return scopedQuery.is("metadata->>product_team_id", null);
-  }
-
-  return scopedQuery;
-}
-
-function memoryMatchesScope(memory: Memory, scope?: MemoryScope) {
-  const normalized = compactMemoryScope(scope);
-  if (!normalized) return true;
-
-  const metadata = memory.metadata ?? {};
-
-  if (normalized.repoId && metadata.repo_id !== normalized.repoId) {
-    return false;
-  }
-  if (
-    normalized.workspaceSessionId &&
-    metadata.workspace_session_id !== normalized.workspaceSessionId
-  ) {
-    return false;
-  }
-  if (
-    normalized.conversationId &&
-    metadata.conversation_id !== normalized.conversationId
-  ) {
-    return false;
-  }
-  if (
-    normalized.productTeamId &&
-    metadata.product_team_id !== normalized.productTeamId
-  ) {
-    return false;
-  }
-  if (
-    normalized.resourceScope === "personal" &&
-    metadata.product_team_id != null
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-export function getMemoryScopeForLane(
-  lane: MemoryLane,
-  scope?: MemoryScope
-): MemoryScope | undefined {
-  const normalized = compactMemoryScope(scope);
-  if (!normalized) return undefined;
-
-  if (lane === "session") {
-    // A workspace session is the broad container; a conversation ID narrows
-    // within that container when one exists.
-    return compactMemoryScope({
-      repoId: normalized.repoId ?? null,
-      workspaceSessionId: normalized.workspaceSessionId ?? null,
-      conversationId: normalized.conversationId ?? null,
-      resourceScope: normalized.resourceScope ?? null,
-      productTeamId: normalized.productTeamId ?? null,
-    });
-  }
-
-  return compactMemoryScope({
-    repoId: normalized.repoId ?? null,
-    resourceScope: normalized.resourceScope ?? null,
-    productTeamId: normalized.productTeamId ?? null,
-  });
-}
-
-function getRepoScopedSearchScope(scope?: MemoryScope) {
-  const normalized = compactMemoryScope(scope);
-  if (!normalized) return undefined;
-  return compactMemoryScope({
-    repoId: normalized.repoId ?? null,
-    resourceScope: normalized.resourceScope ?? null,
-    productTeamId: normalized.productTeamId ?? null,
-  });
-}
-
-export function buildLaneScopedMetadata(
-  lane: MemoryLane,
-  metadata?: Record<string, unknown>,
-  scope?: MemoryScope
-): Record<string, unknown> | undefined {
-  const normalized = compactMemoryScope(scope);
-  const merged: Record<string, unknown> = {
-    ...metadata,
-  };
-
-  if (normalized?.repoId) merged.repo_id = normalized.repoId;
-  if (normalized?.resourceScope) {
-    merged.resource_scope = normalized.resourceScope;
-  }
-  if (normalized?.productTeamId) {
-    merged.product_team_id = normalized.productTeamId;
-  }
-  if (
-    (lane === "session" || lane === "episodic") &&
-    normalized?.workspaceSessionId
-  ) {
-    merged.workspace_session_id = normalized.workspaceSessionId;
-  }
-  if (lane === "session" && normalized?.conversationId) {
-    merged.conversation_id = normalized.conversationId;
-  }
-  if (normalized?.sandboxId) merged.sandbox_id = normalized.sandboxId;
-  if (normalized?.source) merged.source = normalized.source;
-  if (normalized?.agent) merged.agent = normalized.agent;
-
-  return validateMetadata(Object.keys(merged).length > 0 ? merged : undefined);
-}
+// Re-export scope utilities from dedicated module for API compatibility
+export {
+  applyScopeFilters,
+  buildLaneScopedMetadata,
+  compactMemoryScope,
+  getMemoryScopeForLane,
+  getRepoScopedSearchScope,
+  memoryMatchesScope,
+} from "@/lib/memories-scope";
 
 export async function listByLane(
   client: MemoriesClient,

@@ -11,6 +11,29 @@ import type {
   FlowNodeType,
 } from "@/lib/types";
 
+// Re-export selection operations from the selection module.
+export {
+  clearFlowDraftSelection,
+  selectFlowDraftNode,
+  selectFlowDraftEdge,
+  selectAllFlowDraftAgents,
+  deleteSelectedFlowDraftItems,
+} from "./editor-selection";
+
+// Re-export clipboard operations from the clipboard module.
+export type { FlowDraftClipboard } from "./editor-clipboard";
+export {
+  copySelectedFlowDraftItems,
+  pasteFlowDraftItems,
+  duplicateSelectedFlowDraftAgents,
+} from "./editor-clipboard";
+
+// Re-export layout operations from the layout module.
+export {
+  straightenSelectedFlowDraftNodes,
+  tidyFlowDraftLayout,
+} from "./editor-layout";
+
 export type FlowCanvasNode = Node<Record<string, unknown>, string>;
 export type FlowCanvasEdge = Edge;
 
@@ -24,11 +47,6 @@ export type FlowDraftSnapshot = {
   selectedNodeId: string | null;
 };
 
-export type FlowDraftClipboard = {
-  nodes: FlowCanvasNode[];
-  edges: FlowCanvasEdge[];
-};
-
 type InsertNodeOptions = {
   position?: { x: number; y: number };
   idFactory?: () => string;
@@ -37,8 +55,6 @@ type InsertNodeOptions = {
   role?: FlowAgentNodeRole;
   operation?: FlowActionOperation;
 };
-
-const STRUCTURAL_NODE_TYPES = new Set<FlowNodeType>(["start", "end"]);
 
 function cloneFlowCanvasNode(node: FlowCanvasNode): FlowCanvasNode {
   return {
@@ -52,10 +68,6 @@ function cloneFlowCanvasEdge(edge: FlowCanvasEdge): FlowCanvasEdge {
   return {
     ...edge,
   };
-}
-
-function editableNode(node: FlowCanvasNode) {
-  return !STRUCTURAL_NODE_TYPES.has(node.type as FlowNodeType);
 }
 
 function defaultPosition(snapshot: FlowDraftSnapshot, nextIndex: number) {
@@ -268,59 +280,6 @@ export function serializePersistedFlowGraph(graph: FlowGraph) {
   });
 }
 
-export function clearFlowDraftSelection(
-  snapshot: FlowDraftSnapshot
-): FlowDraftSnapshot {
-  return {
-    ...snapshot,
-    nodes: snapshot.nodes.map((node) =>
-      node.selected ? { ...node, selected: false } : node
-    ),
-    edges: snapshot.edges.map((edge) =>
-      edge.selected ? { ...edge, selected: false } : edge
-    ),
-    selectedNodeId: null,
-  };
-}
-
-export function selectFlowDraftNode(
-  snapshot: FlowDraftSnapshot,
-  nodeId: string
-): FlowDraftSnapshot {
-  return {
-    ...snapshot,
-    nodes: snapshot.nodes.map((node) => ({
-      ...node,
-      selected: node.id === nodeId,
-    })),
-    edges: snapshot.edges.map((edge) => ({
-      ...edge,
-      selected: false,
-    })),
-    selectedNodeId: snapshot.nodes.some((node) => node.id === nodeId)
-      ? nodeId
-      : null,
-  };
-}
-
-export function selectFlowDraftEdge(
-  snapshot: FlowDraftSnapshot,
-  edgeId: string
-): FlowDraftSnapshot {
-  return {
-    ...snapshot,
-    nodes: snapshot.nodes.map((node) => ({
-      ...node,
-      selected: false,
-    })),
-    edges: snapshot.edges.map((edge) => ({
-      ...edge,
-      selected: edge.id === edgeId,
-    })),
-    selectedNodeId: null,
-  };
-}
-
 export function insertFlowDraftNode(
   snapshot: FlowDraftSnapshot,
   type: Exclude<FlowNodeType, "start" | "end">,
@@ -428,282 +387,6 @@ export function insertFlowDraftNodeOnEdge(
           selected: false,
         },
       ],
-    },
-  };
-}
-
-export function selectAllFlowDraftAgents(
-  snapshot: FlowDraftSnapshot
-): FlowDraftSnapshot {
-  const selectedNodeIds = snapshot.nodes
-    .filter((node) => editableNode(node))
-    .map((node) => node.id);
-
-  return {
-    ...snapshot,
-    nodes: snapshot.nodes.map((node) => ({
-      ...node,
-      selected: editableNode(node),
-    })),
-    edges: snapshot.edges.map((edge) => ({
-      ...edge,
-      selected: false,
-    })),
-    selectedNodeId: selectedNodeIds[0] ?? null,
-  };
-}
-
-export function deleteSelectedFlowDraftItems(snapshot: FlowDraftSnapshot) {
-  const selectedNodeIds = new Set(
-    snapshot.nodes
-      .filter((node) => node.selected && editableNode(node))
-      .map((node) => node.id)
-  );
-  const selectedEdgeIds = new Set(
-    snapshot.edges.filter((edge) => edge.selected).map((edge) => edge.id)
-  );
-
-  if (selectedNodeIds.size === 0 && selectedEdgeIds.size === 0) {
-    return { snapshot, changed: false };
-  }
-
-  return {
-    changed: true,
-    snapshot: {
-      ...snapshot,
-      nodes: snapshot.nodes
-        .filter((node) => !selectedNodeIds.has(node.id))
-        .map((node) => ({ ...node, selected: false })),
-      edges: snapshot.edges
-        .filter((edge) => !selectedEdgeIds.has(edge.id))
-        .filter(
-          (edge) =>
-            !selectedNodeIds.has(edge.source) &&
-            !selectedNodeIds.has(edge.target)
-        )
-        .map((edge) => ({ ...edge, selected: false })),
-      selectedNodeId: selectedNodeIds.has(snapshot.selectedNodeId ?? "")
-        ? null
-        : snapshot.selectedNodeId,
-    },
-  };
-}
-
-export function copySelectedFlowDraftItems(
-  snapshot: FlowDraftSnapshot
-): FlowDraftClipboard | null {
-  const nodes = snapshot.nodes
-    .filter((node) => node.selected && editableNode(node))
-    .map(cloneFlowCanvasNode);
-  if (nodes.length === 0) {
-    return null;
-  }
-
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  return {
-    nodes,
-    edges: snapshot.edges
-      .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
-      .map(cloneFlowCanvasEdge),
-  };
-}
-
-export function pasteFlowDraftItems(
-  snapshot: FlowDraftSnapshot,
-  clipboard: FlowDraftClipboard,
-  options?: { offset?: { x: number; y: number }; idFactory?: () => string }
-) {
-  if (clipboard.nodes.length === 0) {
-    return { snapshot, changed: false };
-  }
-
-  const offset = options?.offset ?? { x: 48, y: 48 };
-  const idFactory =
-    options?.idFactory ?? (() => crypto.randomUUID().slice(0, 8));
-  const nodeIdMap = new Map<string, string>();
-  const nodes = clipboard.nodes.map((node) => {
-    const id = `${node.type}-${idFactory()}`;
-    nodeIdMap.set(node.id, id);
-    return {
-      ...cloneFlowCanvasNode(node),
-      id,
-      position: {
-        x: node.position.x + offset.x,
-        y: node.position.y + offset.y,
-      },
-      selected: true,
-    };
-  });
-  const edges = clipboard.edges.flatMap((edge) => {
-    const source = nodeIdMap.get(edge.source);
-    const target = nodeIdMap.get(edge.target);
-    if (!source || !target) return [];
-    return [
-      {
-        ...cloneFlowCanvasEdge(edge),
-        id: `edge-${idFactory()}`,
-        source,
-        target,
-        selected: false,
-      },
-    ];
-  });
-
-  return {
-    changed: true,
-    snapshot: {
-      ...snapshot,
-      nodes: [
-        ...snapshot.nodes.map((node) => ({ ...node, selected: false })),
-        ...nodes,
-      ],
-      edges: [
-        ...snapshot.edges.map((edge) => ({ ...edge, selected: false })),
-        ...edges,
-      ],
-      selectedNodeId: nodes[0]?.id ?? null,
-    },
-  };
-}
-
-export function duplicateSelectedFlowDraftAgents(
-  snapshot: FlowDraftSnapshot,
-  options?: { offset?: { x: number; y: number }; idFactory?: () => string }
-) {
-  const selectedNodes = snapshot.nodes.filter(
-    (node) => editableNode(node) && node.selected
-  );
-  if (selectedNodes.length === 0) {
-    return { snapshot, changed: false };
-  }
-
-  const offset = options?.offset ?? { x: 48, y: 48 };
-  const idFactory =
-    options?.idFactory ?? (() => crypto.randomUUID().slice(0, 8));
-  const duplicates = selectedNodes.map((node) => ({
-    ...cloneFlowCanvasNode(node),
-    id: `${node.type}-${idFactory()}`,
-    position: {
-      x: node.position.x + offset.x,
-      y: node.position.y + offset.y,
-    },
-    selected: true,
-  }));
-
-  return {
-    changed: true,
-    snapshot: {
-      ...snapshot,
-      nodes: [
-        ...snapshot.nodes.map((node) => ({ ...node, selected: false })),
-        ...duplicates,
-      ],
-      edges: snapshot.edges.map((edge) => ({ ...edge, selected: false })),
-      selectedNodeId: duplicates[0]?.id ?? null,
-    },
-  };
-}
-
-export function straightenSelectedFlowDraftNodes(snapshot: FlowDraftSnapshot) {
-  const selectedNodes = snapshot.nodes.filter(
-    (node) => editableNode(node) && node.selected
-  );
-  const targetNodes =
-    selectedNodes.length > 1
-      ? selectedNodes
-      : snapshot.nodes.filter((node) => editableNode(node));
-
-  if (targetNodes.length <= 1) {
-    return { snapshot, changed: false };
-  }
-
-  const targetIds = new Set(targetNodes.map((node) => node.id));
-  const baselineY = Math.round(
-    targetNodes.reduce((sum, node) => sum + node.position.y, 0) /
-      targetNodes.length
-  );
-
-  return {
-    changed: true,
-    snapshot: {
-      ...snapshot,
-      nodes: snapshot.nodes.map((node) =>
-        targetIds.has(node.id)
-          ? { ...node, position: { ...node.position, y: baselineY } }
-          : node
-      ),
-    },
-  };
-}
-
-export function tidyFlowDraftLayout(snapshot: FlowDraftSnapshot) {
-  const startNode = snapshot.nodes.find((node) => node.type === "start");
-  if (!startNode) {
-    return { snapshot, changed: false };
-  }
-
-  const outgoing = new Map<string, string[]>();
-  const incoming = new Map<string, string[]>();
-  for (const node of snapshot.nodes) {
-    outgoing.set(node.id, []);
-    incoming.set(node.id, []);
-  }
-  for (const edge of snapshot.edges) {
-    outgoing.get(edge.source)?.push(edge.target);
-    incoming.get(edge.target)?.push(edge.source);
-  }
-
-  const depth = new Map<string, number>([[startNode.id, 0]]);
-  const queue = [startNode.id];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const nextDepth = (depth.get(current) ?? 0) + 1;
-    for (const nextId of outgoing.get(current) || []) {
-      const existing = depth.get(nextId);
-      if (existing == null || nextDepth > existing) {
-        depth.set(nextId, nextDepth);
-      }
-      if (!queue.includes(nextId)) {
-        queue.push(nextId);
-      }
-    }
-  }
-
-  const grouped = new Map<number, FlowCanvasNode[]>();
-  for (const node of snapshot.nodes) {
-    const nodeDepth = depth.get(node.id) ?? 0;
-    const list = grouped.get(nodeDepth) || [];
-    list.push(node);
-    grouped.set(nodeDepth, list);
-  }
-
-  const positioned = new Map<string, { x: number; y: number }>();
-  const sortedDepths = [...grouped.keys()].sort((a, b) => a - b);
-  for (const level of sortedDepths) {
-    const nodesAtLevel = (grouped.get(level) || [])
-      .slice()
-      .sort((left, right) => left.position.y - right.position.y);
-    const center = 240;
-    const gap = 180;
-    const totalHeight = Math.max(0, (nodesAtLevel.length - 1) * gap);
-    const startY = center - totalHeight / 2;
-
-    for (const [index, node] of nodesAtLevel.entries()) {
-      positioned.set(node.id, {
-        x: 180 + level * 280,
-        y: Math.round(startY + index * gap),
-      });
-    }
-  }
-
-  return {
-    changed: true,
-    snapshot: {
-      ...snapshot,
-      nodes: snapshot.nodes.map((node) => ({
-        ...node,
-        position: positioned.get(node.id) ?? node.position,
-      })),
     },
   };
 }
