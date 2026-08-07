@@ -1,19 +1,5 @@
-import { redirect } from "next/navigation"
-import {
-  buildScopedWorkflowsHref,
-  type WorkflowRouteSearchParams,
-} from "@/lib/flows/workflows-route"
+import { AutomationsHub } from "@/components/automations/automations-hub"
 
-export default async function AutomationsPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ scope: string }>
-  searchParams: Promise<WorkflowRouteSearchParams>
-}) {
-  const [{ scope }, resolvedSearchParams] = await Promise.all([
-    params,
-    searchParams,
-  ])
-  redirect(buildScopedWorkflowsHref(scope, resolvedSearchParams))
+export default function AutomationsPage() {
+  return <AutomationsHub />
 }

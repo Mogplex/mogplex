@@ -9,5 +9,5 @@ export default async function ScopeRootPage({
   params: Promise<Params>;
 }) {
   const { scope } = await params;
-  redirect(scopedHref(scope, "/projects/workspace"));
+  redirect(scopedHref(scope, "/control"));
 }

@@ -120,6 +120,8 @@ async function setupWorkflowsPage(page: Page) {
   });
   await page.addInitScript(() => {
     window.localStorage.setItem("theme", "dark");
+    // Ensure the inspector starts expanded (not collapsed) in dock mode.
+    window.localStorage.removeItem("flows-inspector-minimized");
   });
 
   const model = {
@@ -510,7 +512,9 @@ test("inspector empty state stays reachable on a short viewport", async ({
 }) => {
   await setupWorkflowsPage(page);
   // Short enough that the icon, copy and node/connection counts cannot all fit.
-  await page.setViewportSize({ width: 1280, height: 380 });
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold.
+  await page.setViewportSize({ width: 1600, height: 380 });
   await page.goto("/alex/workflows");
   await page.waitForLoadState("networkidle");
 
@@ -548,6 +552,9 @@ test("inspector empty state stays reachable on a short viewport", async ({
 
 test("inspector empty panel minimizes and restores", async ({ page }) => {
   await setupWorkflowsPage(page);
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold where minimize/expand controls appear.
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/alex/workflows");
   await page.waitForLoadState("networkidle");
 

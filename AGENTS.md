@@ -288,6 +288,7 @@ These are the repo’s expected TypeScript rules and conventions.
 
 ## Working Style for Agents
 
+- Source files are capped at 500 lines — split by concern instead of growing a file. Enforced by the ESLint `max-lines` rule; pre-existing violators are grandfathered to warnings in a shrink-only list in `eslint.config.mjs` (remove entries as files get refactored down, never add new ones). Giant files also pin ESLint's per-file worker parallelism and break the Prettier CLI (see the flows-pane hazard below)
 - Make behavior-level changes before refactors
 - Keep feature-specific helpers local to the feature until reuse is real
 - Follow existing repo conventions before introducing new abstractions

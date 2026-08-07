@@ -1,5 +1,3 @@
-import type { RunChatAgentMessage } from "@/lib/agents/run-chat";
-
 /**
  * Default number of trailing messages to retain when windowing a conversation
  * history before sending it to the model. ~40 messages ≈ 20 user/assistant
@@ -17,10 +15,10 @@ export const DEFAULT_MESSAGE_WINDOW = 40;
  * Pure and side-effect free; returns the original array unchanged when it is
  * already within the limit.
  */
-export function windowMessages(
-  messages: RunChatAgentMessage[],
+export function windowMessages<Message extends { role: string }>(
+  messages: Message[],
   maxMessages: number = DEFAULT_MESSAGE_WINDOW
-): RunChatAgentMessage[] {
+): Message[] {
   if (messages.length <= maxMessages) return messages;
 
   let systemCount = 0;

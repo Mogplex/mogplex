@@ -2,34 +2,40 @@ import { scopedHref } from "@/lib/scoped-href";
 
 export const APP_NAV_ITEM_DEFS = [
   {
-    id: "projects",
-    label: "Projects",
+    id: "control",
+    label: "Control",
+    path: "/control",
+    subpaths: ["/control"],
+  },
+  {
+    id: "workspaces",
+    label: "Workspaces",
     path: "/projects/workspace",
-    subpath: "/projects",
+    subpaths: ["/projects", "/workspaces"],
   },
   {
-    id: "agents",
-    label: "Agents",
-    path: "/agents/roster",
-    subpath: "/agents",
+    id: "automations",
+    label: "Automations",
+    path: "/automations",
+    subpaths: ["/automations", "/workflows", "/flows", "/triggers"],
   },
   {
-    id: "workflows",
-    label: "Workflows",
-    path: "/workflows",
-    subpath: "/workflows",
+    id: "delivery",
+    label: "Delivery",
+    path: "/delivery",
+    subpaths: ["/delivery"],
   },
   {
-    id: "observability",
-    label: "Observability",
+    id: "observe",
+    label: "Observe",
     path: "/observability",
-    subpath: "/observability",
+    subpaths: ["/observability", "/observe", "/runs"],
   },
   {
     id: "settings",
     label: "Settings",
     path: "/settings",
-    subpath: "/settings",
+    subpaths: ["/settings", "/agents"],
   },
 ] as const;
 
@@ -39,10 +45,11 @@ export function buildAppNavItems(scope: string) {
   return APP_NAV_ITEM_DEFS.map((item) => ({
     ...item,
     href: scopedHref(scope, item.path),
-    match: scopedHref(scope, item.subpath),
+    match: item.subpaths.map((subpath) => scopedHref(scope, subpath)),
   }));
 }
 
-export function isAppNavItemActive(pathname: string, match: string) {
-  return pathname === match || pathname.startsWith(`${match}/`);
+export function isAppNavItemActive(pathname: string, match: string | string[]) {
+  const matches = Array.isArray(match) ? match : [match];
+  return matches.some((m) => pathname === m || pathname.startsWith(`${m}/`));
 }

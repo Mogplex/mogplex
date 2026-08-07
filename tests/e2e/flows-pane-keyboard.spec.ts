@@ -423,6 +423,9 @@ test("open workflow selectors own shortcuts without disabling them after close",
 test("keyboard shortcuts copy, paste, cut, undo, and redo canvas nodes", async ({
   page,
 }) => {
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold.
+  await page.setViewportSize({ width: 1600, height: 900 });
   await stubFlowsPage(page);
 
   await page.goto("/alex/workflows");
@@ -875,6 +878,9 @@ test("adding a condition node does not let the first autosave overwrite follow-u
 test("select all and escape only affect agent-node selection and preserve structural nodes", async ({
   page,
 }) => {
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold.
+  await page.setViewportSize({ width: 1600, height: 900 });
   await stubFlowsPage(page);
 
   await page.goto("/alex/workflows");
@@ -977,10 +983,12 @@ test("agent node overrides persist to the flow graph without mutating the base a
 test("agent nodes persist an available CLI harness and disable missing-key harnesses", async ({
   page,
 }) => {
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold.
+  await page.setViewportSize({ width: 1600, height: 900 });
   const { getFlow } = await stubFlowsPage(page);
 
-  await page.goto("/alex/automations?tab=editor");
-  await expect(page).toHaveURL("/alex/workflows?tab=editor");
+  await page.goto("/alex/workflows?tab=editor");
   await page.waitForLoadState("networkidle");
 
   const agentNode = page

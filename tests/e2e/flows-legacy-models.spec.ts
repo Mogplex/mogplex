@@ -32,6 +32,9 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 test("flows inspector highlights legacy hidden model overrides and supports quick replacement", async ({
   page,
 }) => {
+  // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
+  // the 1280px dock-mode threshold.
+  await page.setViewportSize({ width: 1600, height: 900 });
   await enableScopedE2EAuth(page);
 
   let currentFlow = {

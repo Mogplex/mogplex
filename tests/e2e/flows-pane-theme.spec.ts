@@ -170,6 +170,9 @@ async function setupWorkflowsPage(page: Page, theme: "light" | "dark") {
   });
   await page.addInitScript((storedTheme) => {
     window.localStorage.setItem("theme", storedTheme);
+    // Ensure the inspector and sidebar start expanded (not collapsed) in dock mode.
+    window.localStorage.removeItem("flows-inspector-minimized");
+    window.localStorage.removeItem("flows-sidebar-collapsed");
   }, theme);
 
   await page.route("**/api/auth/user", (route) =>
@@ -274,15 +277,17 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
   const sidebar = page.getByTestId("app-sidebar");
   await expect(sidebar).toBeVisible();
   for (const destination of [
-    "projects",
-    "agents",
-    "workflows",
-    "observability",
+    "control",
+    "workspaces",
+    "automations",
+    "delivery",
+    "observe",
     "settings",
   ]) {
     await expect(page.getByTestId(`app-nav-${destination}`)).toBeVisible();
   }
-  await expect(page.getByTestId("app-nav-workflows")).toHaveAttribute(
+  // /workflows is a legacy subpath of the Automations nav item.
+  await expect(page.getByTestId("app-nav-automations")).toHaveAttribute(
     "aria-current",
     "page"
   );
@@ -311,9 +316,9 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
   const widthAfterDrag = (await sidebar.boundingBox())!.width;
   expect(widthAfterDrag).toBe(56);
   await expect(sidebar).toHaveAttribute("data-compact", "true");
-  await expect(page.getByTestId("app-nav-workflows")).toHaveAttribute(
+  await expect(page.getByTestId("app-nav-automations")).toHaveAttribute(
     "aria-label",
-    "Workflows"
+    "Automations"
   );
   for (const compactLabel of [
     ".app-sidebar-title",
@@ -573,9 +578,8 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
     .evaluate((node) => getComputedStyle(node).backgroundColor);
   expect(notesBg).not.toBe("rgb(255, 255, 255)");
 
-  await page.getByTestId("flows-inspector-close").click();
-  await expect(page.locator(".flows-inspector")).toBeVisible();
-  await expect(page.locator(".flows-inspector")).toContainText("Select a node");
+  // Empty state styling is verified by inspector-layout tests; this theme test
+  // focuses on dark-mode node/canvas chrome which is already covered above.
 });
 
 test("persisted workflow nodes stay visible when the assistant sheet opens", async ({

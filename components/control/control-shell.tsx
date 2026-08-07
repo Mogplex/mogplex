@@ -1,0 +1,452 @@
+"use client"
+
+import { useState, useCallback, useMemo } from "react"
+import { useParams, useSearchParams, useRouter } from "next/navigation"
+import { useChat } from "@ai-sdk/react"
+import { DefaultChatTransport } from "ai"
+import type {
+  Mission,
+  Worktree,
+  Changeset,
+  Deployment,
+  TimelineEvent,
+  ControlSeedData,
+} from "@/lib/control/types"
+import { generateMissionId } from "@/lib/control/seed"
+import { scopedHref } from "@/lib/scoped-href"
+import { buildCombinedTimeline } from "./build-combined-timeline"
+import { useMissionDerived, type MissionFilter } from "./use-mission-derived"
+import { MissionSidebar } from "./mission-sidebar"
+import { MissionHeader } from "./mission-header"
+import { Timeline } from "./timeline"
+import { Canvas } from "./canvas"
+import { Inspector } from "./inspector"
+import { Composer } from "./composer"
+import { ConsoleDrawer } from "./console-drawer"
+import { NeedsAttentionBanner } from "./needs-attention-banner"
+import { AgentSummaryStrip } from "./agent-summary-strip"
+import { NewMissionComposer } from "./new-mission-composer"
+
+type ControlMode = "conversation" | "canvas" | "review"
+
+export type ControlShellProps = {
+  initialData: ControlSeedData
+  initialMissionId?: string
+}
+
+export function ControlShell({ initialData, initialMissionId }: ControlShellProps) {
+  const params = useParams<{ scope: string }>()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const scope = params.scope
+
+  // Core data state (seeded, then mutated locally)
+  const [missions, setMissions] = useState<Mission[]>(initialData.missions)
+  const [worktrees, setWorktrees] = useState<Worktree[]>(initialData.worktrees)
+  const [changesets] = useState<Changeset[]>(initialData.changesets)
+  const [deployments] = useState<Deployment[]>(initialData.deployments)
+  const workspaces = initialData.workspaces
+
+  // UI state
+  const [selectedMissionId, setSelectedMissionId] = useState<string>(
+    initialMissionId || searchParams.get("mission") || missions[0]?.id || ""
+  )
+  const [mode, setMode] = useState<ControlMode>("conversation")
+  const [missionFilter, setMissionFilter] = useState<MissionFilter>("active")
+  const [missionQuery, setMissionQuery] = useState("")
+  const [selection, setSelection] = useState<string | null>(null)
+  const [inspectorTab, setInspectorTab] = useState("summary")
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerTab, setDrawerTab] = useState<"terminal" | "logs" | "tests" | "events">("terminal")
+  const [drawerHeight, setDrawerHeight] = useState(0) // index into [140, 232, 380]
+  const [agentsOpen, setAgentsOpen] = useState(false)
+  const [newMission, setNewMission] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
+
+  // Selected mission
+  const mission = useMemo(
+    () => missions.find((m) => m.id === selectedMissionId) || missions[0],
+    [missions, selectedMissionId]
+  )
+
+  // Get workspace by id
+  const getWorkspace = useCallback(
+    (id: string) => workspaces.find((w) => w.id === id),
+    [workspaces]
+  )
+
+  // Get worktree by id
+  const getWorktree = useCallback(
+    (id: string) => worktrees.find((w) => w.id === id),
+    [worktrees]
+  )
+
+  // Worktrees for current mission
+  const missionWorktrees = useMemo(
+    () => worktrees.filter((w) => w.mission === mission?.id),
+    [worktrees, mission?.id]
+  )
+
+  // Changesets for current mission
+  const missionChangesets = useMemo(
+    () => changesets.filter((c) => c.mission === mission?.id),
+    [changesets, mission?.id]
+  )
+
+  // Deployments for current mission workspace
+  const missionDeployments = useMemo(
+    () => deployments.filter((d) => d.ws === mission?.ws),
+    [deployments, mission?.ws]
+  )
+
+  // Chat integration using DefaultChatTransport
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/control/chat",
+      }),
+    []
+  )
+
+  const { messages, sendMessage, status } = useChat({
+    transport,
+    id: `control-${selectedMissionId}`,
+  })
+
+  const chatPending = status === "streaming" || status === "submitted"
+
+  // Local input state (useChat v6 doesn't provide input/setInput)
+  const [composerInput, setComposerInput] = useState("")
+
+  // Push a timeline event to the current mission
+  const pushTimelineEvent = useCallback(
+    (event: TimelineEvent) => {
+      setMissions((prev) =>
+        prev.map((m) =>
+          m.id === selectedMissionId
+            ? { ...m, timeline: [...m.timeline, event] }
+            : m
+        )
+      )
+    },
+    [selectedMissionId]
+  )
+
+  // Patch a worktree
+  const patchWorktree = useCallback((id: string, patch: Partial<Worktree>) => {
+    setWorktrees((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)))
+  }, [])
+
+  // Patch a mission
+  const patchMission = useCallback((id: string, patch: Partial<Mission>) => {
+    setMissions((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+  }, [])
+
+  // Select a mission
+  const selectMission = useCallback(
+    (id: string) => {
+      setSelectedMissionId(id)
+      setSelection(null)
+      setNewMission(false)
+      router.push(scopedHref(scope, `/control?mission=${id}`), { scroll: false })
+    },
+    [scope, router]
+  )
+
+  // Select a node (worktree/changeset/env)
+  const selectNode = useCallback((id: string | null, tab?: string) => {
+    setSelection(id)
+    if (tab) setInspectorTab(tab)
+    if (id && mode === "conversation") setMode("canvas")
+  }, [mode])
+
+  // Handle message send
+  const handleSend = useCallback(
+    async (text: string, target: string, scopeLevel: string) => {
+      if (!text.trim()) return
+
+      // Push user event to timeline
+      pushTimelineEvent({
+        kind: "user",
+        label: target === "mission" ? "YOU" : `YOU → ${target.toUpperCase()}`,
+        time: "now",
+        body: text,
+      })
+
+      // Push tool event for dispatch
+      pushTimelineEvent({
+        kind: "tool",
+        label: "DISPATCHED",
+        time: "now",
+        body: `Scope: ${scopeLevel} · target: ${target}.`,
+      })
+
+      // Send to chat API (fail soft if endpoint doesn't exist)
+      try {
+        await sendMessage({ text })
+        setComposerInput("")
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Chat error"
+        if (message.includes("404") || message.includes("Not Found")) {
+          setChatError("Control chat endpoint not yet deployed. Using seed data only.")
+        } else {
+          setChatError(message)
+        }
+      }
+    },
+    [sendMessage, pushTimelineEvent]
+  )
+
+  // Create new mission
+  const handleCreateMission = useCallback(
+    (text: string, targets: string[], autonomy: string, budget: number) => {
+      const id = generateMissionId()
+      const newMissionObj: Mission = {
+        id,
+        title: text.slice(0, 80),
+        ws: targets[0] || "ws-atlas",
+        status: "active",
+        pinned: false,
+        age: "now",
+        cost: 0,
+        budget,
+        base: "main",
+        env: "-",
+        autonomy: autonomy as Mission["autonomy"],
+        approval: "Human merge",
+        sandbox: "container-med",
+        archived: false,
+        targets,
+        timeline: [
+          { kind: "user", label: "YOU", time: "now", body: text },
+          { kind: "tool", label: "DISPATCHED", time: "now", body: `Mogplex is planning. Autonomy: ${autonomy}. Budget: $${budget}.` },
+        ],
+      }
+      setMissions((prev) => [newMissionObj, ...prev])
+      setSelectedMissionId(id)
+      setNewMission(false)
+
+      // Send to chat API (fail soft)
+      sendMessage({ text }).catch(() => {
+        // Fail soft
+      })
+    },
+    [sendMessage]
+  )
+
+  // Derived mission data (filtered list, attention items, stats)
+  const { filteredMissions, needsAttention, agentStats } = useMissionDerived(
+    missions,
+    missionFilter,
+    missionQuery,
+    missionWorktrees,
+    changesets,
+    mission?.cost
+  )
+
+  // Drawer heights
+  const drawerHeights = [140, 232, 380]
+  const cycleDrawerHeight = useCallback(() => {
+    setDrawerHeight((h) => (h + 1) % 3)
+  }, [])
+
+  // Combined timeline: seed events + chat messages interleaved
+  const combinedTimeline = useMemo(
+    () => buildCombinedTimeline(mission?.timeline, messages),
+    [mission?.timeline, messages]
+  )
+
+  if (newMission) {
+    return (
+      <div className="flex h-full flex-col bg-background">
+        <NewMissionComposer
+          workspaces={workspaces}
+          onCancel={() => setNewMission(false)}
+          onCreate={handleCreateMission}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full overflow-hidden bg-background">
+      {/* Left: Mission sidebar */}
+      <MissionSidebar
+        missions={filteredMissions}
+        selectedId={selectedMissionId}
+        filter={missionFilter}
+        query={missionQuery}
+        onSelect={selectMission}
+        onFilterChange={setMissionFilter}
+        onQueryChange={setMissionQuery}
+        onNewMission={() => setNewMission(true)}
+        onPinToggle={(id) => {
+          const m = missions.find((x) => x.id === id)
+          if (m) patchMission(id, { pinned: !m.pinned })
+        }}
+        onArchiveToggle={(id) => {
+          const m = missions.find((x) => x.id === id)
+          if (m) patchMission(id, { archived: !m.archived })
+        }}
+        getWorkspace={getWorkspace}
+        worktrees={worktrees}
+      />
+
+      {/* Center + Right: Main content */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Header */}
+        {mission && (
+          <MissionHeader
+            mission={mission}
+            workspace={getWorkspace(mission.ws)}
+            mode={mode}
+            onModeChange={setMode}
+          />
+        )}
+
+        {/* Content area */}
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          {/* Conversation / Canvas area */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* Needs attention banner */}
+            {needsAttention.length > 0 && mode === "conversation" && (
+              <NeedsAttentionBanner
+                item={needsAttention[0]}
+                onAction={() => {
+                  const item = needsAttention[0]
+                  if (item.kind === "APPROVE" && item.changeset) {
+                    patchWorktree(item.worktree.id, { state: "implementing" })
+                    pushTimelineEvent({
+                      kind: "git",
+                      label: "APPROVED",
+                      time: "now",
+                      body: `${item.changeset.id} approved for merge.`,
+                    })
+                  } else if (item.kind === "FAILED") {
+                    patchWorktree(item.worktree.id, { state: "implementing", action: "retrying..." })
+                  } else {
+                    selectNode(item.worktree.id, "files")
+                  }
+                }}
+                onSecondary={() => selectNode(needsAttention[0].worktree.id)}
+              />
+            )}
+
+            {/* Agent summary strip */}
+            {mode === "conversation" && (
+              <AgentSummaryStrip
+                stats={agentStats}
+                isOpen={agentsOpen}
+                onToggle={() => setAgentsOpen(!agentsOpen)}
+                worktrees={missionWorktrees}
+                onSelectWorktree={selectNode}
+                changesets={missionChangesets}
+                deployments={missionDeployments}
+              />
+            )}
+
+            {/* Canvas mode */}
+            {mode === "canvas" && (
+              <Canvas
+                mission={mission}
+                worktrees={missionWorktrees}
+                changesets={missionChangesets}
+                deployments={missionDeployments}
+                selection={selection}
+                onSelectNode={selectNode}
+              />
+            )}
+
+            {/* Conversation mode */}
+            {mode === "conversation" && (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <Timeline
+                  events={combinedTimeline}
+                  worktrees={worktrees}
+                  getWorktree={getWorktree}
+                  onSelectWorktree={selectNode}
+                  onApprove={(idx) => {
+                    // Mark approval as resolved
+                    const event = combinedTimeline[idx]
+                    if (event?.kind === "approval") {
+                      setMissions((prev) =>
+                        prev.map((m) =>
+                          m.id === selectedMissionId
+                            ? {
+                                ...m,
+                                timeline: m.timeline.map((e, i) =>
+                                  i === idx && e.kind === "approval"
+                                    ? { ...e, resolved: "Approved by you - merge unblocked" }
+                                    : e
+                                ),
+                              }
+                            : m
+                        )
+                      )
+                    }
+                  }}
+                  pending={chatPending}
+                />
+                {chatError && (
+                  <div className="mx-auto max-w-2xl px-4 py-2">
+                    <div className="rounded border border-accent-amber/30 bg-accent-amber/5 px-3 py-2 text-xs text-accent-amber">
+                      {chatError}
+                    </div>
+                  </div>
+                )}
+                <Composer
+                  value={composerInput}
+                  onChange={setComposerInput}
+                  onSend={handleSend}
+                  pending={chatPending}
+                  mission={mission}
+                  worktrees={missionWorktrees}
+                />
+              </div>
+            )}
+
+            {/* Review mode placeholder */}
+            {mode === "review" && (
+              <div className="flex flex-1 items-center justify-center text-muted-foreground">
+                Review tab coming soon
+              </div>
+            )}
+          </div>
+
+          {/* Inspector panel (right side when node selected) */}
+          {selection && mode === "canvas" && (
+            <Inspector
+              selection={selection}
+              tab={inspectorTab}
+              onTabChange={setInspectorTab}
+              onClose={() => setSelection(null)}
+              worktrees={worktrees}
+              changesets={changesets}
+              deployments={deployments}
+              mission={mission}
+              onPatchWorktree={patchWorktree}
+              onPushEvent={pushTimelineEvent}
+              onOpenDrawer={(tab) => {
+                setDrawerOpen(true)
+                setDrawerTab(tab)
+              }}
+            />
+          )}
+        </div>
+
+        {/* Console drawer */}
+        <ConsoleDrawer
+          open={drawerOpen}
+          onToggle={() => setDrawerOpen(!drawerOpen)}
+          tab={drawerTab}
+          onTabChange={setDrawerTab}
+          height={drawerHeights[drawerHeight]}
+          onCycleHeight={cycleDrawerHeight}
+          selection={selection}
+          worktrees={worktrees}
+          getWorktree={getWorktree}
+        />
+      </div>
+    </div>
+  )
+}

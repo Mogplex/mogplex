@@ -847,6 +847,11 @@
        describe the svg, so opt this element out of Tailwind's global
        border-box and let the padding and border sit outside them. */
     box-sizing: content-box;
+    /* Constrain height on short viewports so the minimap shrinks and stays
+       inside the canvas rather than hanging off the bottom. The formula
+       reserves space for the top bar, tabs, and status bar (~450px combined),
+       with an 80px floor so it remains usable. */
+    max-height: max(80px, calc(100vh - 450px));
   }
 
   .flows-pane .react-flow__node.selected > div {

@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import {
-  Activity,
-  Folder,
-  GitBranch,
-  Group,
+  DeliveryTruck,
+  Eye,
+  Flash,
+  Packages,
+  SendDiagonal,
   Settings,
 } from "iconoir-react";
 import { MogplexMark } from "@/components/brand/mogplex-mark";
@@ -24,12 +25,13 @@ const COMPACT_THRESHOLD = 120;
 const MAX_WIDTH = 320;
 
 const NAV_ICONS = {
-  projects: Folder,
-  agents: Group,
-  workflows: GitBranch,
-  observability: Activity,
+  control: SendDiagonal,
+  workspaces: Packages,
+  automations: Flash,
+  delivery: DeliveryTruck,
+  observe: Eye,
   settings: Settings,
-} satisfies Record<AppNavItemId, typeof Folder>;
+} satisfies Record<AppNavItemId, typeof SendDiagonal>;
 
 function clampWidth(value: number) {
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value));

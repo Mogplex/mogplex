@@ -932,7 +932,7 @@ export type Connection = {
   mcp_url: string | null;
   description: string | null;
   is_enabled: boolean;
-  health_status: import("@/lib/connections/status").ConnectionHealthStatus;
+  health_status: import("@/lib/connections/health-status").ConnectionHealthStatus;
   scope: "global" | "project";
   repo_id: string | null;
   oauth_client_id: string | null;
