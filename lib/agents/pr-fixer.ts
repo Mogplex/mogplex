@@ -1,164 +1,21 @@
 import { tool } from "ai";
-import {
-  normalizeRootDirectory,
-  resolveSandboxPath,
-} from "@/lib/repo-settings";
+import { resolveSandboxPath } from "@/lib/repo-settings";
 import { z } from "zod";
-import type { Sandbox } from "@vercel/sandbox";
 
-type SandboxFileAccess = Pick<
-  Sandbox,
-  "readFileToBuffer" | "runCommand" | "writeFiles"
->;
+import { buildUpdateFilePatch } from "./pr-fixer-patch";
+import {
+  buildCommitUrl,
+  encodePath,
+  extractCommitSha,
+  githubHeaders,
+  normalizeRepoPath,
+  parentDirectory,
+  readCommandOutput,
+  stripSandboxRootDirectory,
+  type SandboxFileAccess,
+} from "./pr-fixer-utils";
 
-function encodePath(path: string) {
-  return path
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-}
-
-function normalizeRepoPath(path: string) {
-  const normalized = path
-    .trim()
-    .replace(/^\.\/+/, "")
-    .replace(/\/+/g, "/");
-  if (
-    !normalized ||
-    normalized.startsWith("/") ||
-    normalized.split("/").includes("..")
-  ) {
-    throw new Error("Path must be a relative repository path");
-  }
-  return normalized;
-}
-
-// Agents are prompted with repo-root-relative paths, but sandbox commands run
-// inside rootDirectory when one is configured. Accept both repo-root inputs
-// like "app/src/file.ts" and root-relative inputs like "src/file.ts"; listFiles
-// preserves the stripped target convention while read/update return the user's
-// normalized input path.
-function stripSandboxRootDirectory(
-  path: string,
-  rootDirectory?: string | null
-) {
-  const normalizedRoot = normalizeRootDirectory(rootDirectory);
-  if (!normalizedRoot) return path;
-  if (path === normalizedRoot) return ".";
-  return path.startsWith(`${normalizedRoot}/`)
-    ? path.slice(normalizedRoot.length + 1)
-    : path;
-}
-
-async function readCommandOutput(
-  result: Awaited<ReturnType<SandboxFileAccess["runCommand"]>>,
-  stream: "stdout" | "stderr"
-) {
-  const reader = result[stream];
-  return typeof reader === "function" ? await reader.call(result) : "";
-}
-
-function parentDirectory(path: string) {
-  const parts = path.split("/");
-  parts.pop();
-  return parts.join("/");
-}
-
-function buildCommitUrl(repoFullName: string, sha: string | null) {
-  return sha ? `https://github.com/${repoFullName}/commit/${sha}` : null;
-}
-
-function extractCommitSha(output: string) {
-  return (
-    output
-      .split(/\s+/)
-      .reverse()
-      .find((part) => /^[0-9a-f]{40}$/i.test(part)) ?? null
-  );
-}
-
-function splitPatchLines(normalizedContent: string) {
-  if (normalizedContent.length === 0) return [];
-  return normalizedContent.endsWith("\n")
-    ? normalizedContent.slice(0, -1).split("\n")
-    : normalizedContent.split("\n");
-}
-
-function parsePatchContent(content: string) {
-  const normalized = content.replace(/\r\n/g, "\n");
-  return {
-    lines: splitPatchLines(normalized),
-    missingTrailingNewline: normalized.length > 0 && !normalized.endsWith("\n"),
-  };
-}
-
-function formatPatchRange(lines: string[], created: boolean) {
-  if (lines.length === 0) return created ? "0,0" : "1,0";
-  return `1,${lines.length}`;
-}
-
-/**
- * Builds a coarse unified diff that replaces the entire file: every old line is
- * emitted as a deletion and every new line as an addition. This is intentionally
- * a full-replacement diff rather than a minimal hunk — the renderer in the Edits
- * section just needs valid unified-diff syntax, and avoiding a real diff library
- * keeps this tool dependency-free. The trade-off is that small edits show up as
- * full-file rewrites; callers should treat the patch as informational only.
- *
- * Returns `null` when the new content is identical to the previous content, so
- * no-op writes don't render as a misleading full rewrite.
- */
-export function buildUpdateFilePatch(
-  path: string,
-  previousContent: string | null,
-  nextContent: string
-): string | null {
-  if (previousContent !== null && previousContent === nextContent) {
-    return null;
-  }
-
-  const oldContent =
-    previousContent == null ? null : parsePatchContent(previousContent);
-  const newContent = parsePatchContent(nextContent);
-  const oldLines = oldContent?.lines ?? [];
-  const newLines = newContent.lines;
-  const oldRange = formatPatchRange(oldLines, previousContent == null);
-  const newRange = formatPatchRange(newLines, false);
-
-  const patchLines = [
-    `diff --git a/${path} b/${path}`,
-    previousContent == null
-      ? "new file mode 100644"
-      : "index 0000000..0000000 100644",
-    previousContent == null ? "--- /dev/null" : `--- a/${path}`,
-    `+++ b/${path}`,
-    `@@ -${oldRange} +${newRange} @@`,
-  ];
-
-  for (const [index, line] of oldLines.entries()) {
-    patchLines.push(`-${line}`);
-    if (oldContent?.missingTrailingNewline && index === oldLines.length - 1) {
-      patchLines.push("\\ No newline at end of file");
-    }
-  }
-
-  for (const [index, line] of newLines.entries()) {
-    patchLines.push(`+${line}`);
-    if (newContent.missingTrailingNewline && index === newLines.length - 1) {
-      patchLines.push("\\ No newline at end of file");
-    }
-  }
-
-  return patchLines.join("\n");
-}
-
-function githubHeaders(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-  };
-}
+export { buildUpdateFilePatch } from "./pr-fixer-patch";
 
 export function buildPRFixTools(config: {
   githubToken: string;
