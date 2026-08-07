@@ -37,8 +37,10 @@ describe("rpc", () => {
     expect(names.data).toEqual(["alpha", "beta"]);
 
     const summaries = await db.rpc("repo_summaries", { p_user: USER_A });
+    // Seeded values: the pre-split combined file asserted 6 only because the
+    // writes battery had already updated alpha before rpc ran.
     expect(summaries.data).toEqual([
-      { name: "alpha", stars: 6 },
+      { name: "alpha", stars: 5 },
       { name: "beta", stars: 11 },
     ]);
   });
