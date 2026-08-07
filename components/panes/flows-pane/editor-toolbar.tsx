@@ -158,7 +158,7 @@ export function EditorToolbarHeader({
 
       <div
         data-testid="flow-header-actions"
-        className="col-start-2 row-start-1 ml-auto flex min-w-0 items-center justify-end gap-1.5 lg:col-auto lg:row-auto"
+        className="relative col-start-2 row-start-1 ml-auto flex min-w-0 items-center justify-end gap-1.5 lg:col-auto lg:row-auto"
       >
         <button
           type="button"
