@@ -1,0 +1,222 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  loadToolsModule,
+  withEnv,
+  withPatchedFetch,
+  withPatchedSandboxLookup,
+} from "./helpers/agents-tools-fixtures";
+
+test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup(null, async () => {
+      await withPatchedFetch(
+        async () =>
+          Response.json(
+            {
+              sandbox: {
+                id: "sandbox-record-1",
+                status: "installing",
+              },
+            },
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }
+          ),
+        async () => {
+          const { createStartSandbox } = await loadToolsModule();
+          const tool = createStartSandbox("user-123") as unknown as {
+            execute: (input: { repoId: string }) => Promise<unknown>;
+          };
+
+          const result = await tool.execute({
+            repoId: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+          });
+
+          assert.deepEqual(result, {
+            ok: true,
+            sandboxId: "sandbox-record-1",
+            status: "pending",
+            message:
+              "Sandbox startup is already in progress. The preview pane will update automatically when it's ready.",
+          });
+        }
+      );
+    });
+  });
+});
+
+test("start_sandbox returns as soon as sandbox creation is acknowledged over SSE", async () => {
+  const encoder = new TextEncoder();
+
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup(null, async () => {
+      await withPatchedFetch(
+        async () => {
+          let readyTimer: ReturnType<typeof setTimeout> | null = null;
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "sandbox_created", recordId: "sandbox-record-2" })}\n\n`
+                )
+              );
+              readyTimer = setTimeout(() => {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ type: "ready", sandbox: { id: "sandbox-record-2" } })}\n\n`
+                  )
+                );
+                controller.close();
+              }, 250);
+            },
+            cancel() {
+              if (readyTimer) {
+                clearTimeout(readyTimer);
+                readyTimer = null;
+              }
+            },
+          });
+
+          return new Response(stream, {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          });
+        },
+        async () => {
+          const { createStartSandbox } = await loadToolsModule();
+          const tool = createStartSandbox("user-123") as unknown as {
+            execute: (input: { repoId: string }) => Promise<unknown>;
+          };
+
+          const result = await Promise.race([
+            tool.execute({
+              repoId: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () =>
+                  reject(
+                    new Error("Timed out waiting for sandbox_created result")
+                  ),
+                100
+              )
+            ),
+          ]);
+
+          assert.deepEqual(result, {
+            ok: true,
+            sandboxId: "sandbox-record-2",
+            status: "pending",
+            message:
+              "Sandbox is launching. The preview pane will update automatically when it's ready.",
+          });
+        }
+      );
+    });
+  });
+});
+
+test("start_sandbox fails closed when a full_name does not resolve even if another sandbox is already running", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup(
+      { id: "sandbox-unrelated" },
+      async () => {
+        const { createStartSandbox } = await loadToolsModule();
+        const tool = createStartSandbox("user-123") as unknown as {
+          execute: (input: { repoId: string }) => Promise<unknown>;
+        };
+
+        const result = (await tool.execute({
+          repoId: "webrenew/missing-repo",
+        })) as { error?: string; sandboxId?: string };
+
+        assert.equal(result.error, "Failed to start sandbox");
+        assert.equal(result.sandboxId, undefined);
+      },
+      { repoLookupData: null }
+    );
+  });
+});
+
+test("start_sandbox rejects invalid non-UUID repoIds instead of reusing another sandbox", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup({ id: "sandbox-unrelated" }, async () => {
+      const { createStartSandbox } = await loadToolsModule();
+      const tool = createStartSandbox("user-123") as unknown as {
+        execute: (input: { repoId: string }) => Promise<unknown>;
+      };
+
+      const result = (await tool.execute({
+        repoId: "repo-123",
+      })) as { error?: string; sandboxId?: string };
+
+      assert.equal(result.error, "Failed to start sandbox");
+      assert.equal(result.sandboxId, undefined);
+    });
+  });
+});
+
+test("start_sandbox resolves a GitHub full_name to the repo UUID before posting", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup(
+      null,
+      async () => {
+        const capturedBodies: string[] = [];
+        await withPatchedFetch(
+          async (_url, init) => {
+            capturedBodies.push(
+              typeof init?.body === "string" ? init.body : ""
+            );
+            return Response.json(
+              { sandbox: { id: "sandbox-xyz", status: "running" } },
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              }
+            );
+          },
+          async () => {
+            const { createStartSandbox } = await loadToolsModule();
+            const tool = createStartSandbox("user-123") as unknown as {
+              execute: (input: { repoId: string }) => Promise<unknown>;
+            };
+
+            const result = (await tool.execute({
+              repoId: "webrenew/bloom",
+            })) as { ok: boolean; sandboxId: string };
+
+            assert.equal(result.ok, true);
+            assert.equal(result.sandboxId, "sandbox-xyz");
+            assert.equal(capturedBodies.length, 1);
+            assert.deepEqual(JSON.parse(capturedBodies[0]), {
+              repoId: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+            });
+          }
+        );
+      },
+      {
+        repoLookupData: { id: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b" },
+      }
+    );
+  });
+});
+
+test("start_sandbox returns an error when a full_name does not map to an owned repo", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup(null, async () => {
+      const { createStartSandbox } = await loadToolsModule();
+      const tool = createStartSandbox("user-123") as unknown as {
+        execute: (input: { repoId: string }) => Promise<unknown>;
+      };
+
+      const result = (await tool.execute({
+        repoId: "webrenew/unknown-repo",
+      })) as { error?: string };
+
+      assert.equal(result.error, "Failed to start sandbox");
+    });
+  });
+});

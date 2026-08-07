@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-async function loadSandboxTreeRoute() {
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../app/api/sandbox/[id]/tree/route");
-}
+import {
+  loadSandboxTreeRoute,
+  buildBaseSandboxContext,
+  buildTreeRouteParams,
+  buildTreeRouteRequest,
+  buildDefaultDeps,
+} from "./helpers/sandbox-tree-route-fixtures";
 
 test("GET /api/sandbox/[id]/tree returns canonical repo-relative paths", async () => {
   const { createSandboxTreeGetHandler } = await loadSandboxTreeRoute();
@@ -20,26 +21,18 @@ test("GET /api/sandbox/[id]/tree returns canonical repo-relative paths", async (
     loadOwnedSandboxRouteContext: async (_request, _sandboxId, options) => {
       requestedSelect = options.select;
       requestedCapability = options.requireCapability;
-      return {
-        ok: true,
-        auth: {} as never,
-        record: { sandbox_id: "sandbox-runtime-1" },
-        repo: { root_directory: "apps/web" },
-        rootDirectory: "apps/web",
-        context: {} as never,
-        sandbox: {
-          runCommand: async (input: { cmd: string; args: string[] }) => {
-            findCommandName = input.cmd;
-            findCommandArgs = input.args;
-            return {
-              exitCode: 0,
-              stderr: async () => "",
-              stdout: async () =>
-                "src\td\nsrc/app/page.tsx\tf\nREADME.md\tf\nlinked-config\tl\n",
-            };
-          },
+      return buildBaseSandboxContext({
+        runCommand: async (input) => {
+          findCommandName = input.cmd;
+          findCommandArgs = input.args;
+          return {
+            exitCode: 0,
+            stderr: async () => "",
+            stdout: async () =>
+              "src\td\nsrc/app/page.tsx\tf\nREADME.md\tf\nlinked-config\tl\n",
+          };
         },
-      } as never;
+      });
     },
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
@@ -49,7 +42,7 @@ test("GET /api/sandbox/[id]/tree returns canonical repo-relative paths", async (
 
   const response = await handler(
     new Request("http://localhost/api/sandbox/sandbox-1/tree"),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteParams()
   );
 
   assert.equal(response.status, 200);
@@ -78,31 +71,18 @@ test("write /api/sandbox/[id]/tree methods require file-write capability", async
   } = await loadSandboxTreeRoute();
 
   const requestedCapabilities: unknown[] = [];
-  const context = {
-    ok: true,
-    auth: {} as never,
-    record: { sandbox_id: "sandbox-runtime-1" },
-    repo: { root_directory: "apps/web" },
-    rootDirectory: "apps/web",
-    context: {} as never,
-    sandbox: {
-      runCommand: async (input: { cmd: string; args: string[] }) => {
-        if (input.cmd === "test" && input.args[0] === "-e") {
-          return {
-            exitCode: input.args[1]?.endsWith("old.ts") ? 0 : 1,
-            stderr: async () => "",
-            stdout: async () => "",
-          };
-        }
+  const context = buildBaseSandboxContext({
+    runCommand: async (input) => {
+      if (input.cmd === "test" && input.args[0] === "-e") {
         return {
-          exitCode: 0,
+          exitCode: input.args[1]?.endsWith("old.ts") ? 0 : 1,
           stderr: async () => "",
           stdout: async () => "",
         };
-      },
-      writeFiles: async () => {},
+      }
+      return { exitCode: 0, stderr: async () => "", stdout: async () => "" };
     },
-  } as never;
+  });
 
   const deps = {
     loadOwnedSandboxRouteContext: async (
@@ -118,30 +98,18 @@ test("write /api/sandbox/[id]/tree methods require file-write capability", async
   };
 
   await createSandboxTreePostHandler(deps as never)(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "file", path: "new.ts" }),
-    }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteRequest("POST", { kind: "file", path: "new.ts" }),
+    buildTreeRouteParams()
   );
   await createSandboxTreePatchHandler(deps as never)(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        moves: [{ fromPath: "old.ts", toPath: "newer.ts" }],
-      }),
+    buildTreeRouteRequest("PATCH", {
+      moves: [{ fromPath: "old.ts", toPath: "newer.ts" }],
     }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteParams()
   );
   await createSandboxTreeDeleteHandler(deps as never)(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: "old.ts" }),
-    }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteRequest("DELETE", { path: "old.ts" }),
+    buildTreeRouteParams()
   );
 
   assert.deepEqual(requestedCapabilities, [
@@ -160,37 +128,26 @@ test("POST /api/sandbox/[id]/tree creates files under the repo root", async () =
 
   const handler = createSandboxTreePostHandler({
     loadOwnedSandboxRouteContext: async () =>
-      ({
-        ok: true,
-        auth: {} as never,
-        record: { sandbox_id: "sandbox-runtime-1" },
-        repo: { root_directory: "apps/web" },
-        rootDirectory: "apps/web",
-        context: {} as never,
-        sandbox: {
-          runCommand: async (input: { cmd: string; args: string[] }) => {
-            commands.push(input);
-            if (input.cmd === "test") {
-              return {
-                exitCode: 1,
-                stderr: async () => "",
-                stdout: async () => "",
-              };
-            }
-
+      buildBaseSandboxContext({
+        runCommand: async (input) => {
+          commands.push(input);
+          if (input.cmd === "test") {
             return {
-              exitCode: 0,
+              exitCode: 1,
               stderr: async () => "",
               stdout: async () => "",
             };
-          },
-          writeFiles: async (
-            nextWrites: Array<{ path: string; content: Buffer }>
-          ) => {
-            writes = nextWrites;
-          },
+          }
+          return {
+            exitCode: 0,
+            stderr: async () => "",
+            stdout: async () => "",
+          };
         },
-      }) as never,
+        writeFiles: async (nextWrites) => {
+          writes = nextWrites;
+        },
+      }),
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
     },
@@ -198,15 +155,11 @@ test("POST /api/sandbox/[id]/tree creates files under the repo root", async () =
   });
 
   const response = await handler(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "file",
-        path: "src/lib/new-file.ts",
-      }),
+    buildTreeRouteRequest("POST", {
+      kind: "file",
+      path: "src/lib/new-file.ts",
     }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteParams()
   );
 
   assert.equal(response.status, 201);
@@ -231,33 +184,24 @@ test("PATCH /api/sandbox/[id]/tree moves files without overwriting destinations"
 
   const handler = createSandboxTreePatchHandler({
     loadOwnedSandboxRouteContext: async () =>
-      ({
-        ok: true,
-        auth: {} as never,
-        record: { sandbox_id: "sandbox-runtime-1" },
-        repo: { root_directory: "apps/web" },
-        rootDirectory: "apps/web",
-        context: {} as never,
-        sandbox: {
-          runCommand: async (input: { cmd: string; args: string[] }) => {
-            commands.push(input);
-            if (input.cmd === "test" && input.args[0] === "-e") {
-              const target = input.args[1];
-              return {
-                exitCode: target.endsWith("old-name.ts") ? 0 : 1,
-                stderr: async () => "",
-                stdout: async () => "",
-              };
-            }
-
+      buildBaseSandboxContext({
+        runCommand: async (input) => {
+          commands.push(input);
+          if (input.cmd === "test" && input.args[0] === "-e") {
+            const target = input.args[1];
             return {
-              exitCode: 0,
+              exitCode: target.endsWith("old-name.ts") ? 0 : 1,
               stderr: async () => "",
               stdout: async () => "",
             };
-          },
+          }
+          return {
+            exitCode: 0,
+            stderr: async () => "",
+            stdout: async () => "",
+          };
         },
-      }) as never,
+      }),
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
     },
@@ -265,30 +209,16 @@ test("PATCH /api/sandbox/[id]/tree moves files without overwriting destinations"
   });
 
   const response = await handler(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        moves: [
-          {
-            fromPath: "src/old-name.ts",
-            toPath: "src/new-name.ts",
-          },
-        ],
-      }),
+    buildTreeRouteRequest("PATCH", {
+      moves: [{ fromPath: "src/old-name.ts", toPath: "src/new-name.ts" }],
     }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteParams()
   );
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     ok: true,
-    moves: [
-      {
-        fromPath: "src/old-name.ts",
-        toPath: "src/new-name.ts",
-      },
-    ],
+    moves: [{ fromPath: "src/old-name.ts", toPath: "src/new-name.ts" }],
   });
   assert.equal(touchedSandboxId, "sandbox-1");
   assert.deepEqual(commands, [
@@ -304,47 +234,30 @@ test("PATCH /api/sandbox/[id]/tree moves files without overwriting destinations"
 
 test("PATCH /api/sandbox/[id]/tree rejects moving a directory into itself", async () => {
   const { createSandboxTreePatchHandler } = await loadSandboxTreeRoute();
-
   let runCommandCalls = 0;
 
   const handler = createSandboxTreePatchHandler({
-    loadOwnedSandboxRouteContext: async () =>
-      ({
-        ok: true,
-        auth: {} as never,
-        record: { sandbox_id: "sandbox-runtime-1" },
-        repo: { root_directory: "apps/web" },
-        rootDirectory: "apps/web",
-        context: {} as never,
-        sandbox: {
-          runCommand: async () => {
-            runCommandCalls += 1;
-            return {
-              exitCode: 0,
-              stderr: async () => "",
-              stdout: async () => "",
-            };
-          },
+    ...buildDefaultDeps(
+      buildBaseSandboxContext({
+        runCommand: async () => {
+          runCommandCalls += 1;
+          return {
+            exitCode: 0,
+            stderr: async () => "",
+            stdout: async () => "",
+          };
         },
-      }) as never,
-    touchSandboxLastActive: async () => {},
-    renewSandboxActivityLease: async () => 0,
+      })
+    ),
   });
 
   const response = await handler(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        moves: [
-          {
-            fromPath: "src/components/",
-            toPath: "src/components/nested/",
-          },
-        ],
-      }),
+    buildTreeRouteRequest("PATCH", {
+      moves: [
+        { fromPath: "src/components/", toPath: "src/components/nested/" },
+      ],
     }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteParams()
   );
 
   assert.equal(response.status, 400);
@@ -358,50 +271,31 @@ test("PATCH /api/sandbox/[id]/tree returns 409 when destination exists", async (
   const { createSandboxTreePatchHandler } = await loadSandboxTreeRoute();
 
   const handler = createSandboxTreePatchHandler({
-    loadOwnedSandboxRouteContext: async () =>
-      ({
-        ok: true,
-        auth: {} as never,
-        record: { sandbox_id: "sandbox-runtime-1" },
-        repo: { root_directory: "apps/web" },
-        rootDirectory: "apps/web",
-        context: {} as never,
-        sandbox: {
-          runCommand: async (input: { cmd: string; args: string[] }) => {
-            if (input.cmd === "test" && input.args[0] === "-e") {
-              return {
-                exitCode: 0,
-                stderr: async () => "",
-                stdout: async () => "",
-              };
-            }
-
+    ...buildDefaultDeps(
+      buildBaseSandboxContext({
+        runCommand: async (input) => {
+          if (input.cmd === "test" && input.args[0] === "-e") {
             return {
               exitCode: 0,
               stderr: async () => "",
               stdout: async () => "",
             };
-          },
+          }
+          return {
+            exitCode: 0,
+            stderr: async () => "",
+            stdout: async () => "",
+          };
         },
-      }) as never,
-    touchSandboxLastActive: async () => {},
-    renewSandboxActivityLease: async () => 0,
+      })
+    ),
   });
 
   const response = await handler(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        moves: [
-          {
-            fromPath: "src/a.ts",
-            toPath: "src/b.ts",
-          },
-        ],
-      }),
+    buildTreeRouteRequest("PATCH", {
+      moves: [{ fromPath: "src/a.ts", toPath: "src/b.ts" }],
     }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteParams()
   );
 
   assert.equal(response.status, 409);
@@ -413,37 +307,11 @@ test("PATCH /api/sandbox/[id]/tree returns 409 when destination exists", async (
 test("POST /api/sandbox/[id]/tree rejects path traversal", async () => {
   const { createSandboxTreePostHandler } = await loadSandboxTreeRoute();
 
-  const handler = createSandboxTreePostHandler({
-    loadOwnedSandboxRouteContext: async () =>
-      ({
-        ok: true,
-        auth: {} as never,
-        record: { sandbox_id: "sandbox-runtime-1" },
-        repo: { root_directory: "apps/web" },
-        rootDirectory: "apps/web",
-        context: {} as never,
-        sandbox: {
-          runCommand: async () => ({
-            exitCode: 0,
-            stderr: async () => "",
-            stdout: async () => "",
-          }),
-        },
-      }) as never,
-    touchSandboxLastActive: async () => {},
-    renewSandboxActivityLease: async () => 0,
-  });
+  const handler = createSandboxTreePostHandler(buildDefaultDeps());
 
   const response = await handler(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "file",
-        path: "../escape.ts",
-      }),
-    }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteRequest("POST", { kind: "file", path: "../escape.ts" }),
+    buildTreeRouteParams()
   );
 
   assert.equal(response.status, 400);
@@ -460,32 +328,23 @@ test("DELETE /api/sandbox/[id]/tree removes directories recursively", async () =
 
   const handler = createSandboxTreeDeleteHandler({
     loadOwnedSandboxRouteContext: async () =>
-      ({
-        ok: true,
-        auth: {} as never,
-        record: { sandbox_id: "sandbox-runtime-1" },
-        repo: { root_directory: "apps/web" },
-        rootDirectory: "apps/web",
-        context: {} as never,
-        sandbox: {
-          runCommand: async (input: { cmd: string; args: string[] }) => {
-            commands.push(input);
-            if (input.cmd === "test") {
-              return {
-                exitCode: 0,
-                stderr: async () => "",
-                stdout: async () => "",
-              };
-            }
-
+      buildBaseSandboxContext({
+        runCommand: async (input) => {
+          commands.push(input);
+          if (input.cmd === "test") {
             return {
               exitCode: 0,
               stderr: async () => "",
               stdout: async () => "",
             };
-          },
+          }
+          return {
+            exitCode: 0,
+            stderr: async () => "",
+            stdout: async () => "",
+          };
         },
-      }) as never,
+      }),
     touchSandboxLastActive: async (sandboxId: string) => {
       touchedSandboxId = sandboxId;
     },
@@ -493,19 +352,12 @@ test("DELETE /api/sandbox/[id]/tree removes directories recursively", async () =
   });
 
   const response = await handler(
-    new Request("http://localhost/api/sandbox/sandbox-1/tree", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: "src/generated/" }),
-    }),
-    { params: Promise.resolve({ id: "sandbox-1" }) }
+    buildTreeRouteRequest("DELETE", { path: "src/generated/" }),
+    buildTreeRouteParams()
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
-    ok: true,
-    path: "src/generated/",
-  });
+  assert.deepEqual(await response.json(), { ok: true, path: "src/generated/" });
   assert.equal(touchedSandboxId, "sandbox-1");
   assert.deepEqual(commands, [
     { cmd: "test", args: ["-e", "apps/web/src/generated"] },
