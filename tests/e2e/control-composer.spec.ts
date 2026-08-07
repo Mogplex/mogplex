@@ -36,13 +36,41 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  const chatRequests: Array<{ model?: string }> = [];
+  const chatRequests: Array<{
+    model?: string;
+    permissions?: string;
+    scope?: string;
+    target?: string;
+  }> = [];
+  // A minimal but real UI message stream: text reply plus one tool call, so
+  // the timeline's MOGPLEX and TOOL rendering is exercised end to end.
+  const streamChunks = [
+    { type: "start" },
+    { type: "text-start", id: "t1" },
+    { type: "text-delta", id: "t1", delta: "I can plan, delegate, and ship." },
+    { type: "text-end", id: "t1" },
+    {
+      type: "tool-input-available",
+      toolCallId: "call-1",
+      toolName: "list_worktrees",
+      input: { missionId: "MSN-1" },
+    },
+    { type: "finish" },
+  ];
+  const streamBody =
+    streamChunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") +
+    "data: [DONE]\n\n";
   await page.route("**/api/control/chat", (route) => {
-    chatRequests.push(route.request().postDataJSON() as { model?: string });
+    chatRequests.push(
+      route.request().postDataJSON() as (typeof chatRequests)[number]
+    );
     return route.fulfill({
       status: 200,
-      contentType: "text/event-stream",
-      body: "data: [DONE]\n\n",
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: streamBody,
     });
   });
 
@@ -71,10 +99,12 @@ test("control composers expose permissions, model, and MCP controls without a sp
     .fill("Ship the new onboarding flow");
   await page.getByRole("button", { name: "Start mission" }).click();
 
-  // Dispatch reflects permissions and carries no budget line.
-  await expect(
-    page.getByText("Mogplex is planning. Permissions: Skip Permissions.")
-  ).toBeVisible();
+  // The mission's first message behaves like chat: the agent's streamed reply
+  // and tool call render in the timeline, with no fake dispatch card and no
+  // budget line.
+  await expect(page.getByText("I can plan, delegate, and ship.")).toBeVisible();
+  await expect(page.getByText(/list_worktrees\(/)).toBeVisible();
+  await expect(page.getByText(/Mogplex is planning/)).toHaveCount(0);
   await expect(page.getByText(/Budget: \$/)).toHaveCount(0);
 
   // Conversation composer: permissions chip, model chip preset to the account
@@ -99,12 +129,38 @@ test("control composers expose permissions, model, and MCP controls without a sp
     .fill("Summarize progress");
   await page.keyboard.press("Enter");
 
-  await expect(
-    page.getByText(
-      /Scope: IMPLEMENT · target: mission · Skip Permissions · anthropic\/claude-sonnet-5\./
-    )
-  ).toBeVisible();
   await expect
     .poll(() => chatRequests.at(-1)?.model, { timeout: 10_000 })
     .toBe("anthropic/claude-sonnet-5");
+  expect(chatRequests.at(-1)).toMatchObject({
+    permissions: "Skip Permissions",
+    scope: "IMPLEMENT",
+    target: "mission",
+  });
+});
+
+test("control chat surfaces request failures instead of swallowing them", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/control/chat", (route) =>
+    route.fulfill({ status: 500, body: "orchestrator unavailable" })
+  );
+
+  await page.goto(scopedPath("control"));
+  await page.waitForLoadState("networkidle");
+
+  await page
+    .getByPlaceholder("Describe what you want to achieve...")
+    .fill("Ship something");
+  await page.getByRole("button", { name: "Start mission" }).click();
+
+  // The failed first send must produce a visible error, not silence.
+  await expect(
+    page.locator(".text-accent-amber").filter({ hasText: /./ }).first()
+  ).toBeVisible();
 });

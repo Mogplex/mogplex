@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
@@ -113,12 +113,34 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
   const { messages, sendMessage, status } = useChat({
     transport,
     id: `control-${selectedMissionId}`,
+    onError: (error) => {
+      setChatError(error.message || "Chat error")
+    },
   })
 
   const chatPending = status === "streaming" || status === "submitted"
 
   // Local input state (useChat v6 doesn't provide input/setInput)
   const [composerInput, setComposerInput] = useState("")
+
+  // A mission's first message can't go through sendMessage directly from the
+  // create handler: useChat is keyed by mission id, so the send would hit the
+  // instance of the mission we're navigating away from. Park it and send once
+  // the re-keyed chat is live.
+  const [pendingInitialMessage, setPendingInitialMessage] = useState<{
+    missionId: string
+    text: string
+  } | null>(null)
+  useEffect(() => {
+    if (!pendingInitialMessage) return
+    if (pendingInitialMessage.missionId !== selectedMissionId) return
+    if (status !== "ready") return
+    const { text } = pendingInitialMessage
+    setPendingInitialMessage(null)
+    sendMessage({ text }).catch((err: unknown) => {
+      setChatError(err instanceof Error ? err.message : "Chat error")
+    })
+  }, [pendingInitialMessage, selectedMissionId, status, sendMessage])
 
   // Push a timeline event to the current mission
   const pushTimelineEvent = useCallback(
@@ -167,7 +189,8 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
     async (text: string, target: string, scopeLevel: string, options: ComposerSendOptions) => {
       if (!text.trim()) return
 
-      // Push user event to timeline
+      // The user's message renders as a chat turn, not a dispatch card: the
+      // agent's streamed reply and tool calls are the response.
       pushTimelineEvent({
         kind: "user",
         label: target === "mission" ? "YOU" : `YOU → ${target.toUpperCase()}`,
@@ -175,20 +198,20 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
         body: text,
       })
 
-      // Push tool event for dispatch
-      pushTimelineEvent({
-        kind: "tool",
-        label: "DISPATCHED",
-        time: "now",
-        body: `Scope: ${scopeLevel} · target: ${target} · ${options.permissions}${
-          options.model ? ` · ${options.model}` : ""
-        }.`,
-      })
-
-      // Send to chat API (fail soft if endpoint doesn't exist). The route
-      // resolves a missing model to the user's default server-side.
+      setChatError(null)
+      // The route resolves a missing model to the user's default server-side.
       try {
-        await sendMessage({ text }, { body: { model: options.model ?? undefined } })
+        await sendMessage(
+          { text },
+          {
+            body: {
+              model: options.model ?? undefined,
+              scope: scopeLevel,
+              target,
+              permissions: options.permissions,
+            },
+          }
+        )
         setComposerInput("")
       } catch (err) {
         const message = err instanceof Error ? err.message : "Chat error"
@@ -221,21 +244,17 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
         sandbox: "container-med",
         archived: false,
         targets,
-        timeline: [
-          { kind: "user", label: "YOU", time: "now", body: text },
-          { kind: "tool", label: "DISPATCHED", time: "now", body: `Mogplex is planning. Permissions: ${permissions}.` },
-        ],
+        timeline: [{ kind: "user", label: "YOU", time: "now", body: text }],
       }
       setMissions((prev) => [newMissionObj, ...prev])
       setSelectedMissionId(id)
       setNewMission(false)
-
-      // Send to chat API (fail soft)
-      sendMessage({ text }).catch(() => {
-        // Fail soft
-      })
+      setChatError(null)
+      // Sent via effect once useChat re-keys to the new mission; sending here
+      // would stream the reply into the previous mission's discarded chat.
+      setPendingInitialMessage({ missionId: id, text })
     },
-    [sendMessage]
+    []
   )
 
   // Derived mission data (filtered list, attention items, stats)

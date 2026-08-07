@@ -1,9 +1,11 @@
+import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
 import type { TimelineEvent } from "@/lib/control/types";
 import type { UIMessage } from "ai";
 
 /**
- * Builds a combined timeline by merging mission timeline events with chat messages.
- * Chat messages from the assistant are transformed into timeline events.
+ * Builds a combined timeline by merging mission timeline events with chat
+ * messages. Assistant text becomes MOGPLEX events; tool invocations become
+ * TOOL events with their input (and the error, when the call failed).
  */
 export function buildCombinedTimeline(
   timeline: TimelineEvent[] | undefined,
@@ -21,21 +23,29 @@ export function buildCombinedTimeline(
         continue;
       }
 
-      // Tool call parts
-      if (String(part.type).startsWith("tool")) {
-        const toolPart = part as {
-          type: string;
-          toolName?: string;
-          args?: unknown;
-        };
-        if (toolPart.toolName) {
+      if (isToolOrDynamicToolUIPart(part)) {
+        const toolName = getToolOrDynamicToolName(part);
+        if (part.state === "output-error") {
+          result.push({
+            kind: "fail",
+            label: "TOOL",
+            time: "now",
+            body: `${toolName} failed`,
+            log: part.errorText ?? "unknown error",
+          });
+        } else {
+          const input =
+            part.input === undefined
+              ? "…"
+              : JSON.stringify(part.input).slice(0, 100);
           result.push({
             kind: "tool",
             label: "TOOL",
             time: "now",
-            body: `${toolPart.toolName}(${JSON.stringify(toolPart.args || {}).slice(0, 100)}...)`,
+            body: `${toolName}(${input})`,
           });
         }
+        continue;
       }
 
       // Text parts
