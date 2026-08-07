@@ -105,7 +105,10 @@ export {
 } from "./editor-toolbar";
 
 // Node library sidebar
-export { NodeLibrarySidebar, type NodeLibrarySidebarProps } from "./node-library-sidebar";
+export {
+  NodeLibrarySidebar,
+  type NodeLibrarySidebarProps,
+} from "./node-library-sidebar";
 
 // Inspector panels
 export {
@@ -136,17 +139,8 @@ export {
   type TransformInspectorProps,
 } from "./inspector-state-nodes";
 
-export {
-  ActionInspector,
-  type ActionInspectorProps,
-} from "./inspector-action";
+export { ActionInspector, type ActionInspectorProps } from "./inspector-action";
 
-export {
-  AgentInspector,
-  type AgentInspectorProps,
-} from "./inspector-agent";
+export { AgentInspector, type AgentInspectorProps } from "./inspector-agent";
 
-export {
-  StartInspector,
-  type StartInspectorProps,
-} from "./inspector-start";
+export { StartInspector, type StartInspectorProps } from "./inspector-start";
