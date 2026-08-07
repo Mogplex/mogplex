@@ -376,8 +376,14 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await page
     .getByRole("button", { name: "Inspect 2 prevented events" })
     .click();
+  // The prevented-events drill-down switches the table tab group to the
+  // Pressure tab with the outcome filter applied.
+  await expect(page.getByRole("tab", { name: /^Pressure/ })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
   await expect(page.getByLabel("Outcome")).toHaveValue("suppressed");
-  await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
+  await page.getByRole("tab", { name: /^Runs/ }).click();
   await expect(page.getByLabel("Run status")).toBeVisible();
   await expect(page.getByText("Refactor Bot")).toBeVisible();
   await expect(
@@ -401,17 +407,16 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   expect(repairCount).toBe(1);
   expect(requeueCount).toBe(1);
 
-  const runsSection = page
-    .getByRole("heading", { name: "Runs" })
-    .locator("xpath=ancestor::section");
-  const activitySection = page
-    .getByRole("heading", { name: "Activity" })
-    .locator("xpath=ancestor::section");
-  await runsSection.getByRole("button", { name: "Next" }).click();
-  await expect(runsSection.getByText("Showing 26–30 of 30")).toBeVisible();
-  await activitySection.getByRole("button", { name: "Next" }).click();
-  await expect(activitySection.getByText("Showing 51–75 of 75")).toBeVisible();
+  // Only the active tab's panel is mounted, so getByRole("tabpanel") always
+  // resolves to the table currently shown.
+  const activePanel = page.getByRole("tabpanel");
+  await activePanel.getByRole("button", { name: "Next" }).click();
+  await expect(activePanel.getByText("Showing 26–30 of 30")).toBeVisible();
+  await page.getByRole("tab", { name: /^Activity/ }).click();
+  await activePanel.getByRole("button", { name: "Next" }).click();
+  await expect(activePanel.getByText("Showing 51–75 of 75")).toBeVisible();
 
+  await page.getByRole("tab", { name: /^Runs/ }).click();
   await page.getByLabel("Run status").selectOption("");
 
   const previousJobsFrom = jobRequests.at(-1)?.searchParams.get("from");
