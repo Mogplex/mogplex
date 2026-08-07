@@ -1,16 +1,6 @@
-import {
-  streamText,
-  generateText,
-  convertToModelMessages,
-  stepCountIs,
-} from "ai";
+import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { createAiCall } from "@/lib/interactive-runs";
-import {
-  buildSummaryMessage,
-  planCompaction,
-  serializeForSummary,
-  type CompactableMessage,
-} from "@/lib/control/message-compaction";
+import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 import { withGatewaySystemCaching } from "@/lib/models/gateway-provider-routing";
@@ -140,54 +130,36 @@ export async function executeControlChatRequest(input: {
 
     // Convert messages to model format. Clients send AI SDK UIMessages
     // (`parts`); a plain `content` string/array is also accepted.
-    const uiMessages: CompactableMessage[] = input.body.messages.map(
-      (message) => {
-        const parts =
-          message.parts ??
-          (typeof message.content === "string"
-            ? [{ type: "text", text: message.content }]
-            : (message.content ?? []));
-        return {
-          role: message.role as "user" | "assistant" | "system",
-          parts: parts
-            .filter((part) => part.type === "text")
-            .map((part) => ({
-              type: "text" as const,
-              text: part.text ?? "",
-            })),
-        };
-      }
-    );
+    const uiMessages = input.body.messages.map((message) => {
+      const parts =
+        message.parts ??
+        (typeof message.content === "string"
+          ? [{ type: "text", text: message.content }]
+          : (message.content ?? []));
+      return {
+        role: message.role as "user" | "assistant" | "system",
+        parts: parts
+          .filter((part) => part.type === "text")
+          .map((part) => ({
+            type: "text" as const,
+            text: part.text ?? "",
+          })),
+      };
+    });
 
-    // Compact long conversations so the agent keeps working instead of dying
-    // at the model's context limit: older turns become a model-written
-    // summary, recent turns stay verbatim.
-    let modelMessages = uiMessages;
-    const compactionPlan = planCompaction(uiMessages);
-    if (compactionPlan.compact) {
-      try {
-        const summary = await generateText({
-          model,
-          system:
-            "Summarize this agent conversation for continued work. Preserve: user goals and constraints, decisions made, work completed with concrete identifiers (files, branches, ids), open questions, and pending next steps. Be dense and factual.",
-          prompt: serializeForSummary(compactionPlan.toSummarize),
-          abortSignal: input.req.signal,
-        });
-        modelMessages = [
-          buildSummaryMessage(summary.text),
-          ...compactionPlan.recent,
-        ];
-      } catch {
-        // Summarization is best-effort: fall back to the recent window with a
-        // truncation notice rather than failing the whole request.
-        modelMessages = [
-          buildSummaryMessage(
-            "(Summary unavailable — earlier conversation history was truncated.)"
-          ),
-          ...compactionPlan.recent,
-        ];
-      }
-    }
+    // Compact oversized histories into a checkpoint handoff (same adapter as
+    // /api/chat: validated checkpoint, prefix reuse, ai_call_events audit).
+    // Degrades to the unmodified history on failure.
+    const modelMessages = await compactChatMessagesForModel({
+      userId: input.userId,
+      conversationId: scope.conversationId ?? null,
+      repoId: scope.repoId ?? null,
+      aiCallId: activeCall.id,
+      resolvedModel: input.resolvedModel,
+      teamId: teamId ?? null,
+      uiMessages,
+      abortSignal: input.req.signal,
+    });
 
     const result = streamText({
       model,
