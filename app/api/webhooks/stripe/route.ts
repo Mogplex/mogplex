@@ -134,9 +134,10 @@ async function handleInvoicePaid(
   )?.includedUsageCents;
   if (
     !grant.posted &&
-    account.tier === "pro" &&
-    plan.tier === "team" &&
-    priorIncludedUsageCents !== undefined
+    account.tier !== "free" &&
+    account.tier !== plan.tier &&
+    priorIncludedUsageCents !== undefined &&
+    plan.includedUsageCents > priorIncludedUsageCents
   ) {
     // A same-period portal upgrade reuses the period grant source_ref. Add
     // only the entitlement delta after the prorated upgrade invoice is paid;

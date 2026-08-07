@@ -11,9 +11,10 @@ import {
   TOPUP_PRESETS,
 } from "../../lib/billing/catalog";
 
-// The signed-off numbers (PR #39 / pricing-plan 01): Pro $20/mo, Team
-// $100/mo flat, 20% annual discount, monthly included usage equal to the
-// monthly subscription price.
+// The signed-off numbers (PR #39 / pricing-plan 01, Business added by
+// Charles Aug 7 2026): Pro $20/mo, Team $100/mo flat, Business $200/mo
+// flat, 20% annual discount, monthly included usage equal to the monthly
+// subscription price.
 
 test("plan prices match the signed-off rate card", () => {
   assert.deepEqual(
@@ -23,6 +24,8 @@ test("plan prices match the signed-off rate card", () => {
       ["pro_annual", 19200],
       ["team_monthly", 10000],
       ["team_annual", 96000],
+      ["business_monthly", 20000],
+      ["business_annual", 192000],
     ]
   );
 });

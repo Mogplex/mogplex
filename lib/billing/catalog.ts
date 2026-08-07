@@ -3,7 +3,7 @@
 // runtime code resolves prices the same way, so no environment-specific
 // Stripe IDs are ever stored.
 
-export type PlanTier = "pro" | "team";
+export type PlanTier = "pro" | "team" | "business";
 export type PlanInterval = "month" | "year";
 
 export type PlanPrice = {
@@ -49,6 +49,24 @@ export const PLAN_PRICES: readonly PlanPrice[] = [
     interval: "year",
     amountCents: 96000,
     includedUsageCents: 10000,
+  },
+  // Sold as "Mog Mode" — `business` stays the internal tier key so the DB
+  // constraint and webhook logic survive display-name changes.
+  {
+    lookupKey: "business_monthly",
+    productName: "Mogplex Mog Mode",
+    tier: "business",
+    interval: "month",
+    amountCents: 20000,
+    includedUsageCents: 20000,
+  },
+  {
+    lookupKey: "business_annual",
+    productName: "Mogplex Mog Mode",
+    tier: "business",
+    interval: "year",
+    amountCents: 192000,
+    includedUsageCents: 20000,
   },
 ];
 
