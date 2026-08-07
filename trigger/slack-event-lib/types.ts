@@ -8,8 +8,8 @@ import type {
   SlackInstallationRow,
 } from "@/lib/slack/installations";
 import type { SlackRunImageAttachment } from "@/lib/slack/run-attachments";
+import type { runChatAgent } from "@/lib/agents/run-chat-agent";
 import type {
-  runChatAgent,
   RunChatAgentContentPart,
   RunChatAgentMessage,
 } from "@/lib/agents/run-chat";

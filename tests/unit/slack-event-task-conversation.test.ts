@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { DEFAULT_MESSAGE_WINDOW } from "../../lib/agents/message-window";
 import {
   loadSlackEventTask,
   restoreFetch,
@@ -155,7 +154,7 @@ test("formats conversational final replies as Slack mrkdwn", async () => {
   ]);
 });
 
-test("windows a long thread history before passing it to the agent", async () => {
+test("passes the full thread history to the agent, which owns compaction/windowing", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
 
   const longHistory = Array.from({ length: 200 }, (_, i) => ({
@@ -194,7 +193,10 @@ test("windows a long thread history before passing it to the agent", async () =>
     }),
   });
 
-  assert.equal(agentMessages.length, DEFAULT_MESSAGE_WINDOW);
+  // The handler must hand the runner the FULL history: checkpoint reuse
+  // fingerprints the stable prefix, so pre-windowing here would break it.
+  // The runner compacts oversized histories and windows small ones itself.
+  assert.equal(agentMessages.length, longHistory.length + 1);
   assert.equal(agentMessages.at(-1)?.content, "what's the build status?");
   assert.equal(persistedMessages.length, 202);
 });

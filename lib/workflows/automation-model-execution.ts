@@ -6,6 +6,7 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { Agent, type Dispatcher } from "undici";
+import { demoteStaleToolOutputs } from "@/lib/agents/compaction/reduce";
 import {
   captureUsage,
   EMPTY_CAPTURED_USAGE,
@@ -290,6 +291,15 @@ export async function executeAutomationTextGeneration(input: {
       ...input.request,
       model,
       onStepFinish,
+      // Step-level context reduction: demote stale oversized tool outputs to
+      // typed references so a long automation tool loop cannot outgrow the
+      // window on dead payloads. Deterministic — no model call.
+      prepareStep:
+        input.request.prepareStep ??
+        (({ messages }) => {
+          const reduced = demoteStaleToolOutputs(messages);
+          return reduced === messages ? undefined : { messages: reduced };
+        }),
       maxRetries: 0,
       timeout: generateTimeoutMs,
     }) as GenerateTextRequest;
