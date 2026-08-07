@@ -1,6 +1,7 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { createAiCall } from "@/lib/interactive-runs";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
+import { promoteMemoriesForConversation } from "@/lib/agents/memory-promotion-runner";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 import { withGatewaySystemCaching } from "@/lib/models/gateway-provider-routing";
@@ -204,6 +205,21 @@ export async function executeControlChatRequest(input: {
           totalUsage,
           providerMetadata,
           steps,
+        });
+        // Memory promotion (compaction plan Phase 4): distill durable facts
+        // from this conversation's checkpoint, if one exists. Best-effort by
+        // contract — never lets a promotion failure touch the finished run.
+        promoteMemoriesForConversation({
+          userId: input.userId,
+          conversationId: scope.conversationId ?? null,
+          repoId: scope.repoId ?? null,
+          aiCallId: activeCall.id,
+          model,
+        }).catch((error: unknown) => {
+          console.warn("[memory-promotion] failed", {
+            conversationId: scope.conversationId,
+            error,
+          });
         });
       },
     });

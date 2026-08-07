@@ -33,7 +33,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     category: "memory",
     description: "Summarize conversation or execution history",
     access: "read",
-    implemented: false,
+    implemented: true,
   },
   {
     name: "web_fetch",
@@ -73,7 +73,7 @@ export const COMMUNICATION_TOOLS: OrchestratorToolDef[] = [
     category: "communication",
     description: "Leave a note for the next agent or operator",
     access: "mutation",
-    implemented: false,
+    implemented: true,
   },
 ];
 

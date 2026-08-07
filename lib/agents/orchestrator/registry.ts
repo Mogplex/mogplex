@@ -25,6 +25,10 @@ import type {
   RepoToolDefaults,
 } from "./types";
 import { createStubTool, createTypedStub, buildRepoDefaults } from "./helpers";
+import {
+  createHandoffNoteTool,
+  createSummarizeHistoryTool,
+} from "./tools/memory-impl";
 import { PLANNING_TOOLS, PLANNING_SCHEMAS } from "./tools/planning";
 import { FILESYSTEM_TOOLS, FILESYSTEM_SCHEMAS } from "./tools/filesystem";
 import { GIT_TOOLS, GIT_SCHEMAS } from "./tools/git";
@@ -169,6 +173,12 @@ function buildToolForDef(
       return def.name === "memory_write"
         ? memoryTools.add_memory
         : memoryTools.search_memories;
+    }
+    if (def.name === "summarize_history") {
+      return createSummarizeHistoryTool(ctx);
+    }
+    if (def.name === "handoff_note") {
+      return createHandoffNoteTool(ctx);
     }
   }
 
