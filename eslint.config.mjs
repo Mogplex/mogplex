@@ -329,10 +329,6 @@ export default defineConfig([
     // minimatch metacharacters.
     files: [
       "components/panes/flows-pane.tsx",
-      "hooks/use-conversations.ts",
-      "hooks/use-sandbox.ts",
-      "hooks/use-sessions.ts",
-      "hooks/use-split-panes.ts",
       "lib/workflows/automation-job-workflow.ts",
       "tests/db/ai-calls-cost-trigger.test.ts",
       "tests/db/billing-ledger.test.ts",
@@ -395,8 +391,6 @@ export default defineConfig([
       "tests/unit/sync-models-route.test.ts",
       "tests/unit/vercel-token-route.test.ts",
       "tests/unit/zombie-reaper.test.ts",
-      "trigger/reconcile-ai-call-costs.ts",
-      "trigger/slack-event.ts",
     ],
     rules: {
       "max-lines": ["warn", { max: 500 }],
