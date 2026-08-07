@@ -97,7 +97,9 @@ pnpm exec playwright install --with-deps chromium
 
 ## Verification Expectations
 
-Run the checks that match the surface you changed.
+Run the checks that match the surface you changed. [TESTING.md](./TESTING.md)
+defines which tests a change is required to bring with it and what counts as
+adequate coverage.
 
 ### Typical baseline
 

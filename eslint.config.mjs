@@ -6,6 +6,7 @@ import tsParser from "@typescript-eslint/parser";
 import reactHooks from "eslint-plugin-react-hooks";
 import core from "ultracite/eslint/core";
 import next from "ultracite/eslint/next";
+import noInternalMocks from "./scripts/eslint-rules/no-internal-mocks.mjs";
 
 const sanitizedCore = core
   .map((config) => {
@@ -326,6 +327,17 @@ export default defineConfig([
             "Workflow selection controls must use app-styled components instead of browser-native select or datalist elements.",
         },
       ],
+    },
+  },
+  {
+    // TESTING.md: mock only at declared boundaries. The allowlist lives in
+    // tests/support/mockable-boundaries.mjs and is owner-gated in CODEOWNERS.
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    plugins: {
+      testing: { rules: { "no-internal-mocks": noInternalMocks } },
+    },
+    rules: {
+      "testing/no-internal-mocks": "error",
     },
   },
   {
