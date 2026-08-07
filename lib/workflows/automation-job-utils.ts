@@ -26,7 +26,9 @@ export function splitRepoFullName(fullName: string) {
   return { owner, repo };
 }
 
-export function extractSandboxRef(record: unknown): AutomationSandboxRef | null {
+export function extractSandboxRef(
+  record: unknown
+): AutomationSandboxRef | null {
   if (!record || typeof record !== "object") return null;
   const sandbox = record as Partial<SandboxRecord> & {
     runtime_summary?: { sandbox_id?: string | null };

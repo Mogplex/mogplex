@@ -1,4 +1,3 @@
-import { generateText, type ToolSet } from "ai";
 import {
   mergePullRequestIfSafe,
   type AutoMergeOutcome,
@@ -72,23 +71,19 @@ import { classifyAutomationInfrastructureFailure } from "@/lib/workflows/automat
 import {
   asAutomationModelExecutionError,
   buildAutomationProviderFetch,
-  executeAutomationTextGeneration,
   isAutomationModelExecutionError,
   type AutomationModelExecutionMetadata,
 } from "@/lib/workflows/automation-model-execution";
 import {
   AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV,
-  getAutomationGenerateTimeoutMs,
   getAutomationModelFallbackIds,
 } from "@/lib/workflows/automation-model-defaults";
 import type { FlowAgentNodeRole, FlowGraph, FlowNode } from "@/lib/types";
 import {
-  AUTOMATION_GATEWAY_CACHING_ENV,
   GITHUB_PR_ACCESS_FAILURE_PREFIX,
   INVALID_PR_REVIEW_CONTEXT,
   JOB_RUN_CANCELLED,
   JobRunCancelledError,
-  type AutofixSandboxRecord,
   type AutomationAgentResult,
   type AutomationJobInput,
   type AutomationJobRunResult,
@@ -113,8 +108,6 @@ import {
   isRecord,
   normalizeAutomationAssignmentType,
   readAutomationTeamId,
-  readTextResponse,
-  splitRepoFullName,
   toOptionalString,
   toReviewFindings,
   toStringArray,
@@ -125,19 +118,11 @@ import {
   buildAutomationRuntimeMetadataFields,
   extractToolCalls,
   mergeAutomationAgentResults,
-  normalizeAutomationAgentResult,
   resolveAutomationAiCallUsage,
   resolveJobRunRuntimeDetails,
 } from "@/lib/workflows/automation-job-metadata";
+
 import {
-  buildAutomationHarnessPrompt,
-  buildPromptForJob,
-  buildPromptForPRFix,
-  parseAutomationHarnessReviewResult,
-  stripAutomationHarnessReviewMarker,
-} from "@/lib/workflows/automation-job-prompts";
-import {
-  assertPullRequestGithubAccess,
   loadPullRequestDetails,
   resolveAutofixGithubToken,
   resolveAutofixTargetRepo,
@@ -162,11 +147,7 @@ import {
   releaseQueuedJobs as releaseQueuedJobsBase,
   tryLogAiCall,
 } from "@/lib/workflows/automation-job-persistence";
-import {
-  buildAutofixSandboxInternalApiHeaders,
-  launchAutofixSandbox,
-  launchAutomationHarnessSandbox,
-} from "@/lib/workflows/automation-job-sandbox-setup";
+
 import {
   resolvePullRequestNumber,
   runFlowAction,
@@ -174,12 +155,9 @@ import {
 import { startAutomationJobRun } from "@/lib/workflows/automation-job-start";
 import {
   buildAutomationGatewayContext,
-  buildAutomationSystem,
   createAutomationAgentRunner,
   createPRFixAgentRunner,
   createSandboxPRFixAgentRunner,
-  fallbackAutomationModel,
-  type AutomationAgentDeps,
 } from "@/lib/workflows/automation-job-agent-runners";
 import { runAutomationHarnessAgent } from "@/lib/workflows/automation-job-harness";
 

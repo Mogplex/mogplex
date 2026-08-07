@@ -5,10 +5,7 @@
 
 import { logAutomationDispatchEvent } from "@/lib/automation-dispatch";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import {
-  coerceGraph,
-  getStartConfig,
-} from "@/lib/flows/graph";
+import { coerceGraph, getStartConfig } from "@/lib/flows/graph";
 import type { JobRunStartSource } from "@/lib/job-runs";
 import type {
   DispatchLogContext,

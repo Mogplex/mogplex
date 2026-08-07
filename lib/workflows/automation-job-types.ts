@@ -4,11 +4,7 @@
  */
 
 import type { AutomationModelExecutionMetadata } from "@/lib/workflows/automation-model-execution-types";
-import type {
-  FlowAgentNodeRole,
-  FlowGraph,
-  SandboxRecord,
-} from "@/lib/types";
+import type { FlowGraph } from "@/lib/types";
 import type { BackgroundRuntimeProvider } from "@/lib/runtime-providers";
 import type { AutomationScope } from "@/lib/workflows/automation-guardrails";
 import type { ResolvedUserLanguageModel } from "@/lib/ai-model-resolver";
@@ -236,7 +232,8 @@ export type FlowAutoMergeRequest = {
 export const RUNTIME_HANDLE_PERSIST_FAILED = "RUNTIME_HANDLE_PERSIST_FAILED";
 export const AUTOMATION_JOB_TRIGGER_MAX_ATTEMPTS = 1;
 export const JOB_RUN_CANCELLED = "JOB_RUN_CANCELLED";
-export const INVALID_PR_REVIEW_CONTEXT = "Missing pull request context for PR review";
+export const INVALID_PR_REVIEW_CONTEXT =
+  "Missing pull request context for PR review";
 export const GITHUB_PR_ACCESS_FAILURE_PREFIX = "GitHub PR access failed";
 export const AUTOMATION_GATEWAY_CACHING_ENV = "AUTOMATION_GATEWAY_CACHING";
 
