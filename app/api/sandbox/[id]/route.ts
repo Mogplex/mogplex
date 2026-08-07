@@ -1,6 +1,5 @@
 import { after, NextResponse } from "next/server";
 import { getSandbox } from "@/lib/sandbox/client";
-import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import {
   deleteSandboxRecord,
   stopSandboxRecord,
@@ -12,84 +11,21 @@ import {
   resolveLoadedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
-import type {
-  LoadedSandboxRouteRecord,
-  SandboxRouteRecordLike,
-} from "@/lib/sandbox/route-context";
-import type { SandboxRecord } from "@/lib/types";
 import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
 } from "@/lib/billing/sandbox-usage";
-
-type SandboxStatusRecord = {
-  id: string;
-  user_id: string;
-  repo_id: string;
-  sandbox_id: string;
-  base_branch: string;
-  working_branch: string;
-  snapshot_id?: string | null;
-  install_log?: string | null;
-  dev_log?: string | null;
-  runtime?: string | null;
-  terminal_cwd?: string | null;
-  status: string;
-  stop_reason?: SandboxRecord["stop_reason"];
-  persistent?: boolean | null;
-  preview_url?: string | null;
-  health_status?: string | null;
-  last_health_check_at?: string | null;
-  last_preview_http_status?: number | null;
-  boot_attempts?: number | null;
-  last_boot_started_at?: string | null;
-  last_boot_completed_at?: string | null;
-  billing_source?: string | null;
-  billing_team_id?: string | null;
-  billing_project_id?: string | null;
-  vercel_team_id?: string | null;
-  vercel_project_id?: string | null;
-  error?: string | null;
-  last_preview_error?: string | null;
-  last_boot_error?: string | null;
-  created_at: string;
-  last_active_at: string;
-};
-
-type SandboxDeleteRecord = {
-  id: string;
-  user_id?: string | null;
-  repo_id?: string | null;
-  sandbox_id: string;
-  base_branch?: string | null;
-  working_branch?: string | null;
-  status: string;
-  billing_source?: string | null;
-  billing_team_id?: string | null;
-  billing_project_id?: string | null;
-  vercel_team_id?: string | null;
-  vercel_project_id?: string | null;
-  persistent?: boolean | null;
-};
-
-type SandboxDetailGetDeps = {
-  loadOwnedSandboxRouteRecord: typeof loadOwnedSandboxRouteRecord;
-  resolveLoadedSandboxRouteContext: typeof resolveLoadedSandboxRouteContext;
-  stopSandboxRecord: typeof stopSandboxRecord;
-  updateSandboxRecord: typeof updateSandboxRecord;
-  scheduleAfter: typeof after;
-};
-
-type SandboxDeleteDeps = {
-  loadOwnedSandboxRouteRecord: typeof loadOwnedSandboxRouteRecord;
-  resolveLoadedSandboxRouteContext: typeof resolveLoadedSandboxRouteContext;
-  getSandbox: typeof getSandbox;
-  stopSandboxRecord: typeof stopSandboxRecord;
-  updateSandboxRecord: typeof updateSandboxRecord;
-  deleteSandboxRecord: typeof deleteSandboxRecord;
-  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
-  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
-};
+import {
+  DELETE_ACTIVE_FROM_STATUSES,
+  deleteRemoteSandboxBestEffort,
+  resolveSandboxDetailLiveStatus,
+} from "./_lib/delete-remote";
+import type {
+  SandboxDeleteDeps,
+  SandboxDeleteRecord,
+  SandboxDetailGetDeps,
+  SandboxStatusRecord,
+} from "./_lib/types";
 
 const defaultSandboxDetailGetDeps: SandboxDetailGetDeps = {
   loadOwnedSandboxRouteRecord,
@@ -109,148 +45,6 @@ const defaultSandboxDeleteDeps: SandboxDeleteDeps = {
   prepareSandboxBillingClose,
   finalizeSandboxBillingClose,
 };
-
-function resolveSandboxDetailLiveStatus(
-  record: Pick<SandboxStatusRecord, "status" | "persistent">,
-  sdkStatus: unknown
-): "running" | "stopped" | "paused" {
-  if (sdkStatus === "running") return "running";
-  // The VM probe only exposes "running" here; every other value means the VM
-  // was absent/unusable. Paused is DB state for persistent sandboxes, so a
-  // stopped remote probe must not overwrite an intentional pause.
-  if (record.status === "paused" && record.persistent === true) {
-    return "paused";
-  }
-  return "stopped";
-}
-
-const DELETE_ACTIVE_FROM_STATUSES = [
-  "creating",
-  "installing",
-  "running",
-  "paused",
-  "error",
-] as const;
-
-type RemoteDeleteOutcome =
-  | { verified: true; stoppedRemote?: boolean; endedAt?: Date }
-  | {
-      verified: false;
-      warning: string;
-      error: string;
-      endedAt?: Date;
-    };
-
-function formatRemoteDeleteError(error: unknown) {
-  return error instanceof Error ? error.message : "unknown error";
-}
-
-async function deleteRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
-  loaded: LoadedSandboxRouteRecord<R>,
-  deps: Pick<
-    SandboxDeleteDeps,
-    "resolveLoadedSandboxRouteContext" | "getSandbox"
-  >
-): Promise<RemoteDeleteOutcome> {
-  if (loaded.record.sandbox_id === "pending") {
-    return { verified: true, endedAt: new Date() };
-  }
-
-  const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
-    hydrateSandboxClient: false,
-  });
-  if (!resolved.ok) {
-    console.error(
-      `[sandbox/delete] Credential resolution failed for VM ${loaded.record.sandbox_id} — remote VM may continue running`
-    );
-    return {
-      verified: false,
-      warning:
-        "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
-      error: `Remote VM ${loaded.record.sandbox_id} could not be deleted: credentials unresolvable. Record kept for reaper cleanup.`,
-    };
-  }
-
-  let sandbox: Awaited<ReturnType<SandboxDeleteDeps["getSandbox"]>>;
-  try {
-    sandbox = await deps.getSandbox(loaded.record.sandbox_id, {
-      vercelToken: resolved.context.credentials.vercelToken,
-      vercelTeamId: resolved.context.credentials.vercelTeamId,
-      vercelProjectId: resolved.context.credentials.vercelProjectId,
-    });
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return { verified: true };
-    }
-    console.warn(
-      `[sandbox/delete] Failed to load VM ${loaded.record.sandbox_id} for delete:`,
-      error
-    );
-    return {
-      verified: false,
-      warning:
-        "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
-      error: `Remote VM ${loaded.record.sandbox_id} could not be deleted: ${formatRemoteDeleteError(
-        error
-      )}. Record kept for reaper cleanup.`,
-    };
-  }
-
-  if (typeof sandbox.delete === "function") {
-    try {
-      await sandbox.delete();
-      return { verified: true, endedAt: new Date() };
-    } catch (error) {
-      if (isNotFoundError(error)) {
-        return { verified: true };
-      }
-      console.warn(
-        `[sandbox/delete] Failed to delete VM ${loaded.record.sandbox_id}:`,
-        error
-      );
-      return {
-        verified: false,
-        warning:
-          "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
-        error: `Remote VM ${loaded.record.sandbox_id} could not be deleted: ${formatRemoteDeleteError(
-          error
-        )}. Record kept for reaper cleanup.`,
-      };
-    }
-  }
-
-  try {
-    await sandbox.stop({ blocking: true });
-    const session = sandbox.currentSession();
-    const endedAt = session.stoppedAt ?? session.updatedAt ?? new Date();
-    if (loaded.record.persistent === true) {
-      return {
-        verified: false,
-        warning:
-          "Remote VM was stopped but persistent resources could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
-        error: `Remote VM ${loaded.record.sandbox_id} could not be deleted because delete() is unavailable. VM was stopped, but persistent resources may remain. Record kept for reaper cleanup.`,
-        endedAt,
-      };
-    }
-    return { verified: true, stoppedRemote: true, endedAt };
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return { verified: true };
-    }
-    console.warn(
-      `[sandbox/delete] Failed to stop VM ${loaded.record.sandbox_id} after delete() was unavailable:`,
-      error
-    );
-    return {
-      verified: false,
-      warning:
-        "Remote VM could not be verified as deleted. Record marked for reaper cleanup instead of deleted.",
-      error: `Remote VM ${loaded.record.sandbox_id} could not be deleted or stopped: ${formatRemoteDeleteError(
-        error
-      )}. Record kept for reaper cleanup.`,
-    };
-  }
-}
 
 export function createSandboxDetailGetHandler(
   overrides: Partial<SandboxDetailGetDeps> = {}

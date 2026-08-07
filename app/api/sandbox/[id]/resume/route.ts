@@ -1,212 +1,27 @@
-import {
-  getSandbox,
-  bootstrapFromSnapshotStreaming,
-} from "@/lib/sandbox/client";
-import { updateSandboxRecord } from "@/lib/sandbox/records";
-import {
-  buildSandboxRouteErrorResponse,
-  loadOwnedSandboxRouteContext,
-} from "@/lib/sandbox/route-context";
-import { toSandboxClientRecord } from "@/lib/sandbox/summary";
+import { buildSandboxRouteErrorResponse } from "@/lib/sandbox/route-context";
 import {
   getRepoLinkedVercelProject,
   resolveRepoSandboxEnv,
 } from "@/lib/vercel/env-vars";
 import { resolveConfiguredDevPort } from "@/lib/repo-settings";
-import {
-  buildLimitResponse,
-  enforceSandboxBootLimits,
-  releaseLimitClaim,
-} from "@/lib/request-limits";
+import { buildLimitResponse } from "@/lib/request-limits";
 import {
   buildLifecycleConflictResponse,
   type SandboxLifecycleConflictEvent,
 } from "@/lib/sandbox/lifecycle-conflict";
-import { recordSandboxLifecycleEvent } from "@/lib/sandbox/auto-pause";
 import { NextResponse } from "next/server";
 import type { SandboxEvent } from "@/lib/sandbox/events";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
+import { presentSandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
+
+import type { SandboxResumeRecord, SandboxResumeDeps } from "./_lib/types";
+import { RESUME_SELECT, defaultSandboxResumeDeps } from "./_lib/constants";
 import {
-  finalizeSandboxBillingClose,
-  prepareSandboxBillingClose,
-  presentSandboxBillingAdmissionError,
-  requireSandboxBillingSession,
-} from "@/lib/billing/sandbox-usage";
-
-/**
- * toSandboxClientRecord expects non-null base_branch/working_branch. Our
- * record columns are NOT NULL in practice, but the type stays nullable
- * to match the DB schema — this helper normalizes for the client cast.
- */
-function buildClientSnapshot(
-  record: SandboxResumeRecord,
-  overrides: {
-    status: string;
-    health_status: string;
-    preview_url?: string | null;
-  }
-) {
-  return toSandboxClientRecord({
-    id: record.id,
-    user_id: record.user_id,
-    repo_id: record.repo_id,
-    sandbox_id: record.sandbox_id,
-    base_branch: record.base_branch ?? "main",
-    working_branch: record.working_branch ?? record.base_branch ?? "main",
-    snapshot_id: record.snapshot_id,
-    install_log: null,
-    dev_log: null,
-    runtime: record.runtime,
-    terminal_cwd: record.terminal_cwd,
-    root_directory: record.root_directory,
-    created_at: record.created_at,
-    last_active_at: record.last_active_at,
-    status: overrides.status,
-    health_status: overrides.health_status,
-    preview_url:
-      overrides.preview_url === undefined
-        ? record.preview_url
-        : overrides.preview_url,
-    persistent: record.persistent,
-  });
-}
-
-// Full repo + workspace select — resolveRepoSandboxEnv and the bootstrap
-// helpers read env vars, dev command, runtime, and the workspace's
-// inherited Vercel project link.
-const RESUME_SELECT =
-  "id, repo_id, user_id, sandbox_id, base_branch, working_branch, status, stop_reason, health_status, preview_url, snapshot_id, snapshot_billing_project_id, snapshot_billing_team_id, install_log, dev_log, runtime, terminal_cwd, root_directory, error, last_preview_error, last_boot_error, created_at, last_active_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, persistent, repo:repos(*, workspace:workspaces(*))";
-
-type SandboxResumeRecord = {
-  id: string;
-  user_id: string;
-  repo_id: string;
-  sandbox_id: string;
-  base_branch: string | null;
-  working_branch: string | null;
-  status: string;
-  stop_reason: string | null;
-  health_status: string | null;
-  preview_url: string | null;
-  snapshot_id: string | null;
-  runtime: string | null;
-  terminal_cwd: string | null;
-  /**
-   * Snapshot of the launch-time path; preferred over repo.root_directory
-   * so resuming a sandbox boots the dev server in the same workspace it
-   * was originally launched at.
-   */
-  root_directory: string | null;
-  persistent: boolean | null;
-  created_at: string;
-  last_active_at: string | null;
-  repo:
-    | (Record<string, unknown> & {
-        root_directory: string | null;
-        dev_command: string | null;
-        dev_port: number | null;
-        dev_port_auto: unknown;
-        runtime?: string | null;
-      })
-    | null
-    | undefined;
-};
-
-type SandboxResumeDeps = {
-  loadOwnedSandboxRouteContext: typeof loadOwnedSandboxRouteContext;
-  getSandbox: typeof getSandbox;
-  updateSandboxRecord: typeof updateSandboxRecord;
-  resolveRepoSandboxEnv: typeof resolveRepoSandboxEnv;
-  bootstrapFromSnapshotStreaming: typeof bootstrapFromSnapshotStreaming;
-  enforceSandboxBootLimits: typeof enforceSandboxBootLimits;
-  releaseLimitClaim: typeof releaseLimitClaim;
-  recordSandboxLifecycleEvent: typeof recordSandboxLifecycleEvent;
-  requireSandboxBillingSession: typeof requireSandboxBillingSession;
-  prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
-  finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
-};
-
-function sseEncode(
-  event: SandboxEvent | SandboxLifecycleConflictEvent
-): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
-}
-
-async function stopSandboxAfterLifecycleConflict(
-  sandbox: Awaited<ReturnType<typeof getSandbox>>,
-  sandboxRecordId: string,
-  label: string,
-  deps: Pick<
-    SandboxResumeDeps,
-    "prepareSandboxBillingClose" | "finalizeSandboxBillingClose"
-  >
-) {
-  let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
-    null;
-  try {
-    billingClose = await deps.prepareSandboxBillingClose(sandboxRecordId);
-  } catch (billingError) {
-    console.warn(
-      `[sandbox/resume] Billing close preparation failed after ${label} CAS conflict; reconciliation will recover:`,
-      billingError
-    );
-  }
-  let providerEndedAt: Date;
-  try {
-    await sandbox.stop({ blocking: true });
-    // Conflict cleanup is best-effort and also accepts the lightweight
-    // handles used by lifecycle recovery tests. Primary lifecycle paths use a
-    // fully typed SDK Sandbox and call currentSession directly.
-    const providerSession =
-      typeof sandbox.currentSession === "function"
-        ? sandbox.currentSession()
-        : null;
-    providerEndedAt =
-      providerSession?.stoppedAt ?? providerSession?.updatedAt ?? new Date();
-  } catch (stopErr) {
-    console.warn(
-      `[sandbox/resume] stop() after ${label} CAS conflict surfaced: ${
-        stopErr instanceof Error ? stopErr.message : String(stopErr)
-      }`
-    );
-    return;
-  }
-  try {
-    await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
-  } catch (billingError) {
-    console.warn(
-      `[sandbox/resume] VM stopped after ${label} CAS conflict, but billing finalization failed; reconciliation will retry:`,
-      billingError
-    );
-  }
-}
-
-const defaultSandboxResumeDeps: SandboxResumeDeps = {
-  loadOwnedSandboxRouteContext,
-  getSandbox,
-  updateSandboxRecord,
-  resolveRepoSandboxEnv,
-  bootstrapFromSnapshotStreaming,
-  enforceSandboxBootLimits,
-  releaseLimitClaim,
-  recordSandboxLifecycleEvent,
-  requireSandboxBillingSession,
-  prepareSandboxBillingClose,
-  finalizeSandboxBillingClose,
-};
-
-function releaseSandboxBootLimitClaim(
-  deps: Pick<SandboxResumeDeps, "releaseLimitClaim">,
-  userId: string,
-  claimId: string | null
-) {
-  if (!claimId) return Promise.resolve(false);
-  return deps.releaseLimitClaim({
-    userId,
-    routeKey: "sandbox_boot",
-    claimId,
-  });
-}
+  buildClientSnapshot,
+  sseEncode,
+  stopSandboxAfterLifecycleConflict,
+  releaseSandboxBootLimitClaim,
+} from "./_lib/helpers";
 
 export function createSandboxResumeHandler(
   overrides: Partial<SandboxResumeDeps> = {}
