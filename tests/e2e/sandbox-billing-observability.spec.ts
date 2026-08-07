@@ -72,11 +72,9 @@ test("observability surfaces sandbox compute and AI billing details", async ({
   await expect(
     page.getByRole("heading", { name: "Observability" })
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
+  await page.getByRole("tab", { name: /^Activity/ }).click();
 
-  const activitySection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
+  const activitySection = page.getByRole("tabpanel");
   await activitySection.locator("tbody tr").first().click();
 
   await expect(activitySection.getByText("Sandbox Billing")).toBeVisible();

@@ -376,7 +376,6 @@ export function ActivitySection({
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="ui-section-title">Activity</h2>
           <p className="ui-meta">Model calls across CLI, cloud, and automation — with tokens and cost.</p>
         </div>
         {isLoading && <span className="text-sm text-muted-foreground animate-pulse">Loading…</span>}

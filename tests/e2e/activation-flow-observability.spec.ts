@@ -50,9 +50,8 @@ test("observability can open the matching sandbox health tab in the workspace", 
   await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
-  const callsSection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
+  await page.getByRole("tab", { name: /^Activity/ }).click();
+  const callsSection = page.getByRole("tabpanel");
   await callsSection.locator("tbody tr").first().click();
   await expect(
     callsSection.getByRole("button", { name: "Open sandbox health" })
@@ -152,14 +151,14 @@ test("sandbox health can open exact sandbox-scoped observability calls", async (
   );
   await page.waitForLoadState("networkidle");
 
-  // The observability page now renders only Summary / Pending Approvals /
-  // Activity: the old Live Runs and Calls sections (filter chips, "Clear
-  // repo/sandbox filter", "Call:" selection controls) exist as orphaned
-  // components but are not mounted. Repo/sandbox filters arrive via the URL
-  // and the matching call row auto-expands, so assert that behavior instead.
-  const callsSection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
+  // Repo/sandbox filters arrive via the URL, which lands the page on the
+  // Activity tab of the table tab group with the matching call row
+  // auto-expanded.
+  await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  const callsSection = page.getByRole("tabpanel");
   await expect(callsSection.getByText("claude-sonnet-4")).toBeVisible();
   await expect(callsSection.getByText("gpt-5-mini")).toHaveCount(0);
   await expect(callsSection.getByText(/^gpt-5$/)).toHaveCount(0);
@@ -180,9 +179,7 @@ test("sandbox health can open exact sandbox-scoped observability calls", async (
   await expect(page).toHaveURL(
     /\/observability\?repo_id=repo-1&sandbox_record_id=sandbox-record-repo-1/
   );
-  const reloadedCallsSection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Activity" }) });
+  const reloadedCallsSection = page.getByRole("tabpanel");
   await expect(reloadedCallsSection.getByText("claude-sonnet-4")).toBeVisible();
   await expect(reloadedCallsSection.getByText("gpt-5-mini")).toHaveCount(0);
   await expect(reloadedCallsSection.getByText("Sandbox Billing")).toBeVisible();

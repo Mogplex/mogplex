@@ -139,7 +139,11 @@ test("observability renders nested tool output diffs with the shared viewer", as
   await expect(
     page.getByRole("heading", { name: "Observability", level: 1 })
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
+  // The call_id deep link lands the table tab group on the Activity tab.
+  await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
   await expect(page.getByRole("row", { name: /minimax-m2\.5/i })).toBeVisible();
 
   await expect(page.getByText("Diff source: stdout")).toBeVisible();

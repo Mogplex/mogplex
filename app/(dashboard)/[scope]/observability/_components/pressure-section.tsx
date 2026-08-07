@@ -112,7 +112,6 @@ export function PressureSection({
     >
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="ui-section-title">Pressure</h2>
           <p className="ui-meta">Queue suppression, deferrals, and start failures across the automation fleet.</p>
         </div>
         {pressureLoading && <span className="text-sm text-muted-foreground animate-pulse">Loading pressure…</span>}
