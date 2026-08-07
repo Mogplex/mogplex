@@ -192,6 +192,10 @@ export type ApprovalEvent = BaseTimelineEvent & {
   kind: "approval";
   approvalText: string;
   resolved: string;
+  // Tool approval fields for in-stream approvals (AI SDK v6)
+  approvalId?: string;
+  toolCallId?: string;
+  toolName?: string;
 };
 
 export type GitEvent = BaseTimelineEvent & {
