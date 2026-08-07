@@ -5,7 +5,6 @@ import {
   addTreePath,
   applyTreeMoves,
   buildTreeDropDestinationPath,
-  getAncestorDirectoryTreePaths,
   getParentDirectoryTreePath,
   isDirectoryTreePath,
   removeTreePath,
@@ -13,38 +12,33 @@ import {
   stripDirectoryTreePath,
 } from "@/lib/file-tree-paths";
 import { toast } from "@/hooks/use-toast";
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
+import { useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import {
   type ContextMenuItem,
-  type ContextMenuOpenContext,
   prepareFileTreeInput,
   type FileTreeDropResult,
   type FileTreeRenameEvent,
 } from "@pierre/trees";
-import { Plus, Refresh } from "iconoir-react";
 
-type TreeCreateKind = "directory" | "file";
+import {
+  type TreeCreateKind,
+  buildDefaultCreatePath,
+  getComposedPath,
+  getTreeInteractionMeta,
+  expandTreeAncestors,
+  getExpandedDirectoryTreePaths,
+} from "./file-tree-pane/helpers";
+import { CreateFileDialog, DeleteFileDialog } from "./file-tree-pane/dialogs";
+import { FileTreeContextMenu } from "./file-tree-pane/context-menu";
+import { TreeToolbar } from "./file-tree-pane/tree-toolbar";
+import { TreeContent } from "./file-tree-pane/tree-content";
+import {
+  fetchTreePaths,
+  renameTreeItem,
+  moveTreeItems,
+  createTreeItem,
+  deleteTreeItem,
+} from "./file-tree-pane/tree-api";
 
 interface Props {
   sandboxId: string;
@@ -60,82 +54,6 @@ interface Props {
 }
 
 const EMPTY_PREPARED_INPUT = prepareFileTreeInput([]);
-
-function buildDefaultCreatePath(
-  kind: TreeCreateKind,
-  directoryPath?: string | null
-) {
-  const baseName = kind === "file" ? "untitled.txt" : "new-folder/";
-  return directoryPath ? `${directoryPath}${baseName}` : baseName;
-}
-
-function getComposedPath(event: Event) {
-  return typeof event.composedPath === "function" ? event.composedPath() : [];
-}
-
-function getTreeInteractionMeta(event: Event) {
-  const composedPath = getComposedPath(event);
-  let targetPath: string | null = null;
-  let targetKind: "directory" | "file" | null = null;
-
-  for (const node of composedPath) {
-    if (!(node instanceof HTMLElement)) continue;
-    if (
-      node.dataset.type === "context-menu-trigger" ||
-      node.dataset.itemRenameInput === "true"
-    ) {
-      return null;
-    }
-    if (!targetPath && node.dataset.itemPath) {
-      targetPath = node.dataset.itemPath;
-      targetKind = node.dataset.itemType === "folder" ? "directory" : "file";
-    }
-  }
-
-  return targetPath && targetKind
-    ? { kind: targetKind, path: targetPath }
-    : null;
-}
-
-function expandTreeAncestors(
-  model: ReturnType<typeof useFileTree>["model"],
-  path: string,
-  options?: { includeSelf?: boolean }
-) {
-  for (const ancestor of getAncestorDirectoryTreePaths(path, options)) {
-    const item = model.getItem(ancestor);
-    if (item && "expand" in item) item.expand();
-  }
-}
-
-function getExpandedDirectoryTreePaths(
-  model: ReturnType<typeof useFileTree>["model"],
-  paths: readonly string[]
-) {
-  const expandedPaths: string[] = [];
-
-  for (const treePath of paths) {
-    if (!isDirectoryTreePath(treePath)) continue;
-    const item = model.getItem(treePath);
-    if (item && "isExpanded" in item && item.isExpanded()) {
-      expandedPaths.push(treePath);
-    }
-  }
-
-  return expandedPaths;
-}
-
-async function readJsonResponse<T>(response: Response) {
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message =
-      payload && typeof payload === "object" && "error" in payload
-        ? String(payload.error)
-        : `Request failed (${response.status})`;
-    throw new Error(message);
-  }
-  return payload as T;
-}
 
 export function FileTreePane({
   sandboxId,
@@ -161,7 +79,7 @@ export function FileTreePane({
   const [deleting, setDeleting] = useState(false);
   const refreshRequestIdRef = useRef(0);
   const pathsRef = useRef<string[]>([]);
-  const activeFilePathRef = useRef<string | null>(activeFilePath ?? null);
+  const activeFilePathRef = useRef(activeFilePath ?? null);
   const onOpenFileRef = useRef(onOpenFile);
   const onRetargetFilePathRef = useRef(onRetargetFilePath);
   const onClearFilePathRef = useRef(onClearFilePath);
@@ -172,15 +90,12 @@ export function FileTreePane({
   useEffect(() => {
     onOpenFileRef.current = onOpenFile;
   }, [onOpenFile]);
-
   useEffect(() => {
     onRetargetFilePathRef.current = onRetargetFilePath;
   }, [onRetargetFilePath]);
-
   useEffect(() => {
     onClearFilePathRef.current = onClearFilePath;
   }, [onClearFilePath]);
-
   useEffect(() => {
     activeFilePathRef.current = activeFilePath ?? null;
   }, [activeFilePath]);
@@ -193,30 +108,11 @@ export function FileTreePane({
   const handleRename = useCallback(
     (event: FileTreeRenameEvent) => {
       if (event.sourcePath === event.destinationPath) return;
-
       void (async () => {
         const previousPaths = pathsRef.current;
         let optimisticApplied = false;
         try {
-          await readJsonResponse<{
-            moves: Array<{ fromPath: string; toPath: string }>;
-          }>(
-            await fetch(`/api/sandbox/${sandboxId}/tree`, {
-              method: "PATCH",
-              headers: getActiveTeamRequestHeaders({
-                "Content-Type": "application/json",
-              }),
-              body: JSON.stringify({
-                moves: [
-                  {
-                    fromPath: event.sourcePath,
-                    toPath: event.destinationPath,
-                  },
-                ],
-              }),
-            })
-          );
-
+          await renameTreeItem(sandboxId, event.sourcePath, event.destinationPath);
           replaceTrackedPaths(
             applyTreeMoves(pathsRef.current, [
               { fromPath: event.sourcePath, toPath: event.destinationPath },
@@ -270,25 +166,12 @@ export function FileTreePane({
           ),
         }))
         .filter((move) => move.fromPath !== move.toPath);
-
       if (moves.length === 0) return;
-
       void (async () => {
         const previousPaths = pathsRef.current;
         let optimisticApplied = false;
         try {
-          await readJsonResponse<{
-            moves: Array<{ fromPath: string; toPath: string }>;
-          }>(
-            await fetch(`/api/sandbox/${sandboxId}/tree`, {
-              method: "PATCH",
-              headers: getActiveTeamRequestHeaders({
-                "Content-Type": "application/json",
-              }),
-              body: JSON.stringify({ moves }),
-            })
-          );
-
+          await moveTreeItems(sandboxId, moves);
           replaceTrackedPaths(applyTreeMoves(pathsRef.current, moves));
           for (const move of moves) {
             onRetargetFilePathRef.current?.(
@@ -337,22 +220,14 @@ export function FileTreePane({
     icons: "standard",
     dragAndDrop: {
       onDropComplete: handleDropComplete,
-      onDropError: (message) => {
-        toast({
-          title: "Move blocked",
-          description: message,
-          variant: "destructive",
-        });
+      onDropError: (message: string) => {
+        toast({ title: "Move blocked", description: message, variant: "destructive" });
       },
     },
     renaming: {
       onRename: handleRename,
-      onError: (message) => {
-        toast({
-          title: "Rename blocked",
-          description: message,
-          variant: "destructive",
-        });
+      onError: (message: string) => {
+        toast({ title: "Rename blocked", description: message, variant: "destructive" });
       },
     },
   });
@@ -365,25 +240,15 @@ export function FileTreePane({
     ) => {
       const sortedPaths = sortTreePaths(nextPaths);
       const preparedInput = prepareFileTreeInput(sortedPaths);
-      const expandedPaths = getExpandedDirectoryTreePaths(
-        model,
-        expandedSourcePaths
-      );
+      const expandedPaths = getExpandedDirectoryTreePaths(model, expandedSourcePaths);
       model.resetPaths(
         sortedPaths,
         expandedPaths.length > 0
-          ? {
-              preparedInput,
-              initialExpandedPaths: expandedPaths,
-            }
+          ? { preparedInput, initialExpandedPaths: expandedPaths }
           : { preparedInput }
       );
-
       if (!focusPath) return;
-
-      expandTreeAncestors(model, focusPath, {
-        includeSelf: isDirectoryTreePath(focusPath),
-      });
+      expandTreeAncestors(model, focusPath, { includeSelf: isDirectoryTreePath(focusPath) });
       const focusedItem = model.getItem(focusPath);
       if (focusedItem) {
         focusedItem.focus();
@@ -398,23 +263,11 @@ export function FileTreePane({
     async (options?: { focusPath?: string | null; silent?: boolean }) => {
       const requestId = refreshRequestIdRef.current + 1;
       refreshRequestIdRef.current = requestId;
-
-      if (options?.silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
+      if (options?.silent) setRefreshing(true);
+      else setLoading(true);
       try {
-        const payload = await readJsonResponse<{ paths: string[] }>(
-          await fetch(`/api/sandbox/${sandboxId}/tree`, {
-            cache: "no-store",
-          })
-        );
-
+        const nextPaths = sortTreePaths(await fetchTreePaths(sandboxId));
         if (refreshRequestIdRef.current !== requestId) return;
-
-        const nextPaths = sortTreePaths(payload.paths || []);
         const previousPaths = pathsRef.current;
         replaceTrackedPaths(nextPaths);
         setError(null);
@@ -425,13 +278,12 @@ export function FileTreePane({
         );
       } catch (loadError) {
         if (refreshRequestIdRef.current !== requestId) return;
-        setError(
-          loadError instanceof Error ? loadError.message : "Failed to load tree"
-        );
+        setError(loadError instanceof Error ? loadError.message : "Failed to load tree");
       } finally {
-        if (refreshRequestIdRef.current !== requestId) return;
-        setLoading(false);
-        setRefreshing(false);
+        if (refreshRequestIdRef.current === requestId) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [replaceTrackedPaths, sandboxId, syncModelPaths]
@@ -451,7 +303,6 @@ export function FileTreePane({
   }, [activeFilePath, model, paths]);
 
   const search = useFileTreeSearch(model);
-
   const rootDisplayLabel = useMemo(() => rootLabel || "/", [rootLabel]);
 
   const openFilePath = useCallback((filePath: string) => {
@@ -474,98 +325,48 @@ export function FileTreePane({
 
   const handleCreate = useCallback(async () => {
     if (!createDialog) return;
-
     setCreating(true);
     try {
-      const payload = await readJsonResponse<{ path: string }>(
-        await fetch(`/api/sandbox/${sandboxId}/tree`, {
-          method: "POST",
-          headers: getActiveTeamRequestHeaders({
-            "Content-Type": "application/json",
-          }),
-          body: JSON.stringify({
-            kind: createDialog.kind,
-            path: createPath,
-          }),
-        })
-      );
-
+      const payload = await createTreeItem(sandboxId, createDialog.kind, createPath);
       replaceTrackedPaths(addTreePath(pathsRef.current, payload.path));
       model.add(payload.path);
-      expandTreeAncestors(model, payload.path, {
-        includeSelf: isDirectoryTreePath(payload.path),
-      });
+      expandTreeAncestors(model, payload.path, { includeSelf: isDirectoryTreePath(payload.path) });
       model.focusPath(payload.path);
-
-      if (!isDirectoryTreePath(payload.path)) {
-        openFilePath(payload.path);
-      }
-
-      await refreshTreeRef.current({
-        focusPath: payload.path,
-        silent: true,
-      });
-
+      if (!isDirectoryTreePath(payload.path)) openFilePath(payload.path);
+      await refreshTreeRef.current({ focusPath: payload.path, silent: true });
       toast({
-        title:
-          createDialog.kind === "directory" ? "Folder created" : "File created",
+        title: createDialog.kind === "directory" ? "Folder created" : "File created",
         description: stripDirectoryTreePath(payload.path),
       });
       closeCreateDialog();
     } catch (createError) {
       toast({
         title: "Create failed",
-        description:
-          createError instanceof Error ? createError.message : "Create failed",
+        description: createError instanceof Error ? createError.message : "Create failed",
         variant: "destructive",
       });
       setCreating(false);
     }
-  }, [
-    closeCreateDialog,
-    createDialog,
-    createPath,
-    model,
-    openFilePath,
-    replaceTrackedPaths,
-    sandboxId,
-  ]);
+  }, [closeCreateDialog, createDialog, createPath, model, openFilePath, replaceTrackedPaths, sandboxId]);
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
-
     setDeleting(true);
     try {
-      const payload = await readJsonResponse<{ path: string }>(
-        await fetch(`/api/sandbox/${sandboxId}/tree`, {
-          method: "DELETE",
-          headers: getActiveTeamRequestHeaders({
-            "Content-Type": "application/json",
-          }),
-          body: JSON.stringify({ path: deleteTarget.path }),
-        })
-      );
-
+      const payload = await deleteTreeItem(sandboxId, deleteTarget.path);
       replaceTrackedPaths(removeTreePath(pathsRef.current, payload.path));
-      model.remove(payload.path, {
-        recursive: isDirectoryTreePath(payload.path),
-      });
+      model.remove(payload.path, { recursive: isDirectoryTreePath(payload.path) });
       onClearFilePathRef.current?.(payload.path, sandboxId);
-      await refreshTreeRef.current({
-        focusPath: getParentDirectoryTreePath(payload.path),
-        silent: true,
-      });
+      await refreshTreeRef.current({ focusPath: getParentDirectoryTreePath(payload.path), silent: true });
       toast({
-        title:
-          deleteTarget.kind === "directory" ? "Folder deleted" : "File deleted",
+        title: deleteTarget.kind === "directory" ? "Folder deleted" : "File deleted",
         description: stripDirectoryTreePath(payload.path),
       });
       setDeleteTarget(null);
     } catch (deleteError) {
       toast({
         title: "Delete failed",
-        description:
-          deleteError instanceof Error ? deleteError.message : "Delete failed",
+        description: deleteError instanceof Error ? deleteError.message : "Delete failed",
         variant: "destructive",
       });
     } finally {
@@ -586,16 +387,7 @@ export function FileTreePane({
     (event: React.KeyboardEvent<HTMLElement>) => {
       if (event.key !== "Enter") return;
       const composedPath = getComposedPath(event.nativeEvent);
-      if (
-        composedPath.some(
-          (node) =>
-            node instanceof HTMLElement &&
-            node.dataset.itemRenameInput === "true"
-        )
-      ) {
-        return;
-      }
-
+      if (composedPath.some((node) => node instanceof HTMLElement && node.getAttribute("data-item-rename-input") === "true")) return;
       const focusedPath = model.getFocusedPath();
       if (!focusedPath) return;
       const focusedItem = model.getItem(focusedPath);
@@ -607,252 +399,58 @@ export function FileTreePane({
   );
 
   const renderContextMenu = useCallback(
-    (item: ContextMenuItem, context: ContextMenuOpenContext) => {
-      const directoryPath =
-        item.kind === "directory"
-          ? item.path
-          : getParentDirectoryTreePath(item.path);
-
-      return (
-        <div className="border-border/80 bg-background/95 min-w-44 rounded-md border p-1 shadow-xl backdrop-blur-sm">
-          {item.kind === "file" && (
-            <button
-              type="button"
-              className="hover:bg-accent flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm"
-              onClick={() => {
-                context.close();
-                openFilePath(item.path);
-              }}
-            >
-              Open file
-            </button>
-          )}
-          <button
-            type="button"
-            className="hover:bg-accent flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm"
-            onClick={() => {
-              context.close({ restoreFocus: false });
-              model.startRenaming(item.path);
-            }}
-          >
-            Rename
-          </button>
-          <button
-            type="button"
-            className="hover:bg-accent flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm"
-            onClick={() => {
-              context.close({ restoreFocus: false });
-              openCreateDialog("file", directoryPath);
-            }}
-          >
-            New file here
-          </button>
-          <button
-            type="button"
-            className="hover:bg-accent flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm"
-            onClick={() => {
-              context.close({ restoreFocus: false });
-              openCreateDialog("directory", directoryPath);
-            }}
-          >
-            New folder here
-          </button>
-          <div className="bg-border/80 my-1 h-px" />
-          <button
-            type="button"
-            className="text-destructive hover:bg-destructive/10 flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm"
-            onClick={() => {
-              context.close({ restoreFocus: false });
-              setDeleteTarget(item);
-            }}
-          >
-            Delete
-          </button>
-        </div>
-      );
-    },
+    (item: ContextMenuItem, context: Parameters<typeof FileTreeContextMenu>[0]["context"]) => (
+      <FileTreeContextMenu
+        item={item}
+        context={context}
+        model={model}
+        onOpenFile={openFilePath}
+        onOpenCreateDialog={openCreateDialog}
+        onSetDeleteTarget={setDeleteTarget}
+      />
+    ),
     [model, openCreateDialog, openFilePath]
   );
 
   return (
     <>
       <div className="flex h-full flex-col text-sm">
-        <div className="border-border flex flex-col gap-2 border-b px-2 py-2">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground min-w-0 flex-1 truncate text-[11px]">
-              {rootDisplayLabel}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-[11px]"
-              onClick={() => openCreateDialog("file")}
-            >
-              <Plus className="size-3.5" />
-              File
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-[11px]"
-              onClick={() => openCreateDialog("directory")}
-            >
-              <Plus className="size-3.5" />
-              Folder
-            </Button>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => void refreshTree({ silent: true })}
-              title="Refresh files"
-              aria-label="Refresh files"
-            >
-              <Refresh
-                className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
-              />
-            </Button>
-          </div>
-          <Input
-            value={search.value}
-            onFocus={() => search.open(search.value || undefined)}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              if (!search.isOpen) {
-                search.open(nextValue);
-                return;
-              }
-              search.setValue(nextValue);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                search.focusNextMatch();
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                search.focusPreviousMatch();
-              } else if (event.key === "Escape") {
-                search.close();
-              }
-            }}
-            placeholder="Search files..."
-            aria-label="Search project files"
-            className="h-8 text-xs"
-          />
-        </div>
-
+        <TreeToolbar
+          rootDisplayLabel={rootDisplayLabel}
+          refreshing={refreshing}
+          search={search}
+          onCreateFile={() => openCreateDialog("file")}
+          onCreateFolder={() => openCreateDialog("directory")}
+          onRefresh={() => void refreshTree({ silent: true })}
+        />
         <div className="min-h-0 flex-1 overflow-hidden">
-          {loading ? (
-            <div className="text-muted-foreground p-3 text-xs">
-              Loading project tree…
-            </div>
-          ) : error ? (
-            <div className="flex h-full flex-col items-start gap-3 p-3">
-              <div className="text-destructive text-xs">{error}</div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void refreshTree()}
-              >
-                Retry
-              </Button>
-            </div>
-          ) : paths.length === 0 ? (
-            <div className="text-muted-foreground p-3 text-xs">
-              No files found.
-            </div>
-          ) : (
-            <FileTree
-              model={model}
-              header={null}
-              renderContextMenu={renderContextMenu}
-              className="h-full w-full bg-transparent"
-              onClick={handleTreeClick}
-              onKeyDown={handleTreeKeyDown}
-            />
-          )}
+          <TreeContent
+            loading={loading}
+            error={error}
+            pathsLength={paths.length}
+            model={model}
+            renderContextMenu={renderContextMenu}
+            onTreeClick={handleTreeClick}
+            onTreeKeyDown={handleTreeKeyDown}
+            onRetry={() => void refreshTree()}
+          />
         </div>
       </div>
-
-      <Dialog
+      <CreateFileDialog
         open={createDialog !== null}
-        onOpenChange={(open) => {
-          if (!open) closeCreateDialog();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {createDialog?.kind === "directory"
-                ? "Create folder"
-                : "Create file"}
-            </DialogTitle>
-            <DialogDescription>
-              Enter a repo-relative path. Folder paths can be nested.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={createPath}
-            onChange={(event) => setCreatePath(event.target.value)}
-            placeholder={
-              createDialog?.kind === "directory"
-                ? "src/new-folder/"
-                : "src/new-file.ts"
-            }
-            autoFocus
-          />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={closeCreateDialog}
-              disabled={creating}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleCreate()}
-              disabled={creating || !createPath.trim()}
-            >
-              {creating ? "Creating…" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {deleteTarget?.kind === "directory" ? "folder" : "file"}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget
-                ? `This will permanently remove ${stripDirectoryTreePath(deleteTarget.path)} from the sandbox.`
-                : "This will permanently remove the selected path from the sandbox."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void handleDelete()}
-              disabled={deleting}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        kind={createDialog?.kind ?? null}
+        path={createPath}
+        creating={creating}
+        onPathChange={setCreatePath}
+        onClose={closeCreateDialog}
+        onCreate={() => void handleCreate()}
+      />
+      <DeleteFileDialog
+        target={deleteTarget}
+        deleting={deleting}
+        onClose={() => setDeleteTarget(null)}
+        onDelete={() => void handleDelete()}
+      />
     </>
   );
 }
