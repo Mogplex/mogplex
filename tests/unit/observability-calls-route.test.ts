@@ -1,82 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
-
-async function loadObservabilityCallsRoute() {
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../app/api/observability/calls/route");
-}
-
-class FakeQuery {
-  readonly eqCalls: unknown[][] = [];
-  readonly filterCalls: unknown[][] = [];
-  readonly isCalls: unknown[][] = [];
-  readonly notCalls: unknown[][] = [];
-  readonly orCalls: unknown[][] = [];
-
-  constructor(
-    private readonly result: {
-      data: Record<string, unknown>[] | null;
-      count?: number | null;
-      error: { message: string } | null;
-    }
-  ) {}
-
-  eq(...args: unknown[]) {
-    this.eqCalls.push(args);
-    return this;
-  }
-  order() {
-    return this;
-  }
-  range() {
-    return this;
-  }
-  in() {
-    return this;
-  }
-  is(...args: unknown[]) {
-    this.isCalls.push(args);
-    return this;
-  }
-  not(...args: unknown[]) {
-    this.notCalls.push(args);
-    return this;
-  }
-  or(...args: unknown[]) {
-    this.orCalls.push(args);
-    return this;
-  }
-  filter(...args: unknown[]) {
-    this.filterCalls.push(args);
-    return this;
-  }
-  gte() {
-    return this;
-  }
-  lte() {
-    return this;
-  }
-
-  then<TResult1 = unknown, TResult2 = never>(
-    onfulfilled?:
-      | ((
-          value:
-            | {
-                data: Record<string, unknown>[] | null;
-                count?: number | null;
-                error: { message: string } | null;
-              }
-            | TResult2
-        ) => TResult1 | PromiseLike<TResult1>)
-      | null,
-    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
-  ) {
-    return Promise.resolve(this.result).catch(onrejected).then(onfulfilled);
-  }
-}
+import {
+  loadObservabilityCallsRoute,
+  FakeQuery,
+} from "./helpers/observability-calls-route-fixtures";
 
 test("GET /api/observability/calls paginates after stale live rows are filtered", async () => {
   const { createObservabilityCallsGetHandler } =
@@ -289,7 +217,6 @@ test("GET /api/observability/calls cloud surface excludes pending and streaming 
     )
   );
 
-  // Must filter to rows with no job_run_id and no runtime_command_id
   assert.ok(
     query.isCalls.some(([col, val]) => col === "job_run_id" && val === null)
   );
@@ -298,18 +225,12 @@ test("GET /api/observability/calls cloud surface excludes pending and streaming 
       ([col, val]) => col === "runtime_command_id" && val === null
     )
   );
-  // Must exclude live (pending/streaming) rows so deriveSurface agrees with the filter
   assert.ok(
     query.notCalls.some(
       ([col, op, val]) =>
         col === "status" && op === "in" && val === "(pending,streaming)"
     )
   );
-  // Must exclude rows the deriveSurface helper classifies as CLI via
-  // metadata.source while still keeping normal cloud rows where source is
-  // absent/null. PostgREST neq/not.eq predicates do not match nulls.
-  // This is query-construction coverage; the MOGPLEX_RUN_DB_TESTS integration
-  // smoke test below validates live PostgREST execution semantics.
   assert.ok(
     query.orCalls.some(
       ([expr]) => expr === OBSERVABILITY_SURFACE_OR_FILTERS.nonCliMetadataSource
@@ -335,15 +256,9 @@ test("GET /api/observability/calls cli surface includes metadata.source = 'cli' 
     )
   );
 
-  // Must exclude automation rows so the server-side surface filter matches
-  // deriveSurface's job_run_id-before-runtime_command_id precedence.
   assert.ok(
     query.isCalls.some(([col, val]) => col === "job_run_id" && val === null)
   );
-  // The CLI inference shim records calls without a runtime_command_id and
-  // only stamps metadata.source = "cli". Both markers must select the row.
-  // This is query-construction coverage; the MOGPLEX_RUN_DB_TESTS integration
-  // smoke test below validates live PostgREST execution semantics.
   assert.ok(
     query.orCalls.some(
       ([expr]) => expr === OBSERVABILITY_SURFACE_OR_FILTERS.cliSurface
@@ -401,11 +316,7 @@ test("PostgREST accepts observability surface or() filters with JSON accessors",
 test("GET /api/observability/calls applies repo_id filtering", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();
-  const query = new FakeQuery({
-    data: [],
-    count: 0,
-    error: null,
-  });
+  const query = new FakeQuery({ data: [], count: 0, error: null });
 
   const handler = createObservabilityCallsGetHandler({
     requireUserId: async () => "user-123",
@@ -431,11 +342,7 @@ test("GET /api/observability/calls applies repo_id filtering", async () => {
 test("GET /api/observability/calls applies sandbox_record_id filtering", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();
-  const query = new FakeQuery({
-    data: [],
-    count: 0,
-    error: null,
-  });
+  const query = new FakeQuery({ data: [], count: 0, error: null });
 
   const handler = createObservabilityCallsGetHandler({
     requireUserId: async () => "user-123",
@@ -464,11 +371,7 @@ test("GET /api/observability/calls applies sandbox_record_id filtering", async (
 test("GET /api/observability/calls applies Slack attribution filtering", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();
-  const query = new FakeQuery({
-    data: [],
-    count: 0,
-    error: null,
-  });
+  const query = new FakeQuery({ data: [], count: 0, error: null });
 
   const handler = createObservabilityCallsGetHandler({
     requireUserId: async () => "user-123",
@@ -497,11 +400,7 @@ test("GET /api/observability/calls applies Slack attribution filtering", async (
 test("GET /api/observability/calls can combine repo_id and sandbox_record_id filters", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();
-  const query = new FakeQuery({
-    data: [],
-    count: 0,
-    error: null,
-  });
+  const query = new FakeQuery({ data: [], count: 0, error: null });
 
   const handler = createObservabilityCallsGetHandler({
     requireUserId: async () => "user-123",

@@ -1,105 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
-import type { JobRunRow } from "../../lib/job-run-service";
-import type { ObservabilityStatsAggregates } from "../../app/api/observability/stats/route";
-
-async function loadObservabilityStatsRoute() {
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../app/api/observability/stats/route");
-}
-
-// The row-level aggregation (token breakdown preference, null-cost exclusion,
-// sandbox window clamping, limit-event grouping) lives in the
-// observability_stats_snapshot RPC now — these tests cover the handler's
-// remaining responsibilities: formatting, job-run windowing, and faithful
-// propagation of the aggregates.
-type StatsOverrides = {
-  calls?: Partial<ObservabilityStatsAggregates["calls"]>;
-  today?: Partial<ObservabilityStatsAggregates["today"]>;
-  sandboxes?: Partial<ObservabilityStatsAggregates["sandboxes"]>;
-  dispatch?: Partial<ObservabilityStatsAggregates["dispatch"]>;
-  limits?: Partial<ObservabilityStatsAggregates["limits"]>;
-  reconciliation_pending?: number;
-};
-
-function buildStats(
-  overrides: StatsOverrides = {}
-): ObservabilityStatsAggregates {
-  return {
-    calls: {
-      total: 0,
-      total_tokens: 0,
-      success: 0,
-      avg_duration_ms: null,
-      known_cost_usd: 0,
-      by_model: [],
-      by_type: [],
-      ...overrides.calls,
-    },
-    today: {
-      calls: 0,
-      tokens: 0,
-      known_cost_usd: 0,
-      ...overrides.today,
-    },
-    sandboxes: {
-      total: 0,
-      active: 0,
-      window_time_ms: 0,
-      ...overrides.sandboxes,
-    },
-    dispatch: {
-      suppressed: 0,
-      deferred: 0,
-      start_failed: 0,
-      ...overrides.dispatch,
-    },
-    limits: {
-      allowed: 0,
-      denied: 0,
-      by_route: [],
-      ...overrides.limits,
-    },
-    reconciliation_pending: overrides.reconciliation_pending ?? 0,
-  };
-}
-
-function buildJobRun(
-  overrides: Partial<JobRunRow> & Pick<JobRunRow, "id">
-): JobRunRow {
-  return {
-    assignment_id: null,
-    trigger_id: null,
-    flow_id: "flow-1",
-    flow_version_id: null,
-    runtime_provider: null,
-    runtime_run_id: null,
-    workflow_run_id: null,
-    retry_of_job_run_id: null,
-    status: "success",
-    created_at: "2026-04-21T12:00:00.000Z",
-    started_at: "2026-04-21T12:00:00.000Z",
-    completed_at: "2026-04-21T12:00:00.000Z",
-    input_tokens: null,
-    output_tokens: null,
-    cost_usd: null,
-    duration_ms: null,
-    error: null,
-    start_attempts: 0,
-    last_start_attempt_at: null,
-    last_start_error: null,
-    last_start_source: null,
-    cancel_requested_at: null,
-    cancelled_at: null,
-    cancel_reason: null,
-    cancel_error: null,
-    metadata: null,
-    ...overrides,
-  };
-}
+import {
+  loadObservabilityStatsRoute,
+  buildStats,
+  buildJobRun,
+} from "./helpers/observability-stats-route-fixtures";
 
 test("GET /api/observability/stats formats and propagates the RPC aggregates", async () => {
   const { createObservabilityStatsGetHandler } =
@@ -116,8 +22,6 @@ test("GET /api/observability/stats formats and propagates the RPC aggregates", a
           total_tokens: 606_000,
           success: 2,
           avg_duration_ms: 2000.4,
-          // Sum of known costs only — null-cost calls are excluded by the
-          // RPC, not zero-priced. 3.734 rounds to 3.73 for display.
           known_cost_usd: 3.734,
           by_model: [
             { model: "openai/gpt-5.4-mini", count: 2, tokens: 6000 },
@@ -197,8 +101,6 @@ test("GET /api/observability/stats zeroes rate and duration for an empty window"
   const handler = createObservabilityStatsGetHandler({
     requireUserId: async () => "user-123",
     getNow: () => new Date("2026-04-21T15:30:00.000Z"),
-    // avg_duration_ms is null when no call carries a duration — the summary
-    // must render 0, not NaN, and success_rate must not divide by zero.
     loadSnapshot: async () => ({ stats: buildStats(), jobRuns: [] }),
     isRepairableJobRun: () => false,
     getJobRunPendingAnchor: () => null,
@@ -322,8 +224,8 @@ test("GET /api/observability/stats success rate counts only terminal runs, exclu
   const { createObservabilityStatsGetHandler } =
     await loadObservabilityStatsRoute();
   const now = new Date("2026-04-21T15:30:00.000Z");
-  const inWindow = "2026-04-21T12:00:00.000Z"; // within the last 24h
-  const beforeWindow = "2026-04-19T12:00:00.000Z"; // older than 24h
+  const inWindow = "2026-04-21T12:00:00.000Z";
+  const beforeWindow = "2026-04-19T12:00:00.000Z";
 
   const handler = createObservabilityStatsGetHandler({
     requireUserId: async () => "user-123",
@@ -335,7 +237,6 @@ test("GET /api/observability/stats success rate counts only terminal runs, exclu
         buildJobRun({ id: "ok-2", status: "success", completed_at: inWindow }),
         buildJobRun({ id: "ok-3", status: "success", completed_at: inWindow }),
         buildJobRun({ id: "fail-1", status: "failed", completed_at: inWindow }),
-        // In-flight and aborted runs in the window must NOT dilute the rate.
         buildJobRun({
           id: "running-1",
           status: "running",
@@ -354,7 +255,6 @@ test("GET /api/observability/stats success rate counts only terminal runs, exclu
           status: "cancelled",
           completed_at: inWindow,
         }),
-        // Terminal but older than the window — excluded by time.
         buildJobRun({
           id: "old-success",
           status: "success",
@@ -372,9 +272,6 @@ test("GET /api/observability/stats success rate counts only terminal runs, exclu
   assert.equal(response.status, 200);
   const body = await response.json();
 
-  // 4 concluded in-window (3 success + 1 failed). running/pending/cancelled and
-  // the out-of-window success are all excluded, so the rate is 3/4 = 75% —
-  // not the pre-fix 3/7 ≈ 42.9% that counted in-flight/aborted runs.
   assert.equal(body.summary.job_runs_concluded_in_range, 4);
   assert.equal(body.summary.job_runs_success_rate_in_range, 75);
 });
@@ -385,8 +282,6 @@ test("GET /api/observability/stats windows job-run stats to the from/to range in
   const now = new Date("2026-04-21T15:30:00.000Z");
   const inRange = "2026-04-10T12:00:00.000Z";
   const beforeRange = "2026-03-30T12:00:00.000Z";
-  // Inside the last 24h but *outside* the selected range — the pre-fix code
-  // counted this because it always anchored on now-24h.
   const last24hOnly = "2026-04-21T10:00:00.000Z";
 
   const handler = createObservabilityStatsGetHandler({
@@ -457,10 +352,8 @@ test("GET /api/observability/stats windows job-run stats to the from/to range in
 
   assert.equal(body.summary.job_runs_failed_in_range, 1);
   assert.equal(body.summary.job_runs_repaired_in_range, 1);
-  // 3 concluded in range: failed-in-range, success-in-range, repaired-in-range.
   assert.equal(body.summary.job_runs_concluded_in_range, 3);
   assert.equal(body.summary.job_runs_success_rate_in_range, 66.7);
-  // Snapshot stats stay unwindowed — all 6 runs are visible.
   assert.equal(body.summary.job_runs_total, 6);
 });
 
@@ -496,7 +389,6 @@ test("GET /api/observability/stats passes the selected window to the snapshot lo
       windowEndIso: "2026-04-15T00:00:00.000Z",
     },
     {
-      // No range given: the window degrades to the historical rolling 24h.
       windowStartIso: "2026-04-20T15:30:00.000Z",
       windowEndIso: undefined,
     },

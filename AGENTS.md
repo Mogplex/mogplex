@@ -306,6 +306,6 @@ These are the repo’s expected TypeScript rules and conventions.
 
 - Treat `lib/flows/run-presentation.ts` as the single source of truth for run action visibility and run-status presentation in the recent-runs rail and details modal
 - Preserve backend-derived run flags (`cancelable`, `repairable`, `requeueable`) when refactoring UI logic; do not collapse state combinations locally
-- Update `tests/unit/flow-run-presentation.test.ts` before changing run-control logic so the presenter contract stays explicit
-- Add or update one user-visible regression test in `tests/e2e/flows-pane-runs.spec.ts` when changing rail or modal run-control behavior
+- Update the `tests/unit/flow-run-presentation-*.test.ts` suites before changing run-control logic so the presenter contract stays explicit
+- Add or update one user-visible regression test in the `tests/e2e/flows-pane-runs-*.spec.ts` suites when changing rail or modal run-control behavior
 - Treat review findings as blocking only when they point to an actual invariant break, failing scenario, or user-visible regression; otherwise keep them as advisory cleanup

@@ -1,0 +1,75 @@
+import { expect, test } from "@playwright/test";
+import { setupWorkflowsPage } from "./helpers/flows-pane-theme-fixtures";
+
+test("app sidebar owns primary navigation and supports drag and keyboard resize", async ({
+  page,
+}) => {
+  await setupWorkflowsPage(page, "light");
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+
+  const sidebar = page.getByTestId("app-sidebar");
+  await expect(sidebar).toBeVisible();
+  for (const destination of [
+    "control",
+    "workspaces",
+    "automations",
+    "delivery",
+    "observe",
+    "settings",
+  ]) {
+    await expect(page.getByTestId(`app-nav-${destination}`)).toBeVisible();
+  }
+  // /workflows is a legacy subpath of the Automations nav item.
+  await expect(page.getByTestId("app-nav-automations")).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+
+  const initialBox = await sidebar.boundingBox();
+  expect(initialBox).not.toBeNull();
+  expect(initialBox!.width).toBeGreaterThan(120);
+  await expect(page.getByTestId("app-sidebar-toggle")).toHaveCount(0);
+
+  const resizer = page.getByTestId("app-sidebar-resizer");
+  await expect(resizer).toBeVisible();
+  const widthBeforeKeyboardResize = (await sidebar.boundingBox())!.width;
+  await resizer.press("ArrowRight");
+  const widthAfterKeyboardResize = (await sidebar.boundingBox())!.width;
+  expect(widthAfterKeyboardResize).toBe(widthBeforeKeyboardResize + 8);
+
+  const resizerBox = await resizer.boundingBox();
+  expect(resizerBox).not.toBeNull();
+  await page.mouse.move(
+    resizerBox!.x + resizerBox!.width / 2,
+    resizerBox!.y + 80
+  );
+  await page.mouse.down();
+  await page.mouse.move(56, resizerBox!.y + 80, { steps: 8 });
+  await page.mouse.up();
+  const widthAfterDrag = (await sidebar.boundingBox())!.width;
+  expect(widthAfterDrag).toBe(56);
+  await expect(sidebar).toHaveAttribute("data-compact", "true");
+  await expect(page.getByTestId("app-nav-automations")).toHaveAttribute(
+    "aria-label",
+    "Automations"
+  );
+  for (const compactLabel of [
+    ".app-sidebar-title",
+    ".app-sidebar-section-label",
+    ".app-sidebar-link-label",
+    ".app-sidebar-footer-label",
+  ]) {
+    await expect(sidebar.locator(compactLabel)).toHaveCount(0);
+  }
+  const compactSidebarBox = await sidebar.boundingBox();
+  const compactLogoBox = await sidebar
+    .locator(".app-sidebar-logo")
+    .boundingBox();
+  expect(compactSidebarBox).not.toBeNull();
+  expect(compactLogoBox).not.toBeNull();
+  expect(compactLogoBox!.x + compactLogoBox!.width).toBeLessThanOrEqual(
+    compactSidebarBox!.x + compactSidebarBox!.width
+  );
+});

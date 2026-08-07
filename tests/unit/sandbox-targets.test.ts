@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-async function loadSandboxCredentials() {
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../lib/sandbox/get-user-credentials");
-}
-
-async function loadSandboxBilling() {
-  return import("../../lib/sandbox/billing");
-}
+import {
+  loadSandboxCredentials,
+  loadSandboxBilling,
+  buildPlatformCredentials,
+  buildUserCredentials,
+  buildPlatformTarget,
+  buildUserTarget,
+  buildPlatformRecord,
+  buildUserRecord,
+} from "./helpers/sandbox-targets-fixtures";
 
 test("resolveSandboxTarget ignores a legacy repo user-billing selection", async () => {
   const { resolveSandboxTarget } = await loadSandboxCredentials();
@@ -22,13 +21,7 @@ test("resolveSandboxTarget ignores a legacy repo user-billing selection", async 
       repoLinkedProjectId: "prj_linked",
       repoLinkedTeamId: "team_linked",
     }),
-    {
-      ok: true,
-      billingSource: "platform",
-      credentialSource: "platform",
-      projectId: null,
-      teamId: null,
-    }
+    buildPlatformTarget()
   );
 });
 
@@ -40,13 +33,7 @@ test("resolveSandboxTarget cannot activate user billing through a stale setting"
       workspaceBillingModeInput: "platform",
       repoBillingModeOverrideInput: "user_vercel_project",
     }),
-    {
-      ok: true,
-      billingSource: "platform",
-      credentialSource: "platform",
-      projectId: null,
-      teamId: null,
-    }
+    buildPlatformTarget()
   );
 });
 
@@ -55,21 +42,8 @@ test("resolveSandboxTargetCredentials chooses user credentials for linked target
 
   assert.deepEqual(
     resolveSandboxTargetCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: "platform-project",
-        allowPlatformSandbox: true,
-        userVercelToken: "user-token",
-        userVercelTeamId: "user-team",
-      },
-      {
-        ok: true,
-        billingSource: "user_vercel_project",
-        credentialSource: "user",
-        teamId: "linked-team",
-        projectId: "linked-project",
-      }
+      buildUserCredentials(),
+      buildUserTarget("linked-project", "linked-team")
     ),
     {
       ok: true,
@@ -85,21 +59,8 @@ test("resolveSandboxTargetCredentials keeps personal user-owned projects out of 
 
   assert.deepEqual(
     resolveSandboxTargetCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: "platform-project",
-        allowPlatformSandbox: true,
-        userVercelToken: "user-token",
-        userVercelTeamId: "workspace-team",
-      },
-      {
-        ok: true,
-        billingSource: "user_vercel_project",
-        credentialSource: "user",
-        teamId: null,
-        projectId: "personal-project",
-      }
+      buildUserCredentials({ userVercelTeamId: "workspace-team" }),
+      buildUserTarget("personal-project", null)
     ),
     {
       ok: true,
@@ -115,21 +76,8 @@ test("resolveSandboxRecordCredentials falls back to user-linked project context"
 
   assert.deepEqual(
     resolveSandboxRecordCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: "platform-project",
-        allowPlatformSandbox: true,
-        userVercelToken: "user-token",
-        userVercelTeamId: "user-team",
-      },
-      {
-        billing_source: "user_vercel_project",
-        billing_project_id: "linked-project",
-        billing_team_id: "linked-team",
-        vercel_project_id: "linked-project",
-        vercel_team_id: "linked-team",
-      }
+      buildUserCredentials(),
+      buildUserRecord("linked-project", "linked-team")
     ),
     {
       ok: true,
@@ -145,21 +93,16 @@ test("resolveSandboxRecordCredentials refreshes platform-owned targets from curr
 
   assert.deepEqual(
     resolveSandboxRecordCredentials(
-      {
-        vercelToken: "platform-token",
+      buildPlatformCredentials({
         vercelTeamId: "current-platform-team",
         vercelProjectId: "current-platform-project",
-        allowPlatformSandbox: true,
-        userVercelToken: null,
-        userVercelTeamId: null,
-      },
-      {
-        billing_source: "platform",
+      }),
+      buildPlatformRecord({
         billing_project_id: "stale-platform-project",
         billing_team_id: "stale-platform-team",
         vercel_project_id: "stale-platform-project",
         vercel_team_id: "stale-platform-team",
-      }
+      })
     ),
     {
       ok: true,
@@ -175,21 +118,8 @@ test("resolveSandboxRecordCredentials fails closed for user-billed sandboxes mis
 
   assert.deepEqual(
     resolveSandboxRecordCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: "platform-project",
-        allowPlatformSandbox: true,
-        userVercelToken: "user-token",
-        userVercelTeamId: "user-team",
-      },
-      {
-        billing_source: "user_vercel_project",
-        billing_project_id: null,
-        billing_team_id: null,
-        vercel_project_id: null,
-        vercel_team_id: null,
-      }
+      buildUserCredentials(),
+      buildUserRecord(null as never, null)
     ),
     {
       ok: false,
@@ -210,13 +140,7 @@ test("resolveSandboxTarget does not activate user billing from an account defaul
       accountLinkedProjectId: "prj_account",
       accountLinkedTeamId: "team_account",
     }),
-    {
-      ok: true,
-      billingSource: "platform",
-      credentialSource: "platform",
-      projectId: null,
-      teamId: null,
-    }
+    buildPlatformTarget()
   );
 });
 
@@ -231,13 +155,7 @@ test("resolveSandboxTarget ignores legacy workspace and account billing targets"
       accountLinkedProjectId: "prj_account",
       accountLinkedTeamId: "team_account",
     }),
-    {
-      ok: true,
-      billingSource: "platform",
-      credentialSource: "platform",
-      projectId: null,
-      teamId: null,
-    }
+    buildPlatformTarget()
   );
 });
 
@@ -251,13 +169,7 @@ test("resolveSandboxTarget keeps inherited legacy user billing on platform", asy
       workspaceLinkedProjectId: "prj_workspace",
       workspaceLinkedTeamId: "team_workspace",
     }),
-    {
-      ok: true,
-      billingSource: "platform",
-      credentialSource: "platform",
-      projectId: null,
-      teamId: null,
-    }
+    buildPlatformTarget()
   );
 });
 
@@ -299,21 +211,8 @@ test("resolveSandboxTargetCredentials blocks platform billing for non-allowliste
 
   assert.deepEqual(
     resolveSandboxTargetCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: "platform-project",
-        allowPlatformSandbox: false,
-        userVercelToken: null,
-        userVercelTeamId: null,
-      },
-      {
-        ok: true,
-        billingSource: "platform",
-        credentialSource: "platform",
-        teamId: null,
-        projectId: null,
-      }
+      buildPlatformCredentials({ allowPlatformSandbox: false }),
+      buildPlatformTarget()
     ),
     {
       ok: false,
@@ -329,21 +228,8 @@ test("resolveSandboxRecordCredentials blocks existing platform sandboxes for non
 
   assert.deepEqual(
     resolveSandboxRecordCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: "platform-project",
-        allowPlatformSandbox: false,
-        userVercelToken: null,
-        userVercelTeamId: null,
-      },
-      {
-        billing_source: "platform",
-        billing_project_id: "platform-project",
-        billing_team_id: null,
-        vercel_project_id: "platform-project",
-        vercel_team_id: null,
-      }
+      buildPlatformCredentials({ allowPlatformSandbox: false }),
+      buildPlatformRecord()
     ),
     {
       ok: false,
@@ -363,12 +249,10 @@ test("getPlatformSandboxCredentials returns a null project ID instead of throwin
   try {
     assert.equal(getPlatformSandboxCredentials().vercelProjectId, null);
   } finally {
-    if (savedVercelProjectId !== undefined) {
+    if (savedVercelProjectId !== undefined)
       process.env.VERCEL_PROJECT_ID = savedVercelProjectId;
-    }
-    if (savedPlatformProjectId !== undefined) {
+    if (savedPlatformProjectId !== undefined)
       process.env.PLATFORM_VERCEL_PROJECT_ID = savedPlatformProjectId;
-    }
   }
 });
 
@@ -384,14 +268,11 @@ test("getPlatformSandboxCredentials supports the platform project ID alias", asy
       "platform-project"
     );
   } finally {
-    if (savedVercelProjectId !== undefined) {
+    if (savedVercelProjectId !== undefined)
       process.env.VERCEL_PROJECT_ID = savedVercelProjectId;
-    }
-    if (savedPlatformProjectId === undefined) {
+    if (savedPlatformProjectId === undefined)
       delete process.env.PLATFORM_VERCEL_PROJECT_ID;
-    } else {
-      process.env.PLATFORM_VERCEL_PROJECT_ID = savedPlatformProjectId;
-    }
+    else process.env.PLATFORM_VERCEL_PROJECT_ID = savedPlatformProjectId;
   }
 });
 
@@ -424,21 +305,8 @@ test("resolveSandboxTargetCredentials rejects platform targets with a structured
 
   assert.deepEqual(
     resolveSandboxTargetCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: null,
-        allowPlatformSandbox: true,
-        userVercelToken: null,
-        userVercelTeamId: null,
-      },
-      {
-        ok: true,
-        billingSource: "platform",
-        credentialSource: "platform",
-        teamId: null,
-        projectId: null,
-      }
+      buildPlatformCredentials({ vercelProjectId: null }),
+      buildPlatformTarget()
     ),
     {
       ok: false,
@@ -461,13 +329,7 @@ test("resolveSandboxTargetCredentials still resolves user-billed targets when th
         userVercelToken: "user-token",
         userVercelTeamId: "user-team",
       },
-      {
-        ok: true,
-        billingSource: "user_vercel_project",
-        credentialSource: "user",
-        teamId: "team_linked",
-        projectId: "prj_linked",
-      }
+      buildUserTarget("prj_linked", "team_linked")
     ),
     {
       ok: true,
@@ -486,21 +348,8 @@ test("resolveSandboxRecordCredentials rejects platform records with a structured
 
   assert.deepEqual(
     resolveSandboxRecordCredentials(
-      {
-        vercelToken: "platform-token",
-        vercelTeamId: "platform-team",
-        vercelProjectId: null,
-        allowPlatformSandbox: true,
-        userVercelToken: null,
-        userVercelTeamId: null,
-      },
-      {
-        billing_source: "platform",
-        billing_project_id: null,
-        billing_team_id: null,
-        vercel_project_id: null,
-        vercel_team_id: null,
-      }
+      buildPlatformCredentials({ vercelProjectId: null }),
+      buildPlatformRecord({ billing_project_id: null, vercel_project_id: null })
     ),
     {
       ok: false,

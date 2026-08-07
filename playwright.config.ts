@@ -15,6 +15,8 @@ export default defineConfig({
     timeout: 10_000,
   },
   fullyParallel: false,
+  // flows-api tests share in-memory state; force serial execution
+  workers: 1,
   retries: process.env.CI ? 2 : 0,
   use: {
     baseURL,
