@@ -167,19 +167,21 @@ For cross-app memory portability (e.g. memories.sh cloud sync with the CLI / oth
 
 ## CI Pipeline
 
-GitHub Actions (`ci.yml`) runs four parallel jobs on every PR and push to `main`: **lint**, **typecheck**, **test** (`pnpm test:unit`), **build**. Production deploys (`deploy-production.yml`) run Supabase migrations before Vercel deploy, then smoke-check `/api/cron/production-smoke`.
+GitHub Actions (`ci.yml`) runs **lint**, **typecheck**, **test** (`pnpm test:all`), **build**, and **e2e** on every PR, merge group, and push to `main`; `secret-scan.yml` adds **trufflehog** and `pr-protection.yml` adds **tests-accompany-features** (see TESTING.md). All seven are required checks on `main`. Production deploys (`deploy-production.yml`) run Supabase migrations before Vercel deploy, then smoke-check `/api/cron/production-smoke`.
 
-### Ship PRs in sequence, not in parallel
+### Merge through the merge queue
 
-**Open and land one PR at a time.** When several PRs are open at once, whichever merges first forces the rest to rebase, and every rebase re-runs the full four-job matrix on work that already passed. On a repo this size that is a ~5 minute lint job plus build and tests, paid again per branch per rebase, for no new signal.
+`main` uses a merge queue (squash merges): land PRs with **"Merge when ready"** (`gh pr merge --auto --squash`), and the queue tests each PR against the projected state of `main` in a merge group before merging. Queued PRs build speculatively in parallel (up to 5), so several green PRs merge in roughly one pipeline's latency.
 
-So when a goal needs multiple PRs, stack them in time rather than side by side:
+What this changes:
 
-- Finish, review, and merge PR 1 before opening PR 2.
-- If PR 2's work is already written, keep it on a local branch and push only once PR 1 has landed and the branch is rebased — that way the branch's first CI run is also its last.
-- Only run PRs concurrently when they are genuinely independent *and* one is blocked on something external (a review, a deploy window). Say so in the PR description when you do.
+- Open PRs no longer re-run CI when another PR merges — the strict up-to-date requirement is gone; the queue owns serialization.
+- Stacking several open PRs is fine. Keep each PR small and single-concern for review, not for CI cost.
+- A required check that never reports on `merge_group` stalls the queue: any new workflow carrying a required check must include the `merge_group:` trigger (see `ci.yml`).
+- Queue failures evict the PR and rebuild everything behind it, so flaky tests are more expensive in the queue than on PRs — fix or quarantine flakes promptly (TESTING.md).
+- The e2e suite runs against shared live Neon; speculative builds mean concurrent e2e runs. If queue-only flakes appear, suspect test isolation before infrastructure.
 
-Corollary: batch review fixes. If a reviewer leaves three findings, address all of them in one push, not three.
+Corollary that still applies: batch review fixes. If a reviewer leaves three findings, address all of them in one push, not three.
 
 ### Migrations: never apply schema changes out of band
 
