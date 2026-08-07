@@ -1,3 +1,6 @@
+import { MogplexMark } from "@/components/brand/mogplex-mark";
+import { ClaudeFill, OpenaiFill } from "@/components/icons/harness-icons";
+
 import { GearIcon } from "./icons";
 
 /* ── live run mockup data ─────────────────────────────────────── */
@@ -260,12 +263,35 @@ export const traceRows = [
 
 export const harnesses = [
   {
+    id: "mogplex",
+    label: "Mogplex Native",
+    status: "HARNESS READY",
+    kicker: "HARNESS READY",
+    name: "Mogplex Native",
+    icon: MogplexMark,
+    chipTone: "is-orange",
+    description:
+      "The house agent, built into the platform. No CLI to install and no keys to bring — a pipeline runs on hosted models the moment you wire it.",
+    bullets: [
+      "Zero setup — no CLI, no keys",
+      "Hosted models on your balance",
+      "Tuned for Mogplex pipelines",
+    ],
+    yaml: [
+      ["harness", "mogplex", true],
+      ["model", "claude-opus-5", false],
+      ["credentials", "mogplex-hosted", false],
+      ["sandbox", "per-run", false],
+      ["telemetry", "full", false],
+    ],
+  },
+  {
     id: "claude",
     label: "Claude Code",
     status: "HARNESS READY",
     kicker: "HARNESS READY",
     name: "Claude Code",
-    chip: "CC",
+    icon: ClaudeFill,
     chipTone: "is-beige",
     description:
       "Keep the Claude Code workflow you know. Mogplex adds the sandbox, the gates, and the run telemetry.",
@@ -288,7 +314,7 @@ export const harnesses = [
     status: "HARNESS READY",
     kicker: "HARNESS READY",
     name: "Codex",
-    chip: "CX",
+    icon: OpenaiFill,
     chipTone: "is-white",
     description:
       "Run Codex against your repos while Mogplex records every tool call, diff, token, and approval.",

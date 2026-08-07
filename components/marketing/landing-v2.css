@@ -374,32 +374,8 @@
   transform: rotate(180deg);
 }
 
-.mpx-control-stamp {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  color: #8a8578;
-  font: 9px/1 var(--font-mono);
-  gap: 10px;
-  letter-spacing: 0.18em;
-  white-space: nowrap;
-}
-
-.mpx-control-stamp svg {
-  width: 12px;
-  height: 12px;
-}
-
-.mpx-control-stamp b {
-  color: #b6b1a3;
-  font-weight: 400;
-}
-
-.dark .mpx-control-stamp b {
-  color: #77736a;
-}
-
 .mpx-live-link {
+  margin-left: auto;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
@@ -710,10 +686,10 @@
 
 .mpx-hero h1 {
   margin: 28px 0 0;
-  font-size: clamp(2.8rem, 4.55vw, 4.85rem);
-  font-weight: 800;
-  letter-spacing: -0.038em;
-  line-height: 0.99;
+  font-size: clamp(2.4rem, 3.85vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.032em;
+  line-height: 1.04;
 }
 
 .mpx-hero-copy > p.mpx-rise {
@@ -2532,6 +2508,9 @@ path.mpx-dag-line,
 }
 
 .mpx-harness-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 12px 20px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 6px;
@@ -2540,10 +2519,17 @@ path.mpx-dag-line,
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
+  gap: 8px;
   transition:
     color 180ms ease,
     border-color 180ms ease,
     background 180ms ease;
+}
+
+.mpx-harness-tabs button svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
 }
 
 .mpx-harness-tabs button:hover {
@@ -2662,14 +2648,17 @@ path.mpx-dag-line,
   height: 40px;
   flex: none;
   border-radius: 8px;
-  font: 600 10px/1 var(--font-mono);
   place-items: center;
+}
+
+.mpx-harness-chip svg {
+  width: 22px;
+  height: 22px;
 }
 
 .mpx-harness-chip.is-orange {
   background: var(--accent);
   color: #fff;
-  font-size: 12px;
 }
 
 .mpx-harness-chip.is-beige {
@@ -3185,7 +3174,6 @@ path.mpx-dag-line,
 }
 
 @media (width <= 1240px) {
-  .mpx-control-stamp,
   .mpx-live-link {
     display: none;
   }
@@ -3436,7 +3424,7 @@ path.mpx-dag-line,
   }
 
   .mpx-hero h1 {
-    font-size: clamp(2.6rem, 13vw, 4.2rem);
+    font-size: clamp(2.2rem, 10.5vw, 3.4rem);
   }
 
   .mpx-hero-actions {

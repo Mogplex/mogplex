@@ -36,6 +36,37 @@ test("public landing shows the open-source software engine and primary CTA", asy
   }
 });
 
+test("landing offers three harnesses and drops retired chrome and claims", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const harnessTabs = page.getByRole("tablist", {
+    name: "Available coding harnesses",
+  });
+  await expect(
+    harnessTabs.getByRole("tab", { name: "Mogplex Native" })
+  ).toBeVisible();
+  await expect(
+    harnessTabs.getByRole("tab", { name: "Claude Code" })
+  ).toBeVisible();
+  await expect(harnessTabs.getByRole("tab", { name: "Codex" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Choose your harness\./ })
+  ).toBeVisible();
+
+  await harnessTabs.getByRole("tab", { name: "Claude Code" }).click();
+  await expect(
+    page.getByText("Keep the Claude Code workflow you know", { exact: false })
+  ).toBeVisible();
+
+  // The fake version stamp and the retention promises are gone on purpose:
+  // the stamp meant nothing, and data retention becomes a paid setting later.
+  await expect(page.getByText(/CONTROL\s?PLANE/)).toHaveCount(0);
+  await expect(page.getByText(/nothing carries over/i)).toHaveCount(0);
+  await expect(page.getByText(/dies when the run ends/i)).toHaveCount(0);
+});
+
 test("retired access request route redirects to the rate card", async ({
   request,
 }) => {

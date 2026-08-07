@@ -38,13 +38,14 @@ export function HarnessesSection() {
           <div>
             <Eyebrow large>HARNESS LAYER</Eyebrow>
             <h2>
-              Two harnesses.
+              Choose your harness.
               <br />
               <span>Same gates.</span>
             </h2>
           </div>
           <p className="mpx-harness-lede">
-            Pick the coding agent for each pipeline. Both run in the same
+            Pick the coding agent for each pipeline: the native Mogplex
+            agent, Claude Code, or Codex. Every harness runs in the same
             sandboxes, behind the same gates, on the same meter.
           </p>
         </div>
@@ -68,6 +69,7 @@ export function HarnessesSection() {
               onClick={() => setActiveHarness(index)}
               onKeyDown={(event) => onHarnessKeyDown(event, index)}
             >
+              <item.icon aria-hidden />
               {item.label}
             </button>
           ))}
@@ -106,7 +108,7 @@ export function HarnessesSection() {
           <div className="mpx-harness-copy">
             <div className="mpx-harness-id">
               <span className={`mpx-harness-chip ${harness.chipTone}`}>
-                {harness.chip}
+                <harness.icon aria-hidden />
               </span>
               <div>
                 <p>{harness.kicker}</p>

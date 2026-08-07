@@ -26,7 +26,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "Which agents does it run?",
-    a: "Claude Code and Codex today, with your MCP tools available inside every run. You pick the harness and model per pipeline. Hosted model access uses your Mogplex balance, so you do not need to set up API keys. Prefer your own model billing? Add your AI Gateway key in Settings → API Keys. Your runs then use it.",
+    a: "The native Mogplex agent, Claude Code, and Codex, with your MCP tools available inside every run. You pick the harness and model per pipeline. Hosted model access uses your Mogplex balance, so you do not need to set up API keys. Prefer your own model billing? Add your AI Gateway key in Settings → API Keys. Your runs then use it.",
   },
   {
     q: "Can an agent merge to main without a human?",
@@ -34,7 +34,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "Where does the code run?",
-    a: "In a fresh microVM for each run: a Vercel Sandbox that holds a clone of your repo. Runs share nothing. Nothing runs on your machines. The sandbox dies when the run ends.",
+    a: "In a fresh microVM for each run: a Vercel Sandbox that holds a clone of your repo. Runs share nothing. Nothing runs on your machines.",
   },
   {
     q: "What does it cost?",
