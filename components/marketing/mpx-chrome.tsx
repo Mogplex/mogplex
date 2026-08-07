@@ -7,20 +7,21 @@
 
 import Link from "next/link";
 import { IBM_Plex_Mono, Inter_Tight } from "next/font/google";
-import { useTheme } from "next-themes";
-import {
-  type ReactNode,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { MogplexMark } from "@/components/brand/mogplex-mark";
 import { MogplexWordmark } from "@/components/brand/mogplex-wordmark";
 
 import "./landing-v2.css";
+
+// Re-export from split modules to maintain public API
+export { ArrowRight } from "./mpx-chrome-icons";
+export { MpxFooter, ThemeMenu } from "./mpx-chrome-footer";
+export { GITHUB_URL, SELF_HOSTING_URL } from "./mpx-chrome-constants";
+
+import { ArrowRight, GithubGlyph, StarGlyph } from "./mpx-chrome-icons";
+import { GITHUB_URL } from "./mpx-chrome-constants";
 
 export const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
@@ -33,44 +34,6 @@ export const interTight = Inter_Tight({
   display: "swap",
   variable: "--font-inter-tight",
 });
-
-export const GITHUB_URL = "https://github.com/mogplex/mogplex";
-export const SELF_HOSTING_URL = `${GITHUB_URL}/blob/main/docs/self-hosting.md`;
-
-/* ── shared icons ─────────────────────────────────────────────── */
-
-export function ArrowRight({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M4 12h15M13 6l6 6-6 6" />
-    </svg>
-  );
-}
-
-function GithubGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.483 0-.237-.009-.866-.014-1.7-2.782.605-3.369-1.343-3.369-1.343-.455-1.157-1.11-1.465-1.11-1.465-.908-.621.069-.608.069-.608 1.004.071 1.532 1.032 1.532 1.032.892 1.53 2.341 1.088 2.91.832.091-.647.349-1.088.635-1.338-2.221-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.987 1.029-2.687-.103-.253-.446-1.269.098-2.647 0 0 .84-.269 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.58 9.58 0 0 1 2.504.337c1.909-1.295 2.748-1.026 2.748-1.026.546 1.378.203 2.394.1 2.647.64.7 1.028 1.594 1.028 2.687 0 3.848-2.337 4.695-4.566 4.943.359.31.678.921.678 1.856 0 1.34-.012 2.421-.012 2.751 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.021C22 6.484 17.523 2 12 2Z" />
-    </svg>
-  );
-}
-
-function StarGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="m12 2.8 2.8 5.7 6.3.9-4.6 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2-4.6-4.4 6.3-.9L12 2.8Z" />
-    </svg>
-  );
-}
 
 const GITHUB_REPO_API = "https://api.github.com/repos/mogplex/mogplex";
 
@@ -517,172 +480,5 @@ export function MpxHeader() {
         </div>
       </nav>
     </header>
-  );
-}
-
-/* ── theme control ────────────────────────────────────────────── */
-
-function SunIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="3.5" />
-      <path d="M12 2v2.2M12 19.8V22M4.93 4.93l1.56 1.56M17.51 17.51l1.56 1.56M2 12h2.2M19.8 12H22M4.93 19.07l1.56-1.56M17.51 6.49l1.56-1.56" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.6 8.6 0 1 0 20.5 15.2Z" />
-    </svg>
-  );
-}
-
-function SystemIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="3" y="4" width="18" height="14" rx="2" />
-      <path d="M8 21h8M12 18v3" />
-    </svg>
-  );
-}
-
-export function ThemeMenu() {
-  const { theme, resolvedTheme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false
-  );
-  const current = mounted ? (theme ?? "system") : "system";
-  const resolved = mounted ? (resolvedTheme ?? "light") : "light";
-
-  return (
-    <details className="mpx-theme-menu">
-      <summary aria-label="Choose color theme" title="Color theme">
-        {resolved === "dark" ? <MoonIcon /> : <SunIcon />}
-      </summary>
-      <div role="menu" aria-label="Color theme">
-        <p>COLOR THEME</p>
-        {(
-          [
-            ["light", "Light", <SunIcon key="light" />],
-            ["system", "System", <SystemIcon key="system" />],
-            ["dark", "Dark", <MoonIcon key="dark" />],
-          ] as const
-        ).map(([option, label, icon]) => (
-          <button
-            key={option}
-            type="button"
-            role="menuitemradio"
-            aria-checked={current === option}
-            onClick={(event) => {
-              setTheme(option);
-              event.currentTarget.closest("details")?.removeAttribute("open");
-            }}
-          >
-            {icon}
-            <span>{label}</span>
-            <svg
-              className="mpx-theme-check"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="m5 12.5 4.2 4.2L19 7" />
-            </svg>
-          </button>
-        ))}
-      </div>
-    </details>
-  );
-}
-
-/* ── footer ───────────────────────────────────────────────────── */
-
-export function MpxFooter() {
-  return (
-    <footer className="mpx-footer">
-      <div className="mpx-footer-main">
-        <div>
-          <Link href="/" className="mpx-footer-brand">
-            mogplex
-          </Link>
-          <p>
-            The open-source system that builds and maintains software with
-            agents.
-          </p>
-          <span className="mpx-system-status">
-            <i /> APACHE-2.0 · PUBLIC SOURCE
-          </span>
-        </div>
-        <nav aria-label="Footer navigation">
-          <div>
-            <b>PLATFORM</b>
-            <Link href="/#control-planes">Control plane</Link>
-            <Link href="/#harnesses">Harnesses</Link>
-            <Link href="/#run">CLI</Link>
-            <Link href="/#capabilities">Connectors</Link>
-          </div>
-          <div>
-            <b>OPEN SOURCE</b>
-            <Link href="/#capabilities">Security</Link>
-            <a href={SELF_HOSTING_URL}>Self-hosting</a>
-            <a href="https://docs.mogplex.com">Docs</a>
-          </div>
-          <div>
-            <b>DEVELOPERS</b>
-            <a href="https://docs.mogplex.com">Docs</a>
-            <a href="https://docs.mogplex.com/quickstart">Quickstart</a>
-            <a href={GITHUB_URL}>GitHub</a>
-            <a href={`${GITHUB_URL}/releases`}>Changelog</a>
-          </div>
-          <div>
-            <b>COMPANY</b>
-            <Link href="/company">About</Link>
-            <Link href="/pricing">Pricing</Link>
-            <Link href="/faq">FAQ</Link>
-            <a href={`${GITHUB_URL}/security/policy`}>Security</a>
-          </div>
-        </nav>
-      </div>
-      <div className="mpx-footer-bottom">
-        <p>© {new Date().getFullYear()} MOGPLEX INC.</p>
-        <div>
-          <Link href="/privacy">PRIVACY</Link>
-          <Link href="/terms">TERMS</Link>
-          <a href={`${GITHUB_URL}/security/policy`}>SECURITY</a>
-          <ThemeMenu />
-        </div>
-      </div>
-    </footer>
   );
 }
