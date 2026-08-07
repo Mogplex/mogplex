@@ -167,7 +167,9 @@ For cross-app memory portability (e.g. memories.sh cloud sync with the CLI / oth
 
 ## CI Pipeline
 
-GitHub Actions (`ci.yml`) runs **lint**, **typecheck**, **test** (`pnpm test:all`), **build**, and **e2e** on every PR, merge group, and push to `main`; `secret-scan.yml` adds **trufflehog** and `pr-protection.yml` adds **tests-accompany-features** (see TESTING.md). All seven are required checks on `main`. Production deploys (`deploy-production.yml`) run Supabase migrations before Vercel deploy, then smoke-check `/api/cron/production-smoke`.
+GitHub Actions (`ci.yml`) runs **lint**, **typecheck**, **test** (`pnpm test:all`), **build**, and **e2e** on every PR, merge group, and push to `main`; `secret-scan.yml` adds **trufflehog** and `pr-protection.yml` adds **tests-accompany-features** (see TESTING.md). All seven are required checks on `main`. The **e2e** check is a fan-in over four `e2e-shard (n/4)` matrix jobs — the shards do the work; the `e2e` job only aggregates their results, and its name must not change (the ruleset requires that context). Production deploys (`deploy-production.yml`) run Supabase migrations before Vercel deploy, then smoke-check `/api/cron/production-smoke`.
+
+Two advisory (non-required) checks also run on PRs: **diff-coverage** (`pr-protection.yml`) fails when changed `lib/**` lines are under 80% covered by the vitest tier, and **mutation** (`mutation.yml`) runs incremental Stryker over changed `lib/**` files and reports the mutation score without failing on it. A red diff-coverage or a low mutation score means the accompanying tests probably don't pin the behavior — treat it as a TESTING.md "must go red" violation and fix the tests, don't ignore it because the merge isn't blocked.
 
 ### Merge through the merge queue
 

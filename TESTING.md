@@ -124,9 +124,22 @@ Two of the rules above are checked mechanically:
   The reason is visible in the check output, so reviewers see the claim and
   can challenge it.
 
-Lint and the PR check shrink the slop surface; they cannot prove a test's
-assertions are meaningful. That last step remains the "make it go red" rule
-and the reviewer checklist below.
+Two advisory checks probe whether tests are meaningful, not just present:
+
+- **diff-coverage** (`pr-protection.yml`) runs the vitest tier with coverage
+  and fails when changed `lib/**` lines are under 80% covered. It gates only
+  the lines a PR touches, so coverage ratchets up with each change instead of
+  demanding a backfill.
+- **mutation** (`mutation.yml`) runs incremental Stryker over the `lib/**`
+  files a PR changes and reports how many mutants the vitest tier kills. It
+  never fails on the score — a low score is the machine-checked version of
+  "would this test still pass if the feature silently stopped working?"
+
+Neither advisory check blocks the merge, but reviewers should treat a red
+diff-coverage or a low mutation score as a finding to resolve. Lint and these
+checks shrink the slop surface; they cannot fully prove a test's assertions
+are meaningful. That last step remains the "make it go red" rule and the
+reviewer checklist below.
 
 ## Reviewer checklist
 
