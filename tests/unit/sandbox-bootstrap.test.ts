@@ -40,6 +40,72 @@ test("detects dev commands that require Bun", async () => {
   assert.equal(commandRequiresBun("echo bunny"), false);
 });
 
+async function runBunUsageProbe(cwd: string) {
+  const { buildDetectBunUsageScript } =
+    await import("../../lib/sandbox/client-shell");
+  const { execFileSync } = await import("node:child_process");
+  return execFileSync("node", ["-e", buildDetectBunUsageScript()], {
+    cwd,
+    encoding: "utf8",
+  });
+}
+
+async function makeProbeFixture(files: Record<string, string>) {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join, dirname } = await import("node:path");
+
+  const root = mkdtempSync(join(tmpdir(), "mogplex-bun-probe-"));
+  for (const [relative, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, relative)), { recursive: true });
+    writeFileSync(join(root, relative), content);
+  }
+  return root;
+}
+
+test("bun usage probe detects a nested workspace script invoking bun", async () => {
+  const root = await makeProbeFixture({
+    "package.json": JSON.stringify({
+      scripts: { dev: "pnpm --filter @mogplex/tui dev" },
+    }),
+    "packages/tui/package.json": JSON.stringify({
+      name: "@mogplex/tui",
+      scripts: { dev: "bun run src/index.tsx" },
+    }),
+  });
+
+  assert.equal(await runBunUsageProbe(root), "1");
+});
+
+test("bun usage probe detects bun.lock and packageManager pins", async () => {
+  const lockfileRoot = await makeProbeFixture({
+    "package.json": JSON.stringify({ scripts: { dev: "vite" } }),
+    "bun.lock": "{}",
+  });
+  const packageManagerRoot = await makeProbeFixture({
+    "package.json": JSON.stringify({
+      packageManager: "bun@1.3.10",
+      scripts: { dev: "vite" },
+    }),
+  });
+
+  assert.equal(await runBunUsageProbe(lockfileRoot), "1");
+  assert.equal(await runBunUsageProbe(packageManagerRoot), "1");
+});
+
+test("bun usage probe ignores node_modules and bun-free repos", async () => {
+  const root = await makeProbeFixture({
+    "package.json": JSON.stringify({
+      scripts: { dev: "next dev", test: "vitest" },
+    }),
+    "node_modules/some-dep/package.json": JSON.stringify({
+      scripts: { dev: "bun run dev.ts" },
+    }),
+  });
+
+  assert.equal(await runBunUsageProbe(root), "0");
+});
+
 test("builds a pinned Bun install command for sandbox previews", async () => {
   const {
     buildEnsureBunCommand,
@@ -160,6 +226,87 @@ test("bootstrapFromSnapshotStreaming retries preview health after a ready log", 
       { type: "log", phase: "dev", data: "ready in 375ms\n" },
       { type: "status", status: "running" },
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("bootstrapFromSnapshotStreaming installs Bun and puts it on PATH when the repo probe detects bun", async () => {
+  const { bootstrapFromSnapshotStreaming } = await loadSandboxClient();
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response("<html>ok</html>", { status: 200 })) as typeof fetch;
+
+  const shCommands: string[] = [];
+  const fakeSandbox = {
+    readFile: async ({ path }: { path: string }) => {
+      if (path === "package.json") return Buffer.from("{}");
+      return null;
+    },
+    readFileToBuffer: async ({ path }: { path: string }) => {
+      if (path === "package.json") {
+        // The root dev script fans out to a workspace package whose own dev
+        // script invokes bun — invisible to a command-string check.
+        return Buffer.from(
+          JSON.stringify({
+            scripts: { dev: "pnpm --filter @mogplex/tui dev" },
+          })
+        );
+      }
+      if (path === ".mogplex/dev.log") {
+        return Buffer.from("ready in 375ms\n");
+      }
+      return null;
+    },
+    runCommand: async (opts: {
+      cmd: string;
+      args?: string[];
+      detached?: boolean;
+    }) => {
+      if (opts.cmd === "node") {
+        // The repo-wide bun usage probe.
+        return {
+          stdout: async () => "1",
+          stderr: async () => "",
+          exitCode: 0,
+        };
+      }
+      shCommands.push(opts.args?.[1] ?? "");
+      if (opts.detached) {
+        return {
+          async *logs() {
+            yield { data: "ready in 375ms\n" };
+          },
+          wait: () => new Promise<{ exitCode: number | null }>(() => {}),
+        };
+      }
+      return {
+        stdout: async () => "",
+        stderr: async () => "",
+        exitCode: 0,
+      };
+    },
+    domain: () => "https://preview.example.test",
+  };
+
+  try {
+    const events = [];
+    for await (const event of bootstrapFromSnapshotStreaming(
+      fakeSandbox as never,
+      {}
+    )) {
+      events.push(event);
+    }
+
+    const ensureBun = shCommands.find((command) =>
+      command.includes("command -v bun")
+    );
+    assert.ok(ensureBun, "expected an ensure-bun command to run");
+    const devLaunch = shCommands.find((command) => command.includes("dev.log"));
+    assert.ok(devLaunch, "expected a dev server launch command");
+    assert.match(devLaunch, /export PATH="\$BUN_INSTALL\/bin:\$PATH"/);
+    assert.deepEqual(events.at(-1), { type: "status", status: "running" });
   } finally {
     globalThis.fetch = originalFetch;
   }

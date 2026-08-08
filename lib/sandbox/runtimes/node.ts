@@ -201,33 +201,38 @@ async function detectNodePackageManager(
   rootDir?: string | null
 ): Promise<{ pm: string; installFromRoot: boolean }> {
   // Step 1: Check lockfiles in the subdirectory
-  const [hasYarnLock, hasPnpmLock, hasBunLock, hasNpmLock] = await Promise.all([
-    sandbox.readFile({ path: resolveSandboxPath(rootDir, "yarn.lock") }),
-    sandbox.readFile({ path: resolveSandboxPath(rootDir, "pnpm-lock.yaml") }),
-    sandbox.readFile({ path: resolveSandboxPath(rootDir, "bun.lockb") }),
-    sandbox.readFile({
-      path: resolveSandboxPath(rootDir, "package-lock.json"),
-    }),
-  ]);
+  const [hasYarnLock, hasPnpmLock, hasBunLock, hasNpmLock, hasBunTextLock] =
+    await Promise.all([
+      sandbox.readFile({ path: resolveSandboxPath(rootDir, "yarn.lock") }),
+      sandbox.readFile({ path: resolveSandboxPath(rootDir, "pnpm-lock.yaml") }),
+      sandbox.readFile({ path: resolveSandboxPath(rootDir, "bun.lockb") }),
+      sandbox.readFile({
+        path: resolveSandboxPath(rootDir, "package-lock.json"),
+      }),
+      sandbox.readFile({ path: resolveSandboxPath(rootDir, "bun.lock") }),
+    ]);
 
   if (hasPnpmLock) return { pm: "pnpm", installFromRoot: false };
   if (hasYarnLock) return { pm: "yarn", installFromRoot: false };
-  if (hasBunLock) return { pm: "bun", installFromRoot: false };
+  if (hasBunLock || hasBunTextLock)
+    return { pm: "bun", installFromRoot: false };
   if (hasNpmLock) return { pm: "npm", installFromRoot: false };
 
   // Step 2: If rootDir is set and no lockfile found in subdir, check repo root
   const normalizedRoot = normalizeRootDirectory(rootDir);
   if (normalizedRoot) {
-    const [rootYarn, rootPnpm, rootBun, rootNpm] = await Promise.all([
-      sandbox.readFile({ path: "yarn.lock" }),
-      sandbox.readFile({ path: "pnpm-lock.yaml" }),
-      sandbox.readFile({ path: "bun.lockb" }),
-      sandbox.readFile({ path: "package-lock.json" }),
-    ]);
+    const [rootYarn, rootPnpm, rootBun, rootNpm, rootBunText] =
+      await Promise.all([
+        sandbox.readFile({ path: "yarn.lock" }),
+        sandbox.readFile({ path: "pnpm-lock.yaml" }),
+        sandbox.readFile({ path: "bun.lockb" }),
+        sandbox.readFile({ path: "package-lock.json" }),
+        sandbox.readFile({ path: "bun.lock" }),
+      ]);
 
     if (rootPnpm) return { pm: "pnpm", installFromRoot: true };
     if (rootYarn) return { pm: "yarn", installFromRoot: true };
-    if (rootBun) return { pm: "bun", installFromRoot: true };
+    if (rootBun || rootBunText) return { pm: "bun", installFromRoot: true };
     if (rootNpm) return { pm: "npm", installFromRoot: true };
   }
 

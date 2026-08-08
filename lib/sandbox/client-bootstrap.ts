@@ -5,6 +5,7 @@ import { SandboxBootstrapError } from "./client-validation";
 import {
   buildShellCommand,
   buildSelectiveRebuildCommand,
+  buildWithBunOnPathCommand,
 } from "./client-shell";
 import {
   NO_DEV_SCRIPT_MESSAGE,
@@ -43,7 +44,15 @@ export async function* bootstrapFromSnapshotStreaming(
     yield { type: "warning", message: context.vercelLinkWarning };
   }
 
-  // Skip install — deps are already in the snapshot
+  // Skip install — deps are already in the snapshot. Bun (when the repo
+  // needs it) is also in the snapshot, but the ensure is an idempotent
+  // no-op then and covers snapshots captured before bun support landed.
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.requiresBun,
+    context.runtimeEnv,
+    context.previewUrl
+  );
 
   if (!context.hasDevScript) {
     yield {
@@ -56,19 +65,13 @@ export async function* bootstrapFromSnapshotStreaming(
     return;
   }
 
-  await runRuntimePrerequisitePhase(
-    sandbox,
-    context.devCommand,
-    context.runtimeEnv,
-    context.previewUrl
-  );
-
   // Start dev server
   const devLaunch = await launchDetachedDevCommand(
     sandbox,
     context.normalizedRoot,
     context.devCommand,
-    context.runtimeEnv
+    context.runtimeEnv,
+    { requiresBun: context.requiresBun }
   );
 
   yield { type: "preview_url", url: context.previewUrl };
@@ -102,9 +105,20 @@ export async function bootstrapSandbox(
     console.warn("[sandbox/bootstrap]", context.vercelLinkWarning);
   }
 
+  // Bun must exist before install when it is the package manager, and
+  // before dev when any script in the repo invokes it.
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.requiresBun,
+    context.runtimeEnv,
+    context.previewUrl
+  );
+
   const installLog = await runInstallPhase(
     sandbox,
-    context.installCommand,
+    context.requiresBun
+      ? buildWithBunOnPathCommand(context.installCommand)
+      : context.installCommand,
     context.installDir,
     context.runtimeEnv,
     context.previewUrl
@@ -125,20 +139,16 @@ export async function bootstrapSandbox(
     return buildNoDevScriptBootstrapResult(context, installLog);
   }
 
-  await runRuntimePrerequisitePhase(
-    sandbox,
-    context.devCommand,
-    context.runtimeEnv,
-    context.previewUrl
-  );
-
   // Start dev server in background (with timeout)
   const devLaunch = await launchDetachedDevCommand(
     sandbox,
     context.normalizedRoot,
     context.devCommand,
     context.runtimeEnv,
-    `Dev server launch (${context.devCommand})`
+    {
+      timeoutLabel: `Dev server launch (${context.devCommand})`,
+      requiresBun: context.requiresBun,
+    }
   );
   const previewReadiness = await waitForPreviewSignal(
     sandbox,
@@ -190,15 +200,25 @@ export async function* bootstrapSandboxStreaming(
     yield { type: "warning", message: context.vercelLinkWarning };
   }
 
+  // --- Runtime prerequisites ---
+  // Bun must exist before install when it is the package manager, and
+  // before dev when any script in the repo invokes it.
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.requiresBun,
+    context.runtimeEnv,
+    context.previewUrl
+  );
+
   // --- Install phase ---
   yield { type: "status", status: "installing" };
 
+  const installCommand = context.requiresBun
+    ? buildWithBunOnPathCommand(context.installCommand)
+    : context.installCommand;
   const installCmd = await sandbox.runCommand({
     cmd: "sh",
-    args: [
-      "-lc",
-      buildShellCommand(context.installCommand, context.installDir),
-    ],
+    args: ["-lc", buildShellCommand(installCommand, context.installDir)],
     env: context.runtimeEnv,
     detached: true,
   });
@@ -260,19 +280,13 @@ export async function* bootstrapSandboxStreaming(
     return;
   }
 
-  await runRuntimePrerequisitePhase(
-    sandbox,
-    context.devCommand,
-    context.runtimeEnv,
-    context.previewUrl
-  );
-
   // --- Dev server phase ---
   const devLaunch = await launchDetachedDevCommand(
     sandbox,
     context.normalizedRoot,
     context.devCommand,
-    context.runtimeEnv
+    context.runtimeEnv,
+    { requiresBun: context.requiresBun }
   );
 
   yield { type: "preview_url", url: context.previewUrl };

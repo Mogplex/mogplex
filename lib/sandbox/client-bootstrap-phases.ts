@@ -19,7 +19,6 @@ import {
   buildSelectiveRebuildCommand,
   buildEnsureBunCommand,
   buildWithBunOnPathCommand,
-  commandRequiresBun,
 } from "./client-shell";
 import {
   NO_DEV_SCRIPT_MESSAGE,
@@ -39,11 +38,12 @@ export async function launchDetachedDevCommand(
   normalizedRoot: string | null,
   devCommand: string,
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
-  timeoutLabel?: string
+  opts: { timeoutLabel?: string; requiresBun?: boolean } = {}
 ) {
-  const launchCommand = commandRequiresBun(devCommand)
-    ? buildWithBunOnPathCommand(devCommand)
-    : devCommand;
+  const launchCommand =
+    opts.requiresBun === true
+      ? buildWithBunOnPathCommand(devCommand)
+      : devCommand;
   const command = sandbox.runCommand({
     cmd: "sh",
     args: [
@@ -57,8 +57,8 @@ export async function launchDetachedDevCommand(
     detached: true,
   });
 
-  return timeoutLabel
-    ? withTimeout(command, BOOTSTRAP_STEP_TIMEOUT_MS, timeoutLabel)
+  return opts.timeoutLabel
+    ? withTimeout(command, BOOTSTRAP_STEP_TIMEOUT_MS, opts.timeoutLabel)
     : command;
 }
 
@@ -155,11 +155,11 @@ export async function runSelectiveRebuildPhase(
 
 export async function runRuntimePrerequisitePhase(
   sandbox: Sandbox,
-  devCommand: string,
+  requiresBun: boolean,
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
   previewUrl: string
 ): Promise<string> {
-  if (!commandRequiresBun(devCommand)) return "";
+  if (!requiresBun) return "";
 
   const command = await withTimeout(
     sandbox.runCommand({
