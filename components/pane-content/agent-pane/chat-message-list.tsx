@@ -24,6 +24,15 @@ const MessageContent = dynamic(
   }
 );
 
+const MessageResponse = dynamic(
+  () =>
+    import("@/components/ai-elements/message").then((m) => m.MessageResponse),
+  {
+    ssr: false,
+    loading: () => <span className="text-muted-foreground">...</span>,
+  }
+);
+
 interface ConversationRun {
   id: string;
   type: string;
@@ -71,12 +80,12 @@ function LocalMessage({
       <div className="space-y-2">
         {message.segments.map((segment, index) =>
           segment.type === "text" ? (
-            <div
+            <MessageResponse
               key={`text-${index}`}
-              className="text-foreground whitespace-pre-wrap"
+              className="text-foreground"
             >
               {segment.text}
-            </div>
+            </MessageResponse>
           ) : (
             <LocalToolCalls
               key={`tool-${segment.toolCall.id}`}
@@ -91,9 +100,9 @@ function LocalMessage({
   return (
     <div className="space-y-2">
       {message.text ? (
-        <div className="text-foreground whitespace-pre-wrap">
+        <MessageResponse className="text-foreground">
           {message.text}
-        </div>
+        </MessageResponse>
       ) : null}
       {message.toolCalls && message.toolCalls.length > 0 ? (
         <LocalToolCalls toolCalls={message.toolCalls} />

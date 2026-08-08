@@ -164,3 +164,60 @@ test("control chat surfaces request failures instead of swallowing them", async 
     page.locator(".text-accent-amber").filter({ hasText: /./ }).first()
   ).toBeVisible();
 });
+
+test("control timeline renders agent markdown as formatted HTML", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+
+  // The agent's reply is markdown: a heading plus a GFM table. The timeline
+  // must render it as HTML, not literal pipes and dashes.
+  const agentMarkdown = [
+    "## Tool overview",
+    "",
+    "| Tool | Purpose |",
+    "| --- | --- |",
+    "| read_file | Read a file from the repo |",
+    "| write_file | Write content to a file |",
+  ].join("\n");
+  const streamChunks = [
+    { type: "start" },
+    { type: "text-start", id: "t1" },
+    { type: "text-delta", id: "t1", delta: agentMarkdown },
+    { type: "text-end", id: "t1" },
+    { type: "finish" },
+  ];
+  const streamBody =
+    streamChunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") +
+    "data: [DONE]\n\n";
+  await page.route("**/api/control/chat", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: streamBody,
+    })
+  );
+
+  await page.goto(scopedPath("control"));
+  await page.waitForLoadState("networkidle");
+
+  await page
+    .getByPlaceholder("Describe what you want to achieve...")
+    .fill("List your tools");
+  await page.getByRole("button", { name: "Start mission" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Tool overview" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Read a file from the repo" })
+  ).toBeVisible();
+  await expect(page.getByText("| --- |")).toHaveCount(0);
+});
