@@ -13,6 +13,23 @@ const FAILURE_SIGNAL_PATTERN =
 const FAILURE_STATE_PATTERN =
   /^(?:failed|failure|start_failed|cancel_failed|error|errored)$/i;
 const SAFE_MACHINE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,80}$/;
+// Failure classes are a closed vocabulary shared with the automation
+// pipeline; they must survive sanitization or the failure-class filters and
+// labels in the observability UI stop working on exactly the runs they exist
+// for.
+const SAFE_FAILURE_CLASS_VALUES = new Set([
+  "authentication",
+  "authorization",
+  "cancelled",
+  "canceled",
+  "configuration",
+  "dependency_unavailable",
+  "internal",
+  "provider_unavailable",
+  "rate_limited",
+  "timeout",
+  "unknown",
+]);
 const SAFE_FAILURE_FIELDS = new Set([
   "id",
   "status",
@@ -30,7 +47,14 @@ const SAFE_FAILURE_FIELDS = new Set([
   "path",
   "line",
   "severity",
+  "branch",
+  "review_dedup_key",
 ]);
+// Dispatch context recorded before a run fails (PR refs, shas, titles, repo
+// names) carries no diagnostics; wiping it made failed runs render as if the
+// error had been copied into every metadata field.
+const SAFE_FAILURE_FIELD_SUFFIX_PATTERN =
+  /_(?:id|type|at|ref|sha|title|author|login|full_name|label|provider|phase|source)$/;
 const FAILURE_CONTEXT_RESET_KEYS = new Set([
   "agent",
   "ai_calls",
@@ -126,10 +150,50 @@ function isSafeFailureField(key: string) {
   const normalized = key.toLowerCase();
   return (
     SAFE_FAILURE_FIELDS.has(normalized) ||
-    normalized.endsWith("_id") ||
-    normalized.endsWith("_type") ||
-    normalized.endsWith("_at")
+    SAFE_FAILURE_FIELD_SUFFIX_PATTERN.test(normalized)
   );
+}
+
+// In failure context, unknown string fields fail closed — but values that are
+// provably not prose diagnostics (enum-style machine codes, links to public
+// GitHub pages) stay readable so the operator can still tell WHAT failed.
+function isBenignFailureValue(key: string | undefined, value: string) {
+  if (SAFE_MACHINE_CODE_PATTERN.test(value)) return true;
+  if (SAFE_FAILURE_CLASS_VALUES.has(value)) return true;
+  return (
+    key != null &&
+    key.toLowerCase().endsWith("_url") &&
+    value.startsWith("https://github.com/")
+  );
+}
+
+function sanitizeStringValue(
+  value: string,
+  incidentId: string,
+  parentKey?: string,
+  failureContext = false
+) {
+  if (
+    parentKey &&
+    /(?:^|_)(?:code|error_code)(?:$|_)/i.test(parentKey) &&
+    SAFE_MACHINE_CODE_PATTERN.test(value)
+  ) {
+    return value;
+  }
+  if (parentKey && ERROR_KEY_PATTERN.test(parentKey)) {
+    return SAFE_FAILURE_CLASS_VALUES.has(value)
+      ? value
+      : presentObservabilityFailure(value, incidentId);
+  }
+  if (looksLikeInternalDiagnostic(value)) {
+    return presentObservabilityFailure(value, incidentId);
+  }
+  if (failureContext && (!parentKey || !isSafeFailureField(parentKey))) {
+    return isBenignFailureValue(parentKey, value)
+      ? value
+      : presentObservabilityFailure(value, incidentId);
+  }
+  return value;
 }
 
 function sanitizeValue(
@@ -140,21 +204,7 @@ function sanitizeValue(
   failureContext = false
 ): unknown {
   if (typeof value === "string") {
-    if (
-      parentKey &&
-      /(?:^|_)(?:code|error_code)(?:$|_)/i.test(parentKey) &&
-      SAFE_MACHINE_CODE_PATTERN.test(value)
-    ) {
-      return value;
-    }
-    if (
-      (failureContext && (!parentKey || !isSafeFailureField(parentKey))) ||
-      (parentKey && ERROR_KEY_PATTERN.test(parentKey)) ||
-      looksLikeInternalDiagnostic(value)
-    ) {
-      return presentObservabilityFailure(value, incidentId);
-    }
-    return value;
+    return sanitizeStringValue(value, incidentId, parentKey, failureContext);
   }
   if (Array.isArray(value)) {
     return value.map((entry) =>
