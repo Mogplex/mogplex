@@ -175,7 +175,7 @@
     "react-xtermjs": "^1.0.10",
     "recharts": "2.15.0",
     "server-only": "^0.0.1",
-    "shiki": "^4.4.2",
+    "shiki": "^3.23.0",
     "sonner": "^1.7.1",
     "streamdown": "^2.5.0",
     "stripe": "^22.4.0",
