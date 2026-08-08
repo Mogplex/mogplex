@@ -179,9 +179,9 @@ What this changes:
 
 - Open PRs no longer re-run CI when another PR merges — the strict up-to-date requirement is gone; the queue owns serialization.
 - Stacking several open PRs is fine. Keep each PR small and single-concern for review, not for CI cost.
-- A required check that never reports on `merge_group` stalls the queue: any new workflow carrying a required check must include the `merge_group:` trigger (see `ci.yml`).
+- A required check that never reports on `merge_group` stalls the queue: any new workflow carrying a required check must include the `merge_group:` trigger. Enforced structurally by `scripts/check-merge-group-triggers.mjs` (runs in the lint job): every workflow triggering on `pull_request` must also trigger on `merge_group` or carry an allowlist entry with a reason.
 - Queue failures evict the PR and rebuild everything behind it, so flaky tests are more expensive in the queue than on PRs — fix or quarantine flakes promptly (TESTING.md).
-- The e2e suite runs against shared live Neon; speculative builds mean concurrent e2e runs. If queue-only flakes appear, suspect test isolation before infrastructure.
+- Each CI run forks an ephemeral Neon branch (`ci-run-<run_id>-<attempt>`) for e2e, so speculative builds are isolated from each other; the `neon-branch-cleanup` job deletes it. Requires the `NEON_API_KEY` secret + `NEON_PROJECT_ID` repo variable — when absent, e2e falls back to the shared live database (with a workflow warning) and concurrent queue builds can interfere; then, if queue-only flakes appear, suspect test isolation before infrastructure.
 
 Corollary that still applies: batch review fixes. If a reviewer leaves three findings, address all of them in one push, not three.
 

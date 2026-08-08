@@ -63,6 +63,12 @@ jobs:
       - name: Run lint
         run: pnpm lint
 
+      - name: Check merge_group triggers
+        # A required check that never reports on merge_group stalls the merge
+        # queue for the full check_response_timeout. Structural guard, see the
+        # script header.
+        run: node scripts/check-merge-group-triggers.mjs
+
   typecheck:
     name: typecheck
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -186,16 +192,61 @@ jobs:
       - name: Run production build
         run: pnpm build
 
+  neon-branch:
+    # Ephemeral per-run database: fork the Neon default branch (copy-on-write,
+    # schema + data) so each CI run gets its own isolated database. Without
+    # this, speculative merge-queue builds run e2e concurrently against the
+    # SHARED live database, and any isolation weakness becomes a queue
+    # eviction that rebuilds everything behind it.
+    #
+    # Falls back to the shared DATABASE_URL (with a warning) until
+    # NEON_API_KEY (secret) and NEON_PROJECT_ID (repo variable) are
+    # configured. Branches are named ci-run-<run_id>-<attempt>; if the
+    # cleanup job ever misses one, sweep branches with that prefix manually.
+    name: neon-branch
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    outputs:
+      branch_id: ${{ steps.create.outputs.branch_id }}
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+    steps:
+      - name: Create ephemeral Neon branch
+        id: create
+        run: |
+          set -euo pipefail
+          if [ -z "${NEON_API_KEY}" ] || [ -z "${NEON_PROJECT_ID}" ]; then
+            echo "::warning::NEON_API_KEY / NEON_PROJECT_ID not configured; e2e runs against the shared database, so concurrent merge-queue builds can interfere with each other."
+            echo "branch_id=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          branch_name="ci-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # The response embeds connection URIs with passwords — never echo it.
+          response=$(curl -fsS -X POST \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\": {\"name\": \"${branch_name}\"}, \"endpoints\": [{\"type\": \"read_write\"}]}")
+          branch_id=$(jq -r '.branch.id' <<<"$response")
+          if [ -z "$branch_id" ] || [ "$branch_id" = "null" ]; then
+            echo "Branch creation returned no branch id" >&2
+            exit 1
+          fi
+          echo "Created Neon branch ${branch_name} (${branch_id})"
+          echo "branch_id=${branch_id}" >> "$GITHUB_OUTPUT"
+
   e2e-shard:
     # Sharded at the spec-file level to cut merge-queue cycle time: the suite
     # runs with workers:1 (flows-api specs share in-memory server state), so
     # parallelism has to come from separate machines, each with its own Next
-    # server. Shards share the live Neon database — specs already self-provision
-    # their rows because speculative merge-queue builds run the suite
-    # concurrently anyway.
+    # server. All four shards share the per-run Neon branch — specs
+    # self-provision their rows, so intra-run sharing is safe; the branch
+    # isolates this run from other queue entries.
     name: e2e-shard (${{ matrix.shard }}/4)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
+    needs: neon-branch
     strategy:
       fail-fast: false
       matrix:
@@ -242,6 +293,39 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - name: Point DATABASE_URL at the ephemeral Neon branch
+        # Job outputs drop masked values, so the branch job hands over only
+        # the (non-secret) branch id and each shard resolves its own
+        # connection string. Role and database names are parsed from the
+        # shared DATABASE_URL — the branch is a fork, so they are identical.
+        if: needs.neon-branch.outputs.branch_id != ''
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          BRANCH_ID: ${{ needs.neon-branch.outputs.branch_id }}
+        run: |
+          set -euo pipefail
+          stripped="${DATABASE_URL#*://}"
+          role_name="${stripped%%@*}"
+          role_name="${role_name%%:*}"
+          database_name="${stripped##*/}"
+          database_name="${database_name%%\?*}"
+          uri=$(curl -fsS -G \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            --data-urlencode "branch_id=${BRANCH_ID}" \
+            --data-urlencode "database_name=${database_name}" \
+            --data-urlencode "role_name=${role_name}" \
+            --data-urlencode "pooled=true" \
+            | jq -r '.uri')
+          if [ -z "$uri" ] || [ "$uri" = "null" ]; then
+            echo "Failed to resolve a connection URI for branch ${BRANCH_ID}" >&2
+            exit 1
+          fi
+          echo "::add-mask::${uri}"
+          echo "DATABASE_URL=${uri}" >> "$GITHUB_ENV"
+          echo "e2e uses ephemeral Neon branch ${BRANCH_ID}"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -264,6 +348,28 @@ jobs:
           name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
+
+  neon-branch-cleanup:
+    # Deletes the per-run branch whether the shards passed, failed, or were
+    # cancelled. NOT a required check — if this ever misses (runner death),
+    # the only cost is a stale ci-run-* branch to sweep manually.
+    name: neon-branch-cleanup
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    needs: [neon-branch, e2e-shard]
+    if: always() && needs.neon-branch.outputs.branch_id != ''
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      BRANCH_ID: ${{ needs.neon-branch.outputs.branch_id }}
+    steps:
+      - name: Delete ephemeral Neon branch
+        run: |
+          set -euo pipefail
+          curl -fsS -X DELETE \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" > /dev/null
+          echo "Deleted Neon branch ${BRANCH_ID}"
 
   e2e:
     # Fan-in for the shard matrix. The branch ruleset requires a check named
