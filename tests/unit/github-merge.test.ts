@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergePullRequestIfSafe } from "../../lib/github-merge";
+import {
+  mergePullRequestIfSafe,
+  queuePullRequestForMerge,
+} from "../../lib/github-merge";
 
 type FakeResponse = {
   ok: boolean;
@@ -309,4 +312,45 @@ test("reports a failed merge call without throwing", async () => {
 
   assert.equal(outcome.merged, false);
   assert.match(outcome.reason, /405/);
+});
+
+test("queuePullRequestForMerge refuses to queue a draft PR", async () => {
+  const { fetchImpl, calls } = makeFetch([
+    jsonResponse({ ...cleanPr, draft: true }),
+  ]);
+
+  const outcome = await queuePullRequestForMerge({ ...baseInput, fetchImpl });
+
+  assert.equal(outcome.merged, false);
+  assert.match(outcome.reason, /draft/i);
+  assert.equal(calls.length, 1);
+});
+
+test("queuePullRequestForMerge arms auto-merge on a clean open PR", async () => {
+  const { fetchImpl, calls } = makeFetch([
+    jsonResponse(cleanPr),
+    jsonResponse({
+      data: {
+        enablePullRequestAutoMerge: {
+          pullRequest: {
+            autoMergeRequest: { enabledAt: "2026-08-08T02:00:00Z" },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const outcome = await queuePullRequestForMerge({ ...baseInput, fetchImpl });
+
+  assert.equal(outcome.merged, false);
+  assert.equal(outcome.queued, true);
+  assert.match(outcome.reason, /auto-merge enabled/i);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1]?.url, "https://api.github.com/graphql");
+  const body = JSON.parse(String(calls[1]?.init?.body));
+  assert.deepEqual(body.variables.input, {
+    pullRequestId: "PR_kwDOAutoMerge42",
+    mergeMethod: "SQUASH",
+    expectedHeadOid: "abc123",
+  });
 });
