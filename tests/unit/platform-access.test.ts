@@ -48,7 +48,7 @@ test("derivePlatformAccess keeps AI and sandbox flags independently configurable
   });
 });
 
-test("derivePlatformAccess grants blackbox.ai emails platform access without env config", async () => {
+test("derivePlatformAccess has no built-in allowlist without env config", async () => {
   const { derivePlatformAccess } = await loadPlatformAccess();
 
   const access = derivePlatformAccess(
@@ -62,8 +62,8 @@ test("derivePlatformAccess grants blackbox.ai emails platform access without env
   );
 
   assert.deepEqual(access, {
-    allowPlatformAi: true,
-    allowPlatformSandbox: true,
+    allowPlatformAi: false,
+    allowPlatformSandbox: false,
   });
 });
 
