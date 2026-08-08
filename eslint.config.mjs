@@ -311,6 +311,17 @@ export default defineConfig([
     },
   },
   {
+    // components/ai-elements is vendored from the AI SDK Elements registry
+    // (npx ai-elements). Registry updates regenerate these files wholesale, so
+    // hand-splitting them to satisfy source-file rules would fight upstream.
+    files: ["components/ai-elements/**/*.{jsx,tsx}"],
+    rules: {
+      "max-lines": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/static-components": "off",
+    },
+  },
+  {
     files: [
       "app/**/flows/**/*.{jsx,tsx}",
       "app/**/workflows/**/*.{jsx,tsx}",

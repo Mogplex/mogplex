@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { MessageResponse } from "@/components/ai-elements/message"
 import {
   User,
   Notes,
@@ -209,7 +210,11 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
 
       {/* Body */}
       <div className="px-3 py-2.5">
-        {event.body && <p className="text-xs leading-relaxed">{event.body}</p>}
+        {event.body && (
+          <MessageResponse className="text-xs leading-relaxed">
+            {event.body}
+          </MessageResponse>
+        )}
 
         {/* Plan steps */}
         {event.kind === "plan" && (
