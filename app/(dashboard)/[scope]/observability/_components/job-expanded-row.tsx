@@ -55,11 +55,11 @@ export function JobExpandedRow({ job }: { job: ObservabilityJob }) {
         </div>
         <div>
           <div className="ui-label mb-0.5">Runtime Provider</div>
-          <div className="text-foreground">{runtimeProvider || "—"}</div>
+          <div className="text-foreground break-words">{runtimeProvider || "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Last Start Source</div>
-          <div className="text-foreground">{job.last_start_source || "—"}</div>
+          <div className="text-foreground break-words">{job.last_start_source || "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Retry Lineage</div>
@@ -70,15 +70,15 @@ export function JobExpandedRow({ job }: { job: ObservabilityJob }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div>
           <div className="ui-label mb-0.5">Run Result</div>
-          <div className="text-foreground">{statusPresentation.label}</div>
+          <div className="text-foreground break-words">{statusPresentation.label}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Run Cost</div>
-          <div className="text-foreground">{costPrimaryLabel}</div>
+          <div className="text-foreground break-words">{costPrimaryLabel}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Cost State</div>
-          <div className="text-foreground">
+          <div className="text-foreground break-words">
             {costState === "known"
               ? "recorded"
               : costSecondaryLabel ?? costState}
@@ -86,41 +86,41 @@ export function JobExpandedRow({ job }: { job: ObservabilityJob }) {
         </div>
         <div>
           <div className="ui-label mb-0.5">Timeout Budget</div>
-          <div className="text-foreground">{timeoutBudget || "—"}</div>
+          <div className="text-foreground break-words">{timeoutBudget || "—"}</div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div>
           <div className="ui-label mb-0.5">Latest Automation Outcome</div>
-          <div className="text-foreground">{job.latest_dispatch_event ? getJobAutomationSummary(job) : "—"}</div>
+          <div className="text-foreground break-words">{job.latest_dispatch_event ? getJobAutomationSummary(job) : "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Dispatch Outcome</div>
-          <div className="text-foreground">{job.latest_dispatch_event ? formatDispatchOutcome(job.latest_dispatch_event.outcome) : "—"}</div>
+          <div className="text-foreground break-words">{job.latest_dispatch_event ? formatDispatchOutcome(job.latest_dispatch_event.outcome) : "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Dispatch Reason</div>
-          <div className="text-foreground">{job.latest_dispatch_event ? formatDispatchReason(job.latest_dispatch_event.reason, job.latest_dispatch_event.metadata) : "—"}</div>
+          <div className="text-foreground break-words">{job.latest_dispatch_event ? formatDispatchReason(job.latest_dispatch_event.reason, job.latest_dispatch_event.metadata) : "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Failure Class</div>
-          <div className="text-foreground">{failureClass || "—"}</div>
+          <div className="text-foreground break-words">{failureClass || "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Dispatch Event</div>
-          <div className="text-foreground">{job.latest_dispatch_event ? `${job.latest_dispatch_event.event_kind} · ${new Date(job.latest_dispatch_event.created_at).toLocaleString()}` : "—"}</div>
+          <div className="text-foreground break-words">{job.latest_dispatch_event ? `${job.latest_dispatch_event.event_kind} · ${new Date(job.latest_dispatch_event.created_at).toLocaleString()}` : "—"}</div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div>
           <div className="ui-label mb-0.5">Cancellation Requested</div>
-          <div className="text-foreground">{job.cancel_requested_at ? new Date(job.cancel_requested_at).toLocaleString() : "—"}</div>
+          <div className="text-foreground break-words">{job.cancel_requested_at ? new Date(job.cancel_requested_at).toLocaleString() : "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Cancelled At</div>
-          <div className="text-foreground">{job.cancelled_at ? new Date(job.cancelled_at).toLocaleString() : "—"}</div>
+          <div className="text-foreground break-words">{job.cancelled_at ? new Date(job.cancelled_at).toLocaleString() : "—"}</div>
         </div>
         <div>
           <div className="ui-label mb-0.5">Cancel Reason</div>
@@ -135,7 +135,7 @@ export function JobExpandedRow({ job }: { job: ObservabilityJob }) {
       {job.last_start_error && (
         <div>
           <div className="ui-label mb-1">Last Start Error</div>
-          <div className="rounded bg-accent-red/5 px-2 py-1 font-mono text-accent-red">
+          <div className="rounded bg-accent-red/5 px-2 py-1 font-mono text-accent-red break-words">
             {job.last_start_error}
           </div>
         </div>
@@ -144,7 +144,7 @@ export function JobExpandedRow({ job }: { job: ObservabilityJob }) {
       {job.error && (
         <div>
           <div className="ui-label mb-1">Run Error</div>
-          <div className="rounded bg-accent-red/5 px-2 py-1 font-mono text-accent-red">
+          <div className="rounded bg-accent-red/5 px-2 py-1 font-mono text-accent-red break-words">
             {job.error}
           </div>
         </div>
