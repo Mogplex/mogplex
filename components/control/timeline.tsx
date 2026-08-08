@@ -3,6 +3,7 @@
 import { useRef, useEffect } from "react"
 import type { TimelineEvent, Worktree } from "@/lib/control/types"
 import { TimelineCard } from "./timeline-card"
+import type { ToolApprovalResponse } from "./timeline-card"
 
 type Props = {
   events: TimelineEvent[]
@@ -10,6 +11,7 @@ type Props = {
   getWorktree: (id: string) => Worktree | undefined
   onSelectWorktree: (id: string, tab?: string) => void
   onApprove: (eventIndex: number) => void
+  onToolApprovalResponse?: (response: ToolApprovalResponse) => void
   pending: boolean
 }
 
@@ -19,6 +21,7 @@ export function Timeline({
   getWorktree,
   onSelectWorktree,
   onApprove,
+  onToolApprovalResponse,
   pending,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -44,6 +47,7 @@ export function Timeline({
             getWorktree={getWorktree}
             onSelectWorktree={onSelectWorktree}
             onApprove={onApprove}
+            onToolApprovalResponse={onToolApprovalResponse}
           />
         ))}
         {pending && (

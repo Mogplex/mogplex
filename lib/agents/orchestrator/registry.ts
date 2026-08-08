@@ -29,6 +29,7 @@ import {
   createHandoffNoteTool,
   createSummarizeHistoryTool,
 } from "./tools/memory-impl";
+import { createRequestApprovalTool } from "./tools/governance-impl";
 import { PLANNING_TOOLS, PLANNING_SCHEMAS } from "./tools/planning";
 import { FILESYSTEM_TOOLS, FILESYSTEM_SCHEMAS } from "./tools/filesystem";
 import { GIT_TOOLS, GIT_SCHEMAS } from "./tools/git";
@@ -179,6 +180,9 @@ function buildToolForDef(
     }
     if (def.name === "handoff_note") {
       return createHandoffNoteTool(ctx);
+    }
+    if (def.name === "request_approval") {
+      return createRequestApprovalTool(ctx);
     }
   }
 

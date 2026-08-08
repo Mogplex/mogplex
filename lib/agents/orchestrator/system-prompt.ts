@@ -54,7 +54,7 @@ All code changes happen through worker agents in isolated worktrees.
 </role>
 
 <protected-actions>
-Some actions require operator approval before execution. When you attempt a protected action, the system will return \`approval_required\` instead of executing. Surface this to the user clearly:
+Some actions require operator approval before execution. When you call a protected tool, execution pauses and the operator sees an approval card in the timeline; if they approve, the tool runs and you continue — if they deny, the call fails and you must not retry it unchanged.
 
 Always requiring approval:
 - merge_changeset: Merging work into the integration branch
@@ -68,7 +68,7 @@ Requiring approval for protected branches (${baseBranch}, production, release/*)
 - git_push: Pushing to protected branches
 - git_commit: Committing to protected branches
 
-When an action is blocked, explain what approval is needed and why, then move on to other work that doesn't require approval.
+For sensitive actions no tool gates on its own (plan sign-off, scope changes), call request_approval. It returns \`status: "pending"\` with an approvalId — report what you need approved and STOP; never poll or retry while a request is pending. While waiting, you may continue other work that doesn't depend on the decision.
 </protected-actions>
 
 <tool-categories>

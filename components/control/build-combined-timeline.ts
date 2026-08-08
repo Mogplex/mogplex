@@ -1,11 +1,46 @@
 import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
 import type { TimelineEvent } from "@/lib/control/types";
-import type { UIMessage } from "ai";
+import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from "ai";
+
+/**
+ * Check if a tool part is in an approval-requiring state (requested or responded).
+ */
+function isApprovalState(
+  state: string
+): state is "approval-requested" | "approval-responded" | "output-denied" {
+  return (
+    state === "approval-requested" ||
+    state === "approval-responded" ||
+    state === "output-denied"
+  );
+}
+
+/**
+ * Extract approval info from a tool part if present.
+ */
+function getApprovalInfo(part: UIMessagePart<UIDataTypes, UITools>): {
+  id: string;
+  approved?: boolean;
+  reason?: string;
+} | null {
+  if (!("approval" in part) || !part.approval) return null;
+  const approval = part.approval as {
+    id: string;
+    approved?: boolean;
+    reason?: string;
+  };
+  return {
+    id: approval.id,
+    approved: approval.approved,
+    reason: approval.reason,
+  };
+}
 
 /**
  * Builds a combined timeline by merging mission timeline events with chat
  * messages. Assistant text becomes MOGPLEX events; tool invocations become
  * TOOL events with their input (and the error, when the call failed).
+ * Tool approvals become APPROVAL events.
  */
 export function buildCombinedTimeline(
   timeline: TimelineEvent[] | undefined,
@@ -25,17 +60,58 @@ export function buildCombinedTimeline(
 
       if (isToolOrDynamicToolUIPart(part)) {
         const toolName = getToolOrDynamicToolName(part);
-        if (part.state === "output-error") {
+        const state = "state" in part ? String(part.state) : "";
+
+        // Handle approval states
+        if (isApprovalState(state)) {
+          const approvalInfo = getApprovalInfo(part);
+          const toolCallId =
+            "toolCallId" in part ? String(part.toolCallId) : "";
+
+          if (state === "approval-requested") {
+            result.push({
+              kind: "approval",
+              label: "APPROVAL",
+              time: "now",
+              body: `${toolName} requires approval`,
+              approvalText: `Approve ${toolName} to proceed?`,
+              resolved: "",
+              approvalId: approvalInfo?.id,
+              toolCallId,
+              toolName,
+            });
+          } else if (
+            state === "approval-responded" ||
+            state === "output-denied"
+          ) {
+            const isApproved = approvalInfo?.approved === true;
+            result.push({
+              kind: "approval",
+              label: "APPROVAL",
+              time: "now",
+              body: `${toolName} ${isApproved ? "approved" : "denied"}`,
+              approvalText: approvalInfo?.reason || "",
+              resolved: isApproved ? "Approved by you" : "Denied by you",
+              approvalId: approvalInfo?.id,
+              toolCallId,
+              toolName,
+            });
+          }
+          continue;
+        }
+
+        // Handle other tool states
+        if (state === "output-error") {
           result.push({
             kind: "fail",
             label: "TOOL",
             time: "now",
             body: `${toolName} failed`,
-            log: part.errorText ?? "unknown error",
+            log: "errorText" in part ? String(part.errorText) : "unknown error",
           });
         } else {
           const input =
-            part.input === undefined
+            !("input" in part) || part.input === undefined
               ? "…"
               : JSON.stringify(part.input).slice(0, 100);
           result.push({

@@ -12,7 +12,7 @@ export const GOVERNANCE_TOOLS: OrchestratorToolDef[] = [
     category: "governance",
     description: "Request operator approval for a protected action",
     access: "read",
-    implemented: false,
+    implemented: true,
   },
   {
     name: "check_budget",

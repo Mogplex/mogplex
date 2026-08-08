@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   User,
   Notes,
@@ -16,12 +17,20 @@ import {
 } from "iconoir-react"
 import type { TimelineEvent, Worktree, PlanEvent, DelegateEvent, DiffEvent, FailEvent, CompareEvent, ApprovalEvent } from "@/lib/control/types"
 
+export type ToolApprovalResponse = {
+  approvalId: string
+  toolCallId: string
+  approved: boolean
+  reason?: string
+}
+
 type Props = {
   event: TimelineEvent
   eventIndex: number
   getWorktree: (id: string) => Worktree | undefined
   onSelectWorktree: (id: string, tab?: string) => void
   onApprove: (eventIndex: number) => void
+  onToolApprovalResponse?: (response: ToolApprovalResponse) => void
 }
 
 const KIND_STYLES: Record<string, { icon: typeof User; bg: string; fg: string; labelColor: string }> = {
@@ -57,7 +66,130 @@ const WORKTREE_STATE_DOT: Record<string, string> = {
   archived: "bg-muted-foreground/50",
 }
 
-export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree, onApprove }: Props) {
+function ToolApprovalCard({
+  event,
+  eventIndex,
+  onApprove,
+  onToolApprovalResponse,
+}: {
+  event: ApprovalEvent
+  eventIndex: number
+  onApprove: (eventIndex: number) => void
+  onToolApprovalResponse?: (response: ToolApprovalResponse) => void
+}) {
+  const [note, setNote] = useState("")
+  const [submitting, setSubmitting] = useState<"approve" | "deny" | null>(null)
+  const [responded, setResponded] = useState(false)
+
+  // This is a tool approval (AI SDK) if it has approvalId and toolCallId
+  const isToolApproval = !!(event.approvalId && event.toolCallId)
+
+  const handleResponse = (approved: boolean) => {
+    if (!isToolApproval || !event.approvalId || !event.toolCallId) return
+    if (responded || submitting) return
+    const action = approved ? "approve" : "deny"
+    setSubmitting(action)
+    // Call the callback with the response
+    onToolApprovalResponse?.({
+      approvalId: event.approvalId,
+      toolCallId: event.toolCallId,
+      approved,
+      reason: note.trim() || undefined,
+    })
+    setResponded(true)
+    setSubmitting(null)
+  }
+
+  // Already resolved
+  if (event.resolved) {
+    const isDenied = event.resolved.toLowerCase().includes("denied")
+    return (
+      <div className="mt-2">
+        {event.approvalText && (
+          <p className="mb-2 text-xs text-muted-foreground">{event.approvalText}</p>
+        )}
+        <div
+          className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[10px] font-medium ${
+            isDenied
+              ? "border-accent-red/30 bg-accent-red/5 text-accent-red"
+              : "border-accent-green/30 bg-accent-green/5 text-accent-green"
+          }`}
+        >
+          {isDenied ? <XmarkCircle className="size-3" /> : <Check className="size-3" />}
+          {event.resolved}
+        </div>
+      </div>
+    )
+  }
+
+  // Tool approval pending
+  if (isToolApproval) {
+    return (
+      <div className="mt-2 space-y-2">
+        {event.approvalText && (
+          <p className="text-xs text-muted-foreground">{event.approvalText}</p>
+        )}
+        {event.toolName && (
+          <div className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono text-amber-600 dark:text-amber-400 w-fit">
+            {event.toolName}
+          </div>
+        )}
+        <div className="flex flex-wrap items-start gap-2">
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional note to the agent"
+            maxLength={500}
+            disabled={responded || submitting !== null}
+            className="flex-1 min-w-32 rounded border border-border bg-background px-2 py-1 text-[10px] placeholder:text-muted-foreground/50 disabled:opacity-50"
+          />
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => handleResponse(true)}
+              disabled={responded || submitting !== null}
+              className="rounded bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground hover:bg-brand-accent-hover disabled:opacity-50"
+            >
+              {submitting === "approve" ? "Approving..." : "Approve"}
+            </button>
+            <button
+              onClick={() => handleResponse(false)}
+              disabled={responded || submitting !== null}
+              className="rounded border border-accent-red/30 bg-accent-red/5 px-2.5 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10 disabled:opacity-50"
+            >
+              {submitting === "deny" ? "Denying..." : "Deny"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Legacy approval (non-tool)
+  return (
+    <div className="mt-2">
+      {event.approvalText && (
+        <p className="mb-2 text-xs text-muted-foreground">{event.approvalText}</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => onApprove(eventIndex)}
+          className="rounded bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground hover:bg-brand-accent-hover"
+        >
+          Approve merge
+        </button>
+        <button className="rounded border border-accent-red/30 bg-accent-red/5 px-2.5 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10">
+          Reject
+        </button>
+        <button className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-secondary">
+          Ask a question
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree, onApprove, onToolApprovalResponse }: Props) {
   const style = KIND_STYLES[event.kind] || KIND_STYLES.tool
   const Icon = style.icon
   const isSubdued = event.kind === "tool" || event.kind === "delegate"
@@ -222,32 +354,12 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
 
         {/* Approval */}
         {event.kind === "approval" && (
-          <div className="mt-2">
-            {(event as ApprovalEvent).approvalText && (
-              <p className="mb-2 text-xs text-muted-foreground">{(event as ApprovalEvent).approvalText}</p>
-            )}
-            {(event as ApprovalEvent).resolved ? (
-              <div className="flex items-center gap-2 rounded border border-accent-green/30 bg-accent-green/5 px-2.5 py-1.5 text-[10px] font-medium text-accent-green">
-                <Check className="size-3" />
-                {(event as ApprovalEvent).resolved}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => onApprove(eventIndex)}
-                  className="rounded bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground hover:bg-brand-accent-hover"
-                >
-                  Approve merge
-                </button>
-                <button className="rounded border border-accent-red/30 bg-accent-red/5 px-2.5 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10">
-                  Reject
-                </button>
-                <button className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-secondary">
-                  Ask a question
-                </button>
-              </div>
-            )}
-          </div>
+          <ToolApprovalCard
+            event={event as ApprovalEvent}
+            eventIndex={eventIndex}
+            onApprove={onApprove}
+            onToolApprovalResponse={onToolApprovalResponse}
+          />
         )}
       </div>
     </div>

@@ -1,5 +1,11 @@
 import { tool } from "ai";
 import {
+  createControlApproval,
+  getControlApprovalByToolCallId,
+  resolveControlApproval,
+  type CreateControlApprovalInput,
+} from "@/lib/control/approvals-store";
+import {
   ORCHESTRATOR_TOOLS,
   getToolDef,
   type OrchestratorToolDef,
@@ -130,8 +136,14 @@ export function checkToolPolicy(
     };
   }
 
-  // Check for protected branch mutations
-  if (def.access === "mutation" && PROTECTED_BRANCH_SENSITIVE.has(def.name)) {
+  // Check for protected branch mutations. git_push is exempt here — it has
+  // its own approval path below (approval can override; other protected
+  // branch mutations are hard denials).
+  if (
+    def.access === "mutation" &&
+    def.name !== "git_push" &&
+    PROTECTED_BRANCH_SENSITIVE.has(def.name)
+  ) {
     const targetBranch = extractTargetBranch(def.name, input);
     if (isProtectedBranch(targetBranch, ctx.protectedBranches)) {
       return {
@@ -185,25 +197,60 @@ function logAuditEntry(entry: ToolAuditEntry): void {
 }
 
 /**
- * Approval-required response shape.
+ * Policy-denied response shape (protected branches / policy violations —
+ * approvals are handled by the AI SDK needsApproval gate, not this).
  */
-export type ApprovalRequiredResponse = {
-  status: "approval_required";
+export type PolicyDeniedResponse = {
+  status: "policy_denied";
   tool: string;
+  reason: "protected_branch" | "policy_violation";
   summary: string;
-  approvalId?: string;
 };
 
 /**
- * Wrap a tool's execute function with policy enforcement.
- * - Checks policy before execution
- * - Logs audit events for mutations
- * - Returns approval_required response for blocked actions
+ * Boundary dependencies for the approval gate, injectable for tests
+ * (DI over mocking). Defaults resolve to the control approvals store.
+ */
+export type PolicyApprovalDeps = {
+  createApproval: (
+    input: CreateControlApprovalInput
+  ) => Promise<{ id: string }>;
+  resolveApprovalByToolCall: (input: {
+    userId: string;
+    toolCallId: string;
+  }) => Promise<void>;
+};
+
+const defaultApprovalDeps: PolicyApprovalDeps = {
+  createApproval: (input) => createControlApproval(input),
+  resolveApprovalByToolCall: async (input) => {
+    const pending = await getControlApprovalByToolCallId(input);
+    if (!pending) return;
+    await resolveControlApproval({
+      approvalId: pending.id,
+      userId: input.userId,
+      decision: "approved",
+      source: "in_stream",
+    });
+  },
+};
+
+/**
+ * Wrap a tool with policy enforcement.
+ *
+ * - Approval-required tools get an AI SDK `needsApproval` gate: the SDK
+ *   pauses before execute, emits a tool-approval-request stream part the
+ *   control UI renders, and only executes after the operator approves. Each
+ *   request also persists a control_approvals row (audit now, headless
+ *   approval modes later); execution after approval resolves the row.
+ * - Protected-branch / policy violations stay hard denials inside execute.
+ * - Every mutation attempt is audit-logged.
  */
 export function wrapWithPolicy(
   toolName: string,
   originalTool: Tool,
-  ctx: OrchestratorToolContext
+  ctx: OrchestratorToolContext,
+  deps: PolicyApprovalDeps = defaultApprovalDeps
 ): Tool {
   const def = getToolDef(toolName);
   if (!def) {
@@ -228,10 +275,44 @@ export function wrapWithPolicy(
     return originalTool;
   }
 
+  const mayRequireApproval =
+    ALWAYS_APPROVAL_REQUIRED.has(def.name) ||
+    def.access === "approval" ||
+    def.name === "git_push";
+
+  const needsApproval = async (
+    input: unknown,
+    options: { toolCallId: string }
+  ): Promise<boolean> => {
+    const policyResult = checkToolPolicy(def, ctx, input);
+    if (policyResult.allowed || policyResult.reason !== "approval_required") {
+      return false;
+    }
+    // Persistence is best-effort: a failed write must not skip the gate.
+    try {
+      await deps.createApproval({
+        userId: ctx.userId,
+        toolName,
+        toolCallId: options.toolCallId,
+        toolInput: sanitizeInputForAudit(input) as Record<string, unknown>,
+        summary: policyResult.summary,
+        runId: ctx.missionId ?? null,
+        aiCallId: ctx.aiCallId ?? null,
+      });
+    } catch (error) {
+      console.warn("[orchestrator:policy] approval persist failed", {
+        toolName,
+        error,
+      });
+    }
+    return true;
+  };
+
   return defineTool({
     description: originalDescription ?? def.description,
     parameters: originalParameters,
-    execute: async (input: unknown) => {
+    ...(mayRequireApproval ? { needsApproval } : {}),
+    execute: async (input: unknown, options?: { toolCallId?: string }) => {
       const policyResult = checkToolPolicy(def, ctx, input);
 
       // Log audit entry for all mutation attempts
@@ -242,7 +323,8 @@ export function wrapWithPolicy(
         access: def.access,
         userId: ctx.userId,
         missionId: ctx.missionId,
-        allowed: policyResult.allowed,
+        allowed:
+          policyResult.allowed || policyResult.reason === "approval_required",
         reason: policyResult.allowed ? undefined : policyResult.reason,
         input:
           def.access === "approval"
@@ -251,18 +333,47 @@ export function wrapWithPolicy(
       };
       logAuditEntry(auditEntry);
 
-      // Block execution if policy check failed
-      if (!policyResult.allowed) {
-        const response: ApprovalRequiredResponse = {
-          status: "approval_required",
+      // Hard denials: approval cannot override these.
+      if (
+        !policyResult.allowed &&
+        policyResult.reason !== "approval_required"
+      ) {
+        const response: PolicyDeniedResponse = {
+          status: "policy_denied",
           tool: toolName,
+          reason: policyResult.reason,
           summary: policyResult.summary,
         };
         return response;
       }
 
+      // Reaching execute on an approval-gated call means the operator
+      // approved in-stream — mirror that decision onto the audit row.
+      if (
+        !policyResult.allowed &&
+        policyResult.reason === "approval_required" &&
+        options?.toolCallId
+      ) {
+        await deps
+          .resolveApprovalByToolCall({
+            userId: ctx.userId,
+            toolCallId: options.toolCallId,
+          })
+          .catch((error: unknown) => {
+            console.warn("[orchestrator:policy] approval resolve failed", {
+              toolName,
+              error,
+            });
+          });
+      }
+
       // Execute the original tool
-      return (originalExecute as (input: unknown) => Promise<unknown>)(input);
+      return (
+        originalExecute as (
+          input: unknown,
+          options?: unknown
+        ) => Promise<unknown>
+      )(input, options);
     },
   });
 }
@@ -298,12 +409,13 @@ function sanitizeInputForAudit(input: unknown): unknown {
  */
 export function wrapToolsWithPolicy(
   tools: Record<string, Tool>,
-  ctx: OrchestratorToolContext
+  ctx: OrchestratorToolContext,
+  deps: PolicyApprovalDeps = defaultApprovalDeps
 ): Record<string, Tool> {
   const wrapped: Record<string, Tool> = {};
 
   for (const [name, originalTool] of Object.entries(tools)) {
-    wrapped[name] = wrapWithPolicy(name, originalTool, ctx);
+    wrapped[name] = wrapWithPolicy(name, originalTool, ctx, deps);
   }
 
   return wrapped;

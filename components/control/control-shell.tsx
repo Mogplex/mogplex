@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
 import type {
   Mission,
   MissionPermissions,
@@ -15,6 +15,7 @@ import type {
 } from "@/lib/control/types"
 import type { ComposerSendOptions } from "./composer"
 import { generateMissionId } from "@/lib/control/utils"
+import { useToolApprovalHandler } from "./use-tool-approval-handler"
 import { scopedHref } from "@/lib/scoped-href"
 import { buildCombinedTimeline } from "./build-combined-timeline"
 import { useMissionDerived, type MissionFilter } from "./use-mission-derived"
@@ -28,6 +29,7 @@ import { ConsoleDrawer } from "./console-drawer"
 import { NeedsAttentionBanner } from "./needs-attention-banner"
 import { AgentSummaryStrip } from "./agent-summary-strip"
 import { NewMissionComposer } from "./new-mission-composer"
+import { PendingApprovalsBanner } from "./pending-approvals-banner"
 
 type ControlMode = "conversation" | "canvas" | "review"
 
@@ -110,9 +112,10 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
     []
   )
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
     transport,
     id: `control-${selectedMissionId}`,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onError: (error) => {
       setChatError(error.message || "Chat error")
     },
@@ -224,6 +227,9 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
     },
     [sendMessage, pushTimelineEvent]
   )
+
+  // Handle tool approval response from timeline cards
+  const handleToolApprovalResponse = useToolApprovalHandler(addToolApprovalResponse)
 
   // Create new mission
   const handleCreateMission = useCallback(
@@ -385,6 +391,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
             {/* Conversation mode */}
             {mode === "conversation" && (
               <div className="flex min-h-0 flex-1 flex-col">
+                <PendingApprovalsBanner runId={null} />
                 <Timeline
                   events={combinedTimeline}
                   worktrees={worktrees}
@@ -410,6 +417,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
                       )
                     }
                   }}
+                  onToolApprovalResponse={handleToolApprovalResponse}
                   pending={chatPending}
                 />
                 {chatError && (
