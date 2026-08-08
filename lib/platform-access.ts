@@ -1,7 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
 import { getBillingBalance } from "@/lib/billing/ledger";
-import { isBillingEnabled } from "@/lib/billing/stripe";
 import { resolveActiveTeamCapabilities } from "@/lib/team-capabilities";
 
 export type PlatformAccess = {
@@ -212,12 +211,15 @@ export function createLoadExplicitPlatformAccess(
 
 export const loadExplicitPlatformAccess = createLoadExplicitPlatformAccess();
 
+// The credit ledger in the database is the source of truth for balances, and
+// this must stay readable from processes that never hold the Stripe secret
+// (the Trigger.dev workers run automations but only Vercel serves the Stripe
+// webhooks/checkout). Deployments without Stripe configured simply have no
+// positive balances, so no gate on the Stripe key is needed here.
 async function loadBillingAccess(
   userId: string,
   productTeamId?: string | null
 ): Promise<boolean> {
-  if (!isBillingEnabled()) return false;
-
   const scope = productTeamId
     ? ({
         kind: "team",
