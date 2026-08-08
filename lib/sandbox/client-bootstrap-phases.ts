@@ -17,6 +17,9 @@ import {
   buildShellCommand,
   buildDetachedDevLaunchCommand,
   buildSelectiveRebuildCommand,
+  buildEnsureBunCommand,
+  buildWithBunOnPathCommand,
+  commandRequiresBun,
 } from "./client-shell";
 import {
   NO_DEV_SCRIPT_MESSAGE,
@@ -38,12 +41,15 @@ export async function launchDetachedDevCommand(
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
   timeoutLabel?: string
 ) {
+  const launchCommand = commandRequiresBun(devCommand)
+    ? buildWithBunOnPathCommand(devCommand)
+    : devCommand;
   const command = sandbox.runCommand({
     cmd: "sh",
     args: [
       "-lc",
       buildShellCommand(
-        buildDetachedDevLaunchCommand(devCommand),
+        buildDetachedDevLaunchCommand(launchCommand),
         normalizedRoot
       ),
     ],
@@ -145,6 +151,38 @@ export async function runSelectiveRebuildPhase(
     BOOTSTRAP_STEP_TIMEOUT_MS,
     "Selective rebuild"
   );
+}
+
+export async function runRuntimePrerequisitePhase(
+  sandbox: Sandbox,
+  devCommand: string,
+  runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
+  previewUrl: string
+): Promise<string> {
+  if (!commandRequiresBun(devCommand)) return "";
+
+  const command = await withTimeout(
+    sandbox.runCommand({
+      cmd: "sh",
+      args: ["-lc", buildEnsureBunCommand()],
+      env: runtimeEnv,
+    }),
+    BOOTSTRAP_STEP_TIMEOUT_MS,
+    "Runtime prerequisite install (bun)"
+  );
+  const [stdout, stderr] = await Promise.all([
+    command.stdout(),
+    command.stderr(),
+  ]);
+  const installLog = [stdout, stderr].filter(Boolean).join("\n").trim();
+  if (command.exitCode !== 0) {
+    throw new SandboxBootstrapError("Runtime prerequisite failed (bun)", {
+      installLog,
+      previewUrl,
+    });
+  }
+
+  return installLog;
 }
 
 export async function* streamCommandPhase(

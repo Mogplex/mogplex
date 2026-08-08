@@ -33,6 +33,35 @@ test("extracts explicit dev ports from commands", async () => {
   assert.equal(extractPortFromCommand("pnpm run dev"), null);
 });
 
+test("detects dev commands that require Bun", async () => {
+  const { commandRequiresBun } = await import("../../lib/sandbox/client-shell");
+  assert.equal(commandRequiresBun("bun run src/index.tsx"), true);
+  assert.equal(commandRequiresBun("pnpm --filter @mogplex/tui dev"), false);
+  assert.equal(commandRequiresBun("echo bunny"), false);
+});
+
+test("builds a pinned Bun install command for sandbox previews", async () => {
+  const {
+    buildEnsureBunCommand,
+    buildWithBunOnPathCommand,
+    SANDBOX_BUN_VERSION,
+  } = await import("../../lib/sandbox/client-shell");
+  const command = buildEnsureBunCommand();
+
+  assert.match(command, /command -v bun/);
+  assert.match(
+    command,
+    new RegExp(
+      `https://github\\.com/oven-sh/bun/releases/download/bun-v${SANDBOX_BUN_VERSION}/\\$\\{bun_target\\}\\.zip`
+    )
+  );
+  assert.match(command, /export PATH="\$BUN_INSTALL\/bin:\$PATH"/);
+  assert.match(
+    buildWithBunOnPathCommand("bun run src/index.tsx"),
+    /export PATH="\$BUN_INSTALL\/bin:\$PATH"\nbun run src\/index\.tsx/
+  );
+});
+
 test("allows root 404 readiness for API-oriented runtimes", async () => {
   const { previewAllowsRoot404 } = await loadSandboxClient();
   assert.equal(previewAllowsRoot404({ runtime: "python3.13" }), true);

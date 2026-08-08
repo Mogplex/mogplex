@@ -104,6 +104,7 @@ export { resolveBootstrapContext } from "./client-bootstrap-context";
 export {
   launchDetachedDevCommand,
   runInstallPhase,
+  runRuntimePrerequisitePhase,
   runWorkspaceBuildPhase,
   runSelectiveRebuildPhase,
   streamCommandPhase,

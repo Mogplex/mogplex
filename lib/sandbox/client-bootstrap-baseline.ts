@@ -12,6 +12,7 @@ import { buildShellCommand, shellQuote } from "./client-shell";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
 import {
   launchDetachedDevCommand,
+  runRuntimePrerequisitePhase,
   streamCommandPhase,
   streamPreviewSignal,
 } from "./client-bootstrap-phases";
@@ -158,6 +159,13 @@ async function* runBaselineDevPhase(
     yield { type: "status", status: "running" };
     return;
   }
+
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.devCommand,
+    context.runtimeEnv,
+    context.previewUrl
+  );
 
   const devLaunch = await launchDetachedDevCommand(
     sandbox,
