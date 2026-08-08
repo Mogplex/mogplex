@@ -249,6 +249,11 @@ export async function executeFlowAgentNode(
       flow_node_role: nodeRole,
       flow_node_harness: nodeHarness,
       ...(node.data.autoRevert === true ? { flow_auto_revert: true } : {}),
+      // Review nodes that opted into autoMerge also unlock the agent's PR
+      // lifecycle tools (merge/queue/rebase/close/createIssue) in the runner.
+      ...(nodeRole === "review" && node.data.autoMerge === true
+        ? { flow_auto_merge: true }
+        : {}),
       // The agent runner needs the job run id to persist approval
       // waits; it is only stamped when the node opted into gating.
       ...(node.data.requireApproval === true

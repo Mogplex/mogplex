@@ -78,6 +78,7 @@ export function buildPromptForJob(
       flowContextBlock,
       prNumber: metadata.pr_number,
       systemPrompt,
+      lifecycleTools: metadata.flow_auto_merge === true,
     });
   }
 

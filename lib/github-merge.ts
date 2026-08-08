@@ -245,6 +245,18 @@ async function mergeCleanPullRequest(
   };
 }
 
+// Arm GitHub's native auto-merge without attempting a direct merge. The merge
+// then completes on a later webhook-driven state transition (required checks
+// green, branch protection satisfied) without polling.
+export async function queuePullRequestForMerge(
+  input: MergeInput
+): Promise<AutoMergeOutcome> {
+  const pr = await loadPullRequestGate(input);
+  const blocked = pullRequestBlockReason(input, pr);
+  if (blocked) return blocked;
+  return enablePullRequestAutoMerge(input, pr);
+}
+
 // Merge immediately only when GitHub itself reports the PR as safe: open, not
 // a draft, no conflicts, and `mergeable_state === "clean"`. If required checks
 // or branch protection are still pending, arm GitHub's native auto-merge so a

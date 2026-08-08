@@ -1,6 +1,10 @@
-import { tool } from "ai";
+import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { withAutomationMarker } from "@/lib/github-automation-marker";
+import {
+  mergePullRequestIfSafe,
+  queuePullRequestForMerge as queuePullRequestAutoMerge,
+} from "@/lib/github-merge";
 import {
   createTextContextBudget,
   encodeGitHubContentPath,
@@ -35,6 +39,10 @@ export function buildPRReviewTools(config: {
   prNumber: number;
   defaultRef?: string;
   allowPostComment?: boolean;
+  // Enables PR lifecycle actions (merge/queue/rebase/close + issue creation).
+  // Only flow review nodes that opted into autoMerge get these, so a plain
+  // review run can never mutate the PR.
+  allowPrLifecycle?: boolean;
 }) {
   const request = config.fetch ?? fetch;
   const contentOwner = config.headOwner ?? config.owner;
@@ -213,39 +221,207 @@ export function buildPRReviewTools(config: {
     }),
   };
 
-  if (config.allowPostComment !== true) {
-    return tools;
-  }
+  const lifecycleTools: ToolSet =
+    config.allowPrLifecycle === true
+      ? {
+          mergePullRequest: tool({
+            description:
+              "Merge the pull request (squash) when GitHub reports it clean, or arm auto-merge when required checks are still pending. Only call this after reporting hasIssues=false.",
+            inputSchema: z.object({
+              commitTitle: z.string().optional(),
+            }),
+            execute: async ({ commitTitle }) =>
+              mergePullRequestIfSafe({
+                githubToken: config.githubToken,
+                owner: config.owner,
+                repo: config.repo,
+                prNumber: config.prNumber,
+                ...(commitTitle ? { commitTitle } : {}),
+                fetchImpl: request,
+              }),
+          }),
+          queuePullRequestForMerge: tool({
+            description:
+              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Prefer this over mergePullRequest when checks are still running.",
+            inputSchema: z.object({
+              commitTitle: z.string().optional(),
+            }),
+            execute: async ({ commitTitle }) =>
+              queuePullRequestAutoMerge({
+                githubToken: config.githubToken,
+                owner: config.owner,
+                repo: config.repo,
+                prNumber: config.prNumber,
+                ...(commitTitle ? { commitTitle } : {}),
+                fetchImpl: request,
+              }),
+          }),
+          rebasePullRequest: tool({
+            description:
+              "Update the pull request branch with the latest base-branch changes (GitHub's update-branch mechanism, same as the 'Update branch' button). Use when the branch is behind the base before merging or queuing.",
+            inputSchema: z.object({}),
+            execute: async () => {
+              const prRes = await request(
+                `https://api.github.com/repos/${config.owner}/${config.repo}/pulls/${config.prNumber}`,
+                { headers: githubHeaders(config.githubToken) }
+              );
+              if (!prRes.ok)
+                throw new Error(
+                  `GitHub API ${prRes.status}: PR #${config.prNumber}`
+                );
+              const pr = (await prRes.json()) as {
+                state?: string;
+                head?: { sha?: string };
+              };
+              if (pr.state !== "open") {
+                return {
+                  success: false as const,
+                  error: `PR is ${pr.state ?? "unknown"}`,
+                };
+              }
+
+              const res = await request(
+                `https://api.github.com/repos/${config.owner}/${config.repo}/pulls/${config.prNumber}/update-branch`,
+                {
+                  method: "PUT",
+                  headers: {
+                    ...githubHeaders(config.githubToken),
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(
+                    pr.head?.sha ? { expected_head_sha: pr.head.sha } : {}
+                  ),
+                }
+              );
+              if (res.status === 202) {
+                const data = (await res.json()) as {
+                  message?: string;
+                  url?: string;
+                };
+                return {
+                  success: true as const,
+                  message: data.message ?? "Updating branch",
+                  url: data.url ?? null,
+                };
+              }
+              const body = await res.text().catch(() => "");
+              return {
+                success: false as const,
+                error: `GitHub update-branch failed (${res.status})${body ? `: ${body.slice(0, 300)}` : ""}`,
+              };
+            },
+          }),
+          closePullRequest: tool({
+            description:
+              "Close the pull request without merging. When closing because the change is unsafe, call createIssue first to document what breaks, then close.",
+            inputSchema: z.object({}),
+            execute: async () => {
+              const res = await request(
+                `https://api.github.com/repos/${config.owner}/${config.repo}/pulls/${config.prNumber}`,
+                {
+                  method: "PATCH",
+                  headers: {
+                    ...githubHeaders(config.githubToken),
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ state: "closed" }),
+                }
+              );
+              if (!res.ok) {
+                const body = await res.text().catch(() => "");
+                return {
+                  success: false as const,
+                  error: `GitHub close failed (${res.status})${body ? `: ${body.slice(0, 300)}` : ""}`,
+                };
+              }
+              const data = (await res.json()) as {
+                state?: string;
+                html_url?: string;
+              };
+              return {
+                success: true as const,
+                state: data.state ?? "closed",
+                url: data.html_url ?? null,
+              };
+            },
+          }),
+          createIssue: tool({
+            description:
+              "Create a GitHub issue documenting follow-up work — e.g. why a dependency update is blocked, what breaks, and the suggested remediation.",
+            inputSchema: z.object({
+              title: z.string(),
+              body: z.string(),
+              labels: z.array(z.string()).optional(),
+            }),
+            execute: async ({ title, body, labels }) => {
+              const res = await request(
+                `https://api.github.com/repos/${config.owner}/${config.repo}/issues`,
+                {
+                  method: "POST",
+                  headers: {
+                    ...githubHeaders(config.githubToken),
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    title,
+                    body: withAutomationMarker(body),
+                    labels: labels ?? [],
+                  }),
+                }
+              );
+              if (!res.ok)
+                return { success: false, error: `GitHub API ${res.status}` };
+              const data = (await res.json()) as {
+                number?: number;
+                html_url?: string;
+              };
+              return {
+                success: true,
+                issue_number: data.number,
+                url: data.html_url,
+              };
+            },
+          }),
+        }
+      : {};
+
+  const commentTools: ToolSet =
+    config.allowPostComment === true
+      ? {
+          postComment: tool({
+            description:
+              "Post a top-level review comment on the pull request when you find issues worth flagging",
+            inputSchema: z.object({ body: z.string() }),
+            execute: async ({ body }) => {
+              const res = await request(
+                `https://api.github.com/repos/${config.owner}/${config.repo}/issues/${config.prNumber}/comments`,
+                {
+                  method: "POST",
+                  headers: {
+                    ...githubHeaders(config.githubToken),
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ body: withAutomationMarker(body) }),
+                }
+              );
+
+              if (!res.ok) {
+                const errorBody = await res.text().catch(() => "");
+                throw new Error(
+                  errorBody
+                    ? `GitHub comment post failed (${res.status}): ${errorBody.slice(0, 500)}`
+                    : `GitHub comment post failed (${res.status})`
+                );
+              }
+              return { success: true };
+            },
+          }),
+        }
+      : {};
 
   return {
     ...tools,
-    postComment: tool({
-      description:
-        "Post a top-level review comment on the pull request when you find issues worth flagging",
-      inputSchema: z.object({ body: z.string() }),
-      execute: async ({ body }) => {
-        const res = await request(
-          `https://api.github.com/repos/${config.owner}/${config.repo}/issues/${config.prNumber}/comments`,
-          {
-            method: "POST",
-            headers: {
-              ...githubHeaders(config.githubToken),
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ body: withAutomationMarker(body) }),
-          }
-        );
-
-        if (!res.ok) {
-          const errorBody = await res.text().catch(() => "");
-          throw new Error(
-            errorBody
-              ? `GitHub comment post failed (${res.status}): ${errorBody.slice(0, 500)}`
-              : `GitHub comment post failed (${res.status})`
-          );
-        }
-        return { success: true };
-      },
-    }),
+    ...lifecycleTools,
+    ...commentTools,
   };
 }
