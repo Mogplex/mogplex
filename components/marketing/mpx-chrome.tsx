@@ -6,7 +6,6 @@
    Hash links are root-relative (/#run) so they work from any route. */
 
 import Link from "next/link";
-import { IBM_Plex_Mono, Inter_Tight } from "next/font/google";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 
@@ -22,18 +21,6 @@ export { GITHUB_URL, SELF_HOSTING_URL } from "./mpx-chrome-constants";
 
 import { ArrowRight, GithubGlyph, StarGlyph } from "./mpx-chrome-icons";
 import { GITHUB_URL } from "./mpx-chrome-constants";
-
-export const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex-mono",
-});
-
-export const interTight = Inter_Tight({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter-tight",
-});
 
 const GITHUB_REPO_API = "https://api.github.com/repos/mogplex/mogplex";
 

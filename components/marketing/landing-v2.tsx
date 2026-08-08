@@ -4,11 +4,10 @@ import { useEffect, useRef } from "react";
 
 import {
   BlueprintOverlay,
-  interTight,
   MpxFooter,
   MpxHeader,
-  plexMono,
 } from "@/components/marketing/mpx-chrome";
+import { interTight, plexMono } from "@/components/marketing/mpx-fonts";
 
 import {
   BuildMaintainSection,
