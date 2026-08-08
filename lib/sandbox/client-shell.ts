@@ -2,6 +2,8 @@ import { normalizeDevPort, normalizeRootDirectory } from "@/lib/repo-settings";
 import { isValidSandboxRootDirectory } from "@/lib/sandbox/launch-config";
 import type { BootstrapDetection, BootstrapStrategy } from "./client-types";
 
+export const SANDBOX_BUN_VERSION = "1.3.10";
+
 export function escapeShell(value: string) {
   return value.replace(/'/g, String.raw`'\''`);
 }
@@ -39,6 +41,48 @@ export function buildShellCommand(
 
 export function buildDetachedDevLaunchCommand(devCommand: string) {
   return String.raw`mkdir -p .mogplex && { (${devCommand}) 2>&1 | tee .mogplex/dev.log & printf '%s\n' "$!" > .mogplex/dev.pid; wait "$!"; }`;
+}
+
+export function commandRequiresBun(command: string | null | undefined) {
+  return /(?:^|[\s;&|()])bun(?:$|[\s;&|()])/.test(command ?? "");
+}
+
+export function buildWithBunOnPathCommand(command: string) {
+  const bunInstallDefault = ["$", "{BUN_INSTALL:-$HOME/.bun}"].join("");
+  return (
+    `export BUN_INSTALL="${bunInstallDefault}"
+export PATH="$BUN_INSTALL/bin:$PATH"
+` + command
+  );
+}
+
+export function buildEnsureBunCommand(version = SANDBOX_BUN_VERSION) {
+  if (!/^[0-9A-Za-z._-]+$/.test(version)) {
+    throw new TypeError("Bun version must be a release tag fragment");
+  }
+
+  const bunInstallDefault = ["$", "{BUN_INSTALL:-$HOME/.bun}"].join("");
+  const bunTargetExpansion = ["$", "{bun_target}"].join("");
+
+  return `export BUN_INSTALL="${bunInstallDefault}"
+export PATH="$BUN_INSTALL/bin:$PATH"
+if ! command -v bun >/dev/null 2>&1; then
+  set -eu
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) bun_target="bun-linux-x64" ;;
+    aarch64|arm64) bun_target="bun-linux-aarch64" ;;
+    *) echo "Unsupported Bun sandbox architecture: $arch" >&2; exit 1 ;;
+  esac
+  bun_zip="/tmp/mogplex-${bunTargetExpansion}.zip"
+  mkdir -p "$BUN_INSTALL/bin"
+  curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${version}/${bunTargetExpansion}.zip" -o "$bun_zip"
+  unzip -q -o "$bun_zip" -d "$BUN_INSTALL"
+  mv "$BUN_INSTALL/$bun_target/bun" "$BUN_INSTALL/bin/bun"
+  chmod +x "$BUN_INSTALL/bin/bun"
+  rm -rf "$BUN_INSTALL/$bun_target" "$bun_zip"
+fi
+bun --version`;
 }
 
 /** Resolve the dev port based on framework. Vite defaults to 5173, everything else to 3000. */

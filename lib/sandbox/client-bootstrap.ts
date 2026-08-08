@@ -14,6 +14,7 @@ import { resolveBootstrapContext } from "./client-bootstrap-context";
 import {
   launchDetachedDevCommand,
   runInstallPhase,
+  runRuntimePrerequisitePhase,
   runWorkspaceBuildPhase,
   runSelectiveRebuildPhase,
   streamCommandPhase,
@@ -54,6 +55,13 @@ export async function* bootstrapFromSnapshotStreaming(
     yield { type: "status", status: "running" };
     return;
   }
+
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.devCommand,
+    context.runtimeEnv,
+    context.previewUrl
+  );
 
   // Start dev server
   const devLaunch = await launchDetachedDevCommand(
@@ -116,6 +124,13 @@ export async function bootstrapSandbox(
   if (!context.hasDevScript) {
     return buildNoDevScriptBootstrapResult(context, installLog);
   }
+
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.devCommand,
+    context.runtimeEnv,
+    context.previewUrl
+  );
 
   // Start dev server in background (with timeout)
   const devLaunch = await launchDetachedDevCommand(
@@ -244,6 +259,13 @@ export async function* bootstrapSandboxStreaming(
     yield { type: "status", status: "running" };
     return;
   }
+
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.devCommand,
+    context.runtimeEnv,
+    context.previewUrl
+  );
 
   // --- Dev server phase ---
   const devLaunch = await launchDetachedDevCommand(
