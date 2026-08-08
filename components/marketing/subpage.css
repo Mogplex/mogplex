@@ -368,7 +368,7 @@
 /* ---------- /pricing — rate card ---------- */
 .mpx-sub .price-cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(16px, 2vw, 28px);
   width: 100%;
   max-width: 1560px;
@@ -468,12 +468,74 @@
   line-height: 1.7;
 }
 
+.mpx-sub .price-cta {
+  justify-content: center;
+  margin-top: 20px;
+  text-align: center;
+}
+
 .mpx-sub .meter-card {
   width: 100%;
   max-width: 1560px;
   padding: clamp(44px, 7vh, 72px) 40px;
   margin: 0 auto;
   border-top: 1px solid var(--border);
+}
+
+.mpx-sub .ent-card {
+  display: grid;
+  width: 100%;
+  max-width: 1560px;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: clamp(24px, 4vw, 64px);
+  align-items: end;
+  padding: clamp(36px, 5vh, 56px) 40px;
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
+}
+
+.mpx-sub .ent-card .meter-title {
+  margin-bottom: 0;
+}
+
+.mpx-sub .ent-lede {
+  max-width: 56ch;
+  margin-top: 16px;
+  color: var(--ink-body);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.mpx-sub .ent-action {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.mpx-sub .ent-cta {
+  display: inline-block;
+  padding: 12px 18px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.mpx-sub .ent-cta:hover {
+  opacity: 0.85;
+}
+
+.mpx-sub .ent-note {
+  max-width: 34ch;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.7;
 }
 
 .mpx-sub .meter-kicker {
@@ -542,6 +604,51 @@
   font-weight: 600;
 }
 
+.mpx-sub .model-table {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white);
+}
+
+.mpx-sub .model-row {
+  display: grid;
+  padding: 12px 20px;
+  gap: clamp(14px, 2vw, 28px);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr);
+}
+
+.mpx-sub .model-row + .model-row {
+  border-top: 1px solid var(--border-soft);
+}
+
+.mpx-sub .model-head {
+  padding-block: 14px;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .model-name {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mpx-sub .model-provider {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mpx-sub .model-rate {
+  color: var(--ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- close CTA ---------- */
 .mpx-sub .mpx-sub-close {
   padding: clamp(72px, 12vh, 120px) 40px;
@@ -579,6 +686,12 @@
 }
 
 /* ---------- responsive ---------- */
+@media (max-width: 1280px) {
+  .mpx-sub .price-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 860px) {
   .mpx-sub .sub-hero,
   .mpx-sub .patterns,
@@ -587,18 +700,37 @@
   .mpx-sub .faq-list,
   .mpx-sub .price-cards,
   .mpx-sub .meter-card,
+  .mpx-sub .ent-card,
   .mpx-sub .mpx-sub-close {
     padding-left: 20px;
     padding-right: 20px;
+  }
+
+  .mpx-sub .ent-card {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 
   .mpx-sub .price-cards {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .mpx-sub .model-table {
+    overflow-x: auto;
+  }
+
   .mpx-sub .meter-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
+  }
+
+  .mpx-sub .model-row {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr);
+    gap: 10px;
+  }
+
+  .mpx-sub .model-row > :nth-child(2) {
+    display: none;
   }
 
   .mpx-sub .pattern,

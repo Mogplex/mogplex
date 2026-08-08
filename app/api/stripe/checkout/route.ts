@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 import { getStripe, isBillingEnabled } from "@/lib/billing/stripe";
 import { findTopupPreset } from "@/lib/billing/catalog";
@@ -16,6 +17,11 @@ import {
 // Checkout flows (pricing-plan 02 §3): mode=subscription for plan sign-up,
 // mode=payment for top-ups. Top-up credit posts on payment_intent.succeeded
 // via the webhook — never on the redirect.
+//
+// Every session runs under Managed Payments (pricing-plan 02 §0): Stripe is
+// the merchant of record and handles tax registration, collection, and
+// remittance, so sessions must not also set automatic_tax. Off-session
+// charges are outside the MoR consent — all top-ups stay Checkout-initiated.
 
 function appUrl(path: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
@@ -25,6 +31,18 @@ function appUrl(path: string): string {
 function billingResultPath(returnPath: string, result: string): string {
   const separator = returnPath.includes("?") ? "&" : "?";
   return `${returnPath}${separator}billing=${result}`;
+}
+
+// Best-effort: without it the customer is created email-less and Checkout
+// lets Link autofill an unrelated email from the browser.
+async function getActorEmail(userId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("email")
+    .eq("id", userId)
+    .maybeSingle<{ email: string | null }>();
+  if (error) return null;
+  return data?.email ?? null;
 }
 
 export async function POST(request: Request) {
@@ -72,7 +90,10 @@ export async function POST(request: Request) {
     );
   }
   const { returnPath } = validation.request;
-  const customerId = await ensureStripeCustomer(account);
+  const customerId = await ensureStripeCustomer(
+    account,
+    await getActorEmail(userId)
+  );
   const stripe = getStripe();
 
   if (validation.request.kind === "subscribe") {
@@ -95,7 +116,7 @@ export async function POST(request: Request) {
         customer: customerId,
         client_reference_id: account.id,
         line_items: [{ price: priceId, quantity: 1 }],
-        automatic_tax: { enabled: true },
+        managed_payments: { enabled: true },
         allow_promotion_codes: true,
         billing_address_collection: "auto",
         success_url: appUrl(billingResultPath(returnPath, "subscribed")),
@@ -139,10 +160,11 @@ export async function POST(request: Request) {
       customer: customerId,
       client_reference_id: account.id,
       line_items: [lineItem],
-      automatic_tax: { enabled: true },
+      managed_payments: { enabled: true },
       payment_intent_data: {
         // credit_cents = the pre-tax amount the webhook credits to the ledger
-        // (amount_received includes automatic_tax, which is not spendable).
+        // (amount_received includes the tax Managed Payments withholds, which
+        // is not spendable).
         metadata: {
           kind: "topup",
           billing_account_id: account.id,

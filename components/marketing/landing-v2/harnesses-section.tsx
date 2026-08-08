@@ -38,15 +38,16 @@ export function HarnessesSection() {
           <div>
             <Eyebrow large>HARNESS LAYER</Eyebrow>
             <h2>
-              Choose your harness.
+              Not locked to our agent.
               <br />
-              <span>Same gates.</span>
+              <span>Not to our models.</span>
             </h2>
           </div>
           <p className="mpx-harness-lede">
-            Pick the coding agent for each pipeline: the native Mogplex
-            agent, Claude Code, or Codex. Every harness runs in the same
-            sandboxes, behind the same gates, on the same meter.
+            Mogplex does not lock you to one agent. Pick the native
+            Mogplex agent, Claude Code, or Codex for each pipeline. Every
+            harness runs in the same sandboxes, behind the same gates, on
+            the same meter.
           </p>
         </div>
         <div

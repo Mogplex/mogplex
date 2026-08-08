@@ -25,44 +25,110 @@ function accountFixture(
   };
 }
 
+function customerDepsFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    createCustomer: async () => ({ id: "cus_new" }),
+    updateAccountCustomer: async () => {},
+    retrieveCustomer: async () => null,
+    updateCustomerEmail: async () => {},
+    ...overrides,
+  };
+}
+
 test("customer creation uses one stable idempotency key per billing account", async () => {
   const { ensureStripeCustomer } = await loadCheckoutRuntime();
   const calls: Array<{ params: unknown; options: Stripe.RequestOptions }> = [];
   const updates: Array<{ id: string; customerId: string }> = [];
 
-  const customerId = await ensureStripeCustomer(accountFixture(), {
-    createCustomer: async (params, options) => {
-      calls.push({ params, options: options ?? {} });
-      return { id: "cus_new" };
-    },
-    updateAccountCustomer: async (id, stripeCustomerId) => {
-      updates.push({ id, customerId: stripeCustomerId });
-    },
-  });
+  const customerId = await ensureStripeCustomer(
+    accountFixture(),
+    "charlie@example.com",
+    customerDepsFixture({
+      createCustomer: async (
+        params: Stripe.CustomerCreateParams,
+        options?: Stripe.RequestOptions
+      ) => {
+        calls.push({ params, options: options ?? {} });
+        return { id: "cus_new" };
+      },
+      updateAccountCustomer: async (id: string, stripeCustomerId: string) => {
+        updates.push({ id, customerId: stripeCustomerId });
+      },
+    })
+  );
 
   assert.equal(customerId, "cus_new");
   assert.equal(calls[0]?.options.idempotencyKey, "billing-customer:acct-1");
+  // Email is pinned at creation so Checkout locks its email field to the
+  // login email instead of letting Link autofill an unrelated account.
+  assert.equal(
+    (calls[0]?.params as Stripe.CustomerCreateParams).email,
+    "charlie@example.com"
+  );
   assert.deepEqual(updates, [{ id: "acct-1", customerId: "cus_new" }]);
 });
 
-test("existing Stripe customers do not call Stripe or update the account", async () => {
+test("existing Stripe customers with an email are left untouched", async () => {
   const { ensureStripeCustomer } = await loadCheckoutRuntime();
-  let called = false;
+  let mutated = false;
   const customerId = await ensureStripeCustomer(
     accountFixture({ stripe_customer_id: "cus_existing" }),
-    {
+    "charlie@example.com",
+    customerDepsFixture({
       createCustomer: async () => {
-        called = true;
+        mutated = true;
         return { id: "cus_wrong" };
       },
       updateAccountCustomer: async () => {
-        called = true;
+        mutated = true;
       },
-    }
+      retrieveCustomer: async () => ({ email: "billing@example.com" }),
+      updateCustomerEmail: async () => {
+        mutated = true;
+      },
+    })
   );
 
   assert.equal(customerId, "cus_existing");
-  assert.equal(called, false);
+  assert.equal(mutated, false);
+});
+
+test("existing Stripe customers missing an email get the actor's backfilled", async () => {
+  const { ensureStripeCustomer } = await loadCheckoutRuntime();
+  const emailUpdates: Array<{ customerId: string; email: string }> = [];
+  const customerId = await ensureStripeCustomer(
+    accountFixture({ stripe_customer_id: "cus_existing" }),
+    "charlie@example.com",
+    customerDepsFixture({
+      retrieveCustomer: async () => ({ email: null }),
+      updateCustomerEmail: async (targetId: string, email: string) => {
+        emailUpdates.push({ customerId: targetId, email });
+      },
+    })
+  );
+
+  assert.equal(customerId, "cus_existing");
+  assert.deepEqual(emailUpdates, [
+    { customerId: "cus_existing", email: "charlie@example.com" },
+  ]);
+});
+
+test("no actor email skips the customer lookup entirely", async () => {
+  const { ensureStripeCustomer } = await loadCheckoutRuntime();
+  let looked = false;
+  const customerId = await ensureStripeCustomer(
+    accountFixture({ stripe_customer_id: "cus_existing" }),
+    null,
+    customerDepsFixture({
+      retrieveCustomer: async () => {
+        looked = true;
+        return { email: null };
+      },
+    })
+  );
+
+  assert.equal(customerId, "cus_existing");
+  assert.equal(looked, false);
 });
 
 test("top-up product lookup follows Stripe pagination beyond 100 products", async () => {

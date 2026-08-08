@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import {
   AccentPeriod,
   ArrowRight,
@@ -15,35 +17,37 @@ export function HeroSection() {
       <div className="mpx-hero-copy">
         <div className="mpx-rise" style={{ animationDelay: ".05s" }}>
           <Eyebrow large>
-            APACHE-2.0 · SELF-HOSTABLE · GENERALLY AVAILABLE
+            APACHE-2.0 · SELF-HOSTABLE · NO SALES CALL
           </Eyebrow>
         </div>
         <h1 className="mpx-rise" style={{ animationDelay: ".14s" }}>
-          The open-source engine
-          <br className="mpx-lg-break" /> for building and
-          <br className="mpx-lg-break" /> maintaining software
+          The open-source
+          <br className="mpx-lg-break" /> agent foundry
           <AccentPeriod />
         </h1>
         <p className="mpx-rise" style={{ animationDelay: ".24s" }}>
-          Events go in: issues, CI failures, schedules, and Slack asks.
-          Agents plan, build, test, and review in per-run sandboxes. PRs
-          come out behind your gates.
+          Agents plan, build, test, and review your code. Each run is a
+          sandbox you can watch, on a platform you can read. Your gates
+          decide what ships.
         </p>
         <div
           className="mpx-hero-actions mpx-rise"
           style={{ animationDelay: ".34s" }}
         >
-          <a
+          <Link
             className="mpx-button is-primary"
+            href="/signup"
+            data-testid="landing-primary-cta"
+          >
+            Start now
+          </Link>
+          <a
+            className="mpx-text-link"
             href={GITHUB_URL}
             target="_blank"
             rel="noreferrer noopener"
-            data-testid="landing-primary-cta"
           >
             Read the code
-          </a>
-          <a className="mpx-text-link" href="#run">
-            Watch one run
             <ArrowRight className="mpx-arrow" />
           </a>
         </div>
@@ -60,7 +64,8 @@ export function HeroSection() {
             RUNNING CODE
           </p>
           <p>
-            <span aria-hidden>+</span>&nbsp;&nbsp;WIRED. WATCHED. GATED.
+            <span aria-hidden>+</span>&nbsp;&nbsp;NO SEAT FEES. NO SALES
+            CALL.
           </p>
         </div>
       </div>

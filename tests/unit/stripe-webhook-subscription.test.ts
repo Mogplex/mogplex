@@ -49,6 +49,41 @@ test("invoice.paid should add the included-usage delta for a mid-cycle upgrade",
   assert.equal(recorded.updates[0]?.updates.tier, "team");
 });
 
+test("invoice.paid should grant the pro-to-business delta on a mid-cycle upgrade", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({ tier: "pro" }),
+    subscription: subscriptionFixture("business_monthly"),
+    postedRefs: new Set(["grant:acct-1:2026-08:sub_1"]),
+  });
+
+  await route.handleStripeEvent(invoicePaidEvent(), deps);
+
+  assert.deepEqual(
+    recorded.ledger.map((entry) => [entry.kind, entry.deltaCents]),
+    [["grant_adjustment", 18000]]
+  );
+  assert.equal(
+    recorded.ledger[0]?.sourceRef,
+    "grantadj:acct-1:sub_1:2026-08:business_monthly"
+  );
+  assert.equal(recorded.updates[0]?.updates.tier, "business");
+});
+
+test("invoice.paid should grant nothing on a mid-cycle downgrade", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({ tier: "business" }),
+    subscription: subscriptionFixture("team_monthly"),
+    postedRefs: new Set(["grant:acct-1:2026-08:sub_1"]),
+  });
+
+  await route.handleStripeEvent(invoicePaidEvent(), deps);
+
+  assert.equal(recorded.ledger.length, 0);
+  assert.equal(recorded.updates[0]?.updates.tier, "team");
+});
+
 test("customer.subscription.deleted should drop to free and clear past_due", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({

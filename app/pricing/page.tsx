@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { MarketingSubpageShell } from "@/components/marketing/subpage-shell";
 import {
   formatUsd,
@@ -6,12 +7,19 @@ import {
   SANDBOX_RATE_MICRO_USD_PER_MINUTE,
   TOPUP_PRESETS,
 } from "@/lib/billing/catalog";
+import {
+  formatPerMillion,
+  getPublicModelRates,
+} from "@/lib/models/public-pricing";
 import { buildMarketingMetadata } from "@/lib/seo";
+
+// The per-model rate table re-syncs from the gateway catalog hourly.
+export const revalidate = 3600;
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pricing — tokens at cost, compute by the minute",
   description:
-    "Three tiers, no seats. Model tokens at provider list price with zero markup, sandbox compute at a published per-minute rate, and every run itemized to the cent.",
+    "Four self-serve tiers plus enterprise, no seats. Model tokens at provider list price with zero markup, sandbox compute at a published per-minute rate, and every run itemized to the cent.",
   path: "/pricing",
 });
 
@@ -37,6 +45,8 @@ const PRO_MONTHLY = plan("pro_monthly");
 const PRO_ANNUAL = plan("pro_annual");
 const TEAM_MONTHLY = plan("team_monthly");
 const TEAM_ANNUAL = plan("team_annual");
+const BUSINESS_MONTHLY = plan("business_monthly");
+const BUSINESS_ANNUAL = plan("business_annual");
 
 const TIERS: Tier[] = [
   {
@@ -84,7 +94,23 @@ const TIERS: Tier[] = [
       "Team usage analytics show the cost for each member.",
       "Usage is pooled across the whole team.",
     ],
-    note: "No enterprise tier, no sales call. Need dedicated infrastructure? Self-host the open-source system. Read the self-hosting docs first. They explain the work involved.",
+    note: "Outgrow the included usage? Top-ups never expire, or step up to Mog Mode.",
+  },
+  {
+    key: "03",
+    name: "Mog Mode",
+    price: formatUsd(BUSINESS_MONTHLY.amountCents),
+    cadence: "per month, flat",
+    annual: `${formatUsd(BUSINESS_ANNUAL.amountCents)}/yr — 20% off`,
+    included: `${formatUsd(BUSINESS_MONTHLY.includedUsageCents)}/mo pooled usage included`,
+    audience: "For teams that run agents all day, every day.",
+    features: [
+      "Everything in Team: roles, the audit log, one pooled balance.",
+      "Twice the included usage of Team, pooled across the org.",
+      "Priority sandbox scheduling when capacity is tight.",
+      "Priority support from the people who build Mogplex.",
+    ],
+    note: "Still self-serve, still no sales call. Need more than this? Enterprise is below.",
   },
 ];
 
@@ -117,13 +143,15 @@ const METERS: Meter[] = [
 
 const TOPUPS = TOPUP_PRESETS.map((preset) => formatUsd(preset.amountCents));
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const modelRates = await getPublicModelRates();
+
   return (
     <MarketingSubpageShell
       close={{
         kicker: "SHEET 06 — END",
         lines: ["Priced like infrastructure.", "Not like seats."],
-        note: "every tier is self-serve. the whole rate card is on this page.",
+        note: "every plan is self-serve. enterprise is one email, not a demo gauntlet.",
       }}
     >
       <header className="sub-hero">
@@ -139,8 +167,8 @@ export default function PricingPage() {
           Two things cost real money when an agent ships a PR: model tokens and
           the sandbox it runs in. We bill both at published rates. Tokens pass
           through at API price with no markup. Compute is half a cent a minute.
-          Every run shows its exact cost. No seats, no request quotas, no sales
-          call.
+          Every run shows its exact cost. No seats, no request quotas. A sales
+          call only if you ask for one.
         </p>
         <p className="mono micro">
           launch pricing · start on payg, upgrade when the meter says so
@@ -170,8 +198,39 @@ export default function PricingPage() {
               ))}
             </ul>
             <p className="price-note mono">▪ {tier.note}</p>
+            <Link
+              className="mpx-button is-primary price-cta"
+              href="/signup"
+              data-testid={`pricing-cta-${tier.key}`}
+            >
+              Start now
+            </Link>
           </article>
         ))}
+      </section>
+
+      <section className="ent-card" aria-label="Enterprise">
+        <div className="ent-copy">
+          <p className="meter-kicker mono">TIER 04 — ENTERPRISE</p>
+          <h2 className="meter-title">
+            Need more? <em className="grad">Contact us.</em>
+          </h2>
+          <p className="ent-lede">
+            Dedicated capacity, custom terms, invoiced billing, security
+            review, or help with an air-gapped self-host deployment. Tell us
+            what you need. You talk to the people who build Mogplex, not a
+            sales team.
+          </p>
+        </div>
+        <div className="ent-action">
+          <a className="ent-cta mono" href="mailto:enterprise@mogplex.com">
+            enterprise@mogplex.com
+          </a>
+          <p className="ent-note mono">
+            self-hosting stays free forever — enterprise is for teams that
+            want us in the loop
+          </p>
+        </div>
       </section>
 
       <section className="meter-card" aria-label="Published rate card">
@@ -201,6 +260,43 @@ export default function PricingPage() {
         </p>
       </section>
 
+      {modelRates.length > 0 ? (
+        <section className="meter-card" aria-label="Per-model token rates">
+          <p className="meter-kicker mono">TOKENS — EVERY MODEL, LIST PRICE</p>
+          <h2 className="meter-title">
+            The full token table, <em className="grad">zero markup</em>.
+          </h2>
+          <div className="model-table mono" role="table">
+            <div className="model-row model-head" role="row">
+              <span role="columnheader">Model</span>
+              <span role="columnheader">Provider</span>
+              <span role="columnheader">Input / M tokens</span>
+              <span role="columnheader">Output / M tokens</span>
+            </div>
+            {modelRates.map((model) => (
+              <div className="model-row" role="row" key={model.id}>
+                <span role="cell" className="model-name">
+                  {model.name}
+                </span>
+                <span role="cell" className="model-provider">
+                  {model.provider}
+                </span>
+                <span role="cell" className="model-rate">
+                  {formatPerMillion(model.inputPerMillion)}
+                </span>
+                <span role="cell" className="model-rate">
+                  {formatPerMillion(model.outputPerMillion)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="meter-foot mono">
+            synced from the gateway model catalog. the rate you see is the
+            rate the provider publishes — <b>we add nothing</b>.
+          </p>
+        </section>
+      ) : null}
+
       <section className="terms" aria-label="Pricing principles">
         <div className="terms-row">
           <div className="term">
@@ -228,9 +324,9 @@ export default function PricingPage() {
           <div className="term">
             <p className="term-k mono">OPEN SOURCE</p>
             <p className="term-v">
-              The system is Apache-2.0. Self-hosting is free forever and is our
-              enterprise answer. There is no gated tier or demo call. The docs
-              explain what self-hosting takes.
+              The system is Apache-2.0. Self-hosting is free forever, and the
+              docs explain what it takes. Enterprise exists for teams that want
+              us in the loop — it starts with an email, not a demo call.
             </p>
           </div>
         </div>

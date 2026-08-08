@@ -11,9 +11,10 @@ import {
   TOPUP_PRESETS,
 } from "../../lib/billing/catalog";
 
-// The signed-off numbers (PR #39 / pricing-plan 01): Pro $20/mo, Team
-// $100/mo flat, 20% annual discount, monthly included usage equal to the
-// monthly subscription price.
+// The signed-off numbers (PR #39 / pricing-plan 01, Business added by
+// Charles Aug 7 2026): Pro $20/mo, Team $100/mo flat, Business $200/mo
+// flat, 20% annual discount, monthly included usage equal to the monthly
+// subscription price.
 
 test("plan prices match the signed-off rate card", () => {
   assert.deepEqual(
@@ -23,6 +24,8 @@ test("plan prices match the signed-off rate card", () => {
       ["pro_annual", 19200],
       ["team_monthly", 10000],
       ["team_annual", 96000],
+      ["business_monthly", 20000],
+      ["business_annual", 192000],
     ]
   );
 });
@@ -61,8 +64,14 @@ test("lookup keys are unique across plans and top-up presets", () => {
 });
 
 test("top-up guardrails bracket the presets", () => {
+  // $10–$1,000 manual-only range (Charles, Aug 7 2026 — auto top-up is
+  // outside the Managed Payments MoR consent).
   assert.equal(TOPUP_MIN_CENTS, 1000);
-  assert.equal(TOPUP_MAX_CENTS, 500000);
+  assert.equal(TOPUP_MAX_CENTS, 100000);
+  assert.deepEqual(
+    TOPUP_PRESETS.map((preset) => preset.amountCents),
+    [1000, 2500, 10000, 25000, 50000, 100000]
+  );
   for (const preset of TOPUP_PRESETS) {
     assert.ok(preset.amountCents >= TOPUP_MIN_CENTS);
     assert.ok(preset.amountCents <= TOPUP_MAX_CENTS);

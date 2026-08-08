@@ -8,7 +8,7 @@ export type BillingAccount = {
   product_team_id: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
-  tier: "free" | "pro" | "team";
+  tier: "free" | "pro" | "team" | "business";
   period_anchor: string | null;
   subscription_checkout_generation: number;
   status: "active" | "past_due" | "frozen_topups";

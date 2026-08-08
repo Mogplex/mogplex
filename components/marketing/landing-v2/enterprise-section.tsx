@@ -25,8 +25,11 @@ export function EnterpriseSection() {
             it, file issues, and send patches.
           </p>
           <p>
-            Need the system inside your own network? Self-host it. The docs
-            explain what that takes.
+            Need the system inside your own network? Self-host it — your
+            air-gapped deployment starts with a git clone, free forever.
+            Want dedicated capacity or custom terms on top? Email{" "}
+            <a href="mailto:enterprise@mogplex.com">enterprise@mogplex.com</a>{" "}
+            and talk to the people who build it.
           </p>
           <div className="mpx-enterprise-actions">
             <a

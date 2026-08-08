@@ -29,7 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 type BillingSummary = {
   enabled: boolean;
   canManageBilling?: boolean;
-  tier?: "free" | "pro" | "team";
+  tier?: "free" | "pro" | "team" | "business";
   status?: "active" | "past_due" | "frozen_topups";
   hasSubscription?: boolean;
   hasStripeCustomer?: boolean;
@@ -55,11 +55,18 @@ const PLAN_DETAILS: ReadonlyArray<{
     name: "Team",
     description: "Shared billing and pooled usage for unlimited members.",
   },
+  {
+    tier: "business",
+    name: "Mog Mode",
+    description:
+      "Twice the Team usage pool, priority sandbox scheduling, priority support.",
+  },
 ];
 
 function planName(tier: BillingSummary["tier"]): string {
   if (tier === "pro") return "Pro";
   if (tier === "team") return "Team";
+  if (tier === "business") return "Mog Mode";
   return "Pay as you go";
 }
 
@@ -361,16 +368,35 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
             );
           })}
 
-          <div className="grid gap-4 py-5 pb-0 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
+          <div className="grid gap-4 py-5 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
             <div>
               <h3 className="font-semibold">Enterprise</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Dedicated capacity, custom terms, invoiced billing. You talk
+                to the people who build Mogplex.
+              </p>
+            </div>
+            <div>
+              <p className="font-medium">Contact us</p>
+              <p className="text-xs text-muted-foreground">
+                One email, no sales gauntlet
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <a href="mailto:enterprise@mogplex.com">Email us</a>
+            </Button>
+          </div>
+
+          <div className="grid gap-4 py-5 pb-0 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
+            <div>
+              <h3 className="font-semibold">Self-hosted</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Run the Apache-2.0 platform inside your network. The docs
                 explain the operational work.
               </p>
             </div>
             <div>
-              <p className="font-medium">Self-hosted</p>
+              <p className="font-medium">Free forever</p>
               <p className="text-xs text-muted-foreground">No license fee</p>
             </div>
             <Button asChild variant="outline">

@@ -171,6 +171,12 @@ export function BlueprintOverlay() {
 
 const platformLinks = [
   {
+    label: "Orchestrator",
+    description:
+      "One control surface that commands every project and fans agents out in parallel.",
+    href: "/#orchestrator",
+  },
+  {
     label: "Control plane",
     description:
       "Watch and steer every run, agent, and policy from one dashboard.",
@@ -201,6 +207,21 @@ function PlatformGlyph({
 }: {
   label: (typeof platformLinks)[number]["label"];
 }) {
+  if (label === "Orchestrator") {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 5.5h16v10H9.5L4 19.5v-14Z" />
+        <path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" />
+      </svg>
+    );
+  }
   if (label === "Control plane") {
     return (
       <svg
@@ -374,9 +395,6 @@ export function MpxHeader() {
           <a href="https://docs.mogplex.com">Docs</a>
         </div>
 
-        <Link className="mpx-live-link" href="/#run">
-          Watch a live run
-        </Link>
         <GithubPill />
         <Link className="mpx-button is-primary is-small" href="/signup">
           Start now
@@ -464,9 +482,6 @@ export function MpxHeader() {
           Docs
         </a>
         <div className="mpx-mobile-foot">
-          <Link href="/#run" onClick={() => setMobileOpen(false)}>
-            Watch a live run →
-          </Link>
           <GithubPill small />
         </div>
       </nav>
