@@ -33,7 +33,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     category: "memory",
     description: "Summarize conversation or execution history",
     access: "read",
-    implemented: false,
+    implemented: true,
   },
   {
     name: "web_fetch",
@@ -73,7 +73,7 @@ export const COMMUNICATION_TOOLS: OrchestratorToolDef[] = [
     category: "communication",
     description: "Leave a note for the next agent or operator",
     access: "mutation",
-    implemented: false,
+    implemented: true,
   },
 ];
 
@@ -84,6 +84,10 @@ export const memoryWriteSchema = z.object({
     .enum(["session", "semantic", "episodic", "procedural"])
     .describe("Memory lane"),
   content: z.string().describe("Content to store"),
+  metadata: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe("Optional small JSON object of tags"),
 });
 
 export const memorySearchSchema = z.object({

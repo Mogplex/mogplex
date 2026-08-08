@@ -16,6 +16,7 @@ import {
   createGithubApi,
   webFetch,
   createTerminalExec,
+  createMemoryTools,
 } from "@/lib/agents/tools";
 import type {
   OrchestratorToolDef,
@@ -24,6 +25,10 @@ import type {
   RepoToolDefaults,
 } from "./types";
 import { createStubTool, createTypedStub, buildRepoDefaults } from "./helpers";
+import {
+  createHandoffNoteTool,
+  createSummarizeHistoryTool,
+} from "./tools/memory-impl";
 import { PLANNING_TOOLS, PLANNING_SCHEMAS } from "./tools/planning";
 import { FILESYSTEM_TOOLS, FILESYSTEM_SCHEMAS } from "./tools/filesystem";
 import { GIT_TOOLS, GIT_SCHEMAS } from "./tools/git";
@@ -154,6 +159,26 @@ function buildToolForDef(
     }
     if (def.name === "web_fetch") {
       return webFetch;
+    }
+    if (def.name === "memory_write" || def.name === "memory_search") {
+      const memoryTools = createMemoryTools(
+        ctx.userId,
+        ctx.repoId ?? undefined,
+        {
+          workspaceSessionId: ctx.workspaceSessionId ?? null,
+          conversationId: ctx.conversationId ?? null,
+          sandboxId: ctx.sandboxId ?? null,
+        }
+      );
+      return def.name === "memory_write"
+        ? memoryTools.add_memory
+        : memoryTools.search_memories;
+    }
+    if (def.name === "summarize_history") {
+      return createSummarizeHistoryTool(ctx);
+    }
+    if (def.name === "handoff_note") {
+      return createHandoffNoteTool(ctx);
     }
   }
 

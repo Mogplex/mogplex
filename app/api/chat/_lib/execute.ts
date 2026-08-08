@@ -11,7 +11,7 @@ import type {
 } from "./types";
 import { getChatRunScope, buildChatRunMetadata } from "./types";
 import { buildChatMemorySuffix } from "./memory";
-import { compactChatMessagesForModel } from "./compaction";
+import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { persistChatSessionMemory } from "./session-memory";
 import {
   markChatRunStreaming,

@@ -17,10 +17,23 @@ export const defineTool = (def: Record<string, unknown>): Tool =>
   tool(def as Parameters<typeof tool>[0]);
 
 /**
+ * Every stub built by this module registers here so the registry (and its
+ * drift-guard test) can tell a stub from a real implementation without
+ * executing the tool. A `def.implemented: true` flag with no matching branch
+ * in the registry silently degrades to a stub — exactly the failure mode the
+ * guard exists to catch.
+ */
+const STUB_TOOLS = new WeakSet<Tool>();
+
+export function isStubTool(candidate: Tool): boolean {
+  return STUB_TOOLS.has(candidate);
+}
+
+/**
  * Create a basic stub tool with no parameters.
  */
 export function createStubTool(def: OrchestratorToolDef): Tool {
-  return defineTool({
+  const stub = defineTool({
     description: def.description,
     parameters: z.object({}),
     execute: async () => ({
@@ -29,6 +42,8 @@ export function createStubTool(def: OrchestratorToolDef): Tool {
       note: `The ${def.name} tool is declared but not yet implemented. This capability is planned for the orchestrator.`,
     }),
   });
+  STUB_TOOLS.add(stub);
+  return stub;
 }
 
 /**
@@ -38,7 +53,7 @@ export function createTypedStub<T extends z.ZodType>(
   def: OrchestratorToolDef,
   schema: T
 ): Tool {
-  return defineTool({
+  const stub = defineTool({
     description: def.description,
     parameters: schema,
     execute: async () => ({
@@ -47,6 +62,8 @@ export function createTypedStub<T extends z.ZodType>(
       note: `The ${def.name} tool is declared but not yet implemented. This capability is planned for the orchestrator.`,
     }),
   });
+  STUB_TOOLS.add(stub);
+  return stub;
 }
 
 /**

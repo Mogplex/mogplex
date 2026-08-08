@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   COMPACTION_CHAR_BUDGET,
+  COMPACTION_KEEP_RECENT_MESSAGES,
   compactConversation,
   estimateMessagesChars,
+  type CheckpointGenerator,
   type CompactableAgentMessage,
 } from "@/lib/agents/compaction";
 import {
@@ -23,38 +25,70 @@ import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 
 type ChatUiMessage = CompactableAgentMessage & { role: string };
 
-function buildHandoffUiMessage(handoffText: string): ChatUiMessage {
+// The handoff replaces compacted history and must be readable as a user turn
+// by every caller's message shape; `id` + text parts satisfy both the chat
+// route's UIMessages and the control route's narrower part type. The cast is
+// the one place the adapter bridges its fixed handoff shape to the caller's
+// generic message type.
+function buildHandoffUiMessage<Message extends ChatUiMessage>(
+  handoffText: string
+): Message {
   return {
     id: `compaction-${randomUUID()}`,
     role: "user",
     parts: [{ type: "text", text: handoffText }],
-  };
+  } as Message;
 }
 
-export async function compactChatMessagesForModel(input: {
-  userId: string;
-  conversationId: string | null;
-  repoId?: string | null;
-  aiCallId: string;
-  resolvedModel: string;
-  teamId: string | null;
-  uiMessages: ChatUiMessage[];
-  abortSignal?: AbortSignal;
-}): Promise<ChatUiMessage[]> {
+/**
+ * Boundary dependencies, injectable for tests (repo rule: DI over mocking —
+ * these resolve to the real store / model-resolver in production).
+ */
+export type ChatCompactionDeps = {
+  loadLatestCompaction: typeof loadLatestCompaction;
+  persistCompactionEvent: typeof persistCompactionEvent;
+  resolveModel: typeof resolveUserLanguageModel;
+  generate?: CheckpointGenerator;
+  charBudget?: number;
+  keepRecent?: number;
+};
+
+const defaultDeps: ChatCompactionDeps = {
+  loadLatestCompaction,
+  persistCompactionEvent,
+  resolveModel: resolveUserLanguageModel,
+};
+
+export async function compactChatMessagesForModel<
+  Message extends ChatUiMessage,
+>(
+  input: {
+    userId: string;
+    conversationId: string | null;
+    repoId?: string | null;
+    aiCallId: string;
+    resolvedModel: string;
+    teamId: string | null;
+    uiMessages: Message[];
+    abortSignal?: AbortSignal;
+  },
+  deps: ChatCompactionDeps = defaultDeps
+): Promise<Message[]> {
+  const charBudget = deps.charBudget ?? COMPACTION_CHAR_BUDGET;
   // Without a conversation id there is nowhere to persist or reuse a
   // checkpoint, and re-summarizing every turn would be pure cost.
   if (!input.conversationId) return input.uiMessages;
-  if (estimateMessagesChars(input.uiMessages) <= COMPACTION_CHAR_BUDGET) {
+  if (estimateMessagesChars(input.uiMessages) <= charBudget) {
     return input.uiMessages;
   }
 
   try {
-    const previous = await loadLatestCompaction({
+    const previous = await deps.loadLatestCompaction({
       userId: input.userId,
       conversationId: input.conversationId,
     });
 
-    const { model } = await resolveUserLanguageModel(
+    const { model } = await deps.resolveModel(
       input.userId,
       input.resolvedModel,
       {
@@ -67,17 +101,20 @@ export async function compactChatMessagesForModel(input: {
       }
     );
 
-    const result = await compactConversation<ChatUiMessage>({
+    const result = await compactConversation<Message>({
       messages: input.uiMessages,
       model,
       compactorModelId: input.resolvedModel,
       previous,
       buildHandoffMessage: buildHandoffUiMessage,
       abortSignal: input.abortSignal,
+      generate: deps.generate,
+      charBudget,
+      keepRecent: deps.keepRecent ?? COMPACTION_KEEP_RECENT_MESSAGES,
     });
 
     if (result.outcome === "compacted") {
-      await persistCompactionEvent({
+      await deps.persistCompactionEvent({
         aiCallId: input.aiCallId,
         userId: input.userId,
         conversationId: input.conversationId,
@@ -88,7 +125,7 @@ export async function compactChatMessagesForModel(input: {
     }
     if (result.outcome === "failed") {
       if (result.event) {
-        await persistCompactionEvent({
+        await deps.persistCompactionEvent({
           aiCallId: input.aiCallId,
           userId: input.userId,
           conversationId: input.conversationId,
