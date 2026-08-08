@@ -5,13 +5,30 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AuthDivider } from "@/components/auth/auth-field";
 import { SignUpForm } from "@/components/auth/sign-up-form";
+import { SignedInPanel } from "@/components/auth/signed-in-panel";
 import { SocialButtons } from "@/components/auth/social-buttons";
 import { AuthShell } from "@/components/marketing/auth-shell";
+import { useSession } from "@/lib/better-auth/client";
+import {
+  checkoutPath,
+  parsePlanIntent,
+  planIntentSummary,
+} from "@/lib/billing/plan-intent";
 import { resolveLoginNext } from "@/lib/login-next";
 
 function SignupContent() {
   const params = useSearchParams();
-  const next = resolveLoginNext(params.get("next"));
+  // A tier card on /pricing passes the plan the visitor clicked. Carry it
+  // through signup so they land on checkout for that plan — not on the
+  // dashboard with their purchase intent dropped on the floor.
+  const plan = parsePlanIntent(params.get("plan"));
+  const planNext = plan ? checkoutPath(plan) : null;
+  const next = planNext ?? resolveLoginNext(params.get("next"));
+  const verifiedNext = planNext
+    ? `/login?verified=1&next=${encodeURIComponent(planNext)}`
+    : "/login?verified=1";
+  const summary = plan ? planIntentSummary(plan) : null;
+  const { data: session } = useSession();
 
   return (
     <AuthShell
@@ -28,11 +45,20 @@ function SignupContent() {
           <Link href="/pricing">See the full rate card.</Link>
         </>
       }
+      notice={
+        summary ? (
+          <div className="mpx-auth-alert is-success" data-testid="plan-chip">
+            {summary.name} — {summary.monthlyPrice}/mo · checkout comes after
+            this step ·{" "}
+            <Link href="/pricing">change plan</Link>
+          </div>
+        ) : null
+      }
       footer={
         <div>
           Already have an account?{" "}
           <Link
-            href="/login"
+            href={planNext ? `/login?next=${encodeURIComponent(planNext)}` : "/login"}
           >
             Sign in
           </Link>
@@ -40,9 +66,15 @@ function SignupContent() {
       }
     >
       <div className="mpx-auth-card">
-        <SignUpForm verifiedNext="/login?verified=1" />
-        <AuthDivider />
-        <SocialButtons next={next} source="signup_page" />
+        {session?.user ? (
+          <SignedInPanel email={session.user.email} next={next} />
+        ) : (
+          <>
+            <SignUpForm verifiedNext={verifiedNext} />
+            <AuthDivider />
+            <SocialButtons next={next} source="signup_page" />
+          </>
+        )}
       </div>
       <p className="mpx-auth-foot">
         Prefer to read the code first?{" "}

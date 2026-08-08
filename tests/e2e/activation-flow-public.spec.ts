@@ -97,6 +97,29 @@ test("public marketing pages use the GA and PAYG copy", async ({ page }) => {
   await expect(page.getByText(/optional auto top-up/i)).toHaveCount(0);
   await expect(page.getByText(/custom \(min/i)).toHaveCount(0);
 
+  // Paid tier CTAs carry the plan into signup; PAYG has nothing to buy.
+  await expect(page.getByTestId("pricing-cta-00")).toHaveAttribute(
+    "href",
+    "/signup"
+  );
+  await expect(page.getByTestId("pricing-cta-01")).toHaveAttribute(
+    "href",
+    "/signup?plan=pro"
+  );
+  await expect(page.getByTestId("pricing-cta-02")).toHaveAttribute(
+    "href",
+    "/signup?plan=team"
+  );
+  await expect(page.getByTestId("pricing-cta-03")).toHaveAttribute(
+    "href",
+    "/signup?plan=business"
+  );
+
+  // The plan survives to the signup form and names checkout as the next step.
+  await page.goto("/signup?plan=business");
+  await expect(page.getByTestId("plan-chip")).toContainText("Mog Mode");
+  await expect(page.getByTestId("plan-chip")).toContainText("checkout");
+
   await page.goto("/");
   await expect(
     page.getByRole("link", { name: "Self-hosting docs" })
