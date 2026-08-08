@@ -29,6 +29,7 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+import { streamdownDiffRenderer } from "@/components/diffs/streamdown-diff-renderer";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -321,7 +322,13 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+const streamdownPlugins = {
+  cjk,
+  code,
+  math,
+  mermaid,
+  renderers: [streamdownDiffRenderer],
+};
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
