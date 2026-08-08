@@ -127,7 +127,10 @@ export function DataTable<TData, TValue>({
               </TableRow>
               {row.getIsExpanded() && renderExpandedRow && (
                 <TableRow className="border-border bg-muted/30 hover:bg-muted/30">
-                  <TableCell colSpan={columns.length} className="p-0">
+                  {/* TableCell defaults to whitespace-nowrap for compact data
+                      cells; expanded detail content must wrap normally or long
+                      values paint across the row. */}
+                  <TableCell colSpan={columns.length} className="p-0 whitespace-normal">
                     {renderExpandedRow(row.original)}
                   </TableCell>
                 </TableRow>
