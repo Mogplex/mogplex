@@ -22,6 +22,8 @@ import {
   resolveDevPort,
   resolveBootstrapInstallCommand,
   resolveBootstrapDevCommand,
+  buildDetectBunUsageScript,
+  commandRequiresBun,
 } from "./client-shell";
 import {
   buildPreviewReadinessOptions,
@@ -136,6 +138,26 @@ async function resolveWorkspaceBuildCommand(
   return strategy.buildWorkspaceDepsBuildCommand(packageManager, packageName);
 }
 
+/**
+ * Probe the checkout for bun usage the resolved commands can't reveal —
+ * nested workspace scripts (e.g. `packages/tui`'s `"dev": "bun run …"` run
+ * through a root `pnpm --filter` command), bun lockfiles, or a
+ * `packageManager: "bun@…"` field. Runs from the sandbox repo root; any
+ * probe failure conservatively reports no bun usage.
+ */
+async function detectSandboxBunUsage(sandbox: Sandbox): Promise<boolean> {
+  try {
+    const command = await sandbox.runCommand({
+      cmd: "node",
+      args: ["-e", buildDetectBunUsageScript()],
+    });
+    const stdout = await command.stdout();
+    return stdout.trim() === "1";
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveBootstrapContext(
   sandbox: Sandbox,
   opts: BootstrapSandboxOpts,
@@ -202,6 +224,25 @@ export async function resolveBootstrapContext(
     Boolean(opts.devCommand)
   );
 
+  const installCommand = resolveBootstrapInstallCommand(
+    opts.installCommand,
+    strategy,
+    packageManager
+  );
+  const devCommand = resolveBootstrapDevCommand(
+    opts.devCommand,
+    strategy,
+    packageManager,
+    framework,
+    frameworkEntry,
+    packageDevScript
+  );
+  const requiresBun =
+    packageManager === "bun" ||
+    commandRequiresBun(installCommand) ||
+    commandRequiresBun(devCommand) ||
+    (await detectSandboxBunUsage(sandbox));
+
   return {
     normalizedRoot,
     effectiveRuntime,
@@ -216,19 +257,9 @@ export async function resolveBootstrapContext(
     previewUrl,
     runtimeEnv,
     devLogPath,
-    installCommand: resolveBootstrapInstallCommand(
-      opts.installCommand,
-      strategy,
-      packageManager
-    ),
-    devCommand: resolveBootstrapDevCommand(
-      opts.devCommand,
-      strategy,
-      packageManager,
-      framework,
-      frameworkEntry,
-      packageDevScript
-    ),
+    requiresBun,
+    installCommand,
+    devCommand,
     installDir: resolveInstallDir(effectiveDetection, normalizedRoot),
     workspaceBuildCommand,
     vercelLinkWarning: preparedVercelLink.warning ?? null,

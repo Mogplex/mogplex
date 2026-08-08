@@ -14,6 +14,8 @@ export const LOCKFILE_DESCRIPTORS: readonly LockfileDescriptor[] = [
   { packageManager: "pnpm", filename: "pnpm-lock.yaml" },
   { packageManager: "yarn", filename: "yarn.lock" },
   { packageManager: "bun", filename: "bun.lockb" },
+  // Modern bun (1.2+) writes the text-based bun.lock by default.
+  { packageManager: "bun", filename: "bun.lock" },
   { packageManager: "npm", filename: "package-lock.json" },
 ] as const;
 

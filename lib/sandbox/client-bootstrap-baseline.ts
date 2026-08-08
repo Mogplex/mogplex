@@ -8,7 +8,11 @@ import type {
   BaselineSnapshotBootstrapOpts,
 } from "./client-types";
 import { withTimeout, BOOTSTRAP_STEP_TIMEOUT_MS } from "./client-validation";
-import { buildShellCommand, shellQuote } from "./client-shell";
+import {
+  buildShellCommand,
+  shellQuote,
+  buildWithBunOnPathCommand,
+} from "./client-shell";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
 import {
   launchDetachedDevCommand,
@@ -129,7 +133,12 @@ async function* runBaselineConditionalInstallPhase(
     cmd: "sh",
     args: [
       "-lc",
-      buildShellCommand(context.installCommand, context.installDir),
+      buildShellCommand(
+        context.requiresBun
+          ? buildWithBunOnPathCommand(context.installCommand)
+          : context.installCommand,
+        context.installDir
+      ),
     ],
     env: context.runtimeEnv,
     detached: true,
@@ -160,18 +169,12 @@ async function* runBaselineDevPhase(
     return;
   }
 
-  await runRuntimePrerequisitePhase(
-    sandbox,
-    context.devCommand,
-    context.runtimeEnv,
-    context.previewUrl
-  );
-
   const devLaunch = await launchDetachedDevCommand(
     sandbox,
     context.normalizedRoot,
     context.devCommand,
-    context.runtimeEnv
+    context.runtimeEnv,
+    { requiresBun: context.requiresBun }
   );
   yield { type: "preview_url", url: context.previewUrl };
   yield* streamPreviewSignal(
@@ -211,6 +214,14 @@ export async function* bootstrapFromBaselineSnapshotStreaming(
   yield { type: "status", status: "installing" };
   yield* runBaselineFetchPhase(sandbox, context, opts);
   yield* runBaselineCheckoutPhase(sandbox, context, opts);
+  // Bun must exist before a drift-triggered install when it is the package
+  // manager, and before dev when any script in the repo invokes it.
+  await runRuntimePrerequisitePhase(
+    sandbox,
+    context.requiresBun,
+    context.runtimeEnv,
+    context.previewUrl
+  );
   yield* runBaselineConditionalInstallPhase(
     sandbox,
     context,

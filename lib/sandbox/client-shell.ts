@@ -85,6 +85,50 @@ fi
 bun --version`;
 }
 
+/**
+ * Node one-liner (run with `node -e`) that probes the checked-out repo for
+ * bun usage the resolved install/dev commands can't reveal: a bun lockfile,
+ * a `packageManager: "bun@…"` field, or any package.json script that invokes
+ * bun — including scripts in nested workspace packages that run transitively
+ * through a root command like `pnpm --filter pkg dev`. Prints "1" or "0".
+ *
+ * Node is guaranteed present in the sandbox image, so this works regardless
+ * of the repo's own toolchain.
+ */
+export function buildDetectBunUsageScript() {
+  return [
+    "const fs = require('fs');",
+    "const path = require('path');",
+    "const SKIP = new Set(['node_modules', '.git', '.next', 'dist', 'out', '.turbo', 'build']);",
+    "const BUN = /(?:^|[\\s;&|()])bun(?:$|[\\s;&|()])/;",
+    "let found = false;",
+    "function walk(dir, depth) {",
+    "  if (found || depth > 4) return;",
+    "  let entries;",
+    "  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }",
+    "  for (const entry of entries) {",
+    "    if (found) return;",
+    "    const p = path.join(dir, entry.name);",
+    "    if (entry.isDirectory()) {",
+    "      if (!SKIP.has(entry.name)) walk(p, depth + 1);",
+    "      continue;",
+    "    }",
+    "    if (entry.name === 'bun.lock' || entry.name === 'bun.lockb') { found = true; return; }",
+    "    if (entry.name !== 'package.json') continue;",
+    "    try {",
+    "      const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));",
+    "      if (typeof pkg.packageManager === 'string' && pkg.packageManager.startsWith('bun@')) { found = true; return; }",
+    "      for (const value of Object.values(pkg.scripts || {})) {",
+    "        if (typeof value === 'string' && BUN.test(value)) { found = true; return; }",
+    "      }",
+    "    } catch {}",
+    "  }",
+    "}",
+    "walk('.', 0);",
+    "process.stdout.write(found ? '1' : '0');",
+  ].join("\n");
+}
+
 /** Resolve the dev port based on framework. Vite defaults to 5173, everything else to 3000. */
 export function extractPortFromCommand(command?: string | null) {
   if (!command) return null;

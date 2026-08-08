@@ -105,6 +105,16 @@ export type ResolvedBootstrapContext = {
   installCommand: string;
   devCommand: string;
   /**
+   * True when the repo needs the bun runtime somewhere in its install/dev
+   * path: bun is the package manager, a resolved command invokes bun
+   * directly, or the repo-wide probe found a bun lockfile, a
+   * `packageManager: "bun@…"` field, or a package.json script invoking bun
+   * (covers nested workspace scripts that run transitively, e.g. through
+   * `pnpm --filter pkg dev`). When true, bootstrap ensures bun is installed
+   * before install and puts it on PATH for the install and dev commands.
+   */
+  requiresBun: boolean;
+  /**
    * Command that compiles workspace:* dependencies of the target package so
    * their `dist/` outputs exist before dev starts. Null when the project
    * has no workspace deps, or the package manager doesn't support filtered
