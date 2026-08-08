@@ -115,6 +115,41 @@ test("failed jobs keep benign dispatch context while scrubbing diagnostics", () 
   );
 });
 
+test("token-shaped secrets in failure context are scrubbed unless key-scoped", () => {
+  const raw = {
+    id: "job-7",
+    status: "failed",
+    error: "run failed",
+    metadata: {
+      captured_value: "AKIAIOSFODNN7EXAMPLE",
+      opaque_body: "DEADBEEF0123456789ABCDEF0123456789ABCDEF",
+      env_name: "STRIPE_WEBHOOK_SIGNING_SECRET",
+      resolution: "timeout",
+      trace_url: "https://logs.example.com/run/7",
+      reason: "PR_REVIEW_INFRA_FAILED",
+      review_outcome: "PR_REVIEW_INFRA_FAILED",
+      retry_class: "timeout",
+    },
+  };
+
+  const sanitized = sanitizeObservabilityPayload(raw, "JOB", raw.id);
+  const serialized = JSON.stringify(sanitized);
+
+  // Value shape is not proof of benignity: token-shaped strings, bare
+  // env-var names, class-vocabulary words, and non-GitHub URLs under
+  // unknown keys all fail closed.
+  assert.equal(serialized.includes("AKIAIOSFODNN7EXAMPLE"), false);
+  assert.equal(serialized.includes("DEADBEEF"), false);
+  assert.equal(serialized.includes("STRIPE_WEBHOOK_SIGNING_SECRET"), false);
+  assert.match(sanitized.metadata.resolution, /Incident MOG-/);
+  assert.equal(serialized.includes("logs.example.com"), false);
+
+  // Enum-carrying keys keep their machine codes and failure classes.
+  assert.equal(sanitized.metadata.reason, "PR_REVIEW_INFRA_FAILED");
+  assert.equal(sanitized.metadata.review_outcome, "PR_REVIEW_INFRA_FAILED");
+  assert.equal(sanitized.metadata.retry_class, "timeout");
+});
+
 test("known actionable failures use specific safe guidance", () => {
   const incident = buildObservabilityIncidentId("CALL", "call-1");
   assert.match(

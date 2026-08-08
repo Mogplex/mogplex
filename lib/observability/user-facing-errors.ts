@@ -154,17 +154,25 @@ function isSafeFailureField(key: string) {
   );
 }
 
+// Keys whose values are enum-style codes by contract (dispatch reasons,
+// review outcomes, failure classes). Value shape alone is NOT proof of
+// benignity — AWS access key IDs and bare env-var names match
+// SAFE_MACHINE_CODE_PATTERN too — so the passthrough is scoped to these keys.
+const FAILURE_ENUM_KEY_PATTERN = /(?:^|_)(?:reason|code|outcome|class)$/;
+
 // In failure context, unknown string fields fail closed — but values that are
-// provably not prose diagnostics (enum-style machine codes, links to public
-// GitHub pages) stay readable so the operator can still tell WHAT failed.
+// provably not prose diagnostics (enum codes under enum-carrying keys, links
+// to public GitHub pages) stay readable so the operator can tell WHAT failed.
 function isBenignFailureValue(key: string | undefined, value: string) {
-  if (SAFE_MACHINE_CODE_PATTERN.test(value)) return true;
-  if (SAFE_FAILURE_CLASS_VALUES.has(value)) return true;
-  return (
-    key != null &&
-    key.toLowerCase().endsWith("_url") &&
-    value.startsWith("https://github.com/")
-  );
+  if (key == null) return false;
+  const normalized = key.toLowerCase();
+  if (FAILURE_ENUM_KEY_PATTERN.test(normalized)) {
+    return (
+      SAFE_FAILURE_CLASS_VALUES.has(value) ||
+      SAFE_MACHINE_CODE_PATTERN.test(value)
+    );
+  }
+  return normalized.endsWith("_url") && value.startsWith("https://github.com/");
 }
 
 function sanitizeStringValue(
