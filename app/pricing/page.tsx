@@ -11,6 +11,8 @@ import {
   formatPerMillion,
   getPublicModelRates,
 } from "@/lib/models/public-pricing";
+import { signupPath } from "@/lib/billing/plan-intent";
+import type { PlanTier } from "@/lib/billing/catalog";
 import { buildMarketingMetadata } from "@/lib/seo";
 
 // The per-model rate table re-syncs from the gateway catalog hourly.
@@ -25,6 +27,9 @@ export const metadata: Metadata = buildMarketingMetadata({
 
 type Tier = {
   key: string;
+  // Carried through /signup to /checkout so the plan a visitor clicked is
+  // the plan they are asked to pay for. PAYG has no subscription to buy.
+  intent?: PlanTier;
   name: string;
   price: string;
   cadence: string;
@@ -66,6 +71,7 @@ const TIERS: Tier[] = [
   },
   {
     key: "01",
+    intent: "pro",
     name: "Pro",
     price: formatUsd(PRO_MONTHLY.amountCents),
     cadence: "per month",
@@ -82,6 +88,7 @@ const TIERS: Tier[] = [
   },
   {
     key: "02",
+    intent: "team",
     name: "Team",
     price: formatUsd(TEAM_MONTHLY.amountCents),
     cadence: "per month, flat",
@@ -98,6 +105,7 @@ const TIERS: Tier[] = [
   },
   {
     key: "03",
+    intent: "business",
     name: "Mog Mode",
     price: formatUsd(BUSINESS_MONTHLY.amountCents),
     cadence: "per month, flat",
@@ -200,7 +208,7 @@ export default async function PricingPage() {
             <p className="price-note mono">▪ {tier.note}</p>
             <Link
               className="mpx-button is-primary price-cta"
-              href="/signup"
+              href={signupPath(tier.intent ?? null)}
               data-testid={`pricing-cta-${tier.key}`}
             >
               Start now
