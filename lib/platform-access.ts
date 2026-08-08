@@ -48,7 +48,6 @@ const PLATFORM_ACCESS_USER_IDS_ENV = "PLATFORM_ACCESS_USER_IDS";
 const PLATFORM_ACCESS_EMAILS_ENV = "PLATFORM_ACCESS_EMAILS";
 const PLATFORM_ACCESS_EMAIL_DOMAINS_ENV = "PLATFORM_ACCESS_EMAIL_DOMAINS";
 
-const BUILT_IN_ALLOWLISTED_EMAIL_DOMAINS = ["blackbox.ai"] as const;
 // Balance reads are hot and can tolerate webhook-scale staleness. Membership
 // is deliberately checked outside this cache so removals take effect at once.
 const BILLING_ACCESS_CACHE_TTL_MS = 5_000;
@@ -88,14 +87,14 @@ function parseAllowlist(
 }
 
 function parseDomainAllowlist(value: string | undefined) {
-  const fromEnv = (value || "")
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean)
-    .map((entry) => (entry.startsWith("@") ? entry.slice(1) : entry))
-    .filter(Boolean);
-
-  return new Set([...BUILT_IN_ALLOWLISTED_EMAIL_DOMAINS, ...fromEnv]);
+  return new Set(
+    (value || "")
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean)
+      .map((entry) => (entry.startsWith("@") ? entry.slice(1) : entry))
+      .filter(Boolean)
+  );
 }
 
 function getEmailDomain(email: string | null) {
