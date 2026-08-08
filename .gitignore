@@ -36,3 +36,7 @@ reports/
 
 # vitest coverage output (diff-coverage job)
 coverage/
+
+# nested git worktrees; also keeps ESLint (which inherits this file via
+# includeIgnoreFile) from parsing their checkouts as repo sources
+.worktrees/
