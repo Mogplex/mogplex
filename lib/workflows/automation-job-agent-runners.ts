@@ -114,6 +114,7 @@ export function createAutomationAgentRunner(
                     ? context.metadata.head_ref
                     : undefined,
                 allowPostComment: false,
+                allowPrLifecycle: context.metadata.flow_auto_merge === true,
               });
             })()
           : assignmentType === "push_review"

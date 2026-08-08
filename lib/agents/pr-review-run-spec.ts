@@ -8,13 +8,24 @@ export const PR_REVIEW_STATIC_INSTRUCTIONS = [
   "commentBody is only published when you report no structured findings; use it for the full review narrative in that case. When you include findings, omit commentBody — put everything in summary and the finding bodies.",
 ].join("\n");
 
+const PR_REVIEW_LIFECYCLE_INSTRUCTIONS = [
+  "This run also has PR lifecycle tools: mergePullRequest, queuePullRequestForMerge, rebasePullRequest, closePullRequest, and createIssue.",
+  "Only merge or queue when you reported hasIssues=false. Prefer queuePullRequestForMerge when required checks are still pending; call rebasePullRequest first when the branch is behind the base branch. Never merge or queue a change that would break the repo's typecheck, lint, test, or build.",
+  'When the change is unsafe and not safely fixable, call createIssue with a title like "Dependabot: <dependency> <from> -> <to> blocked" documenting what breaks, the evidence, and the suggested remediation; then call closePullRequest. Reference the issue in your review summary.',
+].join("\n");
+
 export function buildPrReviewRunSpec(input: {
   flowContextBlock?: string | null;
   prNumber: unknown;
   systemPrompt?: string | null;
+  lifecycleTools?: boolean;
 }) {
   return {
-    system: [input.systemPrompt, PR_REVIEW_STATIC_INSTRUCTIONS]
+    system: [
+      input.systemPrompt,
+      PR_REVIEW_STATIC_INSTRUCTIONS,
+      input.lifecycleTools === true ? PR_REVIEW_LIFECYCLE_INSTRUCTIONS : null,
+    ]
       .filter(Boolean)
       .join("\n\n"),
     prompt: [input.flowContextBlock, `Review PR #${input.prNumber}.`]
