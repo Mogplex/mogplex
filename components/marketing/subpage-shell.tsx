@@ -10,11 +10,10 @@ import Link from "next/link";
 import {
   BlueprintOverlay,
   Eyebrow,
-  interTight,
   MpxFooter,
   MpxHeader,
-  plexMono,
 } from "@/components/marketing/mpx-chrome";
+import { interTight, plexMono } from "@/components/marketing/mpx-fonts";
 
 import "./landing-v2.css";
 import "./subpage.css";

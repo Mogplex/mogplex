@@ -2,10 +2,9 @@ import type { ReactNode } from "react";
 import {
   BlueprintOverlay,
   Eyebrow,
-  interTight,
   MpxHeader,
-  plexMono,
 } from "@/components/marketing/mpx-chrome";
+import { interTight, plexMono } from "@/components/marketing/mpx-fonts";
 import "./auth.css";
 
 type AuthShellProps = {
