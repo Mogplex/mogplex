@@ -11,9 +11,7 @@ import { hasCapability } from "@/lib/team-capabilities";
 // billing.manage-gated.
 
 export async function GET(request: Request) {
-  if (!isBillingEnabled()) {
-    return NextResponse.json({ enabled: false });
-  }
+  const billingOperationsEnabled = isBillingEnabled();
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
 
@@ -31,6 +29,7 @@ export async function GET(request: Request) {
     : { includedCents: 0, purchasedCents: 0, totalCents: 0 };
   return NextResponse.json({
     enabled: true,
+    billingOperationsEnabled,
     canManageBilling:
       resolution.scope.kind === "personal" ||
       hasCapability(resolution.capabilities ?? new Set(), "billing.manage"),

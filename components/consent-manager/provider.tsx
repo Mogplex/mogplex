@@ -6,6 +6,7 @@ import {
   ConsentBanner,
   ConsentDialog,
   ConsentManagerProvider,
+  policyPackPresets,
 } from '@c15t/nextjs'
 import { isPublicRoutePath } from '@/lib/auth-route-policy'
 
@@ -92,6 +93,13 @@ export function ConsentManagerClient({
       }
     : {
         mode: 'offline' as const,
+        offlinePolicy: {
+          policyPacks: [
+            policyPackPresets.europeOptIn(),
+            policyPackPresets.californiaOptOut(),
+            policyPackPresets.worldNoBanner(),
+          ],
+        },
         consentCategories: [...consentCategories],
         legalLinks,
         overrides: { country: 'DE' },

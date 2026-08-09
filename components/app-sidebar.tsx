@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
+import useSWR from "swr";
+import {
+  getActiveTeamRequestHeaders,
+  useActiveTeamId,
+} from "@/components/active-scope-provider";
+import { useMemberships } from "@/hooks/use-memberships";
 import {
   Cube,
   DeliveryTruck,
@@ -12,15 +18,14 @@ import {
   Search,
   SendDiagonal,
   Settings,
-  SidebarCollapse,
-  SidebarExpand,
 } from "iconoir-react";
-import { MogplexMark } from "@/components/brand/mogplex-mark";
 import {
   buildAppNavItems,
   isAppNavItemActive,
   type AppNavItemId,
 } from "@/lib/app-navigation";
+import { formatUsd } from "@/lib/billing/catalog";
+import { scopedHref } from "@/lib/scoped-href";
 
 const SIDEBAR_WIDTH_KEY = "mogplex.appSidebar.width";
 const SIDEBAR_COLLAPSED_KEY = "mogplex.appSidebar.collapsed";
@@ -39,17 +44,93 @@ const NAV_ICONS = {
   settings: Settings,
 } satisfies Record<AppNavItemId, typeof SendDiagonal>;
 
+type BillingSummary = {
+  enabled: boolean;
+  canManageBilling?: boolean;
+  tier?: "free" | "pro" | "team" | "business";
+  status?: "active" | "past_due" | "frozen_topups";
+  balance?: {
+    includedCents: number;
+    purchasedCents: number;
+    totalCents: number;
+  };
+};
+
 function clampWidth(value: number) {
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value));
+}
+
+function planName(tier: BillingSummary["tier"]): string {
+  if (tier === "pro") return "Pro Plan";
+  if (tier === "team") return "Team Plan";
+  if (tier === "business") return "Mog Mode";
+  return "Pay as you go";
+}
+
+function formatCreditSummary(summary: BillingSummary | undefined): string {
+  if (!summary?.enabled) return "Billing unavailable";
+  const balance = summary.balance;
+  if (!balance) return "Balance loading";
+
+  const total = formatUsd(balance.totalCents);
+  if (balance.includedCents > 0) {
+    return `${total} / ${formatUsd(balance.includedCents)} included`;
+  }
+  return `${total} available`;
+}
+
+function usageMeterWidth(summary: BillingSummary | undefined): string {
+  const balance = summary?.balance;
+  if (!summary?.enabled || !balance || balance.includedCents <= 0) {
+    return "0%";
+  }
+  const percent = Math.max(
+    0,
+    Math.min(100, (balance.totalCents / balance.includedCents) * 100)
+  );
+  return `${percent}%`;
+}
+
+async function loadBillingSummary([
+  url,
+  activeTeamId,
+]: [string, string | null]): Promise<BillingSummary> {
+  const response = await fetch(url, {
+    headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+  });
+  if (response.status === 503) return { enabled: false };
+  if (!response.ok) throw new Error("Failed to load billing summary");
+  return (await response.json()) as BillingSummary;
 }
 
 export function AppSidebar() {
   const pathname = usePathname() || "";
   const { scope } = useParams<{ scope: string }>();
+  const providedActiveTeamId = useActiveTeamId();
+  const { memberships, isLoading: membershipsLoading } = useMemberships();
+  const routeTeam = useMemo(
+    () => memberships.teams.find((team) => team.slug === scope) ?? null,
+    [memberships.teams, scope]
+  );
+  const routeIsPersonalScope = memberships.personal.slug === scope;
+  const activeBillingTeamId = useMemo(() => {
+    if (providedActiveTeamId) return providedActiveTeamId;
+    return routeTeam?.id ?? null;
+  }, [providedActiveTeamId, routeTeam]);
   const navItems = useMemo(() => buildAppNavItems(scope), [scope]);
+  const shouldLoadBilling =
+    Boolean(scope) &&
+    (Boolean(providedActiveTeamId) ||
+      routeIsPersonalScope ||
+      Boolean(routeTeam) ||
+      !membershipsLoading);
+  const { data: billingSummary, error: billingError, isLoading: billingLoading } =
+    useSWR<BillingSummary>(
+      shouldLoadBilling ? ["/api/billing", activeBillingTeamId] : null,
+      loadBillingSummary
+    );
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [resizing, setResizing] = useState(false);
-  const [lastExpandedWidth, setLastExpandedWidth] = useState(DEFAULT_WIDTH);
   const activePointerId = useRef<number | null>(null);
   const compact = width <= COMPACT_THRESHOLD;
 
@@ -59,7 +140,6 @@ export function AppSidebar() {
     const frame = window.requestAnimationFrame(() => {
       if (Number.isFinite(storedWidth) && storedWidth > 0) {
         const nextWidth = clampWidth(storedWidth);
-        if (nextWidth > COMPACT_THRESHOLD) setLastExpandedWidth(nextWidth);
         setWidth(storedCollapsed === "true" ? MIN_WIDTH : nextWidth);
       } else if (storedCollapsed === "true") {
         setWidth(MIN_WIDTH);
@@ -80,7 +160,6 @@ export function AppSidebar() {
       }
       const nextWidth = clampWidth(event.clientX);
       setWidth(nextWidth);
-      if (nextWidth > COMPACT_THRESHOLD) setLastExpandedWidth(nextWidth);
       window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(nextWidth));
       window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
     };
@@ -102,28 +181,13 @@ export function AppSidebar() {
   function resizeFromKeyboard(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    const direction = event.key === "ArrowLeft" ? -8 : 8;
-    setWidth((current) => {
-      const next = clampWidth(current + direction);
-      if (next > COMPACT_THRESHOLD) setLastExpandedWidth(next);
-      window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
-      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
-      return next;
+      const direction = event.key === "ArrowLeft" ? -8 : 8;
+      setWidth((current) => {
+        const next = clampWidth(current + direction);
+        window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
+        return next;
     });
-  }
-
-  function toggleCollapsed() {
-    if (compact) {
-      const nextWidth = lastExpandedWidth;
-      setWidth(nextWidth);
-      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
-      return;
-    }
-
-    setLastExpandedWidth(width);
-    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "true");
-    setWidth(MIN_WIDTH);
   }
 
   return (
@@ -134,37 +198,7 @@ export function AppSidebar() {
       data-testid="app-sidebar"
       style={{ width }}
     >
-      <div className="app-sidebar-header flex h-[76px] shrink-0 items-center overflow-hidden px-5">
-        <Link
-          href={navItems[0].href}
-          aria-label="Mogplex home"
-          className="app-sidebar-logo grid size-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground"
-        >
-          <MogplexMark className="size-5" />
-        </Link>
-        {compact ? null : (
-          <div className="app-sidebar-title min-w-0 pl-3">
-            <div className="text-[20px] font-semibold tracking-normal">
-              mogplex
-            </div>
-          </div>
-        )}
-        <button
-          type="button"
-          aria-label={compact ? "Expand navigation" : "Collapse navigation"}
-          title={compact ? "Expand navigation" : "Collapse navigation"}
-          onClick={toggleCollapsed}
-          className={`ml-auto grid size-7 shrink-0 place-items-center rounded-md text-secondary-foreground transition-colors hover:bg-muted hover:text-sidebar-foreground ${
-            compact ? "mx-auto" : ""
-          }`}
-        >
-          {compact ? (
-            <SidebarExpand className="size-4" />
-          ) : (
-            <SidebarCollapse className="size-4" />
-          )}
-        </button>
-      </div>
+      <div className="app-sidebar-header h-[20px] shrink-0" aria-hidden="true" />
 
       {compact ? null : (
         <div className="px-5 pb-5">
@@ -214,17 +248,33 @@ export function AppSidebar() {
         {compact ? null : (
           <div className="app-sidebar-footer-label space-y-3">
             <div>
-              <div className="font-semibold text-foreground">Pro Plan</div>
+              <div className="font-semibold text-foreground">
+                {billingLoading
+                  ? "Plan loading"
+                  : billingError
+                    ? "Billing"
+                    : planName(billingSummary?.tier)}
+              </div>
               <div className="mt-2 text-xs text-secondary-foreground">
-                12.4K / 25K credits
+                {billingError
+                  ? "Summary unavailable"
+                  : formatCreditSummary(billingSummary)}
               </div>
             </div>
             <div className="h-1 overflow-hidden rounded-full bg-accent">
-              <div className="h-full w-1/2 rounded-full bg-primary" />
+              <div
+                className="h-full rounded-full bg-foreground/70"
+                style={{ width: usageMeterWidth(billingSummary) }}
+              />
             </div>
-            <a href="#" className="block text-xs text-secondary-foreground hover:text-foreground">
-              Upgrade
-            </a>
+            <Link
+              href={scopedHref(scope, "/settings/billing")}
+              className="block text-xs text-secondary-foreground hover:text-foreground"
+            >
+              {billingSummary?.canManageBilling === false
+                ? "View billing"
+                : "Manage billing"}
+            </Link>
           </div>
         )}
         {compact ? (

@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type BillingSummary = {
   enabled: boolean;
+  billingOperationsEnabled?: boolean;
   canManageBilling?: boolean;
   tier?: "free" | "pro" | "team" | "business";
   status?: "active" | "past_due" | "frozen_topups";
@@ -187,6 +188,8 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const paymentSubmitted =
     checkoutResult === "topup" || checkoutResult === "subscribed";
   const canManageBilling = data.canManageBilling !== false;
+  const canStartBillingFlow =
+    canManageBilling && data.billingOperationsEnabled !== false;
   const hasPaidPlan = data.hasSubscription || data.tier !== "free";
   const currentPlanName = planName(data.tier);
 
@@ -222,7 +225,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
                   : "Included usage resets monthly. Purchased balance never expires."}
               </CardDescription>
             </div>
-            {canManageBilling && hasPaidPlan ? (
+            {canStartBillingFlow && hasPaidPlan ? (
               <Button
                 className="self-start"
                 disabled={pendingAction !== null}
@@ -266,6 +269,8 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
               <CardDescription>
                 {!canManageBilling
                   ? "Only a team owner or admin can change this plan."
+                  : data.billingOperationsEnabled === false
+                    ? "Plan and balance are visible here. Billing changes are not configured on this deployment."
                   : hasPaidPlan
                     ? "Plan changes and cancellation are managed securely in Stripe."
                     : "Stay on PAYG, or subscribe for usage included every month."}
@@ -346,7 +351,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
                     {formatUsd(plan.includedUsageCents)} usage included monthly
                   </p>
                 </div>
-                {canManageBilling && !hasPaidPlan ? (
+                {canStartBillingFlow && !hasPaidPlan ? (
                   <Button
                     disabled={pendingAction !== null}
                     onClick={() =>
@@ -427,7 +432,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {canManageBilling ? (
+          {canStartBillingFlow ? (
             TOPUP_PRESETS.map((preset) => (
               <Button
                 key={preset.lookupKey}
@@ -450,7 +455,9 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
             ))
           ) : (
             <p className="text-sm text-muted-foreground">
-              Only a team owner or admin can add funds.
+              {canManageBilling
+                ? "Billing changes are not configured on this deployment."
+                : "Only a team owner or admin can add funds."}
             </p>
           )}
           {data.status === "frozen_topups" ? (

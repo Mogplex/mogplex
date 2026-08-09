@@ -11,6 +11,10 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/reset-password", match: "subtree" },
   { path: "/request-access", match: "subtree" },
   { path: "/api/auth/", match: "prefix" },
+  // c15t consent-manager calls are proxied by next.config.mjs to the hosted
+  // consent backend. They must stay public so anonymous marketing/login pages
+  // receive JSON consent metadata rather than /login HTML.
+  { path: "/api/c15t/", match: "prefix" },
   { path: "/auth/callback", match: "subtree" },
   { path: "/auth/error", match: "subtree" },
   { path: "/oauth/consent", match: "subtree" },
