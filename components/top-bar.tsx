@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useCommandPalette } from "@/components/command-palette-provider"
-import { buildAppNavItems, isAppNavItemActive } from "@/lib/app-navigation"
+import { buildAppNavItems, isAppNavItemActive, type AppNavItem } from "@/lib/app-navigation"
 
 const DOCS_URL = "https://docs.mogplex.com/"
 
@@ -35,8 +35,6 @@ const fetchSlackInstallations = async (url: string) => {
   if (!response.ok) throw new Error(`Slack installations API ${response.status}`)
   return response.json() as Promise<SlackInstallationsResponse>
 }
-
-type AppNavItem = ReturnType<typeof buildAppNavItems>[number]
 
 function MobileNavLink({ item, pathname }: { item: AppNavItem; pathname: string }) {
   const isActive = isAppNavItemActive(pathname, item.match)

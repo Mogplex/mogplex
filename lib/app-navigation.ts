@@ -56,6 +56,8 @@ export type AppNavSection = (typeof APP_NAV_ITEM_DEFS)[number]["section"];
 
 export type AppNavItemId = (typeof APP_NAV_ITEM_DEFS)[number]["id"];
 
+export type AppNavItem = ReturnType<typeof buildAppNavItems>[number];
+
 export function buildAppNavItems(scope: string) {
   return APP_NAV_ITEM_DEFS.map((item) => ({
     ...item,
