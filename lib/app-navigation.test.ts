@@ -20,6 +20,19 @@ describe("app navigation", () => {
     ]);
   });
 
+  it("places settings alone in the admin section", () => {
+    expect(
+      APP_NAV_ITEM_DEFS.filter((item) => item.section === "admin").map(
+        (item) => item.id
+      )
+    ).toEqual(["settings"]);
+    expect(
+      APP_NAV_ITEM_DEFS.every(
+        (item) => item.section === "primary" || item.section === "admin"
+      )
+    ).toBe(true);
+  });
+
   it("scopes href and match paths", () => {
     const items = buildAppNavItems("acme");
     const repositories = items.find((item) => item.id === "workspaces");

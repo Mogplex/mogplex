@@ -2,7 +2,14 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { createPortal } from "react-dom"
-import { Attachment, Notes, PauseSolid, SendDiagonal } from "iconoir-react"
+import {
+  Attachment,
+  PauseSolid,
+  SendDiagonal,
+  ShieldCheck,
+  ShieldXmark,
+  Strategy,
+} from "iconoir-react"
 import { McpStatusButton } from "@/components/chat/mcp-status-button"
 import { useModels } from "@/hooks/use-models"
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types"
@@ -240,7 +247,7 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
               title="Plan mode is not available yet"
               className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-xs font-medium text-secondary-foreground opacity-60"
             >
-              <Notes className="size-3.5" strokeWidth={1.6} />
+              <Strategy className="size-3.5" strokeWidth={1.6} />
               Plan
             </button>
             <button
@@ -260,8 +267,13 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
             </button>
             <button
               onClick={cyclePermissions}
-              className="h-8 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary"
             >
+              {MISSION_PERMISSION_OPTIONS[permissionsIdx] === "Skip Permissions" ? (
+                <ShieldXmark className="size-3.5" strokeWidth={1.6} />
+              ) : (
+                <ShieldCheck className="size-3.5" strokeWidth={1.6} />
+              )}
               {MISSION_PERMISSION_OPTIONS[permissionsIdx]}
             </button>
             <ModelChip

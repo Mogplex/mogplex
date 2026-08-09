@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import {
+  Box,
+  BoxIso,
   Cube,
-  GitBranch,
+  GitCompare,
+  InputOutput,
   MoreVert,
   NavArrowDown,
   Page,
+  Play,
   SidebarCollapse,
   SidebarExpand,
   Terminal,
@@ -85,6 +89,7 @@ function FileTree({ worktree }: { worktree: Worktree | undefined }) {
   if (!worktree) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-input px-3 py-8 text-center text-xs text-muted-foreground">
+        <BoxIso className="mx-auto mb-3 size-10 opacity-30" strokeWidth={1.5} aria-hidden="true" />
         No sandbox running.
       </div>
     )
@@ -297,19 +302,27 @@ export function SandboxRail({ worktrees, changesets }: Props) {
       />
       <div className="space-y-4 p-4">
         <div className="flex gap-1">
-          {["Sandbox", "Diffs", "Outputs", "Terminal"].map((tab, index) => (
+          {(
+            [
+              { label: "Sandbox", Icon: Box },
+              { label: "Diffs", Icon: GitCompare },
+              { label: "Outputs", Icon: InputOutput },
+              { label: "Terminal", Icon: Terminal },
+            ] as const
+          ).map(({ label, Icon }, index) => (
             <button
-              key={tab}
+              key={label}
               type="button"
               disabled
-              aria-label={`${tab} tab preview`}
-              className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+              aria-label={`${label} tab preview`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors ${
                 index === 0
                   ? "bg-accent text-foreground"
                   : "text-secondary-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
-              {tab}
+              <Icon className="size-4 shrink-0" strokeWidth={1.5} />
+              {label}
             </button>
           ))}
         </div>
@@ -335,9 +348,16 @@ export function SandboxRail({ worktrees, changesets }: Props) {
             type="button"
             disabled
             aria-label={activeWorktree ? "Stop sandbox preview" : "Start sandbox preview"}
-            className="ml-auto rounded-lg border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red opacity-60"
+            className="ml-auto flex items-center gap-1.5 rounded-lg border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red opacity-60"
           >
-            {activeWorktree ? "Stop" : "Start"}
+            {activeWorktree ? (
+              "Stop"
+            ) : (
+              <>
+                <Play className="size-3.5 shrink-0" strokeWidth={1.5} />
+                Start
+              </>
+            )}
           </button>
           <button
             type="button"
@@ -371,7 +391,7 @@ export function SandboxRail({ worktrees, changesets }: Props) {
         <RailSection
           id="diff"
           title="Diff"
-          icon={<GitBranch className="size-4" />}
+          icon={<GitCompare className="size-4" />}
           open={openSections.diff}
           onToggle={toggleSection}
         >

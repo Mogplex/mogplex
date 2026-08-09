@@ -10,13 +10,15 @@ import {
 } from "@/components/active-scope-provider";
 import { useMemberships } from "@/hooks/use-memberships";
 import {
+  ArrowUpCircle,
+  Binocular,
+  Coins,
   Cube,
   DeliveryTruck,
-  Eye,
   Flash,
   Repository,
+  Rocket,
   Search,
-  SendDiagonal,
   Settings,
 } from "iconoir-react";
 import {
@@ -35,14 +37,14 @@ const COMPACT_THRESHOLD = 120;
 const MAX_WIDTH = 320;
 
 const NAV_ICONS = {
-  control: SendDiagonal,
+  control: Rocket,
   workspaces: Repository,
   automations: Flash,
   sandboxes: Cube,
   delivery: DeliveryTruck,
-  observe: Eye,
+  observe: Binocular,
   settings: Settings,
-} satisfies Record<AppNavItemId, typeof SendDiagonal>;
+} satisfies Record<AppNavItemId, typeof Rocket>;
 
 type BillingSummary = {
   enabled: boolean;
@@ -91,6 +93,40 @@ function usageMeterWidth(summary: BillingSummary | undefined): string {
   return `${percent}%`;
 }
 
+type AppNavItem = ReturnType<typeof buildAppNavItems>[number];
+
+function SidebarNavLink({
+  item,
+  compact,
+  pathname,
+}: {
+  item: AppNavItem;
+  compact: boolean;
+  pathname: string;
+}) {
+  const Icon = NAV_ICONS[item.id];
+  const active = isAppNavItemActive(pathname, item.match);
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      aria-label={compact ? item.label : undefined}
+      title={compact ? item.label : undefined}
+      data-testid={`app-nav-${item.id}`}
+      className={`app-sidebar-link flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
+        active
+          ? "is-active bg-sidebar-accent text-sidebar-foreground"
+          : "text-secondary-foreground hover:bg-muted hover:text-sidebar-foreground"
+      }`}
+    >
+      <Icon className="size-5 shrink-0" strokeWidth={1.5} />
+      {compact ? null : (
+        <span className="app-sidebar-link-label truncate">{item.label}</span>
+      )}
+    </Link>
+  );
+}
+
 async function loadBillingSummary([
   url,
   activeTeamId,
@@ -117,6 +153,8 @@ export function AppSidebar() {
     return routeTeam?.id ?? null;
   }, [providedActiveTeamId, routeTeam]);
   const navItems = useMemo(() => buildAppNavItems(scope), [scope]);
+  const primaryItems = navItems.filter((item) => item.section === "primary");
+  const adminItems = navItems.filter((item) => item.section === "admin");
   // Only fetch billing once the route scope resolves to the personal account
   // or a known membership — an unknown team slug must not fall back to
   // personal-scope billing.
@@ -219,32 +257,28 @@ export function AppSidebar() {
         className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden px-4 py-0"
         aria-label="Primary"
       >
-        {navItems.map((item) => {
-          const Icon = NAV_ICONS[item.id];
-          const active = isAppNavItemActive(pathname, item.match);
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              aria-label={compact ? item.label : undefined}
-              title={compact ? item.label : undefined}
-              data-testid={`app-nav-${item.id}`}
-              className={`app-sidebar-link flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
-                active
-                  ? "is-active bg-sidebar-accent text-sidebar-foreground"
-                  : "text-secondary-foreground hover:bg-muted hover:text-sidebar-foreground"
-              }`}
-            >
-              <Icon className="size-5 shrink-0" strokeWidth={1.5} />
-              {compact ? null : (
-                <span className="app-sidebar-link-label truncate">
-                  {item.label}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+        {primaryItems.map((item) => (
+          <SidebarNavLink
+            key={item.id}
+            item={item}
+            compact={compact}
+            pathname={pathname}
+          />
+        ))}
+      </nav>
+
+      <nav
+        className="mb-2 flex flex-col gap-1 border-t border-sidebar-border px-4 pt-2"
+        aria-label="Admin"
+      >
+        {adminItems.map((item) => (
+          <SidebarNavLink
+            key={item.id}
+            item={item}
+            compact={compact}
+            pathname={pathname}
+          />
+        ))}
       </nav>
 
       {compact || showBillingCard ? (
@@ -252,7 +286,8 @@ export function AppSidebar() {
           {compact ? null : (
             <div className="app-sidebar-footer-label space-y-3">
               <div>
-                <div className="font-semibold text-foreground">
+                <div className="flex items-center gap-2 font-semibold text-foreground">
+                  <Coins className="size-4 shrink-0" strokeWidth={1.5} />
                   {billingPending
                     ? "Plan loading"
                     : billingError
@@ -275,8 +310,9 @@ export function AppSidebar() {
               </div>
               <Link
                 href={scopedHref(scope, "/settings/billing")}
-                className="block text-xs text-secondary-foreground hover:text-foreground"
+                className="flex items-center gap-1.5 text-xs text-secondary-foreground hover:text-foreground"
               >
+                <ArrowUpCircle className="size-3.5 shrink-0" strokeWidth={1.5} />
                 {billingSummary?.canManageBilling === false
                   ? "View billing"
                   : "Manage billing"}
