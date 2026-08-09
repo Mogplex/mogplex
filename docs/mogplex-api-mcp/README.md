@@ -105,6 +105,7 @@ mogplex_set_automation_model
 mogplex_trigger_automation
 mogplex_list_automation_runs
 mogplex_get_automation_run_logs
+mogplex_rerun_pr_review
 ```
 
 Later multi-agent orchestration tools:

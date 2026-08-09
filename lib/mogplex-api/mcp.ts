@@ -122,7 +122,7 @@ function initializeResult() {
       version: MOGPLEX_MCP_SERVER_VERSION,
     },
     instructions:
-      "Use Mogplex tools to discover repos, agents, and models; manage env vars on a repo's linked Vercel project; build, publish, trigger, and inspect automations; create sandboxes and read their logs; or start and control one-off repo-bound agent runs.",
+      "Use Mogplex tools to discover repos, agents, and models; manage env vars on a repo's linked Vercel project; build, publish, trigger, and inspect automations; rerun the Mogplex PR review on a pull request; create sandboxes and read their logs; or start and control one-off repo-bound agent runs.",
   };
 }
 

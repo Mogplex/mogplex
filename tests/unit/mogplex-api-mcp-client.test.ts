@@ -151,6 +151,54 @@ test("MogplexApiClient sends automation triggers through the scoped API with ide
   ]);
 });
 
+test("MogplexApiClient posts PR review reruns to the scoped endpoint", async () => {
+  const seen: Array<{
+    url: string;
+    method: string | undefined;
+    body: string | null;
+  }> = [];
+  const client = new MogplexApiClient({
+    baseUrl: "https://app.example",
+    authorization: "mog_test",
+    fetch: async (input, init) => {
+      seen.push({
+        url: String(input),
+        method: init?.method,
+        body: typeof init?.body === "string" ? init.body : null,
+      });
+      return Response.json({
+        ok: true,
+        data: {
+          queued: true,
+          jobRunId: "job-new-1",
+          prNumber: 42,
+          repoId: "repo-1",
+          started: true,
+          deferred: false,
+          reason: null,
+          status: "running",
+          runtimeProvider: "trigger",
+          runtimeRunId: "runtime-1",
+          workflowRunId: "workflow-1",
+          versionFallbackUsed: false,
+        },
+      });
+    },
+  });
+
+  const result = await client.rerunPrReview({ repoId: "repo-1", prNumber: 42 });
+
+  assert.deepEqual(seen, [
+    {
+      url: "https://app.example/api/v1/mogplex/pr-reviews/rerun",
+      method: "POST",
+      body: JSON.stringify({ repoId: "repo-1", prNumber: 42 }),
+    },
+  ]);
+  assert.equal(result.jobRunId, "job-new-1");
+  assert.equal(result.queued, true);
+});
+
 test("MogplexApiClient sends env var mutations to the repo-scoped endpoint", async () => {
   const seen: Array<{
     url: string;
