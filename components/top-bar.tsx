@@ -36,12 +36,59 @@ const fetchSlackInstallations = async (url: string) => {
   return response.json() as Promise<SlackInstallationsResponse>
 }
 
+type AppNavItem = ReturnType<typeof buildAppNavItems>[number]
+
+function MobileNavLink({ item, pathname }: { item: AppNavItem; pathname: string }) {
+  const isActive = isAppNavItemActive(pathname, item.match)
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? "page" : undefined}
+      className={`px-4 py-3 text-sm border-b border-border transition-colors ${
+        isActive
+          ? "bg-primary/10 font-medium text-primary"
+          : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+      }`}
+    >
+      {item.label}
+    </Link>
+  )
+}
+
+export function MobileSheetNav({
+  primaryItems,
+  adminItems,
+  pathname,
+}: {
+  primaryItems: AppNavItem[]
+  adminItems: AppNavItem[]
+  pathname: string
+}) {
+  return (
+    <nav className="flex flex-col">
+      {primaryItems.map((item) => (
+        <MobileNavLink key={item.id} item={item} pathname={pathname} />
+      ))}
+      {adminItems.length > 0 && (
+        <>
+          <div className="mt-6 border-t border-border" aria-hidden="true" />
+          {adminItems.map((item) => (
+            <MobileNavLink key={item.id} item={item} pathname={pathname} />
+          ))}
+        </>
+      )}
+    </nav>
+  )
+}
+
 export function TopBar() {
   const { user, logout, isLoading } = useUser()
   const pathname = usePathname()
   const router = useRouter()
   const { scope } = useParams<{ scope: string }>()
   const navItems = useMemo(() => buildAppNavItems(scope), [scope])
+  const primaryItems = navItems.filter((item) => item.section === "primary")
+  const adminItems = navItems.filter((item) => item.section === "admin")
   const { open: openCommandPalette } = useCommandPalette()
   const {
     data: slackInstallationsData,
@@ -80,24 +127,11 @@ export function TopBar() {
             </button>
           </SheetTrigger>
           <SheetContent side="left" className="w-56 p-0 pt-12">
-            <nav className="flex flex-col">
-              {navItems.map((item) => {
-                const isActive = isAppNavItemActive(pathname, item.match)
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    className={`px-4 py-3 text-sm border-b border-border transition-colors ${
-                      isActive
-                        ? "bg-primary/10 font-medium text-primary"
-                        : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </nav>
+            <MobileSheetNav
+              primaryItems={primaryItems}
+              adminItems={adminItems}
+              pathname={pathname}
+            />
           </SheetContent>
         </Sheet>
 
