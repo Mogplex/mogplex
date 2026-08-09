@@ -43,6 +43,7 @@ function MobileNavLink({ item, pathname }: { item: AppNavItem; pathname: string 
   return (
     <Link
       href={item.href}
+      aria-current={isActive ? "page" : undefined}
       className={`px-4 py-3 text-sm border-b border-border transition-colors ${
         isActive
           ? "bg-primary/10 font-medium text-primary"
@@ -51,6 +52,32 @@ function MobileNavLink({ item, pathname }: { item: AppNavItem; pathname: string 
     >
       {item.label}
     </Link>
+  )
+}
+
+export function MobileSheetNav({
+  primaryItems,
+  adminItems,
+  pathname,
+}: {
+  primaryItems: AppNavItem[]
+  adminItems: AppNavItem[]
+  pathname: string
+}) {
+  return (
+    <nav className="flex flex-col">
+      {primaryItems.map((item) => (
+        <MobileNavLink key={item.id} item={item} pathname={pathname} />
+      ))}
+      {adminItems.length > 0 && (
+        <>
+          <div className="mt-6 border-t border-border" aria-hidden="true" />
+          {adminItems.map((item) => (
+            <MobileNavLink key={item.id} item={item} pathname={pathname} />
+          ))}
+        </>
+      )}
+    </nav>
   )
 }
 
@@ -100,15 +127,11 @@ export function TopBar() {
             </button>
           </SheetTrigger>
           <SheetContent side="left" className="w-56 p-0 pt-12">
-            <nav className="flex flex-col">
-              {primaryItems.map((item) => (
-                <MobileNavLink key={item.id} item={item} pathname={pathname} />
-              ))}
-              <div className="mt-6 border-t border-border" aria-hidden="true" />
-              {adminItems.map((item) => (
-                <MobileNavLink key={item.id} item={item} pathname={pathname} />
-              ))}
-            </nav>
+            <MobileSheetNav
+              primaryItems={primaryItems}
+              adminItems={adminItems}
+              pathname={pathname}
+            />
           </SheetContent>
         </Sheet>
 
