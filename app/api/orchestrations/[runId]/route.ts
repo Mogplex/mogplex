@@ -6,9 +6,9 @@ import {
   updateOrchestrationRun,
 } from "@/lib/orchestrations/store";
 import { isOrchestrationApprovalMode } from "@/lib/orchestrations/status";
+import { MAX_ORCHESTRATION_TITLE_LENGTH } from "@/lib/orchestrations/validation";
+import { isUuid } from "@/lib/uuid";
 import type { UpdateOrchestrationRunInput } from "@/lib/orchestrations/store";
-
-const MAX_TITLE_LENGTH = 500;
 
 type OrchestrationRunRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -18,6 +18,10 @@ type OrchestrationRunRouteDeps = {
 };
 
 type RouteContext = { params: Promise<{ runId: string }> };
+
+function runNotFound() {
+  return NextResponse.json({ error: "Run not found" }, { status: 404 });
+}
 
 function buildDeps(
   overrides: Partial<OrchestrationRunRouteDeps>
@@ -41,11 +45,12 @@ export function createOrchestrationRunGetHandler(
     if (userId instanceof Response) return userId;
 
     const { runId } = await ctx.params;
+    // Run ids are UUIDs; anything else can 404 without a database round trip
+    // (PostgREST rejects non-uuid comparisons as errors, not empty results).
+    if (!isUuid(runId)) return runNotFound();
     try {
       const details = await deps.getOrchestrationRunDetails({ runId, userId });
-      if (!details) {
-        return NextResponse.json({ error: "Run not found" }, { status: 404 });
-      }
+      if (!details) return runNotFound();
       return NextResponse.json(details);
     } catch (error) {
       console.error("[orchestrations] failed to load run", {
@@ -75,8 +80,10 @@ function parsePatchBody(body: unknown): ParsedPatchBody | { error: string } {
 
   if (record.title !== undefined) {
     const title = typeof record.title === "string" ? record.title.trim() : "";
-    if (title.length === 0 || title.length > MAX_TITLE_LENGTH) {
-      return { error: `title must be 1-${MAX_TITLE_LENGTH} characters` };
+    if (title.length === 0 || title.length > MAX_ORCHESTRATION_TITLE_LENGTH) {
+      return {
+        error: `title must be 1-${MAX_ORCHESTRATION_TITLE_LENGTH} characters`,
+      };
     }
     parsed.title = title;
   }
@@ -115,6 +122,7 @@ export function createOrchestrationRunPatchHandler(
     if (userId instanceof Response) return userId;
 
     const { runId } = await ctx.params;
+    if (!isUuid(runId)) return runNotFound();
     let body: unknown;
     try {
       body = await request.json();
@@ -135,9 +143,7 @@ export function createOrchestrationRunPatchHandler(
         runId,
         userId,
       });
-      if (!run) {
-        return NextResponse.json({ error: "Run not found" }, { status: 404 });
-      }
+      if (!run) return runNotFound();
       return NextResponse.json({ run });
     } catch (error) {
       console.error("[orchestrations] failed to update run", {
@@ -163,11 +169,12 @@ export function createOrchestrationRunDeleteHandler(
     if (userId instanceof Response) return userId;
 
     const { runId } = await ctx.params;
+    if (!isUuid(runId)) return runNotFound();
     try {
       const result = await deps.cancelOrchestrationRun({ runId, userId });
       switch (result.outcome) {
         case "not_found":
-          return NextResponse.json({ error: "Run not found" }, { status: 404 });
+          return runNotFound();
         case "not_cancellable":
           return NextResponse.json(
             { error: "Run has already completed" },

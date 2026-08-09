@@ -6,13 +6,13 @@ import {
 } from "@/lib/orchestrations/store";
 import { isOrchestrationApprovalMode } from "@/lib/orchestrations/status";
 import {
+  MAX_ORCHESTRATION_TITLE_LENGTH,
   validateOrchestrationBranchName,
   validateOrchestrationRootDirectory,
 } from "@/lib/orchestrations/validation";
 import { getOwnedRepo } from "@/lib/repos";
 import type { CreateOrchestrationRunInput } from "@/lib/orchestrations/store";
 
-const MAX_TITLE_LENGTH = 500;
 const MAX_REQUEST_LENGTH = 100_000;
 const MAX_LIST_LIMIT = 200;
 
@@ -93,9 +93,9 @@ function parseCreateBody(body: unknown): ParsedCreateBody | { error: string } {
     return { error: "repoId is required" };
   }
   const title = typeof record.title === "string" ? record.title.trim() : "";
-  if (title.length === 0 || title.length > MAX_TITLE_LENGTH) {
+  if (title.length === 0 || title.length > MAX_ORCHESTRATION_TITLE_LENGTH) {
     return {
-      error: `title must be 1-${MAX_TITLE_LENGTH} characters`,
+      error: `title must be 1-${MAX_ORCHESTRATION_TITLE_LENGTH} characters`,
     };
   }
   const request =

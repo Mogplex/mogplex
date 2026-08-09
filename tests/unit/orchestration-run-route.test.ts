@@ -216,6 +216,36 @@ test("DELETE returns 409 for a completed run", async () => {
   assert.equal(response.status, 409);
 });
 
+test("malformed runId returns 404 without touching the store", async () => {
+  const {
+    createOrchestrationRunGetHandler,
+    createOrchestrationRunPatchHandler,
+    createOrchestrationRunDeleteHandler,
+  } = await loadRunRoute();
+  const mustNotBeCalled = async () => {
+    throw new Error("store must not be called for a malformed runId");
+  };
+  const badParams = { params: Promise.resolve({ runId: "not-a-uuid" }) };
+
+  const getResponse = await createOrchestrationRunGetHandler({
+    requireUserId: async () => "user-123",
+    getOrchestrationRunDetails: mustNotBeCalled,
+  })(buildJsonRequest("GET"), badParams);
+  assert.equal(getResponse.status, 404);
+
+  const patchResponse = await createOrchestrationRunPatchHandler({
+    requireUserId: async () => "user-123",
+    updateOrchestrationRun: mustNotBeCalled,
+  })(buildJsonRequest("PATCH", { title: "New title" }), badParams);
+  assert.equal(patchResponse.status, 404);
+
+  const deleteResponse = await createOrchestrationRunDeleteHandler({
+    requireUserId: async () => "user-123",
+    cancelOrchestrationRun: mustNotBeCalled,
+  })(buildJsonRequest("DELETE"), badParams);
+  assert.equal(deleteResponse.status, 404);
+});
+
 test("DELETE returns 404 when the run does not exist for the caller", async () => {
   const { createOrchestrationRunDeleteHandler } = await loadRunRoute();
   const handler = createOrchestrationRunDeleteHandler({
