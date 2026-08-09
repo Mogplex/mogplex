@@ -66,6 +66,7 @@ test("Mogplex MCP initialize and tools/list expose the run control tools", async
       "mogplex_trigger_automation",
       "mogplex_list_automation_runs",
       "mogplex_get_automation_run_logs",
+      "mogplex_rerun_pr_review",
       "mogplex_start_agent_run",
       "mogplex_get_run",
       "mogplex_get_run_events",
@@ -186,6 +187,82 @@ test("Mogplex MCP automation listing forwards bounded pagination", async () => {
     }
   ).result;
   assert.equal(result.structuredContent.nextCursor, "next-page");
+});
+
+test("Mogplex MCP rerun PR review forwards repo and PR number to the API", async () => {
+  const calls: unknown[] = [];
+  const response = await handleMogplexMcpPayload(
+    {
+      jsonrpc: "2.0",
+      id: "rerun-pr-review-1",
+      method: "tools/call",
+      params: {
+        name: "mogplex_rerun_pr_review",
+        arguments: { repoId: "repo-1", prNumber: 42 },
+      },
+    },
+    {
+      client: buildFakeMcpClient({
+        rerunPrReview: async (input) => {
+          calls.push(input);
+          return {
+            queued: true,
+            jobRunId: "job-rerun-1",
+            prNumber: input.prNumber,
+            repoId: input.repoId,
+            started: true,
+            deferred: false,
+            reason: null,
+            status: "running",
+            runtimeProvider: "trigger",
+            runtimeRunId: "runtime-1",
+            workflowRunId: "workflow-1",
+            versionFallbackUsed: false,
+          };
+        },
+      }),
+    }
+  );
+
+  assert.deepEqual(calls, [{ repoId: "repo-1", prNumber: 42 }]);
+  const result = (
+    assertSingleMcpResponse(response) as {
+      result: {
+        content: Array<{ text: string }>;
+        structuredContent: { jobRunId: string; queued: boolean };
+      };
+    }
+  ).result;
+  assert.equal(result.structuredContent.queued, true);
+  assert.equal(result.structuredContent.jobRunId, "job-rerun-1");
+  assert.match(result.content[0]?.text ?? "", /PR #42/);
+});
+
+test("Mogplex MCP rerun PR review rejects invalid arguments before calling the API", async () => {
+  const response = await handleMogplexMcpPayload(
+    {
+      jsonrpc: "2.0",
+      id: "rerun-pr-review-bad",
+      method: "tools/call",
+      params: {
+        name: "mogplex_rerun_pr_review",
+        arguments: { repoId: "repo-1", prNumber: 0 },
+      },
+    },
+    {
+      client: buildFakeMcpClient({
+        rerunPrReview: async () => {
+          throw new Error("should not reach the API for invalid arguments");
+        },
+      }),
+    }
+  );
+
+  const parsed = assertSingleMcpResponse(response) as {
+    error?: { code: number; message: string };
+  };
+  assert.equal(parsed.error?.code, -32602);
+  assert.match(String(parsed.error?.message), /prNumber/);
 });
 
 test("Mogplex MCP env var tools list, set, and delete through the client", async () => {

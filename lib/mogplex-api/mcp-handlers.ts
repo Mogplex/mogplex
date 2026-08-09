@@ -17,6 +17,7 @@ import {
   listReposArgsSchema,
   listSandboxesArgsSchema,
   repoIdArgsSchema,
+  rerunPrReviewArgsSchema,
   runEventsArgsSchema,
   runIdArgsSchema,
   sandboxIdArgsSchema,
@@ -257,6 +258,14 @@ export async function callMogplexTool(
         const result = await context.client.getAutomationRunLogs(input);
         return textResult(
           `Loaded logs for automation run ${result.run.id}. Status: ${result.run.status}.`,
+          result
+        );
+      }
+      case "mogplex_rerun_pr_review": {
+        const input = parseArgs(rerunPrReviewArgsSchema, args);
+        const result = await context.client.rerunPrReview(input);
+        return textResult(
+          `Queued a Mogplex PR Review rerun for PR #${result.prNumber}. Job run: ${result.jobRunId ?? "none"}.`,
           result
         );
       }

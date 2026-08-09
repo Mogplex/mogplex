@@ -76,7 +76,7 @@ test("POST /api/v1/mogplex/mcp accepts OAuth bearer tokens", async () => {
   );
 
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).result.tools.length, 22);
+  assert.equal((await response.json()).result.tools.length, 23);
 });
 
 test("POST /api/v1/mogplex/mcp handles authenticated tools/list", async () => {
@@ -109,7 +109,7 @@ test("POST /api/v1/mogplex/mcp handles authenticated tools/list", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("mcp-protocol-version"), "2025-11-25");
-  assert.equal(payload.result.tools.length, 22);
+  assert.equal(payload.result.tools.length, 23);
 });
 
 test("OPTIONS /api/v1/mogplex/mcp rejects origins outside the allow-list", async () => {

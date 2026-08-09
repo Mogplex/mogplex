@@ -76,6 +76,7 @@ export type MogplexMcpClient = Pick<
   | "listRepos"
   | "listSandboxes"
   | "publishAutomation"
+  | "rerunPrReview"
   | "setAutomationModel"
   | "startAgentRun"
   | "triggerAutomation"

@@ -35,6 +35,73 @@ export function isMogplexPrReviewRerunEvent(input: {
   );
 }
 
+export async function getPullRequestHeadSha(input: {
+  githubToken: string;
+  repoFullName: string;
+  prNumber: number;
+}): Promise<string | null> {
+  const { owner, repo } = parseRepoFullName(input.repoFullName);
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${input.prNumber}`,
+    { headers: getGithubHeaders(input.githubToken) }
+  );
+  const payload = (await response.json().catch(() => null)) as {
+    head?: { sha?: unknown };
+    message?: string;
+  } | null;
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const message =
+      typeof payload?.message === "string"
+        ? payload.message
+        : response.statusText || "Unknown GitHub API error";
+    throw new Error(
+      `GitHub pull request lookup failed (${response.status}): ${message}`
+    );
+  }
+
+  const sha = payload?.head?.sha;
+  return typeof sha === "string" && sha.trim() ? sha : null;
+}
+
+export async function getLatestPrReviewCheckRun(input: {
+  githubToken: string;
+  repoFullName: string;
+  headSha: string;
+}): Promise<{ id: number | null; externalId: string | null } | null> {
+  const { owner, repo } = parseRepoFullName(input.repoFullName);
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/commits/${input.headSha}/check-runs?check_name=${encodeURIComponent(MOGPLEX_PR_REVIEW_CHECK_NAME)}&per_page=1`,
+    { headers: getGithubHeaders(input.githubToken) }
+  );
+  const payload = (await response.json().catch(() => null)) as {
+    check_runs?: Array<{ id?: unknown; external_id?: unknown }>;
+    message?: string;
+  } | null;
+
+  if (!response.ok) {
+    const message =
+      typeof payload?.message === "string"
+        ? payload.message
+        : response.statusText || "Unknown GitHub API error";
+    throw new Error(
+      `GitHub check runs lookup failed (${response.status}): ${message}`
+    );
+  }
+
+  const checkRun = payload?.check_runs?.[0];
+  if (!checkRun) return null;
+
+  return {
+    id: typeof checkRun.id === "number" ? checkRun.id : null,
+    externalId:
+      typeof checkRun.external_id === "string" && checkRun.external_id.trim()
+        ? checkRun.external_id.trim()
+        : null,
+  };
+}
+
 export async function createPrReviewCheckRun(input: {
   githubToken: string;
   repoFullName: string;

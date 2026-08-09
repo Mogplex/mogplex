@@ -56,6 +56,21 @@ export type MogplexApiRunCancelResult = {
   status: string;
 };
 
+export type RerunMogplexPrReviewResult = {
+  queued: boolean;
+  jobRunId: string | null;
+  prNumber: number;
+  repoId: string;
+  started: boolean;
+  deferred: boolean;
+  reason: string | null;
+  status: string | null;
+  runtimeProvider: string | null;
+  runtimeRunId: string | null;
+  workflowRunId: string | null;
+  versionFallbackUsed: boolean;
+};
+
 function normalizeAuthorization(value: string) {
   return value.startsWith("Bearer ") ? value : `Bearer ${value}`;
 }
@@ -327,6 +342,13 @@ export class MogplexApiClient {
   getAutomationRunLogs(input: { automationId: string; runId: string }) {
     return this.request<{ run: FlowRunDetail }>(
       `/api/v1/mogplex/automations/${encodeURIComponent(input.automationId)}/runs/${encodeURIComponent(input.runId)}`
+    );
+  }
+
+  rerunPrReview(input: { repoId: string; prNumber: number }) {
+    return this.request<RerunMogplexPrReviewResult>(
+      "/api/v1/mogplex/pr-reviews/rerun",
+      { method: "POST", body: input }
     );
   }
 

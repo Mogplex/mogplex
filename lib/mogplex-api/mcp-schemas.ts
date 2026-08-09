@@ -126,6 +126,13 @@ export const automationRunLogsArgsSchema = automationIdArgsSchema.extend({
   runId: z.string().trim().min(1),
 });
 
+export const rerunPrReviewArgsSchema = z
+  .object({
+    repoId: z.string().trim().min(1),
+    prNumber: z.number().int().positive(),
+  })
+  .strict();
+
 export const startAgentRunArgsSchema = z
   .object({
     repoId: z.string().trim().min(1),

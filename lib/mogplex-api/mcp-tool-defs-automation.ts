@@ -245,4 +245,30 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
       openWorldHint: false,
     },
   },
+  {
+    name: "mogplex_rerun_pr_review",
+    title: "Rerun Mogplex PR Review",
+    description:
+      'Queue another Mogplex PR Review run for a pull request. Equivalent to clicking the "Re-run review" button on the Mogplex PR Review GitHub check run.',
+    inputSchema: objectSchema({
+      properties: {
+        repoId: {
+          type: "string",
+          description: "Repository id from mogplex_list_repos.",
+        },
+        prNumber: {
+          type: "integer",
+          minimum: 1,
+          description: "Pull request number in the repository.",
+        },
+      },
+      required: ["repoId", "prNumber"],
+    }),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  },
 ];
