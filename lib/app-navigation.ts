@@ -3,21 +3,27 @@ import { scopedHref } from "@/lib/scoped-href";
 export const APP_NAV_ITEM_DEFS = [
   {
     id: "control",
-    label: "Control",
+    label: "Command Center",
     path: "/control",
     subpaths: ["/control"],
   },
   {
     id: "workspaces",
-    label: "Workspaces",
-    path: "/projects/workspace",
-    subpaths: ["/projects", "/workspaces"],
+    label: "Repositories",
+    path: "/projects/repositories",
+    subpaths: ["/projects/repositories", "/projects/workspace", "/workspaces"],
   },
   {
     id: "automations",
     label: "Automations",
     path: "/automations",
     subpaths: ["/automations", "/workflows", "/flows", "/triggers"],
+  },
+  {
+    id: "sandboxes",
+    label: "Sandboxes",
+    path: "/projects/repositories/sandboxes",
+    subpaths: ["/projects/repositories/sandboxes"],
   },
   {
     id: "delivery",
@@ -51,5 +57,9 @@ export function buildAppNavItems(scope: string) {
 
 export function isAppNavItemActive(pathname: string, match: string | string[]) {
   const matches = Array.isArray(match) ? match : [match];
-  return matches.some((m) => pathname === m || pathname.startsWith(`${m}/`));
+  return matches.some((m) => {
+    // Sandboxes owns the only current repositories child route in primary nav.
+    if (m.endsWith("/projects/repositories")) return pathname === m;
+    return pathname === m || pathname.startsWith(`${m}/`);
+  });
 }

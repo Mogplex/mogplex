@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Terminal, NavArrowUp, Xmark } from "iconoir-react"
 import type { Worktree } from "@/lib/control/types"
 
@@ -25,6 +25,14 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "events", label: "Events" },
 ]
 
+const DRAWER_HEIGHT_KEY = "mogplex.consoleDrawer.height"
+const MIN_DRAWER_HEIGHT = 140
+const MAX_DRAWER_HEIGHT = 520
+
+function clampDrawerHeight(value: number) {
+  return Math.min(MAX_DRAWER_HEIGHT, Math.max(MIN_DRAWER_HEIGHT, value))
+}
+
 type Line = { gutter: string; text: string; color: string; tail?: string }
 
 export function ConsoleDrawer({
@@ -40,6 +48,76 @@ export function ConsoleDrawer({
 }: Props) {
   const [terminalLog, setTerminalLog] = useState<string[]>([])
   const [terminalInput, setTerminalInput] = useState("")
+  const [liveHeight, setLiveHeight] = useState(height)
+  const [resizing, setResizing] = useState(false)
+  const activePointerId = useRef<number | null>(null)
+  const drawerRef = useRef<HTMLDivElement | null>(null)
+  const previousHeightProp = useRef(height)
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const storedHeight = Number(window.localStorage.getItem(DRAWER_HEIGHT_KEY))
+      if (Number.isFinite(storedHeight) && storedHeight > 0) {
+        setLiveHeight(clampDrawerHeight(storedHeight))
+      } else {
+        setLiveHeight(previousHeightProp.current)
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
+  useEffect(() => {
+    if (height === previousHeightProp.current) return
+    previousHeightProp.current = height
+    const frame = window.requestAnimationFrame(() => {
+      const nextHeight = clampDrawerHeight(height)
+      setLiveHeight(nextHeight)
+      window.localStorage.setItem(DRAWER_HEIGHT_KEY, String(nextHeight))
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [height])
+
+  useEffect(() => {
+    if (!resizing) return
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (
+        activePointerId.current !== null &&
+        event.pointerId !== activePointerId.current
+      ) {
+        return
+      }
+      const bottomEdge =
+        drawerRef.current?.getBoundingClientRect().bottom ?? window.innerHeight
+      const nextHeight = clampDrawerHeight(bottomEdge - event.clientY)
+      setLiveHeight(nextHeight)
+      window.localStorage.setItem(DRAWER_HEIGHT_KEY, String(nextHeight))
+    }
+    const stopResizing = () => {
+      activePointerId.current = null
+      setResizing(false)
+    }
+
+    window.addEventListener("pointermove", onPointerMove)
+    window.addEventListener("pointerup", stopResizing)
+    window.addEventListener("pointercancel", stopResizing)
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", stopResizing)
+      window.removeEventListener("pointercancel", stopResizing)
+    }
+  }, [resizing])
+
+  const resizeFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
+    event.preventDefault()
+    const direction = event.key === "ArrowUp" ? 16 : -16
+    setLiveHeight((current) => {
+      const next = clampDrawerHeight(current + direction)
+      window.localStorage.setItem(DRAWER_HEIGHT_KEY, String(next))
+      return next
+    })
+  }
 
   // Get active worktree for terminal context
   const wt = (selection?.startsWith("wt-") ? getWorktree(selection) : undefined) || worktrees[0]
@@ -84,9 +162,30 @@ export function ConsoleDrawer({
       {/* Drawer content when open */}
       {open && (
         <div
-          className="flex flex-col bg-[var(--terminal-background)] transition-[height]"
-          style={{ height }}
+          ref={drawerRef}
+          className="relative flex flex-col bg-[var(--terminal-background)] transition-[height]"
+          data-resizing={resizing ? "true" : "false"}
+          style={{ height: liveHeight }}
         >
+          <div
+            role="separator"
+            aria-label="Resize console"
+            aria-orientation="horizontal"
+            aria-valuemin={MIN_DRAWER_HEIGHT}
+            aria-valuemax={MAX_DRAWER_HEIGHT}
+            aria-valuenow={Math.round(liveHeight)}
+            tabIndex={0}
+            onKeyDown={resizeFromKeyboard}
+            onDoubleClick={() => {
+              setLiveHeight(height)
+              window.localStorage.setItem(DRAWER_HEIGHT_KEY, String(height))
+            }}
+            onPointerDown={(event) => {
+              activePointerId.current = event.pointerId
+              setResizing(true)
+            }}
+            className="app-panel-resizer app-panel-resizer-top absolute inset-x-0 top-0 z-30 h-2 cursor-row-resize touch-none outline-none"
+          />
           {/* Header */}
           <div className="flex shrink-0 items-center gap-2 border-b border-[var(--terminal-muted)]/20 px-3 py-1.5">
             {TABS.map((t) => (

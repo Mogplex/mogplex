@@ -27,7 +27,7 @@ test.describe("auth pages render", () => {
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Use the beta sign-in" })
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test("/signup shows the account creation form", async ({ page }) => {

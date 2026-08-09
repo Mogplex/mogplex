@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { createPortal } from "react-dom"
-import { SendDiagonal, PauseSolid } from "iconoir-react"
+import { Attachment, Notes, PauseSolid, SendDiagonal } from "iconoir-react"
 import { McpStatusButton } from "@/components/chat/mcp-status-button"
 import { useModels } from "@/hooks/use-models"
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types"
@@ -85,14 +85,14 @@ function ModelChip({
           })
           setFilter("")
         }}
-        className="rounded border border-border bg-card px-2 py-1 text-[10px] font-medium text-accent-blue hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-accent-blue hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
       >
         {modelId ? shortModelName(modelId) : "Model"}
       </button>
       {open && menuPos && createPortal(
         <div
           ref={menuRef}
-          className="fixed z-[9999] flex max-h-56 w-72 flex-col border border-border bg-card shadow-lg"
+          className="fixed z-[9999] flex max-h-56 w-72 flex-col rounded-lg border border-border bg-card shadow-lg"
           style={{ left: menuPos.left, bottom: menuPos.bottom }}
         >
           <input
@@ -201,9 +201,10 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
   )
 
   return (
-    <div className="border-t border-border bg-card">
+    <div className="bg-transparent px-4 pb-5 sm:px-6">
+      <div className="mx-auto max-w-[760px] rounded-xl border border-border-dim bg-card p-3">
       {/* Quick prompts row */}
-      <div className="flex flex-wrap gap-1.5 border-b border-border/50 px-4 py-2">
+      <div className="flex flex-wrap gap-1.5 border-b border-border pb-2">
         {quickPrompts.map((prompt) => (
           <button
             key={prompt.label}
@@ -219,13 +220,32 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
       </div>
 
       {/* Main input area */}
-      <div className="flex items-end gap-2 px-4 py-3">
+      <div className="flex items-end gap-2 pt-3">
         <div className="flex flex-1 flex-col gap-2">
           {/* Chips row */}
           <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
+              disabled
+              aria-label="Attach file"
+              title="Attach file is not available yet"
+              className="grid size-8 place-items-center rounded-md text-muted-foreground opacity-60"
+            >
+              <Attachment className="size-4" strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
+              disabled
+              aria-label="Plan mode is not available yet"
+              title="Plan mode is not available yet"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-xs font-medium text-secondary-foreground opacity-60"
+            >
+              <Notes className="size-3.5" strokeWidth={1.6} />
+              Plan
+            </button>
+            <button
               onClick={cycleTarget}
-              className="flex items-center gap-1.5 rounded border border-border bg-card px-2 py-1 text-[10px] font-medium hover:bg-secondary"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary"
             >
               <span
                 className={`size-1.5 rounded-full ${target === "mission" ? "bg-primary" : "bg-accent-blue"}`}
@@ -234,13 +254,13 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
             </button>
             <button
               onClick={cycleScope}
-              className="rounded border border-border bg-card px-2 py-1 text-[10px] font-medium hover:bg-secondary"
+              className="h-8 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary"
             >
               {SCOPE_LABELS[scope]}
             </button>
             <button
               onClick={cyclePermissions}
-              className="rounded border border-border bg-card px-2 py-1 text-[10px] font-medium hover:bg-secondary"
+              className="h-8 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary"
             >
               {MISSION_PERMISSION_OPTIONS[permissionsIdx]}
             </button>
@@ -267,7 +287,7 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
                 : `Steer ${target} directly`
             }
             rows={1}
-            className="min-h-[24px] flex-1 resize-y bg-transparent text-sm outline-none placeholder:text-muted-foreground [field-sizing:content]"
+            className="max-h-60 min-h-12 flex-1 resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-muted-foreground [field-sizing:content]"
             disabled={pending}
           />
 
@@ -300,6 +320,7 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
             <SendDiagonal className="size-4" strokeWidth={1.8} />
           </button>
         )}
+      </div>
       </div>
     </div>
   )

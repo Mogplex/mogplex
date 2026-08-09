@@ -5,7 +5,6 @@ import { useParams, usePathname, useRouter } from "next/navigation"
 import { scopedHref } from "@/lib/scoped-href"
 import useSWR from "swr"
 import { useUser } from "@/hooks/use-user"
-import { MogplexMark } from "@/components/brand/mogplex-mark"
 import { ScopeMenuItems } from "@/components/scope-switcher"
 import { SlackFill } from "@/components/settings/icons"
 import { ThemeSwitcher } from "@/components/theme-switcher"
@@ -43,9 +42,6 @@ export function TopBar() {
   const router = useRouter()
   const { scope } = useParams<{ scope: string }>()
   const navItems = useMemo(() => buildAppNavItems(scope), [scope])
-  const activeNavItem = navItems.find((item) =>
-    isAppNavItemActive(pathname, item.match)
-  )
   const { open: openCommandPalette } = useCommandPalette()
   const {
     data: slackInstallationsData,
@@ -76,15 +72,7 @@ export function TopBar() {
       : null)
 
   return (
-    <header className="app-topbar flex h-12 items-center gap-1 border-b border-border bg-card px-3">
-      <Link
-        href={scopedHref(scope, "/projects/workspace")}
-        className="app-brand-mark mr-2 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-brand-accent-hover lg:hidden"
-        aria-label="Mogplex home"
-      >
-        <MogplexMark className="size-5" />
-      </Link>
-
+    <div className="app-topbar flex items-center justify-end gap-2 bg-transparent">
       <Sheet>
           <SheetTrigger asChild>
             <button className="rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] tracking-[0.12em] text-muted-foreground uppercase hover:bg-accent hover:text-foreground lg:hidden">
@@ -113,20 +101,10 @@ export function TopBar() {
           </SheetContent>
         </Sheet>
 
-      <div className="hidden min-w-0 items-center gap-2 lg:flex">
-        <span className="font-mono text-[9px] tracking-[0.14em] text-muted-foreground uppercase">
-          Mogplex
-        </span>
-        <span className="text-border">/</span>
-        <span className="truncate text-[12px] font-medium text-foreground">
-          {activeNavItem?.label || "Workspace"}
-        </span>
-      </div>
-
-      <div className="ml-auto flex items-center gap-2 lg:gap-3">
+      <div className="flex items-center gap-2 lg:gap-3">
         <button
           onClick={openCommandPalette}
-          className="app-command-search hidden h-8 w-[150px] cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 pl-3 pr-1.5 font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase hover:border-primary/40 hover:bg-accent/70 hover:text-foreground sm:inline-flex lg:w-[200px]"
+          className="app-command-search hidden h-8 w-[140px] cursor-pointer items-center justify-between rounded-md border border-border bg-input pl-3 pr-1.5 text-[12px] text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-foreground sm:inline-flex lg:w-[180px]"
         >
           Search
           <kbd className="inline-flex items-center gap-0.5 rounded bg-accent px-1.5 py-0.5 text-[11px] text-muted-foreground">
@@ -158,7 +136,7 @@ export function TopBar() {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuContent align="end" className="mogplex-account-menu w-60">
               <DropdownMenuLabel className="font-normal">
                 <div className="text-sm font-medium">{user.github_username || "User"}</div>
                 <div className="text-xs text-muted-foreground truncate">{user.email || ""}</div>
@@ -225,6 +203,6 @@ export function TopBar() {
           <a href="/login" className="text-[13px] text-muted-foreground hover:text-foreground">Reconnect</a>
         )}
       </div>
-    </header>
+    </div>
   )
 }

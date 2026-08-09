@@ -12,6 +12,9 @@ export const SIDEBAR_WIDTH = '16rem'
 export const SIDEBAR_WIDTH_MOBILE = '18rem'
 export const SIDEBAR_WIDTH_ICON = '3rem'
 export const SIDEBAR_KEYBOARD_SHORTCUT = 'b'
+export const SIDEBAR_WIDTH_KEY = 'mogplex.uiSidebar.width'
+export const SIDEBAR_WIDTH_MIN = 192
+export const SIDEBAR_WIDTH_MAX = 420
 
 export type SidebarContextProps = {
   state: 'expanded' | 'collapsed'
@@ -21,6 +24,8 @@ export type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  sidebarWidth: number
+  setSidebarWidth: (width: number) => void
 }
 
 export const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -53,7 +58,29 @@ export function SidebarProvider({
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen)
+  const [sidebarWidth, setSidebarWidthState] = React.useState(256)
   const open = openProp ?? _open
+  const setSidebarWidth = React.useCallback((width: number) => {
+    const nextWidth = Math.min(
+      SIDEBAR_WIDTH_MAX,
+      Math.max(SIDEBAR_WIDTH_MIN, width),
+    )
+    setSidebarWidthState(nextWidth)
+    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(nextWidth))
+  }, [])
+
+  React.useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY))
+      if (Number.isFinite(storedWidth) && storedWidth > 0) {
+        setSidebarWidthState(
+          Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, storedWidth)),
+        )
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
       const openState = typeof value === 'function' ? value(open) : value
@@ -103,8 +130,20 @@ export function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      sidebarWidth,
+      setSidebarWidth,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
+    [
+      state,
+      open,
+      setOpen,
+      isMobile,
+      openMobile,
+      setOpenMobile,
+      toggleSidebar,
+      sidebarWidth,
+      setSidebarWidth,
+    ],
   )
 
   return (
@@ -115,6 +154,7 @@ export function SidebarProvider({
           style={
             {
               '--sidebar-width': SIDEBAR_WIDTH,
+              '--sidebar-width-resolved': `${sidebarWidth}px`,
               '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
               ...style,
             } as React.CSSProperties

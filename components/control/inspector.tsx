@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Xmark, PlaySolid, PauseSolid, RefreshDouble, GitFork, ArrowSeparateVertical, ArrowUp, Archive } from "iconoir-react"
 import type { Mission, Worktree, Changeset, Deployment, TimelineEvent } from "@/lib/control/types"
 import { formatCost } from "@/lib/control/utils"
@@ -31,6 +32,15 @@ const STATE_STYLES: Record<string, { dot: string; bg: string; fg: string; label:
   degraded: { dot: "bg-accent-amber", bg: "bg-accent-amber/10", fg: "text-accent-amber", label: "DEGRADED" },
 }
 
+const INSPECTOR_WIDTH_KEY = "mogplex.controlInspector.width"
+const DEFAULT_INSPECTOR_WIDTH = 320
+const MIN_INSPECTOR_WIDTH = 280
+const MAX_INSPECTOR_WIDTH = 560
+
+function clampInspectorWidth(value: number) {
+  return Math.min(MAX_INSPECTOR_WIDTH, Math.max(MIN_INSPECTOR_WIDTH, value))
+}
+
 export function Inspector({
   selection,
   tab,
@@ -52,6 +62,62 @@ export function Inspector({
   const changeset = isChangeset ? changesets.find((c) => c.id === selection) : null
   const env = isEnv ? selection.replace("env-", "") : null
   const deployment = isEnv ? deployments.find((d) => d.env === env && d.ws === mission?.ws) : null
+  const [width, setWidth] = useState(DEFAULT_INSPECTOR_WIDTH)
+  const [resizing, setResizing] = useState(false)
+  const activePointerId = useRef<number | null>(null)
+  const asideRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const storedWidth = Number(window.localStorage.getItem(INSPECTOR_WIDTH_KEY))
+      if (Number.isFinite(storedWidth) && storedWidth > 0) {
+        setWidth(clampInspectorWidth(storedWidth))
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
+  useEffect(() => {
+    if (!resizing) return
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (
+        activePointerId.current !== null &&
+        event.pointerId !== activePointerId.current
+      ) {
+        return
+      }
+      const rightEdge =
+        asideRef.current?.getBoundingClientRect().right ?? window.innerWidth
+      const nextWidth = clampInspectorWidth(rightEdge - event.clientX)
+      setWidth(nextWidth)
+      window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(nextWidth))
+    }
+    const stopResizing = () => {
+      activePointerId.current = null
+      setResizing(false)
+    }
+
+    window.addEventListener("pointermove", onPointerMove)
+    window.addEventListener("pointerup", stopResizing)
+    window.addEventListener("pointercancel", stopResizing)
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", stopResizing)
+      window.removeEventListener("pointercancel", stopResizing)
+    }
+  }, [resizing])
+
+  const resizeFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+    event.preventDefault()
+    const direction = event.key === "ArrowLeft" ? 16 : -16
+    setWidth((current) => {
+      const next = clampInspectorWidth(current + direction)
+      window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(next))
+      return next
+    })
+  }
 
   const style = worktree
     ? STATE_STYLES[worktree.state]
@@ -245,7 +311,31 @@ export function Inspector({
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card">
+    <aside
+      ref={asideRef}
+      className="relative flex shrink-0 flex-col border-l border-border bg-card"
+      data-resizing={resizing ? "true" : "false"}
+      style={{ width }}
+    >
+      <div
+        role="separator"
+        aria-label="Resize inspector"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_INSPECTOR_WIDTH}
+        aria-valuemax={MAX_INSPECTOR_WIDTH}
+        aria-valuenow={Math.round(width)}
+        tabIndex={0}
+        onKeyDown={resizeFromKeyboard}
+        onDoubleClick={() => {
+          setWidth(DEFAULT_INSPECTOR_WIDTH)
+          window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(DEFAULT_INSPECTOR_WIDTH))
+        }}
+        onPointerDown={(event) => {
+          activePointerId.current = event.pointerId
+          setResizing(true)
+        }}
+        className="app-panel-resizer app-panel-resizer-left absolute inset-y-0 left-0 z-30 w-2 cursor-col-resize touch-none outline-none"
+      />
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className={`size-2 rounded-full ${style.dot}`} />

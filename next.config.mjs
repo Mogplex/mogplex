@@ -52,8 +52,15 @@ const contentSecurityPolicy = buildContentSecurityPolicy({
   isDevelopment: process.env.NODE_ENV === "development",
 });
 
+const allowedDevOrigins = process.env.MOGPLEX_ALLOWED_DEV_ORIGINS
+  ? process.env.MOGPLEX_ALLOWED_DEV_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : undefined;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  ...(allowedDevOrigins ? { allowedDevOrigins } : {}),
   // Standalone output is only for the self-hosted Docker image (see
   // Dockerfile). Vercel builds must keep the default output mode, so this
   // is opt-in via env rather than set unconditionally.
@@ -162,6 +169,8 @@ export default shouldWrapWithSentry
       widenClientFileUpload: true,
       disableLogger: true,
       automaticVercelMonitors: false,
-      tunnelRoute: "/monitoring",
+      ...(process.env.NODE_ENV === "development"
+        ? {}
+        : { tunnelRoute: "/monitoring" }),
     })
   : nextConfig;

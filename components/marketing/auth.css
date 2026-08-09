@@ -101,6 +101,49 @@
   transition: border-color 160ms ease;
 }
 
+.mpx-auth-input-wrap {
+  position: relative;
+}
+
+.mpx-auth-input.has-action {
+  padding-right: 44px;
+}
+
+.mpx-auth-input-action-slot {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  transform: translateY(-50%);
+}
+
+.mpx-auth-input-action {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.mpx-auth-input-action:hover:not(:disabled),
+.mpx-auth-input-action:focus-visible {
+  color: var(--ink);
+}
+
+.mpx-auth-input-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mpx-auth-input-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .dark .mpx-auth-input {
   background: var(--surface);
 }

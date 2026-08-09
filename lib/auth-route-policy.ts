@@ -40,6 +40,7 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/robots.txt", match: "exact" },
   { path: "/sitemap.xml", match: "exact" },
   { path: "/manifest.webmanifest", match: "exact" },
+  { path: "/monitoring", match: "subtree" },
   { path: "/llms.txt", match: "exact" },
   { path: "/api/cli/latest", match: "subtree" },
   // Retired PAT-handoff route: now a static "update your CLI" notice for

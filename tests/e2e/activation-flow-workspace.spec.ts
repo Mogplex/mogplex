@@ -273,7 +273,7 @@ test("terminal session survives navigation away from the workspace", async ({
     throw new Error("Terminal session host was not mounted");
   }
 
-  await page.getByRole("link", { name: "Repositories", exact: true }).click();
+  await page.getByTestId("app-nav-workspaces").click();
   await expect(page).toHaveURL(
     `/${connectedUser.username}/projects/repositories`
   );

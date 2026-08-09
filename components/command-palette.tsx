@@ -278,10 +278,14 @@ export function CommandPalette({
 
   return (
     <CommandDialog
+      className="mogplex-command-palette"
       open={open}
       onOpenChange={handleOpenChange}
       showCloseButton={false}
-      commandProps={{ shouldFilter: false }}
+      commandProps={{
+        shouldFilter: false,
+        className: "mogplex-command-palette-command",
+      }}
     >
       <CommandInput
         placeholder="Search projects, settings, and actions..."

@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { Eye, EyeClosed } from "iconoir-react";
 import { trackActivation } from "@/lib/activation-tracking";
 import { authClient } from "@/lib/better-auth/client";
 import { AuthField, AuthFormError } from "./auth-field";
@@ -24,6 +25,7 @@ export function SignInForm({ next }: { next: string }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const disabled = isPending || isRedirecting;
 
@@ -83,7 +85,7 @@ export function SignInForm({ next }: { next: string }) {
         id="signin-password"
         label="Password"
         name="password"
-        type="password"
+        type={showPassword ? "text" : "password"}
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         autoComplete="current-password"
@@ -92,6 +94,24 @@ export function SignInForm({ next }: { next: string }) {
         required
         maxLength={128}
         data-testid="signin-password"
+        rightAdornment={
+          <button
+            type="button"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            aria-pressed={showPassword}
+            data-testid="signin-password-toggle"
+            disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setShowPassword((visible) => !visible)}
+            className="mpx-auth-input-action"
+          >
+            {showPassword ? (
+              <EyeClosed aria-hidden className="size-4" strokeWidth={1.8} />
+            ) : (
+              <Eye aria-hidden className="size-4" strokeWidth={1.8} />
+            )}
+          </button>
+        }
       />
       <div className="flex items-center justify-between gap-3">
         <button

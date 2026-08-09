@@ -5,15 +5,31 @@ import type { InputHTMLAttributes, ReactNode } from "react";
 type AuthFieldProps = {
   id: string;
   label: string;
+  rightAdornment?: ReactNode;
 } & InputHTMLAttributes<HTMLInputElement>;
 
-export function AuthField({ id, label, ...input }: AuthFieldProps) {
+export function AuthField({
+  id,
+  label,
+  rightAdornment,
+  className,
+  ...input
+}: AuthFieldProps) {
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="mpx-auth-label">
         {label}
       </label>
-      <input id={id} className="mpx-auth-input" {...input} />
+      <div className="mpx-auth-input-wrap">
+        <input
+          id={id}
+          className={`mpx-auth-input ${rightAdornment ? "has-action" : ""} ${className ?? ""}`.trim()}
+          {...input}
+        />
+        {rightAdornment ? (
+          <div className="mpx-auth-input-action-slot">{rightAdornment}</div>
+        ) : null}
+      </div>
     </div>
   );
 }

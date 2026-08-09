@@ -4,12 +4,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import {
+  Cube,
   DeliveryTruck,
   Eye,
   Flash,
-  Packages,
+  Repository,
+  Search,
   SendDiagonal,
   Settings,
+  SidebarCollapse,
+  SidebarExpand,
 } from "iconoir-react";
 import { MogplexMark } from "@/components/brand/mogplex-mark";
 import {
@@ -19,15 +23,17 @@ import {
 } from "@/lib/app-navigation";
 
 const SIDEBAR_WIDTH_KEY = "mogplex.appSidebar.width";
-const DEFAULT_WIDTH = 224;
-const MIN_WIDTH = 56;
+const SIDEBAR_COLLAPSED_KEY = "mogplex.appSidebar.collapsed";
+const DEFAULT_WIDTH = 272;
+const MIN_WIDTH = 64;
 const COMPACT_THRESHOLD = 120;
 const MAX_WIDTH = 320;
 
 const NAV_ICONS = {
   control: SendDiagonal,
-  workspaces: Packages,
+  workspaces: Repository,
   automations: Flash,
+  sandboxes: Cube,
   delivery: DeliveryTruck,
   observe: Eye,
   settings: Settings,
@@ -43,14 +49,20 @@ export function AppSidebar() {
   const navItems = useMemo(() => buildAppNavItems(scope), [scope]);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [resizing, setResizing] = useState(false);
+  const [lastExpandedWidth, setLastExpandedWidth] = useState(DEFAULT_WIDTH);
   const activePointerId = useRef<number | null>(null);
   const compact = width <= COMPACT_THRESHOLD;
 
   useEffect(() => {
     const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    const storedCollapsed = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     const frame = window.requestAnimationFrame(() => {
       if (Number.isFinite(storedWidth) && storedWidth > 0) {
-        setWidth(clampWidth(storedWidth));
+        const nextWidth = clampWidth(storedWidth);
+        if (nextWidth > COMPACT_THRESHOLD) setLastExpandedWidth(nextWidth);
+        setWidth(storedCollapsed === "true" ? MIN_WIDTH : nextWidth);
+      } else if (storedCollapsed === "true") {
+        setWidth(MIN_WIDTH);
       }
     });
     return () => window.cancelAnimationFrame(frame);
@@ -68,7 +80,9 @@ export function AppSidebar() {
       }
       const nextWidth = clampWidth(event.clientX);
       setWidth(nextWidth);
+      if (nextWidth > COMPACT_THRESHOLD) setLastExpandedWidth(nextWidth);
       window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(nextWidth));
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
     };
     const stopResizing = () => {
       activePointerId.current = null;
@@ -91,9 +105,25 @@ export function AppSidebar() {
     const direction = event.key === "ArrowLeft" ? -8 : 8;
     setWidth((current) => {
       const next = clampWidth(current + direction);
+      if (next > COMPACT_THRESHOLD) setLastExpandedWidth(next);
       window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
       return next;
     });
+  }
+
+  function toggleCollapsed() {
+    if (compact) {
+      const nextWidth = lastExpandedWidth;
+      setWidth(nextWidth);
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
+      return;
+    }
+
+    setLastExpandedWidth(width);
+    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "true");
+    setWidth(MIN_WIDTH);
   }
 
   return (
@@ -104,7 +134,7 @@ export function AppSidebar() {
       data-testid="app-sidebar"
       style={{ width }}
     >
-      <div className="app-sidebar-header flex h-12 shrink-0 items-center overflow-hidden border-b border-sidebar-border px-3">
+      <div className="app-sidebar-header flex h-[76px] shrink-0 items-center overflow-hidden px-5">
         <Link
           href={navItems[0].href}
           aria-label="Mogplex home"
@@ -114,25 +144,44 @@ export function AppSidebar() {
         </Link>
         {compact ? null : (
           <div className="app-sidebar-title min-w-0 pl-3">
-            <div className="text-[13px] font-semibold tracking-[-0.02em]">
-              Mogplex
-            </div>
-            <div className="font-mono text-[8px] tracking-[0.14em] text-muted-foreground uppercase">
-              Foundry
+            <div className="text-[20px] font-semibold tracking-normal">
+              mogplex
             </div>
           </div>
         )}
+        <button
+          type="button"
+          aria-label={compact ? "Expand navigation" : "Collapse navigation"}
+          title={compact ? "Expand navigation" : "Collapse navigation"}
+          onClick={toggleCollapsed}
+          className={`ml-auto grid size-7 shrink-0 place-items-center rounded-md text-secondary-foreground transition-colors hover:bg-muted hover:text-sidebar-foreground ${
+            compact ? "mx-auto" : ""
+          }`}
+        >
+          {compact ? (
+            <SidebarExpand className="size-4" />
+          ) : (
+            <SidebarCollapse className="size-4" />
+          )}
+        </button>
       </div>
 
+      {compact ? null : (
+        <div className="px-5 pb-5">
+          <button
+            type="button"
+            className="flex h-9 w-full items-center gap-3 rounded-lg border border-border bg-input px-3 text-left text-sm text-muted-foreground transition-colors hover:border-border-dim hover:text-foreground"
+          >
+            <Search className="size-4" strokeWidth={1.6} />
+            <span>Search</span>
+          </button>
+        </div>
+      )}
+
       <nav
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden px-2 py-3"
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden px-4 py-0"
         aria-label="Primary"
       >
-        {compact ? null : (
-          <div className="app-sidebar-section-label px-2 pb-1 font-mono text-[8px] tracking-[0.16em] text-muted-foreground uppercase">
-            Workspace
-          </div>
-        )}
         {navItems.map((item) => {
           const Icon = NAV_ICONS[item.id];
           const active = isAppNavItemActive(pathname, item.match);
@@ -144,13 +193,13 @@ export function AppSidebar() {
               aria-label={compact ? item.label : undefined}
               title={compact ? item.label : undefined}
               data-testid={`app-nav-${item.id}`}
-              className={`app-sidebar-link flex h-9 items-center gap-3 rounded-md px-2.5 text-[12px] font-medium transition-colors ${
+              className={`app-sidebar-link flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
                 active
                   ? "is-active bg-sidebar-accent text-sidebar-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+                  : "text-secondary-foreground hover:bg-muted hover:text-sidebar-foreground"
               }`}
             >
-              <Icon className="size-[17px] shrink-0" strokeWidth={1.7} />
+              <Icon className="size-5 shrink-0" strokeWidth={1.5} />
               {compact ? null : (
                 <span className="app-sidebar-link-label truncate">
                   {item.label}
@@ -161,13 +210,26 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="app-sidebar-footer overflow-hidden border-t border-sidebar-border px-4 py-3 font-mono text-[8px] tracking-[0.12em] text-muted-foreground uppercase">
+      <div className="app-sidebar-footer mx-5 mb-5 overflow-hidden rounded-lg border border-sidebar-border bg-card px-4 py-4 text-sm">
         {compact ? null : (
-          <span className="app-sidebar-footer-label">
-            Agent software foundry · v0.1.0
-          </span>
+          <div className="app-sidebar-footer-label space-y-3">
+            <div>
+              <div className="font-semibold text-foreground">Pro Plan</div>
+              <div className="mt-2 text-xs text-secondary-foreground">
+                12.4K / 25K credits
+              </div>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-accent">
+              <div className="h-full w-1/2 rounded-full bg-primary" />
+            </div>
+            <a href="#" className="block text-xs text-secondary-foreground hover:text-foreground">
+              Upgrade
+            </a>
+          </div>
         )}
-        <span className="app-sidebar-footer-dot text-accent-green">●</span>
+        {compact ? (
+          <span className="app-sidebar-footer-dot text-accent-green">●</span>
+        ) : null}
       </div>
 
       <div

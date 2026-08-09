@@ -91,38 +91,34 @@ test("theme preference persists from user menu into spaces without UI regression
   const initialLightTheme = await readSearchInputTheme(page);
   expect(initialLightTheme.rawBackground.length).toBeGreaterThan(0);
   expect(initialLightTheme.rawForeground.length).toBeGreaterThan(0);
+  expect(initialLightTheme.backgroundBrightness).toBeGreaterThan(180);
+  expect(initialLightTheme.foregroundBrightness).toBeLessThan(120);
 
   await selectThemeFromUserMenu(page, "dark");
   await expectDocumentTheme(page, "dark");
 
-  // Poll both channels: the theme switcher animates colors over 200ms, so a
-  // direct read right after the class flip can still return the light values.
   await expect
     .poll(async () => {
-      const theme = await readSearchInputTheme(page);
-      return (
-        theme.rawBackground !== initialLightTheme.rawBackground &&
-        theme.rawForeground !== initialLightTheme.rawForeground
-      );
+      const darkPreferenceChromeTheme = await readSearchInputTheme(page);
+      return {
+        backgroundSettled: darkPreferenceChromeTheme.backgroundBrightness < 80,
+        foregroundSettled: darkPreferenceChromeTheme.foregroundBrightness > 120,
+      };
     })
-    .toBe(true);
+    .toEqual({ backgroundSettled: true, foregroundSettled: true });
 
   await selectThemeFromUserMenu(page, "light");
   await expectDocumentTheme(page, "light");
 
-  // Wait for CSS transitions to complete (theme switcher uses 200ms transitions)
-  const expectedForeground = initialLightTheme.rawForeground;
   await expect
     .poll(async () => {
-      const theme = await readSearchInputTheme(page);
-      return theme.rawForeground;
+      const restoredLightTheme = await readSearchInputTheme(page);
+      return {
+        backgroundSettled: restoredLightTheme.backgroundBrightness > 180,
+        foregroundSettled: restoredLightTheme.foregroundBrightness < 120,
+      };
     })
-    .toBe(expectedForeground);
-
-  const restoredLightTheme = await readSearchInputTheme(page);
-  expect(restoredLightTheme.rawBackground).toBe(
-    initialLightTheme.rawBackground
-  );
+    .toEqual({ backgroundSettled: true, foregroundSettled: true });
 
   expect(patchedThemes).toEqual(["dark", "light"]);
   expect(pageErrors).toEqual([]);

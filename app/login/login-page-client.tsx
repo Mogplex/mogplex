@@ -96,14 +96,6 @@ function LoginContent() {
               Create an account
             </Link>
           </div>
-          <div>
-            Have a beta access code?{" "}
-            <Link
-              href="/login/beta"
-            >
-              Use the beta sign-in
-            </Link>
-          </div>
         </div>
       }
     >

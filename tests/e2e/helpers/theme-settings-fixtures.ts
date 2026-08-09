@@ -123,6 +123,17 @@ export async function readSearchInputTheme(page: Page) {
     };
 
     const parseChannels = (value: string) => {
+      if (value.startsWith("oklab(") || value.startsWith("oklch(")) {
+        const lightness = Number(
+          value.match(/\d+(\.\d+)?%?/)?.[0].replace("%", "") ?? 0
+        );
+        const normalizedLightness = value.includes("%")
+          ? lightness / 100
+          : lightness;
+        const channel = normalizedLightness * 255;
+        return [channel, channel, channel];
+      }
+
       if (value.startsWith("#")) {
         const hex = value.slice(1);
         const expanded =
