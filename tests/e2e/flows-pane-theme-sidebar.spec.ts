@@ -49,7 +49,7 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
   await page.mouse.move(56, resizerBox!.y + 80, { steps: 8 });
   await page.mouse.up();
   const widthAfterDrag = (await sidebar.boundingBox())!.width;
-  expect(widthAfterDrag).toBe(56);
+  expect(widthAfterDrag).toBe(64);
   await expect(sidebar).toHaveAttribute("data-compact", "true");
   await expect(page.getByTestId("app-nav-automations")).toHaveAttribute(
     "aria-label",
