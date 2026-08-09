@@ -1,6 +1,6 @@
 "use client"
 
-import { SendDiagonal, Settings } from "iconoir-react"
+import { Network, SendDiagonal, Settings } from "iconoir-react"
 import type { Mission, Workspace } from "@/lib/control/types"
 
 type ControlMode = "conversation" | "canvas" | "review"
@@ -24,8 +24,8 @@ export function MissionHeader({ mission, workspace, mode, onModeChange }: Props)
       {/* Left: Breadcrumb */}
       <div className="flex min-w-0 items-center gap-2">
         <h1 className="text-xl font-semibold">Command Center</h1>
-        <span className="inline-flex h-6 items-center gap-2 rounded-md bg-secondary px-2 text-xs text-secondary-foreground">
-          <span className="size-1.5 rounded-full bg-accent-blue" />
+        <span className="inline-flex h-6 items-center gap-1.5 rounded-md bg-secondary px-2 text-xs text-secondary-foreground">
+          <Network className="size-3.5 text-accent-blue" strokeWidth={1.5} aria-hidden="true" />
           Orchestrator
         </span>
       </div>

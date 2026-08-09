@@ -6,44 +6,53 @@ export const APP_NAV_ITEM_DEFS = [
     label: "Command Center",
     path: "/control",
     subpaths: ["/control"],
+    section: "primary",
   },
   {
     id: "workspaces",
     label: "Repositories",
     path: "/projects/repositories",
     subpaths: ["/projects/repositories", "/projects/workspace", "/workspaces"],
+    section: "primary",
   },
   {
     id: "automations",
     label: "Automations",
     path: "/automations",
     subpaths: ["/automations", "/workflows", "/flows", "/triggers"],
+    section: "primary",
   },
   {
     id: "sandboxes",
     label: "Sandboxes",
     path: "/projects/repositories/sandboxes",
     subpaths: ["/projects/repositories/sandboxes"],
+    section: "primary",
   },
   {
     id: "delivery",
     label: "Delivery",
     path: "/delivery",
     subpaths: ["/delivery"],
+    section: "primary",
   },
   {
     id: "observe",
     label: "Observe",
     path: "/observability",
     subpaths: ["/observability", "/observe", "/runs"],
+    section: "primary",
   },
   {
     id: "settings",
     label: "Settings",
     path: "/settings",
     subpaths: ["/settings", "/agents"],
+    section: "admin",
   },
 ] as const;
+
+export type AppNavSection = (typeof APP_NAV_ITEM_DEFS)[number]["section"];
 
 export type AppNavItemId = (typeof APP_NAV_ITEM_DEFS)[number]["id"];
 

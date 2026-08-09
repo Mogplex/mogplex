@@ -13,6 +13,7 @@ import type {
   TimelineEvent,
   ControlSeedData,
 } from "@/lib/control/types"
+import { Network } from "iconoir-react"
 import type { ComposerSendOptions } from "./composer"
 import { generateMissionId } from "@/lib/control/utils"
 import { useToolApprovalHandler } from "./use-tool-approval-handler"
@@ -271,8 +272,8 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
         <main className="app-chat-column flex min-w-0 flex-1 flex-col" aria-label="Command Center">
           <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-6">
             <h1 className="text-xl font-semibold">Command Center</h1>
-            <span className="inline-flex h-6 items-center gap-2 rounded-md bg-secondary px-2 text-xs text-secondary-foreground">
-              <span className="size-1.5 rounded-full bg-accent-blue" />
+            <span className="inline-flex h-6 items-center gap-1.5 rounded-md bg-secondary px-2 text-xs text-secondary-foreground">
+              <Network className="size-3.5 text-accent-blue" strokeWidth={1.5} aria-hidden="true" />
               Orchestrator
             </span>
           </div>

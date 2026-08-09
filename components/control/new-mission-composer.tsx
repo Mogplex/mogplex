@@ -1,7 +1,16 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Attachment, Notes, Plus, SendDiagonal, Xmark } from "iconoir-react"
+import {
+  Attachment,
+  Plus,
+  SendDiagonal,
+  ShieldCheck,
+  ShieldXmark,
+  Sparks,
+  Strategy,
+  Xmark,
+} from "iconoir-react"
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types"
 import type { MissionPermissions, Workspace } from "@/lib/control/types"
 
@@ -56,6 +65,7 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
       <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center">
         {/* Header */}
         <div className="mb-8">
+          <Sparks className="mb-3 size-6 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" />
           <h2 className="text-[20px] font-semibold leading-7">Describe the outcome</h2>
           <p className="mt-1 text-sm leading-6 text-secondary-foreground">
             Mogplex plans it, starts the sandbox, and streams the run state here.
@@ -128,13 +138,18 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
               type="button"
               className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-xs font-medium text-secondary-foreground hover:bg-muted hover:text-foreground"
             >
-              <Notes className="size-3.5" strokeWidth={1.6} />
+              <Strategy className="size-3.5" strokeWidth={1.6} />
               Plan
             </button>
             <button
               onClick={cyclePermissions}
-              className="h-8 rounded-md border border-border px-2.5 text-xs font-medium text-secondary-foreground hover:bg-secondary hover:text-foreground"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-secondary-foreground hover:bg-secondary hover:text-foreground"
             >
+              {MISSION_PERMISSION_OPTIONS[permissionsIdx] === "Skip Permissions" ? (
+                <ShieldXmark className="size-3.5" strokeWidth={1.6} />
+              ) : (
+                <ShieldCheck className="size-3.5" strokeWidth={1.6} />
+              )}
               {MISSION_PERMISSION_OPTIONS[permissionsIdx]}
             </button>
 
