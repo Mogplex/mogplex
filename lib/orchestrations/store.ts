@@ -170,6 +170,93 @@ export async function transitionOrchestrationRun(input: {
   return data === true;
 }
 
+export type UpdateOrchestrationRunInput = {
+  runId: string;
+  userId: string;
+  title?: string;
+  approvalMode?: OrchestrationApprovalMode;
+  metadataPatch?: Record<string, unknown> | null;
+};
+
+/**
+ * Partial operator-facing update (title, approval mode, metadata merge).
+ * Status is not updatable here — status changes go through
+ * transitionOrchestrationRun's compare-and-swap. Returns the updated run, or
+ * null when the run does not exist for this user.
+ */
+export async function updateOrchestrationRun(
+  input: UpdateOrchestrationRunInput
+): Promise<OrchestrationRunDTO | null> {
+  const { data, error } = await supabaseAdmin.rpc("update_orchestration_run", {
+    p_run_id: input.runId,
+    p_user_id: input.userId,
+    p_title: input.title ?? null,
+    p_approval_mode: input.approvalMode ?? null,
+    p_metadata_patch: input.metadataPatch ?? null,
+  });
+  if (error) throw new OrchestrationStoreError("update run", error.message);
+  if (data !== true) return null;
+  return getOrchestrationRun(input);
+}
+
+export type CancelOrchestrationRunResult =
+  | { outcome: "cancelled" | "already_cancelled"; run: OrchestrationRunDTO }
+  | { outcome: "not_cancellable"; run: OrchestrationRunDTO }
+  | { outcome: "not_found" };
+
+const CANCEL_RETRY_ATTEMPTS = 3;
+
+/**
+ * Cancels a run from whatever non-terminal status it is currently in.
+ * Idempotent for already-cancelled runs; completed runs are not cancellable.
+ * Retries the compare-and-swap a few times so a concurrent legal transition
+ * (e.g. running_tasks -> integrating racing the cancel) doesn't surface as a
+ * spurious failure.
+ */
+export async function cancelOrchestrationRun(input: {
+  runId: string;
+  userId: string;
+}): Promise<CancelOrchestrationRunResult> {
+  for (let attempt = 0; attempt < CANCEL_RETRY_ATTEMPTS; attempt += 1) {
+    const run = await getOrchestrationRun(input);
+    if (!run) return { outcome: "not_found" };
+    if (run.status === "cancelled") {
+      return { outcome: "already_cancelled", run };
+    }
+    if (run.status === "completed") {
+      return { outcome: "not_cancellable", run };
+    }
+    const transitioned = await transitionOrchestrationRun({
+      runId: run.id,
+      from: run.status,
+      to: "cancelled",
+    });
+    if (!transitioned) continue;
+    try {
+      await appendOrchestrationEvent({
+        runId: run.id,
+        type: "run_cancelled",
+        message: "Run cancelled by operator",
+        repoId: run.repo_id,
+      });
+    } catch (error) {
+      // The cancel itself committed; a failed audit event must not turn a
+      // successful cancellation into a 500 for the caller.
+      console.error("[orchestrations] cancel audit event failed", {
+        runId: run.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const cancelled = await getOrchestrationRun(input);
+    if (cancelled) return { outcome: "cancelled", run: cancelled };
+    return { outcome: "cancelled", run: { ...run, status: "cancelled" } };
+  }
+  throw new OrchestrationStoreError(
+    "cancel run",
+    `run ${input.runId} kept transitioning during cancellation`
+  );
+}
+
 export async function transitionOrchestrationTask(input: {
   taskId: string;
   from: OrchestrationTaskStatus;
