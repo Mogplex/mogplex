@@ -19,6 +19,10 @@ export {
   toTaskSlug,
 } from "./slugs";
 
+// Mirrors the char_length CHECK on orchestration_runs.title; shared by the
+// create and patch routes so the cap cannot drift between them.
+export const MAX_ORCHESTRATION_TITLE_LENGTH = 500;
+
 export type ValidationResult<T = string> =
   | { ok: true; value: T }
   | { ok: false; error: string };
