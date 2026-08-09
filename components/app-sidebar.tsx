@@ -98,7 +98,6 @@ async function loadBillingSummary([
   const response = await fetch(url, {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
   });
-  if (response.status === 503) return { enabled: false };
   if (!response.ok) throw new Error("Failed to load billing summary");
   return (await response.json()) as BillingSummary;
 }
@@ -118,17 +117,21 @@ export function AppSidebar() {
     return routeTeam?.id ?? null;
   }, [providedActiveTeamId, routeTeam]);
   const navItems = useMemo(() => buildAppNavItems(scope), [scope]);
+  // Only fetch billing once the route scope resolves to the personal account
+  // or a known membership — an unknown team slug must not fall back to
+  // personal-scope billing.
+  const scopeResolved =
+    Boolean(providedActiveTeamId) || routeIsPersonalScope || Boolean(routeTeam);
   const shouldLoadBilling =
-    Boolean(scope) &&
-    (Boolean(providedActiveTeamId) ||
-      routeIsPersonalScope ||
-      Boolean(routeTeam) ||
-      !membershipsLoading);
+    Boolean(scope) && !membershipsLoading && scopeResolved;
   const { data: billingSummary, error: billingError, isLoading: billingLoading } =
     useSWR<BillingSummary>(
       shouldLoadBilling ? ["/api/billing", activeBillingTeamId] : null,
       loadBillingSummary
     );
+  const showBillingCard =
+    Boolean(scope) && (membershipsLoading || scopeResolved);
+  const billingPending = membershipsLoading || billingLoading;
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [resizing, setResizing] = useState(false);
   const activePointerId = useRef<number | null>(null);
@@ -244,43 +247,47 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="app-sidebar-footer mx-5 mb-5 overflow-hidden rounded-lg border border-sidebar-border bg-card px-4 py-4 text-sm">
-        {compact ? null : (
-          <div className="app-sidebar-footer-label space-y-3">
-            <div>
-              <div className="font-semibold text-foreground">
-                {billingLoading
-                  ? "Plan loading"
-                  : billingError
-                    ? "Billing"
-                    : planName(billingSummary?.tier)}
+      {compact || showBillingCard ? (
+        <div className="app-sidebar-footer mx-5 mb-5 overflow-hidden rounded-lg border border-sidebar-border bg-card px-4 py-4 text-sm">
+          {compact ? null : (
+            <div className="app-sidebar-footer-label space-y-3">
+              <div>
+                <div className="font-semibold text-foreground">
+                  {billingPending
+                    ? "Plan loading"
+                    : billingError
+                      ? "Billing"
+                      : planName(billingSummary?.tier)}
+                </div>
+                <div className="mt-2 text-xs text-secondary-foreground">
+                  {billingPending
+                    ? "Balance loading"
+                    : billingError
+                      ? "Summary unavailable"
+                      : formatCreditSummary(billingSummary)}
+                </div>
               </div>
-              <div className="mt-2 text-xs text-secondary-foreground">
-                {billingError
-                  ? "Summary unavailable"
-                  : formatCreditSummary(billingSummary)}
+              <div className="h-1 overflow-hidden rounded-full bg-accent">
+                <div
+                  className="h-full rounded-full bg-foreground/70"
+                  style={{ width: usageMeterWidth(billingSummary) }}
+                />
               </div>
+              <Link
+                href={scopedHref(scope, "/settings/billing")}
+                className="block text-xs text-secondary-foreground hover:text-foreground"
+              >
+                {billingSummary?.canManageBilling === false
+                  ? "View billing"
+                  : "Manage billing"}
+              </Link>
             </div>
-            <div className="h-1 overflow-hidden rounded-full bg-accent">
-              <div
-                className="h-full rounded-full bg-foreground/70"
-                style={{ width: usageMeterWidth(billingSummary) }}
-              />
-            </div>
-            <Link
-              href={scopedHref(scope, "/settings/billing")}
-              className="block text-xs text-secondary-foreground hover:text-foreground"
-            >
-              {billingSummary?.canManageBilling === false
-                ? "View billing"
-                : "Manage billing"}
-            </Link>
-          </div>
-        )}
-        {compact ? (
-          <span className="app-sidebar-footer-dot text-accent-green">●</span>
-        ) : null}
-      </div>
+          )}
+          {compact ? (
+            <span className="app-sidebar-footer-dot text-accent-green">●</span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div
         role="separator"

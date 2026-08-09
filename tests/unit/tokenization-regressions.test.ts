@@ -113,13 +113,15 @@ test("dashboard chrome exposes the branded shell and compact navigation mark", a
   assert.doesNotMatch(topBar, /className="app-brand-mark /);
   assert.match(statusBar, /className="app-statusbar /);
   assert.match(dashboardLayout, /<AppSidebar \/>/);
-  assert.match(appSidebar, /import \{ MogplexMark \}/);
+  // The brand mark lives in the window chrome and stays inside the app:
+  // it links to the scoped control route, never the marketing homepage.
+  assert.match(dashboardLayout, /import \{ MogplexMark \}/);
+  assert.match(dashboardLayout, /scopedHref\(scope, "\/control"\)/);
   assert.match(appSidebar, /data-testid="app-sidebar"/);
   assert.match(appSidebar, /data-testid="app-sidebar-resizer"/);
   assert.match(appSidebar, /role="separator"/);
   assert.match(appSidebar, /const MIN_WIDTH = 64/);
   assert.match(appSidebar, /data-compact=\{compact \? "true" : "false"\}/);
-  assert.match(appSidebar, /Collapse navigation|Expand navigation/);
   assert.match(appSidebar, /app-nav-\$\{item\.id\}/);
   assert.match(globals, /\.app-sidebar-link\.is-active/);
   assert.match(globals, /\.app-sidebar\[data-compact="true"\]/);

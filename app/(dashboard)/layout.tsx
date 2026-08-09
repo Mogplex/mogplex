@@ -1,13 +1,16 @@
 "use client"
 import Link from "next/link"
+import { useParams } from "next/navigation"
 import { TopBar } from "@/components/top-bar"
 import { StatusBar } from "@/components/status-bar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { MogplexMark } from "@/components/brand/mogplex-mark"
 import { CommandPaletteProvider } from "@/components/command-palette-provider"
 import { NewModelsDialog } from "@/components/new-models-dialog"
+import { scopedHref } from "@/lib/scoped-href"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { scope } = useParams<{ scope: string }>()
   return (
     <CommandPaletteProvider>
       <div
@@ -18,7 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="app-window-chrome shrink-0 px-3">
             <div className="flex items-center">
               <Link
-                href="/"
+                href={scopedHref(scope, "/control")}
                 aria-label="Mogplex home"
                 className="flex items-center gap-3 rounded-xl text-foreground outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
               >
