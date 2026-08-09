@@ -12,9 +12,23 @@ import {
   type WorkspaceSessionOptions,
 } from "./session-types";
 
+let fallbackIdCounter = 0;
+
+function createClientId() {
+  if (typeof crypto?.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  fallbackIdCounter += 1;
+  const suffix =
+    typeof crypto?.getRandomValues === "function"
+      ? crypto.getRandomValues(new Uint32Array(2)).join("")
+      : fallbackIdCounter.toString(36);
+  return `session-${Date.now().toString(36)}-${suffix}`;
+}
+
 export function makeSession(index: number, name?: string): Session {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     index,
     name: name || `session-${index}`,
     color: SESSION_COLORS[index % SESSION_COLORS.length],

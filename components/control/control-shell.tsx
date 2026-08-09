@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useMemo } from "react"
-import { useParams, useSearchParams, useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
 import type {
@@ -16,10 +16,8 @@ import type {
 import type { ComposerSendOptions } from "./composer"
 import { generateMissionId } from "@/lib/control/utils"
 import { useToolApprovalHandler } from "./use-tool-approval-handler"
-import { scopedHref } from "@/lib/scoped-href"
 import { buildCombinedTimeline } from "./build-combined-timeline"
-import { useMissionDerived, type MissionFilter } from "./use-mission-derived"
-import { MissionSidebar } from "./mission-sidebar"
+import { useMissionDerived } from "./use-mission-derived"
 import { MissionHeader } from "./mission-header"
 import { Timeline } from "./timeline"
 import { Canvas } from "./canvas"
@@ -30,6 +28,7 @@ import { NeedsAttentionBanner } from "./needs-attention-banner"
 import { AgentSummaryStrip } from "./agent-summary-strip"
 import { NewMissionComposer } from "./new-mission-composer"
 import { PendingApprovalsBanner } from "./pending-approvals-banner"
+import { SandboxRail } from "./sandbox-rail"
 
 type ControlMode = "conversation" | "canvas" | "review"
 
@@ -39,10 +38,7 @@ export type ControlShellProps = {
 }
 
 export function ControlShell({ initialData, initialMissionId }: ControlShellProps) {
-  const params = useParams<{ scope: string }>()
   const searchParams = useSearchParams()
-  const router = useRouter()
-  const scope = params.scope
 
   // Core data state (server-provided, then mutated locally)
   const [missions, setMissions] = useState<Mission[]>(initialData.missions)
@@ -56,8 +52,6 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
     initialMissionId || searchParams.get("mission") || missions[0]?.id || ""
   )
   const [mode, setMode] = useState<ControlMode>("conversation")
-  const [missionFilter, setMissionFilter] = useState<MissionFilter>("active")
-  const [missionQuery, setMissionQuery] = useState("")
   const [selection, setSelection] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState("summary")
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -164,22 +158,6 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
     setWorktrees((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)))
   }, [])
 
-  // Patch a mission
-  const patchMission = useCallback((id: string, patch: Partial<Mission>) => {
-    setMissions((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
-  }, [])
-
-  // Select a mission
-  const selectMission = useCallback(
-    (id: string) => {
-      setSelectedMissionId(id)
-      setSelection(null)
-      setNewMission(false)
-      router.push(scopedHref(scope, `/control?mission=${id}`), { scroll: false })
-    },
-    [scope, router]
-  )
-
   // Select a node (worktree/changeset/env)
   const selectNode = useCallback((id: string | null, tab?: string) => {
     setSelection(id)
@@ -264,10 +242,10 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
   )
 
   // Derived mission data (filtered list, attention items, stats)
-  const { filteredMissions, needsAttention, agentStats } = useMissionDerived(
+  const { needsAttention, agentStats } = useMissionDerived(
     missions,
-    missionFilter,
-    missionQuery,
+    "active",
+    "",
     missionWorktrees,
     changesets,
     mission?.cost
@@ -289,41 +267,28 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
   // makes sense when there is a mission view to return to.
   if (newMission || !mission) {
     return (
-      <div className="flex h-full flex-col bg-background">
-        <NewMissionComposer
-          workspaces={workspaces}
-          onCancel={mission ? () => setNewMission(false) : undefined}
-          onCreate={handleCreateMission}
-        />
+      <div className="app-control-shell flex h-full overflow-hidden">
+        <main className="app-chat-column flex min-w-0 flex-1 flex-col" aria-label="Command Center">
+          <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-6">
+            <h1 className="text-xl font-semibold">Command Center</h1>
+            <span className="inline-flex h-6 items-center gap-2 rounded-md bg-secondary px-2 text-xs text-secondary-foreground">
+              <span className="size-1.5 rounded-full bg-accent-blue" />
+              Orchestrator
+            </span>
+          </div>
+          <NewMissionComposer
+            workspaces={workspaces}
+            onCancel={mission ? () => setNewMission(false) : undefined}
+            onCreate={handleCreateMission}
+          />
+        </main>
+        <SandboxRail worktrees={[]} changesets={[]} />
       </div>
     )
   }
 
   return (
-    <div className="flex h-full overflow-hidden bg-background">
-      {/* Left: Mission sidebar */}
-      <MissionSidebar
-        missions={filteredMissions}
-        selectedId={selectedMissionId}
-        filter={missionFilter}
-        query={missionQuery}
-        onSelect={selectMission}
-        onFilterChange={setMissionFilter}
-        onQueryChange={setMissionQuery}
-        onNewMission={() => setNewMission(true)}
-        onPinToggle={(id) => {
-          const m = missions.find((x) => x.id === id)
-          if (m) patchMission(id, { pinned: !m.pinned })
-        }}
-        onArchiveToggle={(id) => {
-          const m = missions.find((x) => x.id === id)
-          if (m) patchMission(id, { archived: !m.archived })
-        }}
-        getWorkspace={getWorkspace}
-        worktrees={worktrees}
-      />
-
-      {/* Center + Right: Main content */}
+    <div className="app-control-shell flex h-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
         {mission && (
@@ -480,6 +445,7 @@ export function ControlShell({ initialData, initialMissionId }: ControlShellProp
           getWorktree={getWorktree}
         />
       </div>
+      <SandboxRail worktrees={missionWorktrees} changesets={missionChangesets} />
     </div>
   )
 }

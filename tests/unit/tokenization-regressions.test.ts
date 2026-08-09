@@ -108,20 +108,18 @@ test("dashboard chrome exposes the branded shell and compact navigation mark", a
 
   assert.match(dashboardLayout, /className="app-shell /);
   assert.match(dashboardLayout, /className="app-shell-content /);
-  assert.match(topBar, /import \{ MogplexMark \}/);
-  assert.match(topBar, /className="app-brand-mark /);
   assert.match(topBar, /className="app-topbar /);
+  assert.doesNotMatch(topBar, /import \{ MogplexMark \}/);
+  assert.doesNotMatch(topBar, /className="app-brand-mark /);
   assert.match(statusBar, /className="app-statusbar /);
   assert.match(dashboardLayout, /<AppSidebar \/>/);
+  assert.match(appSidebar, /import \{ MogplexMark \}/);
   assert.match(appSidebar, /data-testid="app-sidebar"/);
   assert.match(appSidebar, /data-testid="app-sidebar-resizer"/);
   assert.match(appSidebar, /role="separator"/);
-  assert.match(appSidebar, /const MIN_WIDTH = 56/);
+  assert.match(appSidebar, /const MIN_WIDTH = 64/);
   assert.match(appSidebar, /data-compact=\{compact \? "true" : "false"\}/);
-  assert.doesNotMatch(
-    appSidebar,
-    /Collapse navigation|Expand navigation|SIDEBAR_COLLAPSED_KEY/
-  );
+  assert.match(appSidebar, /Collapse navigation|Expand navigation/);
   assert.match(appSidebar, /app-nav-\$\{item\.id\}/);
   assert.match(globals, /\.app-sidebar-link\.is-active/);
   assert.match(globals, /\.app-sidebar\[data-compact="true"\]/);

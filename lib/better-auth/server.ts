@@ -29,6 +29,46 @@ const socialProviders: NonNullable<
   Parameters<typeof betterAuth>[0]["socialProviders"]
 > = {};
 
+function isLocalDevOrigin(origin: string) {
+  if (
+    process.env.NODE_ENV !== "development" &&
+    process.env.PLAYWRIGHT !== "1"
+  ) {
+    return false;
+  }
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== "http:" && protocol !== "https:") return false;
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1"
+    ) {
+      return true;
+    }
+    if (hostname.startsWith("192.168.") || hostname.startsWith("10.")) {
+      return true;
+    }
+    const match = /^172\.(\d+)\./.exec(hostname);
+    return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31);
+  } catch {
+    return false;
+  }
+}
+
+function getTrustedOrigins(request?: Request) {
+  const configured = [
+    baseURL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.BETTER_AUTH_URL,
+  ].filter(Boolean);
+  const origin = request?.headers.get("origin");
+  if (origin && (configured.includes(origin) || isLocalDevOrigin(origin))) {
+    configured.push(origin);
+  }
+  return [...new Set(configured)];
+}
+
 if (
   process.env.AUTH_GITHUB_CLIENT_ID &&
   process.env.AUTH_GITHUB_CLIENT_SECRET
@@ -73,12 +113,9 @@ export const auth = betterAuth({
   ...(process.env.PLAYWRIGHT === "1"
     ? {
         rateLimit: { enabled: false },
-        trustedOrigins: (request?: Request) => {
-          const origin = request?.headers.get("origin");
-          return origin ? [origin] : [];
-        },
       }
     : {}),
+  trustedOrigins: getTrustedOrigins,
   database: new Pool({
     // mogplex_DATABASE_URL is the Neon Vercel-integration var (managed,
     // auto-rotating); unprefixed DATABASE_URL covers local dev and CI.

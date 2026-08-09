@@ -194,42 +194,49 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
   const style = KIND_STYLES[event.kind] || KIND_STYLES.tool
   const Icon = style.icon
   const isSubdued = event.kind === "tool" || event.kind === "delegate"
+  const isUser = event.kind === "user"
 
   return (
-    <div className={`rounded-lg border border-border bg-card ${isSubdued ? "opacity-70" : ""}`}>
+    <div className={`${isUser ? "" : "rounded-xl border border-border bg-secondary"} ${isSubdued ? "opacity-80" : ""}`}>
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
-        <div className={`flex size-6 items-center justify-center rounded-full ${style.bg}`}>
+      <div className={`flex items-center gap-2 ${isUser ? "px-0 pb-1" : "border-b border-border px-4 py-3"}`}>
+        <div className={`flex size-7 items-center justify-center rounded-full ${isUser ? "bg-card" : style.bg}`}>
           <Icon className={`size-3.5 ${style.fg}`} strokeWidth={1.8} />
         </div>
-        <span className={`font-mono text-[10px] font-semibold uppercase tracking-wide ${style.labelColor}`}>
+        <span className={`text-[13px] font-semibold ${isUser ? "text-foreground" : style.labelColor}`}>
           {event.label}
         </span>
-        <span className="font-mono text-[10px] text-muted-foreground">{event.time}</span>
+        <span className="text-xs text-muted-foreground">{event.time}</span>
       </div>
 
       {/* Body */}
-      <div className="px-3 py-2.5">
+      <div className={isUser ? "px-9 py-1" : "px-4 py-3"}>
         {event.body && (
-          <MessageResponse className="text-xs leading-relaxed">
+          <MessageResponse className="text-sm leading-6">
             {event.body}
           </MessageResponse>
         )}
 
         {/* Plan steps */}
         {event.kind === "plan" && (
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-3 overflow-hidden rounded-xl border border-border bg-card">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <span className="text-[15px] font-semibold">Execution Plan</span>
+              <span className="text-xs text-muted-foreground">
+                {(event as PlanEvent).steps.length} steps
+              </span>
+            </div>
             {(event as PlanEvent).steps.map((step) => (
-              <div key={step.n} className="flex items-center gap-2">
-                <span className="font-mono text-[10px] text-muted-foreground">{step.n}</span>
-                <span className="flex-1 text-xs">{step.text}</span>
-                <span className={`font-mono text-[9px] font-medium ${STATE_COLORS[step.state] || ""}`}>
+              <div key={step.n} className="flex min-h-10 items-center gap-3 border-b border-border px-4 last:border-b-0">
+                <span className="grid size-5 place-items-center rounded-full border border-muted-foreground/50 font-mono text-[10px] text-muted-foreground">{step.n}</span>
+                <span className="flex-1 text-sm">{step.text}</span>
+                <span className={`text-xs font-medium ${STATE_COLORS[step.state] || ""}`}>
                   {step.state}
                 </span>
               </div>
             ))}
             {(event as PlanEvent).planApproved ? (
-              <div className="mt-2 flex items-center gap-2">
+              <div className="flex items-center gap-2 border-t border-border px-4 py-3">
                 <button className="rounded border border-accent-green/30 bg-accent-green/5 px-2.5 py-1 text-[10px] font-medium text-accent-green">
                   Plan accepted
                 </button>
@@ -238,7 +245,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
                 </button>
               </div>
             ) : (
-              <div className="mt-2 flex items-center gap-2">
+              <div className="flex items-center gap-2 border-t border-border px-4 py-3">
                 <button className="rounded bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground hover:bg-brand-accent-hover">
                   Approve plan
                 </button>

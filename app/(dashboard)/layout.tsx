@@ -9,14 +9,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <CommandPaletteProvider>
       <div
-        className="app-shell flex h-dvh bg-background pt-[env(safe-area-inset-top)]"
+        className="app-shell h-dvh bg-[#0a0a0c] p-1.5 pt-[calc(env(safe-area-inset-top)+6px)] text-foreground sm:p-3 sm:pt-[calc(env(safe-area-inset-top)+12px)]"
         data-testid="dashboard-shell"
       >
-        <AppSidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar />
-          <div className="app-shell-content flex-1 min-h-0 overflow-auto">{children}</div>
-          <StatusBar />
+        <div className="app-window-frame flex h-full min-h-0 flex-col">
+          <div className="app-window-chrome shrink-0 px-3">
+            <div />
+            <div />
+            <TopBar />
+          </div>
+          <div className="flex min-h-0 flex-1">
+            <AppSidebar />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="app-shell-content min-h-0 flex-1 overflow-auto">
+                {children}
+              </div>
+              <StatusBar />
+            </div>
+          </div>
         </div>
       </div>
       <NewModelsDialog />
