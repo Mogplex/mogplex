@@ -226,14 +226,19 @@ export function Composer({ value, onChange, onSend, pending, mission: _mission, 
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              disabled
               aria-label="Attach file"
+              title="Attach file is not available yet"
+              className="grid size-8 place-items-center rounded-md text-muted-foreground opacity-60"
             >
               <Attachment className="size-4" strokeWidth={1.6} />
             </button>
             <button
               type="button"
-              className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-xs font-medium text-secondary-foreground hover:bg-muted hover:text-foreground"
+              disabled
+              aria-label="Plan mode is not available yet"
+              title="Plan mode is not available yet"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-xs font-medium text-secondary-foreground opacity-60"
             >
               <Notes className="size-3.5" strokeWidth={1.6} />
               Plan

@@ -107,9 +107,10 @@ export const auth = betterAuth({
   // - rateLimit: the auth specs fire several sign-in attempts back-to-back
   //   and CI retries reuse the same server, tripping the production-default
   //   limiter (429s).
-  // - trustedOrigins: the specs hit localhost:<port> while baseURL points at
-  //   the public origin, so cookie-authenticated POSTs would fail the CSRF
-  //   origin check; trust the request's own origin instead.
+  // trustedOrigins is resolved below for every runtime. Production trusts only
+  // configured app/base URLs; local development and Playwright also allow
+  // localhost and private-LAN origins so phone/Chrome testing can post to a
+  // dev server bound on the local network.
   ...(process.env.PLAYWRIGHT === "1"
     ? {
         rateLimit: { enabled: false },

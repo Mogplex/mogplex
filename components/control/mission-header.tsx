@@ -31,7 +31,7 @@ export function MissionHeader({ mission, workspace, mode, onModeChange }: Props)
       </div>
 
       {/* Center: Tabs */}
-      <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 rounded-lg bg-secondary p-1 lg:flex">
+      <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg bg-secondary p-1 max-sm:hidden">
         {(["conversation", "canvas", "review"] as const).map((m) => (
           <button
             key={m}
@@ -52,7 +52,12 @@ export function MissionHeader({ mission, workspace, mode, onModeChange }: Props)
         <span className="hidden max-w-32 truncate font-mono text-xs text-muted-foreground sm:inline">
           {workspace?.name || mission.ws}
         </span>
-        <button className="grid size-8 place-items-center rounded-md border border-border bg-card text-foreground hover:bg-secondary">
+        <button
+          type="button"
+          aria-label="Mission settings"
+          title="Mission settings"
+          className="grid size-8 place-items-center rounded-md border border-border bg-card text-foreground hover:bg-secondary"
+        >
           <Settings className="size-3.5" strokeWidth={1.7} />
         </button>
         <button className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-brand-accent-hover">

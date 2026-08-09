@@ -65,6 +65,7 @@ export function Inspector({
   const [width, setWidth] = useState(DEFAULT_INSPECTOR_WIDTH)
   const [resizing, setResizing] = useState(false)
   const activePointerId = useRef<number | null>(null)
+  const asideRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -86,7 +87,9 @@ export function Inspector({
       ) {
         return
       }
-      const nextWidth = clampInspectorWidth(window.innerWidth - event.clientX)
+      const rightEdge =
+        asideRef.current?.getBoundingClientRect().right ?? window.innerWidth
+      const nextWidth = clampInspectorWidth(rightEdge - event.clientX)
       setWidth(nextWidth)
       window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(nextWidth))
     }
@@ -309,6 +312,7 @@ export function Inspector({
 
   return (
     <aside
+      ref={asideRef}
       className="relative flex shrink-0 flex-col border-l border-border bg-card"
       data-resizing={resizing ? "true" : "false"}
       style={{ width }}

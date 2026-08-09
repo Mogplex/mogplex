@@ -95,7 +95,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
   ).toBeVisible();
 
   await page
-    .getByPlaceholder("Describe what you want to achieve...")
+    .getByPlaceholder("Ask anything or run a command...")
     .fill("Ship the new onboarding flow");
   await page.getByRole("button", { name: "Start mission" }).click();
 
@@ -155,7 +155,7 @@ test("control chat surfaces request failures instead of swallowing them", async 
   await page.waitForLoadState("networkidle");
 
   await page
-    .getByPlaceholder("Describe what you want to achieve...")
+    .getByPlaceholder("Ask anything or run a command...")
     .fill("Ship something");
   await page.getByRole("button", { name: "Start mission" }).click();
 
@@ -209,7 +209,7 @@ test("control timeline renders agent markdown as formatted HTML", async ({
   await page.waitForLoadState("networkidle");
 
   await page
-    .getByPlaceholder("Describe what you want to achieve...")
+    .getByPlaceholder("Ask anything or run a command...")
     .fill("List your tools");
   await page.getByRole("button", { name: "Start mission" }).click();
 

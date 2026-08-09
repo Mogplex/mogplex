@@ -14,8 +14,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         <div className="app-window-frame flex h-full min-h-0 flex-col">
           <div className="app-window-chrome shrink-0 px-3">
-            <div />
-            <div />
+            {/* Grid spacers keep the app utilities right-aligned without browser-chrome dots. */}
+            <div aria-hidden="true" />
+            <div aria-hidden="true" />
             <TopBar />
           </div>
           <div className="flex min-h-0 flex-1">

@@ -23,6 +23,7 @@ import {
 } from "@/lib/app-navigation";
 
 const SIDEBAR_WIDTH_KEY = "mogplex.appSidebar.width";
+const SIDEBAR_COLLAPSED_KEY = "mogplex.appSidebar.collapsed";
 const DEFAULT_WIDTH = 272;
 const MIN_WIDTH = 64;
 const COMPACT_THRESHOLD = 120;
@@ -54,11 +55,14 @@ export function AppSidebar() {
 
   useEffect(() => {
     const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    const storedCollapsed = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     const frame = window.requestAnimationFrame(() => {
       if (Number.isFinite(storedWidth) && storedWidth > 0) {
         const nextWidth = clampWidth(storedWidth);
-        setWidth(nextWidth);
         if (nextWidth > COMPACT_THRESHOLD) setLastExpandedWidth(nextWidth);
+        setWidth(storedCollapsed === "true" ? MIN_WIDTH : nextWidth);
+      } else if (storedCollapsed === "true") {
+        setWidth(MIN_WIDTH);
       }
     });
     return () => window.cancelAnimationFrame(frame);
@@ -78,6 +82,7 @@ export function AppSidebar() {
       setWidth(nextWidth);
       if (nextWidth > COMPACT_THRESHOLD) setLastExpandedWidth(nextWidth);
       window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(nextWidth));
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
     };
     const stopResizing = () => {
       activePointerId.current = null;
@@ -102,14 +107,23 @@ export function AppSidebar() {
       const next = clampWidth(current + direction);
       if (next > COMPACT_THRESHOLD) setLastExpandedWidth(next);
       window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
       return next;
     });
   }
 
   function toggleCollapsed() {
-    const nextWidth = compact ? lastExpandedWidth : MIN_WIDTH;
-    setWidth(nextWidth);
-    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(nextWidth));
+    if (compact) {
+      const nextWidth = lastExpandedWidth;
+      setWidth(nextWidth);
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
+      return;
+    }
+
+    setLastExpandedWidth(width);
+    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "true");
+    setWidth(MIN_WIDTH);
   }
 
   return (

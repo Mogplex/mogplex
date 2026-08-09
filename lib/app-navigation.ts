@@ -58,6 +58,7 @@ export function buildAppNavItems(scope: string) {
 export function isAppNavItemActive(pathname: string, match: string | string[]) {
   const matches = Array.isArray(match) ? match : [match];
   return matches.some((m) => {
+    // Sandboxes owns the only current repositories child route in primary nav.
     if (m.endsWith("/projects/repositories")) return pathname === m;
     return pathname === m || pathname.startsWith(`${m}/`);
   });

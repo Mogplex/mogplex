@@ -92,6 +92,9 @@ function FileTree({ worktree }: { worktree: Worktree | undefined }) {
 
   return (
     <div className="space-y-1 font-mono text-xs">
+      <p className="pb-1 font-sans text-[11px] text-muted-foreground">
+        Preview data until live file sync is attached.
+      </p>
       <div className="flex h-6 items-center gap-2 text-secondary-foreground">
         <NavArrowDown className="size-3.5" />
         <span>{repo}/</span>
@@ -99,6 +102,8 @@ function FileTree({ worktree }: { worktree: Worktree | undefined }) {
       {files.map((file, index) => (
         <button
           key={file}
+          type="button"
+          aria-disabled="true"
           className={`flex h-6 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-muted ${
             index === 1 ? "bg-accent text-foreground" : "text-secondary-foreground"
           }`}
@@ -122,6 +127,9 @@ function DiffPreview({ changeset }: { changeset: Changeset | undefined }) {
 
   return (
     <div className="overflow-x-auto rounded-lg bg-input p-3 font-mono text-xs leading-5">
+      <div className="font-sans text-[11px] text-muted-foreground">
+        Preview diff until live changesets are attached.
+      </div>
       <div className="text-muted-foreground">
         diff --git a/{changeset.title} b/{changeset.title}
       </div>
@@ -148,6 +156,7 @@ function TerminalPreview({ worktree }: { worktree: Worktree | undefined }) {
       </div>
       {worktree ? (
         <>
+          <div className="text-muted-foreground">Preview output.</div>
           <div className="text-accent-green">PASS tests/control-flow.test.ts</div>
           <div className="text-accent-green">Tests: {worktree.checks}</div>
         </>
@@ -169,6 +178,7 @@ export function SandboxRail({ worktrees, changesets }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   const [resizing, setResizing] = useState(false)
   const activePointerId = useRef<number | null>(null)
+  const railRef = useRef<HTMLElement | null>(null)
   const activeWorktree = worktrees.find((w) => w.state !== "archived")
   const activeChangeset = activeWorktree
     ? changesets.find((c) => c.worktree === activeWorktree.id)
@@ -201,7 +211,9 @@ export function SandboxRail({ worktrees, changesets }: Props) {
       ) {
         return
       }
-      const nextWidth = clampRailWidth(window.innerWidth - event.clientX)
+      const rightEdge =
+        railRef.current?.getBoundingClientRect().right ?? window.innerWidth
+      const nextWidth = clampRailWidth(rightEdge - event.clientX)
       setWidth(nextWidth)
       setCollapsed(false)
       window.localStorage.setItem(RAIL_WIDTH_KEY, String(nextWidth))
@@ -259,6 +271,7 @@ export function SandboxRail({ worktrees, changesets }: Props) {
 
   return (
     <aside
+      ref={railRef}
       className="app-live-rail relative hidden shrink-0 overflow-y-auto border-l border-border xl:block"
       data-resizing={resizing ? "true" : "false"}
       style={{ width }}
@@ -287,6 +300,9 @@ export function SandboxRail({ worktrees, changesets }: Props) {
           {["Sandbox", "Diffs", "Outputs", "Terminal"].map((tab, index) => (
             <button
               key={tab}
+              type="button"
+              disabled
+              aria-label={`${tab} tab preview`}
               className={`rounded-lg px-3 py-2 text-sm transition-colors ${
                 index === 0
                   ? "bg-accent text-foreground"
@@ -315,10 +331,20 @@ export function SandboxRail({ worktrees, changesets }: Props) {
               {activeWorktree ? `Started ${activeWorktree.elapsed}` : "No active run"}
             </div>
           </div>
-          <button className="ml-auto rounded-lg border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red hover:bg-accent-red/10">
+          <button
+            type="button"
+            disabled
+            aria-label={activeWorktree ? "Stop sandbox preview" : "Start sandbox preview"}
+            className="ml-auto rounded-lg border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red opacity-60"
+          >
             {activeWorktree ? "Stop" : "Start"}
           </button>
-          <button className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
+          <button
+            type="button"
+            disabled
+            aria-label="Sandbox rail actions preview"
+            className="grid size-8 place-items-center rounded-lg text-muted-foreground opacity-60"
+          >
             <MoreVert className="size-4" />
           </button>
           <button

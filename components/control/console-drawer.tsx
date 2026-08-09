@@ -51,6 +51,8 @@ export function ConsoleDrawer({
   const [liveHeight, setLiveHeight] = useState(height)
   const [resizing, setResizing] = useState(false)
   const activePointerId = useRef<number | null>(null)
+  const drawerRef = useRef<HTMLDivElement | null>(null)
+  const previousHeightProp = useRef(height)
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -58,8 +60,19 @@ export function ConsoleDrawer({
       if (Number.isFinite(storedHeight) && storedHeight > 0) {
         setLiveHeight(clampDrawerHeight(storedHeight))
       } else {
-        setLiveHeight(height)
+        setLiveHeight(previousHeightProp.current)
       }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
+  useEffect(() => {
+    if (height === previousHeightProp.current) return
+    previousHeightProp.current = height
+    const frame = window.requestAnimationFrame(() => {
+      const nextHeight = clampDrawerHeight(height)
+      setLiveHeight(nextHeight)
+      window.localStorage.setItem(DRAWER_HEIGHT_KEY, String(nextHeight))
     })
     return () => window.cancelAnimationFrame(frame)
   }, [height])
@@ -74,7 +87,9 @@ export function ConsoleDrawer({
       ) {
         return
       }
-      const nextHeight = clampDrawerHeight(window.innerHeight - event.clientY)
+      const bottomEdge =
+        drawerRef.current?.getBoundingClientRect().bottom ?? window.innerHeight
+      const nextHeight = clampDrawerHeight(bottomEdge - event.clientY)
       setLiveHeight(nextHeight)
       window.localStorage.setItem(DRAWER_HEIGHT_KEY, String(nextHeight))
     }
@@ -147,6 +162,7 @@ export function ConsoleDrawer({
       {/* Drawer content when open */}
       {open && (
         <div
+          ref={drawerRef}
           className="relative flex flex-col bg-[var(--terminal-background)] transition-[height]"
           data-resizing={resizing ? "true" : "false"}
           style={{ height: liveHeight }}
