@@ -38,7 +38,9 @@ test.describe("auth pages render", () => {
     await expect(page.getByTestId("signup-email")).toBeVisible();
     await expect(page.getByTestId("signup-password")).toBeVisible();
     await expect(page.getByTestId("auth-social-github")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    await expect(
+      page.getByRole("main").getByRole("link", { name: "Sign in" })
+    ).toBeVisible();
   });
 
   test("/forgot-password renders the reset request form", async ({ page }) => {

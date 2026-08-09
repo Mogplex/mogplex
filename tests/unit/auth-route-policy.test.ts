@@ -10,6 +10,7 @@ import {
 test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavior", () => {
   assert.equal(isPublicRoutePath("/install.sh"), true);
   assert.equal(isPublicRoutePath("/api/auth/session"), true);
+  assert.equal(isPublicRoutePath("/api/c15t/init"), true);
   assert.equal(isPublicRoutePath("/login/callback"), true);
   assert.equal(isPublicRoutePath("/login/beta"), true);
   assert.equal(isPublicRoutePath("/login/sso"), true);
@@ -40,6 +41,7 @@ test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavi
   assert.equal(isPublicRoutePath("/reset-password-extra"), false);
   assert.equal(isPublicRoutePath("/privacy-policy"), false);
   assert.equal(isPublicRoutePath("/api/agents"), false);
+  assert.equal(isPublicRoutePath("/api/c15tfoo/init"), false);
   assert.equal(isPublicRoutePath("/api/v1/mogplex/mcp/servers"), false);
   assert.equal(isPublicRoutePath("/.well-knownish/metadata"), false);
 });

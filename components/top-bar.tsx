@@ -101,13 +101,13 @@ export function TopBar() {
           </SheetContent>
         </Sheet>
 
-      <div className="flex items-center gap-2 lg:gap-3">
+      <div className="flex h-9 items-center gap-2 lg:gap-3">
         <button
           onClick={openCommandPalette}
-          className="app-command-search hidden h-8 w-[140px] cursor-pointer items-center justify-between rounded-md border border-border bg-input pl-3 pr-1.5 text-[12px] text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-foreground sm:inline-flex lg:w-[180px]"
+          className="app-command-search hidden h-7 w-[140px] cursor-pointer items-center justify-between rounded-xl border border-border bg-input pl-3 pr-1.5 text-[12px] text-muted-foreground hover:border-border-dim hover:bg-accent hover:text-foreground sm:inline-flex lg:w-[180px]"
         >
           Search
-          <kbd className="inline-flex items-center gap-0.5 rounded bg-accent px-1.5 py-0.5 text-[11px] text-muted-foreground">
+          <kbd className="inline-flex h-5 items-center gap-0.5 rounded-lg bg-accent px-1.5 text-[11px] text-muted-foreground">
             <span>⌘</span><span>K</span>
           </kbd>
         </button>
@@ -117,22 +117,22 @@ export function TopBar() {
             href={githubPrimaryAction.href}
             target="_blank"
             rel="noopener noreferrer"
-          className="hidden items-center rounded-md border border-border bg-card px-3 py-1.5 font-mono text-[10px] tracking-[0.06em] text-foreground/72 uppercase hover:border-primary/40 hover:bg-accent hover:text-foreground sm:inline-flex"
+          className="hidden h-7 items-center rounded-xl border border-border bg-card px-3 font-mono text-[10px] tracking-[0.06em] text-foreground/72 uppercase hover:border-border-dim hover:bg-accent hover:text-foreground sm:inline-flex"
           >
             {githubPrimaryAction.label}
           </a>
         )}
 
         {isLoading ? (
-          <div className="h-[26px] w-20 animate-pulse rounded-md bg-accent" />
+          <div className="h-7 w-20 animate-pulse rounded-xl bg-accent" />
         ) : user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button aria-label="User menu" className="rounded-md outline-none focus:ring-2 focus:ring-ring">
+              <button aria-label="User menu" className="rounded-xl outline-none focus:ring-2 focus:ring-ring">
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt="" className="h-7 w-7 rounded-md ring-1 ring-border transition-shadow hover:ring-primary/60" />
+                  <img src={user.avatar_url} alt="" className="size-7 rounded-2xl ring-1 ring-border transition-shadow hover:ring-border-dim" />
                 ) : (
-                  <div className="h-7 w-7 rounded-md border border-border bg-accent" />
+                  <div className="size-7 rounded-2xl border border-border bg-accent" />
                 )}
               </button>
             </DropdownMenuTrigger>

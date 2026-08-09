@@ -10,38 +10,64 @@ import { hasCapability } from "@/lib/team-capabilities";
 // can read balance/tier; mutating flows (checkout/portal) stay
 // billing.manage-gated.
 
-export async function GET(request: Request) {
-  if (!isBillingEnabled()) {
-    return NextResponse.json({ enabled: false });
-  }
-  const userId = await requireUserId();
-  if (userId instanceof Response) return userId;
+type BillingSummaryDeps = {
+  isBillingEnabled: typeof isBillingEnabled;
+  requireUserId: typeof requireUserId;
+  resolveProductResourceScope: typeof resolveProductResourceScope;
+  findBillingAccountForScope: typeof findBillingAccountForScope;
+  getBillingBalance: typeof getBillingBalance;
+};
 
-  const resolution = await resolveProductResourceScope({ request, userId });
-  if (!resolution.ok) {
-    return NextResponse.json(
-      { error: resolution.error },
-      { status: resolution.status }
-    );
-  }
+const defaultDeps: BillingSummaryDeps = {
+  isBillingEnabled,
+  requireUserId,
+  resolveProductResourceScope,
+  findBillingAccountForScope,
+  getBillingBalance,
+};
 
-  const account = await findBillingAccountForScope(resolution.scope);
-  const balance = account
-    ? await getBillingBalance(account.id)
-    : { includedCents: 0, purchasedCents: 0, totalCents: 0 };
-  return NextResponse.json({
-    enabled: true,
-    canManageBilling:
-      resolution.scope.kind === "personal" ||
-      hasCapability(resolution.capabilities ?? new Set(), "billing.manage"),
-    tier: account?.tier ?? "free",
-    status: account?.status ?? "active",
-    hasSubscription: Boolean(account?.stripe_subscription_id),
-    hasStripeCustomer: Boolean(account?.stripe_customer_id),
-    balance: {
-      includedCents: balance.includedCents,
-      purchasedCents: balance.purchasedCents,
-      totalCents: balance.totalCents,
-    },
-  });
+export function createBillingSummaryGetHandler(
+  overrides: Partial<BillingSummaryDeps> = {}
+) {
+  const deps: BillingSummaryDeps = { ...defaultDeps, ...overrides };
+
+  return async function GET(request: Request) {
+    const billingOperationsEnabled = deps.isBillingEnabled();
+    const userId = await deps.requireUserId();
+    if (userId instanceof Response) return userId;
+
+    const resolution = await deps.resolveProductResourceScope({
+      request,
+      userId,
+    });
+    if (!resolution.ok) {
+      return NextResponse.json(
+        { error: resolution.error },
+        { status: resolution.status }
+      );
+    }
+
+    const account = await deps.findBillingAccountForScope(resolution.scope);
+    const balance = account
+      ? await deps.getBillingBalance(account.id)
+      : { includedCents: 0, purchasedCents: 0, totalCents: 0 };
+    return NextResponse.json({
+      enabled: true,
+      billingOperationsEnabled,
+      canManageBilling:
+        resolution.scope.kind === "personal" ||
+        hasCapability(resolution.capabilities ?? new Set(), "billing.manage"),
+      tier: account?.tier ?? "free",
+      status: account?.status ?? "active",
+      hasSubscription: Boolean(account?.stripe_subscription_id),
+      hasStripeCustomer: Boolean(account?.stripe_customer_id),
+      balance: {
+        includedCents: balance.includedCents,
+        purchasedCents: balance.purchasedCents,
+        totalCents: balance.totalCents,
+      },
+    });
+  };
 }
+
+export const GET = createBillingSummaryGetHandler();

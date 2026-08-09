@@ -56,20 +56,23 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
     "Automations"
   );
   for (const compactLabel of [
-    ".app-sidebar-title",
     ".app-sidebar-section-label",
     ".app-sidebar-link-label",
     ".app-sidebar-footer-label",
   ]) {
     await expect(sidebar.locator(compactLabel)).toHaveCount(0);
   }
+  // The brand mark lives in the window chrome above the sidebar and stays
+  // visible there when the sidebar is compact.
   const compactSidebarBox = await sidebar.boundingBox();
-  const compactLogoBox = await sidebar
-    .locator(".app-sidebar-logo")
-    .boundingBox();
+  const brandLink = page.locator(
+    '.app-window-chrome a[aria-label="Mogplex home"]'
+  );
+  await expect(brandLink).toBeVisible();
+  const brandLinkBox = await brandLink.boundingBox();
   expect(compactSidebarBox).not.toBeNull();
-  expect(compactLogoBox).not.toBeNull();
-  expect(compactLogoBox!.x + compactLogoBox!.width).toBeLessThanOrEqual(
-    compactSidebarBox!.x + compactSidebarBox!.width
+  expect(brandLinkBox).not.toBeNull();
+  expect(brandLinkBox!.y + brandLinkBox!.height).toBeLessThanOrEqual(
+    compactSidebarBox!.y
   );
 });

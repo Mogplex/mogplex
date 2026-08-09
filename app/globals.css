@@ -214,7 +214,7 @@
     --accent-foreground: oklch(20.51% 0.0101 88.8);
     --border: oklch(88.21% 0.0209 91.6);
     --input: oklch(92.86% 0.0169 88);
-    --ring: color-mix(in srgb, #f97316 60%, transparent);
+    --ring: color-mix(in srgb, var(--foreground) 34%, transparent);
     --sidebar: oklch(98.17% 0.0069 84.57);
     --sidebar-foreground: oklch(20.51% 0.0101 88.8);
     --sidebar-accent: oklch(94.65% 0.0099 87.47);
@@ -273,7 +273,7 @@
     --accent-foreground: #ededf0;
     --border: #1e1e24;
     --input: #0b0b0e;
-    --ring: color-mix(in srgb, #f97316 60%, transparent);
+    --ring: color-mix(in srgb, var(--foreground) 34%, transparent);
     --sidebar: #111114;
     --sidebar-foreground: #ededf0;
     --sidebar-accent: #18181d;
@@ -306,7 +306,9 @@
   .app-topbar {
     position: relative;
     z-index: 20;
-    box-shadow: 0 1px 0 var(--border);
+    display: flex;
+    min-height: 36px;
+    align-items: center;
   }
 
   .app-sidebar {
@@ -335,7 +337,7 @@
   }
 
   .app-sidebar-link.is-active svg {
-    color: var(--brand-accent);
+    color: var(--sidebar-accent-foreground);
   }
 
   .app-sidebar-resizer::after {
@@ -351,7 +353,7 @@
   .app-sidebar-resizer:hover::after,
   .app-sidebar-resizer:focus-visible::after,
   .app-sidebar[data-resizing="true"] .app-sidebar-resizer::after {
-    background: var(--brand-accent);
+    background: var(--border-dim);
   }
 
   .app-sidebar[data-compact="true"] .app-sidebar-header {
@@ -399,14 +401,15 @@
   .mogplex-command-palette {
     width: min(720px, calc(100vw - 48px));
     border-color: var(--border);
-    border-radius: 8px;
+    border-radius: 16px;
     background: var(--popover);
     color: var(--popover-foreground);
     box-shadow: var(--app-shadow-panel);
+    overflow: hidden;
   }
 
   .mogplex-command-palette-command {
-    border-radius: 8px;
+    border-radius: 16px;
     background: var(--popover);
     color: var(--popover-foreground);
   }
@@ -455,15 +458,15 @@
 
   .mogplex-command-palette [data-slot="command-item"] {
     min-height: 40px;
-    border-radius: 6px;
+    border-radius: 10px;
     color: var(--foreground);
     font-size: 14px;
     line-height: 20px;
   }
 
   .mogplex-command-palette [data-slot="command-item"][data-selected="true"] {
-    background: var(--accent);
-    color: var(--accent-foreground);
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
+    color: var(--foreground);
   }
 
   .mogplex-command-palette [data-slot="command-item"] .text-muted-foreground {
@@ -485,11 +488,12 @@
 
   .mogplex-account-menu {
     border-color: var(--border);
-    border-radius: 8px;
+    border-radius: 16px;
     background: var(--popover);
     color: var(--popover-foreground);
     padding: 6px;
     box-shadow: var(--app-shadow-panel);
+    overflow: hidden;
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-label"] {
@@ -503,7 +507,7 @@
 
   .mogplex-account-menu [data-slot="dropdown-menu-item"] {
     min-height: 34px;
-    border-radius: 6px;
+    border-radius: 10px;
     color: var(--foreground);
     font-size: 13px;
     line-height: 20px;
@@ -511,8 +515,8 @@
 
   .mogplex-account-menu [data-slot="dropdown-menu-item"]:focus,
   .mogplex-account-menu [data-slot="dropdown-menu-item"][data-highlighted] {
-    background: var(--accent);
-    color: var(--accent-foreground);
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
+    color: var(--foreground);
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-item"][data-disabled] {
@@ -547,7 +551,7 @@
   .app-window-frame {
     overflow: hidden;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 18px;
     background: var(--background);
   }
 
@@ -555,7 +559,7 @@
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    height: 52px;
+    height: 54px;
     border-bottom: 1px solid var(--border);
     background: var(--sidebar);
   }

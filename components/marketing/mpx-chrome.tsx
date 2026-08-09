@@ -383,6 +383,9 @@ export function MpxHeader() {
         </div>
 
         <GithubPill />
+        <Link className="mpx-button is-secondary is-small" href="/login">
+          Sign in
+        </Link>
         <Link className="mpx-button is-primary is-small" href="/signup">
           Start now
         </Link>
@@ -468,6 +471,9 @@ export function MpxHeader() {
         >
           Docs
         </a>
+        <Link href="/login" onClick={() => setMobileOpen(false)}>
+          Sign in
+        </Link>
         <div className="mpx-mobile-foot">
           <GithubPill small />
         </div>

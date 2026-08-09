@@ -13,7 +13,12 @@ export function ConsentManager({ children }: ConsentManagerProps) {
   }
 
   return (
-    <ConsentManagerClient hostedEnabled={Boolean(process.env.NEXT_PUBLIC_C15T_URL)}>
+    <ConsentManagerClient
+      hostedEnabled={
+        process.env.NODE_ENV === 'production' &&
+        Boolean(process.env.NEXT_PUBLIC_C15T_URL)
+      }
+    >
       {children}
     </ConsentManagerClient>
   )
