@@ -91,22 +91,34 @@ test("theme preference persists from user menu into spaces without UI regression
   const initialLightTheme = await readSearchInputTheme(page);
   expect(initialLightTheme.rawBackground.length).toBeGreaterThan(0);
   expect(initialLightTheme.rawForeground.length).toBeGreaterThan(0);
-  expect(initialLightTheme.backgroundBrightness).toBeLessThan(80);
-  expect(initialLightTheme.foregroundBrightness).toBeGreaterThan(120);
+  expect(initialLightTheme.backgroundBrightness).toBeGreaterThan(180);
+  expect(initialLightTheme.foregroundBrightness).toBeLessThan(120);
 
   await selectThemeFromUserMenu(page, "dark");
   await expectDocumentTheme(page, "dark");
 
-  const darkPreferenceChromeTheme = await readSearchInputTheme(page);
-  expect(darkPreferenceChromeTheme.backgroundBrightness).toBeLessThan(80);
-  expect(darkPreferenceChromeTheme.foregroundBrightness).toBeGreaterThan(120);
+  await expect
+    .poll(async () => {
+      const darkPreferenceChromeTheme = await readSearchInputTheme(page);
+      return {
+        backgroundSettled: darkPreferenceChromeTheme.backgroundBrightness < 80,
+        foregroundSettled: darkPreferenceChromeTheme.foregroundBrightness > 120,
+      };
+    })
+    .toEqual({ backgroundSettled: true, foregroundSettled: true });
 
   await selectThemeFromUserMenu(page, "light");
   await expectDocumentTheme(page, "light");
 
-  const restoredLightTheme = await readSearchInputTheme(page);
-  expect(restoredLightTheme.backgroundBrightness).toBeLessThan(80);
-  expect(restoredLightTheme.foregroundBrightness).toBeGreaterThan(120);
+  await expect
+    .poll(async () => {
+      const restoredLightTheme = await readSearchInputTheme(page);
+      return {
+        backgroundSettled: restoredLightTheme.backgroundBrightness > 180,
+        foregroundSettled: restoredLightTheme.foregroundBrightness < 120,
+      };
+    })
+    .toEqual({ backgroundSettled: true, foregroundSettled: true });
 
   expect(patchedThemes).toEqual(["dark", "light"]);
   expect(pageErrors).toEqual([]);

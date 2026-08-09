@@ -9,7 +9,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <CommandPaletteProvider>
       <div
-        className="app-shell h-dvh bg-[#0a0a0c] p-1.5 pt-[calc(env(safe-area-inset-top)+6px)] text-foreground sm:p-3 sm:pt-[calc(env(safe-area-inset-top)+12px)]"
+        className="app-shell h-dvh bg-background p-1.5 pt-[calc(env(safe-area-inset-top)+6px)] text-foreground sm:p-3 sm:pt-[calc(env(safe-area-inset-top)+12px)]"
         data-testid="dashboard-shell"
       >
         <div className="app-window-frame flex h-full min-h-0 flex-col">

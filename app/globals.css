@@ -198,6 +198,65 @@
 
 @layer components {
   .app-shell {
+    --background: oklch(95.88% 0.0086 84.57);
+    --foreground: oklch(20.51% 0.0101 88.8);
+    --card: oklch(99.1% 0.0041 91.45);
+    --card-foreground: oklch(20.51% 0.0101 88.8);
+    --popover: oklch(99.1% 0.0041 91.45);
+    --popover-foreground: oklch(20.51% 0.0101 88.8);
+    --primary: #f97316;
+    --primary-foreground: oklch(99.1% 0.0041 91.45);
+    --secondary: oklch(94.6% 0.0083 91.48);
+    --secondary-foreground: oklch(40% 0.0161 82.35);
+    --muted: oklch(95.17% 0.0096 93.57);
+    --muted-foreground: oklch(55.07% 0.0182 82.77);
+    --accent: oklch(92.83% 0.014 88.69);
+    --accent-foreground: oklch(20.51% 0.0101 88.8);
+    --border: oklch(88.21% 0.0209 91.6);
+    --input: oklch(92.86% 0.0169 88);
+    --ring: color-mix(in srgb, #f97316 60%, transparent);
+    --sidebar: oklch(98.17% 0.0069 84.57);
+    --sidebar-foreground: oklch(20.51% 0.0101 88.8);
+    --sidebar-accent: oklch(94.65% 0.0099 87.47);
+    --sidebar-accent-foreground: oklch(20.51% 0.0101 88.8);
+    --sidebar-border: oklch(88.21% 0.0209 91.6);
+    --accent-green: #4ade80;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-blue: #34d399;
+    --border-dim: oklch(92.83% 0.014 88.69);
+    --terminal-background: oklch(17.8% 0.0043 84.59);
+    --terminal-foreground: oklch(92.79% 0.0083 91.49);
+    --terminal-muted: oklch(43.87% 0.007 91.48);
+    --app-blueprint-dot: color-mix(in srgb, var(--border) 62%, transparent);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-border-dim: var(--border-dim);
+    isolation: isolate;
+    color-scheme: light;
+  }
+
+  .dark .app-shell {
     --background: #0a0a0c;
     --foreground: #ededf0;
     --card: #131317;
@@ -229,12 +288,19 @@
     --terminal-foreground: #ededf0;
     --terminal-muted: #6e6e7a;
     --app-blueprint-dot: color-mix(in srgb, var(--border) 62%, transparent);
-    isolation: isolate;
     color-scheme: dark;
   }
 
   .app-shell-content {
-    background: #0e0e11;
+    background: var(--background);
+  }
+
+  .app-shell :is(input, select, textarea) {
+    color: var(--foreground) !important;
+  }
+
+  .app-shell :is(input, select, textarea)::placeholder {
+    color: var(--muted-foreground) !important;
   }
 
   .app-topbar {
@@ -331,73 +397,57 @@
   }
 
   .mogplex-command-palette {
-    --background: #131317;
-    --foreground: #ededf0;
-    --popover: #131317;
-    --popover-foreground: #ededf0;
-    --card: #18181d;
-    --card-foreground: #ededf0;
-    --muted: #1f1f25;
-    --muted-foreground: #a1a1ac;
-    --accent: #232329;
-    --accent-foreground: #ededf0;
-    --border: #2a2a32;
-    --input: #0b0b0e;
-    --ring: color-mix(in srgb, #f97316 60%, transparent);
-    --destructive: #ef4444;
-    --brand-accent: #f97316;
     width: min(720px, calc(100vw - 48px));
-    border-color: #2a2a32;
+    border-color: var(--border);
     border-radius: 8px;
-    background: #131317;
-    color: #ededf0;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-    color-scheme: dark;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: var(--app-shadow-panel);
   }
 
   .mogplex-command-palette-command {
     border-radius: 8px;
-    background: #131317;
-    color: #ededf0;
+    background: var(--popover);
+    color: var(--popover-foreground);
   }
 
   .mogplex-command-palette [data-slot="command-input-wrapper"] {
     height: 56px;
-    border-bottom: 1px solid #2a2a32;
-    background: #0b0b0e;
+    border-bottom: 1px solid var(--border);
+    background: var(--input);
     padding-inline: 16px;
   }
 
   .mogplex-command-palette [data-slot="command-input-wrapper"] svg {
-    color: #a1a1ac;
+    color: var(--muted-foreground);
     opacity: 1;
   }
 
   .mogplex-command-palette [data-slot="command-input"] {
     height: 56px;
-    color: #ededf0;
+    color: var(--foreground);
     font-size: 14px;
     line-height: 22px;
   }
 
   .mogplex-command-palette [data-slot="command-input"]::placeholder {
-    color: #6e6e7a;
+    color: var(--muted-foreground);
   }
 
   .mogplex-command-palette [data-slot="command-list"] {
     max-height: min(520px, calc(100vh - 220px));
     padding: 8px;
-    background: #131317;
+    background: var(--popover);
   }
 
   .mogplex-command-palette [data-slot="command-group"] {
     padding: 4px 0;
-    color: #ededf0;
+    color: var(--foreground);
   }
 
   .mogplex-command-palette [cmdk-group-heading] {
     padding: 8px 8px 6px;
-    color: #a1a1ac;
+    color: var(--muted-foreground);
     font-size: 12px;
     font-weight: 600;
     line-height: 16px;
@@ -406,18 +456,18 @@
   .mogplex-command-palette [data-slot="command-item"] {
     min-height: 40px;
     border-radius: 6px;
-    color: #ededf0;
+    color: var(--foreground);
     font-size: 14px;
     line-height: 20px;
   }
 
   .mogplex-command-palette [data-slot="command-item"][data-selected="true"] {
-    background: #232329;
-    color: #ededf0;
+    background: var(--accent);
+    color: var(--accent-foreground);
   }
 
   .mogplex-command-palette [data-slot="command-item"] .text-muted-foreground {
-    color: #a1a1ac;
+    color: var(--muted-foreground);
   }
 
   .mogplex-command-palette [data-slot="command-item"] .text-destructive {
@@ -426,96 +476,79 @@
 
   .mogplex-command-palette [data-slot="command-separator"] {
     margin: 6px 0;
-    background: #1e1e24;
+    background: var(--border);
   }
 
   .mogplex-command-palette [data-slot="command-empty"] {
-    color: #a1a1ac;
+    color: var(--muted-foreground);
   }
 
   .mogplex-account-menu {
-    --background: #131317;
-    --foreground: #ededf0;
-    --popover: #131317;
-    --popover-foreground: #ededf0;
-    --card: #18181d;
-    --card-foreground: #ededf0;
-    --muted: #1f1f25;
-    --muted-foreground: #a1a1ac;
-    --secondary: #18181d;
-    --secondary-foreground: #a1a1ac;
-    --accent: #232329;
-    --accent-foreground: #ededf0;
-    --border: #2a2a32;
-    --input: #0b0b0e;
-    --ring: color-mix(in srgb, #f97316 60%, transparent);
-    --destructive: #ef4444;
-    border-color: #2a2a32;
+    border-color: var(--border);
     border-radius: 8px;
-    background: #131317;
-    color: #ededf0;
+    background: var(--popover);
+    color: var(--popover-foreground);
     padding: 6px;
-    box-shadow: 0 24px 72px rgba(0, 0, 0, 0.52);
-    color-scheme: dark;
+    box-shadow: var(--app-shadow-panel);
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-label"] {
-    color: #ededf0;
+    color: var(--foreground);
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-label"].text-muted-foreground,
   .mogplex-account-menu .text-muted-foreground {
-    color: #a1a1ac;
+    color: var(--muted-foreground);
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-item"] {
     min-height: 34px;
     border-radius: 6px;
-    color: #ededf0;
+    color: var(--foreground);
     font-size: 13px;
     line-height: 20px;
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-item"]:focus,
   .mogplex-account-menu [data-slot="dropdown-menu-item"][data-highlighted] {
-    background: #232329;
-    color: #ededf0;
+    background: var(--accent);
+    color: var(--accent-foreground);
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-item"][data-disabled] {
-    color: #6e6e7a;
+    color: var(--muted-foreground);
     opacity: 1;
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-item"] svg {
-    color: #a1a1ac;
+    color: var(--muted-foreground);
   }
 
   .mogplex-account-menu [data-slot="dropdown-menu-separator"] {
     margin: 6px -6px;
-    background: #1e1e24;
+    background: var(--border);
   }
 
   .mogplex-account-menu [data-theme-toggle] {
-    border-color: #2a2a32;
-    background: #0b0b0e;
+    border-color: var(--border);
+    background: var(--input);
   }
 
   .mogplex-account-menu [data-theme-toggle] > div[aria-hidden="true"] {
-    background: #232329;
+    background: var(--accent);
   }
 
   .app-statusbar {
     position: relative;
     z-index: 20;
-    background: #111114;
+    background: var(--sidebar);
   }
 
   .app-window-frame {
     overflow: hidden;
-    border: 1px solid #2a2a32;
+    border: 1px solid var(--border);
     border-radius: 12px;
-    background: #0e0e11;
+    background: var(--background);
   }
 
   .app-window-chrome {
@@ -523,20 +556,20 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     height: 52px;
-    border-bottom: 1px solid #1e1e24;
-    background: #111114;
+    border-bottom: 1px solid var(--border);
+    background: var(--sidebar);
   }
 
   .app-control-shell {
-    background: #0e0e11;
+    background: var(--background);
   }
 
   .app-chat-column {
-    background: #0e0e11;
+    background: var(--background);
   }
 
   .app-live-rail {
-    background: #131317;
+    background: var(--card);
   }
 
   .app-panel-resizer::after,
