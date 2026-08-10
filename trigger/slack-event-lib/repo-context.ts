@@ -4,6 +4,10 @@ import type { SlackRepoContext } from "./types";
 
 const REPO_SLUG_PATTERN =
   /\b([A-Za-z0-9](?:[A-Za-z0-9_.-]{0,38}[A-Za-z0-9])?)\/([A-Za-z0-9_.-]+)\b/g;
+const GITHUB_REPO_URL_PATTERN =
+  /(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s>|)]+)\/([^/\s?#>|)]+)[^\s>|)]*/gi;
+const REPO_OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,38}[A-Za-z0-9])?$/;
+const REPO_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 const ORG_PATTERN = /\b[Oo][Rr][Gg]\s*=\s*([A-Za-z0-9_.-]+)/;
 const REPO_PATTERN = /\b[Rr][Ee][Pp][Oo]\s*=\s*([A-Za-z0-9_.-]+)/;
 
@@ -18,23 +22,34 @@ export function extractSlackRepoCandidates(texts: string[]): string[] {
   const seen = new Set<string>();
   const joined = texts.join("\n");
 
+  const addCandidate = (owner: string, rawRepo: string) => {
+    const repo = rawRepo.replace(/\.git$/i, "");
+    if (!REPO_OWNER_PATTERN.test(owner) || !REPO_NAME_PATTERN.test(repo))
+      return;
+    const candidate = `${owner}/${repo}`;
+    const key = candidate.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push(candidate);
+  };
+
   for (const text of texts) {
-    for (const match of text.matchAll(REPO_SLUG_PATTERN)) {
-      const candidate = `${match[1]}/${match[2]}`;
-      const key = candidate.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        candidates.push(candidate);
+    const textWithoutGithubUrls = text.replace(
+      GITHUB_REPO_URL_PATTERN,
+      (_match, owner: string, repo: string) => {
+        addCandidate(owner, repo);
+        return " ";
       }
+    );
+    for (const match of textWithoutGithubUrls.matchAll(REPO_SLUG_PATTERN)) {
+      addCandidate(match[1], match[2]);
     }
   }
 
   const org = joined.match(ORG_PATTERN)?.[1];
   const repo = joined.match(REPO_PATTERN)?.[1];
   if (org && repo) {
-    const candidate = `${org}/${repo}`;
-    const key = candidate.toLowerCase();
-    if (!seen.has(key)) candidates.push(candidate);
+    addCandidate(org, repo);
   }
 
   return candidates;

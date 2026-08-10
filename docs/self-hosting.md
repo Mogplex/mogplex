@@ -46,6 +46,12 @@ docker build \
 docker run --env-file .env -p 3000:3000 mogplex
 ```
 
+## Slack app setup
+
+Set the Slack OAuth redirect URL to `https://<your-domain>/api/integrations/slack/callback`. The bot OAuth flow requests these scopes: `app_mentions:read`, `channels:history`, `channels:read`, `chat:write`, `files:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `mpim:history`, `mpim:read`, `users:read`, and `users:read.email`.
+
+`files:read` lets Mogplex download images attached to thread messages. Existing workspace installations must reconnect after upgrading to a release that adds this scope; changing the application code cannot expand an existing Slack OAuth grant.
+
 ## What is still on you after it boots
 
 - **Migrations.** The image never touches your schema. Apply `supabase/migrations/` yourself (`supabase db push --db-url ...`) before first boot and after every upgrade.

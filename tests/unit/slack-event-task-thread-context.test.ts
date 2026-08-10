@@ -31,6 +31,16 @@ test("extracts named repositories across Slack thread replies", () => {
   );
 });
 
+test("extracts repositories from pasted GitHub URLs without domain candidates", () => {
+  assert.deepEqual(
+    extractSlackRepoCandidates([
+      "Review https://github.com/Mogplex/mogplex/pull/135",
+      "Then inspect <https://github.com/WebRenew/other-repo.git|the repo>",
+    ]),
+    ["Mogplex/mogplex", "WebRenew/other-repo"]
+  );
+});
+
 test("bounds Slack thread history before the current event", async () => {
   let requestUrl = "";
   const messages = await getSlackThreadMessages(
@@ -262,6 +272,7 @@ test("hydrates Slack thread context, prior images, and named repo scope for conv
 
   let resolvedRepoTexts: string[] = [];
   const agentInputs: RunChatAgentInput[] = [];
+  const operationOrder: string[] = [];
 
   const result = await runSlackEventTask(
     {
@@ -277,6 +288,7 @@ test("hydrates Slack thread context, prior images, and named repo scope for conv
       resolveSlackAttribution: async () => mappedAttribution(),
       getChannelLink: async () => null,
       getThreadMessages: async (_token, input) => {
+        operationOrder.push("thread-context");
         assert.deepEqual(input, {
           channel: "C1",
           threadTs: "1700000000.000100",
@@ -351,10 +363,13 @@ test("hydrates Slack thread context, prior images, and named repo scope for conv
           finalText: "I'll inspect the named repo and screenshots.",
         });
       },
-      postMessage: async (_token, input) => ({
-        channel: input.channel,
-        ts: "1700000000.000999",
-      }),
+      postMessage: async (_token, input) => {
+        operationOrder.push("placeholder");
+        return {
+          channel: input.channel,
+          ts: "1700000000.000999",
+        };
+      },
       updateMessage: async (_token, input) => ({
         channel: input.channel,
         ts: input.ts,
@@ -387,6 +402,11 @@ test("hydrates Slack thread context, prior images, and named repo scope for conv
   assert.ok(
     resolvedRepoTexts.some((text) => text.includes("mogplex/mogplex")),
     "repo resolver should see prior Slack thread text, not only the latest reply"
+  );
+  assert.ok(
+    operationOrder.indexOf("placeholder") <
+      operationOrder.indexOf("thread-context"),
+    "the user-visible placeholder should be posted before thread hydration"
   );
 });
 

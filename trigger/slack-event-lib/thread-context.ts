@@ -13,6 +13,10 @@ import type {
 } from "./types";
 
 const MAX_THREAD_CONTEXT_MESSAGES = 20;
+// Keep this to one Slack API page. Commercially distributed apps can be
+// limited to one conversations.replies request per minute, so cursor-walking a
+// large thread would add minutes of latency or fail mid-run. Persisted turns
+// cover ongoing conversations; this page is bounded recovery context.
 const MAX_THREAD_FETCH_MESSAGES = 200;
 const MAX_THREAD_CONTEXT_CHARS = 6_000;
 const MAX_THREAD_CONTEXT_IMAGES = SLACK_IMAGE_ATTACHMENT_MAX_COUNT;
