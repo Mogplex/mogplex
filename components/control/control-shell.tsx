@@ -213,8 +213,9 @@ export function ControlShell({
       const missionTitle =
         text.slice(0, 80) || options.files[0]?.filename || "New mission";
       // Persist the chat session before re-keying useChat so the first
-      // message streams straight into the durable session's chat.
-      await createSession(missionTitle);
+      // message streams straight into the durable session's chat. The
+      // session inherits the mission's workspace as its project group.
+      await createSession(missionTitle, getWorkspace(targets[0] ?? "")?.name);
       const newMissionObj: Mission = {
         id,
         title: missionTitle.slice(0, 80),
@@ -240,7 +241,7 @@ export function ControlShell({
       // would stream the reply into the previous mission's discarded chat.
       pendingInitialMessageRef.current = { missionId: id, text, options };
     },
-    [createSession]
+    [createSession, getWorkspace]
   );
 
   const { needsAttention, agentStats } = useMissionDerived(

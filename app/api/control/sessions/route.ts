@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 
-const LIST_COLUMNS = "id, title, pinned, archived, created_at, updated_at";
+const LIST_COLUMNS =
+  "id, title, project, pinned, archived, created_at, updated_at";
 
 async function getSessionRecord(id: string, userId: string) {
   const { data, error } = await supabaseAdmin
@@ -54,13 +55,17 @@ export async function POST(req: Request) {
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
 
-  const body = (await req.json().catch(() => ({}))) as { title?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    title?: string;
+    project?: string | null;
+  };
 
   const { data, error } = await supabaseAdmin
     .from("control_sessions")
     .insert({
       user_id: userId,
       title: body.title?.trim() || "New session",
+      project: body.project?.trim().slice(0, 80) || null,
     })
     .select("*")
     .single();
@@ -83,6 +88,7 @@ export async function PUT(req: Request) {
     id?: string;
     expected_updated_at?: string | null;
     title?: string;
+    project?: string | null;
     messages?: unknown;
     pinned?: boolean;
     archived?: boolean;
