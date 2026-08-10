@@ -37,6 +37,10 @@ export function buildControlChatRunMetadata(
     repo_branch: body.repoBranch ?? null,
     team_id: teamId,
     mission_id: body.missionId ?? null,
+    scope: body.scope ?? null,
+    target: body.target ?? null,
+    permissions: body.permissions ?? null,
+    mode: body.mode ?? null,
   };
 }
 

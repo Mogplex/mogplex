@@ -22,10 +22,10 @@ function RepoDashboardStatsPills({
 }) {
   return (
     <div className="text-muted-foreground mt-2 flex flex-wrap gap-2 text-[11px]">
-      <span className="border-border bg-card rounded-sm border px-2 py-0.5">
+      <span className="border-border bg-card rounded-lg border px-2 py-0.5">
         {installationCount} installations
       </span>
-      <span className="border-border bg-card rounded-sm border px-2 py-0.5">
+      <span className="border-border bg-card rounded-lg border px-2 py-0.5">
         {syncedRepoCount} synced spaces
       </span>
     </div>
@@ -61,7 +61,7 @@ export function RepoDashboardFailureState({
           <Button
             size="sm"
             onClick={onRetry}
-            className="h-8 rounded-sm text-xs"
+            className="h-8 rounded-lg text-xs"
           >
             Retry
           </Button>
@@ -69,7 +69,7 @@ export function RepoDashboardFailureState({
             asChild
             variant="ghost"
             size="sm"
-            className="text-muted-foreground h-8 rounded-sm text-xs"
+            className="text-muted-foreground h-8 rounded-lg text-xs"
           >
             <a href={scopedHref(scope, "/settings")}>Settings</a>
           </Button>
@@ -121,7 +121,7 @@ function RepoDashboardEmptyActions({
         <Button
           size="sm"
           onClick={onCreateWorkspace}
-          className="h-8 rounded-sm text-xs"
+          className="h-8 rounded-lg text-xs"
         >
           New project
         </Button>
@@ -129,12 +129,12 @@ function RepoDashboardEmptyActions({
           <Button
             size="sm"
             onClick={onSyncGithub}
-            className="h-8 rounded-sm text-xs"
+            className="h-8 rounded-lg text-xs"
           >
             {syncingRepos ? "Importing..." : "Import repositories"}
           </Button>
         ) : emptyStateActionHref && emptyStateActionLabel ? (
-          <Button asChild size="sm" className="h-8 rounded-sm text-xs">
+          <Button asChild size="sm" className="h-8 rounded-lg text-xs">
             <a
               href={emptyStateActionHref}
               target="_blank"
@@ -157,13 +157,13 @@ function RepoDashboardEmptyActions({
           asChild
           variant="ghost"
           size="sm"
-          className="text-muted-foreground h-8 rounded-sm text-xs"
+          className="text-muted-foreground h-8 rounded-lg text-xs"
         >
           <a href={scopedHref(scope, "/settings")}>Settings</a>
         </Button>
       </div>
       {repoSyncError ? (
-        <div className="border border-red-500/20 bg-red-500/8 px-3 py-2 text-xs text-red-500">
+        <div className="border-destructive/20 bg-destructive/[0.08] text-destructive border px-3 py-2 text-xs">
           {repoSyncError}
         </div>
       ) : null}
@@ -194,7 +194,7 @@ function VercelSetupBlock({
           {handleViaCallback ? (
             <Button
               size="sm"
-              className="h-8 rounded-sm text-xs"
+              className="h-8 rounded-lg text-xs"
               onClick={() => {
                 trackActivation("vercel_connect_started", {
                   source: "repos_empty_state",
@@ -206,7 +206,7 @@ function VercelSetupBlock({
               {action.label}
             </Button>
           ) : (
-            <Button asChild size="sm" className="h-8 rounded-sm text-xs">
+            <Button asChild size="sm" className="h-8 rounded-lg text-xs">
               <a
                 href={action.href}
                 onClick={() => {

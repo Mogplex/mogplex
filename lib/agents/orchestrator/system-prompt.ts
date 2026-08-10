@@ -11,6 +11,10 @@ export type OrchestratorPromptContext = {
   repoBaseBranch?: string;
   missionId?: string;
   missionTitle?: string;
+  controlScope?: string;
+  controlTarget?: string;
+  controlPermissions?: string;
+  controlMode?: string;
   activeSandboxes?: Array<{
     id: string;
     branch: string;
@@ -34,7 +38,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildWorktreesBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildWorktreesBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -150,6 +154,27 @@ Mission ID: ${ctx.missionId}
 
 Use plan_mission to create or update the mission plan. Mission specs live in specs/<mission-slug>/.
 </mission>
+`;
+}
+
+function buildControlIntentBlock(ctx: OrchestratorPromptContext): string {
+  if (!ctx.controlScope && !ctx.controlTarget && !ctx.controlMode) return "";
+
+  const mode = ctx.controlMode === "plan" ? "plan" : "run";
+
+  return `
+<control-intent>
+Mode: ${mode}
+Scope: ${ctx.controlScope || "not specified"}
+Target: ${ctx.controlTarget || "mission"}
+Permissions: ${ctx.controlPermissions || "default"}
+
+${
+  mode === "plan"
+    ? "The operator requested planning only. Produce or update the plan, identify assumptions and acceptance criteria, and do not spawn workers or mutate repository files unless the operator explicitly asks you to continue."
+    : "The operator requested execution. Plan enough to act safely, then use the available tools according to policy."
+}
+</control-intent>
 `;
 }
 

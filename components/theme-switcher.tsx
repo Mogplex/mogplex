@@ -124,7 +124,7 @@ export function ThemeSwitcher() {
     >
       <div
         aria-hidden="true"
-        className="bg-background pointer-events-none absolute top-1 left-1 h-6 rounded-sm transition-[transform,width] duration-200 ease-out"
+        className="bg-background pointer-events-none absolute top-1 left-1 h-6 rounded-md transition-[transform,width] duration-200 ease-out"
         style={{
           transform: `translateX(${indicatorX}px)`,
           width: indicatorWidth,
@@ -145,7 +145,7 @@ export function ThemeSwitcher() {
             data-testid={`theme-switcher-${option}`}
             onClick={() => selectTheme(option)}
             style={{ width }}
-            className={`relative z-10 flex h-6 cursor-pointer items-center justify-center gap-1 rounded-sm px-2 transition-[color,width] duration-200 ease-out ${
+            className={`relative z-10 flex h-6 cursor-pointer items-center justify-center gap-1 rounded-md px-2 transition-[color,width] duration-200 ease-out ${
               isActive
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"

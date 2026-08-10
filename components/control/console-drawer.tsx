@@ -204,7 +204,7 @@ export function ConsoleDrawer({
 
             <div className="ml-auto flex items-center gap-1">
               {tab === "terminal" && (
-                <span className="rounded bg-[#221f18] px-1.5 py-0.5 font-mono text-[9px] text-primary">
+                <span className="bg-accent rounded px-1.5 py-0.5 font-mono text-[9px] text-primary">
                   {scope.toUpperCase()}
                 </span>
               )}

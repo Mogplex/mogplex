@@ -21,7 +21,7 @@ function renderSandboxErrorPill(label: string, message: string) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span>
-          <RepoPill dotClassName="bg-red-300">{label}</RepoPill>
+          <RepoPill dotClassName="bg-destructive">{label}</RepoPill>
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-72 text-xs">
@@ -45,13 +45,13 @@ export function SandboxStatusBadge({
 
   if (isCreating || isSandboxUiBooting(sandboxUiState)) {
     return (
-      <RepoPill dotClassName="bg-amber-300">
+      <RepoPill dotClassName="bg-accent-amber">
         {getSandboxCreationLabel(getSandboxUiRuntimeStatus(sandboxUiState))}
       </RepoPill>
     );
   }
   if (isSandboxUiIdleWarning(sandboxUiState)) {
-    return <RepoPill dotClassName="bg-emerald-300">Ready</RepoPill>;
+    return <RepoPill dotClassName="bg-accent-green">Ready</RepoPill>;
   }
   if (
     sandboxUiState.kind === "degraded" &&
@@ -69,10 +69,10 @@ export function SandboxStatusBadge({
     sandboxUiState.kind === "degraded" &&
     sandboxUiState.reason === "unreachable"
   ) {
-    return <RepoPill dotClassName="bg-amber-300">Unreachable</RepoPill>;
+    return <RepoPill dotClassName="bg-accent-amber">Unreachable</RepoPill>;
   }
   if (isSandboxUiRuntimeRunning(sandboxUiState))
-    return <RepoPill dotClassName="bg-emerald-300">Ready</RepoPill>;
+    return <RepoPill dotClassName="bg-accent-green">Ready</RepoPill>;
   if (sandboxUiState.kind === "errored") {
     return renderSandboxErrorPill(
       "Error",

@@ -31,7 +31,7 @@ const appSidebarUrl = new URL(
   import.meta.url
 );
 
-test("tokenized shadows preserve their pre-tokenization values", async () => {
+test("tokenized shadows preserve semantic shadow tokens", async () => {
   const [globals, modelsSection, notFound] = await Promise.all([
     readFile(globalsUrl, "utf8"),
     readFile(modelsSectionUrl, "utf8"),
@@ -40,15 +40,15 @@ test("tokenized shadows preserve their pre-tokenization values", async () => {
 
   assert.match(
     globals,
-    /--app-shadow-card: 0 12px 30px rgba\(0, 0, 0, 0\.12\);/
+    /--app-shadow-card: 0 12px 30px oklch\(0% 0 0 \/ 12%\);/
   );
   assert.match(
     globals,
-    /--app-shadow-panel: 0 18px 50px rgba\(0, 0, 0, 0\.14\);/
+    /--app-shadow-panel: 0 18px 50px oklch\(0% 0 0 \/ 14%\);/
   );
   assert.match(
     globals,
-    /--signal-lost-action-shadow: 0 12px 36px rgba\(3, 5, 18, 0\.2\);/
+    /--signal-lost-action-shadow: 0 12px 36px\s+oklch\(9\.16% 0\.0368 264\.04 \/ 20%\);/
   );
   assert.match(modelsSection, /shadow-app-card/);
   assert.match(modelsSection, /shadow-app-panel/);
@@ -79,7 +79,7 @@ test("Monaco and ASCII token failures surface visible component errors", async (
 test("highlight.js built-ins retain their distinct fuchsia token", async () => {
   const globals = await readFile(globalsUrl, "utf8");
 
-  assert.match(globals, /--accent-fuchsia: #e879f9;/);
+  assert.match(globals, /--accent-fuchsia: oklch\(74\.01% 0\.1732 327\.29\);/);
   assert.match(
     globals,
     /\.hljs-built_in \{\s*color: var\(--accent-fuchsia\);\s*\}/

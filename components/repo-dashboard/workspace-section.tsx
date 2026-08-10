@@ -58,7 +58,7 @@ function WorkspaceSectionHeader({
           <Button
             size="sm"
             onClick={() => onCreateRepoWorkspace(section.workspace)}
-            className="h-8 rounded-sm text-xs"
+            className="h-8 rounded-lg text-xs"
           >
             New repo
           </Button>
@@ -69,7 +69,7 @@ function WorkspaceSectionHeader({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground h-8 rounded-sm px-2 text-xs"
+                className="text-muted-foreground h-8 rounded-lg px-2 text-xs"
               >
                 Manage
               </Button>
@@ -195,12 +195,12 @@ function WorkspaceSectionEmptyState({
             size="sm"
             onClick={() => onCreateRepoWorkspace(section.workspace)}
             disabled={!canManageWorkspace}
-            className="h-8 rounded-sm text-xs"
+            className="h-8 rounded-lg text-xs"
           >
             Create repo
           </Button>
         ) : githubSetup.primaryAction ? (
-          <Button asChild size="sm" className="h-8 rounded-sm text-xs">
+          <Button asChild size="sm" className="h-8 rounded-lg text-xs">
             <a
               href={githubSetup.primaryAction.href}
               target="_blank"

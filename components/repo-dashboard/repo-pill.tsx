@@ -14,7 +14,7 @@ export function RepoPill({
   return (
     <span
       className={cn(
-        "border-border bg-accent/70 text-muted-foreground inline-flex cursor-default items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium",
+        "border-border bg-accent/70 text-muted-foreground inline-flex cursor-default items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[11px] font-medium",
         className
       )}
     >

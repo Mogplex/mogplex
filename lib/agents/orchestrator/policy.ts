@@ -127,6 +127,14 @@ export function checkToolPolicy(
     return { allowed: true };
   }
 
+  if (ctx.controlMode === "plan") {
+    return {
+      allowed: false,
+      reason: "policy_violation",
+      summary: `Plan mode blocks the ${def.name} tool because it can mutate state. Ask the operator to switch to run mode before executing tools.`,
+    };
+  }
+
   // Tools marked as always requiring approval
   if (ALWAYS_APPROVAL_REQUIRED.has(def.name) || def.access === "approval") {
     return {
