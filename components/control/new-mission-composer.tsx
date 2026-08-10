@@ -157,7 +157,7 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
           />
 
           {/* Options row */}
-          <div className="border-border mt-2 flex items-center gap-2 border-t pt-3">
+          <div className="border-border mt-2 flex flex-wrap items-center gap-2 border-t pt-3">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

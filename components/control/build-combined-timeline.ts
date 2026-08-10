@@ -42,10 +42,11 @@ function getApprovalInfo(part: UIMessagePart<UIDataTypes, UITools>): {
 
 /**
  * Builds a combined timeline by merging mission timeline events with chat
- * messages. Assistant text becomes MOGPLEX events; tool invocations become
- * TOOL events with their input (and the error, when the call failed).
- * Tool approvals become APPROVAL events. Tool inputs or outputs carrying a
- * unified patch become DIFF events so changes render inline in the chat.
+ * messages. User messages become YOU events; assistant text becomes MOGPLEX
+ * events; tool invocations become TOOL events with their input (and the
+ * error, when the call failed). Tool approvals become APPROVAL events.
+ * Tool inputs or outputs carrying a unified patch become DIFF events so
+ * changes render inline in the chat.
  */
 export function buildCombinedTimeline(
   timeline: TimelineEvent[] | undefined,
@@ -55,8 +56,30 @@ export function buildCombinedTimeline(
 
   // Append chat messages as timeline events
   for (const msg of messages) {
-    if (msg.role !== "assistant") continue;
     if (!msg.parts || !Array.isArray(msg.parts)) continue;
+
+    if (msg.role === "user") {
+      const text = msg.parts
+        .filter(
+          (part): part is { type: "text"; text: string } =>
+            part.type === "text" && "text" in part
+        )
+        .map((part) => part.text)
+        .join("\n")
+        .trim();
+      const fileCount = msg.parts.filter((part) => part.type === "file").length;
+      const body =
+        text ||
+        (fileCount > 0
+          ? `${fileCount} attachment${fileCount === 1 ? "" : "s"} included.`
+          : "");
+      if (body) {
+        result.push({ kind: "user", label: "YOU", time: "now", body });
+      }
+      continue;
+    }
+
+    if (msg.role !== "assistant") continue;
 
     for (const part of msg.parts) {
       if (typeof part !== "object" || part == null || !("type" in part)) {

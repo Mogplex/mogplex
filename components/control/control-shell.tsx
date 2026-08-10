@@ -7,6 +7,7 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
+import type { UIMessage } from "ai";
 import type {
   Mission,
   Worktree,
@@ -15,7 +16,8 @@ import type {
   TimelineEvent,
   ControlSeedData,
 } from "@/lib/control/types";
-import { Network } from "iconoir-react";
+import { NewMissionView } from "./new-mission-view";
+import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
 import { generateMissionId } from "@/lib/control/utils";
 import { useSandboxSync } from "@/hooks/use-sandbox";
@@ -30,15 +32,12 @@ import { Composer } from "./composer";
 import { ConsoleDrawer } from "./console-drawer";
 import { NeedsAttentionBanner } from "./needs-attention-banner";
 import { AgentSummaryStrip } from "./agent-summary-strip";
-import { NewMissionComposer } from "./new-mission-composer";
 import { PendingApprovalsBanner } from "./pending-approvals-banner";
 import { SandboxRail } from "./sandbox-rail";
 import { ArtifactSidePanel } from "./artifact-side-panel";
-import {
-  buildControlChatBody,
-  buildControlChatMessage,
-  describeAttachments,
-} from "./control-chat-request";
+import { SessionList } from "./session-list";
+import { useControlSessions } from "./use-control-sessions";
+import { useControlSend } from "./use-control-send";
 
 type ControlMode = "conversation" | "canvas" | "review";
 
@@ -73,6 +72,8 @@ export function ControlShell({
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [newMission, setNewMission] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const persistRef = useRef<(messages: UIMessage[]) => void>(() => {});
 
   const mission = useMemo(
     () => missions.find((m) => m.id === selectedMissionId) || missions[0],
@@ -112,51 +113,61 @@ export function ControlShell({
     []
   );
 
-  const { messages, sendMessage, status, stop, addToolApprovalResponse } =
-    useChat({
-      transport,
-      id: `control-${selectedMissionId}`,
-      sendAutomaticallyWhen:
-        lastAssistantMessageIsCompleteWithApprovalResponses,
-      onError: (error) => {
-        setChatError(error.message || "Chat error");
-      },
-    });
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    stop,
+    addToolApprovalResponse,
+  } = useChat({
+    transport,
+    id: `control-${sessionId ?? selectedMissionId}`,
+    sendAutomaticallyWhen:
+      lastAssistantMessageIsCompleteWithApprovalResponses,
+    onFinish: ({ messages: finishedMessages }) => {
+      persistRef.current(finishedMessages);
+    },
+    onError: (error) => {
+      setChatError(error.message || "Chat error");
+    },
+  });
 
   const chatPending = status === "streaming" || status === "submitted";
 
   useSandboxSync();
 
+  const { sessions, selectSession, createSession, persist } =
+    useControlSessions({
+      sessionId,
+      setSessionId,
+      chatStatus: status,
+      setMessages,
+      deepLinkTarget: searchParams.get("mission"),
+    });
+
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      setMode("conversation");
+      void selectSession(id);
+    },
+    [selectSession]
+  );
+
+  useEffect(() => {
+    persistRef.current = (finished) => {
+      void persist(finished);
+    };
+  }, [persist]);
+
   const [composerInput, setComposerInput] = useState("");
 
-  // A mission's first message can't go through sendMessage directly from the
-  // create handler: useChat is keyed by mission id, so the send would hit the
-  // instance of the mission we're navigating away from. Park it and send once
-  // the re-keyed chat is live.
-  const pendingInitialMessageRef = useRef<{
-    missionId: string;
-    text: string;
-    options: ComposerSendOptions;
-  } | null>(null);
-  useEffect(() => {
-    const pendingInitialMessage = pendingInitialMessageRef.current;
-    if (!pendingInitialMessage) return;
-    if (pendingInitialMessage.missionId !== selectedMissionId) return;
-    if (status !== "ready") return;
-    const { text, options } = pendingInitialMessage;
-    pendingInitialMessageRef.current = null;
-    sendMessage(buildControlChatMessage(text, options), {
-      body: buildControlChatBody({
-        model: options.model,
-        scope: options.mode === "plan" ? "PLAN ONLY" : "IMPLEMENT",
-        target: "mission",
-        permissions: options.permissions,
-        mode: options.mode,
-      }),
-    }).catch((err: unknown) => {
-      setChatError(err instanceof Error ? err.message : "Chat error");
-    });
-  }, [selectedMissionId, status, sendMessage]);
+  const pendingInitialMessageRef = usePendingInitialMessage({
+    selectedMissionId,
+    status,
+    sendMessage,
+    onError: (message) => setChatError(message),
+  });
 
   const pushTimelineEvent = useCallback(
     (event: TimelineEvent) => {
@@ -186,60 +197,24 @@ export function ControlShell({
     [mode]
   );
 
-  const handleSend = useCallback(
-    async (
-      text: string,
-      target: string,
-      scopeLevel: string,
-      options: ComposerSendOptions
-    ) => {
-      if (!text.trim() && options.files.length === 0) return;
-
-      const attachmentSuffix = describeAttachments(options.files.length);
-      pushTimelineEvent({
-        kind: "user",
-        label: target === "mission" ? "YOU" : `YOU → ${target.toUpperCase()}`,
-        time: "now",
-        body: text || attachmentSuffix.trim(),
-      });
-
-      setChatError(null);
-      try {
-        await sendMessage(buildControlChatMessage(text, options), {
-          body: buildControlChatBody({
-            model: options.model,
-            scope: scopeLevel,
-            target,
-            permissions: options.permissions,
-            mode: options.mode,
-          }),
-        });
-        setComposerInput("");
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Chat error";
-        if (message.includes("404") || message.includes("Not Found")) {
-          setChatError("Control chat endpoint not yet deployed.");
-        } else {
-          setChatError(message);
-        }
-      }
-    },
-    [sendMessage, pushTimelineEvent]
-  );
+  const handleSend = useControlSend({
+    sendMessage,
+    setChatError,
+    clearComposer: () => setComposerInput(""),
+  });
 
   const handleToolApprovalResponse = useToolApprovalHandler(
     addToolApprovalResponse
   );
 
   const handleCreateMission = useCallback(
-    (text: string, targets: string[], options: ComposerSendOptions) => {
+    async (text: string, targets: string[], options: ComposerSendOptions) => {
       const id = generateMissionId();
-      const attachmentSuffix = describeAttachments(options.files.length);
-      const missionBody = text
-        ? `${text}${attachmentSuffix}`
-        : attachmentSuffix.trim();
       const missionTitle =
         text.slice(0, 80) || options.files[0]?.filename || "New mission";
+      // Persist the chat session before re-keying useChat so the first
+      // message streams straight into the durable session's chat.
+      await createSession(missionTitle);
       const newMissionObj: Mission = {
         id,
         title: missionTitle.slice(0, 80),
@@ -255,14 +230,7 @@ export function ControlShell({
         sandbox: "container-med",
         archived: false,
         targets,
-        timeline: [
-          {
-            kind: "user",
-            label: "YOU",
-            time: "now",
-            body: missionBody,
-          },
-        ],
+        timeline: [],
       };
       setMissions((prev) => [newMissionObj, ...prev]);
       setSelectedMissionId(id);
@@ -272,7 +240,7 @@ export function ControlShell({
       // would stream the reply into the previous mission's discarded chat.
       pendingInitialMessageRef.current = { missionId: id, text, options };
     },
-    []
+    [createSession]
   );
 
   const { needsAttention, agentStats } = useMissionDerived(
@@ -294,39 +262,35 @@ export function ControlShell({
     [mission?.timeline, messages]
   );
 
-  // With no missions there is nothing to show but the composer; cancel only
-  // makes sense when there is a mission view to return to.
-  if (newMission || !mission) {
+  // With no missions there is nothing to show but the composer — unless a
+  // persisted session is selected, in which case its restored conversation
+  // renders in the main view. Cancel only makes sense when there is a view
+  // to return to.
+  if (newMission || (!mission && !sessionId)) {
     return (
-      <div className="app-control-shell flex h-full overflow-hidden">
-        <main
-          className="app-chat-column flex min-w-0 flex-1 flex-col"
-          aria-label="Command Center"
-        >
-          <div className="border-border flex h-14 shrink-0 items-center gap-3 border-b px-6">
-            <h1 className="text-xl font-semibold">Command Center</h1>
-            <span className="bg-secondary text-secondary-foreground inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs">
-              <Network
-                className="text-accent-blue size-3.5"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              Orchestrator
-            </span>
-          </div>
-          <NewMissionComposer
-            workspaces={workspaces}
-            onCancel={mission ? () => setNewMission(false) : undefined}
-            onCreate={handleCreateMission}
-          />
-        </main>
-        <SandboxRail messages={messages} streaming={chatPending} />
-      </div>
+      <NewMissionView
+        workspaces={workspaces}
+        sessions={sessions}
+        sessionId={sessionId}
+        messages={messages}
+        chatPending={chatPending}
+        canCancel={Boolean(mission || sessionId)}
+        onCancel={() => setNewMission(false)}
+        onCreate={handleCreateMission}
+        onSelectSession={handleSelectSession}
+        onNewSession={() => setNewMission(true)}
+      />
     );
   }
 
   return (
     <div className="app-control-shell flex h-full overflow-hidden">
+      <SessionList
+        sessions={sessions}
+        selectedId={sessionId}
+        onSelect={handleSelectSession}
+        onNew={() => setNewMission(true)}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
         {mission && (
