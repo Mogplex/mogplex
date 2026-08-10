@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 const MAX_THREAD_CONTEXT_MESSAGES = 20;
+const MAX_THREAD_FETCH_MESSAGES = 200;
 const MAX_THREAD_CONTEXT_CHARS = 6_000;
 const MAX_THREAD_CONTEXT_IMAGES = SLACK_IMAGE_ATTACHMENT_MAX_COUNT;
 
@@ -23,7 +24,7 @@ function normalizeSlackText(text: string | undefined) {
 }
 
 function slackSpeaker(input: { user?: string; bot_id?: string }) {
-  if (input.bot_id) return "Mogplex";
+  if (input.bot_id) return `Slack bot ${input.bot_id}`;
   if (input.user) return `Slack user ${input.user}`;
   return "Slack message";
 }
@@ -41,7 +42,8 @@ async function loadThreadMessages(input: {
     return await input.deps.getThreadMessages(input.botToken, {
       channel: input.payload.channelId,
       threadTs: input.payload.threadTs,
-      limit: MAX_THREAD_CONTEXT_MESSAGES,
+      latestTs: input.payload.messageTs,
+      limit: MAX_THREAD_FETCH_MESSAGES,
     });
   } catch (error) {
     console.warn("[slack-event] failed to load Slack thread context", {
@@ -52,6 +54,11 @@ async function loadThreadMessages(input: {
     });
     return [];
   }
+}
+
+function selectThreadContextMessages(messages: SlackThreadContext["messages"]) {
+  if (messages.length <= MAX_THREAD_CONTEXT_MESSAGES) return messages;
+  return [messages[0], ...messages.slice(-(MAX_THREAD_CONTEXT_MESSAGES - 1))];
 }
 
 function toSlackImageAttachment(
@@ -141,7 +148,8 @@ export async function buildSlackThreadContext(input: {
     return { messages: [], contextMessage: null, texts: [] };
   }
 
-  const threadMessages = await loadThreadMessages(input);
+  const loadedMessages = await loadThreadMessages(input);
+  const threadMessages = selectThreadContextMessages(loadedMessages);
   const { lines, texts } = buildThreadTextContext({
     payload: input.payload,
     messages: threadMessages,

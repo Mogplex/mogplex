@@ -170,17 +170,16 @@ export async function runConversationalMode(input: {
     text: userText,
     attachments,
   });
-  const agentInput = await buildConversationalAgentInput({
-    deps,
-    mogplexUserId,
-    conversation,
-    slackThreadContext,
-    userMessage: userMessage.agent,
-    userText,
-  });
-
   let agentResult: Awaited<ReturnType<typeof deps.runAgent>>;
   try {
+    const agentInput = await buildConversationalAgentInput({
+      deps,
+      mogplexUserId,
+      conversation,
+      slackThreadContext,
+      userMessage: userMessage.agent,
+      userText,
+    });
     agentResult = await deps.runAgent({
       userId: mogplexUserId,
       messages: agentInput.messages,

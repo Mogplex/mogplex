@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { escapePostgrestLikePattern } from "@/lib/slack/slack-utils";
 import type { SlackRepoContext } from "./types";
 
 const REPO_SLUG_PATTERN =
@@ -51,7 +52,7 @@ export async function defaultResolveSlackRepoContext(input: {
       .from("repos")
       .select("id, full_name, default_branch, product_team_id")
       .eq("user_id", input.mogplexUserId)
-      .ilike("full_name", candidate)
+      .ilike("full_name", escapePostgrestLikePattern(candidate))
       .or("is_hidden.is.null,is_hidden.eq.false")
       .limit(1)
       .maybeSingle();

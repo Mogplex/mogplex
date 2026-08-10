@@ -210,17 +210,27 @@ export async function updateSlackMessage(
 
 export async function getSlackThreadMessages(
   botToken: string,
-  input: { channel: string; threadTs: string; limit?: number },
+  input: {
+    channel: string;
+    threadTs: string;
+    latestTs?: string;
+    limit?: number;
+  },
   fetchImpl?: typeof fetch
 ): Promise<SlackThreadMessage[]> {
+  const query: Record<string, string> = {
+    channel: input.channel,
+    ts: input.threadTs,
+    limit: String(input.limit ?? 20),
+  };
+  if (input.latestTs) {
+    query.latest = input.latestTs;
+    query.inclusive = "false";
+  }
   const json = await slackApiGet<{ messages?: SlackThreadMessage[] }>(
     "conversations.replies",
     botToken,
-    {
-      channel: input.channel,
-      ts: input.threadTs,
-      limit: String(input.limit ?? 20),
-    },
+    query,
     fetchImpl
   );
   return Array.isArray(json.messages) ? json.messages : [];
