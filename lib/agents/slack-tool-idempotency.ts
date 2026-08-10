@@ -37,6 +37,7 @@ type SlackToolIdempotencyOptions = {
 export const SLACK_STATIC_READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
   "browse_skills",
   "browse_vercel_docs",
+  "github_list_repos",
   "github_pr_search",
   "list_files",
   "list_memories",

@@ -31,6 +31,7 @@ export {
   createGithubApi,
   createGithubPullRequestTool,
   createGithubPrSearch,
+  createGithubRepoList,
   createGithubIssueTool,
   // Memory tools
   createMemoryTools,
