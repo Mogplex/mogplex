@@ -1,206 +1,146 @@
 "use client"
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import {
   Box,
-  BoxIso,
-  Cube,
   GitCompare,
   InputOutput,
-  MoreVert,
-  NavArrowDown,
-  Page,
-  Play,
   SidebarCollapse,
   SidebarExpand,
   Terminal,
 } from "iconoir-react"
-import type { Changeset, Worktree } from "@/lib/control/types"
+import type { UIMessage } from "ai"
+import { collectFileMutations } from "@/lib/control/activity-stream"
+import { collectControlArtifacts } from "./artifact-side-panel-model"
+import { SandboxPanel } from "./sandbox-panel"
+import { TerminalStream } from "./terminal-stream"
 
 type Props = {
-  worktrees: Worktree[]
-  changesets: Changeset[]
+  messages: UIMessage[]
+  streaming: boolean
 }
 
-type SectionId = "files" | "diff" | "terminal"
+type RailTab = "sandbox" | "diffs" | "outputs" | "terminal"
 
 const RAIL_WIDTH_KEY = "mogplex.sandboxRail.width"
 const RAIL_COLLAPSED_KEY = "mogplex.sandboxRail.collapsed"
+const RAIL_TAB_KEY = "mogplex.sandboxRail.tab"
 const DEFAULT_RAIL_WIDTH = 496
 const MIN_RAIL_WIDTH = 400
 const MAX_RAIL_WIDTH = 720
+
+const TABS: ReadonlyArray<{
+  id: RailTab
+  label: string
+  Icon: typeof Box
+}> = [
+  { id: "sandbox", label: "Sandbox", Icon: Box },
+  { id: "diffs", label: "Diffs", Icon: GitCompare },
+  { id: "outputs", label: "Outputs", Icon: InputOutput },
+  { id: "terminal", label: "Terminal", Icon: Terminal },
+]
 
 function clampRailWidth(value: number) {
   return Math.min(MAX_RAIL_WIDTH, Math.max(MIN_RAIL_WIDTH, value))
 }
 
-function RailSection({
-  id,
-  title,
-  icon,
-  open,
-  onToggle,
-  children,
-  bordered = true,
-}: {
-  id: SectionId
-  title: string
-  icon?: ReactNode
-  open: boolean
-  onToggle: (id: SectionId) => void
-  children: ReactNode
-  bordered?: boolean
-}) {
-  return (
-    <section className={`space-y-3 ${bordered ? "border-t border-border pt-4" : ""}`}>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={`sandbox-rail-${id}`}
-        onClick={() => onToggle(id)}
-        className="flex w-full items-center justify-between rounded-md text-left text-sm font-semibold outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        <span className="flex items-center gap-2">
-          {icon}
-          {title}
-        </span>
-        <NavArrowDown
-          className={`size-4 text-muted-foreground transition-transform ${
-            open ? "" : "-rotate-90"
-          }`}
-        />
-      </button>
-      {open ? <div id={`sandbox-rail-${id}`}>{children}</div> : null}
-    </section>
-  )
+function isRailTab(value: string | null): value is RailTab {
+  return TABS.some((tab) => tab.id === value)
 }
 
-function FileTree({ worktree }: { worktree: Worktree | undefined }) {
-  const repo = worktree?.repo || "workspace"
-  const files = worktree
-    ? [
-        "app/page.tsx",
-        "components/agent-panel.tsx",
-        "lib/sandbox/client.ts",
-        "tests/control-flow.test.ts",
-      ]
-    : []
+function DiffsPanel({ messages }: { messages: UIMessage[] }) {
+  const mutations = useMemo(() => collectFileMutations(messages), [messages])
 
-  if (!worktree) {
+  if (mutations.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-input px-3 py-8 text-center text-xs text-muted-foreground">
-        <BoxIso className="mx-auto mb-3 size-10 opacity-30" strokeWidth={1.5} aria-hidden="true" />
-        No sandbox running.
+        No file changes yet. Edits the agent makes show up here.
       </div>
     )
   }
 
   return (
     <div className="space-y-1 font-mono text-xs">
-      <p className="pb-1 font-sans text-[11px] text-muted-foreground">
-        Preview data until live file sync is attached.
-      </p>
-      <div className="flex h-6 items-center gap-2 text-secondary-foreground">
-        <NavArrowDown className="size-3.5" />
-        <span>{repo}/</span>
-      </div>
-      {files.map((file, index) => (
-        <button
-          key={file}
-          type="button"
-          aria-disabled="true"
-          className={`flex h-6 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-muted ${
-            index === 1 ? "bg-accent text-foreground" : "text-secondary-foreground"
-          }`}
+      {mutations.map((mutation) => (
+        <div
+          key={mutation.id}
+          className="flex h-7 items-center gap-2 rounded-md px-2"
         >
-          <Page className="size-3.5 shrink-0" />
-          <span className="truncate">{file}</span>
-        </button>
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${
+              mutation.state === "done"
+                ? "bg-accent-green"
+                : mutation.state === "failed"
+                  ? "bg-accent-red"
+                  : "bg-accent-blue animate-pulse"
+            }`}
+          />
+          <span className="text-muted-foreground shrink-0">{mutation.tool}</span>
+          <span className="truncate text-foreground">{mutation.path}</span>
+        </div>
       ))}
     </div>
   )
 }
 
-function DiffPreview({ changeset }: { changeset: Changeset | undefined }) {
-  if (!changeset) {
+function OutputsPanel({ messages }: { messages: UIMessage[] }) {
+  const artifacts = useMemo(() => collectControlArtifacts(messages), [messages])
+
+  if (artifacts.length === 0) {
     return (
-      <div className="rounded-lg bg-input p-3 font-mono text-xs text-muted-foreground">
-        diff --git waits for the next agent change.
+      <div className="rounded-lg border border-dashed border-border bg-input px-3 py-8 text-center text-xs text-muted-foreground">
+        No outputs yet. Documents and files the agent produces show up here.
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg bg-input p-3 font-mono text-xs leading-5">
-      <div className="font-sans text-[11px] text-muted-foreground">
-        Preview diff until live changesets are attached.
-      </div>
-      <div className="text-muted-foreground">
-        diff --git a/{changeset.title} b/{changeset.title}
-      </div>
-      <div className="text-muted-foreground">@@ -1,4 +1,8 @@</div>
-      <div className="text-secondary-foreground"> import &#123; run &#125; from "./agent"</div>
-      <div className="border-accent-green bg-accent-green/10 text-accent-green border-l-2 pl-2">
-        + await run.withSandbox()
-      </div>
-      <div className="border-accent-red bg-accent-red/10 text-accent-red border-l-2 pl-2">
-        - await run.local()
-      </div>
+    <div className="space-y-2">
+      {artifacts.map((artifact) => (
+        <div
+          key={artifact.id}
+          className="rounded-lg border border-border bg-card p-3"
+        >
+          <div className="truncate text-xs font-semibold">{artifact.title}</div>
+          <div className="text-[11px] text-muted-foreground">
+            {artifact.description}
+          </div>
+          {artifact.kind === "file" && artifact.file ? (
+            <a
+              href={artifact.file.url}
+              download={artifact.file.filename}
+              className="mt-1 inline-block text-[11px] text-accent-blue hover:underline"
+            >
+              Download {artifact.file.filename ?? "file"}
+            </a>
+          ) : null}
+        </div>
+      ))}
     </div>
   )
 }
 
-function TerminalPreview({ worktree }: { worktree: Worktree | undefined }) {
-  const path = worktree ? `~/workspace/${worktree.repo}` : "~/workspace"
-
-  return (
-    <div className="rounded-lg bg-input p-3 font-mono text-xs leading-5">
-      <div>
-        <span className="text-accent-blue">acme@sandbox:{path}$</span>{" "}
-        <span className="text-foreground">{worktree ? "pnpm test" : "waiting"}</span>
-      </div>
-      {worktree ? (
-        <>
-          <div className="text-muted-foreground">Preview output.</div>
-          <div className="text-accent-green">PASS tests/control-flow.test.ts</div>
-          <div className="text-accent-green">Tests: {worktree.checks}</div>
-        </>
-      ) : (
-        <div className="text-muted-foreground">No terminal session attached.</div>
-      )}
-      <div className="mt-1 inline-block h-4 w-2 animate-pulse bg-foreground" />
-    </div>
-  )
-}
-
-export function SandboxRail({ worktrees, changesets }: Props) {
-  const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>({
-    files: true,
-    diff: true,
-    terminal: true,
-  })
+export function SandboxRail({ messages, streaming }: Props) {
+  const [tab, setTab] = useState<RailTab>("terminal")
   const [width, setWidth] = useState(DEFAULT_RAIL_WIDTH)
   const [collapsed, setCollapsed] = useState(false)
   const [resizing, setResizing] = useState(false)
   const activePointerId = useRef<number | null>(null)
   const railRef = useRef<HTMLElement | null>(null)
-  const activeWorktree = worktrees.find((w) => w.state !== "archived")
-  const activeChangeset = activeWorktree
-    ? changesets.find((c) => c.worktree === activeWorktree.id)
-    : undefined
-  const toggleSection = (id: SectionId) => {
-    setOpenSections((current) => ({ ...current, [id]: !current[id] }))
-  }
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       const storedWidth = Number(window.localStorage.getItem(RAIL_WIDTH_KEY))
       const storedCollapsed = window.localStorage.getItem(RAIL_COLLAPSED_KEY)
+      const storedTab = window.localStorage.getItem(RAIL_TAB_KEY)
       if (Number.isFinite(storedWidth) && storedWidth > 0) {
         setWidth(clampRailWidth(storedWidth))
       }
       if (storedCollapsed === "true") {
         setCollapsed(true)
+      }
+      if (isRailTab(storedTab)) {
+        setTab(storedTab)
       }
     })
     return () => window.cancelAnimationFrame(frame)
@@ -247,6 +187,11 @@ export function SandboxRail({ worktrees, changesets }: Props) {
     })
   }
 
+  const selectTab = (next: RailTab) => {
+    setTab(next)
+    window.localStorage.setItem(RAIL_TAB_KEY, next)
+  }
+
   const resizeFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
     event.preventDefault()
@@ -277,9 +222,10 @@ export function SandboxRail({ worktrees, changesets }: Props) {
   return (
     <aside
       ref={railRef}
-      className="app-live-rail relative hidden shrink-0 overflow-y-auto border-l border-border xl:block"
+      className="app-live-rail relative hidden shrink-0 border-l border-border xl:flex xl:flex-col"
       data-resizing={resizing ? "true" : "false"}
       style={{ width }}
+      aria-label="Live rail"
     >
       <div
         role="separator"
@@ -300,113 +246,41 @@ export function SandboxRail({ worktrees, changesets }: Props) {
         }}
         className="app-panel-resizer app-panel-resizer-left absolute inset-y-0 left-0 z-30 w-2 cursor-col-resize touch-none outline-none"
       />
-      <div className="space-y-4 p-4">
-        <div className="flex gap-1">
-          {(
-            [
-              { label: "Sandbox", Icon: Box },
-              { label: "Diffs", Icon: GitCompare },
-              { label: "Outputs", Icon: InputOutput },
-              { label: "Terminal", Icon: Terminal },
-            ] as const
-          ).map(({ label, Icon }, index) => (
-            <button
-              key={label}
-              type="button"
-              disabled
-              aria-label={`${label} tab preview`}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-                index === 0
-                  ? "bg-accent text-foreground"
-                  : "text-secondary-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <Icon className="size-4 shrink-0" strokeWidth={1.5} />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-3 border-b border-border pb-4">
-          <div className="grid size-10 place-items-center rounded-lg bg-secondary">
-            <Cube className="size-5" strokeWidth={1.5} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-semibold">
-                {activeWorktree?.sandbox || "sandbox"}
-              </span>
-              <span className="text-xs text-accent-blue">
-                {activeWorktree ? "Running" : "Idle"}
-              </span>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {activeWorktree ? `Started ${activeWorktree.elapsed}` : "No active run"}
-            </div>
-          </div>
+      <div className="flex items-center gap-1 p-4 pb-0">
+        {TABS.map(({ id, label, Icon }) => (
           <button
+            key={id}
             type="button"
-            disabled
-            aria-label={activeWorktree ? "Stop sandbox preview" : "Start sandbox preview"}
-            className="ml-auto flex items-center gap-1.5 rounded-lg border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red opacity-60"
+            aria-pressed={tab === id}
+            aria-label={`${label} tab`}
+            onClick={() => selectTab(id)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+              tab === id
+                ? "bg-accent text-foreground"
+                : "text-secondary-foreground hover:bg-muted hover:text-foreground"
+            }`}
           >
-            {activeWorktree ? (
-              "Stop"
-            ) : (
-              <>
-                <Play className="size-3.5 shrink-0" strokeWidth={1.5} />
-                Start
-              </>
-            )}
+            <Icon className="size-4 shrink-0" strokeWidth={1.5} />
+            {label}
           </button>
-          <button
-            type="button"
-            disabled
-            aria-label="Sandbox rail actions preview"
-            className="grid size-8 place-items-center rounded-lg text-muted-foreground opacity-60"
-          >
-            <MoreVert className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Collapse sandbox rail"
-            title="Collapse sandbox rail"
-            onClick={toggleCollapsed}
-            className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <SidebarCollapse className="size-4 rotate-180" />
-          </button>
-        </div>
-
-        <RailSection
-          id="files"
-          title="Files"
-          open={openSections.files}
-          onToggle={toggleSection}
-          bordered={false}
+        ))}
+        <button
+          type="button"
+          aria-label="Collapse sandbox rail"
+          title="Collapse sandbox rail"
+          onClick={toggleCollapsed}
+          className="ml-auto grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <FileTree worktree={activeWorktree} />
-        </RailSection>
-
-        <RailSection
-          id="diff"
-          title="Diff"
-          icon={<GitCompare className="size-4" />}
-          open={openSections.diff}
-          onToggle={toggleSection}
-        >
-          <DiffPreview changeset={activeChangeset} />
-        </RailSection>
-
-        <RailSection
-          id="terminal"
-          title="Terminal"
-          icon={<Terminal className="size-4" />}
-          open={openSections.terminal}
-          onToggle={toggleSection}
-        >
-          <TerminalPreview worktree={activeWorktree} />
-        </RailSection>
+          <SidebarCollapse className="size-4 rotate-180" />
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+        {tab === "sandbox" ? <SandboxPanel /> : null}
+        {tab === "diffs" ? <DiffsPanel messages={messages} /> : null}
+        {tab === "outputs" ? <OutputsPanel messages={messages} /> : null}
+        {tab === "terminal" ? (
+          <TerminalStream messages={messages} streaming={streaming} />
+        ) : null}
       </div>
     </aside>
   )

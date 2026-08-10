@@ -18,6 +18,7 @@ import type {
 import { Network } from "iconoir-react";
 import type { ComposerSendOptions } from "./composer";
 import { generateMissionId } from "@/lib/control/utils";
+import { useSandboxSync } from "@/hooks/use-sandbox";
 import { useToolApprovalHandler } from "./use-tool-approval-handler";
 import { buildCombinedTimeline } from "./build-combined-timeline";
 import { useMissionDerived } from "./use-mission-derived";
@@ -123,6 +124,8 @@ export function ControlShell({
     });
 
   const chatPending = status === "streaming" || status === "submitted";
+
+  useSandboxSync();
 
   const [composerInput, setComposerInput] = useState("");
 
@@ -317,7 +320,7 @@ export function ControlShell({
             onCreate={handleCreateMission}
           />
         </main>
-        <SandboxRail worktrees={[]} changesets={[]} />
+        <SandboxRail messages={messages} streaming={chatPending} />
       </div>
     );
   }
@@ -489,10 +492,7 @@ export function ControlShell({
           getWorktree={getWorktree}
         />
       </div>
-      <SandboxRail
-        worktrees={missionWorktrees}
-        changesets={missionChangesets}
-      />
+      <SandboxRail messages={messages} streaming={chatPending} />
     </div>
   );
 }

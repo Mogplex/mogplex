@@ -36,6 +36,8 @@ export function Timeline({
   return (
     <div
       ref={scrollRef}
+      role="log"
+      aria-label="Conversation"
       className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
     >
       <div className="mx-auto max-w-[760px] space-y-4">
