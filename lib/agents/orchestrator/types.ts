@@ -57,6 +57,10 @@ export type OrchestratorToolContext = {
   workspaceSessionId?: string | null;
   /** Lets tool executions (audit, approvals) reference the owning ai_call. */
   aiCallId?: string | null;
+  /** Control-surface execution mode; plan mode hard-denies mutating tools. */
+  controlMode?: "plan" | "run" | null;
+  /** Operator-selected permission preset, currently retained for policy audit. */
+  controlPermissions?: string | null;
 };
 
 /**

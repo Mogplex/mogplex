@@ -6,9 +6,19 @@ import type { createAiCall } from "@/lib/interactive-runs";
  */
 export type ControlChatRequestMessage = {
   role?: string;
-  content?: string | Array<{ type: string; text?: string }>;
-  parts?: Array<{ type: string; text?: string }>;
+  content?: string | Array<ControlChatRequestPart>;
+  parts?: Array<ControlChatRequestPart>;
 };
+
+export type ControlChatRequestPart =
+  | { type: "text"; text?: string }
+  | {
+      type: "file";
+      id?: string;
+      mediaType: string;
+      filename?: string;
+      url: string;
+    };
 
 /**
  * Request body for the Control chat endpoint.
@@ -27,6 +37,10 @@ export type ControlChatRequestBody = {
   repoId?: string | null;
   missionId?: string | null;
   missionTitle?: string | null;
+  scope?: string | null;
+  target?: string | null;
+  permissions?: string | null;
+  mode?: "plan" | "run" | null;
 };
 
 /**
@@ -50,6 +64,10 @@ export type ControlChatRunMetadata = {
   repo_branch: string | null;
   team_id: string | null;
   mission_id: string | null;
+  scope: string | null;
+  target: string | null;
+  permissions: string | null;
+  mode: string | null;
 };
 
 /**

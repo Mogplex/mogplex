@@ -37,7 +37,18 @@ test("control composers expose permissions, model, and MCP controls without a sp
     fulfillJson(route, { connections: [] })
   );
   const chatRequests: Array<{
+    messages?: Array<{
+      role?: string;
+      parts?: Array<{
+        type: string;
+        text?: string;
+        filename?: string;
+        mediaType?: string;
+        url?: string;
+      }>;
+    }>;
     model?: string;
+    mode?: string;
     permissions?: string;
     scope?: string;
     target?: string;
@@ -94,6 +105,19 @@ test("control composers expose permissions, model, and MCP controls without a sp
     page.getByRole("button", { name: "Skip Permissions" })
   ).toBeVisible();
 
+  await page.getByRole("button", { name: "Plan mode" }).click();
+  await expect(
+    page.getByRole("button", { name: "Plan mode on" })
+  ).toBeVisible();
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles({
+      name: "control-plan.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("Prefer the smallest safe release plan."),
+    });
+  await expect(page.getByText("control-plan.txt")).toBeVisible();
   await page
     .getByPlaceholder("Ask anything or run a command...")
     .fill("Ship the new onboarding flow");
@@ -106,6 +130,29 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await expect(page.getByText(/list_worktrees\(/)).toBeVisible();
   await expect(page.getByText(/Mogplex is planning/)).toHaveCount(0);
   await expect(page.getByText(/Budget: \$/)).toHaveCount(0);
+  expect(chatRequests[0]).toMatchObject({
+    mode: "plan",
+    permissions: "Skip Permissions",
+    scope: "PLAN ONLY",
+    target: "mission",
+  });
+  expect(chatRequests[0]?.messages?.at(-1)?.parts).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "text",
+        text: "Ship the new onboarding flow",
+      }),
+      expect.objectContaining({
+        type: "file",
+        filename: "control-plan.txt",
+        mediaType: "text/plain",
+      }),
+    ])
+  );
+  const initialFilePart = chatRequests[0]?.messages
+    ?.at(-1)
+    ?.parts?.find((part) => part.type === "file");
+  expect(initialFilePart?.url).toContain("data:text/plain");
 
   // Conversation composer: permissions chip, model chip preset to the account
   // default, and the MCP connections button are all present.
@@ -124,8 +171,12 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // Switching models routes the chosen id through to the chat request body.
   await modelChip.click();
   await page.getByRole("button", { name: "anthropic/claude-sonnet-5" }).click();
+  await page.getByRole("button", { name: "Plan mode" }).click();
+  await expect(
+    page.getByRole("button", { name: "Plan mode on" })
+  ).toBeVisible();
   await page
-    .getByPlaceholder("Direct Mogplex - it will delegate to agents")
+    .getByPlaceholder("Ask Mogplex for a plan")
     .fill("Summarize progress");
   await page.keyboard.press("Enter");
 
@@ -133,10 +184,37 @@ test("control composers expose permissions, model, and MCP controls without a sp
     .poll(() => chatRequests.at(-1)?.model, { timeout: 10_000 })
     .toBe("anthropic/claude-sonnet-5");
   expect(chatRequests.at(-1)).toMatchObject({
+    mode: "plan",
     permissions: "Skip Permissions",
-    scope: "IMPLEMENT",
+    scope: "PLAN ONLY",
     target: "mission",
   });
+
+  await page
+    .locator('input[type="file"]')
+    .last()
+    .setInputFiles({
+      name: "attachment-only.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# Attachment only\n\nNo prompt body."),
+    });
+  await expect(page.getByText("attachment-only.md")).toBeVisible();
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(3);
+  const attachmentOnlyRequest = chatRequests.at(-1);
+  expect(attachmentOnlyRequest).toMatchObject({
+    mode: "plan",
+    scope: "PLAN ONLY",
+    target: "mission",
+  });
+  expect(attachmentOnlyRequest?.messages?.at(-1)?.parts).toEqual([
+    expect.objectContaining({
+      type: "file",
+      filename: "attachment-only.md",
+      mediaType: "text/markdown",
+    }),
+  ]);
 });
 
 test("control chat surfaces request failures instead of swallowing them", async ({
@@ -214,10 +292,25 @@ test("control timeline renders agent markdown as formatted HTML", async ({
   await page.getByRole("button", { name: "Start mission" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Tool overview" })
+    page.getByRole("heading", { name: "Tool overview" }).first()
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "Read a file from the repo" })
+    page.getByRole("cell", { name: "Read a file from the repo" }).first()
+  ).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Artifacts" })
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Artifacts" })
+      .getByRole("heading", {
+        name: "Artifacts",
+      })
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Artifacts" })
+      .getByRole("heading", { name: "Tool overview" })
   ).toBeVisible();
   await expect(page.getByText("| --- |")).toHaveCount(0);
 });

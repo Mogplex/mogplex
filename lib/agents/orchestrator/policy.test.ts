@@ -105,6 +105,25 @@ describe("wrapWithPolicy approval gate", () => {
     expect(created).toHaveLength(0);
   });
 
+  it("should hard-deny mutating tools in plan mode", async () => {
+    const { deps } = makeDeps();
+    const { tool, calls } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      "write_file",
+      tool,
+      { ...ctx, controlMode: "plan" },
+      deps
+    ) as unknown as WrappedTool;
+
+    const result = (await wrapped.execute({
+      path: "lib/new.ts",
+    })) as PolicyDeniedResponse;
+    expect(result.status).toBe("policy_denied");
+    expect(result.reason).toBe("policy_violation");
+    expect(result.summary).toContain("Plan mode blocks");
+    expect(calls).toHaveLength(0);
+  });
+
   it("should gate git_push only for protected branches", async () => {
     const { deps, created } = makeDeps();
     const { tool } = fakeTool();

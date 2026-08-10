@@ -140,10 +140,10 @@ function DiffPreview({ changeset }: { changeset: Changeset | undefined }) {
       </div>
       <div className="text-muted-foreground">@@ -1,4 +1,8 @@</div>
       <div className="text-secondary-foreground"> import &#123; run &#125; from "./agent"</div>
-      <div className="border-l-2 border-accent-green bg-accent-green/10 pl-2 text-[#86efac]">
+      <div className="border-accent-green bg-accent-green/10 text-accent-green border-l-2 pl-2">
         + await run.withSandbox()
       </div>
-      <div className="border-l-2 border-accent-red bg-accent-red/10 pl-2 text-[#fca5a5]">
+      <div className="border-accent-red bg-accent-red/10 text-accent-red border-l-2 pl-2">
         - await run.local()
       </div>
     </div>

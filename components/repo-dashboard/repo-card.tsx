@@ -200,7 +200,7 @@ function RepoCardHeader({
               <button
                 onClick={(event) => event.stopPropagation()}
                 aria-label="Repo actions"
-                className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-7 w-7 items-center justify-center rounded-sm transition-colors"
+                className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
               >
                 <MoreHoriz className="h-4 w-4" />
               </button>
@@ -260,7 +260,7 @@ function RepoCardMetadata({
         </span>
       )}
       {repo.github_access_state === "synced_only" && (
-        <div className="mt-2 text-[11px] text-amber-300/70">
+        <div className="text-accent-amber/80 mt-2 text-[11px]">
           {repo.github_coverage_detail}
         </div>
       )}
@@ -304,7 +304,7 @@ function RepoCardActions({
           onOpenChat();
         }}
         className={cn(
-          "h-7 rounded-sm px-3 text-xs",
+          "h-7 rounded-lg px-3 text-xs",
           isMobile && "w-full justify-center"
         )}
       >
@@ -320,7 +320,7 @@ function RepoCardActions({
             onStopSandbox();
           }}
           className={cn(
-            "h-7 rounded-sm px-3 text-xs text-red-400/70 hover:bg-red-500/10 hover:text-red-300",
+            "text-destructive hover:bg-destructive/10 hover:text-destructive h-7 rounded-lg px-3 text-xs",
             isMobile && "w-full justify-center"
           )}
         >
@@ -331,7 +331,7 @@ function RepoCardActions({
           className={cn(
             "text-muted-foreground flex h-7 items-center px-3 text-xs",
             isMobile &&
-              "border-border bg-secondary/50 w-full justify-center rounded-sm border"
+              "border-border bg-secondary/50 w-full justify-center rounded-lg border"
           )}
         >
           {sandboxStatus === "installing" ? "Installing..." : "Starting..."}

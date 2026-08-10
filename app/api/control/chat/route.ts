@@ -10,6 +10,10 @@ import {
 } from "./_lib/context";
 import { persistControlStartupFailure } from "./_lib/lifecycle";
 import { executeControlChatRequest } from "./_lib/execute";
+import {
+  ControlChatValidationError,
+  normalizeControlChatMessages,
+} from "./_lib/messages";
 import type {
   ControlChatRequestBody,
   ControlStartupFailure,
@@ -23,7 +27,32 @@ export async function POST(req: Request) {
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
 
-  const body = (await req.json()) as ControlChatRequestBody;
+  const rawBody = (await req.json()) as ControlChatRequestBody & {
+    mode?: unknown;
+  };
+  if (
+    rawBody.mode !== undefined &&
+    rawBody.mode !== null &&
+    rawBody.mode !== "plan" &&
+    rawBody.mode !== "run"
+  ) {
+    return Response.json(
+      { error: "Invalid control chat mode." },
+      { status: 400 }
+    );
+  }
+  const body: ControlChatRequestBody = {
+    ...rawBody,
+    mode: rawBody.mode ?? null,
+  };
+  try {
+    normalizeControlChatMessages(body.messages);
+  } catch (error) {
+    if (error instanceof ControlChatValidationError) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
   const scope = getControlChatRunScope(body);
 
   // Use same rate limiting as /api/chat

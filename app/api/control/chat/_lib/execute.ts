@@ -27,6 +27,7 @@ import {
   finalizeCancelledControlRun,
   finalizeFinishedControlRun,
 } from "./lifecycle";
+import { normalizeControlChatMessages } from "./messages";
 import type {
   ControlChatRequestBody,
   ActiveControlCall,
@@ -86,6 +87,8 @@ export async function executeControlChatRequest(input: {
       missionId: input.body.missionId,
       conversationId: scope.conversationId,
       aiCallId: activeCall.id,
+      controlMode: input.body.mode ?? null,
+      controlPermissions: input.body.permissions ?? null,
     };
 
     const promptContext: OrchestratorPromptContext = {
@@ -96,6 +99,10 @@ export async function executeControlChatRequest(input: {
       repoBaseBranch: input.body.repoBaseBranch ?? undefined,
       missionId: input.body.missionId ?? undefined,
       missionTitle: input.body.missionTitle ?? undefined,
+      controlScope: input.body.scope ?? undefined,
+      controlTarget: input.body.target ?? undefined,
+      controlPermissions: input.body.permissions ?? undefined,
+      controlMode: input.body.mode ?? undefined,
     };
 
     // Build tools with policy wrapping
@@ -131,22 +138,7 @@ export async function executeControlChatRequest(input: {
 
     // Convert messages to model format. Clients send AI SDK UIMessages
     // (`parts`); a plain `content` string/array is also accepted.
-    const uiMessages = input.body.messages.map((message) => {
-      const parts =
-        message.parts ??
-        (typeof message.content === "string"
-          ? [{ type: "text", text: message.content }]
-          : (message.content ?? []));
-      return {
-        role: message.role as "user" | "assistant" | "system",
-        parts: parts
-          .filter((part) => part.type === "text")
-          .map((part) => ({
-            type: "text" as const,
-            text: part.text ?? "",
-          })),
-      };
-    });
+    const uiMessages = normalizeControlChatMessages(input.body.messages);
 
     // Compact oversized histories into a checkpoint handoff (same adapter as
     // /api/chat: validated checkpoint, prefix reuse, ai_call_events audit).

@@ -18,7 +18,7 @@ function RepoDashboardViewToggle({
   viewMode: "grid" | "list";
 }) {
   return (
-    <div className="border-border bg-card/60 flex items-center rounded-sm border">
+    <div className="border-border bg-card/60 flex items-center rounded-lg border">
       <button
         onClick={() => onSelectView("grid")}
         className={cn(
@@ -61,7 +61,7 @@ function RepoDashboardSyncAction({
         size="sm"
         onClick={onSyncGithub}
         disabled={syncingRepos}
-        className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-sm text-xs"
+        className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-lg text-xs"
       >
         {syncingRepos ? "Syncing..." : "Sync GitHub"}
       </Button>
@@ -77,7 +77,7 @@ function RepoDashboardSyncAction({
       asChild
       variant="ghost"
       size="sm"
-      className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-sm text-xs"
+      className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-lg text-xs"
     >
       <a
         href={githubSetup.primaryAction.href}
@@ -163,13 +163,13 @@ export function RepoDashboardHeader({
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Search spaces..."
-              className="border-border bg-card/80 text-foreground placeholder:text-muted-foreground h-8 w-full rounded-sm text-xs shadow-none sm:w-56"
+              className="border-border bg-card/80 text-foreground placeholder:text-muted-foreground h-8 w-full rounded-lg text-xs shadow-none sm:w-56"
             />
             {owners.length > 1 ? (
               <select
                 value={ownerFilter}
                 onChange={(event) => onSelectOwner(event.target.value)}
-                className="border-border bg-card/80 text-foreground h-8 w-full rounded-sm border px-2 text-xs outline-none sm:w-auto"
+                className="border-border bg-card/80 text-foreground h-8 w-full rounded-lg border px-2 text-xs outline-none sm:w-auto"
               >
                 <option value="all">All orgs</option>
                 {owners.map((owner) => (
@@ -186,7 +186,7 @@ export function RepoDashboardHeader({
                 variant="ghost"
                 size="sm"
                 onClick={onHideByOwner}
-                className="h-8 rounded-sm text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive h-8 rounded-lg text-xs"
               >
                 Remove {ownerFilter}
               </Button>
@@ -196,7 +196,7 @@ export function RepoDashboardHeader({
                 variant="ghost"
                 size="sm"
                 onClick={onToggleShowHidden}
-                className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-sm text-xs"
+                className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-lg text-xs"
               >
                 {showHidden ? "Hide removed" : "Show removed"}
               </Button>
@@ -204,7 +204,7 @@ export function RepoDashboardHeader({
             <Button
               size="sm"
               onClick={onCreateWorkspace}
-              className="h-8 w-full justify-center rounded-sm text-xs sm:w-auto"
+              className="h-8 w-full justify-center rounded-lg text-xs sm:w-auto"
             >
               New project
             </Button>
@@ -212,7 +212,7 @@ export function RepoDashboardHeader({
               asChild
               variant="ghost"
               size="sm"
-              className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-sm text-xs"
+              className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-lg text-xs"
             >
               <Link
                 href={scopedHref(scope, "/projects/repositories/sandboxes")}
@@ -248,11 +248,11 @@ export function RepoDashboardStatusMessages({
   return (
     <>
       {dataLoadError ? (
-        <div className="mx-4 mt-2 border border-red-500/20 bg-red-500/8 px-3 py-2 text-xs text-red-500">
+        <div className="border-destructive/20 bg-destructive/[0.08] text-destructive mx-4 mt-2 rounded-lg border px-3 py-2 text-xs">
           {dataLoadError}
         </div>
       ) : repoSyncError ? (
-        <div className="mx-4 mt-2 border border-red-500/20 bg-red-500/8 px-3 py-2 text-xs text-red-500">
+        <div className="border-destructive/20 bg-destructive/[0.08] text-destructive mx-4 mt-2 rounded-lg border px-3 py-2 text-xs">
           {repoSyncError}
         </div>
       ) : null}

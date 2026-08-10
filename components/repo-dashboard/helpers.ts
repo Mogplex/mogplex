@@ -125,8 +125,9 @@ export function getRepoCardCoveragePresentation(repo: Repo) {
   }
 
   return {
-    coverageDot: "bg-amber-300",
-    coverageTone: "border-amber-400/20 bg-amber-400/[0.06] text-amber-300",
+    coverageDot: "bg-accent-amber",
+    coverageTone:
+      "border-accent-amber/20 bg-accent-amber/[0.06] text-accent-amber",
   };
 }
 
@@ -142,7 +143,7 @@ export function getRepoCardClassName({
   viewMode: "grid" | "list";
 }) {
   return [
-    "group overflow-hidden border border-border bg-card/70 p-4 transition-colors",
+    "group overflow-hidden rounded-lg border border-border bg-card/70 p-4 transition-colors",
     selected ? "bg-accent/80" : "hover:bg-accent/45",
     repo.is_hidden && "opacity-40",
     viewMode === "list" && !isMobile

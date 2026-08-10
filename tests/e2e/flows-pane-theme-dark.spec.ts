@@ -119,7 +119,9 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
     ]);
   expect(actualDarkBackground).toBe(expectedDarkBackground);
   expect(canvasBackgroundLayers.dotsClass).toContain("dots");
-  expect(canvasBackgroundLayers.dotFill).toBe("rgba(255, 255, 255, 0.2)");
+  expect(["rgba(255, 255, 255, 0.2)", "lab(100 0 0 / 0.2)"]).toContain(
+    canvasBackgroundLayers.dotFill
+  );
   expect(canvasBackgroundLayers.vignetteBackground).toContain(
     "radial-gradient"
   );
