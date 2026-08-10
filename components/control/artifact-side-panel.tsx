@@ -11,7 +11,13 @@ import {
   ArtifactTitle,
 } from "@/components/ai-elements/artifact";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { usePanelWidth } from "@/hooks/use-panel-width";
 import { collectControlArtifacts } from "./artifact-side-panel-model";
+
+const WIDTH_KEY = "mogplex.artifactPanel.width";
+const DEFAULT_WIDTH = 360;
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 560;
 
 const SAFE_ARTIFACT_URL_PROTOCOLS = new Set([
   "http:",
@@ -39,6 +45,13 @@ export function ArtifactSidePanel({ messages }: { messages: UIMessage[] }) {
   const [closedArtifactKey, setClosedArtifactKey] = useState<string | null>(
     null
   );
+  const { width, resizing, panelRef, resizerProps } = usePanelWidth({
+    storageKey: WIDTH_KEY,
+    defaultWidth: DEFAULT_WIDTH,
+    minWidth: MIN_WIDTH,
+    maxWidth: MAX_WIDTH,
+    handle: "left",
+  });
   const artifactKey = artifacts.map((artifact) => artifact.id).join("|");
   const closed = artifactKey !== "" && closedArtifactKey === artifactKey;
 
@@ -46,9 +59,17 @@ export function ArtifactSidePanel({ messages }: { messages: UIMessage[] }) {
 
   return (
     <aside
-      className="border-border bg-card flex w-[360px] shrink-0 flex-col border-l"
+      ref={panelRef}
+      className="border-border bg-card relative flex shrink-0 flex-col border-l"
+      style={{ width }}
+      data-resizing={resizing ? "true" : "false"}
       aria-label="Artifacts"
     >
+      <div
+        {...resizerProps}
+        aria-label="Resize artifacts panel"
+        className="app-panel-resizer app-panel-resizer-left absolute inset-y-0 left-0 z-30 w-2 cursor-col-resize touch-none outline-none"
+      />
       <div className="border-border flex items-center justify-between border-b px-3 py-2">
         <div>
           <h2 className="text-sm font-semibold">Artifacts</h2>
