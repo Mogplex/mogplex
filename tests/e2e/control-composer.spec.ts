@@ -125,9 +125,13 @@ test("control composers expose permissions, model, and MCP controls without a sp
 
   // The mission's first message behaves like chat: the agent's streamed reply
   // and tool call render in the timeline, with no fake dispatch card and no
-  // budget line.
-  await expect(page.getByText("I can plan, delegate, and ship.")).toBeVisible();
-  await expect(page.getByText(/list_worktrees\(/)).toBeVisible();
+  // budget line. (Scoped to the conversation log: the rail's terminal tab
+  // mirrors the same activity as raw text.)
+  const conversation = page.getByRole("log", { name: "Conversation" });
+  await expect(
+    conversation.getByText("I can plan, delegate, and ship.")
+  ).toBeVisible();
+  await expect(conversation.getByText(/list_worktrees\(/)).toBeVisible();
   await expect(page.getByText(/Mogplex is planning/)).toHaveCount(0);
   await expect(page.getByText(/Budget: \$/)).toHaveCount(0);
   expect(chatRequests[0]).toMatchObject({
@@ -309,5 +313,7 @@ test("control timeline renders agent markdown as formatted HTML", async ({
       .getByRole("complementary", { name: "Artifacts" })
       .getByRole("heading", { name: "Tool overview" })
   ).toBeVisible();
-  await expect(page.getByText("| --- |")).toHaveCount(0);
+  await expect(
+    page.getByRole("log", { name: "Conversation" }).getByText("| --- |")
+  ).toHaveCount(0);
 });
