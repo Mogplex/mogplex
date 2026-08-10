@@ -167,13 +167,16 @@ export function buildCombinedTimeline(
         continue;
       }
 
-      // Text parts
+      // Text parts — skip empties: multi-step tool loops emit steps with no
+      // text, and rendering them produces blank MOGPLEX bubbles.
       if (part.type === "text" && "text" in part) {
+        const text = String(part.text).trim();
+        if (!text) continue;
         result.push({
           kind: "tool",
           label: "MOGPLEX",
           time: "now",
-          body: String(part.text),
+          body: text,
         });
       }
     }
