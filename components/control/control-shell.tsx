@@ -39,6 +39,7 @@ import { ArtifactSidePanel } from "./artifact-side-panel";
 import { SessionList } from "./session-list";
 import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
+import { useSessionUsage } from "./use-session-usage";
 
 type ControlMode = "conversation" | "canvas" | "review";
 
@@ -270,6 +271,19 @@ export function ControlShell({
     mission?.cost
   );
 
+  // Live usage from the session's ai_calls (keyed by streamed ai_call_id
+  // metadata). Falls back to the mission's seeded cost when no runs have
+  // reported usage yet.
+  const sessionUsage = useSessionUsage(messages, chatPending);
+  const displayStats = useMemo(
+    () => ({
+      ...agentStats,
+      spent: sessionUsage.costUsd > 0 ? sessionUsage.costUsd : agentStats.spent,
+      tokens: sessionUsage.inputTokens + sessionUsage.outputTokens,
+    }),
+    [agentStats, sessionUsage]
+  );
+
   const drawerHeights = [140, 232, 380];
   const cycleDrawerHeight = useCallback(() => {
     setDrawerHeight((h) => (h + 1) % 3);
@@ -356,7 +370,7 @@ export function ControlShell({
             {/* Agent summary strip */}
             {mode === "conversation" && (
               <AgentSummaryStrip
-                stats={agentStats}
+                stats={displayStats}
                 isOpen={agentsOpen}
                 onToggle={() => setAgentsOpen(!agentsOpen)}
                 worktrees={missionWorktrees}

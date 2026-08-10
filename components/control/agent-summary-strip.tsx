@@ -3,6 +3,7 @@
 import { NavArrowDown, NavArrowUp } from "iconoir-react"
 import type { Worktree, Changeset, Deployment } from "@/lib/control/types"
 import { formatCost } from "@/lib/control/utils"
+import { formatTokens } from "@/lib/control/session-usage"
 
 type Props = {
   stats: {
@@ -10,6 +11,7 @@ type Props = {
     awaiting: number
     failed: number
     spent: number
+    tokens?: number
   }
   isOpen: boolean
   onToggle: () => void
@@ -30,6 +32,19 @@ const STATE_STYLES: Record<string, { dot: string; border: string; label: string 
 
 const ATTN_STATES = ["approval", "failed", "blocked"]
 
+type Stats = Props["stats"]
+
+function buildSummaryText(stats: Stats): string {
+  const segments = [
+    `${stats.total} agents`,
+    `${formatCost(stats.spent)} spent`,
+  ]
+  if (stats.awaiting > 0) segments.splice(1, 0, `${stats.awaiting} awaiting approval`)
+  if (stats.failed > 0) segments.splice(segments.length - 1, 0, `${stats.failed} failed`)
+  if ((stats.tokens ?? 0) > 0) segments.push(`${formatTokens(stats.tokens ?? 0)} tokens`)
+  return segments.join(" · ")
+}
+
 export function AgentSummaryStrip({
   stats,
   isOpen,
@@ -39,14 +54,7 @@ export function AgentSummaryStrip({
   changesets,
   deployments,
 }: Props) {
-  const summaryText = [
-    `${stats.total} agents`,
-    stats.awaiting > 0 && `${stats.awaiting} awaiting approval`,
-    stats.failed > 0 && `${stats.failed} failed`,
-    `${formatCost(stats.spent)} spent`,
-  ]
-    .filter(Boolean)
-    .join(" · ")
+  const summaryText = buildSummaryText(stats)
 
   // Sort: attention states first
   const sortedWorktrees = [...worktrees]
