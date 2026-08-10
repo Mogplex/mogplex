@@ -13,6 +13,7 @@ import type {
   SlackEventTaskDeps,
   SlackEventTaskPayload,
   SlackEventTaskResult,
+  SlackThreadContext,
   StartRepoAgentRunResult,
 } from "./types";
 import { persistConversationTurn } from "./conversation";
@@ -38,9 +39,54 @@ import {
 } from "./system";
 import { evaluateSlackRepoAgentPolicy } from "./policy";
 import { releaseSlackRepoAgentQuotaReservationBestEffort } from "./quota";
+import { buildSlackThreadContext } from "./thread-context";
 
 /** A blank/empty Slack message is rejected - always send something. */
 const PLACEHOLDER_TEXT = "_Thinking..._";
+
+async function buildConversationalAgentInput(input: {
+  deps: SlackEventTaskDeps;
+  mogplexUserId: string;
+  conversation: ConversationRow;
+  slackThreadContext: SlackThreadContext;
+  userMessage: ReturnType<typeof buildSlackUserMessage>["agent"];
+  userText: string;
+}) {
+  const messages = [
+    ...input.conversation.messages,
+    ...(input.slackThreadContext.contextMessage
+      ? [input.slackThreadContext.contextMessage]
+      : []),
+    input.userMessage,
+  ];
+  const repoContext = await input.deps.resolveRepoContext({
+    mogplexUserId: input.mogplexUserId,
+    texts: [...input.slackThreadContext.texts, input.userText],
+  });
+
+  return { messages, repoContext };
+}
+
+async function loadConversationalConversation(input: {
+  deps: SlackEventTaskDeps;
+  installation: SlackInstallationRow;
+  payload: SlackEventTaskPayload;
+  mogplexUserId: string;
+  boundConversation?: ConversationRow;
+}) {
+  if (input.boundConversation) return input.boundConversation;
+  return input.deps.loadOrCreateConversation({
+    installation: input.installation,
+    channelId: input.payload.channelId,
+    threadTs: input.payload.threadTs,
+    mogplexUserId: input.mogplexUserId,
+    requireExisting: requiresExistingSlackConversation(input.payload),
+  });
+}
+
+function formatFinalSlackText(finalText: string) {
+  return formatSlackConversationalReply(finalText || "_(no response)_");
+}
 
 export function buildSlackToolExecutionIdempotencyKey(
   payload: Pick<SlackEventTaskPayload, "teamId" | "eventId">
@@ -75,15 +121,13 @@ export async function runConversationalMode(input: {
     boundConversation,
   } = input;
 
-  const conversation =
-    boundConversation ??
-    (await deps.loadOrCreateConversation({
-      installation,
-      channelId: payload.channelId,
-      threadTs: payload.threadTs,
-      mogplexUserId,
-      requireExisting: requiresExistingSlackConversation(payload),
-    }));
+  const conversation = await loadConversationalConversation({
+    deps,
+    installation,
+    payload,
+    mogplexUserId,
+    boundConversation,
+  });
   if (!conversation) {
     return {
       outcome: "ignored_unbound_thread_message",
@@ -95,12 +139,6 @@ export async function runConversationalMode(input: {
     channelLinkState,
   });
   const postThreadTs = getSlackReplyThreadTs(payload);
-  const attachments = await prepareSlackAttachments({
-    deps,
-    botToken,
-    payload,
-  });
-
   const placeholder = await postOrReuseSlackMessage({
     deps,
     botToken,
@@ -112,23 +150,49 @@ export async function runConversationalMode(input: {
     text: PLACEHOLDER_TEXT,
   });
 
-  // Hand the agent the full thread history: the runner compacts oversized
-  // histories into a checkpoint handoff (and falls back to windowing when a
-  // history is small or compaction fails), so reuse of persisted checkpoints
-  // needs the stable full prefix. Full history is still persisted by
-  // `persistConversationTurn` below.
-  const userMessage = buildSlackUserMessage({
-    text: userText,
-    attachments,
-  });
-  const messages = [...conversation.messages, userMessage.agent];
-
-  let agentResult: Awaited<ReturnType<typeof deps.runAgent>>;
+  let completed: {
+    agentResult: Awaited<ReturnType<typeof deps.runAgent>>;
+    attachments: Awaited<ReturnType<typeof prepareSlackAttachments>>;
+    userMessage: ReturnType<typeof buildSlackUserMessage>;
+  };
   try {
-    agentResult = await deps.runAgent({
+    const [attachments, slackThreadContext] = await Promise.all([
+      prepareSlackAttachments({ deps, botToken, payload }),
+      buildSlackThreadContext({
+        deps,
+        botToken,
+        payload,
+        conversationMessages: conversation.messages,
+      }),
+    ]);
+
+    // Hand the agent the full thread history: the runner compacts oversized
+    // histories into a checkpoint handoff (and falls back to windowing when a
+    // history is small or compaction fails), so reuse of persisted checkpoints
+    // needs the stable full prefix. Full history is still persisted by
+    // `persistConversationTurn` below.
+    const userMessage = buildSlackUserMessage({
+      text: userText,
+      attachments,
+    });
+    const agentInput = await buildConversationalAgentInput({
+      deps,
+      mogplexUserId,
+      conversation,
+      slackThreadContext,
+      userMessage: userMessage.agent,
+      userText,
+    });
+    const agentResult = await deps.runAgent({
       userId: mogplexUserId,
-      messages,
+      messages: agentInput.messages,
       conversationId: conversation.id,
+      repoId: agentInput.repoContext?.repoId,
+      repoFullName: agentInput.repoContext?.repoFullName,
+      repoOwner: agentInput.repoContext?.repoOwner,
+      repoName: agentInput.repoContext?.repoName,
+      repoBaseBranch: agentInput.repoContext?.repoBaseBranch,
+      teamId: agentInput.repoContext?.teamId,
       // Each Slack event runs exactly one conversational agent pass. Reusing
       // this scope for another pass would intentionally replay matching calls.
       toolExecutionIdempotencyKey:
@@ -138,6 +202,7 @@ export async function runConversationalMode(input: {
         attribution,
       }),
     });
+    completed = { agentResult, attachments, userMessage };
   } catch (error) {
     console.error("[slack-event] conversational agent failed", {
       teamId: payload.teamId,
@@ -157,9 +222,9 @@ export async function runConversationalMode(input: {
     throw error;
   }
 
-  const finalText = formatSlackConversationalReply(
-    agentResult.finalText || "_(no response)_"
-  );
+  const { agentResult, attachments, userMessage } = completed;
+
+  const finalText = formatFinalSlackText(agentResult.finalText);
 
   await deps.updateMessage(botToken, {
     channel: payload.channelId,

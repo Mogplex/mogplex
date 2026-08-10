@@ -7,6 +7,7 @@ import {
 } from "@/lib/slack/installations";
 import {
   getSlackBotToken,
+  getSlackThreadMessages,
   postSlackEphemeral,
   postSlackMessage,
   stripSlackMention,
@@ -15,6 +16,7 @@ import {
 import { runChatAgent } from "@/lib/agents/run-chat-agent";
 import { buildAppUrl } from "@/lib/app-url";
 import { dispatchSlackMentionWorkflows } from "@/lib/flows/trigger-dispatch";
+import { defaultResolveSlackRepoContext } from "./slack-event-lib/repo-context";
 import {
   type SlackEventTaskDeps,
   type SlackEventTaskPayload,
@@ -69,6 +71,8 @@ const defaultDeps: SlackEventTaskDeps = {
   getBotToken: (teamId) => getSlackBotToken(teamId),
   resolveSlackAttribution: defaultResolveSlackAttribution,
   getChannelLink: getSlackChannelLink,
+  getThreadMessages: getSlackThreadMessages,
+  resolveRepoContext: defaultResolveSlackRepoContext,
   reserveSlackRepoAgentMonthlyRun: defaultReserveSlackRepoAgentMonthlyRun,
   releaseSlackRepoAgentMonthlyRun: defaultReleaseSlackRepoAgentMonthlyRun,
   now: () => new Date(),
@@ -168,6 +172,9 @@ export async function runSlackEventTask(
     });
   }
 
+  // `installer_fallback` only applies when this sender is the installation's
+  // own authed Slack user. Other unmapped workspace members exit above, so
+  // conversational repo tools never inherit the installer's repository scope.
   return runConversationalMode({
     deps,
     payload,

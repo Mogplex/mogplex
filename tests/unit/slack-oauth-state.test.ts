@@ -109,6 +109,10 @@ test("buildSlackAuthorizeUrl includes client id, scopes, redirect uri, and state
   assert.equal(parsed.searchParams.get("scope"), SLACK_BOT_SCOPES.join(","));
 });
 
+test("Slack OAuth requests access to download message attachments", () => {
+  assert.ok(new Set<string>(SLACK_BOT_SCOPES).has("files:read"));
+});
+
 test("exchangeSlackCode returns a structured failure for non-2xx Slack responses", async () => {
   const result = await exchangeSlackCode(
     {
