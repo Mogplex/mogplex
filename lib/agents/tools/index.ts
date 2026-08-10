@@ -21,6 +21,7 @@ import {
   createGithubPrSearch,
   type GithubPrSearchOptions,
 } from "./github-pr-search";
+import { createGithubRepoList } from "./github-repo-list";
 import { createGithubIssueTool } from "./github-issue";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { virtualExecTool } from "./virtual-exec";
@@ -47,6 +48,7 @@ export {
   createGithubPrSearch,
   type GithubPrSearchOptions,
 } from "./github-pr-search";
+export { createGithubRepoList } from "./github-repo-list";
 export { createGithubIssueTool } from "./github-issue";
 export { createMemoryTools, type MemoryToolContext } from "./memory";
 export { virtualExecTool } from "./virtual-exec";
@@ -79,6 +81,9 @@ export const TOOL_CAPABILITY: Record<string, Capability> = {
   // This is broader than the workspace-scoped github_api tool: it performs
   // authenticated org/user/repo PR inventory using the user's own GitHub auth.
   github_pr_search: "tools.github_api",
+  // Same authenticated-inventory class as github_pr_search: lists repos
+  // (including private) visible to the user's installations/OAuth.
+  github_list_repos: "tools.github_api",
   github_create_issue: "tools.github_api",
   github_create_pull_request: "tools.github_api",
   write_file: "tools.write_file",
@@ -154,6 +159,10 @@ export function buildStaticTools(
     ...(userId
       ? {
           github_pr_search: createGithubPrSearch({
+            oauthToken: githubPrSearchOptions?.oauthToken ?? null,
+            userId,
+          }),
+          github_list_repos: createGithubRepoList({
             oauthToken: githubPrSearchOptions?.oauthToken ?? null,
             userId,
           }),
