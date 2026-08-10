@@ -24,6 +24,7 @@ import {
 import {
   buildAppNavItems,
   isAppNavItemActive,
+  type AppNavItem,
   type AppNavItemId,
 } from "@/lib/app-navigation";
 import { formatUsd } from "@/lib/billing/catalog";
@@ -92,8 +93,6 @@ function usageMeterWidth(summary: BillingSummary | undefined): string {
   );
   return `${percent}%`;
 }
-
-type AppNavItem = ReturnType<typeof buildAppNavItems>[number];
 
 function SidebarNavLink({
   item,
