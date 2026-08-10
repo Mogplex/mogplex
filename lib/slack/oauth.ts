@@ -10,6 +10,9 @@ export const SLACK_BOT_SCOPES = [
   "channels:history",
   "channels:read",
   "chat:write",
+  // Required to download `url_private_download` images attached to Slack
+  // messages so conversational and repo agents can inspect screenshots.
+  "files:read",
   "groups:history",
   "groups:read",
   "im:history",

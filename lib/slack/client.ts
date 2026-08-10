@@ -28,6 +28,24 @@ export type SlackUpdateMessageResult = {
   ts: string;
 };
 
+export type SlackThreadMessage = {
+  type?: string;
+  user?: string;
+  username?: string;
+  bot_id?: string;
+  text?: string;
+  ts: string;
+  files?: SlackThreadFile[];
+};
+
+export type SlackThreadFile = {
+  id?: string;
+  mimetype?: string;
+  url_private_download?: string;
+  name?: string;
+  size?: number;
+};
+
 export type SlackUserInfo = {
   id: string;
   team_id?: string;
@@ -188,6 +206,24 @@ export async function updateSlackMessage(
     input,
     fetchImpl
   );
+}
+
+export async function getSlackThreadMessages(
+  botToken: string,
+  input: { channel: string; threadTs: string; limit?: number },
+  fetchImpl?: typeof fetch
+): Promise<SlackThreadMessage[]> {
+  const json = await slackApiGet<{ messages?: SlackThreadMessage[] }>(
+    "conversations.replies",
+    botToken,
+    {
+      channel: input.channel,
+      ts: input.threadTs,
+      limit: String(input.limit ?? 20),
+    },
+    fetchImpl
+  );
+  return Array.isArray(json.messages) ? json.messages : [];
 }
 
 export async function getSlackUserInfo(

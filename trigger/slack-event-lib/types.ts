@@ -1,5 +1,7 @@
 import type {
+  SlackThreadMessage,
   postSlackEphemeral,
+  getSlackThreadMessages,
   postSlackMessage,
   updateSlackMessage,
 } from "@/lib/slack/client";
@@ -98,6 +100,15 @@ export type SlackRepoAgentRunContext = {
   attributionMode: SlackAttributionMode;
 };
 
+export type SlackRepoContext = {
+  repoId: string;
+  repoFullName: string;
+  repoOwner: string;
+  repoName: string;
+  repoBaseBranch: string | null;
+  teamId?: string | null;
+};
+
 export type StartRepoAgentRunInput = {
   mogplexUserId: string;
   repoId: string;
@@ -155,6 +166,11 @@ export type SlackEventTaskDeps = {
     mogplexUserId: string;
     requireExisting?: boolean;
   }) => Promise<ConversationRow | null>;
+  getThreadMessages: typeof getSlackThreadMessages;
+  resolveRepoContext: (input: {
+    mogplexUserId: string;
+    texts: string[];
+  }) => Promise<SlackRepoContext | null>;
   persistConversation: (input: {
     conversationId: string;
     userId: string;
@@ -180,6 +196,12 @@ export type SlackEventTaskDeps = {
     slackUserId: string;
   }) => Promise<{ token: string; expiresAt: string } | null>;
   buildSlackLinkUrl: (token: string) => string;
+};
+
+export type SlackThreadContext = {
+  messages: SlackThreadMessage[];
+  contextMessage: RunChatAgentMessage | null;
+  texts: string[];
 };
 
 export type PreparedSlackAttachments = {
