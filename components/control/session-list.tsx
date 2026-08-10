@@ -13,6 +13,7 @@ import {
   projectColorClass,
   type SessionGroup,
 } from "@/lib/control/session-groups";
+import { usePanelWidth } from "@/hooks/use-panel-width";
 
 export type ControlSessionSummary = {
   id: string;
@@ -24,6 +25,10 @@ export type ControlSessionSummary = {
 };
 
 const COLLAPSED_KEY = "mogplex.sessionList.collapsed";
+const WIDTH_KEY = "mogplex.sessionList.width";
+const DEFAULT_WIDTH = 224;
+const MIN_WIDTH = 176;
+const MAX_WIDTH = 320;
 const MAX_VISIBLE_SESSIONS = 5;
 
 function formatAge(iso: string): string {
@@ -147,6 +152,13 @@ export function SessionList({
   onNew: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(true);
+  const { width, resizing, panelRef, resizerProps } = usePanelWidth({
+    storageKey: WIDTH_KEY,
+    defaultWidth: DEFAULT_WIDTH,
+    minWidth: MIN_WIDTH,
+    maxWidth: MAX_WIDTH,
+    handle: "right",
+  });
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -200,10 +212,19 @@ export function SessionList({
 
   return (
     <aside
+      ref={panelRef}
       aria-label="Sessions"
-      className="border-border hidden w-56 shrink-0 flex-col border-r md:flex"
+      data-resizing={resizing ? "true" : "false"}
+      style={{ width }}
+      className="border-border relative hidden shrink-0 flex-col border-r md:flex"
     >
-      <div className="border-border flex items-center justify-between border-b px-3 py-2.5">
+      <div
+        {...resizerProps}
+        aria-label="Resize sessions panel"
+        className="app-panel-resizer absolute inset-y-0 -right-1 z-30 w-2 cursor-col-resize touch-none outline-none"
+      />
+      {/* h-14 matches the mission header so both top dividers align */}
+      <div className="border-border flex h-14 items-center justify-between border-b px-3">
         <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
           Projects
         </span>
