@@ -7,12 +7,13 @@ import {
   SendDiagonal,
   ShieldCheck,
   ShieldXmark,
-  Sparks,
   Xmark,
 } from "iconoir-react";
+import { MogplexFace } from "@/components/brand/mogplex-face";
+import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { Workspace } from "@/lib/control/types";
-import type { ComposerSendOptions } from "./composer";
+import { ModelChip, type ComposerSendOptions } from "./composer";
 import {
   readControlComposerFiles,
   type ControlComposerFile,
@@ -37,6 +38,11 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { modelIds, defaultModelId } = useModels();
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  // The user's pick wins; until then follow the account default, same as
+  // the conversation composer.
+  const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
 
   const activeWorkspaces = workspaces.filter((w) => w.status === "active");
   const availableToAdd = activeWorkspaces.filter(
@@ -60,7 +66,7 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
   const handleSubmit = useCallback(() => {
     if (text.trim() || files.length > 0) {
       onCreate(text.trim(), targets, {
-        model: null,
+        model: modelId,
         permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
         mode: "run",
         files,
@@ -68,7 +74,7 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
       setText("");
       setFiles([]);
     }
-  }, [text, targets, files, permissionsIdx, onCreate]);
+  }, [text, targets, files, modelId, permissionsIdx, onCreate]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -89,9 +95,8 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
       <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center">
         {/* Header */}
         <div className="mb-8">
-          <Sparks
-            className="text-muted-foreground mb-3 size-6"
-            strokeWidth={1.5}
+          <MogplexFace
+            className="text-foreground mb-3 size-9"
             aria-hidden="true"
           />
           <h2 className="text-[20px] leading-7 font-semibold">
@@ -203,6 +208,12 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
               )}
               {MISSION_PERMISSION_OPTIONS[permissionsIdx]}
             </button>
+            <ModelChip
+              modelId={modelId}
+              modelIds={modelIds}
+              onSelect={setSelectedModel}
+              disabled={false}
+            />
 
             <div className="ml-auto flex items-center gap-2">
               {onCancel ? (

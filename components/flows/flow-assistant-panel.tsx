@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
-import { ArrowUp, Sparks, Xmark } from "iconoir-react";
+import { ArrowUp, Xmark } from "iconoir-react";
+import { MogplexFace } from "@/components/brand/mogplex-face";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { MessageContent } from "@/components/message-content";
 import { Button } from "@/components/ui/button";
@@ -134,7 +135,7 @@ export function FlowAssistantPanel({
     >
       <div className="flex items-center gap-3 border-b border-border bg-foreground/[0.02] px-4 py-4">
         <span className="grid size-9 place-items-center rounded-lg border border-accent-blue/20 bg-accent-blue/[0.08] text-accent-blue">
-          <Sparks className="size-4" />
+          <MogplexFace className="size-4" />
         </span>
         <div className="min-w-0">
           <div className="text-[11px] font-semibold tracking-[0.16em] text-foreground uppercase">
@@ -172,7 +173,7 @@ export function FlowAssistantPanel({
       >
         {messages.length === 0 ? (
           <div className="flex items-start gap-2 rounded-md border border-dashed border-border p-3 text-[11px] leading-5 text-muted-foreground">
-            <Sparks className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/80" />
+            <MogplexFace className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/80" />
             <span>
               Describe a change — &ldquo;split the review into parallel
               correctness and performance agents, then join&rdquo; — and apply
