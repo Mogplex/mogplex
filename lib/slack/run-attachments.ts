@@ -40,7 +40,7 @@ function normalizeString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizeSlackFileDownloadUrl(value: unknown) {
+export function normalizeSlackFileDownloadUrl(value: unknown) {
   const raw = normalizeString(value);
   if (!raw) return null;
   try {

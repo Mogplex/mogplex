@@ -5,11 +5,14 @@ import type { SlackRepoContext } from "./types";
 const REPO_SLUG_PATTERN =
   /\b([A-Za-z0-9](?:[A-Za-z0-9_.-]{0,38}[A-Za-z0-9])?)\/([A-Za-z0-9_.-]+)\b/g;
 const GITHUB_REPO_URL_PATTERN =
-  /(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s>|)]+)\/([^/\s?#>|)]+)[^\s>|)]*/gi;
+  /(^|[^a-z0-9.-])(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s>|)]+)\/([^/\s?#>|)]+)[^\s>|)]*/gi;
+const URL_LIKE_PATTERN =
+  /\b(?:https?:\/\/|www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s>|)]*)?/gi;
 const REPO_OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,38}[A-Za-z0-9])?$/;
 const REPO_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 const ORG_PATTERN = /\b[Oo][Rr][Gg]\s*=\s*([A-Za-z0-9_.-]+)/;
 const REPO_PATTERN = /\b[Rr][Ee][Pp][Oo]\s*=\s*([A-Za-z0-9_.-]+)/;
+const MAX_REPO_CONTEXT_CANDIDATES = 10;
 
 function splitRepoFullName(fullName: string) {
   const [owner, repo] = fullName.split("/");
@@ -23,6 +26,7 @@ export function extractSlackRepoCandidates(texts: string[]): string[] {
   const joined = texts.join("\n");
 
   const addCandidate = (owner: string, rawRepo: string) => {
+    if (candidates.length >= MAX_REPO_CONTEXT_CANDIDATES) return;
     const repo = rawRepo.replace(/\.git$/i, "");
     if (!REPO_OWNER_PATTERN.test(owner) || !REPO_NAME_PATTERN.test(repo))
       return;
@@ -33,23 +37,27 @@ export function extractSlackRepoCandidates(texts: string[]): string[] {
     candidates.push(candidate);
   };
 
-  for (const text of texts) {
-    const textWithoutGithubUrls = text.replace(
+  const textsWithoutGithubUrls = texts.map((text) =>
+    text.replace(
       GITHUB_REPO_URL_PATTERN,
-      (_match, owner: string, repo: string) => {
+      (_match, prefix: string, owner: string, repo: string) => {
         addCandidate(owner, repo);
-        return " ";
+        return prefix;
       }
-    );
-    for (const match of textWithoutGithubUrls.matchAll(REPO_SLUG_PATTERN)) {
-      addCandidate(match[1], match[2]);
-    }
-  }
+    )
+  );
 
   const org = joined.match(ORG_PATTERN)?.[1];
   const repo = joined.match(REPO_PATTERN)?.[1];
   if (org && repo) {
     addCandidate(org, repo);
+  }
+
+  for (const text of textsWithoutGithubUrls) {
+    const textWithoutUrls = text.replace(URL_LIKE_PATTERN, " ");
+    for (const match of textWithoutUrls.matchAll(REPO_SLUG_PATTERN)) {
+      addCandidate(match[1], match[2]);
+    }
   }
 
   return candidates;

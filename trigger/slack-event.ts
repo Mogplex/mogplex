@@ -172,6 +172,9 @@ export async function runSlackEventTask(
     });
   }
 
+  // `installer_fallback` only applies when this sender is the installation's
+  // own authed Slack user. Other unmapped workspace members exit above, so
+  // conversational repo tools never inherit the installer's repository scope.
   return runConversationalMode({
     deps,
     payload,

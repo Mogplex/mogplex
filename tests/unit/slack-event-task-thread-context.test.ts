@@ -27,7 +27,7 @@ test("extracts named repositories across Slack thread replies", () => {
       "Org = Mogplex",
       "Repo = mogplex",
     ]),
-    ["mogplex/mogplex"]
+    ["Mogplex/mogplex"]
   );
 });
 
@@ -246,6 +246,12 @@ test("bounds injected Slack thread text to six thousand characters", async () =>
           ts: "1700000001.000100",
           text: overflowText,
         },
+        {
+          type: "message",
+          user: "UCHARLES",
+          ts: "1700000002.000100",
+          text: "Mogplex/mogplex",
+        },
       ],
       fetchAttachment: async () => {
         throw new Error("unexpected attachment fetch");
@@ -264,7 +270,8 @@ test("bounds injected Slack thread text to six thousand characters", async () =>
   const content = context.contextMessage?.content as string;
   assert.ok(content.includes(firstText));
   assert.ok(!content.includes(overflowText));
-  assert.deepEqual(context.texts, [firstText, overflowText]);
+  assert.ok(!content.includes("Mogplex/mogplex"));
+  assert.deepEqual(context.texts, [firstText, overflowText, "Mogplex/mogplex"]);
 });
 
 test("hydrates Slack thread context, prior images, and named repo scope for conversational agent tools", async () => {

@@ -3,6 +3,7 @@ import type { RunChatAgentMessage } from "@/lib/agents/run-chat";
 import {
   SLACK_IMAGE_ATTACHMENT_MAX_COUNT,
   isSlackImageAttachmentMimetype,
+  normalizeSlackFileDownloadUrl,
 } from "@/lib/slack/run-attachments";
 import { prepareSlackAttachments } from "./attachments";
 import type {
@@ -83,17 +84,25 @@ function selectThreadContextMessages(messages: SlackThreadContext["messages"]) {
 function toSlackImageAttachment(
   file: NonNullable<SlackThreadContext["messages"][number]["files"]>[number]
 ): SlackEventAttachment | null {
+  const urlPrivateDownload = normalizeSlackFileDownloadUrl(
+    file.url_private_download
+  );
   if (
     !file.id ||
     !isSlackImageAttachmentMimetype(file.mimetype) ||
-    !file.url_private_download
+    !urlPrivateDownload
   ) {
+    if (file.url_private_download && !urlPrivateDownload) {
+      console.warn("[slack-event] dropped non-Slack thread attachment URL", {
+        attachmentId: file.id,
+      });
+    }
     return null;
   }
   return {
     id: file.id,
     mimetype: file.mimetype,
-    urlPrivateDownload: file.url_private_download,
+    urlPrivateDownload,
     name: file.name,
     sizeBytes: file.size,
   };
@@ -124,6 +133,7 @@ function buildThreadTextContext(input: {
   const lines: string[] = [];
   const texts: string[] = [];
   let usedChars = 0;
+  let contextBudgetExhausted = false;
 
   for (const message of input.messages) {
     if (message.ts === input.payload.messageTs) continue;
@@ -131,8 +141,12 @@ function buildThreadTextContext(input: {
     if (!text || text === "_Thinking..._") continue;
     texts.push(text);
     if (input.knownTexts.has(text)) continue;
+    if (contextBudgetExhausted) continue;
     const line = `- ${slackSpeaker(message)}: ${text}`;
-    if (usedChars + line.length > MAX_THREAD_CONTEXT_CHARS) break;
+    if (usedChars + line.length > MAX_THREAD_CONTEXT_CHARS) {
+      contextBudgetExhausted = true;
+      continue;
+    }
     usedChars += line.length;
     lines.push(line);
   }
