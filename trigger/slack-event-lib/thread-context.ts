@@ -1,4 +1,5 @@
 import { stripSlackMention } from "@/lib/slack/client";
+import type { RunChatAgentMessage } from "@/lib/agents/run-chat";
 import {
   SLACK_IMAGE_ATTACHMENT_MAX_COUNT,
   isSlackImageAttachmentMimetype,
@@ -27,6 +28,20 @@ function slackSpeaker(input: { user?: string; bot_id?: string }) {
   if (input.bot_id) return `Slack bot ${input.bot_id}`;
   if (input.user) return `Slack user ${input.user}`;
   return "Slack message";
+}
+
+function messageText(message: RunChatAgentMessage) {
+  if (typeof message.content === "string") return message.content;
+  return message.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+}
+
+function knownConversationTexts(messages: RunChatAgentMessage[]) {
+  return new Set(
+    messages.map(messageText).map(normalizeSlackText).filter(Boolean)
+  );
 }
 
 function shouldSkipThreadFetch(payload: SlackEventTaskPayload) {
@@ -100,6 +115,7 @@ function getThreadImageAttachments(
 function buildThreadTextContext(input: {
   payload: SlackEventTaskPayload;
   messages: SlackThreadContext["messages"];
+  knownTexts: ReadonlySet<string>;
 }) {
   const lines: string[] = [];
   const texts: string[] = [];
@@ -109,11 +125,12 @@ function buildThreadTextContext(input: {
     if (message.ts === input.payload.messageTs) continue;
     const text = normalizeSlackText(message.text);
     if (!text || text === "_Thinking..._") continue;
+    texts.push(text);
+    if (input.knownTexts.has(text)) continue;
     const line = `- ${slackSpeaker(message)}: ${text}`;
     if (usedChars + line.length > MAX_THREAD_CONTEXT_CHARS) break;
     usedChars += line.length;
     lines.push(line);
-    texts.push(text);
   }
 
   return { lines, texts };
@@ -143,6 +160,7 @@ export async function buildSlackThreadContext(input: {
   deps: Pick<SlackEventTaskDeps, "fetchAttachment" | "getThreadMessages">;
   botToken: string;
   payload: SlackEventTaskPayload;
+  conversationMessages?: RunChatAgentMessage[];
 }): Promise<SlackThreadContext> {
   if (shouldSkipThreadFetch(input.payload)) {
     return { messages: [], contextMessage: null, texts: [] };
@@ -153,6 +171,7 @@ export async function buildSlackThreadContext(input: {
   const { lines, texts } = buildThreadTextContext({
     payload: input.payload,
     messages: threadMessages,
+    knownTexts: knownConversationTexts(input.conversationMessages ?? []),
   });
   const images = await buildThreadImageContext({
     deps: input.deps,

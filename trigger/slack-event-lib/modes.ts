@@ -148,6 +148,7 @@ export async function runConversationalMode(input: {
     deps,
     botToken,
     payload,
+    conversationMessages: conversation.messages,
   });
 
   const placeholder = await postOrReuseSlackMessage({

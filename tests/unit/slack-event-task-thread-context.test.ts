@@ -119,6 +119,144 @@ test("keeps the thread root and recent tail within the context budget", async ()
   assert.equal(context.messages.length, 20);
 });
 
+test("deduplicates persisted turns without hiding them from repo resolution", async () => {
+  const context = await buildSlackThreadContext({
+    deps: {
+      getThreadMessages: async () => [
+        {
+          type: "message",
+          user: "UCHARLES",
+          ts: "1700000000.000100",
+          text: "persisted-thread-turn",
+        },
+        {
+          type: "message",
+          user: "UCHARLES",
+          ts: "1700000001.000100",
+          text: "new-thread-context",
+        },
+      ],
+      fetchAttachment: async () => {
+        throw new Error("unexpected attachment fetch");
+      },
+    },
+    botToken: "xoxb-test",
+    payload: {
+      ...basePayload,
+      channelType: "channel",
+      eventType: "app_mention",
+      messageTs: "1700000099.000100",
+    },
+    conversationMessages: [{ role: "user", content: "persisted-thread-turn" }],
+  });
+
+  assert.equal(typeof context.contextMessage?.content, "string");
+  const content = context.contextMessage?.content as string;
+  assert.doesNotMatch(content, /persisted-thread-turn/);
+  assert.match(content, /new-thread-context/);
+  assert.deepEqual(context.texts, [
+    "persisted-thread-turn",
+    "new-thread-context",
+  ]);
+});
+
+test("degrades to empty context when Slack thread history is unavailable", async () => {
+  const context = await buildSlackThreadContext({
+    deps: {
+      getThreadMessages: async () => {
+        throw new Error("Slack unavailable");
+      },
+      fetchAttachment: async () => {
+        throw new Error("unexpected attachment fetch");
+      },
+    },
+    botToken: "xoxb-test",
+    payload: {
+      ...basePayload,
+      channelType: "channel",
+      eventType: "app_mention",
+      messageTs: "1700000099.000100",
+    },
+  });
+
+  assert.deepEqual(context, {
+    messages: [],
+    contextMessage: null,
+    texts: [],
+  });
+});
+
+test("does not fetch Slack history for DMs or a thread root event", async () => {
+  let fetchCount = 0;
+  const deps = {
+    getThreadMessages: async () => {
+      fetchCount += 1;
+      return [];
+    },
+    fetchAttachment: async () => {
+      throw new Error("unexpected attachment fetch");
+    },
+  };
+
+  const dmContext = await buildSlackThreadContext({
+    deps,
+    botToken: "xoxb-test",
+    payload: { ...basePayload, channelType: "im" },
+  });
+  const rootContext = await buildSlackThreadContext({
+    deps,
+    botToken: "xoxb-test",
+    payload: {
+      ...basePayload,
+      channelType: "channel",
+      eventType: "app_mention",
+    },
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(dmContext.contextMessage, null);
+  assert.equal(rootContext.contextMessage, null);
+});
+
+test("bounds injected Slack thread text to six thousand characters", async () => {
+  const firstText = `first-${"a".repeat(3_000)}`;
+  const overflowText = `overflow-${"b".repeat(3_000)}`;
+  const context = await buildSlackThreadContext({
+    deps: {
+      getThreadMessages: async () => [
+        {
+          type: "message",
+          user: "UCHARLES",
+          ts: "1700000000.000100",
+          text: firstText,
+        },
+        {
+          type: "message",
+          user: "UCHARLES",
+          ts: "1700000001.000100",
+          text: overflowText,
+        },
+      ],
+      fetchAttachment: async () => {
+        throw new Error("unexpected attachment fetch");
+      },
+    },
+    botToken: "xoxb-test",
+    payload: {
+      ...basePayload,
+      channelType: "channel",
+      eventType: "app_mention",
+      messageTs: "1700000099.000100",
+    },
+  });
+
+  assert.equal(typeof context.contextMessage?.content, "string");
+  const content = context.contextMessage?.content as string;
+  assert.ok(content.includes(firstText));
+  assert.ok(!content.includes(overflowText));
+  assert.deepEqual(context.texts, [firstText, overflowText]);
+});
+
 test("hydrates Slack thread context, prior images, and named repo scope for conversational agent tools", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
 
