@@ -3,15 +3,26 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import {
   Box,
+  Folder,
   GitCompare,
   InputOutput,
+  NavArrowDown,
+  NavArrowRight,
+  Page,
   SidebarCollapse,
   SidebarExpand,
   Terminal,
 } from "iconoir-react"
 import type { UIMessage } from "ai"
-import { collectFileMutations } from "@/lib/control/activity-stream"
+import {
+  buildChangedFileTree,
+  collectChangedFiles,
+  collectDirPaths,
+  type ChangedDirNode,
+  type ChangedFile,
+} from "@/lib/control/changed-files"
 import { collectControlArtifacts } from "./artifact-side-panel-model"
+import { PatchViewer } from "@/components/diffs/patch-viewer"
 import { SandboxPanel } from "./sandbox-panel"
 import { TerminalStream } from "./terminal-stream"
 
@@ -48,10 +59,148 @@ function isRailTab(value: string | null): value is RailTab {
   return TABS.some((tab) => tab.id === value)
 }
 
-function DiffsPanel({ messages }: { messages: UIMessage[] }) {
-  const mutations = useMemo(() => collectFileMutations(messages), [messages])
+function ChangeCounts({
+  additions,
+  deletions,
+}: {
+  additions: number
+  deletions: number
+}) {
+  return (
+    <span className="ml-auto shrink-0 font-mono text-[10px]">
+      <span className="text-accent-green">+{additions}</span>
+      <span className="text-muted-foreground"> / </span>
+      <span className="text-accent-red">−{deletions}</span>
+    </span>
+  )
+}
 
-  if (mutations.length === 0) {
+function ChangedFileRow({
+  file,
+  depth,
+  viewing,
+  onToggleView,
+}: {
+  file: ChangedFile
+  depth: number
+  viewing: boolean
+  onToggleView: () => void
+}) {
+  const name = file.path.split("/").pop() ?? file.path
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={file.patch ? onToggleView : undefined}
+        disabled={!file.patch}
+        title={file.patch ? "View diff" : file.path}
+        style={{ paddingLeft: 8 + depth * 14 }}
+        className="flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left enabled:hover:bg-muted/60 disabled:cursor-default"
+      >
+        <Page
+          className="size-3.5 shrink-0 text-muted-foreground"
+          strokeWidth={1.5}
+        />
+        <span className="truncate text-xs text-foreground">{name}</span>
+        {file.patch ? (
+          <ChangeCounts
+            additions={file.additions}
+            deletions={file.deletions}
+          />
+        ) : (
+          <span
+            className={`ml-auto size-1.5 shrink-0 rounded-full ${
+              file.state === "done"
+                ? "bg-accent-green"
+                : file.state === "failed"
+                  ? "bg-accent-red"
+                  : "animate-pulse bg-accent-blue"
+            }`}
+          />
+        )}
+      </button>
+      {viewing && file.patch ? (
+        <PatchViewer patch={file.patch} className="mx-1" />
+      ) : null}
+    </div>
+  )
+}
+
+function ChangedDirSection({
+  node,
+  depth,
+  collapsedDirs,
+  onToggleDir,
+  viewingPath,
+  onToggleView,
+}: {
+  node: ChangedDirNode
+  depth: number
+  collapsedDirs: ReadonlySet<string>
+  onToggleDir: (path: string) => void
+  viewingPath: string | null
+  onToggleView: (path: string) => void
+}) {
+  const isCollapsed = collapsedDirs.has(node.path)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => onToggleDir(node.path)}
+        style={{ paddingLeft: 8 + depth * 14 }}
+        className="flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left hover:bg-muted/60"
+      >
+        {isCollapsed ? (
+          <NavArrowRight className="size-3 shrink-0 text-muted-foreground" />
+        ) : (
+          <NavArrowDown className="size-3 shrink-0 text-muted-foreground" />
+        )}
+        <Folder
+          className="size-3.5 shrink-0 text-muted-foreground"
+          strokeWidth={1.5}
+        />
+        <span className="truncate text-xs font-medium text-foreground">
+          {node.name}
+        </span>
+        <ChangeCounts additions={node.additions} deletions={node.deletions} />
+      </button>
+      {isCollapsed ? null : (
+        <>
+          {node.dirs.map((dir) => (
+            <ChangedDirSection
+              key={dir.path}
+              node={dir}
+              depth={depth + 1}
+              collapsedDirs={collapsedDirs}
+              onToggleDir={onToggleDir}
+              viewingPath={viewingPath}
+              onToggleView={onToggleView}
+            />
+          ))}
+          {node.files.map((file) => (
+            <ChangedFileRow
+              key={file.path}
+              file={file}
+              depth={depth + 1}
+              viewing={viewingPath === file.path}
+              onToggleView={() => onToggleView(file.path)}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+function DiffsPanel({ messages }: { messages: UIMessage[] }) {
+  const files = useMemo(() => collectChangedFiles(messages), [messages])
+  const tree = useMemo(() => buildChangedFileTree(files), [files])
+  const [collapsedDirs, setCollapsedDirs] = useState<ReadonlySet<string>>(
+    new Set()
+  )
+  const [viewingPath, setViewingPath] = useState<string | null>(null)
+
+  if (files.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-input px-3 py-8 text-center text-xs text-muted-foreground">
         No file changes yet. Edits the agent makes show up here.
@@ -59,25 +208,66 @@ function DiffsPanel({ messages }: { messages: UIMessage[] }) {
     )
   }
 
+  const allDirPaths = collectDirPaths(tree)
+  const allCollapsed =
+    allDirPaths.length > 0 && allDirPaths.every((p) => collapsedDirs.has(p))
+
+  const toggleDir = (path: string) => {
+    setCollapsedDirs((current) => {
+      const next = new Set(current)
+      if (next.has(path)) {
+        next.delete(path)
+      } else {
+        next.add(path)
+      }
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    setCollapsedDirs(allCollapsed ? new Set() : new Set(allDirPaths))
+  }
+
+  const toggleView = (path: string) => {
+    setViewingPath((current) => (current === path ? null : path))
+  }
+
   return (
-    <div className="space-y-1 font-mono text-xs">
-      {mutations.map((mutation) => (
-        <div
-          key={mutation.id}
-          className="flex h-7 items-center gap-2 rounded-md px-2"
-        >
-          <span
-            className={`size-1.5 shrink-0 rounded-full ${
-              mutation.state === "done"
-                ? "bg-accent-green"
-                : mutation.state === "failed"
-                  ? "bg-accent-red"
-                  : "bg-accent-blue animate-pulse"
-            }`}
-          />
-          <span className="text-muted-foreground shrink-0">{mutation.tool}</span>
-          <span className="truncate text-foreground">{mutation.path}</span>
-        </div>
+    <div>
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Changed files ({files.length})
+        </span>
+        <ChangeCounts additions={tree.additions} deletions={tree.deletions} />
+        {allDirPaths.length > 0 ? (
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {allCollapsed ? "Expand all" : "Collapse all"}
+          </button>
+        ) : null}
+      </div>
+      {tree.dirs.map((dir) => (
+        <ChangedDirSection
+          key={dir.path}
+          node={dir}
+          depth={0}
+          collapsedDirs={collapsedDirs}
+          onToggleDir={toggleDir}
+          viewingPath={viewingPath}
+          onToggleView={toggleView}
+        />
+      ))}
+      {tree.files.map((file) => (
+        <ChangedFileRow
+          key={file.path}
+          file={file}
+          depth={0}
+          viewing={viewingPath === file.path}
+          onToggleView={() => toggleView(file.path)}
+        />
       ))}
     </div>
   )
