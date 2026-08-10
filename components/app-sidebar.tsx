@@ -280,10 +280,9 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      {compact || showBillingCard ? (
+      {!compact && showBillingCard ? (
         <div className="app-sidebar-footer mx-5 mb-5 overflow-hidden rounded-lg border border-sidebar-border bg-card px-4 py-4 text-sm">
-          {compact ? null : (
-            <div className="app-sidebar-footer-label space-y-3">
+          <div className="app-sidebar-footer-label space-y-3">
               <div>
                 <div className="flex items-center gap-2 font-semibold text-foreground">
                   <Coins className="size-4 shrink-0" strokeWidth={1.5} />
@@ -317,10 +316,6 @@ export function AppSidebar() {
                   : "Manage billing"}
               </Link>
             </div>
-          )}
-          {compact ? (
-            <span className="app-sidebar-footer-dot text-accent-green">●</span>
-          ) : null}
         </div>
       ) : null}
 

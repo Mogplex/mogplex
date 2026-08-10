@@ -65,7 +65,7 @@ function modelProvider(modelId: string) {
   return modelId.split("/")[0] ?? modelId;
 }
 
-function ModelChip({
+export function ModelChip({
   modelId,
   modelIds,
   onSelect,

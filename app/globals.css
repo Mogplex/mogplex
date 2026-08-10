@@ -1858,6 +1858,39 @@
   }
 }
 
+/* MogplexFace: pupils drift through a look-around cycle with pauses. */
+@keyframes mogplex-look {
+  0%,
+  14% {
+    transform: translate(0, 0);
+  }
+  24%,
+  34% {
+    transform: translate(-0.9px, 0.2px);
+  }
+  44%,
+  54% {
+    transform: translate(0.9px, -0.3px);
+  }
+  64%,
+  74% {
+    transform: translate(0, 0.7px);
+  }
+  84%,
+  100% {
+    transform: translate(0, 0);
+  }
+}
+.mogplex-face-pupils {
+  animation: mogplex-look 7s ease-in-out infinite;
+  transform-box: fill-box;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mogplex-face-pupils {
+    animation: none;
+  }
+}
+
 /* Hide c15t consent "branding" tag. Prefix match — c15t appends a per-build
    hash to each class, so exact names (e.g. c15t-ui-branding-cFvDg) drift. */
 [class*="c15t-ui-branding"] {
