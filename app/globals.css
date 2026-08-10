@@ -1858,7 +1858,9 @@
   }
 }
 
-/* MogplexFace: pupils drift through a look-around cycle with pauses. */
+/* MogplexFace: pupils drift through a look-around cycle with pauses. They are
+   painted in the background color so they read as dark filled eyes against
+   the mark, whatever the current foreground color is. */
 @keyframes mogplex-look {
   0%,
   14% {
@@ -1882,6 +1884,7 @@
   }
 }
 .mogplex-face-pupils {
+  fill: var(--background, Canvas);
   animation: mogplex-look 7s ease-in-out infinite;
   transform-box: fill-box;
 }

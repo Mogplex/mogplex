@@ -1,14 +1,16 @@
 import type { SVGProps } from "react"
-import { MOGPLEX_MARK_PATH } from "./mogplex-mark"
+import {
+  MOGPLEX_MARK_BODY_PATH,
+  MOGPLEX_MARK_EYE_PATHS,
+} from "./mogplex-mark"
 
 /**
- * The Mogplex mark as a living face: the mark's triangular eye cutouts are
- * filled with slightly inset triangles that drift through a look-around
- * cycle (see the `mogplex-look` keyframes in globals.css). The inset leaves
- * a thin background rim so the eyes read as solid shapes whose gaze shifts.
- * Rendered bare — no wrapper, no background — so it can sit anywhere the
- * brand should feel alive (loading states, hero sections, assistant
- * headers).
+ * The Mogplex mark as a living face: the eyes are drawn on top of the mark's
+ * solid silhouette in the background color (see `.mogplex-face-pupils` in
+ * globals.css), so they read as dark filled pupils that drift through a
+ * look-around cycle (the `mogplex-look` keyframes). Rendered bare — no
+ * wrapper, no background — so it can sit anywhere the brand should feel
+ * alive (loading states, hero sections, assistant headers).
  */
 export function MogplexFace({
   className,
@@ -24,10 +26,11 @@ export function MogplexFace({
       className={className}
       {...rest}
     >
-      <path fillRule="evenodd" clipRule="evenodd" d={MOGPLEX_MARK_PATH} />
+      <path d={MOGPLEX_MARK_BODY_PATH} />
       <g className="mogplex-face-pupils">
-        <path d="M11.08 14.91V19.28L14.1 17.1Z" />
-        <path d="M20.92 14.91V19.28L17.9 17.1Z" />
+        {MOGPLEX_MARK_EYE_PATHS.map((d) => (
+          <path key={d} d={d} />
+        ))}
       </g>
     </svg>
   )
