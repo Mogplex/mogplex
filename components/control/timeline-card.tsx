@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { MessageResponse } from "@/components/ai-elements/message"
+import { PatchViewer } from "@/components/diffs/patch-viewer"
 import {
   User,
   Notes,
@@ -274,14 +275,9 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
                 <span className="text-accent-red">{file.del}</span>
               </div>
             ))}
-            <div className="mt-2 flex items-center gap-2">
-              <button className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-secondary">
-                Open change set
-              </button>
-              <button className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-secondary">
-                Compare
-              </button>
-            </div>
+            {(event as DiffEvent).patch ? (
+              <PatchViewer patch={(event as DiffEvent).patch} />
+            ) : null}
           </div>
         )}
 
