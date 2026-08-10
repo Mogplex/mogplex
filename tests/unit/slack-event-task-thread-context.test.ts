@@ -72,7 +72,7 @@ test("bounds Slack thread history before the current event", async () => {
   assert.deepEqual(messages, []);
 });
 
-test("keeps the thread root and recent tail within the context budget", async () => {
+test("keeps the thread root and tail of the fetched Slack page", async () => {
   const replies: SlackThreadMessage[] = Array.from(
     { length: 24 },
     (_, index) => ({
@@ -83,7 +83,7 @@ test("keeps the thread root and recent tail within the context budget", async ()
         index === 4
           ? "old-context-marker"
           : index === 23
-            ? "recent-context-marker"
+            ? "page-tail-context-marker"
             : `thread reply ${index + 1}`,
     })
   );
@@ -123,7 +123,7 @@ test("keeps the thread root and recent tail within the context budget", async ()
   assert.equal(typeof content, "string");
   const text = content as string;
   assert.match(text, /root-context-marker/);
-  assert.match(text, /recent-context-marker/);
+  assert.match(text, /page-tail-context-marker/);
   assert.match(text, /Slack bot BOTHER: third-party-status/);
   assert.doesNotMatch(text, /old-context-marker/);
   assert.equal(context.messages.length, 20);

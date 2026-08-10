@@ -17,9 +17,11 @@ import type {
 const MAX_THREAD_CONTEXT_MESSAGES = 20;
 // Keep this to one Slack API page. Commercially distributed apps can be
 // limited to one conversations.replies request per minute, so cursor-walking a
-// large thread would add minutes of latency or fail mid-run. Persisted turns
-// cover ongoing conversations; this page is bounded recovery context.
-const MAX_THREAD_FETCH_MESSAGES = 200;
+// large thread would add minutes of latency or fail mid-run. Slack returns the
+// page oldest-first, so threads longer than one page retain the root and the
+// earliest available replies rather than the newest tail. Persisted turns cover
+// ongoing conversations; this page is bounded recovery context.
+const MAX_THREAD_FETCH_PAGE_SIZE = 200;
 const MAX_THREAD_CONTEXT_CHARS = 6_000;
 const MAX_THREAD_CONTEXT_IMAGES = SLACK_IMAGE_ATTACHMENT_MAX_COUNT;
 
@@ -68,7 +70,7 @@ async function loadThreadMessages(input: {
       channel: input.payload.channelId,
       threadTs: input.payload.threadTs,
       latestTs: input.payload.messageTs,
-      limit: MAX_THREAD_FETCH_MESSAGES,
+      limit: MAX_THREAD_FETCH_PAGE_SIZE,
     });
   } catch (error) {
     console.warn("[slack-event] failed to load Slack thread context", {
@@ -81,7 +83,9 @@ async function loadThreadMessages(input: {
   }
 }
 
-function selectThreadContextMessages(messages: SlackThreadContext["messages"]) {
+function selectFetchedPageContextMessages(
+  messages: SlackThreadContext["messages"]
+) {
   if (messages.length <= MAX_THREAD_CONTEXT_MESSAGES) return messages;
   return [messages[0], ...messages.slice(-(MAX_THREAD_CONTEXT_MESSAGES - 1))];
 }
@@ -234,7 +238,7 @@ export async function buildSlackThreadContext(input: {
   }
 
   const loadedMessages = await loadThreadMessages(input);
-  const threadMessages = selectThreadContextMessages(loadedMessages);
+  const threadMessages = selectFetchedPageContextMessages(loadedMessages);
   const { lines, texts } = buildThreadTextContext({
     payload: input.payload,
     messages: threadMessages,
