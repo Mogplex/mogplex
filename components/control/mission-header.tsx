@@ -1,6 +1,6 @@
 "use client"
 
-import { Network, SendDiagonal, Settings } from "iconoir-react"
+import { GitCommit, Network, Settings } from "iconoir-react"
 import type { Mission, Workspace } from "@/lib/control/types"
 
 type ControlMode = "conversation" | "canvas" | "review"
@@ -10,6 +10,9 @@ type Props = {
   workspace: Workspace | undefined
   mode: ControlMode
   onModeChange: (mode: ControlMode) => void
+  /** Streams a commit-and-push instruction to the agent. */
+  onCommitPush?: () => void
+  commitDisabled?: boolean
 }
 
 const MODE_LABELS: Record<ControlMode, string> = {
@@ -18,12 +21,23 @@ const MODE_LABELS: Record<ControlMode, string> = {
   review: "Review",
 }
 
-export function MissionHeader({ mission, workspace, mode, onModeChange }: Props) {
+export function MissionHeader({
+  mission,
+  workspace,
+  mode,
+  onModeChange,
+  onCommitPush,
+  commitDisabled,
+}: Props) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-transparent px-6">
       {/* Left: Breadcrumb */}
       <div className="flex min-w-0 items-center gap-2">
         <h1 className="text-xl font-semibold">Command Center</h1>
+        <span className="text-muted-foreground hidden sm:inline">/</span>
+        <span className="text-muted-foreground hidden max-w-48 truncate text-sm sm:inline">
+          {mission.title}
+        </span>
         <span className="inline-flex h-6 items-center gap-1.5 rounded-md bg-secondary px-2 text-xs text-secondary-foreground">
           <Network className="size-3.5 text-accent-blue" strokeWidth={1.5} aria-hidden="true" />
           Orchestrator
@@ -60,9 +74,14 @@ export function MissionHeader({ mission, workspace, mode, onModeChange }: Props)
         >
           <Settings className="size-3.5" strokeWidth={1.7} />
         </button>
-        <button className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-brand-accent-hover">
-          <SendDiagonal className="size-3.5" strokeWidth={1.7} />
-          <span className="hidden sm:inline">Ship winner</span>
+        <button
+          type="button"
+          onClick={onCommitPush}
+          disabled={commitDisabled}
+          className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-brand-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <GitCommit className="size-3.5" strokeWidth={1.7} />
+          <span className="hidden sm:inline">Commit &amp; push</span>
         </button>
       </div>
     </header>
