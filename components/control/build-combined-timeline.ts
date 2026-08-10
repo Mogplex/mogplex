@@ -1,4 +1,8 @@
 import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
+import {
+  diffFilesFromPatch,
+  extractPatchFromValue,
+} from "@/lib/control/diff-text";
 import type { TimelineEvent } from "@/lib/control/types";
 import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from "ai";
 
@@ -40,7 +44,8 @@ function getApprovalInfo(part: UIMessagePart<UIDataTypes, UITools>): {
  * Builds a combined timeline by merging mission timeline events with chat
  * messages. Assistant text becomes MOGPLEX events; tool invocations become
  * TOOL events with their input (and the error, when the call failed).
- * Tool approvals become APPROVAL events.
+ * Tool approvals become APPROVAL events. Tool inputs or outputs carrying a
+ * unified patch become DIFF events so changes render inline in the chat.
  */
 export function buildCombinedTimeline(
   timeline: TimelineEvent[] | undefined,
@@ -110,16 +115,31 @@ export function buildCombinedTimeline(
             log: "errorText" in part ? String(part.errorText) : "unknown error",
           });
         } else {
+          const toolInput = "input" in part ? part.input : undefined;
           const input =
-            !("input" in part) || part.input === undefined
+            toolInput === undefined
               ? "…"
-              : JSON.stringify(part.input).slice(0, 100);
+              : JSON.stringify(toolInput).slice(0, 100);
           result.push({
             kind: "tool",
             label: "TOOL",
             time: "now",
             body: `${toolName}(${input})`,
           });
+
+          const patch =
+            extractPatchFromValue("output" in part ? part.output : undefined) ??
+            extractPatchFromValue(toolInput);
+          if (patch) {
+            result.push({
+              kind: "diff",
+              label: "DIFF",
+              time: "now",
+              body: `${toolName} changes`,
+              patch,
+              files: diffFilesFromPatch(patch),
+            });
+          }
         }
         continue;
       }

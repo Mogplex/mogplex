@@ -172,6 +172,8 @@ export type ToolEvent = BaseTimelineEvent & {
 export type DiffEvent = BaseTimelineEvent & {
   kind: "diff";
   files: DiffFile[];
+  /** Unified patch text, rendered inline by the timeline card. */
+  patch?: string;
 };
 
 export type FailEvent = BaseTimelineEvent & {
