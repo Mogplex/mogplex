@@ -235,23 +235,11 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
                 </span>
               </div>
             ))}
-            {(event as PlanEvent).planApproved ? (
+            {(event as PlanEvent).planApproved && (
               <div className="flex items-center gap-2 border-t border-border px-4 py-3">
-                <button className="rounded border border-accent-green/30 bg-accent-green/5 px-2.5 py-1 text-[10px] font-medium text-accent-green">
+                <span className="rounded border border-accent-green/30 bg-accent-green/5 px-2.5 py-1 text-[10px] font-medium text-accent-green">
                   Plan accepted
-                </button>
-                <button className="rounded border border-border px-2.5 py-1 text-[10px] font-medium text-muted-foreground hover:bg-secondary">
-                  Revise plan
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 border-t border-border px-4 py-3">
-                <button className="rounded bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground hover:bg-brand-accent-hover">
-                  Approve plan
-                </button>
-                <button className="rounded border border-border px-2.5 py-1 text-[10px] font-medium text-muted-foreground hover:bg-secondary">
-                  Revise plan
-                </button>
+                </span>
               </div>
             )}
           </div>

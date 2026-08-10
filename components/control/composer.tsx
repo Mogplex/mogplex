@@ -8,7 +8,6 @@ import {
   SendDiagonal,
   ShieldCheck,
   ShieldXmark,
-  Strategy,
 } from "iconoir-react";
 import { McpStatusButton } from "@/components/chat/mcp-status-button";
 import { useModels } from "@/hooks/use-models";
@@ -176,7 +175,6 @@ export function Composer({
   const [target, setTarget] = useState("mission");
   const [scope, setScope] = useState<Scope>("implement");
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
-  const [planMode, setPlanMode] = useState(false);
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const { modelIds, defaultModelId } = useModels();
@@ -235,11 +233,10 @@ export function Composer({
 
   const handleSend = useCallback(() => {
     if ((value.trim() || files.length > 0) && !pending) {
-      const sendScope = planMode ? "plan" : scope;
-      onSend(value.trim(), target, SCOPE_LABELS[sendScope], {
+      onSend(value.trim(), target, SCOPE_LABELS[scope], {
         model: modelId,
         permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
-        mode: planMode ? "plan" : "run",
+        mode: "run",
         files,
       });
       onChange("");
@@ -250,7 +247,6 @@ export function Composer({
     value,
     files,
     pending,
-    planMode,
     target,
     scope,
     modelId,
@@ -324,20 +320,6 @@ export function Composer({
                 }}
               />
               <button
-                type="button"
-                aria-pressed={planMode}
-                aria-label={planMode ? "Plan mode on" : "Plan mode"}
-                onClick={() => setPlanMode((current) => !current)}
-                className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium ${
-                  planMode
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-secondary text-secondary-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <Strategy className="size-3.5" strokeWidth={1.6} />
-                Plan
-              </button>
-              <button
                 onClick={cycleTarget}
                 className="border-border bg-card hover:bg-secondary flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium"
               >
@@ -348,14 +330,19 @@ export function Composer({
               </button>
               <button
                 onClick={cycleScope}
-                disabled={pending || planMode}
+                disabled={pending}
                 className="border-border bg-card hover:bg-secondary h-8 rounded-md border px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {planMode ? SCOPE_LABELS.plan : SCOPE_LABELS[scope]}
+                {SCOPE_LABELS[scope]}
               </button>
               <button
                 onClick={cyclePermissions}
-                className="border-border bg-card hover:bg-secondary flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium"
+                className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium ${
+                  MISSION_PERMISSION_OPTIONS[permissionsIdx] ===
+                  "Skip Permissions"
+                    ? "border-accent-amber/30 bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/20"
+                    : "border-accent-blue/30 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
+                }`}
               >
                 {MISSION_PERMISSION_OPTIONS[permissionsIdx] ===
                 "Skip Permissions" ? (
@@ -384,9 +371,7 @@ export function Composer({
               onKeyDown={handleKeyDown}
               placeholder={
                 target === "mission"
-                  ? planMode
-                    ? "Ask Mogplex for a plan"
-                    : "Direct Mogplex - it will delegate to agents"
+                  ? "Direct Mogplex - it will delegate to agents"
                   : `Steer ${target} directly`
               }
               rows={1}
