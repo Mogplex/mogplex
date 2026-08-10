@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   ShieldXmark,
   Sparks,
-  Strategy,
   Xmark,
 } from "iconoir-react";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
@@ -35,7 +34,6 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
     workspaces[0]?.id ? [workspaces[0].id] : []
   );
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
-  const [planMode, setPlanMode] = useState(false);
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,13 +62,13 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
       onCreate(text.trim(), targets, {
         model: null,
         permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
-        mode: planMode ? "plan" : "run",
+        mode: "run",
         files,
       });
       setText("");
       setFiles([]);
     }
-  }, [text, targets, files, permissionsIdx, planMode, onCreate]);
+  }, [text, targets, files, permissionsIdx, onCreate]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -189,22 +187,13 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
               }}
             />
             <button
-              type="button"
-              aria-pressed={planMode}
-              aria-label={planMode ? "Plan mode on" : "Plan mode"}
-              onClick={() => setPlanMode((current) => !current)}
-              className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium ${
-                planMode
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-secondary text-secondary-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <Strategy className="size-3.5" strokeWidth={1.6} />
-              Plan
-            </button>
-            <button
               onClick={cyclePermissions}
-              className="border-border text-secondary-foreground hover:bg-secondary hover:text-foreground flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium"
+              className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium ${
+                MISSION_PERMISSION_OPTIONS[permissionsIdx] ===
+                "Skip Permissions"
+                  ? "border-accent-amber/30 bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/20"
+                  : "border-accent-blue/30 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
+              }`}
             >
               {MISSION_PERMISSION_OPTIONS[permissionsIdx] ===
               "Skip Permissions" ? (

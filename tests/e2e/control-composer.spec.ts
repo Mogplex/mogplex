@@ -88,27 +88,27 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await page.goto(scopedPath("control"));
   await page.waitForLoadState("networkidle");
 
-  // New-mission composer: permissions defaults to Skip Permissions, cycles to
-  // Approve Edits, and no dollar spend-cap chip exists anywhere.
+  // New-mission composer: permissions defaults to Skip Permissions (amber
+  // warning), cycles to Approve Edits (blue), and no dollar spend-cap chip
+  // exists anywhere.
   await expect(page.getByText("Describe the outcome")).toBeVisible();
   const permissionsChip = page.getByRole("button", {
     name: "Skip Permissions",
   });
   await expect(permissionsChip).toBeVisible();
+  await expect(permissionsChip).toHaveClass(/accent-amber/);
   await expect(page.getByText(/\$\d+ cap/)).toHaveCount(0);
   await permissionsChip.click();
-  await expect(
-    page.getByRole("button", { name: "Approve Edits" })
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Approve Edits" }).click();
+  const approveEditsChip = page.getByRole("button", { name: "Approve Edits" });
+  await expect(approveEditsChip).toBeVisible();
+  await expect(approveEditsChip).toHaveClass(/accent-blue/);
+  await approveEditsChip.click();
   await expect(
     page.getByRole("button", { name: "Skip Permissions" })
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Plan mode" }).click();
-  await expect(
-    page.getByRole("button", { name: "Plan mode on" })
-  ).toBeVisible();
+  // No manual plan-mode gate: the composer sends straight to the agent.
+  await expect(page.getByRole("button", { name: "Plan mode" })).toHaveCount(0);
   await page
     .locator('input[type="file"]')
     .first()
@@ -131,9 +131,9 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await expect(page.getByText(/Mogplex is planning/)).toHaveCount(0);
   await expect(page.getByText(/Budget: \$/)).toHaveCount(0);
   expect(chatRequests[0]).toMatchObject({
-    mode: "plan",
+    mode: "run",
     permissions: "Skip Permissions",
-    scope: "PLAN ONLY",
+    scope: "IMPLEMENT",
     target: "mission",
   });
   expect(chatRequests[0]?.messages?.at(-1)?.parts).toEqual(
@@ -171,12 +171,9 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // Switching models routes the chosen id through to the chat request body.
   await modelChip.click();
   await page.getByRole("button", { name: "anthropic/claude-sonnet-5" }).click();
-  await page.getByRole("button", { name: "Plan mode" }).click();
-  await expect(
-    page.getByRole("button", { name: "Plan mode on" })
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Plan mode" })).toHaveCount(0);
   await page
-    .getByPlaceholder("Ask Mogplex for a plan")
+    .getByPlaceholder("Direct Mogplex - it will delegate to agents")
     .fill("Summarize progress");
   await page.keyboard.press("Enter");
 
@@ -184,9 +181,9 @@ test("control composers expose permissions, model, and MCP controls without a sp
     .poll(() => chatRequests.at(-1)?.model, { timeout: 10_000 })
     .toBe("anthropic/claude-sonnet-5");
   expect(chatRequests.at(-1)).toMatchObject({
-    mode: "plan",
+    mode: "run",
     permissions: "Skip Permissions",
-    scope: "PLAN ONLY",
+    scope: "IMPLEMENT",
     target: "mission",
   });
 
@@ -204,8 +201,8 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(3);
   const attachmentOnlyRequest = chatRequests.at(-1);
   expect(attachmentOnlyRequest).toMatchObject({
-    mode: "plan",
-    scope: "PLAN ONLY",
+    mode: "run",
+    scope: "IMPLEMENT",
     target: "mission",
   });
   expect(attachmentOnlyRequest?.messages?.at(-1)?.parts).toEqual([
