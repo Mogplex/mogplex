@@ -70,32 +70,42 @@ export async function defaultResolveSlackRepoContext(input: {
   const candidates = extractSlackRepoCandidates(input.texts);
   if (candidates.length === 0) return null;
 
+  const candidateFilter = candidates
+    .map(
+      (candidate) => `full_name.ilike.${escapePostgrestLikePattern(candidate)}`
+    )
+    .join(",");
+  const { data, error } = await supabaseAdmin
+    .from("repos")
+    .select("id, full_name, default_branch, product_team_id, is_hidden")
+    .eq("user_id", input.mogplexUserId)
+    .or(candidateFilter)
+    .limit(MAX_REPO_CONTEXT_CANDIDATES);
+  if (error) {
+    console.warn("[slack-event] failed to resolve repo context", {
+      candidateCount: candidates.length,
+      error,
+    });
+    return null;
+  }
+
+  const visibleByFullName = new Map(
+    (data ?? [])
+      .filter((repo) => repo.is_hidden !== true)
+      .map((repo) => [repo.full_name.toLowerCase(), repo] as const)
+  );
   for (const candidate of candidates) {
-    const { data, error } = await supabaseAdmin
-      .from("repos")
-      .select("id, full_name, default_branch, product_team_id")
-      .eq("user_id", input.mogplexUserId)
-      .ilike("full_name", escapePostgrestLikePattern(candidate))
-      .or("is_hidden.is.null,is_hidden.eq.false")
-      .limit(1)
-      .maybeSingle();
-    if (error) {
-      console.warn("[slack-event] failed to resolve repo context", {
-        candidate,
-        error,
-      });
-      continue;
-    }
-    if (!data) continue;
-    const split = splitRepoFullName(data.full_name);
+    const repoRow = visibleByFullName.get(candidate.toLowerCase());
+    if (!repoRow) continue;
+    const split = splitRepoFullName(repoRow.full_name);
     if (!split) continue;
     return {
-      repoId: data.id,
-      repoFullName: data.full_name,
+      repoId: repoRow.id,
+      repoFullName: repoRow.full_name,
       repoOwner: split.owner,
       repoName: split.repo,
-      repoBaseBranch: data.default_branch ?? null,
-      teamId: data.product_team_id ?? null,
+      repoBaseBranch: repoRow.default_branch ?? null,
+      teamId: repoRow.product_team_id ?? null,
     };
   }
 

@@ -359,7 +359,10 @@ test("hydrates Slack thread context, prior images, and named repo scope for conv
       loadOrCreateConversation: async () => ({
         id: "conv-1",
         user_id: "user-mogplex",
-        messages: [],
+        messages: [
+          { role: "user", content: "persisted user turn" },
+          { role: "assistant", content: "persisted assistant turn" },
+        ],
         model: null,
         title: null,
       }),
@@ -393,7 +396,9 @@ test("hydrates Slack thread context, prior images, and named repo scope for conv
   assert.equal(agentInput.repoName, "mogplex");
   assert.equal(agentInput.repoBaseBranch, "main");
 
-  const contextContent = agentInput.messages[0]?.content;
+  assert.equal(agentInput.messages[0]?.content, "persisted user turn");
+  assert.equal(agentInput.messages[1]?.content, "persisted assistant turn");
+  const contextContent = agentInput.messages.at(-2)?.content;
   assert.ok(Array.isArray(contextContent));
   assert.equal(contextContent[0].type, "text");
   assert.match(contextContent[0].text, /Prior Slack thread messages/);

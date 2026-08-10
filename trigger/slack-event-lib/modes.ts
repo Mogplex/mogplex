@@ -53,10 +53,10 @@ async function buildConversationalAgentInput(input: {
   userText: string;
 }) {
   const messages = [
+    ...input.conversation.messages,
     ...(input.slackThreadContext.contextMessage
       ? [input.slackThreadContext.contextMessage]
       : []),
-    ...input.conversation.messages,
     input.userMessage,
   ];
   const repoContext = await input.deps.resolveRepoContext({
