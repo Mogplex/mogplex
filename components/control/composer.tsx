@@ -4,12 +4,14 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Attachment,
+  NavArrowDown,
   PauseSolid,
   SendDiagonal,
   ShieldCheck,
   ShieldXmark,
 } from "iconoir-react";
 import { McpStatusButton } from "@/components/chat/mcp-status-button";
+import { ProviderIcon } from "@/components/provider-icon";
 import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type {
@@ -57,6 +59,10 @@ const SCOPES: Scope[] = ["plan", "implement", "test", "pipeline"];
 
 function shortModelName(modelId: string) {
   return modelId.split("/").pop() ?? modelId;
+}
+
+function modelProvider(modelId: string) {
+  return modelId.split("/")[0] ?? modelId;
 }
 
 function ModelChip({
@@ -113,9 +119,16 @@ function ModelChip({
           });
           setFilter("");
         }}
-        className="border-border bg-card text-accent-blue hover:bg-secondary h-8 rounded-md border px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+        className="border-border bg-card text-accent-blue hover:bg-secondary flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
       >
+        {modelId ? (
+          <ProviderIcon
+            provider={modelProvider(modelId)}
+            className="size-4 border-0"
+          />
+        ) : null}
         {modelId ? shortModelName(modelId) : "Model"}
+        <NavArrowDown className="size-3 opacity-70" strokeWidth={2} />
       </button>
       {open &&
         menuPos &&
@@ -146,13 +159,17 @@ function ModelChip({
                     setOpen(false);
                     setFilter("");
                   }}
-                  className={`hover:bg-secondary/50 w-full px-2 py-1.5 text-left text-[11px] ${
+                  className={`hover:bg-secondary/50 flex w-full items-center gap-2 px-2 py-1.5 text-left text-[11px] ${
                     m === modelId
                       ? "bg-accent-blue/5 text-accent-blue"
                       : "text-foreground"
                   }`}
                 >
-                  {m}
+                  <ProviderIcon
+                    provider={modelProvider(m)}
+                    className="size-4 border-0"
+                  />
+                  <span className="truncate">{m}</span>
                 </button>
               ))}
             </div>

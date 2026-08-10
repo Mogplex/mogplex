@@ -16,6 +16,7 @@ import type {
   TimelineEvent,
   ControlSeedData,
 } from "@/lib/control/types";
+import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
@@ -203,6 +204,22 @@ export function ControlShell({
     clearComposer: () => setComposerInput(""),
   });
 
+  // Header action: the agent runs in the mission sandbox, so committing is
+  // an instruction it executes with its shell tools, not a local git call.
+  const handleCommitPush = useCallback(() => {
+    void handleSend(
+      "Commit the current changes with a conventional commit message and push the branch.",
+      "mission",
+      "IMPLEMENT",
+      {
+        model: null,
+        permissions: MISSION_PERMISSION_OPTIONS[0],
+        mode: "run",
+        files: [],
+      }
+    );
+  }, [handleSend]);
+
   const handleToolApprovalResponse = useToolApprovalHandler(
     addToolApprovalResponse
   );
@@ -300,6 +317,8 @@ export function ControlShell({
             workspace={getWorkspace(mission.ws)}
             mode={mode}
             onModeChange={setMode}
+            onCommitPush={handleCommitPush}
+            commitDisabled={chatPending}
           />
         )}
 
