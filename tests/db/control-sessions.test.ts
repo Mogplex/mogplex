@@ -4,7 +4,10 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
-const MIGRATION = "neon/migrations/20260810180000_control_sessions.sql";
+const MIGRATIONS = [
+  "neon/migrations/20260810180000_control_sessions.sql",
+  "neon/migrations/20260810190000_control_sessions_project.sql",
+];
 
 const USER_A = "00000000-0000-4000-8000-00000000000a";
 const USER_B = "00000000-0000-4000-8000-00000000000b";
@@ -18,8 +21,10 @@ beforeAll(async () => {
     create role authenticated;
     create role service_role;
   `);
-  const sql = await readFile(path.join(REPO_ROOT, MIGRATION), "utf8");
-  await db.exec(sql);
+  for (const migration of MIGRATIONS) {
+    const sql = await readFile(path.join(REPO_ROOT, migration), "utf8");
+    await db.exec(sql);
+  }
 });
 
 afterAll(async () => {
@@ -116,5 +121,31 @@ describe("control_sessions migration", () => {
          as revoked`
     );
     expect(rows[0]?.revoked).toBe(true);
+  });
+
+  it("stores an optional project for sidebar grouping, defaulting to null", async () => {
+    const { rows } = await db.query<{ title: string; project: string | null }>(
+      `insert into public.control_sessions (user_id, title, project)
+       values
+         ($1, 'grouped', 't3chat'),
+         ($1, 'ungrouped', null),
+         ($1, 'default project', null)
+       returning title, project`,
+      [USER_A]
+    );
+
+    expect(rows).toEqual([
+      { title: "grouped", project: "t3chat" },
+      { title: "ungrouped", project: null },
+      { title: "default project", project: null },
+    ]);
+
+    const { rows: grouped } = await db.query<{ project: string | null }>(
+      `select project from public.control_sessions
+       where user_id = $1 and archived = false
+       order by project nulls last`,
+      [USER_A]
+    );
+    expect(grouped.map((row) => row.project)).toEqual(["t3chat", null, null]);
   });
 });

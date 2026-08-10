@@ -80,11 +80,14 @@ export function useControlSessions({
   }, [sessions, deepLinkTarget, selectSession]);
 
   const createSession = useCallback(
-    async (title: string) => {
+    async (title: string, project?: string) => {
       const res = await fetch("/api/control/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: title.slice(0, 80) || "New session" }),
+        body: JSON.stringify({
+          title: title.slice(0, 80) || "New session",
+          project: project?.trim() || null,
+        }),
       });
       if (!res.ok) return null;
       const record = (await res.json()) as SessionRecord;
@@ -93,6 +96,7 @@ export function useControlSessions({
         {
           id: record.id,
           title: record.title,
+          project: record.project,
           pinned: record.pinned,
           updated_at: record.updated_at,
         },
