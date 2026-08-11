@@ -92,7 +92,7 @@ export function DotCheck() {
       <svg
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#fff"
+        stroke="var(--neutral-0)"
         strokeWidth="3.4"
         strokeLinecap="round"
         strokeLinejoin="round"

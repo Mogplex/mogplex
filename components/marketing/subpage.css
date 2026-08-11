@@ -38,7 +38,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  color: #8a8578;
+  color: var(--neutral-5);
   font-size: 9px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -212,12 +212,12 @@
   border-radius: 6px;
   margin-top: 22px;
   background: var(--dark);
-  color: #e9e7e1;
+  color: var(--neutral-2);
   font-size: 12.5px;
 }
 
 .mpx-sub .t-dim {
-  color: #77736a;
+  color: var(--neutral-5);
 }
 
 /* ---------- /how-it-works — run ledger ---------- */

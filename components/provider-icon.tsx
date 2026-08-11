@@ -18,7 +18,7 @@ function ProviderInitial({ provider }: { provider: string }) {
   return (
     <span
       aria-hidden="true"
-      className="text-[10px] font-semibold text-neutral-200"
+      className="text-[10px] font-semibold text-foreground"
     >
       {getProviderInitial(provider)}
     </span>
@@ -57,7 +57,7 @@ export function ProviderIcon({
     <span
       data-testid={testId}
       className={cn(
-        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/70 bg-neutral-950",
+        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/70 bg-background",
         className
       )}
     >

@@ -100,7 +100,7 @@ function ProjectGroupSection({
         )}
         <span
           aria-hidden="true"
-          className={`grid size-4 shrink-0 place-items-center rounded text-[9px] font-bold text-white ${projectColorClass(group.name)}`}
+          className={`grid size-4 shrink-0 place-items-center rounded text-[9px] font-bold text-primary-foreground ${projectColorClass(group.name)}`}
         >
           {group.name.charAt(0).toUpperCase()}
         </span>

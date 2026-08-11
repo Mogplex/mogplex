@@ -438,7 +438,7 @@ export function Composer({
             <button
               aria-label="Stop"
               onClick={onStop}
-              className="bg-accent-red hover:bg-accent-red/90 flex size-8 items-center justify-center rounded-md text-white"
+              className="bg-accent-red hover:bg-accent-red/90 flex size-8 items-center justify-center rounded-md text-primary-foreground"
             >
               <PauseSolid className="size-4" />
             </button>

@@ -186,7 +186,7 @@ export function CliApiKeysSection() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay">
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl">
             {newToken ? (
               <>

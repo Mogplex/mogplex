@@ -119,7 +119,7 @@ export function EditorToolbarHeader({
               type="button"
               onClick={onPersist}
               title={`Save (${primaryModifierLabel}S)`}
-              className="rounded-full border border-current/15 px-2 py-0.5 text-[10px] text-inherit hover:bg-black/10 dark:hover:bg-white/10"
+              className="rounded-full border border-current/15 px-2 py-0.5 text-[10px] text-inherit hover:bg-foreground/10"
             >
               Save
             </button>
