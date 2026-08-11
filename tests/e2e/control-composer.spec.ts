@@ -36,6 +36,32 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
+  // One connected repo: the composer must default the session's project to it.
+  await page.route("**/api/repos", (route) =>
+    fulfillJson(route, [
+      { id: "repo-1", full_name: "acme/widgets", name: "widgets" },
+    ])
+  );
+  const sessionCreates: Array<{ title?: string; project?: string | null }> = [];
+  await page.route("**/api/control/sessions", (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    const body = request.postDataJSON() as {
+      title?: string;
+      project?: string | null;
+    };
+    sessionCreates.push(body);
+    return fulfillJson(route, {
+      id: "sess-e2e-1",
+      title: body.title ?? "Session",
+      project: body.project ?? null,
+      pinned: false,
+      archived: false,
+      created_at: "2026-08-11T00:00:00.000Z",
+      updated_at: "2026-08-11T00:00:00.000Z",
+      messages: [],
+    });
+  });
   const chatRequests: Array<{
     messages?: Array<{
       role?: string;
@@ -92,6 +118,10 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // warning), cycles to Approve Edits (blue), and no dollar spend-cap chip
   // exists anywhere.
   await expect(page.getByText("Describe the outcome")).toBeVisible();
+  // The session's project defaults to the connected repo.
+  const projectPicker = page.getByLabel("Project", { exact: true });
+  await expect(projectPicker).toBeVisible();
+  await expect(projectPicker).toHaveValue("repo-1");
   const permissionsChip = page.getByRole("button", {
     name: "Skip Permissions",
   });
@@ -140,6 +170,9 @@ test("control composers expose permissions, model, and MCP controls without a sp
     scope: "IMPLEMENT",
     target: "mission",
   });
+  // The new session is tied to the repo's project.
+  expect(sessionCreates).toHaveLength(1);
+  expect(sessionCreates[0]?.project).toBe("widgets");
   expect(chatRequests[0]?.messages?.at(-1)?.parts).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -216,6 +249,75 @@ test("control composers expose permissions, model, and MCP controls without a sp
       mediaType: "text/markdown",
     }),
   ]);
+});
+
+test("control composer creates a new project when no repos are connected", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos", (route) => fulfillJson(route, []));
+  const sessionCreates: Array<{ title?: string; project?: string | null }> = [];
+  await page.route("**/api/control/sessions", (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    const body = request.postDataJSON() as {
+      title?: string;
+      project?: string | null;
+    };
+    sessionCreates.push(body);
+    return fulfillJson(route, {
+      id: "sess-e2e-new",
+      title: body.title ?? "Session",
+      project: body.project ?? null,
+      pinned: false,
+      archived: false,
+      created_at: "2026-08-11T00:00:00.000Z",
+      updated_at: "2026-08-11T00:00:00.000Z",
+      messages: [],
+    });
+  });
+  await page.route("**/api/control/chat", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: 'data: {"type":"start"}\n\ndata: [DONE]\n\n',
+    })
+  );
+
+  await page.goto(scopedPath("control"));
+  await page.waitForLoadState("networkidle");
+
+  // With no repos the composer must be creating a new project, not leaving
+  // the session unfiled.
+  const projectPicker = page.getByLabel("Project", { exact: true });
+  await expect(projectPicker).toHaveValue("new");
+  const nameInput = page.getByLabel("New project name");
+  await expect(nameInput).toBeVisible();
+
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Rebuild the analytics dashboard");
+  // Untouched, the new project would take a slug derived from the mission.
+  await expect(nameInput).toHaveAttribute(
+    "placeholder",
+    "rebuild-the-analytics-dashboard"
+  );
+  await nameInput.fill("analytics-redesign");
+  await page.getByRole("button", { name: "Start mission" }).click();
+
+  await expect.poll(() => sessionCreates.length, { timeout: 10_000 }).toBe(1);
+  expect(sessionCreates[0]?.project).toBe("analytics-redesign");
+  // The sidebar files the session under the new project group.
+  await expect(
+    page.getByRole("button", { name: /analytics-redesign/ })
+  ).toBeVisible();
 });
 
 test("control chat surfaces request failures instead of swallowing them", async ({

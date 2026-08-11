@@ -3,37 +3,43 @@
 import { useState, useCallback, useRef } from "react";
 import {
   Attachment,
-  Plus,
   SendDiagonal,
   ShieldCheck,
   ShieldXmark,
-  Xmark,
 } from "iconoir-react";
 import { MogplexFace } from "@/components/brand/mogplex-face";
 import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
-import type { Workspace } from "@/lib/control/types";
+import type { Repo } from "@/lib/types";
+import {
+  defaultProjectChoice,
+  deriveProjectName,
+  repoProjectName,
+} from "@/lib/control/session-project";
 import { ModelChip, type ComposerSendOptions } from "./composer";
 import {
   readControlComposerFiles,
   type ControlComposerFile,
 } from "./control-attachments";
 
+const NEW_PROJECT = "new";
+
 type Props = {
-  workspaces: Workspace[];
+  repos: Repo[];
   onCancel?: () => void;
   onCreate: (
     text: string,
-    targets: string[],
+    project: string,
     options: ComposerSendOptions
   ) => void;
 };
 
-export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
+export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
   const [text, setText] = useState("");
-  const [targets, setTargets] = useState<string[]>(
-    workspaces[0]?.id ? [workspaces[0].id] : []
-  );
+  // null = untouched: follow the default (favorite/first repo, or "new" when
+  // no repos are connected). Repos load async, so the default resolves late.
+  const [choice, setChoice] = useState<string | null>(null);
+  const [newProjectName, setNewProjectName] = useState("");
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -44,37 +50,38 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
   // the conversation composer.
   const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
 
-  const activeWorkspaces = workspaces.filter((w) => w.status === "active");
-  const availableToAdd = activeWorkspaces.filter(
-    (w) => !targets.includes(w.id)
-  );
+  const selectedRepoId = choice ?? defaultProjectChoice(repos);
 
   const cyclePermissions = useCallback(() => {
     setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length);
   }, []);
 
-  const addTarget = useCallback(() => {
-    if (availableToAdd.length > 0) {
-      setTargets((prev) => [...prev, availableToAdd[0].id]);
-    }
-  }, [availableToAdd]);
-
-  const removeTarget = useCallback((id: string) => {
-    setTargets((prev) => prev.filter((t) => t !== id));
-  }, []);
-
   const handleSubmit = useCallback(() => {
-    if (text.trim() || files.length > 0) {
-      onCreate(text.trim(), targets, {
-        model: modelId,
-        permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
-        mode: "run",
-        files,
-      });
-      setText("");
-      setFiles([]);
-    }
-  }, [text, targets, files, modelId, permissionsIdx, onCreate]);
+    if (!text.trim() && files.length === 0) return;
+    // Every session is tied to a project: the selected repo, or a new project
+    // named explicitly (falling back to a slug derived from the mission).
+    const repo = repos.find((r) => r.id === selectedRepoId);
+    const project = repo
+      ? repoProjectName(repo)
+      : newProjectName.trim() || deriveProjectName(text);
+    onCreate(text.trim(), project, {
+      model: modelId,
+      permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
+      mode: "run",
+      files,
+    });
+    setText("");
+    setFiles([]);
+  }, [
+    text,
+    files,
+    repos,
+    selectedRepoId,
+    newProjectName,
+    modelId,
+    permissionsIdx,
+    onCreate,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -108,46 +115,36 @@ export function NewMissionComposer({ workspaces, onCancel, onCreate }: Props) {
           </p>
         </div>
 
-        {activeWorkspaces.length > 0 || targets.length > 0 ? (
-          <div className="mb-4 space-y-2">
-            <div className="text-muted-foreground flex items-center gap-2 text-xs">
-              <span>
-                {targets.length} workspace{targets.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {targets.map((t) => {
-                const ws = workspaces.find((w) => w.id === t);
-                return (
-                  <div
-                    key={t}
-                    className="border-border bg-secondary flex items-center gap-1.5 rounded-md border px-3 py-1.5"
-                  >
-                    <span className="bg-primary size-1.5 rounded-full" />
-                    <span className="text-xs font-medium">{ws?.name || t}</span>
-                    {targets.length > 1 && (
-                      <button
-                        onClick={() => removeTarget(t)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <Xmark className="size-3" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-              {availableToAdd.length > 0 && (
-                <button
-                  onClick={addTarget}
-                  className="border-border text-muted-foreground hover:border-primary hover:text-foreground flex items-center gap-1 rounded-md border border-dashed px-3 py-1.5 text-xs"
-                >
-                  <Plus className="size-3" />
-                  Add workspace
-                </button>
-              )}
-            </div>
-          </div>
-        ) : null}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label
+            htmlFor="control-project"
+            className="text-muted-foreground text-xs"
+          >
+            Project
+          </label>
+          <select
+            id="control-project"
+            value={selectedRepoId}
+            onChange={(event) => setChoice(event.target.value)}
+            className="border-border bg-secondary text-secondary-foreground h-8 max-w-64 rounded-md border px-2 text-xs font-medium outline-none"
+          >
+            {repos.map((repo) => (
+              <option key={repo.id} value={repo.id}>
+                {repo.full_name}
+              </option>
+            ))}
+            <option value={NEW_PROJECT}>New project…</option>
+          </select>
+          {selectedRepoId === NEW_PROJECT ? (
+            <input
+              value={newProjectName}
+              onChange={(event) => setNewProjectName(event.target.value)}
+              placeholder={deriveProjectName(text)}
+              aria-label="New project name"
+              className="border-border bg-secondary text-secondary-foreground placeholder:text-muted-foreground h-8 w-48 rounded-md border px-2 text-xs outline-none"
+            />
+          ) : null}
+        </div>
 
         {/* Input */}
         <div className="border-border-dim bg-card rounded-xl border p-3">
