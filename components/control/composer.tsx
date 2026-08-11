@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowUp,
@@ -14,11 +14,7 @@ import { McpStatusButton } from "@/components/chat/mcp-status-button";
 import { ProviderIcon } from "@/components/provider-icon";
 import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
-import type {
-  Mission,
-  MissionPermissions,
-  Worktree,
-} from "@/lib/control/types";
+import type { Mission, MissionPermissions } from "@/lib/control/types";
 import {
   readControlComposerFiles,
   type ControlComposerFile,
@@ -42,22 +38,10 @@ type Props = {
   ) => void;
   pending: boolean;
   mission: Mission | undefined;
-  worktrees: Worktree[];
   onStop: () => void;
   /** Total tokens consumed by the active session (drives the context ring). */
   usageTokens?: number;
 };
-
-type Scope = "plan" | "implement" | "test" | "pipeline";
-
-const SCOPE_LABELS: Record<Scope, string> = {
-  plan: "PLAN ONLY",
-  implement: "IMPLEMENT",
-  test: "IMPLEMENT + TEST",
-  pipeline: "FULL PIPELINE",
-};
-
-const SCOPES: Scope[] = ["plan", "implement", "test", "pipeline"];
 
 const CHIP_CLASS =
   "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] text-ink-300 transition-colors hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50";
@@ -242,12 +226,9 @@ export function Composer({
   onSend,
   pending,
   mission: _mission,
-  worktrees,
   onStop,
   usageTokens = 0,
 }: Props) {
-  const [target, setTarget] = useState("mission");
-  const [scope, setScope] = useState<Scope>("implement");
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -259,31 +240,13 @@ export function Composer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const targets = useMemo(
-    () => [
-      "mission",
-      ...worktrees.filter((w) => w.state !== "archived").map((w) => w.id),
-    ],
-    [worktrees]
-  );
-
-  const cycleTarget = useCallback(() => {
-    const idx = targets.indexOf(target);
-    setTarget(targets[(idx + 1) % targets.length]);
-  }, [targets, target]);
-
-  const cycleScope = useCallback(() => {
-    const idx = SCOPES.indexOf(scope);
-    setScope(SCOPES[(idx + 1) % SCOPES.length]);
-  }, [scope]);
-
   const cyclePermissions = useCallback(() => {
     setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length);
   }, []);
 
   const handleSend = useCallback(() => {
     if ((value.trim() || files.length > 0) && !pending) {
-      onSend(value.trim(), target, SCOPE_LABELS[scope], {
+      onSend(value.trim(), "mission", "IMPLEMENT", {
         model: modelId,
         permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
         mode: "run",
@@ -293,17 +256,7 @@ export function Composer({
       setFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [
-    value,
-    files,
-    pending,
-    target,
-    scope,
-    modelId,
-    permissionsIdx,
-    onSend,
-    onChange,
-  ]);
+  }, [value, files, pending, modelId, permissionsIdx, onSend, onChange]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -402,29 +355,6 @@ export function Composer({
             onSelect={setSelectedModel}
             disabled={pending}
           />
-          <div className="mx-1 hidden h-5 w-px bg-ink-700 sm:block" />
-          <button
-            type="button"
-            onClick={cycleTarget}
-            title="Send target"
-            className={CHIP_CLASS}
-          >
-            <span
-              className={`size-1.5 rounded-full ${
-                target === "mission" ? "bg-primary" : "bg-sky-400"
-              }`}
-            />
-            {target === "mission" ? "MISSION" : target.toUpperCase()}
-          </button>
-          <button
-            type="button"
-            onClick={cycleScope}
-            disabled={pending}
-            title="Run scope"
-            className={CHIP_CLASS}
-          >
-            {SCOPE_LABELS[scope]}
-          </button>
           <button
             type="button"
             onClick={cyclePermissions}

@@ -92,11 +92,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     [worktrees]
   );
 
-  const missionWorktrees = useMemo(
-    () => worktrees.filter((w) => w.mission === mission?.id),
-    [worktrees, mission?.id]
-  );
-
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -470,7 +465,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                   onSend={handleSend}
                   pending={chatPending}
                   mission={mission}
-                  worktrees={missionWorktrees}
                   onStop={stop}
                   usageTokens={usageTokens}
                 />
