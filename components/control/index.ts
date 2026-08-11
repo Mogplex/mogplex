@@ -1,5 +1,4 @@
 export { ControlShell } from "./control-shell";
-export { MissionSidebar } from "./mission-sidebar";
 export { MissionHeader } from "./mission-header";
 export { Timeline } from "./timeline";
 export { TimelineCard } from "./timeline-card";

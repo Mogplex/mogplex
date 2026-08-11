@@ -5,9 +5,13 @@ import {
   NavArrowDown,
   NavArrowRight,
   Plus,
+  Search,
   SidebarCollapse,
   SidebarExpand,
+  SortDown,
+  SortUp,
 } from "iconoir-react";
+import { useCommandPalette } from "@/components/command-palette-provider";
 import {
   groupSessionsByProject,
   projectColorClass,
@@ -24,10 +28,13 @@ export type ControlSessionSummary = {
   updated_at: string;
 };
 
+type SortMode = "recent" | "alpha";
+
 const COLLAPSED_KEY = "mogplex.sessionList.collapsed";
 const WIDTH_KEY = "mogplex.sessionList.width";
-const DEFAULT_WIDTH = 224;
-const MIN_WIDTH = 176;
+const SORT_KEY = "mogplex.sessionList.sort";
+const DEFAULT_WIDTH = 288;
+const MIN_WIDTH = 220;
 const MAX_WIDTH = 320;
 const MAX_VISIBLE_SESSIONS = 5;
 
@@ -39,13 +46,36 @@ function formatAge(iso: string): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
+function sortGroups(
+  groups: SessionGroup<ControlSessionSummary>[],
+  mode: SortMode
+): SessionGroup<ControlSessionSummary>[] {
+  if (mode === "recent") return groups;
+  return groups
+    .map((group) => ({
+      ...group,
+      sessions: [...group.sessions].sort((a, b) =>
+        a.title.localeCompare(b.title)
+      ),
+    }))
+    .sort((a, b) => {
+      // General always trails named projects, matching the recent ordering.
+      if (a.project === null) return 1;
+      if (b.project === null) return -1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
 function SessionRow({
   session,
   selected,
+  working,
   onSelect,
 }: {
   session: ControlSessionSummary;
   selected: boolean;
+  /** The selected session's chat is streaming a reply right now. */
+  working: boolean;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -53,16 +83,20 @@ function SessionRow({
       type="button"
       aria-current={selected ? "true" : undefined}
       onClick={() => onSelect(session.id)}
-      className={`w-full rounded-md px-2.5 py-1.5 text-left transition-colors ${
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
         selected
-          ? "bg-accent text-foreground"
-          : "text-secondary-foreground hover:bg-secondary hover:text-foreground"
+          ? "bg-ink-750 font-medium text-ink-100"
+          : "text-ink-400 hover:bg-ink-800"
       }`}
     >
-      <span className="block truncate text-xs font-medium">
-        {session.title}
-      </span>
-      <span className="text-muted-foreground block text-[10px]">
+      {working ? (
+        <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-sky-400" />
+      ) : null}
+      {working ? (
+        <span className="shrink-0 text-sky-400">Working</span>
+      ) : null}
+      <span className="min-w-0 truncate">{session.title}</span>
+      <span className="ml-auto shrink-0 text-xs text-ink-400">
         {formatAge(session.updated_at)}
       </span>
     </button>
@@ -72,10 +106,12 @@ function SessionRow({
 function ProjectGroupSection({
   group,
   selectedId,
+  workingId,
   onSelect,
 }: {
   group: SessionGroup<ControlSessionSummary>;
   selectedId: string | null;
+  workingId: string | null;
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -86,36 +122,35 @@ function ProjectGroupSection({
     : group.sessions.slice(0, MAX_VISIBLE_SESSIONS);
 
   return (
-    <div>
+    <div className="mt-1">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="hover:bg-secondary flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5"
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-ink-200 transition-colors hover:bg-ink-800"
       >
         {open ? (
-          <NavArrowDown className="text-muted-foreground size-3 shrink-0" />
+          <NavArrowDown className="size-3 shrink-0 text-ink-400" />
         ) : (
-          <NavArrowRight className="text-muted-foreground size-3 shrink-0" />
+          <NavArrowRight className="size-3 shrink-0 text-ink-400" />
         )}
         <span
           aria-hidden="true"
-          className={`grid size-4 shrink-0 place-items-center rounded text-[9px] font-bold text-primary-foreground ${projectColorClass(group.name)}`}
-        >
-          {group.name.charAt(0).toUpperCase()}
-        </span>
-        <span className="truncate text-xs font-semibold">{group.name}</span>
-        <span className="text-muted-foreground ml-auto font-mono text-[9px]">
+          className={`size-3.5 shrink-0 rounded-full ${projectColorClass(group.name)}`}
+        />
+        <span className="min-w-0 truncate font-medium">{group.name}</span>
+        <span className="ml-auto shrink-0 text-xs text-ink-400">
           {group.sessions.length}
         </span>
       </button>
       {open ? (
-        <div className="border-border mb-1 ml-[13px] space-y-0.5 border-l pl-1">
+        <div className="ml-6 space-y-px">
           {visible.map((session) => (
             <SessionRow
               key={session.id}
               session={session}
               selected={session.id === selectedId}
+              working={session.id === workingId}
               onSelect={onSelect}
             />
           ))}
@@ -123,9 +158,9 @@ function ProjectGroupSection({
             <button
               type="button"
               onClick={() => setShowAll((current) => !current)}
-              className="text-muted-foreground hover:text-foreground w-full px-2.5 py-1 text-left text-[10px]"
+              className="w-full rounded-md px-2 py-1.5 text-left text-[13px] text-ink-400 transition-colors hover:bg-ink-800 hover:text-ink-200"
             >
-              {showAll ? "Show less" : `Show ${hiddenCount} more`}
+              {showAll ? "Show less" : "Show more"}
             </button>
           ) : null}
         </div>
@@ -135,23 +170,27 @@ function ProjectGroupSection({
 }
 
 /**
- * Left session rail, Conductor-style: sessions grouped under collapsible
- * project sections. Collapsed by default: the conversation column shares a
- * row with the artifacts panel and the live rail, so the list only takes
- * horizontal space when the user expands it.
+ * Secondary sidebar: sessions grouped under collapsible project sections,
+ * with palette search, sort toggle, drag resize, and double-click collapse
+ * to an icon rail. Width and collapse persist to localStorage.
  */
 export function SessionList({
   sessions,
   selectedId,
+  workingId = null,
   onSelect,
   onNew,
 }: {
   sessions: ControlSessionSummary[];
   selectedId: string | null;
+  /** Session whose chat is currently streaming (shows a Working row badge). */
+  workingId?: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
 }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const { open: openCommandPalette } = useCommandPalette();
+  const [collapsed, setCollapsed] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("recent");
   const { width, resizing, panelRef, resizerProps } = usePanelWidth({
     storageKey: WIDTH_KEY,
     defaultWidth: DEFAULT_WIDTH,
@@ -162,17 +201,32 @@ export function SessionList({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) !== "false");
+      setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "true");
+      const storedSort = window.localStorage.getItem(SORT_KEY);
+      if (storedSort === "recent" || storedSort === "alpha") {
+        setSortMode(storedSort);
+      }
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const groups = useMemo(() => groupSessionsByProject(sessions), [sessions]);
+  const groups = useMemo(
+    () => sortGroups(groupSessionsByProject(sessions), sortMode),
+    [sessions, sortMode]
+  );
 
-  const toggle = () => {
+  const toggleCollapsed = () => {
     setCollapsed((current) => {
       const next = !current;
       window.localStorage.setItem(COLLAPSED_KEY, String(next));
+      return next;
+    });
+  };
+
+  const toggleSort = () => {
+    setSortMode((current) => {
+      const next = current === "recent" ? "alpha" : "recent";
+      window.localStorage.setItem(SORT_KEY, next);
       return next;
     });
   };
@@ -181,14 +235,14 @@ export function SessionList({
     return (
       <aside
         aria-label="Sessions"
-        className="border-border hidden w-10 shrink-0 flex-col border-r md:flex"
+        className="hidden w-10 shrink-0 flex-col border-r border-ink-800 bg-ink-900 md:flex"
       >
         <button
           type="button"
           aria-label="Expand sessions"
           title="Expand sessions"
-          onClick={toggle}
-          className="text-muted-foreground hover:bg-muted hover:text-foreground grid size-10 place-items-center"
+          onClick={toggleCollapsed}
+          className="grid size-10 place-items-center text-ink-400 hover:bg-ink-800 hover:text-ink-100"
         >
           <SidebarExpand className="size-4" />
         </button>
@@ -197,11 +251,11 @@ export function SessionList({
           aria-label="New session"
           title="New session"
           onClick={onNew}
-          className="text-muted-foreground hover:bg-muted hover:text-foreground grid size-10 place-items-center"
+          className="grid size-10 place-items-center text-ink-400 hover:bg-ink-800 hover:text-ink-100"
         >
           <Plus className="size-4" strokeWidth={2} />
         </button>
-        <div className="text-muted-foreground mt-2 flex flex-1 justify-center">
+        <div className="mt-2 flex flex-1 justify-center text-ink-400">
           <span className="text-[10px] font-semibold tracking-wide uppercase [writing-mode:vertical-rl]">
             Sessions · {sessions.length}
           </span>
@@ -216,25 +270,58 @@ export function SessionList({
       aria-label="Sessions"
       data-resizing={resizing ? "true" : "false"}
       style={{ width }}
-      className="border-border relative hidden shrink-0 flex-col border-r md:flex"
+      className="relative hidden shrink-0 flex-col border-r border-ink-800 bg-ink-900 md:flex"
     >
       <div
         {...resizerProps}
+        onDoubleClick={toggleCollapsed}
         aria-label="Resize sessions panel"
+        title="Drag to resize · double-click to collapse"
         className="app-panel-resizer absolute inset-y-0 -right-1 z-30 w-2 cursor-col-resize touch-none outline-none"
       />
-      {/* h-14 matches the mission header so both top dividers align */}
-      <div className="border-border flex h-14 items-center justify-between border-b px-3">
-        <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+      <div className="px-3 pt-3 pb-3">
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          className="flex w-full items-center gap-2 rounded-lg border border-ink-700/60 bg-ink-800 px-3 py-2 text-sm text-ink-400 transition-colors hover:border-ink-600"
+        >
+          <Search className="size-4 shrink-0" strokeWidth={2} />
+          <span className="min-w-0 flex-1 text-left">Search</span>
+          <kbd className="font-sans text-xs text-ink-400">⌘K</kbd>
+        </button>
+      </div>
+      <div className="flex items-center justify-between px-4 pb-1.5">
+        <span className="text-[11px] font-semibold tracking-widest text-ink-400 uppercase">
           Projects
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 text-ink-400">
+          <button
+            type="button"
+            aria-label={
+              sortMode === "recent"
+                ? "Sort projects alphabetically"
+                : "Sort projects by recent activity"
+            }
+            title={
+              sortMode === "recent"
+                ? "Sort alphabetically"
+                : "Sort by recent activity"
+            }
+            onClick={toggleSort}
+            className="grid size-6 place-items-center rounded-md hover:bg-ink-800 hover:text-ink-200"
+          >
+            {sortMode === "recent" ? (
+              <SortDown className="size-3.5" strokeWidth={2} />
+            ) : (
+              <SortUp className="size-3.5" strokeWidth={2} />
+            )}
+          </button>
           <button
             type="button"
             aria-label="New session"
             title="New session"
             onClick={onNew}
-            className="text-muted-foreground hover:bg-secondary hover:text-foreground grid size-6 place-items-center rounded-md"
+            className="grid size-6 place-items-center rounded-md hover:bg-ink-800 hover:text-ink-200"
           >
             <Plus className="size-3.5" strokeWidth={2} />
           </button>
@@ -242,16 +329,16 @@ export function SessionList({
             type="button"
             aria-label="Collapse sessions"
             title="Collapse sessions"
-            onClick={toggle}
-            className="text-muted-foreground hover:bg-secondary hover:text-foreground grid size-6 place-items-center rounded-md"
+            onClick={toggleCollapsed}
+            className="grid size-6 place-items-center rounded-md hover:bg-ink-800 hover:text-ink-200"
           >
             <SidebarCollapse className="size-3.5" />
           </button>
         </div>
       </div>
-      <div className="flex-1 space-y-1 overflow-y-auto p-2">
+      <nav className="flex-1 overflow-y-auto px-2 pb-3 text-[13px]">
         {sessions.length === 0 ? (
-          <p className="text-muted-foreground px-2 py-6 text-center text-[11px]">
+          <p className="px-2 py-6 text-center text-[11px] text-ink-400">
             No sessions yet. Start one from the composer.
           </p>
         ) : (
@@ -260,11 +347,12 @@ export function SessionList({
               key={group.project ?? "__general__"}
               group={group}
               selectedId={selectedId}
+              workingId={workingId}
               onSelect={onSelect}
             />
           ))
         )}
-      </div>
+      </nav>
     </aside>
   );
 }
