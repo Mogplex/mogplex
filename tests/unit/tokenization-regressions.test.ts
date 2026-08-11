@@ -40,11 +40,11 @@ test("tokenized shadows preserve semantic shadow tokens", async () => {
 
   assert.match(
     globals,
-    /--app-shadow-card: 0 12px 30px oklch\(0% 0 0 \/ 12%\);/
+    /--app-shadow-card: 0 12px 30px oklch\(10\.88% 0\.006 132 \/ 12%\);/
   );
   assert.match(
     globals,
-    /--app-shadow-panel: 0 18px 50px oklch\(0% 0 0 \/ 14%\);/
+    /--app-shadow-panel: 0 18px 50px oklch\(10\.88% 0\.006 132 \/ 14%\);/
   );
   assert.match(
     globals,
@@ -90,7 +90,8 @@ test("application theme tokens carry the Mogplex paper and orange brand roles", 
   const globals = await readFile(globalsUrl, "utf8");
 
   assert.match(globals, /--brand-accent: oklch\(66\.57% 0\.225 36\.57\);/);
-  assert.match(globals, /--background: oklch\(95\.88% 0\.0086 84\.57\);/);
+  assert.match(globals, /--neutral-1: oklch\(96\.88% 0\.007 96\);/);
+  assert.match(globals, /--background: var\(--neutral-1\);/);
   assert.match(globals, /--primary: var\(--brand-accent\);/);
   assert.match(globals, /--ring: var\(--brand-accent\);/);
   assert.match(globals, /::selection \{\s*background: var\(--brand-accent\);/);
