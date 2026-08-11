@@ -403,7 +403,7 @@ export function FlowsPane() {
         </section>
         <FlowRunDetailsDialog open={Boolean(selectedRunId)} runDetail={selectedRunDetail} runSummary={selectedRunSummary} loading={selectedRunDetailLoading} error={selectedRunDetailError} activeRunActions={activeRunActions} reviewFindingIssueActionId={reviewFindingIssueActionId}
           onOpenChange={(o) => { if (!o) setSelectedRunId(null) }} onRunAction={(j, a) => { void runFlowJobAction(j, a) }} onCreateReviewFindingIssue={(f) => { void createReviewFindingIssue(f) }} />
-        {rightSheetOpen && <div className="flows-inspector-backdrop fixed inset-0 z-30 bg-black/40" onClick={() => { if (assistantPanelOpen) setAssistantPanelOpen(false); else clearCanvasSelection() }} />}
+        {rightSheetOpen && <div className="flows-inspector-backdrop fixed inset-0 z-30 bg-overlay" onClick={() => { if (assistantPanelOpen) setAssistantPanelOpen(false); else clearCanvasSelection() }} />}
         <aside data-testid="flows-right-sheet" data-state={rightSheetAnimateOpen ? "open" : "closed"} className={cn("flows-inspector min-h-0 flex-col overflow-hidden border-l border-border bg-background p-2", rightSheetOpen && "flows-inspector-open")}>
           {assistantPanelOpen && selectedFlow && draftGraph ? <FlowAssistantPanel key={selectedFlow.id} flowId={selectedFlow.id} graph={draftGraph} onApplyGraph={applyAssistantGraph} /> : !selectedFlow || !selectedNode ? (
             <div data-testid="flows-inspector-empty" className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card">

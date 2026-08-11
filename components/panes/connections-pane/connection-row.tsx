@@ -58,7 +58,7 @@ export function ConnectionRow({ conn, isExcluded, hasRepo, togglingId, deletingI
         }`}
       >
         <span
-          className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+          className={`absolute top-0.5 w-3 h-3 rounded-full bg-primary-foreground transition-transform ${
             conn.is_enabled ? "left-[18px]" : "left-0.5"
           }`}
         />

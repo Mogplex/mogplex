@@ -159,7 +159,7 @@ export function useFlowDerivedStatus(
       cn(
         "h-8 min-w-[92px] whitespace-nowrap rounded-md px-3 text-xs font-semibold shadow-lg sm:min-w-[96px]",
         publishSucceeded && !dirty
-          ? "bg-accent-green text-white shadow-accent-green/25 hover:bg-accent-green/90"
+          ? "bg-accent-green text-primary-foreground shadow-accent-green/25 hover:bg-accent-green/90"
           : "bg-primary text-primary-foreground shadow-primary/20 hover:bg-primary/90 hover:shadow-primary/30"
       ),
     [dirty, publishSucceeded]
