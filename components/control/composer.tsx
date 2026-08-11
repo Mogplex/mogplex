@@ -3,10 +3,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
+  ArrowUp,
   Attachment,
   NavArrowDown,
   PauseSolid,
-  SendDiagonal,
   ShieldCheck,
   ShieldXmark,
 } from "iconoir-react";
@@ -44,6 +44,8 @@ type Props = {
   mission: Mission | undefined;
   worktrees: Worktree[];
   onStop: () => void;
+  /** Total tokens consumed by the active session (drives the context ring). */
+  usageTokens?: number;
 };
 
 type Scope = "plan" | "implement" | "test" | "pipeline";
@@ -57,12 +59,68 @@ const SCOPE_LABELS: Record<Scope, string> = {
 
 const SCOPES: Scope[] = ["plan", "implement", "test", "pipeline"];
 
+const CHIP_CLASS =
+  "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] text-ink-300 transition-colors hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50";
+
 function shortModelName(modelId: string) {
   return modelId.split("/").pop() ?? modelId;
 }
 
 function modelProvider(modelId: string) {
   return modelId.split("/")[0] ?? modelId;
+}
+
+function compactTokens(tokens: number) {
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+  return String(tokens);
+}
+
+/** Circular context gauge: percent of the model's context window used. */
+function ContextRing({
+  usageTokens,
+  contextLimit,
+}: {
+  usageTokens: number;
+  contextLimit: number | undefined;
+}) {
+  const percent = contextLimit
+    ? Math.min(100, Math.round((usageTokens / contextLimit) * 100))
+    : null;
+  const circumference = 2 * Math.PI * 15.5;
+  const offset =
+    percent === null ? 0 : circumference * (1 - Math.max(percent, 2) / 100);
+  const title = contextLimit
+    ? `Context: ${percent}% used (${usageTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens)`
+    : `Tokens used this session: ${usageTokens.toLocaleString()} (context window unknown)`;
+
+  return (
+    <div className="relative size-9 shrink-0" title={title}>
+      <svg viewBox="0 0 36 36" className="size-9 -rotate-90">
+        <circle
+          cx="18"
+          cy="18"
+          r="15.5"
+          fill="none"
+          stroke="var(--ink-700)"
+          strokeWidth="3"
+        />
+        <circle
+          cx="18"
+          cy="18"
+          r="15.5"
+          fill="none"
+          stroke={percent !== null && percent >= 90 ? "var(--delr)" : "var(--ink-400)"}
+          strokeWidth="3"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-ink-300">
+        {percent !== null ? percent : compactTokens(usageTokens)}
+      </span>
+    </div>
+  );
 }
 
 export function ModelChip({
@@ -119,7 +177,7 @@ export function ModelChip({
           });
           setFilter("");
         }}
-        className="border-border bg-card text-accent-blue hover:bg-secondary flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+        className={`${CHIP_CLASS} font-medium text-ink-200`}
       >
         {modelId ? (
           <ProviderIcon
@@ -128,26 +186,26 @@ export function ModelChip({
           />
         ) : null}
         {modelId ? shortModelName(modelId) : "Model"}
-        <NavArrowDown className="size-3 opacity-70" strokeWidth={2} />
+        <NavArrowDown className="size-3 text-ink-400" strokeWidth={2} />
       </button>
       {open &&
         menuPos &&
         createPortal(
           <div
             ref={menuRef}
-            className="border-border bg-card fixed z-[9999] flex max-h-56 w-72 flex-col rounded-lg border shadow-lg"
+            className="fixed z-[9999] flex max-h-56 w-72 flex-col rounded-lg border border-ink-700 bg-ink-850 shadow-2xl shadow-black/50"
             style={{ left: menuPos.left, bottom: menuPos.bottom }}
           >
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Search models..."
-              className="border-border bg-input text-foreground border-b px-2 py-1.5 text-[11px] outline-none"
+              className="border-b border-ink-700 bg-ink-900 px-2 py-1.5 text-[11px] text-ink-100 outline-none"
               autoFocus
             />
             <div className="flex-1 overflow-auto">
               {filtered.length === 0 && (
-                <div className="text-muted-foreground px-2 py-1.5 text-[11px]">
+                <div className="px-2 py-1.5 text-[11px] text-ink-400">
                   No models
                 </div>
               )}
@@ -159,10 +217,8 @@ export function ModelChip({
                     setOpen(false);
                     setFilter("");
                   }}
-                  className={`hover:bg-secondary/50 flex w-full items-center gap-2 px-2 py-1.5 text-left text-[11px] ${
-                    m === modelId
-                      ? "bg-accent-blue/5 text-accent-blue"
-                      : "text-foreground"
+                  className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-[11px] hover:bg-ink-800 ${
+                    m === modelId ? "text-ink-100" : "text-ink-300"
                   }`}
                 >
                   <ProviderIcon
@@ -188,13 +244,14 @@ export function Composer({
   mission: _mission,
   worktrees,
   onStop,
+  usageTokens = 0,
 }: Props) {
   const [target, setTarget] = useState("mission");
   const [scope, setScope] = useState<Scope>("implement");
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const { modelIds, defaultModelId } = useModels();
+  const { modelIds, defaultModelId, contextLimits } = useModels();
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   // The user's pick wins; until then follow their account default so the chip
   // never shows a model the send path wouldn't actually use.
@@ -209,30 +266,6 @@ export function Composer({
     ],
     [worktrees]
   );
-
-  const quickPrompts = useMemo(() => {
-    const active = worktrees.filter((w) => w.state !== "archived");
-    const prompts = [
-      {
-        label: "Try another approach",
-        value: "Fork a new worktree and try a different approach.",
-      },
-    ];
-    if (active.length >= 2) {
-      prompts.unshift({
-        label: `Compare ${active[0].id} and ${active[1].id}`,
-        value: `Compare the implementations in ${active[0].id} and ${active[1].id}.`,
-      });
-    }
-    const blocked = worktrees.find((w) => w.state === "blocked");
-    if (blocked) {
-      prompts.push({
-        label: "Explain the conflict",
-        value: `Explain the ${blocked.id} conflict and how to resolve it.`,
-      });
-    }
-    return prompts;
-  }, [worktrees]);
 
   const cycleTarget = useCallback(() => {
     const idx = targets.indexOf(target);
@@ -282,180 +315,166 @@ export function Composer({
     [handleSend]
   );
 
-  return (
-    <div className="bg-transparent px-4 pb-5 sm:px-6">
-      <div className="border-border-dim bg-card mx-auto max-w-[760px] rounded-xl border p-3">
-        {/* Quick prompts row */}
-        <div className="border-border flex flex-wrap gap-1.5 border-b pb-2">
-          {quickPrompts.map((prompt) => (
-            <button
-              key={prompt.label}
-              onClick={() => {
-                onChange(prompt.value);
-                textareaRef.current?.focus();
-              }}
-              className="border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-2 py-1 text-[10px] font-medium"
-            >
-              {prompt.label}
-            </button>
-          ))}
-        </div>
+  const skipPermissions =
+    MISSION_PERMISSION_OPTIONS[permissionsIdx] === "Skip Permissions";
 
-        {/* Main input area */}
-        <div className="flex items-end gap-2 pt-3">
-          <div className="flex flex-1 flex-col gap-2">
-            {/* Chips row */}
-            <div className="flex flex-wrap items-center gap-2">
+  return (
+    <div className="mx-auto w-full max-w-5xl shrink-0 px-4 pb-5 sm:px-6">
+      <div className="overflow-hidden rounded-xl border border-ink-800 bg-ink-900">
+        <label htmlFor="control-composer" className="sr-only">
+          Ask for follow-up changes
+        </label>
+        <textarea
+          id="control-composer"
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask for follow-up changes or attach images"
+          rows={2}
+          className="max-h-60 w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[15px] text-ink-100 outline-none [field-sizing:content] placeholder:text-ink-400"
+          disabled={pending}
+        />
+
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-4 pb-2">
+            {files.map((file) => (
+              <span
+                key={file.id}
+                className="inline-flex max-w-48 items-center gap-1 rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[10px] text-ink-300"
+              >
+                <Attachment className="size-3 shrink-0" strokeWidth={1.6} />
+                <span className="truncate">
+                  {file.filename ?? file.mediaType}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${file.filename ?? "attachment"}`}
+                  className="text-ink-400 hover:text-ink-100"
+                  onClick={() =>
+                    setFiles((current) =>
+                      current.filter((item) => item !== file)
+                    )
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {attachmentError ? (
+          <p className="px-4 pb-1 text-[11px] text-delr">{attachmentError}</p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-1 px-3 pb-3">
+          <button
+            type="button"
+            disabled={pending}
+            aria-label="Attach file"
+            title="Attach file"
+            onClick={() => fileInputRef.current?.click()}
+            className={CHIP_CLASS}
+          >
+            <Attachment className="size-4" strokeWidth={1.6} />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="sr-only"
+            multiple
+            onChange={async (event) => {
+              const selectedFiles = Array.from(event.currentTarget.files ?? []);
+              const result = await readControlComposerFiles(
+                selectedFiles,
+                files.length
+              );
+              if (result.attachments.length > 0) {
+                setFiles((current) => [...current, ...result.attachments]);
+              }
+              setAttachmentError(result.error);
+              event.currentTarget.value = "";
+            }}
+          />
+          <ModelChip
+            modelId={modelId}
+            modelIds={modelIds}
+            onSelect={setSelectedModel}
+            disabled={pending}
+          />
+          <div className="mx-1 hidden h-5 w-px bg-ink-700 sm:block" />
+          <button
+            type="button"
+            onClick={cycleTarget}
+            title="Send target"
+            className={CHIP_CLASS}
+          >
+            <span
+              className={`size-1.5 rounded-full ${
+                target === "mission" ? "bg-primary" : "bg-sky-400"
+              }`}
+            />
+            {target === "mission" ? "MISSION" : target.toUpperCase()}
+          </button>
+          <button
+            type="button"
+            onClick={cycleScope}
+            disabled={pending}
+            title="Run scope"
+            className={CHIP_CLASS}
+          >
+            {SCOPE_LABELS[scope]}
+          </button>
+          <button
+            type="button"
+            onClick={cyclePermissions}
+            title="Tool permissions"
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${
+              skipPermissions
+                ? "bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/20"
+                : "bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
+            }`}
+          >
+            {skipPermissions ? (
+              <ShieldXmark className="size-3.5" strokeWidth={1.6} />
+            ) : (
+              <ShieldCheck className="size-3.5" strokeWidth={1.6} />
+            )}
+            {MISSION_PERMISSION_OPTIONS[permissionsIdx]}
+          </button>
+          <span className="text-[12px] text-ink-400">
+            <McpStatusButton />
+          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <ContextRing
+              usageTokens={usageTokens}
+              contextLimit={modelId ? contextLimits[modelId] : undefined}
+            />
+            {pending ? (
               <button
                 type="button"
-                disabled={pending}
-                aria-label="Attach file"
-                title="Attach file"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-muted-foreground hover:bg-secondary hover:text-foreground grid size-8 place-items-center rounded-md disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Stop"
+                onClick={onStop}
+                className="flex size-9 items-center justify-center rounded-full bg-accent-red text-primary-foreground transition-colors hover:bg-accent-red/90"
               >
-                <Attachment className="size-4" strokeWidth={1.6} />
+                <PauseSolid className="size-4" />
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="sr-only"
-                multiple
-                onChange={async (event) => {
-                  const selectedFiles = Array.from(
-                    event.currentTarget.files ?? []
-                  );
-                  const result = await readControlComposerFiles(
-                    selectedFiles,
-                    files.length
-                  );
-                  if (result.attachments.length > 0) {
-                    setFiles((current) => [...current, ...result.attachments]);
-                  }
-                  setAttachmentError(result.error);
-                  event.currentTarget.value = "";
-                }}
-              />
+            ) : (
               <button
-                onClick={cycleTarget}
-                className="border-border bg-card hover:bg-secondary flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium"
-              >
-                <span
-                  className={`size-1.5 rounded-full ${target === "mission" ? "bg-primary" : "bg-accent-blue"}`}
-                />
-                {target === "mission" ? "MISSION" : target.toUpperCase()}
-              </button>
-              <button
-                onClick={cycleScope}
-                disabled={pending}
-                className="border-border bg-card hover:bg-secondary h-8 rounded-md border px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {SCOPE_LABELS[scope]}
-              </button>
-              <button
-                onClick={cyclePermissions}
-                className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium ${
-                  MISSION_PERMISSION_OPTIONS[permissionsIdx] ===
-                  "Skip Permissions"
-                    ? "border-accent-amber/30 bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/20"
-                    : "border-accent-blue/30 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
+                type="button"
+                aria-label="Send"
+                onClick={handleSend}
+                disabled={!value.trim() && files.length === 0}
+                className={`flex size-9 items-center justify-center rounded-full transition-colors ${
+                  value.trim() || files.length > 0
+                    ? "bg-primary text-primary-foreground hover:bg-brand-accent-hover"
+                    : "cursor-not-allowed bg-ink-800 text-ink-600"
                 }`}
               >
-                {MISSION_PERMISSION_OPTIONS[permissionsIdx] ===
-                "Skip Permissions" ? (
-                  <ShieldXmark className="size-3.5" strokeWidth={1.6} />
-                ) : (
-                  <ShieldCheck className="size-3.5" strokeWidth={1.6} />
-                )}
-                {MISSION_PERMISSION_OPTIONS[permissionsIdx]}
+                <ArrowUp className="size-4" strokeWidth={2.4} />
               </button>
-              <ModelChip
-                modelId={modelId}
-                modelIds={modelIds}
-                onSelect={setSelectedModel}
-                disabled={pending}
-              />
-              <span className="text-muted-foreground ml-auto text-[12px]">
-                <McpStatusButton />
-              </span>
-            </div>
-
-            {/* Textarea */}
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                target === "mission"
-                  ? "Direct Mogplex - it will delegate to agents"
-                  : `Steer ${target} directly`
-              }
-              rows={1}
-              className="placeholder:text-muted-foreground [field-sizing:content] max-h-60 min-h-12 flex-1 resize-y bg-transparent text-sm leading-6 outline-none"
-              disabled={pending}
-            />
-
-            {files.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {files.map((file) => (
-                  <span
-                    key={file.id}
-                    className="border-border bg-secondary text-secondary-foreground inline-flex max-w-48 items-center gap-1 rounded border px-2 py-1 text-[10px]"
-                  >
-                    <Attachment className="size-3 shrink-0" strokeWidth={1.6} />
-                    <span className="truncate">
-                      {file.filename ?? file.mediaType}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${file.filename ?? "attachment"}`}
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() =>
-                        setFiles((current) =>
-                          current.filter((item) => item !== file)
-                        )
-                      }
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
             )}
-            {attachmentError ? (
-              <p className="text-accent-red text-[11px]">{attachmentError}</p>
-            ) : null}
-
-            {/* Hint */}
-            <span className="text-muted-foreground text-[10px]">
-              Enter to send · Shift+Enter for a new line
-            </span>
           </div>
-
-          {/* Send/Stop button */}
-          {pending ? (
-            <button
-              aria-label="Stop"
-              onClick={onStop}
-              className="bg-accent-red hover:bg-accent-red/90 flex size-8 items-center justify-center rounded-md text-primary-foreground"
-            >
-              <PauseSolid className="size-4" />
-            </button>
-          ) : (
-            <button
-              aria-label="Send"
-              onClick={handleSend}
-              disabled={!value.trim() && files.length === 0}
-              className={`flex size-8 items-center justify-center rounded-md transition-colors ${
-                value.trim() || files.length > 0
-                  ? "bg-primary text-primary-foreground hover:bg-brand-accent-hover"
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              }`}
-            >
-              <SendDiagonal className="size-4" strokeWidth={1.8} />
-            </button>
-          )}
         </div>
       </div>
     </div>

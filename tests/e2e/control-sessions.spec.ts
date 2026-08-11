@@ -116,10 +116,8 @@ test("control sessions: history list, restore, persist, and new session", async 
   await page.goto(scopedPath("control"));
   await page.waitForLoadState("networkidle");
 
-  // History: the sidebar lists the stored session (expand it from its
-  // default-collapsed strip first).
+  // History: the sidebar lists the stored session.
   const sidebar = page.getByRole("complementary", { name: "Sessions" });
-  await sidebar.getByRole("button", { name: "Expand sessions" }).click();
   await expect(
     sidebar.getByRole("button", { name: /Earlier investigation/ })
   ).toBeVisible();
@@ -134,7 +132,7 @@ test("control sessions: history list, restore, persist, and new session", async 
 
   // Continue the restored session: the completed turn persists via PUT.
   await page
-    .getByPlaceholder("Direct Mogplex - it will delegate to agents")
+    .getByPlaceholder("Ask for follow-up changes or attach images")
     .fill("Thanks, ship it");
   await page.keyboard.press("Enter");
   await expect(conversation.getByText("Glad to help.")).toBeVisible();

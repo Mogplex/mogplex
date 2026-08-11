@@ -2,12 +2,14 @@
 import { useState, useEffect } from "react"
 import { useParams, usePathname } from "next/navigation"
 import useSWR from "swr"
+import { GitBranch, Terminal } from "iconoir-react"
 import { scopedHref } from "@/lib/scoped-href"
 import { useSandboxStore } from "@/hooks/use-sandbox"
 import {
   isSandboxUiRuntimeRunning,
   resolveSandboxUiState,
 } from "@/lib/sandbox/ui-state"
+import { CONTROL_VIEW_EVENT } from "@/lib/control/utils"
 import { useUser } from "@/hooks/use-user"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useSessionsStore } from "@/hooks/use-sessions"
@@ -35,9 +37,16 @@ export function StatusBar() {
   const isWorkspaceRoute = scope
     ? pathname.startsWith(scopedHref(scope, "/projects/workspace"))
     : false
+  const isControlRoute = scope
+    ? pathname.startsWith(scopedHref(scope, "/control"))
+    : false
 
   const { data: repos } = useSWR<Repo[]>("/api/repos", fetcher)
   const sandboxesById = useSandboxStore((state) => state.sandboxesById)
+  const latestSandbox =
+    Object.values(sandboxesById).sort((a, b) =>
+      (b.last_active_at ?? "").localeCompare(a.last_active_at ?? "")
+    )[0] ?? null
   const { user } = useUser()
   const githubPrimaryAction = user?.github_primary_action
     || (!user?.github_connected
@@ -86,8 +95,7 @@ export function StatusBar() {
           ? "Start preview"
           : "Ask the agent for a task"
 
-  if (isMobile) {
-    return (
+  if (isMobile) {    return (
       <Sheet>
         <SheetTrigger asChild>
           <div className="app-statusbar flex min-h-8 items-center justify-between border-t border-border bg-card px-3 pb-[env(safe-area-inset-bottom)] font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
@@ -120,6 +128,32 @@ export function StatusBar() {
           </div>
         </SheetContent>
       </Sheet>
+    )
+  }
+
+  if (isControlRoute) {
+    return (
+      <div className="app-statusbar flex h-8 items-center gap-4 overflow-x-auto border-t border-border bg-card px-3 font-mono text-[10px] tracking-wide text-muted-foreground uppercase whitespace-nowrap">
+        {latestSandbox && (
+          <span className="flex shrink-0 items-center gap-[5px]">
+            <GitBranch className="size-3" strokeWidth={1.8} />
+            <span className="font-mono text-secondary-foreground normal-case">
+              {latestSandbox.working_branch}
+            </span>
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(CONTROL_VIEW_EVENT))}
+          className="flex shrink-0 items-center gap-[5px] hover:text-foreground"
+        >
+          <Terminal className="size-3" strokeWidth={1.8} />
+          <span>Sandbox checkout</span>
+        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-4 pl-4">
+          <span className="shrink-0 text-secondary-foreground">{datetime}</span>
+        </div>
+      </div>
     )
   }
 

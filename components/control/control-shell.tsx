@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -11,29 +11,31 @@ import type { UIMessage } from "ai";
 import type {
   Mission,
   Worktree,
-  Changeset,
-  Deployment,
-  TimelineEvent,
   ControlSeedData,
 } from "@/lib/control/types";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
+import type { SandboxRecord } from "@/lib/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
 import { generateMissionId } from "@/lib/control/utils";
-import { useSandboxSync } from "@/hooks/use-sandbox";
+import { CONTROL_VIEW_EVENT } from "@/lib/control/utils";
+import { collectChangedFiles } from "@/lib/control/changed-files";
+import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
+import { scopedHref } from "@/lib/scoped-href";
+import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
+import { useRepos } from "@/hooks/use-repos";
+import { toast } from "@/hooks/use-toast";
+import { SandboxLaunchProvider } from "@/components/sandbox-launch-provider";
+import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import { useToolApprovalHandler } from "./use-tool-approval-handler";
 import { buildCombinedTimeline } from "./build-combined-timeline";
-import { useMissionDerived } from "./use-mission-derived";
-import { MissionHeader } from "./mission-header";
+import { ControlTopBar } from "./control-top-bar";
+import { WorkspaceTabs, type ControlView } from "./workspace-tabs";
+import { WorktreesPanel } from "./worktrees-panel";
+import { ChangedFilesCard } from "./changed-files-card";
 import { Timeline } from "./timeline";
-import { Canvas } from "./canvas";
-import { Inspector } from "./inspector";
 import { Composer } from "./composer";
-import { ConsoleDrawer } from "./console-drawer";
-import { NeedsAttentionBanner } from "./needs-attention-banner";
-import { AgentSummaryStrip } from "./agent-summary-strip";
-import { PendingApprovalsBanner } from "./pending-approvals-banner";
 import { SandboxRail } from "./sandbox-rail";
 import { ArtifactSidePanel } from "./artifact-side-panel";
 import { SessionList } from "./session-list";
@@ -41,37 +43,36 @@ import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
 import { useSessionUsage } from "./use-session-usage";
 
-type ControlMode = "conversation" | "canvas" | "review";
-
 export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
 };
 
-export function ControlShell({
-  initialData,
-  initialMissionId,
-}: ControlShellProps) {
+function downloadTextFile(filename: string, contents: string) {
+  const url = URL.createObjectURL(
+    new Blob([contents], { type: "text/markdown" })
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function ControlShellInner({ initialData, initialMissionId }: ControlShellProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { scope } = useParams<{ scope: string }>();
 
   const [missions, setMissions] = useState<Mission[]>(initialData.missions);
-  const [worktrees, setWorktrees] = useState<Worktree[]>(initialData.worktrees);
-  const [changesets] = useState<Changeset[]>(initialData.changesets);
-  const [deployments] = useState<Deployment[]>(initialData.deployments);
+  const [worktrees] = useState<Worktree[]>(initialData.worktrees);
   const workspaces = initialData.workspaces;
 
   const [selectedMissionId, setSelectedMissionId] = useState<string>(
     initialMissionId || searchParams.get("mission") || missions[0]?.id || ""
   );
-  const [mode, setMode] = useState<ControlMode>("conversation");
-  const [selection, setSelection] = useState<string | null>(null);
-  const [inspectorTab, setInspectorTab] = useState("summary");
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<
-    "terminal" | "logs" | "tests" | "events"
-  >("terminal");
-  const [drawerHeight, setDrawerHeight] = useState(0); // index into [140, 232, 380]
-  const [agentsOpen, setAgentsOpen] = useState(false);
+  const [view, setView] = useState<ControlView>("chat");
+  const [focusSandboxId, setFocusSandboxId] = useState<string | null>(null);
   const [newMission, setNewMission] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -95,16 +96,6 @@ export function ControlShell({
   const missionWorktrees = useMemo(
     () => worktrees.filter((w) => w.mission === mission?.id),
     [worktrees, mission?.id]
-  );
-
-  const missionChangesets = useMemo(
-    () => changesets.filter((c) => c.mission === mission?.id),
-    [changesets, mission?.id]
-  );
-
-  const missionDeployments = useMemo(
-    () => deployments.filter((d) => d.ws === mission?.ws),
-    [deployments, mission?.ws]
   );
 
   const transport = useMemo(
@@ -138,19 +129,39 @@ export function ControlShell({
   const chatPending = status === "streaming" || status === "submitted";
 
   useSandboxSync();
+  const sandboxesById = useSandboxStore((state) => state.sandboxesById);
+  const sandboxes = useMemo(
+    () =>
+      Object.values(sandboxesById).sort((a, b) =>
+        (b.last_active_at ?? "").localeCompare(a.last_active_at ?? "")
+      ),
+    [sandboxesById]
+  );
+  const { repos } = useRepos();
+  const { launchRepoSandbox } = useSandboxLaunchActions();
 
-  const { sessions, selectSession, createSession, persist } =
-    useControlSessions({
-      sessionId,
-      setSessionId,
-      chatStatus: status,
-      setMessages,
-      deepLinkTarget: searchParams.get("mission"),
-    });
+  const {
+    sessions,
+    selectSession,
+    createSession,
+    updateSession,
+    persist,
+  } = useControlSessions({
+    sessionId,
+    setSessionId,
+    chatStatus: status,
+    setMessages,
+    deepLinkTarget: searchParams.get("mission"),
+  });
+
+  const activeSession = useMemo(
+    () => sessions.find((entry) => entry.id === sessionId) ?? null,
+    [sessions, sessionId]
+  );
 
   const handleSelectSession = useCallback(
     (id: string) => {
-      setMode("conversation");
+      setView("chat");
       void selectSession(id);
     },
     [selectSession]
@@ -171,55 +182,11 @@ export function ControlShell({
     onError: (message) => setChatError(message),
   });
 
-  const pushTimelineEvent = useCallback(
-    (event: TimelineEvent) => {
-      setMissions((prev) =>
-        prev.map((m) =>
-          m.id === selectedMissionId
-            ? { ...m, timeline: [...m.timeline, event] }
-            : m
-        )
-      );
-    },
-    [selectedMissionId]
-  );
-
-  const patchWorktree = useCallback((id: string, patch: Partial<Worktree>) => {
-    setWorktrees((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, ...patch } : w))
-    );
-  }, []);
-
-  const selectNode = useCallback(
-    (id: string | null, tab?: string) => {
-      setSelection(id);
-      if (tab) setInspectorTab(tab);
-      if (id && mode === "conversation") setMode("canvas");
-    },
-    [mode]
-  );
-
   const handleSend = useControlSend({
     sendMessage,
     setChatError,
     clearComposer: () => setComposerInput(""),
   });
-
-  // Header action: the agent runs in the mission sandbox, so committing is
-  // an instruction it executes with its shell tools, not a local git call.
-  const handleCommitPush = useCallback(() => {
-    void handleSend(
-      "Commit the current changes with a conventional commit message and push the branch.",
-      "mission",
-      "IMPLEMENT",
-      {
-        model: null,
-        permissions: MISSION_PERMISSION_OPTIONS[0],
-        mode: "run",
-        files: [],
-      }
-    );
-  }, [handleSend]);
 
   const handleToolApprovalResponse = useToolApprovalHandler(
     addToolApprovalResponse
@@ -262,42 +229,122 @@ export function ControlShell({
     [createSession, getWorkspace]
   );
 
-  const { needsAttention, agentStats } = useMissionDerived(
-    missions,
-    "active",
-    "",
-    missionWorktrees,
-    changesets,
-    mission?.cost
-  );
-
   // Live usage from the session's ai_calls (keyed by streamed ai_call_id
-  // metadata). Falls back to the mission's seeded cost when no runs have
-  // reported usage yet.
+  // metadata); drives the composer's context ring.
   const sessionUsage = useSessionUsage(messages, chatPending);
-  const displayStats = useMemo(
-    () => ({
-      ...agentStats,
-      spent: sessionUsage.costUsd > 0 ? sessionUsage.costUsd : agentStats.spent,
-      tokens: sessionUsage.inputTokens + sessionUsage.outputTokens,
-    }),
-    [agentStats, sessionUsage]
-  );
-
-  const drawerHeights = [140, 232, 380];
-  const cycleDrawerHeight = useCallback(() => {
-    setDrawerHeight((h) => (h + 1) % 3);
-  }, []);
+  const usageTokens = sessionUsage.inputTokens + sessionUsage.outputTokens;
 
   const combinedTimeline = useMemo(
     () => buildCombinedTimeline(mission?.timeline, messages),
     [mission?.timeline, messages]
   );
 
+  const hasChanges = useMemo(
+    () => collectChangedFiles(messages).length > 0,
+    [messages]
+  );
+
+  // The most recently active sandbox drives the branch/preview surfaces.
+  const activeSandbox: SandboxRecord | null = sandboxes[0] ?? null;
+  const previewUrl = useMemo(
+    () =>
+      sandboxes.find(
+        (sandbox) =>
+          sandbox.runtime_summary.status === "running" &&
+          sandbox.runtime_summary.preview_url
+      )?.runtime_summary.preview_url ?? null,
+    [sandboxes]
+  );
+  const activeRepo = useMemo(
+    () =>
+      activeSandbox
+        ? (repos.find((repo) => repo.id === activeSandbox.repo_id) ?? null)
+        : null,
+    [activeSandbox, repos]
+  );
+
+  const hasSession = Boolean(sessionId || mission);
+
+  // Header/menus act through the agent: it runs in the mission sandbox, so
+  // git and shell work is an instruction it executes, not a local call.
+  const sendInstruction = useCallback(
+    (text: string) => {
+      setView("chat");
+      void handleSend(text, "mission", "IMPLEMENT", {
+        model: null,
+        permissions: MISSION_PERMISSION_OPTIONS[0],
+        mode: "run",
+        files: [],
+      });
+    },
+    [handleSend]
+  );
+
+  const handleSpawnWorktree = useCallback(() => {
+    const repo =
+      activeRepo ??
+      repos.find(
+        (candidate) =>
+          activeSession?.project &&
+          (candidate.name === activeSession.project ||
+            candidate.full_name.endsWith(`/${activeSession.project}`))
+      ) ??
+      repos[0];
+    if (!repo) {
+      toast({
+        title: "No repository connected",
+        description: "Connect a repository before spawning worktrees.",
+        variant: "destructive",
+      });
+      return;
+    }
+    void launchRepoSandbox(repo, {
+      source: "control",
+      trigger: "spawn-worktree",
+      intent: { kind: "start_fresh", interactive: true },
+    });
+  }, [activeRepo, activeSession?.project, repos, launchRepoSandbox]);
+
+  const handleMergeSandbox = useCallback(
+    (sandbox: SandboxRecord) => {
+      sendInstruction(
+        `Merge the \`${sandbox.working_branch}\` branch into \`${sandbox.base_branch}\`: commit any pending changes with a conventional commit message, switch to the base branch, merge, resolve any conflicts, and push.`
+      );
+    },
+    [sendInstruction]
+  );
+
+  const handleCopyLink = useCallback(() => {
+    const target = sessionId ?? selectedMissionId;
+    if (!target) return;
+    const url = `${window.location.origin}${scopedHref(scope, "/control")}?mission=${target}`;
+    void navigator.clipboard.writeText(url);
+  }, [sessionId, selectedMissionId, scope]);
+
+  const handleExportTranscript = useCallback(() => {
+    if (messages.length === 0) return;
+    const title = activeSession?.title ?? mission?.title ?? "control-session";
+    const slug =
+      title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "control-session";
+    downloadTextFile(
+      `${slug}.md`,
+      buildTranscriptMarkdown(title, messages)
+    );
+  }, [messages, activeSession?.title, mission?.title]);
+
+  // Status bar "Sandbox checkout" jumps straight to the worktrees panel.
+  useEffect(() => {
+    const listener = () => setView("worktrees");
+    window.addEventListener(CONTROL_VIEW_EVENT, listener);
+    return () => window.removeEventListener(CONTROL_VIEW_EVENT, listener);
+  }, []);
+
   // With no missions there is nothing to show but the composer — unless a
   // persisted session is selected, in which case its restored conversation
-  // renders in the main view. Cancel only makes sense when there is a view
-  // to return to.
+  // renders in the main view.
   if (newMission || (!mission && !sessionId)) {
     return (
       <NewMissionView
@@ -316,91 +363,71 @@ export function ControlShell({
   }
 
   return (
-    <div className="app-control-shell flex h-full overflow-hidden">
+    <div className="app-control-shell flex h-full overflow-hidden bg-ink-950 text-ink-100">
       <SessionList
         sessions={sessions}
         selectedId={sessionId}
+        workingId={chatPending ? sessionId : null}
         onSelect={handleSelectSession}
         onNew={() => setNewMission(true)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Header */}
-        {mission && (
-          <MissionHeader
-            mission={mission}
-            workspace={getWorkspace(mission.ws)}
-            mode={mode}
-            onModeChange={setMode}
-            onCommitPush={handleCommitPush}
-            commitDisabled={chatPending}
-          />
-        )}
+        <ControlTopBar
+          projectName={
+            activeSession?.project ??
+            (mission ? (getWorkspace(mission.ws)?.name ?? null) : null)
+          }
+          sessionTitle={activeSession?.title ?? mission?.title ?? null}
+          branch={activeSandbox?.working_branch ?? mission?.base ?? "main"}
+          hasSession={hasSession}
+          chatPending={chatPending}
+          previewUrl={previewUrl}
+          repoFullName={activeRepo?.full_name ?? null}
+          onSendInstruction={sendInstruction}
+          onOpenTerminal={() =>
+            router.push(scopedHref(scope, "/projects/workspace"))
+          }
+          onSpawnWorktree={handleSpawnWorktree}
+          onScheduleAutomation={() =>
+            router.push(scopedHref(scope, "/automations"))
+          }
+          onRename={(title) => {
+            void updateSession({ title });
+          }}
+          onArchive={() => {
+            void updateSession({ archived: true });
+          }}
+          onExportTranscript={handleExportTranscript}
+          onCopyLink={handleCopyLink}
+        />
+        <WorkspaceTabs
+          view={view}
+          onViewChange={setView}
+          sandboxes={sandboxes}
+          onFocusSandbox={(id) => {
+            setView("worktrees");
+            setFocusSandboxId(id);
+          }}
+        />
 
-        {/* Content area */}
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          {/* Conversation / Canvas area */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            {/* Needs attention banner */}
-            {needsAttention.length > 0 && mode === "conversation" && (
-              <NeedsAttentionBanner
-                item={needsAttention[0]}
-                onAction={() => {
-                  const item = needsAttention[0];
-                  if (item.kind === "APPROVE" && item.changeset) {
-                    patchWorktree(item.worktree.id, { state: "implementing" });
-                    pushTimelineEvent({
-                      kind: "git",
-                      label: "APPROVED",
-                      time: "now",
-                      body: `${item.changeset.id} approved for merge.`,
-                    });
-                  } else if (item.kind === "FAILED") {
-                    patchWorktree(item.worktree.id, {
-                      state: "implementing",
-                      action: "retrying...",
-                    });
-                  } else {
-                    selectNode(item.worktree.id, "files");
-                  }
-                }}
-                onSecondary={() => selectNode(needsAttention[0].worktree.id)}
-              />
-            )}
-
-            {/* Agent summary strip */}
-            {mode === "conversation" && (
-              <AgentSummaryStrip
-                stats={displayStats}
-                isOpen={agentsOpen}
-                onToggle={() => setAgentsOpen(!agentsOpen)}
-                worktrees={missionWorktrees}
-                onSelectWorktree={selectNode}
-                changesets={missionChangesets}
-                deployments={missionDeployments}
-              />
-            )}
-
-            {/* Canvas mode */}
-            {mode === "canvas" && (
-              <Canvas
-                mission={mission}
-                worktrees={missionWorktrees}
-                changesets={missionChangesets}
-                deployments={missionDeployments}
-                selection={selection}
-                onSelectNode={selectNode}
-              />
-            )}
-
-            {/* Conversation mode */}
-            {mode === "conversation" && (
-              <div className="flex min-h-0 flex-1 flex-col">
-                <PendingApprovalsBanner runId={null} />
+          {view === "worktrees" ? (
+            <WorktreesPanel
+              sandboxes={sandboxes}
+              focusSandboxId={focusSandboxId}
+              onClearFocus={() => setFocusSandboxId(null)}
+              canMerge={hasSession && !chatPending}
+              onMerge={handleMergeSandbox}
+              onSpawn={handleSpawnWorktree}
+            />
+          ) : (
+            <>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <Timeline
                   events={combinedTimeline}
                   worktrees={worktrees}
                   getWorktree={getWorktree}
-                  onSelectWorktree={selectNode}
+                  onSelectWorktree={() => setView("worktrees")}
                   onApprove={(idx) => {
                     // Mark approval as resolved
                     const event = combinedTimeline[idx];
@@ -427,10 +454,15 @@ export function ControlShell({
                   }}
                   onToolApprovalResponse={handleToolApprovalResponse}
                   pending={chatPending}
+                  trailing={
+                    !chatPending && hasChanges ? (
+                      <ChangedFilesCard messages={messages} />
+                    ) : null
+                  }
                 />
                 {chatError && (
-                  <div className="mx-auto max-w-2xl px-4 py-2">
-                    <div className="border-accent-amber/30 bg-accent-amber/5 text-accent-amber rounded border px-3 py-2 text-xs">
+                  <div className="mx-auto w-full max-w-5xl px-4 py-2 sm:px-6">
+                    <div className="rounded border border-accent-amber/30 bg-accent-amber/5 px-3 py-2 text-xs text-accent-amber">
                       {chatError}
                     </div>
                   </div>
@@ -443,54 +475,23 @@ export function ControlShell({
                   mission={mission}
                   worktrees={missionWorktrees}
                   onStop={stop}
+                  usageTokens={usageTokens}
                 />
               </div>
-            )}
-
-            {/* Review mode placeholder */}
-            {mode === "review" && (
-              <div className="text-muted-foreground flex flex-1 items-center justify-center">
-                Review tab coming soon
-              </div>
-            )}
-          </div>
-
-          {/* Inspector panel (right side when node selected) */}
-          {selection && mode === "canvas" && (
-            <Inspector
-              selection={selection}
-              tab={inspectorTab}
-              onTabChange={setInspectorTab}
-              onClose={() => setSelection(null)}
-              worktrees={worktrees}
-              changesets={changesets}
-              deployments={deployments}
-              mission={mission}
-              onPatchWorktree={patchWorktree}
-              onPushEvent={pushTimelineEvent}
-              onOpenDrawer={(tab) => {
-                setDrawerOpen(true);
-                setDrawerTab(tab);
-              }}
-            />
+              <ArtifactSidePanel messages={messages} />
+            </>
           )}
-          {mode === "conversation" && <ArtifactSidePanel messages={messages} />}
         </div>
-
-        {/* Console drawer */}
-        <ConsoleDrawer
-          open={drawerOpen}
-          onToggle={() => setDrawerOpen(!drawerOpen)}
-          tab={drawerTab}
-          onTabChange={setDrawerTab}
-          height={drawerHeights[drawerHeight]}
-          onCycleHeight={cycleDrawerHeight}
-          selection={selection}
-          worktrees={worktrees}
-          getWorktree={getWorktree}
-        />
       </div>
       <SandboxRail messages={messages} streaming={chatPending} />
     </div>
+  );
+}
+
+export function ControlShell(props: ControlShellProps) {
+  return (
+    <SandboxLaunchProvider>
+      <ControlShellInner {...props} />
+    </SandboxLaunchProvider>
   );
 }

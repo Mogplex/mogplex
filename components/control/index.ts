@@ -1,11 +1,5 @@
 export { ControlShell } from "./control-shell";
-export { MissionHeader } from "./mission-header";
 export { Timeline } from "./timeline";
 export { TimelineCard } from "./timeline-card";
 export { Composer } from "./composer";
-export { Canvas } from "./canvas";
-export { Inspector } from "./inspector";
-export { ConsoleDrawer } from "./console-drawer";
-export { NeedsAttentionBanner } from "./needs-attention-banner";
-export { AgentSummaryStrip } from "./agent-summary-strip";
 export { NewMissionComposer } from "./new-mission-composer";
