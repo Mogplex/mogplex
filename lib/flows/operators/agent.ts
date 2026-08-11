@@ -67,6 +67,11 @@ export const agentOperator: FlowOperatorDefinition<AgentNode> = {
       typeof raw.modelOverride === "string" && raw.modelOverride.length > 0
         ? raw.modelOverride
         : null,
+    fallbackModelOverride:
+      typeof raw.fallbackModelOverride === "string" &&
+      raw.fallbackModelOverride.length > 0
+        ? raw.fallbackModelOverride
+        : null,
     maxStepsOverride:
       typeof raw.maxStepsOverride === "number" &&
       Number.isFinite(raw.maxStepsOverride)
@@ -93,6 +98,7 @@ export const agentOperator: FlowOperatorDefinition<AgentNode> = {
     autoRevert: false,
     requireApproval: false,
     modelOverride: null,
+    fallbackModelOverride: null,
     maxStepsOverride: null,
     timeoutMsOverride: null,
     systemPromptOverride: null,

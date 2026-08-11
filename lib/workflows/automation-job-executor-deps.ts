@@ -145,6 +145,7 @@ export async function resolveAutomationModelForPhase(input: {
   timeoutMs?: number | null;
   gatewayContext?: GatewayCallContext;
   teamId?: string | null;
+  fallbackModelId?: string | null;
 }) {
   try {
     return await input.deps.resolveAutomationModel(
@@ -152,7 +153,8 @@ export async function resolveAutomationModelForPhase(input: {
       input.modelId,
       input.timeoutMs,
       input.gatewayContext,
-      input.teamId ?? null
+      input.teamId ?? null,
+      input.fallbackModelId ?? null
     );
   } catch (error) {
     throw asAutomationModelExecutionError({

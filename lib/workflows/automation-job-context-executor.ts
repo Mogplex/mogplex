@@ -52,6 +52,7 @@ export async function executeAutomationContext(input: {
       assignmentType
     ),
     teamId: readAutomationTeamId(input.context.metadata),
+    fallbackModelId: input.context.agent.fallback_model,
   });
   const prNumber =
     assignmentType === "pr_review"

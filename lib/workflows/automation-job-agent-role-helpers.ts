@@ -128,6 +128,7 @@ async function resolveAutomationModelForPhase(input: {
   timeoutMs?: number | null;
   gatewayContext?: GatewayCallContext;
   teamId?: string | null;
+  fallbackModelId?: string | null;
 }) {
   try {
     return await input.deps.resolveAutomationModel(
@@ -135,7 +136,8 @@ async function resolveAutomationModelForPhase(input: {
       input.modelId,
       input.timeoutMs,
       input.gatewayContext,
-      input.teamId ?? null
+      input.teamId ?? null,
+      input.fallbackModelId ?? null
     );
   } catch (error) {
     throw asAutomationModelExecutionError({
@@ -329,6 +331,7 @@ export async function executeEditRoleNode(params: {
       timeoutMs: nodeContext.agent.timeout_ms,
       gatewayContext: buildAutomationGatewayContext(nodeContext, "pr_fix"),
       teamId: readAutomationTeamId(nodeContext.metadata),
+      fallbackModelId: nodeContext.agent.fallback_model,
     });
 
     const runFixAgent =
