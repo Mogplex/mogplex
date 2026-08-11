@@ -8,7 +8,7 @@ import {
 import { buildAutomationProviderFetch } from "@/lib/workflows/automation-model-execution";
 import {
   AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV,
-  getAutomationModelFallbackIds,
+  getAutomationModelFallbackIdsWithOverride,
 } from "@/lib/workflows/automation-model-defaults";
 import type { AutomationLanguageModel } from "@/lib/workflows/automation-job-types";
 
@@ -17,7 +17,8 @@ export async function resolveAutomationModel(
   modelId: string,
   timeoutMs?: number | null,
   gatewayContext?: GatewayCallContext,
-  teamId?: string | null
+  teamId?: string | null,
+  fallbackModelId?: string | null
 ): Promise<AutomationLanguageModel> {
   // Published flow versions are immutable snapshots, so a graph published
   // before a model was retired still pins the retired id. Upgrade it to the
@@ -44,13 +45,20 @@ export async function resolveAutomationModel(
     modelId,
     allowlistState
   );
+  // A pinned user fallback can go stale the same way the primary can (the
+  // graph is an immutable snapshot), so upgrade it through the same
+  // supersession rules before offering it to the gateway.
+  const effectiveFallbackModelId = fallbackModelId?.trim()
+    ? await resolveRuntimeModelId(userId, fallbackModelId, allowlistState)
+    : null;
 
   const resolved = await resolveUserLanguageModel(userId, effectiveModelId, {
     providerFetch: buildAutomationProviderFetch({ timeoutMs }),
     preferGatewayProviderObject: true,
     gatewayContext: gatewayContext ?? { userId },
-    gatewayFallbackModelIds: getAutomationModelFallbackIds(
+    gatewayFallbackModelIds: getAutomationModelFallbackIdsWithOverride(
       effectiveModelId,
+      effectiveFallbackModelId,
       process.env[AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV]
     ),
     teamId: teamId ?? null,

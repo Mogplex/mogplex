@@ -136,6 +136,27 @@ export function MogplexModelSection({
           ]}
         />
       </InspectorField>
+      <InspectorField label="Fallback model">
+        <WorkflowSelect
+          ariaLabel="Fallback model"
+          value={node.data.fallbackModelOverride ?? ""}
+          onValueChange={(value) => updateNodeData(node.id, (data) => ({
+            ...data,
+            fallbackModelOverride: value || null,
+          }), { mergeKey: `agent-fallback-model-${node.id}` })}
+          contentClassName="min-w-[min(520px,calc(100vw-32px))]"
+          options={[
+            { value: "", label: "Default fallback pool" },
+            ...availableModelOptions.map((model) => ({
+              value: model.id,
+              label: model.label,
+            })),
+          ]}
+        />
+      </InspectorField>
+      <InspectorCallout variant="info" icon={<LightBulb />}>
+        If the primary model hits upstream issues during a run, the fallback model takes over. Leave unset to use the shared fallback pool.
+      </InspectorCallout>
       <InspectorCallout variant="info" icon={<LightBulb />}>
         The model is set per step, here. Agents supply the prompt and role; each automation chooses what it runs on.
       </InspectorCallout>

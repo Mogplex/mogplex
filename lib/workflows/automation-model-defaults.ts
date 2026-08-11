@@ -60,6 +60,27 @@ export function getAutomationModelFallbackIds(
   );
 }
 
+/**
+ * Pool for a run whose node carries a user-picked fallback model: the user's
+ * choice leads, ahead of any env-configured/default pool entries. Only the
+ * first policy-approved candidate reaches AI Gateway, so a configured
+ * fallback effectively replaces the shared pool for that run.
+ */
+export function getAutomationModelFallbackIdsWithOverride(
+  primaryModelId: string,
+  userFallbackModelId: string | null | undefined,
+  configuredModels?: string | null
+) {
+  const userFallback = userFallbackModelId?.trim();
+  if (!userFallback) {
+    return getAutomationModelFallbackIds(primaryModelId, configuredModels);
+  }
+  return getAutomationModelFallbackIds(
+    primaryModelId,
+    [userFallback, ...(configuredModels?.split(",") ?? [])].join(",")
+  );
+}
+
 // Default timeout is per attempt; keep all retry attempts under the task cap.
 export const AUTOMATION_MODEL_DEFAULT_TIMEOUT_MS = Math.floor(
   AUTOMATION_MODEL_DEFAULT_TOTAL_BUDGET_MS /

@@ -88,6 +88,7 @@ export function resolveFlowAgentOverrides(
     name: agent.name,
     slug: agent.slug,
     model: modelId,
+    fallback_model: node.data.fallbackModelOverride ?? null,
     system_prompt: node.data.systemPromptOverride ?? agent.system_prompt,
     max_steps:
       typeof node.data.maxStepsOverride === "number"
