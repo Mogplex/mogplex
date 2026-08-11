@@ -36,7 +36,6 @@ import { WorktreesPanel } from "./worktrees-panel";
 import { ChangedFilesCard } from "./changed-files-card";
 import { Timeline } from "./timeline";
 import { Composer } from "./composer";
-import { SandboxRail } from "./sandbox-rail";
 import { ArtifactSidePanel } from "./artifact-side-panel";
 import { SessionList } from "./session-list";
 import { useControlSessions } from "./use-control-sessions";
@@ -351,8 +350,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         workspaces={workspaces}
         sessions={sessions}
         sessionId={sessionId}
-        messages={messages}
-        chatPending={chatPending}
         canCancel={Boolean(mission || sessionId)}
         onCancel={() => setNewMission(false)}
         onCreate={handleCreateMission}
@@ -483,7 +480,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           )}
         </div>
       </div>
-      <SandboxRail messages={messages} streaming={chatPending} />
     </div>
   );
 }
