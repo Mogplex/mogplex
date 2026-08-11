@@ -13,6 +13,9 @@ type Props = {
   onApprove: (eventIndex: number) => void
   onToolApprovalResponse?: (response: ToolApprovalResponse) => void
   pending: boolean
+  /** Rendered after the last event, inside the scroll area (e.g. the
+   *  changed-files summary card once a run completes). */
+  trailing?: React.ReactNode
 }
 
 export function Timeline({
@@ -23,6 +26,7 @@ export function Timeline({
   onApprove,
   onToolApprovalResponse,
   pending,
+  trailing,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -38,9 +42,9 @@ export function Timeline({
       ref={scrollRef}
       role="log"
       aria-label="Conversation"
-      className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
+      className="flex-1 overflow-y-auto px-4 py-6 sm:px-6"
     >
-      <div className="mx-auto max-w-[760px] space-y-4">
+      <div className="mx-auto w-full max-w-5xl space-y-5">
         {events.map((event, idx) => (
           <TimelineCard
             key={`${event.kind}-${idx}`}
@@ -53,11 +57,12 @@ export function Timeline({
           />
         ))}
         {pending && (
-          <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-            <span className="size-2 animate-pulse rounded-full bg-accent-blue" />
-            Mogplex is planning...
+          <div className="flex items-center gap-2 px-1 py-2 text-xs text-ink-400">
+            <span className="size-2 animate-pulse rounded-full bg-sky-400" />
+            Mogplex is working...
           </div>
         )}
+        {trailing}
       </div>
     </div>
   )

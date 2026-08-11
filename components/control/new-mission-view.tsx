@@ -1,24 +1,20 @@
 "use client";
 
 import { Network } from "iconoir-react";
-import type { UIMessage } from "ai";
 import type { Workspace } from "@/lib/control/types";
 import type { ComposerSendOptions } from "./composer";
 import { NewMissionComposer } from "./new-mission-composer";
-import { SandboxRail } from "./sandbox-rail";
 import { SessionList } from "./session-list";
 import type { ControlSessionSummary } from "./session-list";
 
 /**
  * Standalone view shown when there is no mission selected (fresh load or the
- * user asked for a new session): session rail, centered composer, live rail.
+ * user asked for a new session): session rail and centered composer.
  */
 export function NewMissionView({
   workspaces,
   sessions,
   sessionId,
-  messages,
-  chatPending,
   canCancel,
   onCancel,
   onCreate,
@@ -28,8 +24,6 @@ export function NewMissionView({
   workspaces: Workspace[];
   sessions: ControlSessionSummary[];
   sessionId: string | null;
-  messages: UIMessage[];
-  chatPending: boolean;
   canCancel: boolean;
   onCancel: () => void;
   onCreate: (
@@ -69,7 +63,6 @@ export function NewMissionView({
           onCreate={onCreate}
         />
       </main>
-      <SandboxRail messages={messages} streaming={chatPending} />
     </div>
   );
 }

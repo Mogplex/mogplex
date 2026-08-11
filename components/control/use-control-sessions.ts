@@ -148,5 +148,73 @@ export function useControlSessions({
     [sessionId]
   );
 
-  return { sessions, selectSession, createSession, persist, refreshList };
+  /**
+   * Rename/pin/archive the selected session with the same optimistic
+   * concurrency as persist (one rebase retry on 409). Archiving removes the
+   * session from the list and clears the selection.
+   */
+  const updateSession = useCallback(
+    async (fields: {
+      title?: string;
+      pinned?: boolean;
+      archived?: boolean;
+    }): Promise<boolean> => {
+      const expected = updatedAtRef.current;
+      if (!sessionId || !expected) return false;
+
+      const put = (expectedUpdatedAt: string) =>
+        fetch("/api/control/sessions", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: sessionId,
+            ...fields,
+            expected_updated_at: expectedUpdatedAt,
+          }),
+        });
+
+      let res = await put(expected);
+      if (res.status === 409) {
+        const fresh = await fetch(`/api/control/sessions?id=${sessionId}`);
+        if (!fresh.ok) return false;
+        const record = (await fresh.json()) as SessionRecord;
+        res = await put(record.updated_at);
+      }
+      if (!res.ok) return false;
+
+      const { session } = (await res.json()) as { session: SessionRecord };
+      updatedAtRef.current = session.updated_at;
+      if (fields.archived) {
+        setSessions((current) =>
+          current.filter((entry) => entry.id !== sessionId)
+        );
+        setSessionId(null);
+        setMessages([]);
+        return true;
+      }
+      setSessions((current) =>
+        current.map((entry) =>
+          entry.id === sessionId
+            ? {
+                ...entry,
+                title: session.title,
+                pinned: session.pinned,
+                updated_at: session.updated_at,
+              }
+            : entry
+        )
+      );
+      return true;
+    },
+    [sessionId, setSessionId, setMessages]
+  );
+
+  return {
+    sessions,
+    selectSession,
+    createSession,
+    updateSession,
+    persist,
+    refreshList,
+  };
 }

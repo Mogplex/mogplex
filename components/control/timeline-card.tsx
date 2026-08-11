@@ -36,19 +36,19 @@ type Props = {
 }
 
 const KIND_STYLES: Record<string, { icon: typeof User; bg: string; fg: string; labelColor: string }> = {
-  user: { icon: User, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
-  plan: { icon: Notes, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
-  delegate: { icon: Cpu, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
-  tool: { icon: Tools, bg: "bg-secondary", fg: "text-muted-foreground/70", labelColor: "text-muted-foreground/70" },
-  diff: { icon: GitBranch, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
+  user: { icon: User, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
+  plan: { icon: Notes, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
+  delegate: { icon: Cpu, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
+  tool: { icon: Tools, bg: "bg-ink-800", fg: "text-ink-400", labelColor: "text-ink-400" },
+  diff: { icon: GitBranch, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
   fail: { icon: XmarkCircle, bg: "bg-accent-red/10", fg: "text-accent-red", labelColor: "text-accent-red" },
   conflict: { icon: WarningTriangle, bg: "bg-accent-red/10", fg: "text-accent-red", labelColor: "text-accent-red" },
-  compare: { icon: ArrowSeparateVertical, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
+  compare: { icon: ArrowSeparateVertical, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
   approval: { icon: CheckCircle, bg: "bg-accent-amber/10", fg: "text-accent-amber", labelColor: "text-accent-amber" },
-  git: { icon: GitBranch, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
-  deploy: { icon: Rocket, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
+  git: { icon: GitBranch, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
+  deploy: { icon: Rocket, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
   question: { icon: HelpCircle, bg: "bg-accent-amber/10", fg: "text-accent-amber", labelColor: "text-accent-amber" },
-  done: { icon: Check, bg: "bg-secondary", fg: "text-muted-foreground", labelColor: "text-muted-foreground" },
+  done: { icon: Check, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -180,12 +180,6 @@ function ToolApprovalCard({
         >
           Approve merge
         </button>
-        <button className="rounded border border-accent-red/30 bg-accent-red/5 px-2.5 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10">
-          Reject
-        </button>
-        <button className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-secondary">
-          Ask a question
-        </button>
       </div>
     </div>
   )
@@ -198,16 +192,16 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
   const isUser = event.kind === "user"
 
   return (
-    <div className={`${isUser ? "" : "rounded-xl border border-border bg-secondary"} ${isSubdued ? "opacity-80" : ""}`}>
+    <div className={`${isUser ? "" : "rounded-xl border border-ink-800 bg-ink-900"} ${isSubdued ? "opacity-80" : ""}`}>
       {/* Header */}
-      <div className={`flex items-center gap-2 ${isUser ? "px-0 pb-1" : "border-b border-border px-4 py-3"}`}>
-        <div className={`flex size-7 items-center justify-center rounded-full ${isUser ? "bg-card" : style.bg}`}>
+      <div className={`flex items-center gap-2 ${isUser ? "px-0 pb-1" : "border-b border-ink-800 px-4 py-3"}`}>
+        <div className={`flex size-7 items-center justify-center rounded-full ${isUser ? "bg-ink-800" : style.bg}`}>
           <Icon className={`size-3.5 ${style.fg}`} strokeWidth={1.8} />
         </div>
-        <span className={`text-[13px] font-semibold ${isUser ? "text-foreground" : style.labelColor}`}>
+        <span className={`text-[13px] font-semibold ${isUser ? "text-ink-100" : style.labelColor}`}>
           {event.label}
         </span>
-        <span className="text-xs text-muted-foreground">{event.time}</span>
+        <span className="text-xs text-ink-400">{event.time}</span>
       </div>
 
       {/* Body */}
@@ -220,15 +214,15 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
 
         {/* Plan steps */}
         {event.kind === "plan" && (
-          <div className="mt-3 overflow-hidden rounded-xl border border-border bg-card">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <div className="mt-3 overflow-hidden rounded-xl border border-ink-800 bg-ink-950">
+            <div className="flex items-center gap-2 border-b border-ink-800 px-4 py-3">
               <span className="text-[15px] font-semibold">Execution Plan</span>
               <span className="text-xs text-muted-foreground">
                 {(event as PlanEvent).steps.length} steps
               </span>
             </div>
             {(event as PlanEvent).steps.map((step) => (
-              <div key={step.n} className="flex min-h-10 items-center gap-3 border-b border-border px-4 last:border-b-0">
+              <div key={step.n} className="flex min-h-10 items-center gap-3 border-b border-ink-800 px-4 last:border-b-0">
                 <span className="grid size-5 place-items-center rounded-full border border-muted-foreground/50 font-mono text-[10px] text-muted-foreground">{step.n}</span>
                 <span className="flex-1 text-sm">{step.text}</span>
                 <span className={`text-xs font-medium ${STATE_COLORS[step.state] || ""}`}>
@@ -237,7 +231,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
               </div>
             ))}
             {(event as PlanEvent).planApproved && (
-              <div className="flex items-center gap-2 border-t border-border px-4 py-3">
+              <div className="flex items-center gap-2 border-t border-ink-800 px-4 py-3">
                 <span className="rounded border border-accent-green/30 bg-accent-green/5 px-2.5 py-1 text-[10px] font-medium text-accent-green">
                   Plan accepted
                 </span>
@@ -255,7 +249,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
                 <button
                   key={chipId}
                   onClick={() => onSelectWorktree(chipId)}
-                  className="flex items-center gap-1.5 rounded border border-border bg-card px-2 py-1 text-[10px] font-medium hover:bg-secondary"
+                  className="flex items-center gap-1.5 rounded border border-ink-700 bg-ink-850 px-2 py-1 text-[10px] font-medium hover:bg-secondary"
                 >
                   <span className={`size-1.5 rounded-full ${WORKTREE_STATE_DOT[wt?.state || "archived"]}`} />
                   {chipId} {wt && `· ${wt.agent}`}
@@ -287,25 +281,6 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
             <pre className="overflow-x-auto rounded bg-[var(--terminal-background)] p-2 font-mono text-[10px] leading-relaxed text-[var(--terminal-foreground)]">
               {(event as FailEvent).log}
             </pre>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button className="flex items-center gap-1.5 rounded border border-accent-red/30 bg-accent-red/5 px-2 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10">
-                <span className="size-1.5 rounded-full bg-accent-red" />
-                Retry run
-              </button>
-              <button className="rounded border border-border px-2 py-1 text-[10px] font-medium hover:bg-secondary">
-                Open terminal
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Conflict chips */}
-        {event.kind === "conflict" && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <button className="flex items-center gap-1.5 rounded border border-accent-red/30 bg-accent-red/5 px-2 py-1 text-[10px] font-medium text-accent-red hover:bg-accent-red/10">
-              <span className="size-1.5 rounded-full bg-accent-red" />
-              Resolve conflict
-            </button>
           </div>
         )}
 
@@ -316,7 +291,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
               const wt = getWorktree(colId)
               if (!wt) return null
               return (
-                <div key={colId} className="flex-1 rounded border border-border p-2">
+                <div key={colId} className="flex-1 rounded border border-ink-800 p-2">
                   <div className="mb-2 flex items-center gap-1.5">
                     <span className={`size-1.5 rounded-full ${WORKTREE_STATE_DOT[wt.state]}`} />
                     <span className="font-mono text-[10px] font-medium">
@@ -339,9 +314,6 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
                       <span className="text-accent-amber">{wt.risk}</span>
                     </div>
                   </div>
-                  <button className="mt-2 w-full rounded border border-border py-1 text-[10px] font-medium hover:bg-secondary">
-                    Choose this one
-                  </button>
                 </div>
               )
             })}

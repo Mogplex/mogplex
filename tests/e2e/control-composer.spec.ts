@@ -177,7 +177,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await page.getByRole("button", { name: "anthropic/claude-sonnet-5" }).click();
   await expect(page.getByRole("button", { name: "Plan mode" })).toHaveCount(0);
   await page
-    .getByPlaceholder("Direct Mogplex - it will delegate to agents")
+    .getByPlaceholder("Ask for follow-up changes or attach images")
     .fill("Summarize progress");
   await page.keyboard.press("Enter");
 
