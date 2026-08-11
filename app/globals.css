@@ -75,6 +75,21 @@
   --terminal-foreground: var(--neutral-2);
   --terminal-cursor: var(--neutral-0);
   --terminal-muted: var(--neutral-5);
+  /* Ink scale (control surface). Light mode maps onto the neutral scale so
+     the control route stays coherent outside dark mode. */
+  --ink-950: var(--neutral-1);
+  --ink-900: var(--neutral-0);
+  --ink-850: var(--neutral-2);
+  --ink-800: var(--neutral-3);
+  --ink-750: var(--neutral-3);
+  --ink-700: var(--neutral-4);
+  --ink-600: var(--neutral-5);
+  --ink-400: var(--neutral-5);
+  --ink-300: var(--neutral-6);
+  --ink-200: var(--neutral-7);
+  --ink-100: var(--neutral-9);
+  --addg: var(--accent-green);
+  --delr: var(--accent-red);
 }
 
 .dark {
@@ -118,6 +133,19 @@
   --accent-blue: oklch(62.31% 0.188 259.81);
   --accent-cyan: oklch(71.52% 0.1431 215.22);
   --border-dim: var(--neutral-8);
+  --ink-950: #0c0c0d;
+  --ink-900: #131315;
+  --ink-850: #18181b;
+  --ink-800: #1e1e22;
+  --ink-750: #242429;
+  --ink-700: #2b2b31;
+  --ink-600: #3a3a42;
+  --ink-400: #8b8b95;
+  --ink-300: #a7a7b1;
+  --ink-200: #c9c9d2;
+  --ink-100: #e8e8ee;
+  --addg: #4ade80;
+  --delr: #f87171;
 }
 
 @theme inline {
@@ -158,6 +186,19 @@
   --color-accent-cyan: var(--accent-cyan);
   --color-border-dim: var(--border-dim);
   --color-overlay: var(--overlay);
+  --color-ink-950: var(--ink-950);
+  --color-ink-900: var(--ink-900);
+  --color-ink-850: var(--ink-850);
+  --color-ink-800: var(--ink-800);
+  --color-ink-750: var(--ink-750);
+  --color-ink-700: var(--ink-700);
+  --color-ink-600: var(--ink-600);
+  --color-ink-400: var(--ink-400);
+  --color-ink-300: var(--ink-300);
+  --color-ink-200: var(--ink-200);
+  --color-ink-100: var(--ink-100);
+  --color-addg: var(--addg);
+  --color-delr: var(--delr);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
