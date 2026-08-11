@@ -187,18 +187,19 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   );
 
   const handleCreateMission = useCallback(
-    async (text: string, targets: string[], options: ComposerSendOptions) => {
+    async (text: string, project: string, options: ComposerSendOptions) => {
       const id = generateMissionId();
       const missionTitle =
         text.slice(0, 80) || options.files[0]?.filename || "New mission";
       // Persist the chat session before re-keying useChat so the first
-      // message streams straight into the durable session's chat. The
-      // session inherits the mission's workspace as its project group.
-      await createSession(missionTitle, getWorkspace(targets[0] ?? "")?.name);
+      // message streams straight into the durable session's chat. Every
+      // session is tied to the project chosen in the composer (a connected
+      // repo or a newly named project).
+      await createSession(missionTitle, project);
       const newMissionObj: Mission = {
         id,
         title: missionTitle.slice(0, 80),
-        ws: targets[0] ?? "",
+        ws: "",
         status: "active",
         pinned: false,
         age: "now",
@@ -209,7 +210,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         approval: "Human merge",
         sandbox: "container-med",
         archived: false,
-        targets,
+        targets: [],
         timeline: [],
       };
       setMissions((prev) => [newMissionObj, ...prev]);
@@ -220,7 +221,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       // would stream the reply into the previous mission's discarded chat.
       pendingInitialMessageRef.current = { missionId: id, text, options };
     },
-    [createSession, getWorkspace]
+    [createSession]
   );
 
   // Live usage from the session's ai_calls (keyed by streamed ai_call_id
@@ -342,7 +343,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   if (newMission || (!mission && !sessionId)) {
     return (
       <NewMissionView
-        workspaces={workspaces}
+        repos={repos}
         sessions={sessions}
         sessionId={sessionId}
         canCancel={Boolean(mission || sessionId)}

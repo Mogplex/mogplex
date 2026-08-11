@@ -1,7 +1,7 @@
 "use client";
 
 import { Network } from "iconoir-react";
-import type { Workspace } from "@/lib/control/types";
+import type { Repo } from "@/lib/types";
 import type { ComposerSendOptions } from "./composer";
 import { NewMissionComposer } from "./new-mission-composer";
 import { SessionList } from "./session-list";
@@ -12,7 +12,7 @@ import type { ControlSessionSummary } from "./session-list";
  * user asked for a new session): session rail and centered composer.
  */
 export function NewMissionView({
-  workspaces,
+  repos,
   sessions,
   sessionId,
   canCancel,
@@ -21,14 +21,14 @@ export function NewMissionView({
   onSelectSession,
   onNewSession,
 }: {
-  workspaces: Workspace[];
+  repos: Repo[];
   sessions: ControlSessionSummary[];
   sessionId: string | null;
   canCancel: boolean;
   onCancel: () => void;
   onCreate: (
     text: string,
-    targets: string[],
+    project: string,
     options: ComposerSendOptions
   ) => void;
   onSelectSession: (id: string) => void;
@@ -58,7 +58,7 @@ export function NewMissionView({
           </span>
         </div>
         <NewMissionComposer
-          workspaces={workspaces}
+          repos={repos}
           onCancel={canCancel ? onCancel : undefined}
           onCreate={onCreate}
         />
