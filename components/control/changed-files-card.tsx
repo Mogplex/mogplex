@@ -204,7 +204,7 @@ export function ChangedFilesCard({ messages }: { messages: UIMessage[] }) {
       </div>
 
       <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
-        <DialogContent className="flex h-[85dvh] w-[90dvw] max-w-[90dvw] flex-col gap-0 overflow-hidden rounded-xl border-ink-700 bg-ink-900 p-0">
+        <DialogContent className="flex h-[85dvh] w-[90dvw] max-w-[90dvw] flex-col gap-0 overflow-hidden rounded-xl border-ink-700 bg-ink-900 p-0 sm:max-w-[90dvw]">
           <div className="flex items-center gap-2 border-b border-ink-800 px-4 py-2.5">
             <DialogTitle className="text-[13px] font-semibold text-ink-100">
               Diff · {files.length} file{files.length === 1 ? "" : "s"}

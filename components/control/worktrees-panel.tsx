@@ -123,7 +123,7 @@ function PreviewModal({
     >
       <DialogContent
         showCloseButton={false}
-        className="flex h-[95dvh] w-[95dvw] max-w-[95dvw] flex-col gap-0 overflow-hidden rounded-xl border-ink-700 bg-ink-900 p-0 shadow-2xl"
+        className="flex h-[95dvh] w-[95dvw] max-w-[95dvw] flex-col gap-0 overflow-hidden rounded-xl border-ink-700 bg-ink-900 p-0 shadow-2xl sm:max-w-[95dvw]"
         aria-label="Sandbox preview"
       >
         <div className="flex items-center gap-2 border-b border-ink-800 bg-ink-850 px-3 py-2">
