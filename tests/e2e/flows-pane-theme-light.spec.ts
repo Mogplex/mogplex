@@ -38,7 +38,7 @@ test("workflows builder and portalled surfaces follow the light app theme", asyn
   ] = await normalizeCssColors(page, [
     "#f6f5f0",
     paneStyles.backgroundColor,
-    "#1a1b17",
+    "#10110d",
     paneStyles.color,
     "#fcfbf7",
   ]);
