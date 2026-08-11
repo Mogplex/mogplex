@@ -36,11 +36,11 @@ test("workflows builder and portalled surfaces follow the light app theme", asyn
     actualLightForeground,
     expectedLightCard,
   ] = await normalizeCssColors(page, [
-    "#f7f5ef",
+    "#f6f5f0",
     paneStyles.backgroundColor,
-    "#191712",
+    "#1a1b17",
     paneStyles.color,
-    "#fdfcf9",
+    "#fcfbf7",
   ]);
   expect(paneStyles.themeBackground).not.toBe("");
   expect(actualLightBackground).toBe(expectedLightBackground);
