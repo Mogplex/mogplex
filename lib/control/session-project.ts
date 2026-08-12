@@ -11,12 +11,36 @@ type ProjectRepo = {
   is_favorite?: boolean;
 };
 
-/** Group/display name for a repo-backed project. */
-export function repoProjectName(repo: {
-  name?: string;
-  full_name: string;
-}): string {
-  return repo.name?.trim() || repo.full_name;
+/** Group/display name for a repo-backed project. Full names are unambiguous. */
+export function repoProjectName(repo: { full_name: string }): string {
+  return repo.full_name;
+}
+
+/**
+ * Resolve a durable session's repository. Older sessions only stored a short
+ * project name, so retain a safe fallback when that name maps to one repo.
+ */
+export function resolveControlSessionRepo<T extends ProjectRepo>(
+  session: { repo_id?: string | null; project?: string | null } | null,
+  repos: T[]
+): T | null {
+  if (!session) return null;
+
+  if (session.repo_id) {
+    return repos.find((repo) => repo.id === session.repo_id) ?? null;
+  }
+
+  const project = session.project?.trim().toLowerCase();
+  if (!project) return null;
+
+  const exact = repos.find((repo) => repo.full_name.toLowerCase() === project);
+  if (exact) return exact;
+
+  const legacyMatches = repos.filter((repo) => {
+    const name = repo.name?.trim() || repo.full_name.split("/").at(-1) || "";
+    return name.toLowerCase() === project;
+  });
+  return legacyMatches.length === 1 ? legacyMatches[0] : null;
 }
 
 /**

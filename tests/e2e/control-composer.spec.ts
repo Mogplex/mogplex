@@ -39,22 +39,34 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // One connected repo: the composer must default the session's project to it.
   await page.route("**/api/repos", (route) =>
     fulfillJson(route, [
-      { id: "repo-1", full_name: "acme/widgets", name: "widgets" },
+      {
+        id: "repo-1",
+        full_name: "acme/widgets",
+        owner: "acme",
+        name: "widgets",
+        default_branch: "main",
+      },
     ])
   );
-  const sessionCreates: Array<{ title?: string; project?: string | null }> = [];
+  const sessionCreates: Array<{
+    title?: string;
+    project?: string | null;
+    repo_id?: string | null;
+  }> = [];
   await page.route("**/api/control/sessions", (route) => {
     const request = route.request();
     if (request.method() !== "POST") return route.continue();
     const body = request.postDataJSON() as {
       title?: string;
       project?: string | null;
+      repo_id?: string | null;
     };
     sessionCreates.push(body);
     return fulfillJson(route, {
       id: "sess-e2e-1",
       title: body.title ?? "Session",
       project: body.project ?? null,
+      repo_id: body.repo_id ?? null,
       pinned: false,
       archived: false,
       created_at: "2026-08-11T00:00:00.000Z",
@@ -78,6 +90,16 @@ test("control composers expose permissions, model, and MCP controls without a sp
     permissions?: string;
     scope?: string;
     target?: string;
+    conversationId?: string | null;
+    missionId?: string | null;
+    missionTitle?: string | null;
+    repoId?: string | null;
+    repoFullName?: string | null;
+    repoOwner?: string | null;
+    repoName?: string | null;
+    repoBranch?: string | null;
+    repoBaseBranch?: string | null;
+    sandboxId?: string | null;
   }> = [];
   // A minimal but real UI message stream: text reply plus one tool call, so
   // the timeline's MOGPLEX and TOOL rendering is exercised end to end.
@@ -121,7 +143,16 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // The session's project defaults to the connected repo.
   const projectPicker = page.getByLabel("Project", { exact: true });
   await expect(projectPicker).toBeVisible();
-  await expect(projectPicker).toHaveValue("repo-1");
+  await expect(projectPicker).toHaveAttribute("data-slot", "select-trigger");
+  await expect(projectPicker).toHaveAttribute("data-value", "repo-1");
+  await projectPicker.click();
+  await expect(
+    page.getByRole("option", { name: "acme/widgets" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: "New project…" })
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   const permissionsChip = page.getByRole("button", {
     name: "Skip Permissions",
   });
@@ -169,10 +200,21 @@ test("control composers expose permissions, model, and MCP controls without a sp
     permissions: "Skip Permissions",
     scope: "IMPLEMENT",
     target: "mission",
+    conversationId: "sess-e2e-1",
+    repoId: "repo-1",
+    repoFullName: "acme/widgets",
+    repoOwner: "acme",
+    repoName: "widgets",
+    repoBranch: "main",
+    repoBaseBranch: "main",
   });
+  await expect(page).toHaveURL(/\/control\?mission=sess-e2e-1$/);
   // The new session is tied to the repo's project.
   expect(sessionCreates).toHaveLength(1);
-  expect(sessionCreates[0]?.project).toBe("widgets");
+  expect(sessionCreates[0]).toMatchObject({
+    project: "acme/widgets",
+    repo_id: "repo-1",
+  });
   expect(chatRequests[0]?.messages?.at(-1)?.parts).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -223,16 +265,22 @@ test("control composers expose permissions, model, and MCP controls without a sp
     scope: "IMPLEMENT",
     target: "mission",
   });
+  await expect(
+    page.getByRole("button", { name: "Attach file" }).last()
+  ).toBeEnabled();
 
-  await page
-    .locator('input[type="file"]')
-    .last()
-    .setInputFiles({
-      name: "attachment-only.md",
-      mimeType: "text/markdown",
-      buffer: Buffer.from("# Attachment only\n\nNo prompt body."),
-    });
-  await expect(page.getByText("attachment-only.md")).toBeVisible();
+  await page.getByTestId("control-composer-dropzone").evaluate((element) => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(
+      new File(["image bytes"], "dropped-screenshot.png", {
+        type: "image/png",
+      })
+    );
+    element.dispatchEvent(
+      new DragEvent("drop", { bubbles: true, dataTransfer })
+    );
+  });
+  await expect(page.getByText("dropped-screenshot.png")).toBeVisible();
   await page.getByRole("button", { name: "Send" }).click();
 
   await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(3);
@@ -245,8 +293,8 @@ test("control composers expose permissions, model, and MCP controls without a sp
   expect(attachmentOnlyRequest?.messages?.at(-1)?.parts).toEqual([
     expect.objectContaining({
       type: "file",
-      filename: "attachment-only.md",
-      mediaType: "text/markdown",
+      filename: "dropped-screenshot.png",
+      mediaType: "image/png",
     }),
   ]);
 });
@@ -260,19 +308,25 @@ test("control composer creates a new project when no repos are connected", async
     fulfillJson(route, { connections: [] })
   );
   await page.route("**/api/repos", (route) => fulfillJson(route, []));
-  const sessionCreates: Array<{ title?: string; project?: string | null }> = [];
+  const sessionCreates: Array<{
+    title?: string;
+    project?: string | null;
+    repo_id?: string | null;
+  }> = [];
   await page.route("**/api/control/sessions", (route) => {
     const request = route.request();
     if (request.method() !== "POST") return route.continue();
     const body = request.postDataJSON() as {
       title?: string;
       project?: string | null;
+      repo_id?: string | null;
     };
     sessionCreates.push(body);
     return fulfillJson(route, {
       id: "sess-e2e-new",
       title: body.title ?? "Session",
       project: body.project ?? null,
+      repo_id: body.repo_id ?? null,
       pinned: false,
       archived: false,
       created_at: "2026-08-11T00:00:00.000Z",
@@ -297,7 +351,8 @@ test("control composer creates a new project when no repos are connected", async
   // With no repos the composer must be creating a new project, not leaving
   // the session unfiled.
   const projectPicker = page.getByLabel("Project", { exact: true });
-  await expect(projectPicker).toHaveValue("new");
+  await expect(projectPicker).toHaveAttribute("data-slot", "select-trigger");
+  await expect(projectPicker).toHaveAttribute("data-value", "new");
   const nameInput = page.getByLabel("New project name");
   await expect(nameInput).toBeVisible();
 
@@ -314,6 +369,7 @@ test("control composer creates a new project when no repos are connected", async
 
   await expect.poll(() => sessionCreates.length, { timeout: 10_000 }).toBe(1);
   expect(sessionCreates[0]?.project).toBe("analytics-redesign");
+  expect(sessionCreates[0]?.repo_id).toBeNull();
   // The sidebar files the session under the new project group.
   await expect(
     page.getByRole("button", { name: /analytics-redesign/ })

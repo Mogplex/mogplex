@@ -4,17 +4,34 @@ import {
   defaultProjectChoice,
   deriveProjectName,
   repoProjectName,
+  resolveControlSessionRepo,
 } from "../../lib/control/session-project";
 
-test("repoProjectName prefers the short repo name", () => {
-  assert.equal(
-    repoProjectName({ name: "widgets", full_name: "acme/widgets" }),
-    "widgets"
-  );
+test("repoProjectName uses the unambiguous full repository name", () => {
   assert.equal(repoProjectName({ full_name: "acme/widgets" }), "acme/widgets");
+});
+
+test("resolveControlSessionRepo prefers repo id and safely restores legacy names", () => {
+  const repos = [
+    { id: "r1", name: "widgets", full_name: "acme/widgets" },
+    { id: "r2", name: "api", full_name: "acme/api" },
+  ];
+
+  assert.equal(resolveControlSessionRepo({ repo_id: "r2" }, repos)?.id, "r2");
   assert.equal(
-    repoProjectName({ name: "  ", full_name: "acme/widgets" }),
-    "acme/widgets"
+    resolveControlSessionRepo({ project: "acme/widgets" }, repos)?.id,
+    "r1"
+  );
+  assert.equal(
+    resolveControlSessionRepo({ project: "widgets" }, repos)?.id,
+    "r1"
+  );
+  assert.equal(
+    resolveControlSessionRepo({ project: "widgets" }, [
+      ...repos,
+      { id: "r3", name: "widgets", full_name: "other/widgets" },
+    ]),
+    null
   );
 });
 

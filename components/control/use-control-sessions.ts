@@ -33,11 +33,16 @@ export function useControlSessions({
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
   const updatedAtRef = useRef<string | null>(null);
   const pendingRestoreRef = useRef<UIMessage[] | null>(null);
+  const mutationRevisionRef = useRef(0);
   const [restoreTick, setRestoreTick] = useState(0);
 
   const refreshList = useCallback(async () => {
+    const revision = mutationRevisionRef.current;
     const res = await fetch("/api/control/sessions");
     if (!res.ok) return;
+    // An initial list request can finish after a new session was created.
+    // Never let that stale response erase the locally inserted session.
+    if (revision !== mutationRevisionRef.current) return;
     setSessions((await res.json()) as ControlSessionSummary[]);
   }, []);
 
@@ -80,23 +85,26 @@ export function useControlSessions({
   }, [sessions, deepLinkTarget, selectSession]);
 
   const createSession = useCallback(
-    async (title: string, project?: string) => {
+    async (title: string, project?: string, repoId?: string | null) => {
       const res = await fetch("/api/control/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           title: title.slice(0, 80) || "New session",
           project: project?.trim() || null,
+          repo_id: repoId || null,
         }),
       });
       if (!res.ok) return null;
       const record = (await res.json()) as SessionRecord;
+      mutationRevisionRef.current += 1;
       updatedAtRef.current = record.updated_at;
       setSessions((current) => [
         {
           id: record.id,
           title: record.title,
           project: record.project,
+          repo_id: record.repo_id,
           pinned: record.pinned,
           updated_at: record.updated_at,
         },

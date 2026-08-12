@@ -5,6 +5,7 @@ import type { ComposerSendOptions } from "./composer";
 import {
   buildControlChatBody,
   buildControlChatMessage,
+  type ControlChatRequestContext,
 } from "./control-chat-request";
 
 type SendMessage = (
@@ -21,10 +22,12 @@ export function useControlSend({
   sendMessage,
   setChatError,
   clearComposer,
+  requestContext,
 }: {
   sendMessage: SendMessage;
   setChatError: (message: string | null) => void;
   clearComposer: () => void;
+  requestContext: ControlChatRequestContext;
 }) {
   return useCallback(
     async (
@@ -44,6 +47,7 @@ export function useControlSend({
             target,
             permissions: options.permissions,
             mode: options.mode,
+            ...requestContext,
           }),
         });
         clearComposer();
@@ -56,6 +60,6 @@ export function useControlSend({
         }
       }
     },
-    [sendMessage, setChatError, clearComposer]
+    [sendMessage, setChatError, clearComposer, requestContext]
   );
 }

@@ -7,14 +7,29 @@ import {
 
 const NOW = new Date().toISOString();
 
-function sandboxRecord(status: string) {
+function sandboxRecord(
+  status: string,
+  {
+    id = "rec-1",
+    repoId = "repo-1",
+    sandboxId = "sbx_live123",
+    branch = "feat/demo",
+    lastActiveAt = NOW,
+  }: {
+    id?: string;
+    repoId?: string;
+    sandboxId?: string;
+    branch?: string;
+    lastActiveAt?: string;
+  } = {}
+) {
   return {
-    id: "rec-1",
+    id,
     user_id: "00000000-0000-4000-8000-000000000001",
-    repo_id: "repo-1",
-    sandbox_id: "sbx_live123",
+    repo_id: repoId,
+    sandbox_id: sandboxId,
     base_branch: "main",
-    working_branch: "feat/demo",
+    working_branch: branch,
     limit_claim_id: null,
     status,
     preview_url:
@@ -27,9 +42,9 @@ function sandboxRecord(status: string) {
     runtime: null,
     terminal_cwd: null,
     created_at: NOW,
-    last_active_at: NOW,
+    last_active_at: lastActiveAt,
     runtime_summary: {
-      sandbox_id: "sbx_live123",
+      sandbox_id: sandboxId,
       status,
       health_status: "unknown",
       preview_url:
@@ -65,6 +80,47 @@ test("control worktrees panel shows live sandbox cards and preview", async ({
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
+  await page.route("**/api/repos", (route) =>
+    fulfillJson(route, [
+      {
+        id: "repo-1",
+        full_name: "acme/widgets",
+        owner: "acme",
+        name: "widgets",
+        default_branch: "main",
+      },
+      {
+        id: "repo-2",
+        full_name: "acme/unrelated",
+        owner: "acme",
+        name: "unrelated",
+        default_branch: "main",
+      },
+    ])
+  );
+  await page.route("**/api/control/sessions**", (route) => {
+    const request = route.request();
+    if (request.method() === "GET") return fulfillJson(route, []);
+    if (request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        title?: string;
+        project?: string | null;
+        repo_id?: string | null;
+      };
+      return fulfillJson(route, {
+        id: "sess-worktrees",
+        title: body.title ?? "Session",
+        project: body.project ?? null,
+        repo_id: body.repo_id ?? null,
+        pinned: false,
+        archived: false,
+        messages: [],
+        created_at: NOW,
+        updated_at: NOW,
+      });
+    }
+    return route.fallback();
+  });
 
   let stopped = false;
   let stopPosted = false;
@@ -75,7 +131,16 @@ test("control worktrees panel shows live sandbox cards and preview", async ({
   });
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, {
-      sandboxes: [sandboxRecord(stopped ? "stopped" : "running")],
+      sandboxes: [
+        sandboxRecord(stopped ? "stopped" : "running"),
+        sandboxRecord("running", {
+          id: "rec-2",
+          repoId: "repo-2",
+          sandboxId: "sbx_unrelated",
+          branch: "feat/unrelated",
+          lastActiveAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      ],
     })
   );
 
@@ -107,9 +172,17 @@ test("control worktrees panel shows live sandbox cards and preview", async ({
     .getByPlaceholder("Ask anything or run a command...")
     .fill("Run the tests");
   await page.getByRole("button", { name: "Start mission" }).click();
+  await expect(page).toHaveURL(/\/control\?mission=sess-worktrees$/);
+  await expect(
+    page.getByText("acme/widgets", { exact: true }).last()
+  ).toBeVisible();
 
   // One tab per active sandbox appears next to Chat / Worktrees.
   await expect(page.getByRole("button", { name: "feat/demo" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "feat/unrelated" })
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Worktrees 1" })).toBeVisible();
 
   // The Worktrees tab shows a card per sandbox with real status and actions.
   await page.getByRole("button", { name: /Worktrees/ }).click();

@@ -40,6 +40,8 @@ test("control sessions: history list, restore, persist, and new session", async 
       return fulfillJson(route, {
         id: "sess-1",
         title: "Earlier investigation",
+        project: "acme/widgets",
+        repo_id: "repo-1",
         pinned: false,
         archived: false,
         messages: SESSION_1_MESSAGES,
@@ -52,6 +54,8 @@ test("control sessions: history list, restore, persist, and new session", async 
         {
           id: "sess-1",
           title: "Earlier investigation",
+          project: "acme/widgets",
+          repo_id: "repo-1",
           pinned: false,
           archived: false,
           created_at: NOW,
@@ -64,6 +68,8 @@ test("control sessions: history list, restore, persist, and new session", async 
       return fulfillJson(route, {
         id: "sess-2",
         title: "Fix billing",
+        project: "acme/widgets",
+        repo_id: "repo-1",
         pinned: false,
         archived: false,
         messages: [],
@@ -124,6 +130,7 @@ test("control sessions: history list, restore, persist, and new session", async 
 
   // Restore: selecting it brings back the full conversation.
   await sidebar.getByRole("button", { name: /Earlier investigation/ }).click();
+  await expect(page).toHaveURL(/\/control\?mission=sess-1$/);
   const conversation = page.getByRole("log", { name: "Conversation" });
   await expect(
     conversation.getByText("Investigate the auth bug")
@@ -154,6 +161,7 @@ test("control sessions: history list, restore, persist, and new session", async 
     .fill("Fix billing");
   await page.keyboard.press("Enter");
   await expect.poll(() => posted, { timeout: 10_000 }).toBe(true);
+  await expect(page).toHaveURL(/\/control\?mission=sess-2$/);
   await expect(
     sidebar.getByRole("button", { name: /Fix billing/ })
   ).toBeVisible();

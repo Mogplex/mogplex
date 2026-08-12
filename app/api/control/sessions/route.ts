@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 
 const LIST_COLUMNS =
-  "id, title, project, pinned, archived, created_at, updated_at";
+  "id, title, project, repo_id, pinned, archived, created_at, updated_at";
 
 async function getSessionRecord(id: string, userId: string) {
   const { data, error } = await supabaseAdmin
@@ -58,6 +58,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     title?: string;
     project?: string | null;
+    repo_id?: string | null;
   };
 
   const { data, error } = await supabaseAdmin
@@ -65,7 +66,8 @@ export async function POST(req: Request) {
     .insert({
       user_id: userId,
       title: body.title?.trim() || "New session",
-      project: body.project?.trim().slice(0, 80) || null,
+      project: body.project?.trim().slice(0, 160) || null,
+      repo_id: body.repo_id || null,
     })
     .select("*")
     .single();
@@ -89,6 +91,7 @@ export async function PUT(req: Request) {
     expected_updated_at?: string | null;
     title?: string;
     project?: string | null;
+    repo_id?: string | null;
     messages?: unknown;
     pinned?: boolean;
     archived?: boolean;
