@@ -139,17 +139,21 @@ export async function POST(req: Request) {
     return NextResponse.json(linked);
   } catch (runError) {
     const [sessionCleanup, runCleanup] = await Promise.all([
-      supabaseAdmin
-        .from("control_sessions")
-        .delete()
-        .eq("id", session.id)
-        .eq("user_id", userId),
+      Promise.resolve(
+        supabaseAdmin
+          .from("control_sessions")
+          .delete()
+          .eq("id", session.id)
+          .eq("user_id", userId)
+      ).catch((error: unknown) => ({ error })),
       createdRunId
-        ? supabaseAdmin
-            .from("orchestration_runs")
-            .delete()
-            .eq("id", createdRunId)
-            .eq("user_id", userId)
+        ? Promise.resolve(
+            supabaseAdmin
+              .from("orchestration_runs")
+              .delete()
+              .eq("id", createdRunId)
+              .eq("user_id", userId)
+          ).catch((error: unknown) => ({ error }))
         : Promise.resolve({ error: null }),
     ]);
     if (sessionCleanup.error || runCleanup.error) {

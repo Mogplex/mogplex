@@ -16,6 +16,7 @@ import {
   loadOwnedWorktreeTask,
   markWorktreeError,
   markWorktreePruned,
+  reclaimStaleCreatingWorktree,
   reserveWorktree,
 } from "./store";
 import type { OrchestrationWorktreeDTO, WorktreeCommandResult } from "./types";
@@ -33,6 +34,7 @@ type WorktreeServiceDeps = {
   loadSandbox: typeof loadOwnedWorktreeSandbox;
   findLiveForTask: typeof findLiveWorktreeForTask;
   reserve: typeof reserveWorktree;
+  reclaimCreating: typeof reclaimStaleCreatingWorktree;
   execute: typeof executeWorktreeCommand;
   activate: typeof activateWorktree;
   markError: typeof markWorktreeError;
@@ -47,6 +49,7 @@ const defaultDeps: WorktreeServiceDeps = {
   loadSandbox: loadOwnedWorktreeSandbox,
   findLiveForTask: findLiveWorktreeForTask,
   reserve: reserveWorktree,
+  reclaimCreating: reclaimStaleCreatingWorktree,
   execute: executeWorktreeCommand,
   activate: activateWorktree,
   markError: markWorktreeError,
@@ -110,6 +113,15 @@ export async function spawnWorktree(
 
   let worktree = existing;
   let ownsCreation = existing?.status === "error";
+  if (existing?.status === "creating") {
+    const reclaimed = await deps.reclaimCreating({
+      worktreeId: existing.id,
+      userId: input.userId,
+      expectedUpdatedAt: existing.updated_at,
+    });
+    worktree = reclaimed ?? existing;
+    ownsCreation = reclaimed !== null;
+  }
   if (!worktree) {
     const reservation = await deps.reserve({
       userId: input.userId,
@@ -251,9 +263,13 @@ export async function archiveWorktree(
   const deps = { ...defaultDeps, ...overrides };
   const worktree = await requireOwnedWorktree(input, deps);
   if (worktree.status === "archived") return worktree;
-  if (worktree.status !== "active" && worktree.status !== "error") {
+  if (
+    worktree.status !== "creating" &&
+    worktree.status !== "active" &&
+    worktree.status !== "error"
+  ) {
     throw new WorktreeServiceError(
-      "Only active or failed worktrees can be archived"
+      "Only pending, active, or failed worktrees can be archived"
     );
   }
   return deps.archive(input);

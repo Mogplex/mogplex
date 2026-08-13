@@ -12,17 +12,19 @@ const MIGRATIONS = [
   "neon/migrations/20260813120000_orchestration_worktrees.sql",
   "neon/migrations/20260813133000_orchestration_worktrees_review_followup.sql",
 ];
-
 const USER_A = "00000000-0000-4000-8000-00000000000a";
 const USER_B = "00000000-0000-4000-8000-00000000000b";
 const REPO_A = "00000000-0000-4000-8000-00000000001a";
 const REPO_B = "00000000-0000-4000-8000-00000000001b";
 const SANDBOX_A = "00000000-0000-4000-8000-00000000002a";
 const LEGACY_SESSION = "00000000-0000-4000-8000-00000000003a";
-
+const LEGACY_LONG_SESSION = "00000000-0000-4000-8000-00000000003b";
 let db: PGlite;
-let legacyBackfill: { run_id: string; base_branch: string } | undefined;
-
+let legacyBackfills: Array<{
+  run_id: string;
+  base_branch: string;
+  title: string;
+}> = [];
 beforeAll(async () => {
   db = new PGlite();
   await db.exec(`
@@ -33,40 +35,39 @@ beforeAll(async () => {
   for (const migration of MIGRATIONS) {
     if (migration.endsWith("orchestration_worktrees.sql")) {
       await db.exec(`
-        create table public.repos (
-          id uuid primary key,
-          default_branch text
-        );
         create table public.external_agent_runs (
           id uuid primary key default gen_random_uuid(),
           user_id uuid not null,
           repo_id uuid not null,
           sandbox_record_id uuid
         );
-        insert into public.repos (id, default_branch)
-        values ('${REPO_A}', 'develop');
         insert into public.control_sessions (id, user_id, repo_id, title)
-        values ('${LEGACY_SESSION}', '${USER_A}', '${REPO_A}', 'Legacy mission');
+        values
+          ('${LEGACY_SESSION}', '${USER_A}', '${REPO_A}', ''),
+          ('${LEGACY_LONG_SESSION}', '${USER_A}', '${REPO_A}', repeat('x', 600));
       `);
     }
     const sql = await readFile(path.join(REPO_ROOT, migration), "utf8");
     await db.exec(sql);
   }
-  const backfill = await db.query<{ run_id: string; base_branch: string }>(
-    `select run.id as run_id, run.base_branch
+  const backfill = await db.query<{
+    run_id: string;
+    base_branch: string;
+    title: string;
+  }>(
+    `select run.id as run_id, run.base_branch, run.title
      from public.control_sessions session
      join public.orchestration_runs run
        on run.id = session.orchestration_run_id
-     where session.id = $1`,
-    [LEGACY_SESSION]
+     where session.id in ($1, $2)
+     order by session.id`,
+    [LEGACY_SESSION, LEGACY_LONG_SESSION]
   );
-  legacyBackfill = backfill.rows[0];
+  legacyBackfills = backfill.rows;
 });
-
 afterAll(async () => {
   await db.close();
 });
-
 beforeEach(async () => {
   await db.exec(`
     truncate public.control_sessions cascade;
@@ -74,7 +75,6 @@ beforeEach(async () => {
     truncate public.orchestration_runs cascade;
   `);
 });
-
 async function insertRun(userId = USER_A, repoId = REPO_A) {
   const { rows } = await db.query<{ id: string }>(
     `insert into public.orchestration_runs
@@ -87,7 +87,6 @@ async function insertRun(userId = USER_A, repoId = REPO_A) {
   );
   return rows[0]!.id;
 }
-
 async function insertTask(runId: string, repoId = REPO_A) {
   const spec = await db.query<{ id: string }>(
     `insert into public.orchestration_specs
@@ -106,7 +105,6 @@ async function insertTask(runId: string, repoId = REPO_A) {
   );
   return task.rows[0]!.id;
 }
-
 async function insertWorktree(input: {
   runId: string;
   taskId: string;
@@ -136,11 +134,17 @@ async function insertWorktree(input: {
 }
 
 describe("orchestration worktree persistence", () => {
-  it("backfills repository-linked legacy Control sessions", () => {
-    expect(legacyBackfill?.run_id).toBeTruthy();
-    expect(legacyBackfill?.base_branch).toBe("develop");
+  it("backfills legacy sessions without mirrored repos and clamps titles", () => {
+    expect(legacyBackfills).toHaveLength(2);
+    expect(legacyBackfills.map((row) => row.base_branch)).toEqual([
+      "main",
+      "main",
+    ]);
+    expect(legacyBackfills.map((row) => row.title)).toEqual([
+      "New session",
+      "x".repeat(500),
+    ]);
   });
-
   it("keeps every worktree RPC service-role only", async () => {
     const signatures = [
       "public.activate_orchestration_worktree(uuid,uuid,text)",
@@ -166,7 +170,6 @@ describe("orchestration worktree persistence", () => {
       });
     }
   });
-
   it("creates every mission task atomically", async () => {
     const runId = await insertRun();
     const tasks = [
@@ -213,7 +216,6 @@ describe("orchestration worktree persistence", () => {
       [runId]
     );
     expect(counts.rows[0]).toEqual({ specs: 3, tasks: 2 });
-
     const failingRun = await insertRun(USER_A, REPO_B);
     await expect(
       db.query(
@@ -237,12 +239,10 @@ describe("orchestration worktree persistence", () => {
     );
     expect(partial.rows[0]!.count).toBe(0);
   });
-
   it("binds a worktree to one owned run, task, repo, sandbox, and checkout", async () => {
     const runId = await insertRun();
     const taskId = await insertTask(runId);
     const worktree = await insertWorktree({ runId, taskId });
-
     const { rows } = await db.query<{
       worktree_id: string | null;
       sandbox_id: string | null;

@@ -121,6 +121,33 @@ export async function reserveWorktree(input: {
   return { worktree: data as OrchestrationWorktreeDTO, created: true };
 }
 
+const STALE_WORKTREE_RESERVATION_MS = 5 * 60 * 1000;
+
+export function staleWorktreeReservationCutoff(now = Date.now()): string {
+  return new Date(now - STALE_WORKTREE_RESERVATION_MS).toISOString();
+}
+
+export async function reclaimStaleCreatingWorktree(input: {
+  worktreeId: string;
+  userId: string;
+  expectedUpdatedAt: string;
+}): Promise<OrchestrationWorktreeDTO | null> {
+  const cutoff = staleWorktreeReservationCutoff();
+  const { data, error } = await supabaseAdmin
+    .from(WORKTREES)
+    .update({ error: null })
+    .eq("id", input.worktreeId)
+    .eq("user_id", input.userId)
+    .eq("status", "creating")
+    .eq("updated_at", input.expectedUpdatedAt)
+    .lt("updated_at", cutoff)
+    .select("*")
+    .maybeSingle();
+  if (error)
+    throw new WorktreeStoreError("reclaim stale reservation", error.message);
+  return data as OrchestrationWorktreeDTO | null;
+}
+
 export async function activateWorktree(input: {
   worktreeId: string;
   userId: string;
@@ -222,7 +249,7 @@ export async function archiveWorktreeRecord(input: {
     .update({ status: "archived", archived_at: new Date().toISOString() })
     .eq("id", input.worktreeId)
     .eq("user_id", input.userId)
-    .in("status", ["active", "error"])
+    .in("status", ["creating", "active", "error"])
     .select("*")
     .single();
   if (error || !data) {

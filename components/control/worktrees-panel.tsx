@@ -29,7 +29,8 @@ function WorktreeRow({
   worktree: OrchestrationWorktreeDTO;
   onAction: (
     action: "rebase" | "archive" | "prune",
-    id: string
+    id: string,
+    options?: { force?: boolean }
   ) => Promise<void>;
   onDiff: (id: string) => Promise<string>;
 }) {
@@ -37,15 +38,20 @@ function WorktreeRow({
   const [diff, setDiff] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pruneOpen, setPruneOpen] = useState(false);
-  const runAction = async (action: "rebase" | "archive" | "prune") => {
+  const [forcePruneOpen, setForcePruneOpen] = useState(false);
+  const runAction = async (
+    action: "rebase" | "archive" | "prune",
+    force = false
+  ) => {
     setBusy(action);
     setError(null);
     try {
-      await onAction(action, worktree.id);
+      await onAction(action, worktree.id, { force });
     } catch (actionError) {
       setError(
         actionError instanceof Error ? actionError.message : "Action failed"
       );
+      if (action === "prune" && !force) setForcePruneOpen(true);
     } finally {
       setBusy(null);
     }
@@ -129,7 +135,9 @@ function WorktreeRow({
             <Refresh className="size-3" /> Rebase
           </button>
         ) : null}
-        {worktree.status === "active" || worktree.status === "error" ? (
+        {worktree.status === "creating" ||
+        worktree.status === "active" ||
+        worktree.status === "error" ? (
           <button
             type="button"
             onClick={() => void runAction("archive")}
@@ -156,8 +164,7 @@ function WorktreeRow({
             <AlertDialogTitle>Prune this checkout?</AlertDialogTitle>
             <AlertDialogDescription>
               This removes the archived Git checkout from its sandbox. It does
-              not stop the sandbox or delete the branch. If the sandbox no
-              longer exists, the failed binding is still retired.
+              not stop the sandbox or delete the branch.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -167,6 +174,27 @@ function WorktreeRow({
               onClick={() => void runAction("prune")}
             >
               Prune checkout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={forcePruneOpen} onOpenChange={setForcePruneOpen}>
+        <AlertDialogContent className="border-ink-700 bg-ink-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retire the sandbox binding?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Git could not remove the checkout. Use this only when the sandbox
+              no longer exists. Mogplex will retire the database binding but
+              will not delete the branch.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-delr hover:bg-delr/90 text-white"
+              onClick={() => void runAction("prune", true)}
+            >
+              Retire binding
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -185,7 +213,8 @@ export function WorktreesPanel({
   loading: boolean;
   onAction: (
     action: "rebase" | "archive" | "prune",
-    id: string
+    id: string,
+    options?: { force?: boolean }
   ) => Promise<void>;
   onDiff: (id: string) => Promise<string>;
 }) {

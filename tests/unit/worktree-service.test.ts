@@ -178,6 +178,7 @@ test("spawn returns an in-flight concurrent reservation without recreating it", 
         status: "running",
       }),
       reserve: async () => ({ worktree: winner, created: false }),
+      reclaimCreating: async () => null,
       execute: async () => {
         executed = true;
         return { exitCode: 0, stdout: "", stderr: "" };
@@ -186,6 +187,54 @@ test("spawn returns an in-flight concurrent reservation without recreating it", 
   );
   assert.equal(result, winner);
   assert.equal(executed, false);
+});
+
+test("spawn atomically reclaims and resumes a stale creating reservation", async () => {
+  const stale = buildWorktree({
+    status: "creating",
+    updated_at: "2026-08-12T23:00:00.000Z",
+  });
+  let reclaimedInput: unknown;
+  let executed = false;
+  const result = await spawnWorktree(
+    {
+      userId: "user-1",
+      runId: RUN_ID,
+      taskId: TASK_ID,
+      sandboxId: SANDBOX_ID,
+    },
+    {
+      loadTask: async () => buildTask(),
+      findLiveForTask: async () => stale,
+      loadSandbox: async () => ({
+        id: SANDBOX_ID,
+        repo_id: REPO_ID,
+        status: "running",
+      }),
+      reclaimCreating: async (input) => {
+        reclaimedInput = input;
+        return { ...stale, updated_at: "2026-08-13T00:10:00.000Z" };
+      },
+      execute: async () => {
+        executed = true;
+        return {
+          exitCode: 0,
+          stdout: `MOGPLEX_WORKTREE_PATH=/vercel/sandbox/.worktrees/${WORKTREE_ID}\n`,
+          stderr: "",
+        };
+      },
+      activate: async () => buildWorktree(),
+      markError: async () => {},
+    }
+  );
+
+  assert.deepEqual(reclaimedInput, {
+    worktreeId: WORKTREE_ID,
+    userId: "user-1",
+    expectedUpdatedAt: stale.updated_at,
+  });
+  assert.equal(executed, true);
+  assert.equal(result.status, "active");
 });
 
 test("rebase and diff force execution into the persisted checkout", async () => {
@@ -253,6 +302,22 @@ test("archive provides a recovery path for a failed worktree", async () => {
     },
     {
       load: async () => buildWorktree({ status: "error" }),
+      archive: async () => buildWorktree({ status: "archived" }),
+    }
+  );
+  assert.equal(archived.status, "archived");
+});
+
+test("archive provides a manual recovery path for a stuck reservation", async () => {
+  const archived = await archiveWorktree(
+    {
+      userId: "user-1",
+      worktreeId: WORKTREE_ID,
+      runId: RUN_ID,
+      repoId: REPO_ID,
+    },
+    {
+      load: async () => buildWorktree({ status: "creating" }),
       archive: async () => buildWorktree({ status: "archived" }),
     }
   );

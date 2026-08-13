@@ -42,7 +42,11 @@ export function useControlWorktrees(input: {
   }, [refresh, input.chatPending]);
 
   const act = useCallback(
-    async (action: "rebase" | "archive" | "prune", worktreeId: string) => {
+    async (
+      action: "rebase" | "archive" | "prune",
+      worktreeId: string,
+      options: { force?: boolean } = {}
+    ) => {
       const response = await fetch("/api/control/worktrees", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -50,7 +54,7 @@ export function useControlWorktrees(input: {
           action,
           worktreeId,
           sessionId: input.sessionId,
-          force: action === "prune",
+          force: options.force === true,
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
