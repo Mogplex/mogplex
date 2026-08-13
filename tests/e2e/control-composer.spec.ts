@@ -209,6 +209,9 @@ test("control composers expose permissions, model, and MCP controls without a sp
     repoBaseBranch: "main",
   });
   await expect(page).toHaveURL(/\/control\?mission=sess-e2e-1$/);
+  await expect(
+    conversation.getByText("I can plan, delegate, and ship.")
+  ).toBeVisible();
   // The new session is tied to the repo's project.
   expect(sessionCreates).toHaveLength(1);
   expect(sessionCreates[0]).toMatchObject({
@@ -313,6 +316,13 @@ test("control composer creates a new project when no repos are connected", async
     project?: string | null;
     repo_id?: string | null;
   }> = [];
+  const chatRequests: Array<{
+    conversationId?: string | null;
+    missionId?: string | null;
+    repoId?: string | null;
+    repoBranch?: string | null;
+    repoBaseBranch?: string | null;
+  }> = [];
   await page.route("**/api/control/sessions", (route) => {
     const request = route.request();
     if (request.method() !== "POST") return route.continue();
@@ -334,16 +344,19 @@ test("control composer creates a new project when no repos are connected", async
       messages: [],
     });
   });
-  await page.route("**/api/control/chat", (route) =>
-    route.fulfill({
+  await page.route("**/api/control/chat", (route) => {
+    chatRequests.push(
+      route.request().postDataJSON() as (typeof chatRequests)[number]
+    );
+    return route.fulfill({
       status: 200,
       headers: {
         "content-type": "text/event-stream",
         "x-vercel-ai-ui-message-stream": "v1",
       },
       body: 'data: {"type":"start"}\n\ndata: [DONE]\n\n',
-    })
-  );
+    });
+  });
 
   await page.goto(scopedPath("control"));
   await page.waitForLoadState("networkidle");
@@ -368,8 +381,16 @@ test("control composer creates a new project when no repos are connected", async
   await page.getByRole("button", { name: "Start mission" }).click();
 
   await expect.poll(() => sessionCreates.length, { timeout: 10_000 }).toBe(1);
+  await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(1);
   expect(sessionCreates[0]?.project).toBe("analytics-redesign");
   expect(sessionCreates[0]?.repo_id).toBeNull();
+  expect(chatRequests[0]).toMatchObject({
+    conversationId: "sess-e2e-new",
+    missionId: "sess-e2e-new",
+    repoId: null,
+    repoBranch: null,
+    repoBaseBranch: null,
+  });
   // The sidebar files the session under the new project group.
   await expect(
     page.getByRole("button", { name: /analytics-redesign/ })

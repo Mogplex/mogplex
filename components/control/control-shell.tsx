@@ -8,26 +8,24 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
 import type { UIMessage } from "ai";
-import type {
-  Mission,
-  Worktree,
-  ControlSeedData,
+import {
+  MISSION_PERMISSION_OPTIONS,
+  type Mission,
+  type Worktree,
+  type ControlSeedData,
 } from "@/lib/control/types";
-import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { SandboxRecord } from "@/lib/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
-import { generateMissionId } from "@/lib/control/utils";
-import { CONTROL_VIEW_EVENT } from "@/lib/control/utils";
+import { CONTROL_VIEW_EVENT, generateMissionId } from "@/lib/control/utils";
 import { collectChangedFiles } from "@/lib/control/changed-files";
 import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
 import { scopedHref } from "@/lib/scoped-href";
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
 import { useRepos } from "@/hooks/use-repos";
 import { toast } from "@/hooks/use-toast";
-import { SandboxLaunchProvider } from "@/components/sandbox-launch-provider";
-import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
+import { SandboxLaunchProvider, useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import { useToolApprovalHandler } from "./use-tool-approval-handler";
 import { buildCombinedTimeline } from "./build-combined-timeline";
 import { ControlTopBar } from "./control-top-bar";
@@ -42,6 +40,7 @@ import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
 import { useSessionUsage } from "./use-session-usage";
 import { useControlSessionContext } from "./use-control-session-context";
+import { canonicalizeControlSessionProjects } from "@/lib/control/session-project";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
@@ -153,6 +152,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     () => sessions.find((entry) => entry.id === sessionId) ?? null,
     [sessions, sessionId]
   );
+  const displaySessions = canonicalizeControlSessionProjects(sessions, repos);
 
   const { activeRepo, sandboxes, activeSandbox, requestContext } =
     useControlSessionContext({
@@ -356,7 +356,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     return (
       <NewMissionView
         repos={repos}
-        sessions={sessions}
+        sessions={displaySessions}
         sessionId={sessionId}
         canCancel={Boolean(mission || sessionId)}
         onCancel={() => setNewMission(false)}
@@ -370,7 +370,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   return (
     <div className="app-control-shell flex h-full overflow-hidden bg-ink-950 text-ink-100">
       <SessionList
-        sessions={sessions}
+        sessions={displaySessions}
         selectedId={sessionId}
         workingId={chatPending ? sessionId : null}
         onSelect={handleSelectSession}

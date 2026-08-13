@@ -6,6 +6,48 @@ import { resolveControlSessionRepo } from "@/lib/control/session-project";
 import type { ControlChatRequestContext } from "./control-chat-request";
 import type { ControlSessionSummary } from "./session-list";
 
+type ContextRepo = Pick<
+  Repo,
+  "id" | "full_name" | "owner" | "name" | "default_branch"
+>;
+type ContextSandbox = Pick<
+  SandboxRecord,
+  "id" | "working_branch" | "base_branch"
+>;
+
+export function buildControlSessionRequestContext({
+  activeRepo,
+  activeSandbox,
+  sessionId,
+  selectedMissionId,
+  missionTitle,
+}: {
+  activeRepo: ContextRepo | null;
+  activeSandbox: ContextSandbox | null;
+  sessionId: string | null;
+  selectedMissionId: string;
+  missionTitle: string | null;
+}): ControlChatRequestContext {
+  const [fallbackOwner, fallbackName] = activeRepo?.full_name.split("/") ?? [];
+  const baseBranch = activeRepo
+    ? (activeSandbox?.base_branch ?? activeRepo.default_branch ?? "main")
+    : null;
+  return {
+    conversationId: sessionId,
+    missionId: (sessionId ?? selectedMissionId) || null,
+    missionTitle,
+    repoId: activeRepo?.id ?? null,
+    repoFullName: activeRepo?.full_name ?? null,
+    repoOwner: activeRepo?.owner ?? fallbackOwner ?? null,
+    repoName: activeRepo?.name ?? fallbackName ?? null,
+    repoBranch: activeRepo
+      ? (activeSandbox?.working_branch ?? baseBranch)
+      : null,
+    repoBaseBranch: baseBranch,
+    sandboxId: activeSandbox?.id ?? null,
+  };
+}
+
 export function useControlSessionContext({
   activeSession,
   repos,
@@ -35,24 +77,17 @@ export function useControlSessionContext({
   );
   const activeSandbox = sandboxes[0] ?? null;
 
-  const requestContext = useMemo<ControlChatRequestContext>(() => {
-    const [fallbackOwner, fallbackName] =
-      activeRepo?.full_name.split("/") ?? [];
-    const baseBranch =
-      activeSandbox?.base_branch ?? activeRepo?.default_branch ?? "main";
-    return {
-      conversationId: sessionId,
-      missionId: sessionId ?? selectedMissionId ?? null,
-      missionTitle,
-      repoId: activeRepo?.id ?? null,
-      repoFullName: activeRepo?.full_name ?? null,
-      repoOwner: activeRepo?.owner ?? fallbackOwner ?? null,
-      repoName: activeRepo?.name ?? fallbackName ?? null,
-      repoBranch: activeSandbox?.working_branch ?? baseBranch,
-      repoBaseBranch: baseBranch,
-      sandboxId: activeSandbox?.id ?? null,
-    };
-  }, [activeRepo, activeSandbox, missionTitle, selectedMissionId, sessionId]);
+  const requestContext = useMemo(
+    () =>
+      buildControlSessionRequestContext({
+        activeRepo,
+        activeSandbox,
+        sessionId,
+        selectedMissionId,
+        missionTitle,
+      }),
+    [activeRepo, activeSandbox, missionTitle, selectedMissionId, sessionId]
+  );
 
   return { activeRepo, sandboxes, activeSandbox, requestContext };
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
+import { parseControlSessionRepoId } from "@/lib/control/session-project";
 
 const LIST_COLUMNS =
   "id, title, project, repo_id, pinned, archived, created_at, updated_at";
@@ -58,8 +59,12 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     title?: string;
     project?: string | null;
-    repo_id?: string | null;
+    repo_id?: unknown;
   };
+  const parsedRepoId = parseControlSessionRepoId(body.repo_id);
+  if (!parsedRepoId.ok) {
+    return NextResponse.json({ error: "Invalid repo_id" }, { status: 400 });
+  }
 
   const { data, error } = await supabaseAdmin
     .from("control_sessions")
@@ -67,7 +72,7 @@ export async function POST(req: Request) {
       user_id: userId,
       title: body.title?.trim() || "New session",
       project: body.project?.trim().slice(0, 160) || null,
-      repo_id: body.repo_id || null,
+      repo_id: parsedRepoId.value,
     })
     .select("*")
     .single();
@@ -91,11 +96,18 @@ export async function PUT(req: Request) {
     expected_updated_at?: string | null;
     title?: string;
     project?: string | null;
-    repo_id?: string | null;
+    repo_id?: unknown;
     messages?: unknown;
     pinned?: boolean;
     archived?: boolean;
   };
+  if (Object.hasOwn(body, "repo_id")) {
+    const parsedRepoId = parseControlSessionRepoId(body.repo_id);
+    if (!parsedRepoId.ok) {
+      return NextResponse.json({ error: "Invalid repo_id" }, { status: 400 });
+    }
+    body.repo_id = parsedRepoId.value;
+  }
   const { id, expected_updated_at: expectedUpdatedAt, ...fields } = body;
 
   if (!id) {

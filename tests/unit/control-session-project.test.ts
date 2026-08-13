@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  controlSessionProjectName,
   defaultProjectChoice,
   deriveProjectName,
+  parseControlSessionRepoId,
   repoProjectName,
   resolveControlSessionRepo,
 } from "../../lib/control/session-project";
@@ -33,6 +35,43 @@ test("resolveControlSessionRepo prefers repo id and safely restores legacy names
     ]),
     null
   );
+});
+
+test("controlSessionProjectName normalizes unambiguous legacy groups", () => {
+  const repos = [
+    { id: "r1", name: "widgets", full_name: "acme/widgets" },
+    { id: "r2", name: "api", full_name: "acme/api" },
+  ];
+
+  assert.equal(
+    controlSessionProjectName({ project: "widgets" }, repos),
+    "acme/widgets"
+  );
+  assert.equal(
+    controlSessionProjectName({ project: "custom-project" }, repos),
+    "custom-project"
+  );
+  assert.equal(controlSessionProjectName({ project: "   " }, repos), null);
+});
+
+test("parseControlSessionRepoId accepts null or UUID values and rejects malformed input", () => {
+  assert.deepEqual(parseControlSessionRepoId(undefined), {
+    ok: true,
+    value: null,
+  });
+  assert.deepEqual(parseControlSessionRepoId("   "), {
+    ok: true,
+    value: null,
+  });
+  assert.deepEqual(
+    parseControlSessionRepoId(" 1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b "),
+    {
+      ok: true,
+      value: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+    }
+  );
+  assert.deepEqual(parseControlSessionRepoId("not-a-uuid"), { ok: false });
+  assert.deepEqual(parseControlSessionRepoId(123), { ok: false });
 });
 
 test("defaultProjectChoice picks favorite, then first repo, then new", () => {

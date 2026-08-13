@@ -80,9 +80,10 @@ export function useControlSessions({
       return;
     }
     deepLinkedRef.current = true;
+    if (deepLinkTarget === sessionId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- restores a deep-linked session once the list loads
     void selectSession(deepLinkTarget);
-  }, [sessions, deepLinkTarget, selectSession]);
+  }, [sessions, deepLinkTarget, selectSession, sessionId]);
 
   const createSession = useCallback(
     async (title: string, project?: string, repoId?: string | null) => {
@@ -144,6 +145,7 @@ export function useControlSessions({
       if (!res.ok) return;
 
       const { session } = (await res.json()) as { session: SessionRecord };
+      mutationRevisionRef.current += 1;
       updatedAtRef.current = session.updated_at;
       setSessions((current) =>
         current.map((entry) =>
@@ -191,6 +193,7 @@ export function useControlSessions({
       if (!res.ok) return false;
 
       const { session } = (await res.json()) as { session: SessionRecord };
+      mutationRevisionRef.current += 1;
       updatedAtRef.current = session.updated_at;
       if (fields.archived) {
         setSessions((current) =>

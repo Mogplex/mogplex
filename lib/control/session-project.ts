@@ -4,6 +4,8 @@
  * group named explicitly or derived from the mission text.
  */
 
+import { isUuid } from "@/lib/uuid";
+
 type ProjectRepo = {
   id: string;
   name?: string;
@@ -41,6 +43,38 @@ export function resolveControlSessionRepo<T extends ProjectRepo>(
     return name.toLowerCase() === project;
   });
   return legacyMatches.length === 1 ? legacyMatches[0] : null;
+}
+
+/** Display legacy repo-backed sessions under the repo's canonical full name. */
+export function controlSessionProjectName<T extends ProjectRepo>(
+  session: { repo_id?: string | null; project?: string | null },
+  repos: T[]
+): string | null {
+  return (
+    (resolveControlSessionRepo(session, repos)?.full_name ??
+      session.project?.trim()) ||
+    null
+  );
+}
+
+export function canonicalizeControlSessionProjects<
+  T extends { repo_id?: string | null; project?: string | null },
+>(sessions: T[], repos: ProjectRepo[]): T[] {
+  return sessions.map((session) => {
+    const project = controlSessionProjectName(session, repos);
+    return project === session.project ? session : { ...session, project };
+  });
+}
+
+/** Validate and normalize the optional repository id accepted by the API. */
+export function parseControlSessionRepoId(
+  value: unknown
+): { ok: true; value: string | null } | { ok: false } {
+  if (value === null || value === undefined) return { ok: true, value: null };
+  if (typeof value !== "string") return { ok: false };
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, value: null };
+  return isUuid(trimmed) ? { ok: true, value: trimmed } : { ok: false };
 }
 
 /**
