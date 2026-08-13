@@ -85,6 +85,7 @@ export type ControlPromptWorktreeContext = {
   orchestrationRunId: string | null;
   worktrees: Array<{
     id: string;
+    taskId: string;
     branch: string;
     status: string;
     sandboxId: string;
@@ -92,6 +93,13 @@ export type ControlPromptWorktreeContext = {
     agentId?: string;
   }>;
 };
+
+/** Exactly one validated record may become the selected tool sandbox. */
+export function resolveSelectedControlSandboxId(
+  sandboxes: ReadonlyArray<{ id: string }>
+): string | null {
+  return sandboxes.length === 1 ? (sandboxes[0]?.id ?? null) : null;
+}
 
 /** Load worktrees only through the owned Control session and its linked run. */
 export async function resolveControlPromptWorktrees(
@@ -124,6 +132,7 @@ export async function resolveControlPromptWorktrees(
         .filter((worktree) => worktree.status !== "archived")
         .map((worktree) => ({
           id: worktree.id,
+          taskId: worktree.task_id,
           branch: worktree.branch_name,
           status: worktree.status,
           sandboxId: worktree.sandbox_id,

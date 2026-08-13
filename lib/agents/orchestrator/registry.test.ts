@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   ORCHESTRATOR_TOOLS,
   buildOrchestratorTools,
+  getImplementationStats,
   type OrchestratorToolContext,
 } from "./registry";
-import { isStubTool } from "./helpers";
 
 /**
  * A context with every optional field populated: no tool may degrade to a
@@ -31,29 +31,37 @@ const FULL_CONTEXT: OrchestratorToolContext = {
 describe("buildOrchestratorTools", () => {
   const tools = buildOrchestratorTools(FULL_CONTEXT);
 
-  it("should build one tool per registry definition", () => {
+  it("exposes only implemented tools to the model", () => {
     expect(Object.keys(tools).sort()).toEqual(
-      ORCHESTRATOR_TOOLS.map((def) => def.name).sort()
+      ORCHESTRATOR_TOOLS.filter((def) => def.implemented)
+        .map((def) => def.name)
+        .sort()
     );
+    expect(tools.sandbox_provision).toBeUndefined();
+    expect(tools.sandbox_pause).toBeUndefined();
+    expect(tools.steer_agent).toBeUndefined();
   });
 
   it("should provide a real implementation for every def flagged implemented (drift guard)", () => {
     const drifted = ORCHESTRATOR_TOOLS.filter(
-      (def) => def.implemented && isStubTool(tools[def.name])
+      (def) => def.implemented && !tools[def.name]
     ).map((def) => def.name);
     expect(drifted).toEqual([]);
   });
 
-  it("should keep every def flagged unimplemented as a stub (reverse drift guard)", () => {
-    const undeclared = ORCHESTRATOR_TOOLS.filter(
-      (def) => !def.implemented && !isStubTool(tools[def.name])
-    ).map((def) => def.name);
-    expect(undeclared).toEqual([]);
+  it("keeps planned capabilities in diagnostic inventory metadata", () => {
+    const stats = getImplementationStats();
+    expect(stats.planned).toBeGreaterThan(0);
+    expect(stats.total).toBe(stats.implemented + stats.planned);
+    expect(
+      ORCHESTRATOR_TOOLS.find((def) => def.name === "sandbox_provision")
+        ?.implemented
+    ).toBe(false);
   });
 
   it("should wire memory_write and memory_search to the memory tool implementations", () => {
-    expect(isStubTool(tools.memory_write)).toBe(false);
-    expect(isStubTool(tools.memory_search)).toBe(false);
+    expect(tools.memory_write).toBeDefined();
+    expect(tools.memory_search).toBeDefined();
     // The real memory tools carry the memories-surface descriptions, not the
     // registry def descriptions the stubs would echo back.
     expect(tools.memory_write.description).toContain("durable memory");
@@ -66,12 +74,42 @@ describe("buildOrchestratorTools", () => {
     );
   });
 
-  it("should degrade github-dependent tools to stubs when the token is missing", () => {
+  it("omits context-unavailable tools instead of replacing them with callable stubs", () => {
     const withoutToken = buildOrchestratorTools({
       ...FULL_CONTEXT,
       githubToken: null,
     });
-    expect(isStubTool(withoutToken.search_repo)).toBe(true);
-    expect(isStubTool(withoutToken.open_pr)).toBe(true);
+    expect(withoutToken.search_repo).toBeUndefined();
+    expect(withoutToken.open_pr).toBeUndefined();
+    expect(Object.keys(withoutToken)).not.toContain("sandbox_provision");
+  });
+
+  it("describes the sandbox and worktree decision contract consistently", () => {
+    expect(tools.sandbox_start.description).toMatch(/runtime|preview/i);
+    expect(tools.sandbox_start.description).toMatch(
+      /does not create.*worktree/i
+    );
+    expect(tools.run_command.description).toMatch(/selected sandbox/i);
+    expect(tools.run_command.description).toMatch(/does not create.*worktree/i);
+    expect(tools.spawn_worktree.description).toMatch(/planned task/i);
+    expect(tools.spawn_worktree.description).toMatch(
+      /does not start.*sandbox/i
+    );
+    expect(tools.spawn_subagent.description).toMatch(
+      /exact.*sandbox.*checkout/i
+    );
+    expect(tools.archive_worktree.description).toMatch(
+      /without stopping|does not stop/i
+    );
+    expect(tools.prune_worktree.description).toMatch(
+      /does not stop or delete/i
+    );
+  });
+
+  it("keeps the selected sandbox server-owned when spawning a worktree", () => {
+    const schema = tools.spawn_worktree.inputSchema as unknown as {
+      shape: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.shape)).toEqual(["taskId"]);
   });
 });

@@ -15,6 +15,8 @@ export type OrchestratorPromptContext = {
   controlTarget?: string;
   controlPermissions?: string;
   controlMode?: string;
+  /** Exact tool names exposed to this model invocation. */
+  availableToolNames?: string[];
   activeSandboxes?: Array<{
     id: string;
     branch: string;
@@ -22,6 +24,7 @@ export type OrchestratorPromptContext = {
   }>;
   activeWorktrees?: Array<{
     id: string;
+    taskId: string;
     branch: string;
     agentId?: string;
     status: string;
@@ -40,7 +43,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -60,25 +63,13 @@ All code changes happen through worker agents in isolated worktrees.
 </role>
 
 <protected-actions>
-Some actions require operator approval before execution. When you call a protected tool, execution pauses and the operator sees an approval card in the timeline; if they approve, the tool runs and you continue — if they deny, the call fails and you must not retry it unchanged.
+Some callable actions require operator approval before execution. When a tool requests approval, execution pauses and the operator sees an approval card; if they deny it, do not retry the same action unchanged. Pruning a worktree requires approval because it removes the managed checkout. Protected branches include ${baseBranch}, production, and release/*.
 
-Always requiring approval:
-- merge_changeset: Merging work into the integration branch
-- deploy, promote, rollback: Environment deployments
-- delete_file: Deleting files
-- secrets_read: Accessing secrets
-- mcp_grant, mcp_revoke: Managing MCP permissions
-- feature_flag_set: Changing feature flags
-
-Requiring approval for protected branches (${baseBranch}, production, release/*):
-- git_push: Pushing to protected branches
-- git_commit: Committing to protected branches
-
-For sensitive actions no tool gates on its own (plan sign-off, scope changes), call request_approval. It returns \`status: "pending"\` with an approvalId — report what you need approved and STOP; never poll or retry while a request is pending. While waiting, you may continue other work that doesn't depend on the decision.
+For sensitive decisions no tool gates on its own, such as plan sign-off or scope changes, call request_approval. It returns \`status: "pending"\` with an approvalId — report what you need approved and STOP; never poll or retry while a request is pending. While waiting, you may continue other work that doesn't depend on the decision. Never invent or call a capability that is not present in the callable tool list.
 </protected-actions>
 
 <tool-categories>
-${buildToolCategoriesBlock()}
+${buildToolCategoriesBlock(ctx.availableToolNames)}
 </tool-categories>
 
 <communication>
@@ -109,11 +100,10 @@ Each task spec should include:
 
 <integration>
 After worker agents complete their tasks:
-1. Review the changes in each worktree (diff_worktrees, diff_base)
-2. Check for conflicts before attempting merge
-3. Merge in dependency order using merge_changeset (requires approval)
-4. Run validation on the integration branch
-5. If conflicts occur, either resolve them or spawn an integration agent
+1. Review each persisted checkout with diff_worktree
+2. Compare results against the task acceptance criteria and dependency order
+3. Run validation with run_command in the selected sandbox
+4. If an integration capability is not callable, report that limitation and request the operator's next action; never fabricate a merge or deployment
 
 Git branch naming:
 - Spec branch: mogplex/spec/<mission-slug>
@@ -123,11 +113,27 @@ Git branch naming:
 
 <debugging>
 When a worker agent fails or gets stuck:
-1. Use request_reasoning to understand what happened
-2. Check the agent's logs and commit history
-3. Decide: steer the agent, retry with adjustments, or cancel and reassign
-4. Never let a failing agent block the entire mission indefinitely
+1. Inspect the persisted task, worktree, diff, and available run output
+2. Identify the concrete failure and its owning resource
+3. Use only the callable tools to gather evidence or continue safely
+4. Report any capability gap explicitly instead of inventing a tool call
 </debugging>`;
+}
+
+function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
+  if (ctx.controlMode === "plan") return "";
+
+  return `
+<resource-decision-contract>
+- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. Starting a sandbox never creates a worktree.
+- Use run_command for a shell command in the selected sandbox. With no selection it may fall back to exactly one repo-scoped running sandbox or start one for the active repository; it returns the resolved sandbox identity and never implies or creates a worktree.
+- Use plan_mission to create task identities before isolated coding work.
+- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.
+- Use spawn_subagent only after an active persisted worktree exists. The worker must use that worktree's exact sandbox and checkout path.
+- Preview-only, inspection-only, and command-only work must not create a worktree.
+- Sandbox lifecycle operations never mutate worktree lifecycle state. Worktree archive or prune operations never stop or delete sandbox compute.
+</resource-decision-contract>
+`;
 }
 
 function buildRepositoryBlock(ctx: OrchestratorPromptContext): string {
@@ -196,17 +202,25 @@ No active sandbox is selected. A sandbox is the remote compute environment; a Gi
 
   const worktreeLines = worktrees.map(
     (w) =>
-      `- ${w.id}: branch=${w.branch}, status=${w.status}${w.agentId ? `, agent=${w.agentId}` : ""}` +
+      `- ${w.id}: task=${w.taskId}, branch=${w.branch}, status=${w.status}${w.agentId ? `, agent=${w.agentId}` : ""}` +
       `, sandbox=${w.sandboxId}, checkout=${w.checkoutPath}`
   );
 
   const sandboxLines = sandboxes.map(
     (s) => `- ${s.id}: branch=${s.branch}, status=${s.status}`
   );
+  const sandboxSelection =
+    sandboxes.length === 1
+      ? `Selected sandbox: ${sandboxes[0]?.id}`
+      : sandboxes.length > 1
+        ? "Multiple sandboxes are available. Require an explicit sandbox selection before execution. Never guess from account order or unrelated state."
+        : "No sandbox is selected.";
 
   return `
 <execution-environments>
 Sandboxes and Git worktrees are separate resources. Never infer a worktree from a sandbox record.
+
+${sandboxSelection}
 
 Active worktrees:
 ${worktreeLines.length > 0 ? worktreeLines.join("\n") : "(none)"}
@@ -217,7 +231,7 @@ ${sandboxLines.length > 0 ? sandboxLines.join("\n") : "(none)"}
 `;
 }
 
-function buildToolCategoriesBlock(): string {
+function buildToolCategoriesBlock(availableToolNames?: string[]): string {
   const categories = [
     "planning",
     "filesystem",
@@ -232,19 +246,21 @@ function buildToolCategoriesBlock(): string {
   ] as const;
 
   const lines: string[] = [];
+  const available = availableToolNames
+    ? new Set(availableToolNames)
+    : new Set(
+        ORCHESTRATOR_TOOLS.filter((tool) => tool.implemented).map(
+          (tool) => tool.name
+        )
+      );
 
   for (const category of categories) {
-    const tools = getToolsByCategory(category);
+    const tools = getToolsByCategory(category).filter(
+      (tool) => tool.implemented && available.has(tool.name)
+    );
+    if (tools.length === 0) continue;
     const toolNames = tools.map((t) => t.name).join(", ");
-    const implementedCount = tools.filter((t) => t.implemented).length;
-    const status =
-      implementedCount === tools.length
-        ? "(all implemented)"
-        : implementedCount > 0
-          ? `(${implementedCount}/${tools.length} implemented)`
-          : "(planned)";
-
-    lines.push(`**${category}** ${status}: ${toolNames}`);
+    lines.push(`**${category}**: ${toolNames}`);
   }
 
   return lines.join("\n");
@@ -255,13 +271,13 @@ function buildToolCategoriesBlock(): string {
  */
 export function getToolImplementationSummary(): string {
   const implemented = ORCHESTRATOR_TOOLS.filter((t) => t.implemented);
-  const stub = ORCHESTRATOR_TOOLS.filter((t) => !t.implemented);
+  const planned = ORCHESTRATOR_TOOLS.filter((t) => !t.implemented);
 
-  return `Tool Registry: ${implemented.length} implemented, ${stub.length} planned (${ORCHESTRATOR_TOOLS.length} total)
+  return `Tool Registry: ${implemented.length} implemented, ${planned.length} planned (${ORCHESTRATOR_TOOLS.length} total)
 
 Implemented:
 ${implemented.map((t) => `- ${t.name}: ${t.description}`).join("\n")}
 
 Planned:
-${stub.map((t) => `- ${t.name}: ${t.description}`).join("\n")}`;
+${planned.map((t) => `- ${t.name}: ${t.description}`).join("\n")}`;
 }

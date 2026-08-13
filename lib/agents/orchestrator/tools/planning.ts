@@ -128,11 +128,6 @@ export const spawnWorktreeSchema = z.object({
     .string()
     .uuid()
     .describe("Orchestration task assigned to the checkout"),
-  sandboxId: z
-    .string()
-    .uuid()
-    .optional()
-    .describe("Sandbox record that will host the checkout"),
 });
 
 export const listWorktreesSchema = z.object({

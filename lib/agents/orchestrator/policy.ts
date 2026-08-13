@@ -273,11 +273,12 @@ export function wrapWithPolicy(
     return originalTool;
   }
 
-  // Extract the original execute function and schema
-  // AI SDK tools have parameters and execute
+  // Preserve the AI SDK v6 inputSchema. The legacy parameters fallback keeps
+  // older internal test/tools compatible without exposing a schema-less tool.
   const originalExecute = (originalTool as { execute?: unknown }).execute;
-  const originalParameters = (originalTool as { parameters?: unknown })
-    .parameters;
+  const originalInputSchema =
+    (originalTool as { inputSchema?: unknown; parameters?: unknown })
+      .inputSchema ?? (originalTool as { parameters?: unknown }).parameters;
   const originalDescription = (originalTool as { description?: string })
     .description;
 
@@ -320,7 +321,7 @@ export function wrapWithPolicy(
 
   return defineTool({
     description: originalDescription ?? def.description,
-    parameters: originalParameters,
+    inputSchema: originalInputSchema,
     ...(mayRequireApproval ? { needsApproval } : {}),
     execute: async (input: unknown, options?: { toolCallId?: string }) => {
       const policyResult = checkToolPolicy(def, ctx, input);

@@ -16,6 +16,7 @@ import {
   getControlChatRunScope,
   buildControlChatRunMetadata,
   buildControlGatewayContext,
+  resolveSelectedControlSandboxId,
   resolveControlPromptSandboxes,
   resolveControlPromptWorktrees,
   resolveGithubTokenForRepo,
@@ -79,7 +80,7 @@ export async function executeControlChatRequest(input: {
 
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
-      sandboxId: input.body.sandboxId,
+      sandboxId: resolveSelectedControlSandboxId(activeSandboxes),
       repoId: input.body.repoId,
       repoOwner: input.body.repoOwner,
       repoName: input.body.repoName,
@@ -119,7 +120,11 @@ export async function executeControlChatRequest(input: {
         : wrapToolsWithPolicy(rawTools, toolContext);
 
     // Build system prompt
-    const systemPrompt = buildOrchestratorSystemPrompt(promptContext);
+    const systemPrompt = buildOrchestratorSystemPrompt({
+      ...promptContext,
+      availableToolNames:
+        input.body.enableTools === false ? [] : Object.keys(rawTools),
+    });
 
     // Resolve model
     const gatewayContext = buildControlGatewayContext(input.userId, input.body);
