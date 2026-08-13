@@ -102,6 +102,8 @@ test("terminal_exec reports a missing exitCode as null rather than 0", async () 
           stdout: "partial output",
           stderr: "",
           command: "pnpm build",
+          sandboxId: "sandbox-1",
+          sandboxResolution: "selected",
         });
       }
     );
@@ -127,6 +129,29 @@ test("terminal_exec passes a zero exit code through untouched", async () => {
           stdout: "ok",
           stderr: "warn",
           command: "true",
+          sandboxId: "sandbox-1",
+          sandboxResolution: "selected",
+        });
+      }
+    );
+  });
+});
+
+test("terminal_exec preserves the resolved sandbox identity on command failure", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedFetch(
+      async () => Response.json({ error: "command rejected" }, { status: 500 }),
+      async () => {
+        const { createTerminalExec } = await loadToolsModule();
+        const tool = createTerminalExec("sandbox-1", "user-123") as unknown as {
+          execute: (input: { command: string }) => Promise<unknown>;
+        };
+
+        assert.deepEqual(await tool.execute({ command: "false" }), {
+          error: "command rejected",
+          command: "false",
+          sandboxId: "sandbox-1",
+          sandboxResolution: "selected",
         });
       }
     );

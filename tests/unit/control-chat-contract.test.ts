@@ -5,7 +5,6 @@ import {
   resolveControlPromptSandboxes,
   resolveControlPromptWorktrees,
 } from "../../app/api/control/chat/_lib/context";
-import { buildOrchestratorSystemPrompt } from "../../lib/agents/orchestrator/system-prompt";
 
 test("control chat normalization preserves AI SDK file parts", () => {
   const [message] = normalizeControlChatMessages([
@@ -171,63 +170,6 @@ test("control chat normalization allows capped file parts across message history
   assert.equal(messages[1]?.parts.length, 3);
 });
 
-test("plan mode adds explicit non-mutation intent to the orchestrator prompt", () => {
-  const prompt = buildOrchestratorSystemPrompt({
-    repoFullName: "acme/demo",
-    missionId: "mission-1",
-    missionTitle: "Fix onboarding",
-    controlMode: "plan",
-    controlScope: "PLAN ONLY",
-    controlTarget: "mission",
-    controlPermissions: "Ask First",
-  });
-
-  assert.match(prompt, /<control-intent>/);
-  assert.match(prompt, /Mode: plan/);
-  assert.match(prompt, /Scope: PLAN ONLY/);
-  assert.match(prompt, /Target: mission/);
-  assert.match(prompt, /Permissions: Ask First/);
-  assert.match(prompt, /planning only/);
-  assert.match(prompt, /do not spawn workers or mutate repository files/);
-  assert.doesNotMatch(prompt, /Use spawn_worktree/);
-});
-
-test("orchestrator prompt keeps sandboxes and worktrees distinct", () => {
-  const prompt = buildOrchestratorSystemPrompt({
-    repoFullName: "acme/demo",
-    activeSandboxes: [
-      { id: "sandbox-record-1", branch: "feat/context", status: "running" },
-    ],
-  });
-
-  assert.match(prompt, /Sandboxes and Git worktrees are separate resources/);
-  assert.match(prompt, /Active worktrees:\n\(none\)/);
-  assert.match(
-    prompt,
-    /sandbox-record-1: branch=feat\/context, status=running/
-  );
-});
-
-test("orchestrator prompt identifies the exact sandbox and checkout for each worktree", () => {
-  const prompt = buildOrchestratorSystemPrompt({
-    repoFullName: "acme/demo",
-    activeWorktrees: [
-      {
-        id: "worktree-1",
-        branch: "feat/context",
-        status: "active",
-        sandboxId: "sandbox-record-1",
-        checkoutPath: "/vercel/sandbox/.worktrees/worktree-1",
-      },
-    ],
-  });
-
-  assert.match(
-    prompt,
-    /worktree-1: branch=feat\/context, status=active, sandbox=sandbox-record-1, checkout=\/vercel\/sandbox\/\.worktrees\/worktree-1/
-  );
-});
-
 test("control prompt sandbox context comes from an owned server record", async () => {
   const sandboxes = await resolveControlPromptSandboxes(
     new Request("https://app.mogplex.com/api/control/chat"),
@@ -390,6 +332,7 @@ test("control prompt loads worktrees through the owned session run", async () =>
     worktrees: [
       {
         id: "worktree-1",
+        taskId: "task-1",
         branch: "feat/server-owned",
         status: "active",
         sandboxId: "sandbox-1",

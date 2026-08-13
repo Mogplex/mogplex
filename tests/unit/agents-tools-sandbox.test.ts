@@ -221,6 +221,69 @@ test("start_sandbox returns an error when a full_name does not map to an owned r
   });
 });
 
+test("terminal_exec returns the automatically resolved sandbox identity", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup({ id: "sandbox-record-1" }, async () => {
+      await withPatchedFetch(
+        async () => Response.json({ exitCode: 0, stdout: "ok", stderr: "" }),
+        async () => {
+          const { createTerminalExec } = await loadToolsModule();
+          const tool = createTerminalExec(
+            undefined,
+            "user-123",
+            "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b"
+          ) as unknown as {
+            execute: (input: { command: string }) => Promise<unknown>;
+          };
+
+          assert.deepEqual(await tool.execute({ command: "pwd" }), {
+            exitCode: 0,
+            stdout: "ok",
+            stderr: "",
+            command: "pwd",
+            sandboxId: "sandbox-record-1",
+            sandboxResolution: "reused_running",
+          });
+        }
+      );
+    });
+  });
+});
+
+test("terminal_exec refuses to guess when multiple repo sandboxes are running", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedSandboxLookup(
+      [{ id: "sandbox-record-1" }, { id: "sandbox-record-2" }],
+      async () => {
+        let fetched = false;
+        await withPatchedFetch(
+          async () => {
+            fetched = true;
+            return Response.json({ exitCode: 0 });
+          },
+          async () => {
+            const { createTerminalExec } = await loadToolsModule();
+            const tool = createTerminalExec(
+              undefined,
+              "user-123",
+              "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b"
+            ) as unknown as {
+              execute: (input: { command: string }) => Promise<unknown>;
+            };
+
+            assert.deepEqual(await tool.execute({ command: "pwd" }), {
+              error:
+                "Multiple running sandboxes are available for this repository. Select one explicitly before continuing.",
+              command: "pwd",
+            });
+          }
+        );
+        assert.equal(fetched, false);
+      }
+    );
+  });
+});
+
 test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth", async () => {
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
     let capturedUrl = "";

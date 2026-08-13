@@ -41,7 +41,7 @@ export function withEnv<T>(
 }
 
 export async function withPatchedSandboxLookup<T>(
-  data: { id: string } | null,
+  data: { id: string } | Array<{ id: string }> | null,
   callback: () => Promise<T>,
   options?: { repoLookupData?: { id: string } | null }
 ) {
@@ -62,10 +62,16 @@ export async function withPatchedSandboxLookup<T>(
       return query;
     },
     limit() {
-      return query;
+      return Promise.resolve({
+        data: Array.isArray(data) ? data : data ? [data] : [],
+        error: null,
+      });
     },
     async single() {
-      return { data, error: null };
+      return {
+        data: Array.isArray(data) ? (data[0] ?? null) : data,
+        error: null,
+      };
     },
     async maybeSingle() {
       return { data: options?.repoLookupData ?? null, error: null };

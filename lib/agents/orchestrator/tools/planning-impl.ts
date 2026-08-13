@@ -146,7 +146,7 @@ export function createSpawnSubagentTool(
   const deps = { ...defaultSpawnSubagentDeps, ...overrides };
   return defineTool({
     description:
-      "Launch a worker bound to one active persisted worktree. The worker uses that exact checkout path and does not create a sandbox or branch.",
+      "Launch a worker only after an active persisted worktree exists. The worker uses that worktree's exact sandbox and checkout path and does not create a sandbox, checkout, or branch.",
     inputSchema: spawnSubagentSchema,
     execute: async ({
       worktreeId,

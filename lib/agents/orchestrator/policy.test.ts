@@ -62,6 +62,22 @@ function fakeTool(onExecute?: (input: unknown) => unknown) {
 }
 
 describe("wrapWithPolicy approval gate", () => {
+  it("preserves the input schema of implemented tools", () => {
+    const inputSchema = z.object({ repoId: z.string() });
+    const original = defineTool({
+      description: "start compute",
+      inputSchema,
+      execute: async () => ({ ok: true }),
+    });
+
+    const wrapped = wrapWithPolicy(
+      "sandbox_start",
+      original,
+      ctx
+    ) as unknown as { inputSchema?: unknown };
+    expect(wrapped.inputSchema).toBe(inputSchema);
+  });
+
   it("should expose needsApproval on always-approval tools and persist the request", async () => {
     const { deps, created } = makeDeps();
     const { tool } = fakeTool();
@@ -138,6 +154,30 @@ describe("wrapWithPolicy approval gate", () => {
       ok: true,
     });
     expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    "sandbox_start",
+    "run_command",
+    "spawn_worktree",
+    "spawn_subagent",
+    "archive_worktree",
+  ])("should block %s resource mutations in plan mode", async (toolName) => {
+    const { deps } = makeDeps();
+    const { tool, calls } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      toolName,
+      tool,
+      { ...ctx, controlMode: "plan" },
+      deps
+    ) as unknown as WrappedTool;
+
+    const result = (await wrapped.execute({})) as PolicyDeniedResponse;
+    expect(result).toMatchObject({
+      status: "policy_denied",
+      reason: "policy_violation",
+    });
+    expect(calls).toHaveLength(0);
   });
 
   it("should gate git_push only for protected branches", async () => {

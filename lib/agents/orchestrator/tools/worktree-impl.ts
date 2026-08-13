@@ -40,15 +40,11 @@ function toolError(error: unknown) {
 export function createSpawnWorktreeTool(ctx: OrchestratorToolContext): Tool {
   return defineTool({
     description:
-      "Create or reuse the real Git worktree assigned to an orchestration task inside a selected sandbox.",
+      "Create or reuse the real Git worktree for a planned task in the active mission inside the selected sandbox. This creates an isolated checkout and branch; it does not start, stop, or otherwise change sandbox compute.",
     inputSchema: spawnWorktreeSchema,
-    execute: async ({
-      taskId,
-      sandboxId,
-    }: z.infer<typeof spawnWorktreeSchema>) => {
+    execute: async ({ taskId }: z.infer<typeof spawnWorktreeSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
-      const resolvedSandboxId = sandboxId ?? ctx.sandboxId;
-      if (!resolvedSandboxId) {
+      if (!ctx.sandboxId) {
         return { status: "error" as const, error: "Select a sandbox first." };
       }
       try {
@@ -56,7 +52,7 @@ export function createSpawnWorktreeTool(ctx: OrchestratorToolContext): Tool {
           userId: ctx.userId,
           runId: ctx.orchestrationRunId,
           taskId,
-          sandboxId: resolvedSandboxId,
+          sandboxId: ctx.sandboxId,
         });
         return { status: "ok" as const, worktree };
       } catch (error) {
