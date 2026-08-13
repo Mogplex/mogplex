@@ -220,3 +220,86 @@ test("start_sandbox returns an error when a full_name does not map to an owned r
     });
   });
 });
+
+test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    let capturedUrl = "";
+    let capturedInit: RequestInit | undefined;
+
+    await withPatchedFetch(
+      async (url, init) => {
+        capturedUrl = url.toString();
+        capturedInit = init;
+        return Response.json({
+          sandbox: {
+            id: "sandbox-record-1",
+            runtime_summary: { status: "stopped" },
+            error_summary: { current_error: null },
+          },
+        });
+      },
+      async () => {
+        const { createStopSandbox } = await loadToolsModule();
+        const tool = createStopSandbox("user-123") as unknown as {
+          execute: (input: { sandboxId: string }) => Promise<unknown>;
+        };
+
+        assert.deepEqual(
+          await tool.execute({ sandboxId: "sandbox-record-1" }),
+          {
+            ok: true,
+            sandboxId: "sandbox-record-1",
+            status: "stopped",
+            message:
+              "Sandbox compute stopped. Its record and worktree bindings remain available for restart.",
+          }
+        );
+      }
+    );
+
+    assert.equal(
+      capturedUrl,
+      "http://localhost:3000/api/sandbox/sandbox-record-1/stop"
+    );
+    assert.equal(capturedInit?.method, "POST");
+    assert.equal(capturedInit?.body, undefined);
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("authorization"), "Bearer internal-secret");
+    assert.equal(headers.get("x-delegated-user-id"), "user-123");
+    assert.equal(headers.get("content-type"), "application/json");
+  });
+});
+
+test("sandbox_stop does not report success when Stop remains unconfirmed", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedFetch(
+      async () =>
+        Response.json({
+          sandbox: {
+            id: "sandbox-record-1",
+            runtime_summary: { status: "running" },
+            error_summary: {
+              current_error:
+                "Remote VM could not be confirmed stopped. The record remains active for reconciliation.",
+            },
+          },
+        }),
+      async () => {
+        const { createStopSandbox } = await loadToolsModule();
+        const tool = createStopSandbox("user-123") as unknown as {
+          execute: (input: { sandboxId: string }) => Promise<unknown>;
+        };
+
+        assert.deepEqual(
+          await tool.execute({ sandboxId: "sandbox-record-1" }),
+          {
+            error:
+              "Remote VM could not be confirmed stopped. The record remains active for reconciliation.",
+            sandboxId: "sandbox-record-1",
+            status: "running",
+          }
+        );
+      }
+    );
+  });
+});

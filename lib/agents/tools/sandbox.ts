@@ -432,29 +432,66 @@ export function createStartSandbox(userId?: string) {
 const stopSandboxParams = z.object({
   sandboxId: z.string().describe("The sandbox ID to stop"),
 });
-
+type SandboxStopApiResponse = {
+  error?: unknown;
+  sandbox?: {
+    id?: unknown;
+    runtime_summary?: { status?: unknown };
+    error_summary?: { current_error?: unknown };
+  };
+};
+function readStopResponseString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+function formatSandboxStopResult(
+  data: SandboxStopApiResponse,
+  requestedSandboxId: string
+) {
+  const stoppedSandbox = data.sandbox;
+  const sandboxId =
+    readStopResponseString(stoppedSandbox?.id) ?? requestedSandboxId;
+  const status = readStopResponseString(
+    stoppedSandbox?.runtime_summary?.status
+  );
+  if (status !== "stopped") {
+    return {
+      error:
+        readStopResponseString(stoppedSandbox?.error_summary?.current_error) ??
+        "Sandbox stop could not be confirmed. Its record remains available for reconciliation.",
+      sandboxId,
+      status: status ?? "unknown",
+    };
+  }
+  return {
+    ok: true,
+    sandboxId,
+    status,
+    message:
+      "Sandbox compute stopped. Its record and worktree bindings remain available for restart.",
+  };
+}
 export function createStopSandbox(userId?: string) {
   return defineTool({
     description:
-      "Stop a running sandbox microVM. Use this when the user asks to stop or shut down the preview.",
+      "Stop sandbox compute while preserving its sandbox record and worktree bindings for restart. Use this when the user asks to stop or shut down the preview. This does not delete the sandbox record.",
     inputSchema: stopSandboxParams,
     execute: async ({ sandboxId }: z.infer<typeof stopSandboxParams>) => {
       const baseUrl = resolveAppBaseUrl();
-
       const requestHeaders = getSandboxRequestHeaders(userId);
       if ("error" in requestHeaders) return { error: requestHeaders.error };
-
-      const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}`, {
-        method: "DELETE",
+      const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}/stop`, {
+        method: "POST",
         headers: requestHeaders.headers,
       });
-
+      const data = (await res
+        .json()
+        .catch(() => ({}))) as SandboxStopApiResponse;
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        return { error: (data.error as string) || "Failed to stop sandbox" };
+        return {
+          error: readStopResponseString(data.error) ?? "Failed to stop sandbox",
+        };
       }
-
-      return { ok: true, message: "Sandbox stopped." };
+      return formatSandboxStopResult(data, sandboxId);
     },
   });
 }

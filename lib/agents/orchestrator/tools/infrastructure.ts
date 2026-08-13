@@ -24,7 +24,7 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
   {
     name: "sandbox_stop",
     category: "infrastructure",
-    description: "Stop a running sandbox",
+    description: "Stop sandbox compute without deleting its record",
     access: "mutation",
     implemented: true,
   },

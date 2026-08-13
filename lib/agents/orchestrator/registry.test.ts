@@ -60,6 +60,12 @@ describe("buildOrchestratorTools", () => {
     expect(tools.memory_search.description).toContain("saved memories");
   });
 
+  it("should describe sandbox_stop as non-deleting", () => {
+    expect(tools.sandbox_stop.description).toContain(
+      "does not delete the sandbox record"
+    );
+  });
+
   it("should degrade github-dependent tools to stubs when the token is missing", () => {
     const withoutToken = buildOrchestratorTools({
       ...FULL_CONTEXT,
