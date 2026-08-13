@@ -241,6 +241,7 @@ test("control prompt sandbox context comes from an owned server record", async (
 });
 
 test("control prompt rejects a sandbox from a different repository", async () => {
+  const warnings: Array<Record<string, unknown>> = [];
   const sandboxes = await resolveControlPromptSandboxes(
     new Request("https://app.mogplex.com/api/control/chat"),
     { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-2" },
@@ -258,10 +259,18 @@ test("control prompt rejects a sandbox from a different repository", async () =>
         repo: null,
         rootDirectory: null,
       }),
+      warn: (_message, context) => warnings.push(context),
     }
   );
 
   assert.deepEqual(sandboxes, []);
+  assert.deepEqual(warnings, [
+    {
+      sandboxId: "sandbox-record-2",
+      repoId: "repo-1",
+      sandboxRepoId: "repo-2",
+    },
+  ]);
 });
 
 test("control prompt degrades when the sandbox loader returns a failure", async () => {

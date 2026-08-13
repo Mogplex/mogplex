@@ -422,7 +422,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
               onClearFocus={() => setFocusSandboxId(null)}
               canMerge={hasSession && !chatPending}
               onMerge={handleMergeSandbox}
-              onSpawn={handleStartSandbox}
+              onStartSandbox={handleStartSandbox}
             />
           ) : (
             <>

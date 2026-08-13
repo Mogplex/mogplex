@@ -92,7 +92,14 @@ export async function resolveControlPromptSandboxes(
     });
     return [];
   }
-  if (loaded.record.repo_id !== body.repoId) return [];
+  if (loaded.record.repo_id !== body.repoId) {
+    deps.warn?.("[control] sandbox prompt context repo mismatch", {
+      sandboxId: body.sandboxId,
+      repoId: body.repoId,
+      sandboxRepoId: loaded.record.repo_id,
+    });
+    return [];
+  }
 
   return [
     {

@@ -301,7 +301,7 @@ export function SandboxesPanel({
   onClearFocus,
   canMerge,
   onMerge,
-  onSpawn,
+  onStartSandbox,
 }: {
   sandboxes: SandboxRecord[];
   hasRepository: boolean;
@@ -309,7 +309,7 @@ export function SandboxesPanel({
   onClearFocus: () => void;
   canMerge: boolean;
   onMerge: (sandbox: SandboxRecord) => void;
-  onSpawn: () => void;
+  onStartSandbox: () => void;
 }) {
   const launchLogs = useSandboxStore((state) => state.logs);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
@@ -354,7 +354,7 @@ export function SandboxesPanel({
         </span>
         <button
           type="button"
-          onClick={onSpawn}
+          onClick={onStartSandbox}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-850 px-3 py-1.5 text-[12.5px] font-medium text-ink-200 transition-colors hover:bg-ink-800"
         >
           <Plus className="size-3.5" strokeWidth={2} />
@@ -382,7 +382,7 @@ export function SandboxesPanel({
         ))}
         <button
           type="button"
-          onClick={onSpawn}
+          onClick={onStartSandbox}
           className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 bg-ink-900/40 text-ink-400 transition-colors hover:border-ink-600 hover:bg-ink-900 hover:text-ink-200"
         >
           <span className="flex size-9 items-center justify-center rounded-lg border border-ink-700 bg-ink-850">
