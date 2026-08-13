@@ -88,6 +88,7 @@ describe("buildOrchestratorTools", () => {
       sandboxId: null,
     });
     expect(withoutSandbox.write_file).toBeUndefined();
+    expect(withoutSandbox.sandbox_stop).toBeUndefined();
   });
 
   it("describes the sandbox and worktree decision contract consistently", () => {
