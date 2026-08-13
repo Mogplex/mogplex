@@ -19,6 +19,7 @@ import {
   markAiCallFailedAfterRunInsertFailure,
   markExternalAgentRunFailed,
   markExternalAgentRunQueued,
+  loadOwnedRunWorktree,
   type InsertExternalAgentRunInput,
   type MarkExternalAgentRunFailedInput,
   type MarkExternalAgentRunQueuedInput,
@@ -29,6 +30,7 @@ import {
   normalizeStartRequest,
   type NormalizedStartRequest,
 } from "./runs-normalize";
+import { hashRequest } from "./runs-normalize";
 import {
   MogplexApiRunError,
   type ExternalAgentRunRow,
@@ -62,6 +64,8 @@ type ActiveSandboxForRun = {
   sandbox_id: string | null;
 };
 
+type OwnedRunWorktree = Awaited<ReturnType<typeof loadOwnedRunWorktree>>;
+
 export type StartMogplexApiRunDeps = {
   loadOwnedRepo: (
     repoId: string,
@@ -81,6 +85,10 @@ export type StartMogplexApiRunDeps = {
       "repoId" | "workingBranch" | "rootDirectory"
     > & { userId: string }
   ) => Promise<ActiveSandboxForRun | null>;
+  loadOwnedWorktree: (input: {
+    userId: string;
+    worktreeId: string;
+  }) => Promise<OwnedRunWorktree>;
   createAiCall: typeof createAiCall;
   appendAcceptedEvent: typeof appendExternalRunAcceptedEvent;
   insertRun: (
@@ -106,6 +114,7 @@ const defaultStartMogplexApiRunDeps: StartMogplexApiRunDeps = {
   loadRunByIdempotencyKey,
   loadRunById,
   findActiveSandbox,
+  loadOwnedWorktree: loadOwnedRunWorktree,
   createAiCall,
   appendAcceptedEvent: appendExternalRunAcceptedEvent,
   insertRun,
@@ -158,6 +167,7 @@ export function presentMogplexApiRun(row: ExternalAgentRunRow) {
     aiCallId: row.ai_call_id,
     sandboxRecordId: row.sandbox_record_id,
     sandboxId: row.sandbox_id,
+    worktreeId: row.worktree_id,
     repoId: row.repo_id,
     harness: row.harness,
     status: row.status,
@@ -207,16 +217,66 @@ export async function startMogplexApiRun(input: {
     throw new MogplexApiRunError("NOT_FOUND", "Repo not found", 404);
   }
 
-  const { normalized, requestHash } = normalizeStartRequest({
+  const normalizedResult = normalizeStartRequest({
     body: input.body,
     repo,
     idempotencyKey: input.idempotencyKey,
   });
+  let { normalized, requestHash } = normalizedResult;
 
   const existing = await deps.loadRunByIdempotencyKey(
     input.user.userId,
     input.idempotencyKey
   );
+  // A replay must remain available after its assigned worktree is archived or
+  // pruned. For worktree-bound requests, compare the logical caller inputs
+  // before reloading live checkout state; branch/root/sandbox were server
+  // overrides on the original request.
+  if (existing && normalized.worktreeId) {
+    const sameLogicalRequest =
+      existing.repo_id === normalized.repoId &&
+      existing.prompt === normalized.prompt &&
+      existing.harness === normalized.harness &&
+      existing.conversation_id === normalized.conversationId &&
+      existing.workspace_session_id === normalized.workspaceSessionId &&
+      existing.mode === normalized.mode &&
+      existing.worktree_id === normalized.worktreeId;
+    if (!sameLogicalRequest) {
+      throw new MogplexApiRunError(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key already used for a different request",
+        409
+      );
+    }
+    return { run: presentMogplexApiRun(existing), replayed: true };
+  }
+
+  let boundWorktree: NonNullable<OwnedRunWorktree> | null = null;
+  if (normalized.worktreeId) {
+    boundWorktree = await deps.loadOwnedWorktree({
+      userId: input.user.userId,
+      worktreeId: normalized.worktreeId,
+    });
+    if (
+      boundWorktree?.worktree.repo_id !== normalized.repoId ||
+      boundWorktree?.worktree.status !== "active"
+    ) {
+      throw new MogplexApiRunError(
+        "NOT_FOUND",
+        "Active worktree not found",
+        404
+      );
+    }
+    normalized = {
+      ...normalized,
+      baseBranch: boundWorktree.worktree.base_branch,
+      workingBranch: boundWorktree.worktree.branch_name,
+      createBranch: false,
+      rootDirectory: boundWorktree.worktree.checkout_path,
+    };
+    requestHash = hashRequest(normalized);
+  }
+
   if (existing) {
     if (existing.request_hash !== requestHash) {
       throw new MogplexApiRunError(
@@ -231,12 +291,14 @@ export async function startMogplexApiRun(input: {
     return { run: presentMogplexApiRun(existing), replayed: true };
   }
 
-  const sandbox = await deps.findActiveSandbox({
-    userId: input.user.userId,
-    repoId: normalized.repoId,
-    workingBranch: normalized.workingBranch,
-    rootDirectory: normalized.rootDirectory,
-  });
+  const sandbox =
+    boundWorktree?.sandbox ??
+    (await deps.findActiveSandbox({
+      userId: input.user.userId,
+      repoId: normalized.repoId,
+      workingBranch: normalized.workingBranch,
+      rootDirectory: normalized.rootDirectory,
+    }));
   const metadata = buildRunMetadata({
     normalized,
     idempotencyKey: input.idempotencyKey,

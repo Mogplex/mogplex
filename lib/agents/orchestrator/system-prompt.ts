@@ -25,6 +25,8 @@ export type OrchestratorPromptContext = {
     branch: string;
     agentId?: string;
     status: string;
+    sandboxId: string;
+    checkoutPath: string;
   }>;
 };
 
@@ -194,7 +196,8 @@ No active sandbox is selected. A sandbox is the remote compute environment; a Gi
 
   const worktreeLines = worktrees.map(
     (w) =>
-      `- ${w.id}: branch=${w.branch}, status=${w.status}${w.agentId ? `, agent=${w.agentId}` : ""}`
+      `- ${w.id}: branch=${w.branch}, status=${w.status}${w.agentId ? `, agent=${w.agentId}` : ""}` +
+      `, sandbox=${w.sandboxId}, checkout=${w.checkoutPath}`
   );
 
   const sandboxLines = sandboxes.map(

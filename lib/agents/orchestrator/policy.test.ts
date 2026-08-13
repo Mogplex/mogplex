@@ -124,6 +124,22 @@ describe("wrapWithPolicy approval gate", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("should allow plan mode to persist the mission plan", async () => {
+    const { deps } = makeDeps();
+    const { tool, calls } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      "plan_mission",
+      tool,
+      { ...ctx, controlMode: "plan" },
+      deps
+    ) as unknown as WrappedTool;
+
+    expect(await wrapped.execute({ objective: "Plan it", tasks: [] })).toEqual({
+      ok: true,
+    });
+    expect(calls).toHaveLength(1);
+  });
+
   it("should gate git_push only for protected branches", async () => {
     const { deps, created } = makeDeps();
     const { tool } = fakeTool();

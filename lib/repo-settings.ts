@@ -289,6 +289,10 @@ export function resolveSandboxPath(
 
   if (path.startsWith("/")) return path;
 
+  if (rootDirectory?.startsWith("/")) {
+    return `${rootDirectory.replace(/\/+$/, "")}/${path.replace(/^\.\/+/, "")}`;
+  }
+
   const normalizedRoot = normalizeRootDirectory(rootDirectory);
   const normalizedPath = path.replace(/^\.\/+/, "");
 

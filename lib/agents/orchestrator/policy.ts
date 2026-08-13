@@ -127,7 +127,9 @@ export function checkToolPolicy(
     return { allowed: true };
   }
 
-  if (ctx.controlMode === "plan") {
+  // Persisting the plan itself is the one state change plan mode permits.
+  // Repository, sandbox, and execution mutations remain hard-denied.
+  if (ctx.controlMode === "plan" && def.name !== "plan_mission") {
     return {
       allowed: false,
       reason: "policy_violation",

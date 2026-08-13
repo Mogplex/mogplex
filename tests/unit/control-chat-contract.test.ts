@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeControlChatMessages } from "../../app/api/control/chat/_lib/messages";
-import { resolveControlPromptSandboxes } from "../../app/api/control/chat/_lib/context";
+import {
+  resolveControlPromptSandboxes,
+  resolveControlPromptWorktrees,
+} from "../../app/api/control/chat/_lib/context";
 import { buildOrchestratorSystemPrompt } from "../../lib/agents/orchestrator/system-prompt";
 
 test("control chat normalization preserves AI SDK file parts", () => {
@@ -205,6 +208,26 @@ test("orchestrator prompt keeps sandboxes and worktrees distinct", () => {
   );
 });
 
+test("orchestrator prompt identifies the exact sandbox and checkout for each worktree", () => {
+  const prompt = buildOrchestratorSystemPrompt({
+    repoFullName: "acme/demo",
+    activeWorktrees: [
+      {
+        id: "worktree-1",
+        branch: "feat/context",
+        status: "active",
+        sandboxId: "sandbox-record-1",
+        checkoutPath: "/vercel/sandbox/.worktrees/worktree-1",
+      },
+    ],
+  });
+
+  assert.match(
+    prompt,
+    /worktree-1: branch=feat\/context, status=active, sandbox=sandbox-record-1, checkout=\/vercel\/sandbox\/\.worktrees\/worktree-1/
+  );
+});
+
 test("control prompt sandbox context comes from an owned server record", async () => {
   const sandboxes = await resolveControlPromptSandboxes(
     new Request("https://app.mogplex.com/api/control/chat"),
@@ -321,4 +344,80 @@ test("control prompt degrades when the sandbox loader throws", async () => {
       error: failure,
     },
   ]);
+});
+
+test("control prompt loads worktrees through the owned session run", async () => {
+  const result = await resolveControlPromptWorktrees(
+    "user-1",
+    {
+      messages: [],
+      conversationId: "session-1",
+      repoId: "repo-1",
+    },
+    {
+      loadSession: async () => ({
+        user_id: "user-1",
+        repo_id: "repo-1",
+        orchestration_run_id: "run-1",
+      }),
+      listWorktrees: async () => [
+        {
+          id: "worktree-1",
+          user_id: "user-1",
+          run_id: "run-1",
+          task_id: "task-1",
+          repo_id: "repo-1",
+          sandbox_id: "sandbox-1",
+          agent_id: "agent-1",
+          branch_name: "feat/server-owned",
+          base_branch: "main",
+          checkout_path: "/repo/.worktrees/worktree-1",
+          status: "active",
+          latest_commit_sha: null,
+          error: null,
+          metadata: {},
+          created_at: "2026-08-13T00:00:00.000Z",
+          updated_at: "2026-08-13T00:00:00.000Z",
+          archived_at: null,
+          pruned_at: null,
+        },
+      ],
+    }
+  );
+
+  assert.deepEqual(result, {
+    orchestrationRunId: "run-1",
+    worktrees: [
+      {
+        id: "worktree-1",
+        branch: "feat/server-owned",
+        status: "active",
+        sandboxId: "sandbox-1",
+        checkoutPath: "/repo/.worktrees/worktree-1",
+        agentId: "agent-1",
+      },
+    ],
+  });
+});
+
+test("control prompt rejects worktree context for a mismatched session repo", async () => {
+  let listed = false;
+  const result = await resolveControlPromptWorktrees(
+    "user-1",
+    { messages: [], conversationId: "session-1", repoId: "repo-1" },
+    {
+      loadSession: async () => ({
+        user_id: "user-1",
+        repo_id: "repo-2",
+        orchestration_run_id: "run-2",
+      }),
+      listWorktrees: async () => {
+        listed = true;
+        return [];
+      },
+    }
+  );
+
+  assert.deepEqual(result, { orchestrationRunId: null, worktrees: [] });
+  assert.equal(listed, false);
 });

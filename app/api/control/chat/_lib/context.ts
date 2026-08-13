@@ -12,6 +12,7 @@ import type {
   ControlChatRunScope,
   ControlChatRunMetadata,
 } from "./types";
+import { listWorktrees } from "@/lib/worktrees/service";
 
 /**
  * Extract scope identifiers from the request body for event tracking.
@@ -54,6 +55,91 @@ const defaultControlPromptSandboxDeps: ControlPromptSandboxDeps = {
     ),
   warn: (message, context) => console.warn(message, context),
 };
+
+type ControlPromptWorktreeDeps = {
+  loadSession: (input: { conversationId: string; userId: string }) => Promise<{
+    user_id: string;
+    repo_id: string | null;
+    orchestration_run_id: string | null;
+  } | null>;
+  listWorktrees: typeof listWorktrees;
+  warn?: (message: string, context: Record<string, unknown>) => void;
+};
+
+const defaultControlPromptWorktreeDeps: ControlPromptWorktreeDeps = {
+  async loadSession(input) {
+    const { data, error } = await supabaseAdmin
+      .from("control_sessions")
+      .select("user_id, repo_id, orchestration_run_id")
+      .eq("id", input.conversationId)
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  listWorktrees,
+  warn: (message, context) => console.warn(message, context),
+};
+
+export type ControlPromptWorktreeContext = {
+  orchestrationRunId: string | null;
+  worktrees: Array<{
+    id: string;
+    branch: string;
+    status: string;
+    sandboxId: string;
+    checkoutPath: string;
+    agentId?: string;
+  }>;
+};
+
+/** Load worktrees only through the owned Control session and its linked run. */
+export async function resolveControlPromptWorktrees(
+  userId: string,
+  body: ControlChatRequestBody,
+  deps: ControlPromptWorktreeDeps = defaultControlPromptWorktreeDeps
+): Promise<ControlPromptWorktreeContext> {
+  const empty = { orchestrationRunId: null, worktrees: [] };
+  if (!body.conversationId || !body.repoId) return empty;
+  try {
+    const session = await deps.loadSession({
+      conversationId: body.conversationId,
+      userId,
+    });
+    if (
+      session?.user_id !== userId ||
+      session.repo_id !== body.repoId ||
+      !session.orchestration_run_id
+    ) {
+      return empty;
+    }
+    const worktrees = await deps.listWorktrees({
+      userId,
+      runId: session.orchestration_run_id,
+      repoId: body.repoId,
+    });
+    return {
+      orchestrationRunId: session.orchestration_run_id,
+      worktrees: worktrees
+        .filter((worktree) => worktree.status !== "archived")
+        .map((worktree) => ({
+          id: worktree.id,
+          branch: worktree.branch_name,
+          status: worktree.status,
+          sandboxId: worktree.sandbox_id,
+          checkoutPath: worktree.checkout_path,
+          ...(worktree.agent_id ? { agentId: worktree.agent_id } : {}),
+        })),
+    };
+  } catch (error) {
+    deps.warn?.("[control] worktree prompt context unavailable", {
+      conversationId: body.conversationId,
+      repoId: body.repoId,
+      error,
+    });
+    return empty;
+  }
+}
 
 /**
  * Load the selected sandbox from server-owned state before adding it to the

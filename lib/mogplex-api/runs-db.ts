@@ -13,6 +13,7 @@ import {
 import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 import type { AiCall } from "@/lib/types";
 import type { ExternalAgentRunRow, MogplexApiRunHarness } from "./runs-types";
+import { loadOwnedWorktree } from "@/lib/worktrees/store";
 
 async function getSupabaseAdmin() {
   const mod = await import("@/lib/supabase/admin");
@@ -42,6 +43,7 @@ export type NormalizedStartRequest = {
   conversationId: string | null;
   workspaceSessionId: string | null;
   mode: string | null;
+  worktreeId: string | null;
 };
 
 export type InsertExternalAgentRunInput = {
@@ -155,6 +157,7 @@ export async function insertRun(input: InsertExternalAgentRunInput) {
       ai_call_id: input.aiCallId,
       sandbox_record_id: input.sandbox?.id ?? null,
       sandbox_id: input.sandbox?.sandbox_id ?? null,
+      worktree_id: input.normalized.worktreeId,
       idempotency_key: input.idempotencyKey,
       request_hash: input.requestHash,
       harness: input.normalized.harness,
@@ -177,6 +180,27 @@ export async function insertRun(input: InsertExternalAgentRunInput) {
   }
 
   return data as ExternalAgentRunRow;
+}
+
+export async function loadOwnedRunWorktree(input: {
+  userId: string;
+  worktreeId: string;
+}) {
+  const worktree = await loadOwnedWorktree(input);
+  if (!worktree) return null;
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data: sandbox, error } = await supabaseAdmin
+    .from("sandboxes")
+    .select("id, sandbox_id")
+    .eq("id", worktree.sandbox_id)
+    .eq("user_id", input.userId)
+    .eq("repo_id", worktree.repo_id)
+    .in("status", [...ACTIVE_EXTERNAL_RUN_SANDBOX_STATUSES])
+    .maybeSingle();
+  if (error)
+    throw new Error(`Failed to load worktree sandbox: ${error.message}`);
+  if (!sandbox) return null;
+  return { worktree, sandbox };
 }
 
 export async function markAiCallFailedAfterRunInsertFailure(input: {

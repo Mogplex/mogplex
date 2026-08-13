@@ -51,6 +51,8 @@ export type OrchestratorToolContext = {
   githubToken?: string | null;
   teamId?: string | null;
   missionId?: string | null;
+  /** Server-owned orchestration run linked to the Control session. */
+  orchestrationRunId?: string | null;
   protectedBranches?: string[];
   /** Scopes memory lanes; without it session/episodic writes are unscoped. */
   conversationId?: string | null;

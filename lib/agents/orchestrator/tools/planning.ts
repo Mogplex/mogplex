@@ -12,7 +12,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     category: "planning",
     description: "Create a structured mission plan from a high-level objective",
     access: "mutation",
-    implemented: false,
+    implemented: true,
   },
   {
     name: "spawn_worktree",
@@ -20,7 +20,28 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     description:
       "Create an isolated Git worktree for a subagent with its own branch",
     access: "mutation",
-    implemented: false,
+    implemented: true,
+  },
+  {
+    name: "list_worktrees",
+    category: "planning",
+    description: "List persisted Git worktrees for the active mission",
+    access: "read",
+    implemented: true,
+  },
+  {
+    name: "archive_worktree",
+    category: "planning",
+    description: "Archive a worktree while preserving its checkout and branch",
+    access: "mutation",
+    implemented: true,
+  },
+  {
+    name: "prune_worktree",
+    category: "planning",
+    description: "Remove an archived worktree checkout and retire its record",
+    access: "approval",
+    implemented: true,
   },
   {
     name: "spawn_subagent",
@@ -28,7 +49,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     description:
       "Launch a worker agent in an isolated worktree to execute a task",
     access: "mutation",
-    implemented: false,
+    implemented: true,
   },
   {
     name: "steer_agent",
@@ -72,27 +93,65 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
 // --- Schemas ---
 
 export const planMissionSchema = z.object({
-  objective: z.string().describe("High-level objective for the mission"),
+  objective: z.string().min(1).describe("High-level objective for the mission"),
   constraints: z
     .array(z.string())
     .optional()
     .describe("Constraints or requirements for the plan"),
   context: z.string().optional().describe("Additional context for planning"),
+  tasks: z
+    .array(
+      z.object({
+        slug: z
+          .string()
+          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+          .refine((slug) => slug !== "master", {
+            message: '"master" is reserved for the mission spec',
+          })
+          .describe("Stable lowercase task slug"),
+        title: z.string().min(1).max(500),
+        prompt: z.string().min(1),
+        harness: z.enum(["codex", "claude-code"]).default("codex"),
+        ownedPaths: z.array(z.string()).min(1),
+        blockedPaths: z.array(z.string()).optional(),
+        dependsOn: z.array(z.string()).optional(),
+        acceptanceCriteria: z.array(z.string()).optional(),
+        validationCommands: z.array(z.string()).optional(),
+      })
+    )
+    .min(1)
+    .describe("Concrete tasks that can each receive a worktree"),
 });
 
 export const spawnWorktreeSchema = z.object({
-  branchName: z.string().describe("Name for the new branch"),
-  baseBranch: z.string().optional().describe("Base branch to create from"),
-  rootDirectory: z.string().optional().describe("Root directory within repo"),
+  taskId: z
+    .string()
+    .uuid()
+    .describe("Orchestration task assigned to the checkout"),
+  sandboxId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe("Sandbox record that will host the checkout"),
+});
+
+export const listWorktreesSchema = z.object({
+  includePruned: z.boolean().optional().describe("Include retired records"),
+});
+
+export const archiveWorktreeSchema = z.object({
+  worktreeId: z.string().uuid().describe("Worktree to archive"),
+});
+
+export const pruneWorktreeSchema = z.object({
+  worktreeId: z.string().uuid().describe("Archived worktree to remove"),
+  force: z.boolean().optional().describe("Remove a dirty checkout"),
 });
 
 export const spawnSubagentSchema = z.object({
-  worktreeId: z.string().describe("ID of the worktree to use"),
-  taskPrompt: z.string().describe("Task instructions for the subagent"),
-  agentType: z
-    .string()
-    .optional()
-    .describe("Type of agent to spawn (e.g., codex, claude-code)"),
+  worktreeId: z.string().uuid().describe("Persisted worktree to use"),
+  taskPrompt: z.string().min(1).describe("Task instructions for the subagent"),
+  agentType: z.enum(["codex", "claude-code"]).default("codex"),
 });
 
 export const steerAgentSchema = z.object({
@@ -128,6 +187,9 @@ export const scoreImplementationsSchema = z.object({
 export const PLANNING_SCHEMAS: Record<string, z.ZodType> = {
   plan_mission: planMissionSchema,
   spawn_worktree: spawnWorktreeSchema,
+  list_worktrees: listWorktreesSchema,
+  archive_worktree: archiveWorktreeSchema,
+  prune_worktree: pruneWorktreeSchema,
   spawn_subagent: spawnSubagentSchema,
   steer_agent: steerAgentSchema,
   cancel_run: cancelRunSchema,

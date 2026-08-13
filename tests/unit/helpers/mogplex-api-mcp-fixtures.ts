@@ -26,6 +26,7 @@ export function buildRun(
     aiCallId: "call-1",
     sandboxRecordId: "sandbox-record-1",
     sandboxId: "sbx_123",
+    worktreeId: null,
     repoId: "repo-1",
     harness: "codex",
     status: "pending",
