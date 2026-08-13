@@ -10,6 +10,7 @@ const MIGRATIONS = [
   "neon/migrations/20260810180000_control_sessions.sql",
   "neon/migrations/20260812120000_control_sessions_repo.sql",
   "neon/migrations/20260813120000_orchestration_worktrees.sql",
+  "neon/migrations/20260813133000_orchestration_worktrees_review_followup.sql",
 ];
 
 const USER_A = "00000000-0000-4000-8000-00000000000a";
