@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canonicalizeControlSessionProjects,
   controlSessionProjectName,
   defaultProjectChoice,
   deriveProjectName,
@@ -52,6 +53,15 @@ test("controlSessionProjectName normalizes unambiguous legacy groups", () => {
     "custom-project"
   );
   assert.equal(controlSessionProjectName({ project: "   " }, repos), null);
+
+  const sessions = [
+    { id: "legacy", project: "widgets" },
+    { id: "custom", project: "custom-project" },
+  ];
+  assert.deepEqual(canonicalizeControlSessionProjects(sessions, repos), [
+    { id: "legacy", project: "acme/widgets" },
+    sessions[1],
+  ]);
 });
 
 test("parseControlSessionRepoId accepts null or UUID values and rejects malformed input", () => {

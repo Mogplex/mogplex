@@ -148,11 +148,12 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     deepLinkTarget: searchParams.get("mission"),
   });
 
-  const activeSession = useMemo(
-    () => sessions.find((entry) => entry.id === sessionId) ?? null,
-    [sessions, sessionId]
+  const displaySessions = useMemo(
+    () => canonicalizeControlSessionProjects(sessions, repos),
+    [repos, sessions]
   );
-  const displaySessions = canonicalizeControlSessionProjects(sessions, repos);
+  const activeSession =
+    displaySessions.find((entry) => entry.id === sessionId) ?? null;
 
   const { activeRepo, sandboxes, activeSandbox, requestContext } =
     useControlSessionContext({
@@ -342,7 +343,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     );
   }, [messages, activeSession?.title, mission?.title]);
 
-  // Status bar "Sandbox checkout" jumps straight to the worktrees panel.
   useEffect(() => {
     const listener = () => setView("worktrees");
     window.addEventListener(CONTROL_VIEW_EVENT, listener);
