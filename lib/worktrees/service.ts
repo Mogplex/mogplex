@@ -16,6 +16,7 @@ import {
   loadOwnedWorktreeTask,
   markWorktreeError,
   markWorktreePruned,
+  isStaleWorktreeReservation,
   reclaimStaleCreatingWorktree,
   reserveWorktree,
 } from "./store";
@@ -24,11 +25,19 @@ import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 
 export class WorktreeServiceError extends Error {
   readonly forceEligible: boolean;
+  readonly kind: "not_found" | "conflict";
 
-  constructor(message: string, options: { forceEligible?: boolean } = {}) {
+  constructor(
+    message: string,
+    options: {
+      forceEligible?: boolean;
+      kind?: "not_found" | "conflict";
+    } = {}
+  ) {
     super(message);
     this.name = "WorktreeServiceError";
     this.forceEligible = options.forceEligible ?? false;
+    this.kind = options.kind ?? "conflict";
   }
 }
 
@@ -197,7 +206,7 @@ async function requireOwnedWorktree(
 ): Promise<OrchestrationWorktreeDTO> {
   const worktree = await deps.load(input);
   if (worktree?.run_id !== input.runId || worktree.repo_id !== input.repoId) {
-    throw new WorktreeServiceError("Worktree not found");
+    throw new WorktreeServiceError("Worktree not found", { kind: "not_found" });
   }
   return worktree;
 }
@@ -275,7 +284,19 @@ export async function archiveWorktree(
       "Only pending, active, or failed worktrees can be archived"
     );
   }
-  return deps.archive(input);
+  if (
+    worktree.status === "creating" &&
+    !isStaleWorktreeReservation(worktree.updated_at)
+  ) {
+    throw new WorktreeServiceError(
+      "Wait for worktree creation to finish before archiving"
+    );
+  }
+  return deps.archive({
+    ...input,
+    expectedCreatingUpdatedAt:
+      worktree.status === "creating" ? worktree.updated_at : undefined,
+  });
 }
 
 export async function pruneWorktree(
@@ -306,7 +327,7 @@ export async function pruneWorktree(
     const failure = commandFailure(result);
     if (failure) {
       if (!input.force) {
-        throw new WorktreeServiceError(failure, { forceEligible: true });
+        throw new WorktreeServiceError(failure);
       }
       console.warn("[worktrees] force-retiring checkout after git failure", {
         worktreeId: worktree.id,

@@ -117,6 +117,28 @@ describe("spawnWorktree reservation recovery", () => {
     ).resolves.toBe(archived);
   });
 
+  it("does not archive a creation that still owns its live lease", async () => {
+    const archive = vi.fn();
+    await expect(
+      archiveWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+        },
+        {
+          load: async () => ({
+            ...worktree("creating"),
+            updated_at: new Date().toISOString(),
+          }),
+          archive,
+        }
+      )
+    ).rejects.toThrow("Wait for worktree creation to finish");
+    expect(archive).not.toHaveBeenCalled();
+  });
+
   it("offers force retirement only when an archived sandbox is gone", async () => {
     const archived = worktree("archived");
     await expect(
@@ -137,6 +159,30 @@ describe("spawnWorktree reservation recovery", () => {
     ).rejects.toMatchObject({
       message: "Sandbox not found",
       forceEligible: true,
+    });
+  });
+
+  it("does not offer force retirement for ordinary git failures", async () => {
+    await expect(
+      pruneWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+        },
+        {
+          load: async () => worktree("archived"),
+          execute: async () => ({
+            exitCode: 1,
+            stdout: "",
+            stderr: "checkout contains modified files",
+          }),
+        }
+      )
+    ).rejects.toMatchObject({
+      message: "checkout contains modified files",
+      forceEligible: false,
     });
   });
 });

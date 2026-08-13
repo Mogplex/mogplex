@@ -8,6 +8,10 @@ import type {
 
 const WORKTREES = "orchestration_worktrees";
 
+export function buildReservedCheckoutPath(worktreeId: string): string {
+  return `/.reserved/.worktrees/${worktreeId}`;
+}
+
 export class WorktreeStoreError extends Error {
   constructor(operation: string, cause: string) {
     super(`worktree store ${operation} failed: ${cause}`);
@@ -94,7 +98,7 @@ export async function reserveWorktree(input: {
       agent_id: input.agentId,
       branch_name: input.branchName,
       base_branch: input.baseBranch,
-      checkout_path: `/.worktrees/${id}`,
+      checkout_path: buildReservedCheckoutPath(id),
       status: "creating",
     })
     .select("*")
@@ -125,6 +129,17 @@ const STALE_WORKTREE_RESERVATION_MS = 5 * 60 * 1000;
 
 export function staleWorktreeReservationCutoff(now = Date.now()): string {
   return new Date(now - STALE_WORKTREE_RESERVATION_MS).toISOString();
+}
+
+export function isStaleWorktreeReservation(
+  updatedAt: string,
+  now = Date.now()
+): boolean {
+  const updatedAtMs = Date.parse(updatedAt);
+  return (
+    Number.isFinite(updatedAtMs) &&
+    updatedAtMs < now - STALE_WORKTREE_RESERVATION_MS
+  );
 }
 
 export async function reclaimStaleCreatingWorktree(input: {
@@ -244,15 +259,20 @@ export async function listOwnedWorktrees(input: {
 export async function archiveWorktreeRecord(input: {
   worktreeId: string;
   userId: string;
+  expectedCreatingUpdatedAt?: string;
 }): Promise<OrchestrationWorktreeDTO> {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from(WORKTREES)
     .update({ status: "archived", archived_at: new Date().toISOString() })
     .eq("id", input.worktreeId)
-    .eq("user_id", input.userId)
-    .in("status", ["creating", "active", "error"])
-    .select("*")
-    .single();
+    .eq("user_id", input.userId);
+  query = input.expectedCreatingUpdatedAt
+    ? query
+        .eq("status", "creating")
+        .eq("updated_at", input.expectedCreatingUpdatedAt)
+        .lt("updated_at", staleWorktreeReservationCutoff())
+    : query.in("status", ["active", "error"]);
+  const { data, error } = await query.select("*").single();
   if (error || !data) {
     throw new WorktreeStoreError(
       "archive",

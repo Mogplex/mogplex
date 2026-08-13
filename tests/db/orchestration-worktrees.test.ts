@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { buildReservedCheckoutPath } from "../../lib/worktrees/store";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MIGRATIONS = [
@@ -118,7 +119,7 @@ async function insertWorktree(input: {
        (id, user_id, run_id, task_id, repo_id, sandbox_id, branch_name,
         base_branch, checkout_path, status, archived_at)
      values ($7::uuid, $1, $2, $3, $4, $5, 'mogplex/task/implementation', 'main',
-       '/vercel/sandbox/.worktrees/' || $7::text, $6,
+       $8, $6,
        case when $6 = 'archived' then now() else null end)
      returning id`,
     [
@@ -129,10 +130,10 @@ async function insertWorktree(input: {
       SANDBOX_A,
       input.status ?? "active",
       worktreeId,
+      buildReservedCheckoutPath(worktreeId),
     ]
   );
 }
-
 describe("orchestration worktree persistence", () => {
   it("backfills legacy sessions without mirrored repos and clamps titles", () => {
     expect(legacyBackfills).toHaveLength(2);
@@ -251,7 +252,6 @@ describe("orchestration worktree persistence", () => {
        from public.orchestration_tasks where id = $1`,
       [taskId]
     );
-
     expect(worktree.rows[0]!.id).toBeTruthy();
     expect(rows[0]).toEqual({ worktree_id: null, sandbox_id: null });
 
