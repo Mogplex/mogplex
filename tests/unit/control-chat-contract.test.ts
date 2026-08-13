@@ -52,7 +52,6 @@ test("control chat normalization preserves AI SDK file parts", () => {
     },
   ]);
 });
-
 test("control chat normalization accepts legacy string content", () => {
   const [message] = normalizeControlChatMessages([
     { role: "user", content: "Create a release plan" },
@@ -123,7 +122,6 @@ test("control chat normalization rejects invalid file parts", () => {
     /exceeds the size limit/
   );
 });
-
 test("control chat normalization rejects remote file URLs", () => {
   assert.throws(
     () =>
@@ -192,6 +190,7 @@ test("control chat normalization allows capped file parts across message history
 test("control prompt sandbox context comes from an owned server record", async () => {
   const context = await resolveControlPromptSandboxContext(
     new Request("https://app.mogplex.com/api/control/chat"),
+    "user-1",
     {
       messages: [],
       repoId: "repo-1",
@@ -199,6 +198,7 @@ test("control prompt sandbox context comes from an owned server record", async (
       sandboxId: "sandbox-record-1",
     },
     {
+      listRepoSandboxes: async () => [],
       loadSandboxRecord: async () => ({
         ok: true,
         auth: {} as never,
@@ -218,6 +218,7 @@ test("control prompt sandbox context comes from an owned server record", async (
   assert.deepEqual(context, {
     decisionSource: "server_validated_request",
     rejectionReason: null,
+    selectionRequired: false,
     selected: {
       recordId: "sandbox-record-1",
       runtimeId: "sbx-runtime-1",
@@ -231,13 +232,14 @@ test("control prompt sandbox context comes from an owned server record", async (
     ],
   });
 });
-
 test("control prompt rejects a sandbox from a different repository", async () => {
   const warnings: Array<Record<string, unknown>> = [];
   const sandboxes = await resolveControlPromptSandboxes(
     new Request("https://app.mogplex.com/api/control/chat"),
+    "user-1",
     { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-2" },
     {
+      listRepoSandboxes: async () => [],
       loadSandboxRecord: async () => ({
         ok: true,
         auth: {} as never,
@@ -269,12 +271,14 @@ test("control sandbox telemetry classifies stale and client-invented identifiers
   for (const status of [404, 410]) {
     const context = await resolveControlPromptSandboxContext(
       new Request("https://app.mogplex.com/api/control/chat"),
+      "user-1",
       {
         messages: [],
         repoId: "repo-1",
         sandboxId: "client-invented-sandbox",
       },
       {
+        listRepoSandboxes: async () => [],
         loadSandboxRecord: async () => ({
           ok: false,
           status,
@@ -285,6 +289,7 @@ test("control sandbox telemetry classifies stale and client-invented identifiers
     assert.deepEqual(context, {
       decisionSource: "none",
       rejectionReason: "sandbox_not_found",
+      selectionRequired: true,
       selected: null,
       sandboxes: [],
     });
@@ -295,8 +300,10 @@ test("control prompt degrades when the sandbox loader returns a failure", async 
   const warnings: Array<Record<string, unknown>> = [];
   const sandboxes = await resolveControlPromptSandboxes(
     new Request("https://app.mogplex.com/api/control/chat"),
+    "user-1",
     { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-1" },
     {
+      listRepoSandboxes: async () => [],
       loadSandboxRecord: async () => ({
         ok: false,
         status: 503,
@@ -322,8 +329,10 @@ test("control prompt degrades when the sandbox loader throws", async () => {
   const warnings: Array<Record<string, unknown>> = [];
   const sandboxes = await resolveControlPromptSandboxes(
     new Request("https://app.mogplex.com/api/control/chat"),
+    "user-1",
     { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-1" },
     {
+      listRepoSandboxes: async () => [],
       loadSandboxRecord: async () => {
         throw failure;
       },

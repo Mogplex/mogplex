@@ -16,7 +16,7 @@ import {
   getControlChatRunScope,
   buildControlChatRunMetadata,
   buildControlGatewayContext,
-  resolveSelectedControlSandboxId,
+  resolveControlToolSandboxId,
   resolveControlPromptSandboxContext,
   resolveControlPromptWorktrees,
   resolveGithubTokenForRepo,
@@ -75,7 +75,7 @@ export async function executeControlChatRequest(input: {
     // Build orchestrator context
     const [githubToken, sandboxContext, worktreeContext] = await Promise.all([
       resolveGithubTokenForRepo(input.userId, input.body.repoId),
-      resolveControlPromptSandboxContext(input.req, input.body),
+      resolveControlPromptSandboxContext(input.req, input.userId, input.body),
       resolveControlPromptWorktrees(input.userId, input.body),
     ]);
     // Replace the client hint with the owned, server-validated session and
@@ -85,7 +85,7 @@ export async function executeControlChatRequest(input: {
       missionId: worktreeContext.controlSessionId,
     };
     const activeSandboxes = sandboxContext.sandboxes;
-    const selectedSandboxId = resolveSelectedControlSandboxId(activeSandboxes);
+    const selectedSandboxId = resolveControlToolSandboxId(sandboxContext);
 
     // Both writes are fail-open, but awaiting them preserves ordering so
     // qualification never observes a decision without its owning context.
@@ -100,7 +100,7 @@ export async function executeControlChatRequest(input: {
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
       sandboxId: selectedSandboxId,
-      sandboxSelectionRequired: activeSandboxes.length > 1,
+      sandboxSelectionRequired: sandboxContext.selectionRequired,
       repoId: input.body.repoId,
       repoOwner: input.body.repoOwner,
       repoName: input.body.repoName,
