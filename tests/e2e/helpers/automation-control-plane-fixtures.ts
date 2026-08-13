@@ -38,3 +38,49 @@ export async function mockBaseChrome(page: Page) {
     })
   );
 }
+
+export async function mockControlSessionBootstrap(page: Page) {
+  await page.route("**/api/repos", (route) =>
+    fulfillJson(route, [
+      {
+        id: "repo-control-default",
+        full_name: "acme/widgets",
+        owner: "acme",
+        name: "widgets",
+        default_branch: "main",
+      },
+    ])
+  );
+  let session: Record<string, unknown> | null = null;
+  await page.route("**/api/control/sessions**", (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        title?: string;
+        project?: string | null;
+        repo_id?: string | null;
+      };
+      session = {
+        id: "session-control-default",
+        title: body.title ?? "Control session",
+        project: body.project ?? "acme/widgets",
+        repo_id: body.repo_id ?? "repo-control-default",
+        orchestration_run_id: "run-control-default",
+        pinned: false,
+        archived: false,
+        messages: [],
+        created_at: "2026-08-13T00:00:00.000Z",
+        updated_at: "2026-08-13T00:00:00.000Z",
+      };
+      return fulfillJson(route, session);
+    }
+    const id = new URL(request.url()).searchParams.get("id");
+    return fulfillJson(route, id ? session : session ? [session] : []);
+  });
+  await page.route("**/api/control/worktrees**", (route) =>
+    fulfillJson(route, { worktrees: [] })
+  );
+  await page.route("**/api/sandbox", (route) =>
+    fulfillJson(route, { sandboxes: [] })
+  );
+}

@@ -30,12 +30,14 @@ export function WorkspaceTabs({
   onViewChange,
   sandboxes,
   worktrees,
+  selectedSandboxId,
   onFocusSandbox,
 }: {
   view: ControlView;
   onViewChange: (view: ControlView) => void;
   sandboxes: SandboxRecord[];
   worktrees: OrchestrationWorktreeDTO[];
+  selectedSandboxId: string | null;
   onFocusSandbox: (sandboxId: string) => void;
 }) {
   return (
@@ -80,8 +82,9 @@ export function WorkspaceTabs({
         <button
           key={sandbox.id}
           type="button"
+          aria-pressed={sandbox.id === selectedSandboxId}
           onClick={() => onFocusSandbox(sandbox.id)}
-          className={`${TAB_BASE} ${TAB_OFF}`}
+          className={`${TAB_BASE} ${sandbox.id === selectedSandboxId ? TAB_ON : TAB_OFF}`}
         >
           <span
             className={`size-1.5 shrink-0 rounded-full ${

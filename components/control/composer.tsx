@@ -36,7 +36,7 @@ type Props = {
     target: string,
     scope: string,
     options: ComposerSendOptions
-  ) => void;
+  ) => Promise<boolean>;
   pending: boolean;
   mission: Mission | undefined;
   onStop: () => void;
@@ -261,17 +261,19 @@ export function Composer({
     setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length);
   }, []);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if ((value.trim() || files.length > 0) && !pending) {
-      onSend(value.trim(), "mission", "IMPLEMENT", {
+      const sent = await onSend(value.trim(), "mission", "IMPLEMENT", {
         model: modelId,
         permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
         mode: "run",
         files,
       });
-      onChange("");
-      setFiles([]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (sent) {
+        onChange("");
+        setFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
     }
   }, [value, files, pending, modelId, permissionsIdx, onSend, onChange]);
 
@@ -279,7 +281,7 @@ export function Composer({
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSend();
+        void handleSend();
       }
     },
     [handleSend]
@@ -416,7 +418,7 @@ export function Composer({
               <button
                 type="button"
                 aria-label="Send"
-                onClick={handleSend}
+                onClick={() => void handleSend()}
                 disabled={!value.trim() && files.length === 0}
                 className={`flex size-9 items-center justify-center rounded-full transition-colors ${
                   value.trim() || files.length > 0

@@ -80,6 +80,9 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
+  await page.route("**/api/control/worktrees**", (route) =>
+    fulfillJson(route, { worktrees: [] })
+  );
   await page.route("**/api/repos", (route) =>
     fulfillJson(route, [
       {
@@ -124,15 +127,40 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
 
   let stopped = false;
   let stopPosted = false;
+  let restartPosted = false;
+  let resumePosted = false;
+  const chatRequests: Array<{ sandboxId?: string | null }> = [];
   await page.route("**/api/sandbox/rec-1/stop", (route) => {
     stopPosted = true;
     stopped = true;
     return fulfillJson(route, { ok: true });
   });
+  await page.route("**/api/sandbox/rec-1/restart", (route) => {
+    restartPosted = true;
+    stopped = false;
+    return fulfillJson(route, { sandbox: sandboxRecord("running") });
+  });
+  await page.route("**/api/sandbox/rec-paused/resume", (route) => {
+    resumePosted = true;
+    return fulfillJson(route, {
+      sandbox: sandboxRecord("running", {
+        id: "rec-paused",
+        sandboxId: "sbx_paused",
+        branch: "feat/paused",
+        lastActiveAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    });
+  });
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, {
       sandboxes: [
         sandboxRecord(stopped ? "stopped" : "running"),
+        sandboxRecord("paused", {
+          id: "rec-paused",
+          sandboxId: "sbx_paused",
+          branch: "feat/paused",
+          lastActiveAt: new Date(Date.now() - 60_000).toISOString(),
+        }),
         sandboxRecord("running", {
           id: "rec-2",
           repoId: "repo-2",
@@ -154,16 +182,17 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   const streamBody =
     streamChunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") +
     "data: [DONE]\n\n";
-  await page.route("**/api/control/chat", (route) =>
-    route.fulfill({
+  await page.route("**/api/control/chat", (route) => {
+    chatRequests.push(route.request().postDataJSON() as { sandboxId?: string });
+    return route.fulfill({
       status: 200,
       headers: {
         "content-type": "text/event-stream",
         "x-vercel-ai-ui-message-stream": "v1",
       },
       body: streamBody,
-    })
-  );
+    });
+  });
 
   await page.goto(scopedPath("control"));
   await page.waitForLoadState("networkidle");
@@ -179,19 +208,33 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
 
   // One branch tab per active sandbox appears next to Chat / Sandboxes.
   await expect(page.getByRole("button", { name: "feat/demo" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "feat/paused" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "feat/unrelated" })
   ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Sandboxes 1" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sandboxes 2" })).toBeVisible();
+  expect(chatRequests[0]?.sandboxId).toBe("rec-1");
+
+  // Branch tabs select the exact sandbox context sent to the agent.
+  const pausedTab = page.getByRole("button", { name: "feat/paused" });
+  await pausedTab.click();
+  await expect(pausedTab).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Chat" }).click();
+  await page
+    .getByPlaceholder("Ask for follow-up changes or attach images")
+    .fill("Continue in the paused sandbox");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => chatRequests.length).toBe(2);
+  expect(chatRequests[1]?.sandboxId).toBe("rec-paused");
 
   // The Sandboxes tab shows remote compute with real status and actions.
-  await page.getByRole("button", { name: "Sandboxes 1" }).click();
+  await page.getByRole("button", { name: "Sandboxes 2" }).click();
   await expect(page.getByRole("heading", { name: "Sandboxes" })).toBeVisible();
   await expect(page.getByText("sbx_live123")).toHaveCount(0);
   await expect(page.getByText("feat/demo").first()).toBeVisible();
   await expect(page.getByText("Running").first()).toBeVisible();
   await expect(
-    page.getByText("No recent output for this sandbox.")
+    page.getByText("No recent output for this sandbox.").first()
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Preview" }).first()
@@ -199,6 +242,13 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await expect(
     page.getByRole("button", { name: "Stop" }).first()
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+
+  // A paused sandbox can be resumed without creating a replacement, so its
+  // persisted worktree binding remains valid.
+  await page.getByRole("button", { name: "Resume" }).click();
+  await expect.poll(() => resumePosted).toBe(true);
+  await expect(page.getByText("Running")).toHaveCount(2);
 
   // Preview opens the real sandbox URL in a modal and closes again.
   await page.getByRole("button", { name: "Preview" }).first().click();
@@ -215,6 +265,13 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await page.getByRole("button", { name: "Stop" }).first().click();
   await expect.poll(() => stopPosted).toBe(true);
   await expect(page.getByText("Stopped").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restart" })).toBeVisible();
+
+  // A stopped sandbox restarts through its existing record instead of
+  // creating unrelated compute that would strand the worktree binding.
+  await page.getByRole("button", { name: "Restart" }).click();
+  await expect.poll(() => restartPosted).toBe(true);
+  await expect(page.getByText("Running")).toHaveCount(2);
 
   // The dashed spawn card stays available.
   await expect(

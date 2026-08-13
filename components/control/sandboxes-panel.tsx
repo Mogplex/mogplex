@@ -192,12 +192,18 @@ function SandboxCard({
   onPreview: (target: PreviewTarget) => void;
 }) {
   const stop = useSandboxStore((state) => state.stop);
-  const [stopping, setStopping] = useState(false);
+  const resume = useSandboxStore((state) => state.resume);
+  const restart = useSandboxStore((state) => state.restart);
+  const [lifecycleAction, setLifecycleAction] = useState<
+    "stop" | "resume" | "restart" | null
+  >(null);
   const status = sandbox.runtime_summary.status;
   const badge = BADGE[status] ?? BADGE.stopped;
   const previewUrl = sandbox.runtime_summary.preview_url;
   const lines = sandboxLogLines(sandbox, launchLogs);
   const running = status === "running";
+  const paused = status === "paused";
+  const stopped = status === "stopped";
 
   return (
     <div
@@ -258,18 +264,52 @@ function SandboxCard({
           {running ? (
             <button
               type="button"
-              disabled={stopping}
+              disabled={lifecycleAction !== null}
               onClick={async () => {
-                setStopping(true);
+                setLifecycleAction("stop");
                 try {
                   await stop(sandbox.id);
                 } finally {
-                  setStopping(false);
+                  setLifecycleAction(null);
                 }
               }}
               className="rounded-md border border-ink-700 bg-ink-850 px-2.5 py-1 font-medium text-ink-300 transition-colors hover:bg-ink-800 disabled:opacity-50"
             >
-              {stopping ? "Stopping…" : "Stop"}
+              {lifecycleAction === "stop" ? "Stopping…" : "Stop"}
+            </button>
+          ) : null}
+          {paused ? (
+            <button
+              type="button"
+              disabled={lifecycleAction !== null}
+              onClick={async () => {
+                setLifecycleAction("resume");
+                try {
+                  await resume(sandbox.id);
+                } finally {
+                  setLifecycleAction(null);
+                }
+              }}
+              className="rounded-md border border-ink-700 bg-ink-850 px-2.5 py-1 font-medium text-ink-200 transition-colors hover:bg-ink-800 disabled:opacity-50"
+            >
+              {lifecycleAction === "resume" ? "Resuming…" : "Resume"}
+            </button>
+          ) : null}
+          {stopped ? (
+            <button
+              type="button"
+              disabled={lifecycleAction !== null}
+              onClick={async () => {
+                setLifecycleAction("restart");
+                try {
+                  await restart(sandbox.repo_id, { sandboxId: sandbox.id });
+                } finally {
+                  setLifecycleAction(null);
+                }
+              }}
+              className="rounded-md border border-ink-700 bg-ink-850 px-2.5 py-1 font-medium text-ink-200 transition-colors hover:bg-ink-800 disabled:opacity-50"
+            >
+              {lifecycleAction === "restart" ? "Restarting…" : "Restart"}
             </button>
           ) : null}
           {running && canMerge ? (

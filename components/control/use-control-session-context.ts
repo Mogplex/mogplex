@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useSandboxStore } from "@/hooks/use-sandbox";
 import type { Repo, SandboxRecord } from "@/lib/types";
 import { resolveControlSessionRepo } from "@/lib/control/session-project";
 import type { ControlChatRequestContext } from "./control-chat-request";
@@ -21,6 +22,20 @@ export function selectControlSessionSandboxes<T extends { repo_id: string }>(
 ): T[] {
   if (!activeRepo) return [];
   return allSandboxes.filter((sandbox) => sandbox.repo_id === activeRepo.id);
+}
+
+export function selectControlActiveSandbox<
+  T extends { id: string; runtime_summary: { status: string } },
+>(sandboxes: T[], preferredSandboxId: string | null): T | null {
+  const preferred = preferredSandboxId
+    ? sandboxes.find((sandbox) => sandbox.id === preferredSandboxId)
+    : null;
+  if (preferred) return preferred;
+  return (
+    sandboxes.find((sandbox) => sandbox.runtime_summary.status === "running") ??
+    sandboxes[0] ??
+    null
+  );
 }
 
 export function buildControlSessionRequestContext({
@@ -71,6 +86,8 @@ export function useControlSessionContext({
   selectedMissionId: string;
   missionTitle: string | null;
 }) {
+  const preferredSandboxId = useSandboxStore((state) => state.activeSandboxId);
+  const selectSandbox = useSandboxStore((state) => state.setActiveSandbox);
   const activeRepo = useMemo(
     () => resolveControlSessionRepo(activeSession, repos),
     [activeSession, repos]
@@ -80,7 +97,10 @@ export function useControlSessionContext({
     () => selectControlSessionSandboxes(activeRepo, allSandboxes),
     [activeRepo, allSandboxes]
   );
-  const activeSandbox = sandboxes[0] ?? null;
+  const activeSandbox = useMemo(
+    () => selectControlActiveSandbox(sandboxes, preferredSandboxId),
+    [preferredSandboxId, sandboxes]
+  );
 
   const requestContext = useMemo(
     () =>
@@ -94,5 +114,11 @@ export function useControlSessionContext({
     [activeRepo, activeSandbox, missionTitle, selectedMissionId, sessionId]
   );
 
-  return { activeRepo, sandboxes, activeSandbox, requestContext };
+  return {
+    activeRepo,
+    sandboxes,
+    activeSandbox,
+    requestContext,
+    selectSandbox,
+  };
 }

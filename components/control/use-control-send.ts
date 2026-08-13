@@ -13,6 +13,8 @@ type SendMessage = (
   options: { body: ReturnType<typeof buildControlChatBody> }
 ) => Promise<void>;
 
+type SendFailureRef = { current: boolean };
+
 /**
  * Conversation-composer send path: streams the message through the control
  * chat endpoint; the user message renders from the chat's own message list
@@ -21,12 +23,12 @@ type SendMessage = (
 export function useControlSend({
   sendMessage,
   setChatError,
-  clearComposer,
+  sendFailureRef,
   requestContext,
 }: {
   sendMessage: SendMessage;
   setChatError: (message: string | null) => void;
-  clearComposer: () => void;
+  sendFailureRef: SendFailureRef;
   requestContext: ControlChatRequestContext;
 }) {
   return useCallback(
@@ -36,8 +38,9 @@ export function useControlSend({
       scopeLevel: string,
       options: ComposerSendOptions
     ) => {
-      if (!text.trim() && options.files.length === 0) return;
+      if (!text.trim() && options.files.length === 0) return false;
 
+      sendFailureRef.current = false;
       setChatError(null);
       try {
         await sendMessage(buildControlChatMessage(text, options), {
@@ -50,7 +53,7 @@ export function useControlSend({
             ...requestContext,
           }),
         });
-        clearComposer();
+        return !sendFailureRef.current;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Chat error";
         if (message.includes("404") || message.includes("Not Found")) {
@@ -58,8 +61,9 @@ export function useControlSend({
         } else {
           setChatError(message);
         }
+        return false;
       }
     },
-    [sendMessage, setChatError, clearComposer, requestContext]
+    [sendMessage, setChatError, sendFailureRef, requestContext]
   );
 }
