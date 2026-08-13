@@ -19,7 +19,6 @@ import {
   buildSelectiveRebuildCommand,
   buildEnsureBunCommand,
   buildWithBunOnPathCommand,
-  SANDBOX_BUN_VERSION,
 } from "./client-shell";
 import {
   NO_DEV_SCRIPT_MESSAGE,
@@ -208,7 +207,7 @@ export async function* streamRuntimePrerequisitePhase(
   yield {
     type: "log",
     phase: "install",
-    data: `Bun ${SANDBOX_BUN_VERSION} ready.\n`,
+    data: "Bun runtime ready.\n",
   };
   return installLog;
 }

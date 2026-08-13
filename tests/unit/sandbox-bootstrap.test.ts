@@ -140,7 +140,12 @@ test("builds a pinned Bun install command for sandbox previews", async () => {
   assert.match(command, /bun_sha256=/);
   assert.match(command, /command -v sha256sum/);
   assert.match(command, /sha256sum -c -/);
+  assert.match(command, /printf '%s {2}%s\\n'/);
   assert.match(command, /command -v unzip/);
+  assert.ok(
+    command.indexOf("set -eu") < command.indexOf("if ! command -v bun"),
+    "strict shell mode must cover the pre-installed Bun path"
+  );
   assert.match(
     command,
     /ln -sf "\$\(command -v bun\)" "\$BUN_INSTALL\/bin\/bunx"/
@@ -367,7 +372,7 @@ test("bootstrapFromSnapshotStreaming installs Bun and puts it on PATH when the r
         phase: "install",
         data: "Ensuring Bun runtime is available...\n",
       },
-      { type: "log", phase: "install", data: "Bun 1.3.10 ready.\n" },
+      { type: "log", phase: "install", data: "Bun runtime ready.\n" },
     ]);
     assert.deepEqual(events.at(-1), { type: "status", status: "running" });
   } finally {

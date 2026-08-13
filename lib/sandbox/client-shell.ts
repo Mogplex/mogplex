@@ -4,6 +4,8 @@ import type { BootstrapDetection, BootstrapStrategy } from "./client-types";
 
 export const SANDBOX_BUN_VERSION = "1.3.10";
 
+// Published in the pinned release's SHASUMS256.txt:
+// https://github.com/oven-sh/bun/releases/tag/bun-v1.3.10
 const SANDBOX_BUN_SHA256 = {
   "bun-linux-aarch64":
     "fa5ecb25cafa8e8f5c87a0f833719d46dd0af0a86c7837d806531212d55636d3",
@@ -76,8 +78,9 @@ export function buildEnsureBunCommand(version = SANDBOX_BUN_VERSION) {
 
   return `export BUN_INSTALL="${bunInstallDefault}"
 export PATH="$BUN_INSTALL/bin:$PATH"
+set -eu
+mkdir -p "$BUN_INSTALL/bin"
 if ! command -v bun >/dev/null 2>&1; then
-  set -eu
   arch="$(uname -m)"
   case "$arch" in
     x86_64|amd64) bun_target="bun-linux-x64"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-x64"]}" ;;
@@ -87,9 +90,8 @@ if ! command -v bun >/dev/null 2>&1; then
   bun_zip="/tmp/mogplex-${bunTargetExpansion}.zip"
   command -v unzip >/dev/null 2>&1 || { echo "Bun install requires unzip" >&2; exit 1; }
   command -v sha256sum >/dev/null 2>&1 || { echo "Bun install requires sha256sum" >&2; exit 1; }
-  mkdir -p "$BUN_INSTALL/bin"
   curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${version}/${bunTargetExpansion}.zip" -o "$bun_zip"
-  printf '%s  %s\n' "$bun_sha256" "$bun_zip" | sha256sum -c -
+  printf '%s  %s\\n' "$bun_sha256" "$bun_zip" | sha256sum -c -
   unzip -q -o "$bun_zip" -d "$BUN_INSTALL"
   mv "$BUN_INSTALL/$bun_target/bun" "$BUN_INSTALL/bin/bun"
   chmod +x "$BUN_INSTALL/bin/bun"
