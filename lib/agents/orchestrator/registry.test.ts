@@ -91,6 +91,18 @@ describe("buildOrchestratorTools", () => {
     expect(withoutSandbox.sandbox_stop).toBeUndefined();
   });
 
+  it("omits sandbox execution tools while server-owned selection is ambiguous", () => {
+    const ambiguousSandbox = buildOrchestratorTools({
+      ...FULL_CONTEXT,
+      sandboxId: null,
+      sandboxSelectionRequired: true,
+    });
+
+    expect(ambiguousSandbox.run_command).toBeUndefined();
+    expect(ambiguousSandbox.sandbox_start).toBeUndefined();
+    expect(ambiguousSandbox.sandbox_stop).toBeUndefined();
+  });
+
   it("describes the sandbox and worktree decision contract consistently", () => {
     expect(tools.sandbox_start.description).toMatch(/runtime|preview/i);
     expect(tools.sandbox_start.description).toMatch(

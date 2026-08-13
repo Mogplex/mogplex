@@ -26,6 +26,20 @@ describe("orchestrator resource decision prompt", () => {
     expect(diagnostics).toContain("sandbox_provision");
   });
 
+  it("uses an unambiguous callable equivalent for an unavailable tool name", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      availableToolNames: ["sandbox_start"],
+    });
+
+    expect(prompt).toContain(
+      "If the requested outcome maps unambiguously to one safe callable tool, use that callable tool"
+    );
+    expect(prompt).toContain(
+      "Do not pause only to confirm the unavailable tool name"
+    );
+  });
+
   it("pins the sandbox-only and worktree-required decisions", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",

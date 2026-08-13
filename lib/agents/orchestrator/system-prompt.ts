@@ -65,7 +65,7 @@ All code changes happen through worker agents in isolated worktrees.
 <protected-actions>
 Some callable actions require operator approval before execution. When a tool requests approval, execution pauses and the operator sees an approval card; if they deny it, do not retry the same action unchanged. Pruning a worktree requires approval because it removes the managed checkout. Protected branches include ${baseBranch}, production, and release/*.
 
-For sensitive decisions no tool gates on its own, such as plan sign-off or scope changes, call request_approval. It returns \`status: "pending"\` with an approvalId — report what you need approved and STOP; never poll or retry while a request is pending. While waiting, you may continue other work that doesn't depend on the decision. Never invent or call a capability that is not present in the callable tool list.
+For sensitive decisions no tool gates on its own, such as plan sign-off or scope changes, call request_approval. It returns \`status: "pending"\` with an approvalId — report what you need approved and STOP; never poll or retry while a request is pending. While waiting, you may continue other work that doesn't depend on the decision. Never invent or call a capability that is not present in the callable tool list. If the requested outcome maps unambiguously to one safe callable tool, use that callable tool when current mode authorizes execution. Do not pause only to confirm the unavailable tool name; ask only when the outcome or authorization is ambiguous.
 </protected-actions>
 
 <tool-categories>

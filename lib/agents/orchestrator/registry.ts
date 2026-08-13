@@ -134,6 +134,7 @@ function buildToolForDef(
       : null;
   }
   if (def.name === "run_command") {
+    if (ctx.sandboxSelectionRequired) return null;
     return createTerminalExec(
       ctx.sandboxId ?? undefined,
       ctx.userId,
@@ -142,6 +143,7 @@ function buildToolForDef(
     );
   }
   if (def.name === "sandbox_start") {
+    if (ctx.sandboxSelectionRequired) return null;
     return createStartSandbox(ctx.userId);
   }
   if (def.name === "sandbox_stop") {
