@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import type { Repo, SandboxRecord } from "@/lib/types";
 import { resolveControlSessionRepo } from "@/lib/control/session-project";
@@ -101,6 +101,12 @@ export function useControlSessionContext({
     () => selectControlActiveSandbox(sandboxes, preferredSandboxId),
     [preferredSandboxId, sandboxes]
   );
+
+  useEffect(() => {
+    if (activeSandbox && activeSandbox.id !== preferredSandboxId) {
+      selectSandbox(activeSandbox.id);
+    }
+  }, [activeSandbox, preferredSandboxId, selectSandbox]);
 
   const requestContext = useMemo(
     () =>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 
 import { mergeSandboxRecord } from "@/lib/sandbox/client-record";
@@ -63,15 +63,11 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
       return {
         ...nextIndexes,
         activeSandboxId:
-          state.activeSandboxId === record.id &&
-          (record.runtime_summary.status === "stopped" ||
-            record.runtime_summary.status === "error")
-            ? null
-            : record.runtime_summary.status === "running" ||
-                record.runtime_summary.status === "installing" ||
-                record.runtime_summary.status === "creating"
-              ? record.id
-              : state.activeSandboxId,
+          record.runtime_summary.status === "running" ||
+          record.runtime_summary.status === "installing" ||
+          record.runtime_summary.status === "creating"
+            ? record.id
+            : state.activeSandboxId,
       };
     }),
 
@@ -85,12 +81,7 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
       const nextIndexes = withSandboxRecord(state, next);
       return {
         ...nextIndexes,
-        activeSandboxId:
-          state.activeSandboxId === next.id &&
-          (next.runtime_summary.status === "stopped" ||
-            next.runtime_summary.status === "error")
-            ? null
-            : state.activeSandboxId,
+        activeSandboxId: state.activeSandboxId,
       };
     }),
 
@@ -166,11 +157,7 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
 
       return {
         ...nextIndexes,
-        activeSandboxId:
-          state.activeSandboxId === recordId &&
-          (newStatus === "stopped" || newStatus === "error")
-            ? null
-            : state.activeSandboxId,
+        activeSandboxId: state.activeSandboxId,
       };
     }),
 
@@ -399,14 +386,26 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
 const useNeonBackend = process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon";
 
 export function useSandboxSync() {
-  const { user } = useUser();
+  const { user, isLoading: userLoading } = useUser();
+  const [initialSyncComplete, setInitialSyncComplete] = useState(false);
   const refresh = useSandboxStore((state) => state.refresh);
   const applySandboxPatch = useSandboxStore((state) => state.applySandboxPatch);
 
   useEffect(() => {
-    if (!user?.id) return;
-    void refresh();
-  }, [user?.id, refresh]);
+    if (userLoading) return;
+    if (!user?.id) {
+      setInitialSyncComplete(true);
+      return;
+    }
+    let active = true;
+    setInitialSyncComplete(false);
+    void refresh().finally(() => {
+      if (active) setInitialSyncComplete(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [user?.id, userLoading, refresh]);
 
   useTableEvents({
     tables: ["sandboxes"],
@@ -442,4 +441,6 @@ export function useSandboxSync() {
       void supabase.removeChannel(channel);
     };
   }, [user?.id, refresh, applySandboxPatch]);
+
+  return { loading: userLoading || !initialSyncComplete };
 }

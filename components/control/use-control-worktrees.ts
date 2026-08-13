@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
 
+function isCurrentRefresh(
+  revision: number,
+  expectedRevision: number,
+  sessionId: string,
+  activeSessionId: string | null
+): boolean {
+  return revision === expectedRevision && sessionId === activeSessionId;
+}
+
 export function useControlWorktrees(input: {
   sessionId: string | null;
   chatPending: boolean;
@@ -12,6 +21,7 @@ export function useControlWorktrees(input: {
     worktrees: OrchestrationWorktreeDTO[];
   }>({ sessionId: "", worktrees: [] });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const activeSessionIdRef = useRef(input.sessionId);
   const refreshRevisionRef = useRef(0);
 
@@ -26,21 +36,31 @@ export function useControlWorktrees(input: {
     refreshRevisionRef.current = revision;
     if (!sessionId) {
       setLoading(false);
+      setError(null);
       return;
     }
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch(
         `/api/control/worktrees?sessionId=${encodeURIComponent(sessionId)}`
       );
-      if (!response.ok) return;
       const body = (await response.json()) as {
         worktrees?: OrchestrationWorktreeDTO[];
+        error?: string;
       };
       if (
-        revision !== refreshRevisionRef.current ||
-        sessionId !== activeSessionIdRef.current
+        !isCurrentRefresh(
+          revision,
+          refreshRevisionRef.current,
+          sessionId,
+          activeSessionIdRef.current
+        )
       ) {
+        return;
+      }
+      if (!response.ok) {
+        setError(body.error || "Could not load worktrees");
         return;
       }
       setResult({
@@ -49,6 +69,16 @@ export function useControlWorktrees(input: {
       });
     } catch (error) {
       console.warn("[control] failed to refresh worktrees", error);
+      if (
+        isCurrentRefresh(
+          revision,
+          refreshRevisionRef.current,
+          sessionId,
+          activeSessionIdRef.current
+        )
+      ) {
+        setError("Could not load worktrees");
+      }
     } finally {
       if (revision === refreshRevisionRef.current) setLoading(false);
     }
@@ -109,5 +139,5 @@ export function useControlWorktrees(input: {
 
   const worktrees =
     result.sessionId === input.sessionId ? result.worktrees : [];
-  return { worktrees, loading, refresh, act, loadDiff };
+  return { worktrees, loading, error, refresh, act, loadDiff };
 }

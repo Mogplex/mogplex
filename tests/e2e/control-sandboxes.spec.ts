@@ -7,6 +7,10 @@ import {
 
 const NOW = new Date().toISOString();
 
+function runningPreviewUrl(status: string, previewUrl: string): string | null {
+  return status === "running" ? previewUrl : null;
+}
+
 function sandboxRecord(
   status: string,
   {
@@ -15,14 +19,19 @@ function sandboxRecord(
     sandboxId = "sbx_live123",
     branch = "feat/demo",
     lastActiveAt = NOW,
+    previewUrl = "https://preview.example.vercel.app",
+    error = null,
   }: {
     id?: string;
     repoId?: string;
     sandboxId?: string;
     branch?: string;
     lastActiveAt?: string;
+    previewUrl?: string;
+    error?: string | null;
   } = {}
 ) {
+  const resolvedPreviewUrl = runningPreviewUrl(status, previewUrl);
   return {
     id,
     user_id: "00000000-0000-4000-8000-000000000001",
@@ -32,10 +41,9 @@ function sandboxRecord(
     working_branch: branch,
     limit_claim_id: null,
     status,
-    preview_url:
-      status === "running" ? "https://preview.example.vercel.app" : null,
+    preview_url: resolvedPreviewUrl,
     snapshot_id: null,
-    error: null,
+    error,
     stop_reason: null,
     install_log: null,
     dev_log: null,
@@ -47,8 +55,7 @@ function sandboxRecord(
       sandbox_id: sandboxId,
       status,
       health_status: "unknown",
-      preview_url:
-        status === "running" ? "https://preview.example.vercel.app" : null,
+      preview_url: resolvedPreviewUrl,
       last_health_check_at: null,
       last_preview_http_status: null,
       boot_attempts: 0,
@@ -63,11 +70,11 @@ function sandboxRecord(
       team_label: null,
     },
     error_summary: {
-      current_error: null,
+      current_error: error,
       last_preview_error: null,
       last_boot_error: null,
-      display_error: null,
-      has_errors: false,
+      display_error: error,
+      has_errors: Boolean(error),
     },
   };
 }
@@ -129,6 +136,7 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   let stopPosted = false;
   let restartPosted = false;
   let resumePosted = false;
+  let deletePosted = false;
   const chatRequests: Array<{ sandboxId?: string | null }> = [];
   await page.route("**/api/sandbox/rec-1/stop", (route) => {
     stopPosted = true;
@@ -148,8 +156,16 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
         sandboxId: "sbx_paused",
         branch: "feat/paused",
         lastActiveAt: new Date(Date.now() - 60_000).toISOString(),
+        previewUrl: "https://paused-preview.example.vercel.app",
       }),
     });
+  });
+  await page.route("**/api/sandbox/rec-error", (route) => {
+    if (route.request().method() === "DELETE") {
+      deletePosted = true;
+      return fulfillJson(route, { ok: true, sandboxId: "rec-error" });
+    }
+    return route.fallback();
   });
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, {
@@ -167,6 +183,13 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
           sandboxId: "sbx_unrelated",
           branch: "feat/unrelated",
           lastActiveAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+        sandboxRecord("error", {
+          id: "rec-error",
+          sandboxId: "sbx_failed",
+          branch: "feat/failed",
+          error: "Runtime failed to start",
+          lastActiveAt: new Date(Date.now() - 120_000).toISOString(),
         }),
       ],
     })
@@ -206,20 +229,50 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
     page.getByText("acme/widgets", { exact: true }).last()
   ).toBeVisible();
 
-  // One branch tab per active sandbox appears next to Chat / Sandboxes.
-  await expect(page.getByRole("button", { name: "feat/demo" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "feat/paused" })).toBeVisible();
+  // Control view tabs follow the keyboard tab pattern and keep counts distinct.
+  const chatTab = page.getByRole("tab", { name: "Chat", exact: true });
+  await chatTab.focus();
+  await page.keyboard.press("ArrowRight");
   await expect(
-    page.getByRole("button", { name: "feat/unrelated" })
-  ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Sandboxes 2" })).toBeVisible();
+    page.getByRole("tab", { name: "Worktrees, 0 checkouts" })
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    page.getByRole("tab", { name: "Sandboxes, 3 compute environments" })
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Home");
+  await expect(chatTab).toHaveAttribute("aria-selected", "true");
+
+  // Sandbox selectors use compute identity; repository branches stay secondary.
+  await expect(
+    page.getByRole("button", {
+      name: /Select sandbox sbx_live123, Running, repository branch feat\/demo/,
+    })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /Select sandbox sbx_paused, Paused, repository branch feat\/paused/,
+    })
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /sbx_unrelated/ })).toHaveCount(
+    0
+  );
+  await expect(
+    page.getByRole("tab", { name: "Sandboxes, 3 compute environments" })
+  ).toBeVisible();
   expect(chatRequests[0]?.sandboxId).toBe("rec-1");
 
-  // Branch tabs select the exact sandbox context sent to the agent.
-  const pausedTab = page.getByRole("button", { name: "feat/paused" });
+  // Sandbox selectors select the exact context sent to the agent and preview.
+  const pausedTab = page.getByRole("button", {
+    name: /Select sandbox sbx_paused/,
+  });
   await pausedTab.click();
   await expect(pausedTab).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Chat" }).click();
+  await expect(page.getByText("Selected sandbox:")).toBeVisible();
+  await expect(
+    page.getByText("sbx_paused", { exact: true }).last()
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Chat", exact: true }).click();
   await page
     .getByPlaceholder("Ask for follow-up changes or attach images")
     .fill("Continue in the paused sandbox");
@@ -228,21 +281,35 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   expect(chatRequests[1]?.sandboxId).toBe("rec-paused");
 
   // The Sandboxes tab shows remote compute with real status and actions.
-  await page.getByRole("button", { name: "Sandboxes 2" }).click();
+  await page
+    .getByRole("tab", { name: "Sandboxes, 3 compute environments" })
+    .click();
   await expect(page.getByRole("heading", { name: "Sandboxes" })).toBeVisible();
-  await expect(page.getByText("sbx_live123")).toHaveCount(0);
-  await expect(page.getByText("feat/demo").first()).toBeVisible();
-  await expect(page.getByText("Running").first()).toBeVisible();
   await expect(
-    page.getByText("No recent output for this sandbox.").first()
+    page.getByText(
+      "Remote compute for commands and previews. A sandbox can host zero or more worktree checkouts."
+    )
+  ).toBeVisible();
+  const liveSandbox = page.getByRole("region", {
+    name: "Sandbox sbx_live123",
+  });
+  await expect(liveSandbox.getByText("sbx_live123")).toBeVisible();
+  await expect(liveSandbox.getByText("feat/demo from main")).toBeVisible();
+  await expect(liveSandbox.getByText("Running", { exact: true })).toBeVisible();
+  await expect(
+    liveSandbox.getByText("No recent compute output.")
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Preview" }).first()
+    liveSandbox.getByRole("button", { name: "Preview" })
   ).toBeEnabled();
   await expect(
-    page.getByRole("button", { name: "Stop" }).first()
+    liveSandbox.getByRole("button", { name: "Stop compute" })
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+  await expect(page.getByText("Runtime failed to start")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Merge to main" })).toHaveCount(
+    0
+  );
 
   // A paused sandbox can be resumed without creating a replacement, so its
   // persisted worktree binding remains valid.
@@ -250,8 +317,16 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await expect.poll(() => resumePosted).toBe(true);
   await expect(page.getByText("Running")).toHaveCount(2);
 
+  // The top-bar preview follows the selected sandbox, not the first running
+  // sandbox returned by the collection endpoint.
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Open sandbox preview" })
+  ).toHaveAttribute("title", "https://paused-preview.example.vercel.app");
+  await page.keyboard.press("Escape");
+
   // Preview opens the real sandbox URL in a modal and closes again.
-  await page.getByRole("button", { name: "Preview" }).first().click();
+  await liveSandbox.getByRole("button", { name: "Preview" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(
@@ -262,19 +337,55 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await expect(dialog).toBeHidden();
 
   // Stop hits the real endpoint and the card reflects the new state.
-  await page.getByRole("button", { name: "Stop" }).first().click();
+  await liveSandbox.getByRole("button", { name: "Stop compute" }).click();
+  const stopDialog = page.getByRole("alertdialog", {
+    name: "Stop sandbox compute?",
+  });
+  await expect(
+    stopDialog.getByText(
+      "Compute, snapshots, sessions, and preview are removed. The sandbox record and worktree records stay for restart, but checkout data becomes unavailable. Mogplex does not delete remote Git branches."
+    )
+  ).toBeVisible();
+  await stopDialog.getByRole("button", { name: "Stop compute" }).click();
   await expect.poll(() => stopPosted).toBe(true);
-  await expect(page.getByText("Stopped").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Restart" })).toBeVisible();
+  await expect(liveSandbox.getByLabel("Runtime status: Stopped")).toBeVisible();
+  await expect(
+    liveSandbox.getByRole("button", { name: "Restart" })
+  ).toBeVisible();
 
   // A stopped sandbox restarts through its existing record instead of
   // creating unrelated compute that would strand the worktree binding.
-  await page.getByRole("button", { name: "Restart" }).click();
+  await liveSandbox.getByRole("button", { name: "Restart" }).click();
   await expect.poll(() => restartPosted).toBe(true);
   await expect(page.getByText("Running")).toHaveCount(2);
+
+  // Delete is a separate, destructive lifecycle with explicit consequences.
+  const failedSandbox = page.getByRole("region", {
+    name: "Sandbox sbx_failed",
+  });
+  await failedSandbox.getByRole("button", { name: "Delete sandbox" }).click();
+  const deleteDialog = page.getByRole("alertdialog", {
+    name: "Delete sandbox record?",
+  });
+  await expect(
+    deleteDialog.getByText(
+      "Compute, snapshots, sessions, and the sandbox record are removed. Worktree records stay, but their checkouts become unavailable. Mogplex does not delete remote Git branches."
+    )
+  ).toBeVisible();
+  await deleteDialog.getByRole("button", { name: "Delete sandbox" }).click();
+  await expect.poll(() => deletePosted).toBe(true);
+  await expect(failedSandbox).toHaveCount(0);
 
   // The dashed spawn card stays available.
   await expect(
     page.getByRole("button", { name: /Start sandbox/ }).first()
   ).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.getByText("Remote compute for commands and previews.")
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(390);
 });

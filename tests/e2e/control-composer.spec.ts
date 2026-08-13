@@ -380,7 +380,7 @@ test("control composer creates a new project when no repos are connected", async
   await expect.poll(() => sessionCreates.length, { timeout: 10_000 }).toBe(1);
   await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(1);
   expect(sessionCreates[0]?.project).toBe("analytics-redesign");
-  await page.locator("button[aria-pressed]", { hasText: "Sandboxes" }).click();
+  await page.getByRole("tab", { name: /Sandboxes, 0 compute/ }).click();
   await expect(
     page.getByText(/No repository is linked to this session/)
   ).toBeVisible();
