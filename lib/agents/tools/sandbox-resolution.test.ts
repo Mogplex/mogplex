@@ -7,7 +7,11 @@ import {
   expect,
   it,
 } from "vitest";
-import { createStartSandbox, createTerminalExec } from "./sandbox";
+import {
+  createStartSandbox,
+  createTerminalExec,
+  createWriteFile,
+} from "./sandbox";
 import { resolveOrCreateSandbox } from "./sandbox-resolution";
 
 type RunningSandbox = { id: string };
@@ -176,9 +180,40 @@ describe("sandbox resolution contract", () => {
       resolveOrCreateSandbox("user-1", "acme/missing")
     ).resolves.toBeNull();
   });
+
+  it("surfaces delegated-auth configuration failures", async () => {
+    delete process.env.INTERNAL_API_SECRET;
+    await expect(
+      resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
+    ).resolves.toEqual({
+      error: "INTERNAL_API_SECRET is required for delegated internal API calls",
+    });
+  });
 });
 
 describe("sandbox command tool contract", () => {
+  it("surfaces delegated-auth failures instead of blaming repo selection", async () => {
+    delete process.env.INTERNAL_API_SECRET;
+    let fetched = false;
+    global.fetch = async () => {
+      fetched = true;
+      return Response.json({ exitCode: 0 });
+    };
+    const tool = createTerminalExec(
+      undefined,
+      "user-1",
+      "00000000-0000-4000-8000-000000000001"
+    ) as unknown as {
+      execute: (input: { command: string }) => Promise<unknown>;
+    };
+
+    await expect(tool.execute({ command: "pwd" })).resolves.toEqual({
+      error: "INTERNAL_API_SECRET is required for delegated internal API calls",
+      command: "pwd",
+    });
+    expect(fetched).toBe(false);
+  });
+
   it("returns selected sandbox identity on success and failure", async () => {
     let status = 200;
     global.fetch = async () =>
@@ -243,6 +278,132 @@ describe("sandbox command tool contract", () => {
       ok: true,
       sandboxId: "sandbox-new",
       status: "running",
+    });
+  });
+
+  it("does not resurrect a dead selected sandbox after re-resolution fails", async () => {
+    const urls: string[] = [];
+    global.fetch = async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.endsWith("/sandbox-old/exec")) {
+        return Response.json({ error: "old sandbox missing" }, { status: 404 });
+      }
+      return Response.json({ error: "start failed" }, { status: 500 });
+    };
+    const tool = createTerminalExec(
+      "sandbox-old",
+      "user-1",
+      "00000000-0000-4000-8000-000000000001"
+    ) as unknown as {
+      execute: (input: { command: string }) => Promise<unknown>;
+    };
+
+    await tool.execute({ command: "pwd" });
+    installSandboxRows([{ id: "sandbox-new" }]);
+    global.fetch = async (input) => {
+      const url = String(input);
+      urls.push(url);
+      return Response.json({ exitCode: 0, stdout: "ok", stderr: "" });
+    };
+
+    await expect(tool.execute({ command: "pwd" })).resolves.toMatchObject({
+      sandboxId: "sandbox-new",
+      sandboxResolution: "reused_running",
+    });
+    expect(
+      urls.filter((url) => url.endsWith("/sandbox-old/exec"))
+    ).toHaveLength(1);
+  });
+
+  it("reports the retry response against the newly resolved sandbox", async () => {
+    installSandboxRows([{ id: "sandbox-new" }]);
+    global.fetch = async (input) => {
+      const url = String(input);
+      if (url.endsWith("/sandbox-old/exec")) {
+        return Response.json({ error: "old sandbox missing" }, { status: 404 });
+      }
+      return Response.json({ error: "new command rejected" }, { status: 500 });
+    };
+    const tool = createTerminalExec(
+      "sandbox-old",
+      "user-1",
+      "00000000-0000-4000-8000-000000000001"
+    ) as unknown as {
+      execute: (input: { command: string }) => Promise<unknown>;
+    };
+
+    await expect(tool.execute({ command: "pwd" })).resolves.toMatchObject({
+      error: "new command rejected",
+      sandboxId: "sandbox-new",
+      sandboxResolution: "reused_running",
+    });
+  });
+
+  it("surfaces a re-resolution auth failure after a selected sandbox disappears", async () => {
+    global.fetch = async () => {
+      delete process.env.INTERNAL_API_SECRET;
+      return Response.json({ error: "old sandbox missing" }, { status: 404 });
+    };
+    const tool = createTerminalExec(
+      "sandbox-old",
+      "user-1",
+      "00000000-0000-4000-8000-000000000001"
+    ) as unknown as {
+      execute: (input: { command: string }) => Promise<unknown>;
+    };
+
+    await expect(tool.execute({ command: "pwd" })).resolves.toEqual({
+      error: "INTERNAL_API_SECRET is required for delegated internal API calls",
+      command: "pwd",
+    });
+  });
+
+  it("reports a successful retry against the newly resolved sandbox", async () => {
+    installSandboxRows([{ id: "sandbox-new" }]);
+    global.fetch = async (input) =>
+      String(input).endsWith("/sandbox-old/exec")
+        ? Response.json({ error: "old sandbox missing" }, { status: 404 })
+        : Response.json({ exitCode: 0, stdout: "ok", stderr: "" });
+    const tool = createTerminalExec(
+      "sandbox-old",
+      "user-1",
+      "00000000-0000-4000-8000-000000000001"
+    ) as unknown as {
+      execute: (input: { command: string }) => Promise<unknown>;
+    };
+
+    await expect(tool.execute({ command: "pwd" })).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: "ok",
+      sandboxId: "sandbox-new",
+      sandboxResolution: "reused_running",
+    });
+  });
+});
+
+describe("sandbox write tool contract", () => {
+  it("requires and reports the server-selected sandbox identity", async () => {
+    const unboundTool = createWriteFile("user-1") as unknown as {
+      execute: (input: { path: string; content: string }) => Promise<unknown>;
+    };
+    await expect(
+      unboundTool.execute({ path: "src/a.ts", content: "export {};" })
+    ).resolves.toEqual({ error: "Select a sandbox first." });
+
+    global.fetch = async () => Response.json({ ok: true });
+    const boundTool = createWriteFile(
+      "user-1",
+      "sandbox-selected"
+    ) as unknown as {
+      execute: (input: { path: string; content: string }) => Promise<unknown>;
+    };
+    await expect(
+      boundTool.execute({ path: "src/a.ts", content: "export {};" })
+    ).resolves.toEqual({
+      ok: true,
+      path: "src/a.ts",
+      sandboxId: "sandbox-selected",
     });
   });
 });
