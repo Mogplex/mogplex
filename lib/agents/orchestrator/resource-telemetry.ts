@@ -19,6 +19,7 @@ export type ResourceRejectionReason =
   | "mission_not_linked"
   | "multiple_sandboxes"
   | "operation_failed"
+  | "repo_lookup_failed"
   | "repo_mismatch"
   | "repo_not_selected"
   | "sandbox_inactive"
@@ -103,6 +104,7 @@ const RESOURCE_REJECTION_REASONS = new Set<ResourceRejectionReason>([
   "mission_not_linked",
   "multiple_sandboxes",
   "operation_failed",
+  "repo_lookup_failed",
   "repo_mismatch",
   "repo_not_selected",
   "sandbox_inactive",

@@ -116,16 +116,20 @@ export type ControlPromptSandboxContext = {
   sandboxes: Array<{ id: string; branch: string; status: string }>;
 };
 
-function worktreeSessionRejection(
+function resolveWorktreeSession(
   session: ControlPromptWorktreeSession | null,
   userId: string,
   repoId: string
-): ResourceRejectionReason | null {
-  if (!session) return "session_not_found";
+):
+  | { ok: true; runId: string }
+  | { ok: false; reason: ResourceRejectionReason } {
+  if (!session) return { ok: false, reason: "session_not_found" };
   if (session.user_id !== userId || session.repo_id !== repoId) {
-    return "repo_mismatch";
+    return { ok: false, reason: "repo_mismatch" };
   }
-  return session.orchestration_run_id ? null : "mission_not_linked";
+  return session.orchestration_run_id
+    ? { ok: true, runId: session.orchestration_run_id }
+    : { ok: false, reason: "mission_not_linked" };
 }
 
 function sandboxLoadRejection(status: number): ResourceRejectionReason {
@@ -192,17 +196,18 @@ export async function resolveControlPromptWorktrees(
       conversationId,
       userId,
     });
-    const rejectionReason = worktreeSessionRejection(session, userId, repoId);
-    if (rejectionReason) return { ...empty, rejectionReason };
-    if (!session?.orchestration_run_id) return empty;
+    const sessionResolution = resolveWorktreeSession(session, userId, repoId);
+    if (!sessionResolution.ok) {
+      return { ...empty, rejectionReason: sessionResolution.reason };
+    }
     const worktrees = await deps.listWorktrees({
       userId,
-      runId: session.orchestration_run_id,
+      runId: sessionResolution.runId,
       repoId,
     });
     return {
       controlSessionId: conversationId,
-      orchestrationRunId: session.orchestration_run_id,
+      orchestrationRunId: sessionResolution.runId,
       decisionSource: "owned_control_session",
       rejectionReason: null,
       worktrees: worktrees

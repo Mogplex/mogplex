@@ -20,6 +20,7 @@ export type SandboxResolutionFailure = {
   reason:
     | "auth_unavailable"
     | "multiple_sandboxes"
+    | "repo_lookup_failed"
     | "repo_mismatch"
     | "sandbox_unavailable";
 };
@@ -41,19 +42,27 @@ export function getSandboxRequestHeaders(userId?: string) {
 async function resolveRepoUuid(
   userId: string,
   repoId: string | undefined
-): Promise<{ ok: true; repoId: string | undefined } | { ok: false }> {
+): Promise<
+  | { ok: true; repoId: string | undefined }
+  | { ok: false; reason: "repo_lookup_failed" | "repo_mismatch" }
+> {
   if (!repoId) return { ok: true, repoId: undefined };
   if (repoId.includes("/")) {
     const { supabaseAdmin } = await import("@/lib/supabase/admin");
-    const { data: lookup } = await supabaseAdmin
+    const { data: lookup, error } = await supabaseAdmin
       .from("repos")
       .select("id")
       .eq("full_name", repoId)
       .eq("user_id", userId)
       .maybeSingle();
-    return lookup?.id ? { ok: true, repoId: lookup.id } : { ok: false };
+    if (error) return { ok: false, reason: "repo_lookup_failed" };
+    return lookup?.id
+      ? { ok: true, repoId: lookup.id }
+      : { ok: false, reason: "repo_mismatch" };
   }
-  return isRepoId(repoId) ? { ok: true, repoId } : { ok: false };
+  return isRepoId(repoId)
+    ? { ok: true, repoId }
+    : { ok: false, reason: "repo_mismatch" };
 }
 
 async function findRunningSandboxIds(
@@ -174,7 +183,7 @@ export async function resolveOrCreateSandbox(
 
   const resolved = await resolveRepoUuid(userId, repoId);
   if (!resolved.ok) {
-    return { error: "Failed to start sandbox", reason: "repo_mismatch" };
+    return { error: "Failed to start sandbox", reason: resolved.reason };
   }
   if (!resolved.repoId) return null;
 
