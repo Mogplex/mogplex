@@ -25,7 +25,15 @@ begin
   end if;
 
   execute format($sql$
-    with inserted_runs as (
+    with candidate_sessions as (
+      select
+        session.*,
+        'control-' || replace(session.id::text, '-', '') as run_slug
+      from public.control_sessions session
+      where session.repo_id is not null
+        and session.orchestration_run_id is null
+    ),
+    inserted_runs as (
       insert into public.orchestration_runs
         (user_id, repo_id, title, slug, request, base_branch, spec_branch,
          integration_branch, metadata)
@@ -33,21 +41,33 @@ begin
         session.user_id,
         session.repo_id,
         coalesce(nullif(left(session.title, 500), ''), 'New session'),
-        'control-' || replace(session.id::text, '-', ''),
+        session.run_slug,
         coalesce(nullif(left(session.title, 500), ''), 'New session'),
         %s,
         'mogplex/spec/control-' || replace(session.id::text, '-', ''),
         'mogplex/integrate/control-' || replace(session.id::text, '-', ''),
         jsonb_build_object('controlSessionId', session.id, 'backfilled', true)
-      from public.control_sessions session
-      where session.repo_id is not null
-        and session.orchestration_run_id is null
-      returning id, metadata
+      from candidate_sessions session
+      on conflict (repo_id, slug) do nothing
+      returning id, repo_id, slug, metadata
+    ),
+    resolved_runs as (
+      select
+        (inserted.metadata->>'controlSessionId')::uuid as session_id,
+        inserted.id as run_id
+      from inserted_runs inserted
+      union all
+      select session.id, existing.id
+      from candidate_sessions session
+      join public.orchestration_runs existing
+        on existing.repo_id = session.repo_id
+       and existing.slug = session.run_slug
     )
     update public.control_sessions session
-    set orchestration_run_id = inserted.id
-    from inserted_runs inserted
-    where session.id = (inserted.metadata->>'controlSessionId')::uuid
+    set orchestration_run_id = resolved.run_id
+    from resolved_runs resolved
+    where session.id = resolved.session_id
+      and session.orchestration_run_id is null
   $sql$, v_base_branch_sql);
 end
 $block$;

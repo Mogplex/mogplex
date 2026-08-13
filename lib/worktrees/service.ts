@@ -306,11 +306,15 @@ export async function archiveWorktree(
       "Wait for worktree creation to finish before archiving"
     );
   }
-  return deps.archive({
+  const archived = await deps.archive({
     ...input,
     expectedCreatingUpdatedAt:
       worktree.status === "creating" ? worktree.updated_at : undefined,
   });
+  if (!archived) {
+    throw new WorktreeServiceError("Worktree changed; refresh and retry");
+  }
+  return archived;
 }
 
 export async function pruneWorktree(
@@ -338,32 +342,27 @@ export async function pruneWorktree(
       sandboxId: worktree.sandbox_id,
       command: buildPruneWorktreeCommand({
         checkoutPath: worktree.checkout_path,
-        force: input.force ?? false,
+        // `force` retires a binding only after the executor confirms the
+        // sandbox is gone. It must never turn into `git worktree --force`.
+        force: false,
       }),
     });
     const failure = commandFailure(result);
-    if (failure) {
-      if (!input.force) {
-        throw new WorktreeServiceError(failure);
-      }
-      console.warn("[worktrees] force-retiring checkout after git failure", {
-        worktreeId: worktree.id,
-        error: failure,
-      });
-    }
+    if (failure) throw new WorktreeServiceError(failure);
   } catch (error) {
-    if (!input.force) {
-      if (error instanceof WorktreeExecutorError && error.status === 404) {
+    if (error instanceof WorktreeExecutorError && error.status === 404) {
+      if (!input.force) {
         throw new WorktreeServiceError(error.message, {
           forceEligible: true,
         });
       }
+      console.warn("[worktrees] retiring binding for missing sandbox", {
+        worktreeId: worktree.id,
+        error: error.message,
+      });
+    } else {
       throw error;
     }
-    console.warn("[worktrees] force-retiring checkout after executor failure", {
-      worktreeId: worktree.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
   }
   return deps.markPruned(input);
 }

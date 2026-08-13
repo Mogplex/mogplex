@@ -221,11 +221,13 @@ function WorktreeRow({
 export function WorktreesPanel({
   worktrees,
   loading,
+  onRefresh,
   onAction,
   onDiff,
 }: {
   worktrees: OrchestrationWorktreeDTO[];
   loading: boolean;
+  onRefresh: () => Promise<void>;
   onAction: (
     action: "rebase" | "archive" | "prune",
     id: string,
@@ -236,7 +238,7 @@ export function WorktreesPanel({
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-4 py-6 sm:px-6">
       <div className="border-ink-800 border-b pb-4">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center gap-2">
           <h2 className="text-ink-300 text-xs font-semibold tracking-wider uppercase">
             Worktrees
           </h2>
@@ -245,6 +247,14 @@ export function WorktreesPanel({
               ? "Loading"
               : `${worktrees.length} checkout${worktrees.length === 1 ? "" : "s"}`}
           </span>
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={loading}
+            className="border-ink-700 text-ink-300 hover:bg-ink-800 ml-auto flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+          >
+            <Refresh className="size-3" /> Refresh
+          </button>
         </div>
         <p className="text-ink-500 mt-1 max-w-2xl text-xs leading-5">
           Isolated Git checkouts assigned to mission tasks. Sandbox compute can

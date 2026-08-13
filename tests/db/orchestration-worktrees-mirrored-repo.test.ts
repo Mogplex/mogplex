@@ -14,6 +14,8 @@ const MIGRATIONS = [
 const USER_ID = "00000000-0000-4000-8000-00000000000a";
 const REPO_ID = "00000000-0000-4000-8000-00000000001a";
 const SESSION_ID = "00000000-0000-4000-8000-00000000003a";
+const ORPHANED_SESSION_ID = "00000000-0000-4000-8000-00000000003b";
+const ORPHANED_RUN_ID = "00000000-0000-4000-8000-00000000004b";
 
 it("uses the mirrored repository default branch when that table exists", async () => {
   const db = new PGlite();
@@ -43,20 +45,39 @@ it("uses the mirrored repository default branch when that table exists", async (
           insert into public.repos (id, default_branch)
           values ('${REPO_ID}', 'develop');
           insert into public.control_sessions (id, user_id, repo_id, title)
-          values ('${SESSION_ID}', '${USER_ID}', '${REPO_ID}', 'Legacy');
+          values
+            ('${SESSION_ID}', '${USER_ID}', '${REPO_ID}', 'Legacy'),
+            ('${ORPHANED_SESSION_ID}', '${USER_ID}', '${REPO_ID}', 'Orphaned');
+          insert into public.orchestration_runs
+            (id, user_id, repo_id, title, slug, request, base_branch,
+             spec_branch, integration_branch)
+          values
+            ('${ORPHANED_RUN_ID}', '${USER_ID}', '${REPO_ID}', 'Orphaned',
+             'control-' || replace('${ORPHANED_SESSION_ID}', '-', ''),
+             'Orphaned', 'develop', 'mogplex/spec/orphaned',
+             'mogplex/integrate/orphaned');
         `);
       }
       await db.exec(await readFile(path.join(REPO_ROOT, migration), "utf8"));
     }
-    const result = await db.query<{ base_branch: string }>(
-      `select run.base_branch
+    const result = await db.query<{
+      orchestration_run_id: string;
+      base_branch: string;
+    }>(
+      `select session.orchestration_run_id, run.base_branch
        from public.control_sessions session
        join public.orchestration_runs run
          on run.id = session.orchestration_run_id
-       where session.id = $1`,
-      [SESSION_ID]
+       where session.id in ($1, $2)
+       order by session.id`,
+      [SESSION_ID, ORPHANED_SESSION_ID]
     );
-    expect(result.rows).toEqual([{ base_branch: "develop" }]);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0]!.base_branch).toBe("develop");
+    expect(result.rows[1]).toEqual({
+      orchestration_run_id: ORPHANED_RUN_ID,
+      base_branch: "develop",
+    });
   } finally {
     await db.close();
   }

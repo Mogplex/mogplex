@@ -259,7 +259,7 @@ export async function archiveWorktreeRecord(input: {
   worktreeId: string;
   userId: string;
   expectedCreatingUpdatedAt?: string;
-}): Promise<OrchestrationWorktreeDTO> {
+}): Promise<OrchestrationWorktreeDTO | null> {
   let query = supabaseAdmin
     .from(WORKTREES)
     .update({ status: "archived", archived_at: new Date().toISOString() })
@@ -271,14 +271,9 @@ export async function archiveWorktreeRecord(input: {
         .eq("updated_at", input.expectedCreatingUpdatedAt)
         .lt("updated_at", staleWorktreeReservationCutoff())
     : query.in("status", ["active", "error"]);
-  const { data, error } = await query.select("*").single();
-  if (error || !data) {
-    throw new WorktreeStoreError(
-      "archive",
-      error?.message ?? "archivable worktree not found"
-    );
-  }
-  return data as OrchestrationWorktreeDTO;
+  const { data, error } = await query.select("*").maybeSingle();
+  if (error) throw new WorktreeStoreError("archive", error.message);
+  return data as OrchestrationWorktreeDTO | null;
 }
 
 export async function markWorktreePruned(input: {

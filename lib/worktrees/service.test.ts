@@ -167,6 +167,27 @@ describe("spawnWorktree reservation recovery", () => {
     expect(archive).not.toHaveBeenCalled();
   });
 
+  it("maps a concurrent archive change to a retryable conflict", async () => {
+    await expect(
+      archiveWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+        },
+        {
+          load: async () => worktree("active"),
+          archive: async () => null,
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "WorktreeServiceError",
+      message: "Worktree changed; refresh and retry",
+      kind: "conflict",
+    });
+  });
+
   it("offers force retirement only when an archived sandbox is gone", async () => {
     const archived = worktree("archived");
     await expect(
@@ -212,6 +233,53 @@ describe("spawnWorktree reservation recovery", () => {
       message: "checkout contains modified files",
       forceEligible: false,
     });
+  });
+
+  it("force-retires only after confirming the sandbox is missing", async () => {
+    const pruned = worktree("pruned");
+    const markPruned = vi.fn(async () => pruned);
+    await expect(
+      pruneWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+          force: true,
+        },
+        {
+          load: async () => worktree("archived"),
+          execute: async () => {
+            throw new WorktreeExecutorError("Sandbox not found", 404);
+          },
+          markPruned,
+        }
+      )
+    ).resolves.toBe(pruned);
+    expect(markPruned).toHaveBeenCalledOnce();
+  });
+
+  it("does not force-retire on executor failures from a live sandbox", async () => {
+    const markPruned = vi.fn();
+    await expect(
+      pruneWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+          force: true,
+        },
+        {
+          load: async () => worktree("archived"),
+          execute: async () => {
+            throw new WorktreeExecutorError("Executor unavailable", 503);
+          },
+          markPruned,
+        }
+      )
+    ).rejects.toThrow("Executor unavailable");
+    expect(markPruned).not.toHaveBeenCalled();
   });
 
   it("prunes a reservation placeholder without executing git", async () => {
