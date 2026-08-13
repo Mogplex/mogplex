@@ -157,3 +157,42 @@ test("terminal_exec preserves the resolved sandbox identity on command failure",
     );
   });
 });
+
+test("write_file uses its server-selected sandbox without a model sandbox id", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    let capturedUrl = "";
+    await withPatchedFetch(
+      async (input) => {
+        capturedUrl = String(input);
+        return Response.json({ ok: true });
+      },
+      async () => {
+        const { createWriteFile } = await loadToolsModule();
+        const tool = createWriteFile(
+          "user-123",
+          "sandbox-selected"
+        ) as unknown as {
+          inputSchema: { shape: Record<string, unknown> };
+          execute: (input: {
+            path: string;
+            content: string;
+          }) => Promise<unknown>;
+        };
+
+        assert.deepEqual(Object.keys(tool.inputSchema.shape), [
+          "path",
+          "content",
+        ]);
+        assert.deepEqual(
+          await tool.execute({ path: "src/a.ts", content: "export {};" }),
+          {
+            ok: true,
+            path: "src/a.ts",
+            sandboxId: "sandbox-selected",
+          }
+        );
+        assert.match(capturedUrl, /\/sandbox-selected\/files$/);
+      }
+    );
+  });
+});

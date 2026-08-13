@@ -126,7 +126,7 @@ function buildToolForDef(
     return createListFiles(ctx.githubToken, repoDefaults);
   }
   if (def.name === "write_file") {
-    return createWriteFile(ctx.userId);
+    return ctx.sandboxId ? createWriteFile(ctx.userId, ctx.sandboxId) : null;
   }
   if (def.name === "search_repo") {
     return ctx.githubToken

@@ -179,7 +179,11 @@ export async function resolveOrCreateSandbox(
   }
 
   const requestHeaders = getSandboxRequestHeaders(userId);
-  if ("error" in requestHeaders) return null;
+  if ("error" in requestHeaders) {
+    return {
+      error: requestHeaders.error ?? "Internal sandbox auth is not configured",
+    };
+  }
   const response = await fetch(`${resolveAppBaseUrl()}/api/sandbox`, {
     method: "POST",
     headers: requestHeaders.headers,

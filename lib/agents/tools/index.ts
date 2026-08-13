@@ -178,7 +178,7 @@ export function buildStaticTools(
           ),
         }
       : {}),
-    ...(sandboxId ? { write_file: createWriteFile(userId) } : {}),
+    ...(sandboxId ? { write_file: createWriteFile(userId, sandboxId) } : {}),
   };
   return filterToolsByCapability(
     all,

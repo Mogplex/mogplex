@@ -78,13 +78,22 @@ async function retryExecAfterSandboxLoss(
   }
 ): Promise<{
   sandbox: SandboxResolution | null;
-  result: ReturnType<typeof formatSandboxExecResult> | null;
+  result:
+    | ReturnType<typeof formatSandboxExecResult>
+    | ReturnType<typeof formatSandboxExecError>
+    | null;
 } | null> {
   if (res.status !== 404 && res.status !== 410) return null;
 
   const resolution = await resolveOrCreateSandbox(ctx.userId, ctx.repoId);
-  if (!resolution || "error" in resolution) {
+  if (!resolution) {
     return { sandbox: null, result: null };
+  }
+  if ("error" in resolution) {
+    return {
+      sandbox: null,
+      result: { error: resolution.error, command: ctx.command },
+    };
   }
 
   const retry = await postSandboxExec(resolution.sandboxId, ctx.headers, {
@@ -92,11 +101,12 @@ async function retryExecAfterSandboxLoss(
     cwd: ctx.cwd,
   });
 
+  const retryData = await retry.json().catch(() => ({}));
   return {
     sandbox: resolution,
     result: retry.ok
-      ? formatSandboxExecResult(await retry.json(), ctx.command, resolution)
-      : null,
+      ? formatSandboxExecResult(retryData, ctx.command, resolution)
+      : formatSandboxExecError(retryData, ctx.command, resolution),
   };
 }
 
@@ -110,6 +120,7 @@ export function createTerminalExec(
   userId?: string,
   repoId?: string
 ) {
+  let selectedSandboxId = sandboxId;
   // Track the selected/resolved sandbox across calls within this tool instance.
   let cachedSandbox: SandboxResolution | null = sandboxId
     ? { sandboxId, status: "running", source: "selected" }
@@ -120,12 +131,17 @@ export function createTerminalExec(
       "Execute a shell command in the selected sandbox. If none is selected, fall back only to exactly one running sandbox for the active repository or start one when none exists. The result identifies the resolved sandbox. This does not create or imply a worktree.",
     inputSchema: terminalParams,
     execute: async ({ command, cwd }: z.infer<typeof terminalParams>) => {
+      const requestHeaders = getSandboxRequestHeaders(userId);
+      if ("error" in requestHeaders) {
+        return { error: requestHeaders.error, command };
+      }
+
       // Resolve sandbox at execution time (not build time)
       if (!cachedSandbox) {
         const resolution = await resolveOrCreateSandbox(
           userId,
           repoId,
-          sandboxId
+          selectedSandboxId
         );
         if (resolution && "error" in resolution) {
           return { error: resolution.error, command };
@@ -138,11 +154,6 @@ export function createTerminalExec(
           error: "No sandbox available. Select a repository first.",
           command,
         };
-      }
-
-      const requestHeaders = getSandboxRequestHeaders(userId);
-      if ("error" in requestHeaders) {
-        return { error: requestHeaders.error, command };
       }
 
       const res = await postSandboxExec(
@@ -169,6 +180,7 @@ export function createTerminalExec(
         cwd,
       });
       if (retried) {
+        selectedSandboxId = undefined;
         cachedSandbox = retried.sandbox;
         if (retried.result) return retried.result;
       }
@@ -184,18 +196,15 @@ export const terminalExec = createTerminalExec();
 const writeFileParams = z.object({
   path: z.string().describe("File path relative to sandbox root"),
   content: z.string().describe("File content to write"),
-  sandboxId: z.string().describe("Sandbox record ID"),
 });
 
-export function createWriteFile(userId?: string) {
+export function createWriteFile(userId?: string, sandboxId?: string) {
   return defineTool({
-    description: "Write content to a file in the sandbox",
+    description:
+      "Write content to a file in the server-selected sandbox. The sandbox identity is fixed by the active session and cannot be supplied by the model.",
     inputSchema: writeFileParams,
-    execute: async ({
-      path,
-      content,
-      sandboxId,
-    }: z.infer<typeof writeFileParams>) => {
+    execute: async ({ path, content }: z.infer<typeof writeFileParams>) => {
+      if (!sandboxId) return { error: "Select a sandbox first." };
       const baseUrl = resolveAppBaseUrl();
 
       const requestHeaders = getSandboxRequestHeaders(userId);
@@ -212,7 +221,7 @@ export function createWriteFile(userId?: string) {
         return { error: (data.error as string) || "Write failed" };
       }
 
-      return { ok: true, path };
+      return { ok: true, path, sandboxId };
     },
   });
 }

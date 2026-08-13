@@ -82,6 +82,12 @@ describe("buildOrchestratorTools", () => {
     expect(withoutToken.search_repo).toBeUndefined();
     expect(withoutToken.open_pr).toBeUndefined();
     expect(Object.keys(withoutToken)).not.toContain("sandbox_provision");
+
+    const withoutSandbox = buildOrchestratorTools({
+      ...FULL_CONTEXT,
+      sandboxId: null,
+    });
+    expect(withoutSandbox.write_file).toBeUndefined();
   });
 
   it("describes the sandbox and worktree decision contract consistently", () => {
@@ -111,5 +117,13 @@ describe("buildOrchestratorTools", () => {
       shape: Record<string, unknown>;
     };
     expect(Object.keys(schema.shape)).toEqual(["taskId"]);
+  });
+
+  it("keeps the selected sandbox server-owned when writing a file", () => {
+    const schema = tools.write_file.inputSchema as unknown as {
+      shape: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.shape)).toEqual(["path", "content"]);
+    expect(tools.write_file.description).toMatch(/server-selected sandbox/i);
   });
 });
