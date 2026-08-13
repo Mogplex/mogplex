@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { WORKTREE_RESERVATION_STALE_MS } from "./constants";
 import type {
   OrchestrationWorktreeDTO,
   WorktreeSandboxContext,
@@ -7,6 +8,14 @@ import type {
 } from "./types";
 
 const WORKTREES = "orchestration_worktrees";
+
+export function buildReservedCheckoutPath(worktreeId: string): string {
+  return `/.reserved/.worktrees/${worktreeId}`;
+}
+
+export function isReservedCheckoutPath(checkoutPath: string): boolean {
+  return checkoutPath.startsWith("/.reserved/.worktrees/");
+}
 
 export class WorktreeStoreError extends Error {
   constructor(operation: string, cause: string) {
@@ -80,7 +89,7 @@ export async function reserveWorktree(input: {
   agentId: string | null;
   branchName: string;
   baseBranch: string;
-}): Promise<OrchestrationWorktreeDTO> {
+}): Promise<{ worktree: OrchestrationWorktreeDTO; created: boolean }> {
   const id = randomUUID();
   const { data, error } = await supabaseAdmin
     .from(WORKTREES)
@@ -94,15 +103,95 @@ export async function reserveWorktree(input: {
       agent_id: input.agentId,
       branch_name: input.branchName,
       base_branch: input.baseBranch,
-      checkout_path: `/.worktrees/${id}`,
+      checkout_path: buildReservedCheckoutPath(id),
       status: "creating",
     })
     .select("*")
     .single();
   if (error || !data) {
+    if (error?.code === "23505") {
+      const winner = await findLiveWorktreeForTask({
+        taskId: input.taskId,
+        userId: input.userId,
+      });
+      if (winner) {
+        return { worktree: winner, created: false };
+      }
+    }
     throw new WorktreeStoreError(
       "reserve",
       error?.message ?? "no row returned"
+    );
+  }
+  return { worktree: data as OrchestrationWorktreeDTO, created: true };
+}
+
+export function staleWorktreeReservationCutoff(now = Date.now()): string {
+  return new Date(now - WORKTREE_RESERVATION_STALE_MS).toISOString();
+}
+
+export async function reclaimStaleCreatingWorktree(input: {
+  worktreeId: string;
+  userId: string;
+  expectedUpdatedAt: string;
+}): Promise<OrchestrationWorktreeDTO | null> {
+  const now = Date.now();
+  const cutoff = staleWorktreeReservationCutoff(now);
+  const { data, error } = await supabaseAdmin
+    .from(WORKTREES)
+    .update({ error: null, updated_at: new Date(now).toISOString() })
+    .eq("id", input.worktreeId)
+    .eq("user_id", input.userId)
+    .eq("status", "creating")
+    .eq("updated_at", input.expectedUpdatedAt)
+    .lt("updated_at", cutoff)
+    .select("*")
+    .maybeSingle();
+  if (error)
+    throw new WorktreeStoreError("reclaim stale reservation", error.message);
+  return data as OrchestrationWorktreeDTO | null;
+}
+
+export async function claimErroredWorktree(input: {
+  worktreeId: string;
+  userId: string;
+  expectedUpdatedAt: string;
+}): Promise<OrchestrationWorktreeDTO | null> {
+  const { data, error } = await supabaseAdmin
+    .from(WORKTREES)
+    .update({
+      status: "creating",
+      error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.worktreeId)
+    .eq("user_id", input.userId)
+    .eq("status", "error")
+    .eq("updated_at", input.expectedUpdatedAt)
+    .select("*")
+    .maybeSingle();
+  if (error)
+    throw new WorktreeStoreError("claim failed worktree", error.message);
+  return data as OrchestrationWorktreeDTO | null;
+}
+
+export async function recordMaterializedWorktree(input: {
+  worktreeId: string;
+  userId: string;
+  checkoutPath: string;
+}): Promise<OrchestrationWorktreeDTO> {
+  const { data, error } = await supabaseAdmin
+    .from(WORKTREES)
+    .update({ checkout_path: input.checkoutPath })
+    .eq("id", input.worktreeId)
+    .eq("user_id", input.userId)
+    .eq("status", "creating")
+    .select("*")
+    .single();
+  if (error || !data) {
+    throw new WorktreeStoreError(
+      "record materialized checkout",
+      error?.message ?? "creating worktree not found"
     );
   }
   return data as OrchestrationWorktreeDTO;
@@ -140,7 +229,8 @@ export async function markWorktreeError(input: {
     .from(WORKTREES)
     .update({ status: "error", error: input.error })
     .eq("id", input.worktreeId)
-    .eq("user_id", input.userId);
+    .eq("user_id", input.userId)
+    .in("status", ["creating", "error"]);
   if (error) throw new WorktreeStoreError("mark error", error.message);
 }
 
@@ -202,22 +292,22 @@ export async function listOwnedWorktrees(input: {
 export async function archiveWorktreeRecord(input: {
   worktreeId: string;
   userId: string;
-}): Promise<OrchestrationWorktreeDTO> {
-  const { data, error } = await supabaseAdmin
+  expectedCreatingUpdatedAt?: string;
+}): Promise<OrchestrationWorktreeDTO | null> {
+  let query = supabaseAdmin
     .from(WORKTREES)
     .update({ status: "archived", archived_at: new Date().toISOString() })
     .eq("id", input.worktreeId)
-    .eq("user_id", input.userId)
-    .eq("status", "active")
-    .select("*")
-    .single();
-  if (error || !data) {
-    throw new WorktreeStoreError(
-      "archive",
-      error?.message ?? "active worktree not found"
-    );
-  }
-  return data as OrchestrationWorktreeDTO;
+    .eq("user_id", input.userId);
+  query = input.expectedCreatingUpdatedAt
+    ? query
+        .eq("status", "creating")
+        .eq("updated_at", input.expectedCreatingUpdatedAt)
+        .lt("updated_at", staleWorktreeReservationCutoff())
+    : query.in("status", ["active", "error"]);
+  const { data, error } = await query.select("*").maybeSingle();
+  if (error) throw new WorktreeStoreError("archive", error.message);
+  return data as OrchestrationWorktreeDTO | null;
 }
 
 export async function markWorktreePruned(input: {

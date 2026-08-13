@@ -423,6 +423,7 @@ function ControlShellInner({
             <WorktreesPanel
               worktrees={controlWorktrees.worktrees}
               loading={controlWorktrees.loading}
+              onRefresh={controlWorktrees.refresh}
               onAction={controlWorktrees.act}
               onDiff={controlWorktrees.loadDiff}
             />

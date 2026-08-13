@@ -210,26 +210,31 @@ describe("planning tools", () => {
   it("starts a worker with the exact active worktree binding", async () => {
     const starts: Array<Record<string, unknown>> = [];
     const bindings: Array<Record<string, unknown>> = [];
-    const tool = createSpawnSubagentTool(ctx, {
-      loadWorktree: async () => buildWorktree(),
-      bindAgent: async (input) => {
-        bindings.push(input);
-        return buildWorktree();
-      },
-      startRun: async (input) => {
-        starts.push(input as unknown as Record<string, unknown>);
-        return {
-          replayed: false,
-          run: {
-            runId: "99999999-9999-4999-8999-999999999999",
-            aiCallId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-            worktreeId: WORKTREE_ID,
-          },
-        } as Awaited<
-          ReturnType<typeof import("@/lib/mogplex-api/runs").startMogplexApiRun>
-        >;
-      },
-    }) as unknown as ExecutableTool;
+    const tool = createSpawnSubagentTool(
+      { ...ctx, aiCallId: null },
+      {
+        loadWorktree: async () => buildWorktree(),
+        bindAgent: async (input) => {
+          bindings.push(input);
+          return buildWorktree();
+        },
+        startRun: async (input) => {
+          starts.push(input as unknown as Record<string, unknown>);
+          return {
+            replayed: false,
+            run: {
+              runId: "99999999-9999-4999-8999-999999999999",
+              aiCallId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              worktreeId: WORKTREE_ID,
+            },
+          } as Awaited<
+            ReturnType<
+              typeof import("@/lib/mogplex-api/runs").startMogplexApiRun
+            >
+          >;
+        },
+      }
+    ) as unknown as ExecutableTool;
 
     const result = (await tool.execute({
       worktreeId: WORKTREE_ID,
@@ -239,6 +244,7 @@ describe("planning tools", () => {
 
     expect(result.status).toBe("ok");
     expect(starts[0]).toMatchObject({
+      idempotencyKey: expect.stringContaining("control:conversation-1:"),
       body: {
         repoId: REPO_ID,
         worktreeId: WORKTREE_ID,

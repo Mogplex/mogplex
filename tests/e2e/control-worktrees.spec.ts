@@ -81,6 +81,7 @@ test("Control counts worktrees separately from sandbox compute", async ({
 
   await page.getByRole("button", { name: "Worktrees 1" }).click();
   await expect(page.getByRole("heading", { name: "Worktrees" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
   await expect(
     page.getByText("mogplex/task/separate-worktrees/code")
   ).toBeVisible();

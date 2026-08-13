@@ -5,10 +5,11 @@ import {
   buildWorktreeDiffCommand,
   parseCreatedWorktreePath,
 } from "./commands";
-import { executeWorktreeCommand } from "./executor";
+import { executeWorktreeCommand, WorktreeExecutorError } from "./executor";
 import {
   activateWorktree,
   archiveWorktreeRecord,
+  claimErroredWorktree,
   findLiveWorktreeForTask,
   listOwnedWorktrees,
   loadOwnedWorktree,
@@ -16,15 +17,30 @@ import {
   loadOwnedWorktreeTask,
   markWorktreeError,
   markWorktreePruned,
+  isReservedCheckoutPath,
+  reclaimStaleCreatingWorktree,
+  recordMaterializedWorktree,
   reserveWorktree,
 } from "./store";
+import { isStaleWorktreeReservation } from "./constants";
 import type { OrchestrationWorktreeDTO, WorktreeCommandResult } from "./types";
 import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 
 export class WorktreeServiceError extends Error {
-  constructor(message: string) {
+  readonly forceEligible: boolean;
+  readonly kind: "not_found" | "conflict";
+
+  constructor(
+    message: string,
+    options: {
+      forceEligible?: boolean;
+      kind?: "not_found" | "conflict";
+    } = {}
+  ) {
     super(message);
     this.name = "WorktreeServiceError";
+    this.forceEligible = options.forceEligible ?? false;
+    this.kind = options.kind ?? "conflict";
   }
 }
 
@@ -33,6 +49,9 @@ type WorktreeServiceDeps = {
   loadSandbox: typeof loadOwnedWorktreeSandbox;
   findLiveForTask: typeof findLiveWorktreeForTask;
   reserve: typeof reserveWorktree;
+  reclaimCreating: typeof reclaimStaleCreatingWorktree;
+  claimError: typeof claimErroredWorktree;
+  recordMaterialized: typeof recordMaterializedWorktree;
   execute: typeof executeWorktreeCommand;
   activate: typeof activateWorktree;
   markError: typeof markWorktreeError;
@@ -47,6 +66,9 @@ const defaultDeps: WorktreeServiceDeps = {
   loadSandbox: loadOwnedWorktreeSandbox,
   findLiveForTask: findLiveWorktreeForTask,
   reserve: reserveWorktree,
+  reclaimCreating: reclaimStaleCreatingWorktree,
+  claimError: claimErroredWorktree,
+  recordMaterialized: recordMaterializedWorktree,
   execute: executeWorktreeCommand,
   activate: activateWorktree,
   markError: markWorktreeError,
@@ -71,16 +93,27 @@ export async function spawnWorktree(
   overrides: Partial<WorktreeServiceDeps> = {}
 ): Promise<OrchestrationWorktreeDTO> {
   const deps = { ...defaultDeps, ...overrides };
+  const task = await deps.loadTask(input);
+  if (!task) throw new WorktreeServiceError("Orchestration task not found");
   const existing = await deps.findLiveForTask({
     taskId: input.taskId,
     userId: input.userId,
   });
+  if (
+    existing &&
+    (existing.run_id !== task.run_id || existing.repo_id !== task.repo_id)
+  ) {
+    throw new WorktreeServiceError("Worktree belongs to another mission");
+  }
+  if (existing && existing.sandbox_id !== input.sandboxId) {
+    throw new WorktreeServiceError(
+      "Worktree is already reserved in another sandbox"
+    );
+  }
   if (existing?.status === "active" || existing?.status === "archived") {
     return existing;
   }
 
-  const task = await deps.loadTask(input);
-  if (!task) throw new WorktreeServiceError("Orchestration task not found");
   const sandbox = await deps.loadSandbox({
     sandboxId: input.sandboxId,
     userId: input.userId,
@@ -97,9 +130,28 @@ export async function spawnWorktree(
     );
   }
 
-  const worktree =
-    existing ??
-    (await deps.reserve({
+  let worktree = existing;
+  let ownsCreation = false;
+  if (existing?.status === "error") {
+    const claimed = await deps.claimError({
+      worktreeId: existing.id,
+      userId: input.userId,
+      expectedUpdatedAt: existing.updated_at,
+    });
+    worktree = claimed ?? existing;
+    ownsCreation = claimed !== null;
+  }
+  if (existing?.status === "creating") {
+    const reclaimed = await deps.reclaimCreating({
+      worktreeId: existing.id,
+      userId: input.userId,
+      expectedUpdatedAt: existing.updated_at,
+    });
+    worktree = reclaimed ?? existing;
+    ownsCreation = reclaimed !== null;
+  }
+  if (!worktree) {
+    const reservation = await deps.reserve({
       userId: input.userId,
       runId: task.run_id,
       taskId: task.id,
@@ -108,9 +160,32 @@ export async function spawnWorktree(
       agentId: task.agent_id,
       branchName: task.branch_name,
       baseBranch: task.base_branch,
-    }));
+    });
+    worktree = reservation.worktree;
+    ownsCreation = reservation.created;
+    if (worktree.run_id !== task.run_id || worktree.repo_id !== task.repo_id) {
+      throw new WorktreeServiceError("Worktree belongs to another mission");
+    }
+    if (worktree.sandbox_id !== sandbox.id) {
+      throw new WorktreeServiceError(
+        "Worktree is already reserved in another sandbox"
+      );
+    }
+  }
+  if (!ownsCreation) {
+    // A concurrent creator still owns the lease. Callers must treat this as a
+    // lifecycle snapshot and wait for a later list/stream update before bind.
+    return worktree;
+  }
 
   try {
+    if (!isReservedCheckoutPath(worktree.checkout_path)) {
+      return deps.activate({
+        worktreeId: worktree.id,
+        userId: input.userId,
+        checkoutPath: worktree.checkout_path,
+      });
+    }
     const result = await deps.execute({
       userId: input.userId,
       sandboxId: sandbox.id,
@@ -128,6 +203,11 @@ export async function spawnWorktree(
         "Git did not report the managed worktree path"
       );
     }
+    worktree = await deps.recordMaterialized({
+      worktreeId: worktree.id,
+      userId: input.userId,
+      checkoutPath,
+    });
     return deps.activate({
       worktreeId: worktree.id,
       userId: input.userId,
@@ -164,7 +244,7 @@ async function requireOwnedWorktree(
 ): Promise<OrchestrationWorktreeDTO> {
   const worktree = await deps.load(input);
   if (worktree?.run_id !== input.runId || worktree.repo_id !== input.repoId) {
-    throw new WorktreeServiceError("Worktree not found");
+    throw new WorktreeServiceError("Worktree not found", { kind: "not_found" });
   }
   return worktree;
 }
@@ -210,6 +290,9 @@ export async function diffWorktree(
   if (worktree.status === "pruned") {
     throw new WorktreeServiceError("Pruned worktrees have no checkout");
   }
+  if (isReservedCheckoutPath(worktree.checkout_path)) {
+    throw new WorktreeServiceError("Worktree has no checkout yet");
+  }
   const result = await deps.execute({
     userId: input.userId,
     sandboxId: worktree.sandbox_id,
@@ -233,10 +316,32 @@ export async function archiveWorktree(
   const deps = { ...defaultDeps, ...overrides };
   const worktree = await requireOwnedWorktree(input, deps);
   if (worktree.status === "archived") return worktree;
-  if (worktree.status !== "active") {
-    throw new WorktreeServiceError("Only active worktrees can be archived");
+  if (
+    worktree.status !== "creating" &&
+    worktree.status !== "active" &&
+    worktree.status !== "error"
+  ) {
+    throw new WorktreeServiceError(
+      "Only creating, active, or failed worktrees can be archived"
+    );
   }
-  return deps.archive(input);
+  if (
+    worktree.status === "creating" &&
+    !isStaleWorktreeReservation(worktree.updated_at)
+  ) {
+    throw new WorktreeServiceError(
+      "Wait for worktree creation to finish before archiving"
+    );
+  }
+  const archived = await deps.archive({
+    ...input,
+    expectedCreatingUpdatedAt:
+      worktree.status === "creating" ? worktree.updated_at : undefined,
+  });
+  if (!archived) {
+    throw new WorktreeServiceError("Worktree changed; refresh and retry");
+  }
+  return archived;
 }
 
 export async function pruneWorktree(
@@ -255,15 +360,36 @@ export async function pruneWorktree(
   if (worktree.status !== "archived") {
     throw new WorktreeServiceError("Archive the worktree before pruning it");
   }
-  const result = await deps.execute({
-    userId: input.userId,
-    sandboxId: worktree.sandbox_id,
-    command: buildPruneWorktreeCommand({
-      checkoutPath: worktree.checkout_path,
-      force: input.force ?? false,
-    }),
-  });
-  const failure = commandFailure(result);
-  if (failure) throw new WorktreeServiceError(failure);
+  if (isReservedCheckoutPath(worktree.checkout_path)) {
+    return deps.markPruned(input);
+  }
+  try {
+    const result = await deps.execute({
+      userId: input.userId,
+      sandboxId: worktree.sandbox_id,
+      command: buildPruneWorktreeCommand({
+        checkoutPath: worktree.checkout_path,
+        // `force` retires a binding only after the executor confirms the
+        // sandbox is gone. It must never turn into `git worktree --force`.
+        force: false,
+      }),
+    });
+    const failure = commandFailure(result);
+    if (failure) throw new WorktreeServiceError(failure);
+  } catch (error) {
+    if (error instanceof WorktreeExecutorError && error.status === 404) {
+      if (!input.force) {
+        throw new WorktreeServiceError(error.message, {
+          forceEligible: true,
+        });
+      }
+      console.warn("[worktrees] retiring binding for missing sandbox", {
+        worktreeId: worktree.id,
+        error: error.message,
+      });
+    } else {
+      throw error;
+    }
+  }
   return deps.markPruned(input);
 }

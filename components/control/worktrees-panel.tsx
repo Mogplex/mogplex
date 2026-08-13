@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { GitBranch, Refresh, Trash } from "iconoir-react";
+import { isStaleWorktreeReservation } from "@/lib/worktrees/constants";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
 import {
   AlertDialog,
@@ -21,6 +22,12 @@ const STATUS_STYLE: Record<string, string> = {
   error: "border-delr/25 bg-delr/10 text-delr",
 };
 
+function canArchiveWorktree(worktree: OrchestrationWorktreeDTO): boolean {
+  if (worktree.status === "active" || worktree.status === "error") return true;
+  if (worktree.status !== "creating") return false;
+  return isStaleWorktreeReservation(worktree.updated_at);
+}
+
 function WorktreeRow({
   worktree,
   onAction,
@@ -29,7 +36,8 @@ function WorktreeRow({
   worktree: OrchestrationWorktreeDTO;
   onAction: (
     action: "rebase" | "archive" | "prune",
-    id: string
+    id: string,
+    options?: { force?: boolean }
   ) => Promise<void>;
   onDiff: (id: string) => Promise<string>;
 }) {
@@ -37,15 +45,26 @@ function WorktreeRow({
   const [diff, setDiff] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pruneOpen, setPruneOpen] = useState(false);
-  const runAction = async (action: "rebase" | "archive" | "prune") => {
+  const [forcePruneOpen, setForcePruneOpen] = useState(false);
+  const runAction = async (
+    action: "rebase" | "archive" | "prune",
+    force = false
+  ) => {
     setBusy(action);
     setError(null);
     try {
-      await onAction(action, worktree.id);
+      await onAction(action, worktree.id, { force });
     } catch (actionError) {
       setError(
         actionError instanceof Error ? actionError.message : "Action failed"
       );
+      const forceEligible =
+        actionError instanceof Error &&
+        "forceEligible" in actionError &&
+        actionError.forceEligible === true;
+      if (action === "prune" && !force && forceEligible) {
+        setForcePruneOpen(true);
+      }
     } finally {
       setBusy(null);
     }
@@ -120,24 +139,24 @@ function WorktreeRow({
           </button>
         ) : null}
         {worktree.status === "active" ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void runAction("rebase")}
-              disabled={busy !== null}
-              className="border-ink-700 text-ink-200 hover:bg-ink-800 flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
-            >
-              <Refresh className="size-3" /> Rebase
-            </button>
-            <button
-              type="button"
-              onClick={() => void runAction("archive")}
-              disabled={busy !== null}
-              className="border-ink-700 text-ink-200 hover:bg-ink-800 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
-            >
-              Archive
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => void runAction("rebase")}
+            disabled={busy !== null}
+            className="border-ink-700 text-ink-200 hover:bg-ink-800 flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+          >
+            <Refresh className="size-3" /> Rebase
+          </button>
+        ) : null}
+        {canArchiveWorktree(worktree) ? (
+          <button
+            type="button"
+            onClick={() => void runAction("archive")}
+            disabled={busy !== null}
+            className="border-ink-700 text-ink-200 hover:bg-ink-800 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+          >
+            Archive
+          </button>
         ) : null}
         {worktree.status === "archived" ? (
           <button
@@ -170,6 +189,27 @@ function WorktreeRow({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog open={forcePruneOpen} onOpenChange={setForcePruneOpen}>
+        <AlertDialogContent className="border-ink-700 bg-ink-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retire the sandbox binding?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Git could not remove the checkout. Use this only when the sandbox
+              no longer exists. Mogplex will retire the database binding but
+              will not delete the branch.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-delr hover:bg-delr/90 text-white"
+              onClick={() => void runAction("prune", true)}
+            >
+              Retire binding
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -177,21 +217,24 @@ function WorktreeRow({
 export function WorktreesPanel({
   worktrees,
   loading,
+  onRefresh,
   onAction,
   onDiff,
 }: {
   worktrees: OrchestrationWorktreeDTO[];
   loading: boolean;
+  onRefresh: () => Promise<void>;
   onAction: (
     action: "rebase" | "archive" | "prune",
-    id: string
+    id: string,
+    options?: { force?: boolean }
   ) => Promise<void>;
   onDiff: (id: string) => Promise<string>;
 }) {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-4 py-6 sm:px-6">
       <div className="border-ink-800 border-b pb-4">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center gap-2">
           <h2 className="text-ink-300 text-xs font-semibold tracking-wider uppercase">
             Worktrees
           </h2>
@@ -200,6 +243,14 @@ export function WorktreesPanel({
               ? "Loading"
               : `${worktrees.length} checkout${worktrees.length === 1 ? "" : "s"}`}
           </span>
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={loading}
+            className="border-ink-700 text-ink-300 hover:bg-ink-800 ml-auto flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+          >
+            <Refresh className="size-3" /> Refresh
+          </button>
         </div>
         <p className="text-ink-500 mt-1 max-w-2xl text-xs leading-5">
           Isolated Git checkouts assigned to mission tasks. Sandbox compute can

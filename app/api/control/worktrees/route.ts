@@ -165,10 +165,9 @@ export const POST = createControlWorktreesPostHandler();
 
 function worktreeErrorResponse(error: unknown) {
   if (error instanceof WorktreeServiceError) {
-    const notFound = error.message === "Worktree not found";
     return NextResponse.json(
-      { error: error.message },
-      { status: notFound ? 404 : 409 }
+      { error: error.message, forceEligible: error.forceEligible },
+      { status: error.kind === "not_found" ? 404 : 409 }
     );
   }
   console.error("[control/worktrees] operation failed", error);

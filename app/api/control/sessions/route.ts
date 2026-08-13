@@ -138,20 +138,30 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(linked);
   } catch (runError) {
-    await Promise.all([
+    const sessionCleanup = await Promise.resolve(
       supabaseAdmin
         .from("control_sessions")
         .delete()
         .eq("id", session.id)
-        .eq("user_id", userId),
-      createdRunId
-        ? supabaseAdmin
+        .eq("user_id", userId)
+    ).catch((error: unknown) => ({ error }));
+    const runCleanup = createdRunId
+      ? await Promise.resolve(
+          supabaseAdmin
             .from("orchestration_runs")
             .delete()
             .eq("id", createdRunId)
             .eq("user_id", userId)
-        : Promise.resolve(),
-    ]);
+        ).catch((error: unknown) => ({ error }))
+      : { error: null };
+    if (sessionCleanup.error || runCleanup.error) {
+      console.error("[control/sessions] mission rollback was incomplete", {
+        sessionId: session.id,
+        runId: createdRunId,
+        sessionError: sessionCleanup.error,
+        runError: runCleanup.error,
+      });
+    }
     console.error("[control/sessions] failed to create mission run", runError);
     return NextResponse.json(
       { error: "Failed to create mission" },

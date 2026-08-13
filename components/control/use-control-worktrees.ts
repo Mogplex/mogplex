@@ -30,6 +30,8 @@ export function useControlWorktrees(input: {
         sessionId: input.sessionId,
         worktrees: body.worktrees ?? [],
       });
+    } catch (error) {
+      console.warn("[control] failed to refresh worktrees", error);
     } finally {
       setLoading(false);
     }
@@ -40,7 +42,11 @@ export function useControlWorktrees(input: {
   }, [refresh, input.chatPending]);
 
   const act = useCallback(
-    async (action: "rebase" | "archive" | "prune", worktreeId: string) => {
+    async (
+      action: "rebase" | "archive" | "prune",
+      worktreeId: string,
+      options: { force?: boolean } = {}
+    ) => {
       const response = await fetch("/api/control/worktrees", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -48,12 +54,18 @@ export function useControlWorktrees(input: {
           action,
           worktreeId,
           sessionId: input.sessionId,
+          force: options.force === true,
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         error?: string;
+        forceEligible?: boolean;
       };
-      if (!response.ok) throw new Error(body.error || "Worktree action failed");
+      if (!response.ok) {
+        throw Object.assign(new Error(body.error || "Worktree action failed"), {
+          forceEligible: body.forceEligible === true,
+        });
+      }
       await refresh();
     },
     [input.sessionId, refresh]

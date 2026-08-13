@@ -7,6 +7,7 @@ import {
   rebaseWorktree,
   spawnWorktree,
 } from "../../lib/worktrees/service";
+import { WorktreeExecutorError } from "../../lib/worktrees/executor";
 import type {
   OrchestrationWorktreeDTO,
   WorktreeTaskContext,
@@ -73,7 +74,13 @@ test("spawn creates a real checkout and persists the server-reported path", asyn
         repo_id: REPO_ID,
         status: "running",
       }),
-      reserve: async () => buildWorktree({ status: "creating" }),
+      reserve: async () => ({
+        worktree: buildWorktree({
+          status: "creating",
+          checkout_path: `/.reserved/.worktrees/${WORKTREE_ID}`,
+        }),
+        created: true,
+      }),
       execute: async ({ sandboxId, command, cwd }) => {
         assert.equal(sandboxId, SANDBOX_ID);
         assert.equal(cwd, undefined);
@@ -88,6 +95,11 @@ test("spawn creates a real checkout and persists the server-reported path", asyn
         activations.push(input);
         return buildWorktree();
       },
+      recordMaterialized: async (input) =>
+        buildWorktree({
+          status: "creating",
+          checkout_path: input.checkoutPath,
+        }),
       markError: async () => {},
     }
   );
@@ -113,12 +125,131 @@ test("spawn is idempotent for an existing active task checkout", async () => {
     },
     {
       findLiveForTask: async () => existing,
-      loadTask: async () => {
-        throw new Error("must not load");
-      },
+      loadTask: async () => buildTask(),
     }
   );
   assert.equal(result, existing);
+});
+
+test("spawn rejects reuse across missions or sandboxes", async () => {
+  await assert.rejects(
+    spawnWorktree(
+      {
+        userId: "user-1",
+        runId: RUN_ID,
+        taskId: TASK_ID,
+        sandboxId: SANDBOX_ID,
+      },
+      {
+        loadTask: async () => buildTask(),
+        findLiveForTask: async () =>
+          buildWorktree({
+            run_id: "66666666-6666-4666-8666-666666666666",
+          }),
+      }
+    ),
+    /another mission/
+  );
+
+  await assert.rejects(
+    spawnWorktree(
+      {
+        userId: "user-1",
+        runId: RUN_ID,
+        taskId: TASK_ID,
+        sandboxId: "77777777-7777-4777-8777-777777777777",
+      },
+      {
+        loadTask: async () => buildTask(),
+        findLiveForTask: async () => buildWorktree({ status: "error" }),
+      }
+    ),
+    /another sandbox/
+  );
+});
+
+test("spawn returns an in-flight concurrent reservation without recreating it", async () => {
+  let executed = false;
+  const winner = buildWorktree({ status: "creating" });
+  const result = await spawnWorktree(
+    {
+      userId: "user-1",
+      runId: RUN_ID,
+      taskId: TASK_ID,
+      sandboxId: SANDBOX_ID,
+    },
+    {
+      loadTask: async () => buildTask(),
+      findLiveForTask: async () => null,
+      loadSandbox: async () => ({
+        id: SANDBOX_ID,
+        repo_id: REPO_ID,
+        status: "running",
+      }),
+      reserve: async () => ({ worktree: winner, created: false }),
+      reclaimCreating: async () => null,
+      execute: async () => {
+        executed = true;
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+    }
+  );
+  assert.equal(result, winner);
+  assert.equal(executed, false);
+});
+
+test("spawn atomically reclaims and resumes a stale creating reservation", async () => {
+  const stale = buildWorktree({
+    status: "creating",
+    checkout_path: `/.reserved/.worktrees/${WORKTREE_ID}`,
+    updated_at: "2026-08-12T23:00:00.000Z",
+  });
+  let reclaimedInput: unknown;
+  let executed = false;
+  const result = await spawnWorktree(
+    {
+      userId: "user-1",
+      runId: RUN_ID,
+      taskId: TASK_ID,
+      sandboxId: SANDBOX_ID,
+    },
+    {
+      loadTask: async () => buildTask(),
+      findLiveForTask: async () => stale,
+      loadSandbox: async () => ({
+        id: SANDBOX_ID,
+        repo_id: REPO_ID,
+        status: "running",
+      }),
+      reclaimCreating: async (input) => {
+        reclaimedInput = input;
+        return { ...stale, updated_at: "2026-08-13T00:10:00.000Z" };
+      },
+      execute: async () => {
+        executed = true;
+        return {
+          exitCode: 0,
+          stdout: `MOGPLEX_WORKTREE_PATH=/vercel/sandbox/.worktrees/${WORKTREE_ID}\n`,
+          stderr: "",
+        };
+      },
+      activate: async () => buildWorktree(),
+      recordMaterialized: async (input) =>
+        buildWorktree({
+          status: "creating",
+          checkout_path: input.checkoutPath,
+        }),
+      markError: async () => {},
+    }
+  );
+
+  assert.deepEqual(reclaimedInput, {
+    worktreeId: WORKTREE_ID,
+    userId: "user-1",
+    expectedUpdatedAt: stale.updated_at,
+  });
+  assert.equal(executed, true);
+  assert.equal(result.status, "active");
 });
 
 test("rebase and diff force execution into the persisted checkout", async () => {
@@ -176,6 +307,38 @@ test("archive changes database state without touching sandbox lifecycle", async 
   assert.equal(executed, false);
 });
 
+test("archive provides a recovery path for a failed worktree", async () => {
+  const archived = await archiveWorktree(
+    {
+      userId: "user-1",
+      worktreeId: WORKTREE_ID,
+      runId: RUN_ID,
+      repoId: REPO_ID,
+    },
+    {
+      load: async () => buildWorktree({ status: "error" }),
+      archive: async () => buildWorktree({ status: "archived" }),
+    }
+  );
+  assert.equal(archived.status, "archived");
+});
+
+test("archive provides a manual recovery path for a stuck reservation", async () => {
+  const archived = await archiveWorktree(
+    {
+      userId: "user-1",
+      worktreeId: WORKTREE_ID,
+      runId: RUN_ID,
+      repoId: REPO_ID,
+    },
+    {
+      load: async () => buildWorktree({ status: "creating" }),
+      archive: async () => buildWorktree({ status: "archived" }),
+    }
+  );
+  assert.equal(archived.status, "archived");
+});
+
 test("prune requires archive and removes only the persisted checkout", async () => {
   await assert.rejects(
     pruneWorktree(
@@ -211,6 +374,31 @@ test("prune requires archive and removes only the persisted checkout", async () 
   assert.equal(pruned.status, "pruned");
   assert.match(command, new RegExp(WORKTREE_ID));
   assert.doesNotMatch(command, /sandbox (stop|pause|delete)/);
+});
+
+test("forced prune releases an archived binding when its sandbox is gone", async () => {
+  let marked = false;
+  const pruned = await pruneWorktree(
+    {
+      userId: "user-1",
+      worktreeId: WORKTREE_ID,
+      runId: RUN_ID,
+      repoId: REPO_ID,
+      force: true,
+    },
+    {
+      load: async () => buildWorktree({ status: "archived" }),
+      execute: async () => {
+        throw new WorktreeExecutorError("Sandbox not found", 404);
+      },
+      markPruned: async () => {
+        marked = true;
+        return buildWorktree({ status: "pruned" });
+      },
+    }
+  );
+  assert.equal(pruned.status, "pruned");
+  assert.equal(marked, true);
 });
 
 test("lifecycle actions reject a worktree from another mission", async () => {

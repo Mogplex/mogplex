@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { buildReservedCheckoutPath } from "../../lib/worktrees/store";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MIGRATIONS = [
@@ -10,16 +11,21 @@ const MIGRATIONS = [
   "neon/migrations/20260810180000_control_sessions.sql",
   "neon/migrations/20260812120000_control_sessions_repo.sql",
   "neon/migrations/20260813120000_orchestration_worktrees.sql",
+  "neon/migrations/20260813133000_orchestration_worktrees_review_followup.sql",
 ];
-
 const USER_A = "00000000-0000-4000-8000-00000000000a";
 const USER_B = "00000000-0000-4000-8000-00000000000b";
 const REPO_A = "00000000-0000-4000-8000-00000000001a";
 const REPO_B = "00000000-0000-4000-8000-00000000001b";
 const SANDBOX_A = "00000000-0000-4000-8000-00000000002a";
-
+const LEGACY_SESSION = "00000000-0000-4000-8000-00000000003a";
+const LEGACY_LONG_SESSION = "00000000-0000-4000-8000-00000000003b";
 let db: PGlite;
-
+let legacyBackfills: Array<{
+  run_id: string;
+  base_branch: string;
+  title: string;
+}> = [];
 beforeAll(async () => {
   db = new PGlite();
   await db.exec(`
@@ -36,17 +42,33 @@ beforeAll(async () => {
           repo_id uuid not null,
           sandbox_record_id uuid
         );
+        insert into public.control_sessions (id, user_id, repo_id, title)
+        values
+          ('${LEGACY_SESSION}', '${USER_A}', '${REPO_A}', ''),
+          ('${LEGACY_LONG_SESSION}', '${USER_A}', '${REPO_A}', repeat('x', 600));
       `);
     }
     const sql = await readFile(path.join(REPO_ROOT, migration), "utf8");
     await db.exec(sql);
   }
+  const backfill = await db.query<{
+    run_id: string;
+    base_branch: string;
+    title: string;
+  }>(
+    `select run.id as run_id, run.base_branch, run.title
+     from public.control_sessions session
+     join public.orchestration_runs run
+       on run.id = session.orchestration_run_id
+     where session.id in ($1, $2)
+     order by session.id`,
+    [LEGACY_SESSION, LEGACY_LONG_SESSION]
+  );
+  legacyBackfills = backfill.rows;
 });
-
 afterAll(async () => {
   await db.close();
 });
-
 beforeEach(async () => {
   await db.exec(`
     truncate public.control_sessions cascade;
@@ -54,7 +76,6 @@ beforeEach(async () => {
     truncate public.orchestration_runs cascade;
   `);
 });
-
 async function insertRun(userId = USER_A, repoId = REPO_A) {
   const { rows } = await db.query<{ id: string }>(
     `insert into public.orchestration_runs
@@ -67,7 +88,6 @@ async function insertRun(userId = USER_A, repoId = REPO_A) {
   );
   return rows[0]!.id;
 }
-
 async function insertTask(runId: string, repoId = REPO_A) {
   const spec = await db.query<{ id: string }>(
     `insert into public.orchestration_specs
@@ -86,7 +106,6 @@ async function insertTask(runId: string, repoId = REPO_A) {
   );
   return task.rows[0]!.id;
 }
-
 async function insertWorktree(input: {
   runId: string;
   taskId: string;
@@ -100,7 +119,7 @@ async function insertWorktree(input: {
        (id, user_id, run_id, task_id, repo_id, sandbox_id, branch_name,
         base_branch, checkout_path, status, archived_at)
      values ($7::uuid, $1, $2, $3, $4, $5, 'mogplex/task/implementation', 'main',
-       '/vercel/sandbox/.worktrees/' || $7::text, $6,
+       $8, $6,
        case when $6 = 'archived' then now() else null end)
      returning id`,
     [
@@ -111,11 +130,47 @@ async function insertWorktree(input: {
       SANDBOX_A,
       input.status ?? "active",
       worktreeId,
+      buildReservedCheckoutPath(worktreeId),
     ]
   );
 }
-
 describe("orchestration worktree persistence", () => {
+  it("backfills legacy sessions without mirrored repos and clamps titles", () => {
+    expect(legacyBackfills).toHaveLength(2);
+    expect(legacyBackfills.map((row) => row.base_branch)).toEqual([
+      "main",
+      "main",
+    ]);
+    expect(legacyBackfills.map((row) => row.title)).toEqual([
+      "New session",
+      "x".repeat(500),
+    ]);
+  });
+  it("keeps every worktree RPC service-role only", async () => {
+    const signatures = [
+      "public.activate_orchestration_worktree(uuid,uuid,text)",
+      "public.prune_orchestration_worktree(uuid,uuid)",
+      "public.bind_orchestration_worktree_agent(uuid,uuid,uuid)",
+      "public.create_orchestration_plan(uuid,uuid,text,text,text[],jsonb)",
+    ];
+    for (const signature of signatures) {
+      const privileges = await db.query<{
+        authenticated: boolean;
+        service_role: boolean;
+      }>(
+        `select
+           has_function_privilege('authenticated', $1, 'execute')
+             as authenticated,
+           has_function_privilege('service_role', $1, 'execute')
+             as service_role`,
+        [signature]
+      );
+      expect(privileges.rows[0], signature).toEqual({
+        authenticated: false,
+        service_role: true,
+      });
+    }
+  });
   it("creates every mission task atomically", async () => {
     const runId = await insertRun();
     const tasks = [
@@ -162,7 +217,6 @@ describe("orchestration worktree persistence", () => {
       [runId]
     );
     expect(counts.rows[0]).toEqual({ specs: 3, tasks: 2 });
-
     const failingRun = await insertRun(USER_A, REPO_B);
     await expect(
       db.query(
@@ -186,12 +240,10 @@ describe("orchestration worktree persistence", () => {
     );
     expect(partial.rows[0]!.count).toBe(0);
   });
-
   it("binds a worktree to one owned run, task, repo, sandbox, and checkout", async () => {
     const runId = await insertRun();
     const taskId = await insertTask(runId);
     const worktree = await insertWorktree({ runId, taskId });
-
     const { rows } = await db.query<{
       worktree_id: string | null;
       sandbox_id: string | null;
@@ -200,7 +252,6 @@ describe("orchestration worktree persistence", () => {
        from public.orchestration_tasks where id = $1`,
       [taskId]
     );
-
     expect(worktree.rows[0]!.id).toBeTruthy();
     expect(rows[0]).toEqual({ worktree_id: null, sandbox_id: null });
 
@@ -417,5 +468,32 @@ describe("orchestration worktree persistence", () => {
         [USER_A, REPO_A, worktree.rows[0]!.id]
       )
     ).rejects.toThrow();
+  });
+
+  it("deletes a run with an active worktree without circular FK failure", async () => {
+    const runId = await insertRun();
+    const taskId = await insertTask(runId);
+    const worktree = await insertWorktree({
+      runId,
+      taskId,
+      status: "creating",
+    });
+    await db.query(
+      `select public.activate_orchestration_worktree($1, $2, $3)`,
+      [
+        worktree.rows[0]!.id,
+        USER_A,
+        `/vercel/sandbox/.worktrees/${worktree.rows[0]!.id}`,
+      ]
+    );
+    await db.query(`delete from public.orchestration_runs where id = $1`, [
+      runId,
+    ]);
+    const remaining = await db.query<{ count: number }>(
+      `select count(*)::int as count
+       from public.orchestration_worktrees where run_id = $1`,
+      [runId]
+    );
+    expect(remaining.rows[0]!.count).toBe(0);
   });
 });
