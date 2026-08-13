@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
 
 export function useControlWorktrees(input: {
@@ -12,28 +12,45 @@ export function useControlWorktrees(input: {
     worktrees: OrchestrationWorktreeDTO[];
   }>({ sessionId: "", worktrees: [] });
   const [loading, setLoading] = useState(false);
+  const activeSessionIdRef = useRef(input.sessionId);
+  const refreshRevisionRef = useRef(0);
+
+  useEffect(() => {
+    activeSessionIdRef.current = input.sessionId;
+    refreshRevisionRef.current += 1;
+  }, [input.sessionId]);
 
   const refresh = useCallback(async () => {
-    if (!input.sessionId) {
+    const sessionId = input.sessionId;
+    const revision = refreshRevisionRef.current + 1;
+    refreshRevisionRef.current = revision;
+    if (!sessionId) {
+      setLoading(false);
       return;
     }
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/control/worktrees?sessionId=${encodeURIComponent(input.sessionId)}`
+        `/api/control/worktrees?sessionId=${encodeURIComponent(sessionId)}`
       );
       if (!response.ok) return;
       const body = (await response.json()) as {
         worktrees?: OrchestrationWorktreeDTO[];
       };
+      if (
+        revision !== refreshRevisionRef.current ||
+        sessionId !== activeSessionIdRef.current
+      ) {
+        return;
+      }
       setResult({
-        sessionId: input.sessionId,
+        sessionId,
         worktrees: body.worktrees ?? [],
       });
     } catch (error) {
       console.warn("[control] failed to refresh worktrees", error);
     } finally {
-      setLoading(false);
+      if (revision === refreshRevisionRef.current) setLoading(false);
     }
   }, [input.sessionId]);
 

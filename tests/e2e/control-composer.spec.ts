@@ -3,17 +3,16 @@ import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
   mockBaseChrome,
+  mockControlSessionBootstrap,
   modelId,
 } from "./helpers/automation-control-plane-fixtures";
 
 const shortModel = modelId.split("/").pop()!;
-
 test("control composers expose permissions, model, and MCP controls without a spend cap", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
-
   // Registered after mockBaseChrome so it wins: the composer's model chip
   // must follow the account default from /api/models.
   await page.route("**/api/models", (route) =>
@@ -430,10 +429,10 @@ test("control timeline renders agent markdown as formatted HTML", async ({
 }) => {
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
+  await mockControlSessionBootstrap(page);
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-
   // The agent's reply is markdown: a heading plus a GFM table. The timeline
   // must render it as HTML, not literal pipes and dashes.
   const agentMarkdown = [

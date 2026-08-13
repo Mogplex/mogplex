@@ -3,6 +3,7 @@ import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
   mockBaseChrome,
+  mockControlSessionBootstrap,
 } from "./helpers/automation-control-plane-fixtures";
 
 const SAMPLE_PATCH = [
@@ -24,6 +25,7 @@ test("control chat renders agent diffs inline when tools produce a patch", async
 }) => {
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
+  await mockControlSessionBootstrap(page);
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );

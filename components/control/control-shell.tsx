@@ -8,11 +8,7 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
 import type { UIMessage } from "ai";
-import {
-  MISSION_PERMISSION_OPTIONS,
-  type Mission,
-  type ControlSeedData,
-} from "@/lib/control/types";
+import { MISSION_PERMISSION_OPTIONS, type Mission, type ControlSeedData } from "@/lib/control/types";
 import type { SandboxRecord } from "@/lib/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
@@ -81,6 +77,7 @@ function ControlShellInner({
   const [focusSandboxId, setFocusSandboxId] = useState<string | null>(null);
   const [newMission, setNewMission] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const sendFailureRef = useRef(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const persistRef = useRef<(messages: UIMessage[]) => void>(() => {});
 
@@ -120,6 +117,7 @@ function ControlShellInner({
       persistRef.current(finishedMessages);
     },
     onError: (error) => {
+      sendFailureRef.current = true;
       setChatError(error.message || "Chat error");
     },
   });
@@ -161,7 +159,7 @@ function ControlShellInner({
   const activeSession =
     displaySessions.find((entry) => entry.id === sessionId) ?? null;
 
-  const { activeRepo, sandboxes, activeSandbox, requestContext } =
+  const { activeRepo, sandboxes, activeSandbox, requestContext, selectSandbox } =
     useControlSessionContext({
       activeSession,
       repos,
@@ -197,7 +195,7 @@ function ControlShellInner({
   const handleSend = useControlSend({
     sendMessage,
     setChatError,
-    clearComposer: () => setComposerInput(""),
+    sendFailureRef,
     requestContext,
   });
   const handleToolApprovalResponse = useToolApprovalHandler(
@@ -402,7 +400,9 @@ function ControlShellInner({
           onViewChange={setView}
           sandboxes={sandboxes}
           worktrees={controlWorktrees.worktrees}
+          selectedSandboxId={activeSandbox?.id ?? null}
           onFocusSandbox={(id) => {
+            selectSandbox(id);
             setView("sandboxes");
             setFocusSandboxId(id);
           }}
