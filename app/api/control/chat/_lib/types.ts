@@ -58,12 +58,18 @@ export type ControlChatRunScope = {
 export type ControlChatRunMetadata = {
   surface: "control";
   sandbox_id: string | null;
+  sandbox_hint_id: string | null;
+  sandbox_runtime_id: string | null;
+  sandbox_selection_source: string | null;
+  sandbox_rejection_reason: string | null;
   repo: string | null;
   repo_owner: string | null;
   repo_name: string | null;
   repo_branch: string | null;
   team_id: string | null;
   mission_id: string | null;
+  mission_hint_id: string | null;
+  orchestration_run_id: string | null;
   scope: string | null;
   target: string | null;
   permissions: string | null;

@@ -39,6 +39,7 @@ test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async ()
             ok: true,
             sandboxId: "sandbox-record-1",
             status: "pending",
+            sandboxResolution: "reused_pending",
             message:
               "Sandbox startup is already in progress. The preview pane will update automatically when it's ready.",
           });
@@ -110,6 +111,7 @@ test("start_sandbox returns as soon as sandbox creation is acknowledged over SSE
             ok: true,
             sandboxId: "sandbox-record-2",
             status: "pending",
+            sandboxResolution: "created",
             message:
               "Sandbox is launching. The preview pane will update automatically when it's ready.",
           });
@@ -274,6 +276,7 @@ test("terminal_exec refuses to guess when multiple repo sandboxes are running", 
             assert.deepEqual(await tool.execute({ command: "pwd" }), {
               error:
                 "Multiple running sandboxes are available for this repository. Select one explicitly before continuing.",
+              reason: "multiple_sandboxes",
               command: "pwd",
             });
           }
@@ -358,8 +361,32 @@ test("sandbox_stop does not report success when Stop remains unconfirmed", async
           {
             error:
               "Remote VM could not be confirmed stopped. The record remains active for reconciliation.",
+            reason: "sandbox_unavailable",
             sandboxId: "sandbox-record-1",
             status: "running",
+          }
+        );
+      }
+    );
+  });
+});
+
+test("sandbox_stop classifies stale or client-invented record identifiers", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    await withPatchedFetch(
+      async () =>
+        Response.json({ error: "Sandbox not found" }, { status: 404 }),
+      async () => {
+        const { createStopSandbox } = await loadToolsModule();
+        const tool = createStopSandbox("user-123") as unknown as {
+          execute: (input: { sandboxId: string }) => Promise<unknown>;
+        };
+
+        assert.deepEqual(
+          await tool.execute({ sandboxId: "client-invented-sandbox" }),
+          {
+            error: "Sandbox not found",
+            reason: "sandbox_not_found",
           }
         );
       }

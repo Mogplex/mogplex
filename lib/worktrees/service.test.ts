@@ -98,6 +98,7 @@ describe("spawnWorktree reservation recovery", () => {
       name: "WorktreeServiceError",
       message: "Worktree is already reserved in another sandbox",
       kind: "conflict",
+      reason: "sandbox_mismatch",
     });
     expect(execute).not.toHaveBeenCalled();
   });
@@ -215,6 +216,7 @@ describe("spawnWorktree reservation recovery", () => {
       name: "WorktreeServiceError",
       message: "Worktree changed; refresh and retry",
       kind: "conflict",
+      reason: "stale_resource",
     });
   });
 
@@ -242,6 +244,7 @@ describe("spawnWorktree reservation recovery", () => {
     ).rejects.toMatchObject({
       message: "Sandbox not found",
       forceEligible: true,
+      reason: "sandbox_not_found",
     });
   });
 
@@ -377,5 +380,25 @@ describe("spawnWorktree reservation recovery", () => {
       )
     ).rejects.toThrow("Route not found");
     expect(markPruned).not.toHaveBeenCalled();
+  });
+
+  it("classifies invented task and inactive sandbox failures", async () => {
+    await expect(
+      spawnWorktree(input, { loadTask: async () => null })
+    ).rejects.toMatchObject({
+      kind: "not_found",
+      reason: "task_not_found",
+    });
+    await expect(
+      spawnWorktree(input, {
+        loadTask: async () => task(),
+        findLiveForTask: async () => null,
+        loadSandbox: async () => ({
+          id: IDS.sandbox,
+          repo_id: IDS.repo,
+          status: "stopped",
+        }),
+      })
+    ).rejects.toMatchObject({ reason: "sandbox_inactive" });
   });
 });

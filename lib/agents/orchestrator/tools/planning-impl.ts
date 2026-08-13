@@ -28,6 +28,7 @@ function missingRun() {
   return {
     status: "error" as const,
     error: "This Control session is not linked to an orchestration run.",
+    reason: "mission_not_linked" as const,
   };
 }
 
@@ -167,6 +168,7 @@ export function createSpawnSubagentTool(
           return {
             status: "error" as const,
             error: "Active mission worktree not found.",
+            reason: "worktree_not_found" as const,
           };
         }
         const promptHash = createHash("sha256")
@@ -211,6 +213,7 @@ export function createSpawnSubagentTool(
           status: "error" as const,
           error:
             error instanceof Error ? error.message : "Subagent launch failed",
+          reason: "operation_failed" as const,
         };
       }
     },

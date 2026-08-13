@@ -15,7 +15,14 @@ export type SandboxResolution = {
   source: SandboxResolutionSource;
 };
 
-export type SandboxResolutionFailure = { error: string };
+export type SandboxResolutionFailure = {
+  error: string;
+  reason:
+    | "auth_unavailable"
+    | "multiple_sandboxes"
+    | "repo_mismatch"
+    | "sandbox_unavailable";
+};
 
 export function getSandboxRequestHeaders(userId?: string) {
   try {
@@ -26,6 +33,7 @@ export function getSandboxRequestHeaders(userId?: string) {
         error instanceof Error
           ? error.message
           : "Internal sandbox auth is not configured",
+      reason: "auth_unavailable" as const,
     };
   }
 }
@@ -69,10 +77,14 @@ async function findRunningSandboxIds(
 
 async function readReusedSandboxResponse(
   response: Response
-): Promise<SandboxResolution | null> {
-  if (!response.ok) return null;
+): Promise<SandboxResolution | SandboxResolutionFailure> {
+  if (!response.ok) {
+    return { error: "Failed to start sandbox", reason: "sandbox_unavailable" };
+  }
   const { sandbox } = await response.json();
-  if (!sandbox?.id) return null;
+  if (!sandbox?.id) {
+    return { error: "Failed to start sandbox", reason: "sandbox_unavailable" };
+  }
   const running = sandbox.runtime_summary?.status === "running";
   return {
     sandboxId: sandbox.id as string,
@@ -119,15 +131,19 @@ function readSandboxCreationEvent(
 
 async function consumeSandboxCreationStream(
   response: Response
-): Promise<SandboxResolution | null> {
-  if (!response.body) return null;
+): Promise<SandboxResolution | SandboxResolutionFailure> {
+  const failed = {
+    error: "Failed to start sandbox",
+    reason: "sandbox_unavailable" as const,
+  };
+  if (!response.ok || !response.body) return failed;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) return null;
+    if (done) return failed;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");
     buffer = lines.pop() || "";
@@ -136,7 +152,7 @@ async function consumeSandboxCreationStream(
       const settled = readSandboxCreationEvent(line);
       if (!settled) continue;
       await reader.cancel().catch(() => {});
-      return settled.resolution;
+      return settled.resolution ?? failed;
     }
   }
 }
@@ -157,7 +173,10 @@ export async function resolveOrCreateSandbox(
   if (!userId) return null;
 
   const resolved = await resolveRepoUuid(userId, repoId);
-  if (!resolved.ok || !resolved.repoId) return null;
+  if (!resolved.ok) {
+    return { error: "Failed to start sandbox", reason: "repo_mismatch" };
+  }
+  if (!resolved.repoId) return null;
 
   const runningSandboxIds = await findRunningSandboxIds(
     userId,
@@ -167,6 +186,7 @@ export async function resolveOrCreateSandbox(
     return {
       error:
         "Multiple running sandboxes are available for this repository. Select one explicitly before continuing.",
+      reason: "multiple_sandboxes",
     };
   }
   const runningSandboxId = runningSandboxIds[0];
@@ -182,6 +202,7 @@ export async function resolveOrCreateSandbox(
   if ("error" in requestHeaders) {
     return {
       error: requestHeaders.error ?? "Internal sandbox auth is not configured",
+      reason: "auth_unavailable",
     };
   }
   const response = await fetch(`${resolveAppBaseUrl()}/api/sandbox`, {

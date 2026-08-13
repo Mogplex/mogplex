@@ -2,9 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeControlChatMessages } from "../../app/api/control/chat/_lib/messages";
 import {
+  buildControlChatRunMetadata,
+  resolveControlPromptSandboxContext,
   resolveControlPromptSandboxes,
   resolveControlPromptWorktrees,
 } from "../../app/api/control/chat/_lib/context";
+
+test("control run metadata keeps client resource hints non-authoritative", () => {
+  const metadata = buildControlChatRunMetadata(
+    {
+      messages: [],
+      sandboxId: "client-sandbox-hint",
+      missionId: "client-mission-hint",
+    },
+    "team-1"
+  );
+
+  assert.equal(metadata.sandbox_id, null);
+  assert.equal(metadata.sandbox_hint_id, "client-sandbox-hint");
+  assert.equal(metadata.mission_id, null);
+  assert.equal(metadata.mission_hint_id, "client-mission-hint");
+  assert.equal(metadata.orchestration_run_id, null);
+});
 
 test("control chat normalization preserves AI SDK file parts", () => {
   const [message] = normalizeControlChatMessages([
@@ -171,7 +190,7 @@ test("control chat normalization allows capped file parts across message history
 });
 
 test("control prompt sandbox context comes from an owned server record", async () => {
-  const sandboxes = await resolveControlPromptSandboxes(
+  const context = await resolveControlPromptSandboxContext(
     new Request("https://app.mogplex.com/api/control/chat"),
     {
       messages: [],
@@ -196,13 +215,21 @@ test("control prompt sandbox context comes from an owned server record", async (
     }
   );
 
-  assert.deepEqual(sandboxes, [
-    {
-      id: "sandbox-record-1",
-      branch: "feat/server-owned",
-      status: "running",
+  assert.deepEqual(context, {
+    decisionSource: "server_validated_request",
+    rejectionReason: null,
+    selected: {
+      recordId: "sandbox-record-1",
+      runtimeId: "sbx-runtime-1",
     },
-  ]);
+    sandboxes: [
+      {
+        id: "sandbox-record-1",
+        branch: "feat/server-owned",
+        status: "running",
+      },
+    ],
+  });
 });
 
 test("control prompt rejects a sandbox from a different repository", async () => {
@@ -236,6 +263,32 @@ test("control prompt rejects a sandbox from a different repository", async () =>
       sandboxRepoId: "repo-2",
     },
   ]);
+});
+
+test("control sandbox telemetry classifies stale and client-invented identifiers", async () => {
+  for (const status of [404, 410]) {
+    const context = await resolveControlPromptSandboxContext(
+      new Request("https://app.mogplex.com/api/control/chat"),
+      {
+        messages: [],
+        repoId: "repo-1",
+        sandboxId: "client-invented-sandbox",
+      },
+      {
+        loadSandboxRecord: async () => ({
+          ok: false,
+          status,
+          error: "Sandbox not found",
+        }),
+      }
+    );
+    assert.deepEqual(context, {
+      decisionSource: "none",
+      rejectionReason: "sandbox_not_found",
+      selected: null,
+      sandboxes: [],
+    });
+  }
 });
 
 test("control prompt degrades when the sandbox loader returns a failure", async () => {
@@ -328,7 +381,10 @@ test("control prompt loads worktrees through the owned session run", async () =>
   );
 
   assert.deepEqual(result, {
+    controlSessionId: "session-1",
     orchestrationRunId: "run-1",
+    decisionSource: "owned_control_session",
+    rejectionReason: null,
     worktrees: [
       {
         id: "worktree-1",
@@ -361,6 +417,74 @@ test("control prompt rejects worktree context for a mismatched session repo", as
     }
   );
 
-  assert.deepEqual(result, { orchestrationRunId: null, worktrees: [] });
+  assert.deepEqual(result, {
+    controlSessionId: null,
+    orchestrationRunId: null,
+    decisionSource: "none",
+    rejectionReason: "repo_mismatch",
+    worktrees: [],
+  });
   assert.equal(listed, false);
+});
+
+test("control worktree context reports missing, unlinked, and failed session lookups", async () => {
+  const body = {
+    messages: [],
+    conversationId: "session-1",
+    repoId: "repo-1",
+  };
+
+  const missing = await resolveControlPromptWorktrees("user-1", body, {
+    loadSession: async () => null,
+    listWorktrees: async () => [],
+  });
+  assert.equal(missing.rejectionReason, "session_not_found");
+
+  const unlinked = await resolveControlPromptWorktrees("user-1", body, {
+    loadSession: async () => ({
+      user_id: "user-1",
+      repo_id: "repo-1",
+      orchestration_run_id: null,
+    }),
+    listWorktrees: async () => [],
+  });
+  assert.equal(unlinked.rejectionReason, "mission_not_linked");
+
+  const failed = await resolveControlPromptWorktrees("user-1", body, {
+    loadSession: async () => {
+      throw new Error("database unavailable");
+    },
+    listWorktrees: async () => [],
+    warn: () => {},
+  });
+  assert.equal(failed.rejectionReason, "worktree_lookup_failed");
+});
+
+test("control worktree context rejects a client-invented mission identifier", async () => {
+  let loaded = false;
+  const result = await resolveControlPromptWorktrees(
+    "user-1",
+    {
+      messages: [],
+      conversationId: "session-1",
+      missionId: "different-mission",
+      repoId: "repo-1",
+    },
+    {
+      loadSession: async () => {
+        loaded = true;
+        return null;
+      },
+      listWorktrees: async () => [],
+    }
+  );
+
+  assert.deepEqual(result, {
+    controlSessionId: null,
+    orchestrationRunId: null,
+    decisionSource: "none",
+    rejectionReason: "mission_mismatch",
+    worktrees: [],
+  });
+  assert.equal(loaded, false);
 });

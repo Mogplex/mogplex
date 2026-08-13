@@ -138,5 +138,67 @@ describe("sandbox Stop worktree boundary", () => {
       task_worktree_id: WORKTREE_ID,
       task_root_directory: checkoutPath,
     });
+
+    // Restart targets the same persisted sandbox record and recovers the
+    // existing checkout relationship; it does not mint another worktree.
+    await db.query(
+      `update public.sandboxes set status = 'running' where id = $1`,
+      [SANDBOX_ID]
+    );
+    const restarted = await db.query<{
+      sandbox_id: string;
+      sandbox_status: string;
+      worktree_id: string;
+      worktree_status: string;
+    }>(
+      `select sandbox.id as sandbox_id, sandbox.status as sandbox_status,
+              worktree.id as worktree_id, worktree.status as worktree_status
+       from public.sandboxes sandbox
+       join public.orchestration_worktrees worktree
+         on worktree.sandbox_id = sandbox.id
+       where sandbox.id = $1`,
+      [SANDBOX_ID]
+    );
+    expect(restarted.rows[0]).toEqual({
+      sandbox_id: SANDBOX_ID,
+      sandbox_status: "running",
+      worktree_id: WORKTREE_ID,
+      worktree_status: "active",
+    });
+
+    // Worktree lifecycle is independent in the other direction: archive and
+    // prune release the task checkout while compute stays running.
+    await db.query(
+      `update public.orchestration_worktrees
+       set status = 'archived', archived_at = now() where id = $1`,
+      [WORKTREE_ID]
+    );
+    await db.query(`select public.prune_orchestration_worktree($1, $2)`, [
+      WORKTREE_ID,
+      USER_ID,
+    ]);
+    const pruned = await db.query<{
+      sandbox_status: string;
+      worktree_status: string;
+      task_worktree_id: string | null;
+      task_root_directory: string | null;
+    }>(
+      `select sandbox.status as sandbox_status,
+              worktree.status as worktree_status,
+              task.worktree_id as task_worktree_id,
+              task.root_directory as task_root_directory
+       from public.sandboxes sandbox
+       join public.orchestration_worktrees worktree
+         on worktree.sandbox_id = sandbox.id
+       join public.orchestration_tasks task on task.id = worktree.task_id
+       where sandbox.id = $1`,
+      [SANDBOX_ID]
+    );
+    expect(pruned.rows[0]).toEqual({
+      sandbox_status: "running",
+      worktree_status: "pruned",
+      task_worktree_id: null,
+      task_root_directory: null,
+    });
   });
 });
