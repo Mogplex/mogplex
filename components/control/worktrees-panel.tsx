@@ -21,6 +21,17 @@ const STATUS_STYLE: Record<string, string> = {
   error: "border-delr/25 bg-delr/10 text-delr",
 };
 
+const STALE_CREATING_MS = 5 * 60 * 1000;
+
+function canArchiveWorktree(worktree: OrchestrationWorktreeDTO): boolean {
+  if (worktree.status === "active" || worktree.status === "error") return true;
+  if (worktree.status !== "creating") return false;
+  const updatedAt = Date.parse(worktree.updated_at);
+  return (
+    Number.isFinite(updatedAt) && updatedAt < Date.now() - STALE_CREATING_MS
+  );
+}
+
 function WorktreeRow({
   worktree,
   onAction,
@@ -141,9 +152,7 @@ function WorktreeRow({
             <Refresh className="size-3" /> Rebase
           </button>
         ) : null}
-        {worktree.status === "creating" ||
-        worktree.status === "active" ||
-        worktree.status === "error" ? (
+        {canArchiveWorktree(worktree) ? (
           <button
             type="button"
             onClick={() => void runAction("archive")}

@@ -17,6 +17,7 @@ import {
   markWorktreeError,
   markWorktreePruned,
   isStaleWorktreeReservation,
+  isReservedCheckoutPath,
   reclaimStaleCreatingWorktree,
   reserveWorktree,
 } from "./store";
@@ -252,6 +253,9 @@ export async function diffWorktree(
   if (worktree.status === "pruned") {
     throw new WorktreeServiceError("Pruned worktrees have no checkout");
   }
+  if (isReservedCheckoutPath(worktree.checkout_path)) {
+    throw new WorktreeServiceError("Worktree has no checkout yet");
+  }
   const result = await deps.execute({
     userId: input.userId,
     sandboxId: worktree.sandbox_id,
@@ -281,7 +285,7 @@ export async function archiveWorktree(
     worktree.status !== "error"
   ) {
     throw new WorktreeServiceError(
-      "Only pending, active, or failed worktrees can be archived"
+      "Only creating, active, or failed worktrees can be archived"
     );
   }
   if (
@@ -314,6 +318,9 @@ export async function pruneWorktree(
   if (worktree.status === "pruned") return worktree;
   if (worktree.status !== "archived") {
     throw new WorktreeServiceError("Archive the worktree before pruning it");
+  }
+  if (isReservedCheckoutPath(worktree.checkout_path)) {
+    return deps.markPruned(input);
   }
   try {
     const result = await deps.execute({

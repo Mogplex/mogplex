@@ -12,6 +12,10 @@ export function buildReservedCheckoutPath(worktreeId: string): string {
   return `/.reserved/.worktrees/${worktreeId}`;
 }
 
+export function isReservedCheckoutPath(checkoutPath: string): boolean {
+  return checkoutPath.startsWith("/.reserved/.worktrees/");
+}
+
 export class WorktreeStoreError extends Error {
   constructor(operation: string, cause: string) {
     super(`worktree store ${operation} failed: ${cause}`);

@@ -185,4 +185,28 @@ describe("spawnWorktree reservation recovery", () => {
       forceEligible: false,
     });
   });
+
+  it("prunes a reservation placeholder without executing git", async () => {
+    const execute = vi.fn();
+    const pruned = worktree("pruned");
+    await expect(
+      pruneWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+        },
+        {
+          load: async () => ({
+            ...worktree("archived"),
+            checkout_path: `/.reserved/.worktrees/${IDS.worktree}`,
+          }),
+          execute,
+          markPruned: async () => pruned,
+        }
+      )
+    ).resolves.toBe(pruned);
+    expect(execute).not.toHaveBeenCalled();
+  });
 });

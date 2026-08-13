@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildReservedCheckoutPath,
+  isReservedCheckoutPath,
   isStaleWorktreeReservation,
   staleWorktreeReservationCutoff,
 } from "./store";
@@ -22,5 +23,10 @@ describe("staleWorktreeReservationCutoff", () => {
     expect(
       buildReservedCheckoutPath("11111111-2222-4333-8444-555555555555")
     ).toBe("/.reserved/.worktrees/11111111-2222-4333-8444-555555555555");
+    expect(
+      isReservedCheckoutPath(
+        "/.reserved/.worktrees/11111111-2222-4333-8444-555555555555"
+      )
+    ).toBe(true);
   });
 });
