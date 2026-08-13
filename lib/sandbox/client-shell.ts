@@ -9,6 +9,8 @@ export const SANDBOX_BUN_VERSION = "1.3.10";
 const SANDBOX_BUN_SHA256 = {
   "bun-linux-aarch64":
     "fa5ecb25cafa8e8f5c87a0f833719d46dd0af0a86c7837d806531212d55636d3",
+  "bun-linux-x64-baseline":
+    "41201a8c5ee74a9dcbb1ce25a1104f1f929838b57a845aa78d98379b0ce7cde2",
   "bun-linux-x64":
     "f57bc0187e39623de716ba3a389fda5486b2d7be7131a980ba54dc7b733d2e08",
 } as const;
@@ -83,11 +85,18 @@ mkdir -p "$BUN_INSTALL/bin"
 if ! command -v bun >/dev/null 2>&1; then
   arch="$(uname -m)"
   case "$arch" in
-    x86_64|amd64) bun_target="bun-linux-x64"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-x64"]}" ;;
+    x86_64|amd64)
+      if grep -qw avx2 /proc/cpuinfo; then
+        bun_target="bun-linux-x64"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-x64"]}"
+      else
+        bun_target="bun-linux-x64-baseline"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-x64-baseline"]}"
+      fi
+      ;;
     aarch64|arm64) bun_target="bun-linux-aarch64"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-aarch64"]}" ;;
     *) echo "Unsupported Bun sandbox architecture: $arch" >&2; exit 1 ;;
   esac
   bun_zip="/tmp/mogplex-${bunTargetExpansion}.zip"
+  command -v curl >/dev/null 2>&1 || { echo "Bun install requires curl" >&2; exit 1; }
   command -v unzip >/dev/null 2>&1 || { echo "Bun install requires unzip" >&2; exit 1; }
   command -v sha256sum >/dev/null 2>&1 || { echo "Bun install requires sha256sum" >&2; exit 1; }
   curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${version}/${bunTargetExpansion}.zip" -o "$bun_zip"

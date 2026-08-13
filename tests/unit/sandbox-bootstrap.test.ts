@@ -138,6 +138,9 @@ test("builds a pinned Bun install command for sandbox previews", async () => {
   );
   assert.match(command, /export PATH="\$BUN_INSTALL\/bin:\$PATH"/);
   assert.match(command, /bun_sha256=/);
+  assert.match(command, /bun-linux-x64-baseline/);
+  assert.match(command, /\/proc\/cpuinfo/);
+  assert.match(command, /command -v curl/);
   assert.match(command, /command -v sha256sum/);
   assert.match(command, /sha256sum -c -/);
   assert.match(command, /printf '%s {2}%s\\n'/);
