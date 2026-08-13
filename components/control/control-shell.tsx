@@ -8,26 +8,24 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
 import type { UIMessage } from "ai";
-import type {
-  Mission,
-  Worktree,
-  ControlSeedData,
+import {
+  MISSION_PERMISSION_OPTIONS,
+  type Mission,
+  type Worktree,
+  type ControlSeedData,
 } from "@/lib/control/types";
-import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { SandboxRecord } from "@/lib/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
-import { generateMissionId } from "@/lib/control/utils";
-import { CONTROL_VIEW_EVENT } from "@/lib/control/utils";
+import { CONTROL_VIEW_EVENT, generateMissionId } from "@/lib/control/utils";
 import { collectChangedFiles } from "@/lib/control/changed-files";
 import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
 import { scopedHref } from "@/lib/scoped-href";
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
 import { useRepos } from "@/hooks/use-repos";
 import { toast } from "@/hooks/use-toast";
-import { SandboxLaunchProvider } from "@/components/sandbox-launch-provider";
-import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
+import { SandboxLaunchProvider, useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import { useToolApprovalHandler } from "./use-tool-approval-handler";
 import { buildCombinedTimeline } from "./build-combined-timeline";
 import { ControlTopBar } from "./control-top-bar";
@@ -41,6 +39,9 @@ import { SessionList } from "./session-list";
 import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
 import { useSessionUsage } from "./use-session-usage";
+import { useControlSessionContext } from "./use-control-session-context";
+import { useControlSessionUrl } from "./use-control-session-url";
+import { canonicalizeControlSessionProjects } from "@/lib/control/session-project";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
@@ -124,7 +125,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
 
   useSandboxSync();
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
-  const sandboxes = useMemo(
+  const allSandboxes = useMemo(
     () =>
       Object.values(sandboxesById).sort((a, b) =>
         (b.last_active_at ?? "").localeCompare(a.last_active_at ?? "")
@@ -136,6 +137,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
 
   const {
     sessions,
+    sessionsLoaded,
     selectSession,
     createSession,
     updateSession,
@@ -148,10 +150,22 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     deepLinkTarget: searchParams.get("mission"),
   });
 
-  const activeSession = useMemo(
-    () => sessions.find((entry) => entry.id === sessionId) ?? null,
-    [sessions, sessionId]
+  const displaySessions = useMemo(
+    () => canonicalizeControlSessionProjects(sessions, repos),
+    [repos, sessions]
   );
+  const activeSession =
+    displaySessions.find((entry) => entry.id === sessionId) ?? null;
+
+  const { activeRepo, sandboxes, activeSandbox, requestContext } =
+    useControlSessionContext({
+      activeSession,
+      repos,
+      allSandboxes,
+      sessionId,
+      selectedMissionId,
+      missionTitle: activeSession?.title ?? mission?.title ?? null,
+    });
 
   const handleSelectSession = useCallback(
     (id: string) => {
@@ -174,12 +188,14 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     status,
     sendMessage,
     onError: (message) => setChatError(message),
+    requestContext,
   });
 
   const handleSend = useControlSend({
     sendMessage,
     setChatError,
     clearComposer: () => setComposerInput(""),
+    requestContext,
   });
 
   const handleToolApprovalResponse = useToolApprovalHandler(
@@ -187,7 +203,12 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   );
 
   const handleCreateMission = useCallback(
-    async (text: string, project: string, options: ComposerSendOptions) => {
+    async (
+      text: string,
+      project: string,
+      repoId: string | null,
+      options: ComposerSendOptions
+    ) => {
       const id = generateMissionId();
       const missionTitle =
         text.slice(0, 80) || options.files[0]?.filename || "New mission";
@@ -195,7 +216,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       // message streams straight into the durable session's chat. Every
       // session is tied to the project chosen in the composer (a connected
       // repo or a newly named project).
-      await createSession(missionTitle, project);
+      await createSession(missionTitle, project, repoId);
       const newMissionObj: Mission = {
         id,
         title: missionTitle.slice(0, 80),
@@ -221,7 +242,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       // would stream the reply into the previous mission's discarded chat.
       pendingInitialMessageRef.current = { missionId: id, text, options };
     },
-    [createSession]
+    [createSession, pendingInitialMessageRef]
   );
 
   // Live usage from the session's ai_calls (keyed by streamed ai_call_id
@@ -239,8 +260,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     [messages]
   );
 
-  // The most recently active sandbox drives the branch/preview surfaces.
-  const activeSandbox: SandboxRecord | null = sandboxes[0] ?? null;
   const previewUrl = useMemo(
     () =>
       sandboxes.find(
@@ -250,14 +269,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       )?.runtime_summary.preview_url ?? null,
     [sandboxes]
   );
-  const activeRepo = useMemo(
-    () =>
-      activeSandbox
-        ? (repos.find((repo) => repo.id === activeSandbox.repo_id) ?? null)
-        : null,
-    [activeSandbox, repos]
-  );
-
   const hasSession = Boolean(sessionId || mission);
 
   // Header/menus act through the agent: it runs in the mission sandbox, so
@@ -276,15 +287,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   );
 
   const handleSpawnWorktree = useCallback(() => {
-    const repo =
-      activeRepo ??
-      repos.find(
-        (candidate) =>
-          activeSession?.project &&
-          (candidate.name === activeSession.project ||
-            candidate.full_name.endsWith(`/${activeSession.project}`))
-      ) ??
-      repos[0];
+    const repo = activeRepo;
     if (!repo) {
       toast({
         title: "No repository connected",
@@ -298,7 +301,15 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       trigger: "spawn-worktree",
       intent: { kind: "start_fresh", interactive: true },
     });
-  }, [activeRepo, activeSession?.project, repos, launchRepoSandbox]);
+  }, [activeRepo, launchRepoSandbox]);
+
+  useControlSessionUrl({
+    scope,
+    searchParams,
+    sessionId,
+    sessions,
+    sessionsLoaded,
+  });
 
   const handleMergeSandbox = useCallback(
     (sandbox: SandboxRecord) => {
@@ -330,7 +341,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     );
   }, [messages, activeSession?.title, mission?.title]);
 
-  // Status bar "Sandbox checkout" jumps straight to the worktrees panel.
   useEffect(() => {
     const listener = () => setView("worktrees");
     window.addEventListener(CONTROL_VIEW_EVENT, listener);
@@ -344,7 +354,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     return (
       <NewMissionView
         repos={repos}
-        sessions={sessions}
+        sessions={displaySessions}
         sessionId={sessionId}
         canCancel={Boolean(mission || sessionId)}
         onCancel={() => setNewMission(false)}
@@ -358,7 +368,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   return (
     <div className="app-control-shell flex h-full overflow-hidden bg-ink-950 text-ink-100">
       <SessionList
-        sessions={sessions}
+        sessions={displaySessions}
         selectedId={sessionId}
         workingId={chatPending ? sessionId : null}
         onSelect={handleSelectSession}
@@ -407,6 +417,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           {view === "worktrees" ? (
             <WorktreesPanel
               sandboxes={sandboxes}
+              hasRepository={Boolean(activeRepo)}
               focusSandboxId={focusSandboxId}
               onClearFocus={() => setFocusSandboxId(null)}
               canMerge={hasSession && !chatPending}

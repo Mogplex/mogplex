@@ -325,6 +325,7 @@ export default defineConfig([
     files: [
       "app/**/flows/**/*.{jsx,tsx}",
       "app/**/workflows/**/*.{jsx,tsx}",
+      "components/control/**/*.{jsx,tsx}",
       "components/flows/**/*.{jsx,tsx}",
       "components/panes/{flow,workflow}*.{jsx,tsx}",
       "components/panes/{flow,workflow}*/**/*.{jsx,tsx}",
@@ -335,7 +336,7 @@ export default defineConfig([
         {
           selector: "JSXOpeningElement[name.name=/^(select|datalist)$/]",
           message:
-            "Workflow selection controls must use app-styled components instead of browser-native select or datalist elements.",
+            "Project and workflow selection controls must use app-styled components instead of browser-native select or datalist elements.",
         },
       ],
     },

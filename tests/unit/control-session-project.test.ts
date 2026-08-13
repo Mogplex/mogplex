@@ -1,21 +1,87 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canonicalizeControlSessionProjects,
+  controlSessionProjectName,
   defaultProjectChoice,
   deriveProjectName,
+  parseControlSessionRepoId,
   repoProjectName,
+  resolveControlSessionRepo,
 } from "../../lib/control/session-project";
 
-test("repoProjectName prefers the short repo name", () => {
-  assert.equal(
-    repoProjectName({ name: "widgets", full_name: "acme/widgets" }),
-    "widgets"
-  );
+test("repoProjectName uses the unambiguous full repository name", () => {
   assert.equal(repoProjectName({ full_name: "acme/widgets" }), "acme/widgets");
+});
+
+test("resolveControlSessionRepo prefers repo id and safely restores legacy names", () => {
+  const repos = [
+    { id: "r1", name: "widgets", full_name: "acme/widgets" },
+    { id: "r2", name: "api", full_name: "acme/api" },
+  ];
+
+  assert.equal(resolveControlSessionRepo({ repo_id: "r2" }, repos)?.id, "r2");
   assert.equal(
-    repoProjectName({ name: "  ", full_name: "acme/widgets" }),
+    resolveControlSessionRepo({ project: "acme/widgets" }, repos)?.id,
+    "r1"
+  );
+  assert.equal(
+    resolveControlSessionRepo({ project: "widgets" }, repos)?.id,
+    "r1"
+  );
+  assert.equal(
+    resolveControlSessionRepo({ project: "widgets" }, [
+      ...repos,
+      { id: "r3", name: "widgets", full_name: "other/widgets" },
+    ]),
+    null
+  );
+});
+
+test("controlSessionProjectName normalizes unambiguous legacy groups", () => {
+  const repos = [
+    { id: "r1", name: "widgets", full_name: "acme/widgets" },
+    { id: "r2", name: "api", full_name: "acme/api" },
+  ];
+
+  assert.equal(
+    controlSessionProjectName({ project: "widgets" }, repos),
     "acme/widgets"
   );
+  assert.equal(
+    controlSessionProjectName({ project: "custom-project" }, repos),
+    "custom-project"
+  );
+  assert.equal(controlSessionProjectName({ project: "   " }, repos), null);
+
+  const sessions = [
+    { id: "legacy", project: "widgets" },
+    { id: "custom", project: "custom-project" },
+  ];
+  assert.deepEqual(canonicalizeControlSessionProjects(sessions, repos), [
+    { id: "legacy", project: "acme/widgets" },
+    sessions[1],
+  ]);
+});
+
+test("parseControlSessionRepoId accepts null or UUID values and rejects malformed input", () => {
+  assert.deepEqual(parseControlSessionRepoId(undefined), {
+    ok: true,
+    value: null,
+  });
+  assert.deepEqual(parseControlSessionRepoId("   "), {
+    ok: true,
+    value: null,
+  });
+  assert.deepEqual(
+    parseControlSessionRepoId(" 1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b "),
+    {
+      ok: true,
+      value: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+    }
+  );
+  assert.deepEqual(parseControlSessionRepoId("not-a-uuid"), { ok: false });
+  assert.deepEqual(parseControlSessionRepoId(123), { ok: false });
 });
 
 test("defaultProjectChoice picks favorite, then first repo, then new", () => {

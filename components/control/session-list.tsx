@@ -24,6 +24,8 @@ export type ControlSessionSummary = {
   title: string;
   /** Project the session belongs to; null groups under "General". */
   project: string | null;
+  /** Exact connected repository used for agent and sandbox context. */
+  repo_id: string | null;
   pinned: boolean;
   updated_at: string;
 };

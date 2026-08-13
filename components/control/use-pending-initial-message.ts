@@ -5,6 +5,7 @@ import type { ComposerSendOptions } from "./composer";
 import {
   buildControlChatBody,
   buildControlChatMessage,
+  type ControlChatRequestContext,
 } from "./control-chat-request";
 
 type SendMessage = (
@@ -23,11 +24,13 @@ export function usePendingInitialMessage({
   status,
   sendMessage,
   onError,
+  requestContext,
 }: {
   selectedMissionId: string;
   status: string;
   sendMessage: SendMessage;
   onError: (message: string) => void;
+  requestContext: ControlChatRequestContext;
 }) {
   const pendingRef = useRef<{
     missionId: string;
@@ -49,11 +52,12 @@ export function usePendingInitialMessage({
         target: "mission",
         permissions: options.permissions,
         mode: options.mode,
+        ...requestContext,
       }),
     }).catch((err: unknown) => {
       onError(err instanceof Error ? err.message : "Chat error");
     });
-  }, [selectedMissionId, status, sendMessage, onError]);
+  }, [selectedMissionId, status, sendMessage, onError, requestContext]);
 
   return pendingRef;
 }

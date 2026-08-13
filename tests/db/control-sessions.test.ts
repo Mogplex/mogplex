@@ -7,6 +7,7 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MIGRATIONS = [
   "neon/migrations/20260810180000_control_sessions.sql",
   "neon/migrations/20260810190000_control_sessions_project.sql",
+  "neon/migrations/20260812120000_control_sessions_repo.sql",
 ];
 
 const USER_A = "00000000-0000-4000-8000-00000000000a";
@@ -147,5 +148,23 @@ describe("control_sessions migration", () => {
       [USER_A]
     );
     expect(grouped.map((row) => row.project)).toEqual(["t3chat", null, null]);
+  });
+
+  it("stores the exact repository identity for durable agent context", async () => {
+    const repoId = "00000000-0000-4000-8000-000000000123";
+    const { rows } = await db.query<{
+      project: string;
+      repo_id: string | null;
+    }>(
+      `insert into public.control_sessions (user_id, title, project, repo_id)
+       values ($1, 'repo context', 'Mogplex/mogplex', $2)
+       returning project, repo_id`,
+      [USER_A, repoId]
+    );
+
+    expect(rows[0]).toEqual({
+      project: "Mogplex/mogplex",
+      repo_id: repoId,
+    });
   });
 });

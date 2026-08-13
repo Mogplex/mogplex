@@ -8,6 +8,13 @@ import {
   ShieldXmark,
 } from "iconoir-react";
 import { MogplexFace } from "@/components/brand/mogplex-face";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { Repo } from "@/lib/types";
@@ -18,9 +25,10 @@ import {
 } from "@/lib/control/session-project";
 import { ModelChip, type ComposerSendOptions } from "./composer";
 import {
-  readControlComposerFiles,
+  appendControlComposerFiles,
   type ControlComposerFile,
 } from "./control-attachments";
+import { useControlFileDrop } from "./use-control-file-drop";
 
 const NEW_PROJECT = "new";
 
@@ -30,6 +38,7 @@ type Props = {
   onCreate: (
     text: string,
     project: string,
+    repoId: string | null,
     options: ComposerSendOptions
   ) => void;
 };
@@ -46,6 +55,21 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { modelIds, defaultModelId } = useModels();
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const {
+    isDraggingFiles,
+    addFiles,
+    dropZoneProps,
+  } = useControlFileDrop({
+    existingCount: files.length,
+    onAttachments: useCallback(
+      (attachments: ControlComposerFile[]) =>
+        setFiles((current) =>
+          appendControlComposerFiles(current, attachments)
+        ),
+      []
+    ),
+    onError: setAttachmentError,
+  });
   // The user's pick wins; until then follow the account default, same as
   // the conversation composer.
   const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
@@ -64,7 +88,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
     const project = repo
       ? repoProjectName(repo)
       : newProjectName.trim() || deriveProjectName(text);
-    onCreate(text.trim(), project, {
+    onCreate(text.trim(), project, repo?.id ?? null, {
       model: modelId,
       permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
       mode: "run",
@@ -122,19 +146,26 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
           >
             Project
           </label>
-          <select
-            id="control-project"
+          <Select
             value={selectedRepoId}
-            onChange={(event) => setChoice(event.target.value)}
-            className="border-border bg-secondary text-secondary-foreground h-8 max-w-64 rounded-md border px-2 text-xs font-medium outline-none"
+            onValueChange={setChoice}
           >
-            {repos.map((repo) => (
-              <option key={repo.id} value={repo.id}>
-                {repo.full_name}
-              </option>
-            ))}
-            <option value={NEW_PROJECT}>New project…</option>
-          </select>
+            <SelectTrigger
+              id="control-project"
+              aria-label="Project"
+              className="border-border bg-secondary text-secondary-foreground h-8 w-64 max-w-full px-2 text-xs font-medium shadow-none"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="border-border bg-popover max-h-72 shadow-2xl">
+              {repos.map((repo) => (
+                <SelectItem key={repo.id} value={repo.id}>
+                  {repo.full_name}
+                </SelectItem>
+              ))}
+              <SelectItem value={NEW_PROJECT}>New project…</SelectItem>
+            </SelectContent>
+          </Select>
           {selectedRepoId === NEW_PROJECT ? (
             <input
               value={newProjectName}
@@ -147,7 +178,20 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
         </div>
 
         {/* Input */}
-        <div className="border-border-dim bg-card rounded-xl border p-3">
+        <div
+          data-testid="control-new-mission-dropzone"
+          {...dropZoneProps}
+          className={`relative rounded-xl border p-3 transition-colors ${
+            isDraggingFiles
+              ? "border-accent-blue bg-accent-blue/5"
+              : "border-border-dim bg-card"
+          }`}
+        >
+          {isDraggingFiles ? (
+            <div className="pointer-events-none absolute inset-x-0 top-0 bg-accent-blue px-3 py-1 text-center text-[11px] font-medium text-primary-foreground">
+              Drop images or files to attach
+            </div>
+          ) : null}
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -177,14 +221,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
                 const selectedFiles = Array.from(
                   event.currentTarget.files ?? []
                 );
-                const result = await readControlComposerFiles(
-                  selectedFiles,
-                  files.length
-                );
-                if (result.attachments.length > 0) {
-                  setFiles((current) => [...current, ...result.attachments]);
-                }
-                setAttachmentError(result.error);
+                await addFiles(selectedFiles);
                 event.currentTarget.value = "";
               }}
             />

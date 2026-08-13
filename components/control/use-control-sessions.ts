@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
+import { mergeControlSessionLists } from "@/lib/control/session-list-merge";
 import type { ControlSessionSummary } from "./session-list";
 
 type SessionRecord = ControlSessionSummary & {
@@ -31,18 +32,31 @@ export function useControlSessions({
   deepLinkTarget?: string | null;
 }) {
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const updatedAtRef = useRef<string | null>(null);
   const pendingRestoreRef = useRef<UIMessage[] | null>(null);
+  const mutationRevisionRef = useRef(0);
+  const removedSessionIdsRef = useRef(new Set<string>());
   const [restoreTick, setRestoreTick] = useState(0);
 
   const refreshList = useCallback(async () => {
+    const revision = mutationRevisionRef.current;
     const res = await fetch("/api/control/sessions");
     if (!res.ok) return;
-    setSessions((await res.json()) as ControlSessionSummary[]);
+    const fetched = (await res.json()) as ControlSessionSummary[];
+    setSessionsLoaded(true);
+    // An initial list request can finish after a new session was created.
+    // Merge it without overwriting local mutations or reviving archives.
+    if (revision !== mutationRevisionRef.current) {
+      setSessions((current) =>
+        mergeControlSessionLists(current, fetched, removedSessionIdsRef.current)
+      );
+      return;
+    }
+    setSessions(fetched);
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch populates the session list
     void refreshList();
   }, [refreshList]);
 
@@ -75,28 +89,33 @@ export function useControlSessions({
       return;
     }
     deepLinkedRef.current = true;
+    if (deepLinkTarget === sessionId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- restores a deep-linked session once the list loads
     void selectSession(deepLinkTarget);
-  }, [sessions, deepLinkTarget, selectSession]);
+  }, [sessions, deepLinkTarget, selectSession, sessionId]);
 
   const createSession = useCallback(
-    async (title: string, project?: string) => {
+    async (title: string, project?: string, repoId?: string | null) => {
       const res = await fetch("/api/control/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           title: title.slice(0, 80) || "New session",
           project: project?.trim() || null,
+          repo_id: repoId || null,
         }),
       });
       if (!res.ok) return null;
       const record = (await res.json()) as SessionRecord;
+      mutationRevisionRef.current += 1;
+      removedSessionIdsRef.current.delete(record.id);
       updatedAtRef.current = record.updated_at;
       setSessions((current) => [
         {
           id: record.id,
           title: record.title,
           project: record.project,
+          repo_id: record.repo_id,
           pinned: record.pinned,
           updated_at: record.updated_at,
         },
@@ -136,6 +155,7 @@ export function useControlSessions({
       if (!res.ok) return;
 
       const { session } = (await res.json()) as { session: SessionRecord };
+      mutationRevisionRef.current += 1;
       updatedAtRef.current = session.updated_at;
       setSessions((current) =>
         current.map((entry) =>
@@ -183,14 +203,19 @@ export function useControlSessions({
       if (!res.ok) return false;
 
       const { session } = (await res.json()) as { session: SessionRecord };
+      mutationRevisionRef.current += 1;
       updatedAtRef.current = session.updated_at;
       if (fields.archived) {
+        removedSessionIdsRef.current.add(sessionId);
         setSessions((current) =>
           current.filter((entry) => entry.id !== sessionId)
         );
         setSessionId(null);
         setMessages([]);
         return true;
+      }
+      if (fields.archived === false) {
+        removedSessionIdsRef.current.delete(sessionId);
       }
       setSessions((current) =>
         current.map((entry) =>
@@ -211,6 +236,7 @@ export function useControlSessions({
 
   return {
     sessions,
+    sessionsLoaded,
     selectSession,
     createSession,
     updateSession,

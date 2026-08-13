@@ -29,6 +29,7 @@ export function NewMissionView({
   onCreate: (
     text: string,
     project: string,
+    repoId: string | null,
     options: ComposerSendOptions
   ) => void;
   onSelectSession: (id: string) => void;

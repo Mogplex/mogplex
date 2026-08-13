@@ -16,9 +16,10 @@ import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { Mission, MissionPermissions } from "@/lib/control/types";
 import {
-  readControlComposerFiles,
+  appendControlComposerFiles,
   type ControlComposerFile,
 } from "./control-attachments";
+import { useControlFileDrop } from "./use-control-file-drop";
 
 export type ComposerSendOptions = {
   model: string | null;
@@ -239,6 +240,22 @@ export function Composer({
   const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    isDraggingFiles,
+    addFiles,
+    dropZoneProps,
+  } = useControlFileDrop({
+    disabled: pending,
+    existingCount: files.length,
+    onAttachments: useCallback(
+      (attachments: ControlComposerFile[]) =>
+        setFiles((current) =>
+          appendControlComposerFiles(current, attachments)
+        ),
+      []
+    ),
+    onError: setAttachmentError,
+  });
 
   const cyclePermissions = useCallback(() => {
     setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length);
@@ -273,7 +290,20 @@ export function Composer({
 
   return (
     <div className="mx-auto w-full max-w-5xl shrink-0 px-4 pb-5 sm:px-6">
-      <div className="overflow-hidden rounded-xl border border-ink-800 bg-ink-900">
+      <div
+        data-testid="control-composer-dropzone"
+        {...dropZoneProps}
+        className={`relative overflow-hidden rounded-xl border bg-ink-900 transition-colors ${
+          isDraggingFiles
+            ? "border-accent-blue bg-accent-blue/5"
+            : "border-ink-800"
+        }`}
+      >
+        {isDraggingFiles ? (
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-accent-blue px-3 py-1 text-center text-[11px] font-medium text-primary-foreground">
+            Drop images or files to attach
+          </div>
+        ) : null}
         <label htmlFor="control-composer" className="sr-only">
           Ask for follow-up changes
         </label>
@@ -338,14 +368,7 @@ export function Composer({
             multiple
             onChange={async (event) => {
               const selectedFiles = Array.from(event.currentTarget.files ?? []);
-              const result = await readControlComposerFiles(
-                selectedFiles,
-                files.length
-              );
-              if (result.attachments.length > 0) {
-                setFiles((current) => [...current, ...result.attachments]);
-              }
-              setAttachmentError(result.error);
+              await addFiles(selectedFiles);
               event.currentTarget.value = "";
             }}
           />

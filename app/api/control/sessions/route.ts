@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
+import { validateControlSessionRepoAccess } from "@/lib/control/session-repo-access";
+import { pickControlSessionUpdateFields } from "@/lib/control/session-update";
 
 const LIST_COLUMNS =
-  "id, title, project, pinned, archived, created_at, updated_at";
+  "id, title, project, repo_id, pinned, archived, created_at, updated_at";
 
 async function getSessionRecord(id: string, userId: string) {
   const { data, error } = await supabaseAdmin
@@ -58,14 +60,27 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     title?: string;
     project?: string | null;
+    repo_id?: unknown;
   };
+  const repoAccess = await validateControlSessionRepoAccess({
+    request: req,
+    userId,
+    repoId: body.repo_id,
+  });
+  if (!repoAccess.ok) {
+    return NextResponse.json(
+      { error: repoAccess.error },
+      { status: repoAccess.status }
+    );
+  }
 
   const { data, error } = await supabaseAdmin
     .from("control_sessions")
     .insert({
       user_id: userId,
       title: body.title?.trim() || "New session",
-      project: body.project?.trim().slice(0, 80) || null,
+      project: body.project?.trim().slice(0, 160) || null,
+      repo_id: repoAccess.value,
     })
     .select("*")
     .single();
@@ -89,11 +104,26 @@ export async function PUT(req: Request) {
     expected_updated_at?: string | null;
     title?: string;
     project?: string | null;
+    repo_id?: unknown;
     messages?: unknown;
     pinned?: boolean;
     archived?: boolean;
   };
-  const { id, expected_updated_at: expectedUpdatedAt, ...fields } = body;
+  if (Object.hasOwn(body, "repo_id")) {
+    const repoAccess = await validateControlSessionRepoAccess({
+      request: req,
+      userId,
+      repoId: body.repo_id,
+    });
+    if (!repoAccess.ok) {
+      return NextResponse.json(
+        { error: repoAccess.error },
+        { status: repoAccess.status }
+      );
+    }
+    body.repo_id = repoAccess.value;
+  }
+  const { id, expected_updated_at: expectedUpdatedAt } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
@@ -104,6 +134,8 @@ export async function PUT(req: Request) {
       { status: 400 }
     );
   }
+
+  const fields = pickControlSessionUpdateFields(body);
 
   const { data, error } = await supabaseAdmin
     .from("control_sessions")
