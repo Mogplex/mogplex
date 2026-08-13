@@ -362,17 +362,20 @@ export async function pruneWorktree(
     throw new WorktreeServiceError("Archive the worktree before pruning it");
   }
   try {
+    // The reservation probe may resume a stopped sandbox so it can verify and
+    // remove a checkout created just before reservation persistence failed.
+    const command = isReservedCheckoutPath(worktree.checkout_path)
+      ? buildPruneReservedWorktreeCommand({ worktreeId: worktree.id })
+      : buildPruneWorktreeCommand({
+          checkoutPath: worktree.checkout_path,
+          // `force` retires a binding only after the executor confirms the
+          // sandbox is gone. It must never turn into `git worktree --force`.
+          force: false,
+        });
     const result = await deps.execute({
       userId: input.userId,
       sandboxId: worktree.sandbox_id,
-      command: isReservedCheckoutPath(worktree.checkout_path)
-        ? buildPruneReservedWorktreeCommand({ worktreeId: worktree.id })
-        : buildPruneWorktreeCommand({
-            checkoutPath: worktree.checkout_path,
-            // `force` retires a binding only after the executor confirms the
-            // sandbox is gone. It must never turn into `git worktree --force`.
-            force: false,
-          }),
+      command,
     });
     const failure = commandFailure(result);
     if (failure) throw new WorktreeServiceError(failure);
