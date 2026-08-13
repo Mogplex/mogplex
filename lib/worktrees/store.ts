@@ -80,7 +80,7 @@ export async function reserveWorktree(input: {
   agentId: string | null;
   branchName: string;
   baseBranch: string;
-}): Promise<OrchestrationWorktreeDTO> {
+}): Promise<{ worktree: OrchestrationWorktreeDTO; created: boolean }> {
   const id = randomUUID();
   const { data, error } = await supabaseAdmin
     .from(WORKTREES)
@@ -110,7 +110,7 @@ export async function reserveWorktree(input: {
         winner.repo_id === input.repoId &&
         winner.sandbox_id === input.sandboxId
       ) {
-        return winner;
+        return { worktree: winner, created: false };
       }
     }
     throw new WorktreeStoreError(
@@ -118,7 +118,7 @@ export async function reserveWorktree(input: {
       error?.message ?? "no row returned"
     );
   }
-  return data as OrchestrationWorktreeDTO;
+  return { worktree: data as OrchestrationWorktreeDTO, created: true };
 }
 
 export async function activateWorktree(input: {
@@ -153,7 +153,8 @@ export async function markWorktreeError(input: {
     .from(WORKTREES)
     .update({ status: "error", error: input.error })
     .eq("id", input.worktreeId)
-    .eq("user_id", input.userId);
+    .eq("user_id", input.userId)
+    .in("status", ["creating", "error"]);
   if (error) throw new WorktreeStoreError("mark error", error.message);
 }
 
@@ -221,13 +222,13 @@ export async function archiveWorktreeRecord(input: {
     .update({ status: "archived", archived_at: new Date().toISOString() })
     .eq("id", input.worktreeId)
     .eq("user_id", input.userId)
-    .eq("status", "active")
+    .in("status", ["active", "error"])
     .select("*")
     .single();
   if (error || !data) {
     throw new WorktreeStoreError(
       "archive",
-      error?.message ?? "active worktree not found"
+      error?.message ?? "archivable worktree not found"
     );
   }
   return data as OrchestrationWorktreeDTO;

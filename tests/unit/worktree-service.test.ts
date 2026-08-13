@@ -73,7 +73,10 @@ test("spawn creates a real checkout and persists the server-reported path", asyn
         repo_id: REPO_ID,
         status: "running",
       }),
-      reserve: async () => buildWorktree({ status: "creating" }),
+      reserve: async () => ({
+        worktree: buildWorktree({ status: "creating" }),
+        created: true,
+      }),
       execute: async ({ sandboxId, command, cwd }) => {
         assert.equal(sandboxId, SANDBOX_ID);
         assert.equal(cwd, undefined);
@@ -156,9 +159,9 @@ test("spawn rejects reuse across missions or sandboxes", async () => {
   );
 });
 
-test("spawn returns the concurrent reservation winner without recreating it", async () => {
+test("spawn returns an in-flight concurrent reservation without recreating it", async () => {
   let executed = false;
-  const winner = buildWorktree();
+  const winner = buildWorktree({ status: "creating" });
   const result = await spawnWorktree(
     {
       userId: "user-1",
@@ -174,7 +177,7 @@ test("spawn returns the concurrent reservation winner without recreating it", as
         repo_id: REPO_ID,
         status: "running",
       }),
-      reserve: async () => winner,
+      reserve: async () => ({ worktree: winner, created: false }),
       execute: async () => {
         executed = true;
         return { exitCode: 0, stdout: "", stderr: "" };
@@ -240,6 +243,22 @@ test("archive changes database state without touching sandbox lifecycle", async 
   assert.equal(executed, false);
 });
 
+test("archive provides a recovery path for a failed worktree", async () => {
+  const archived = await archiveWorktree(
+    {
+      userId: "user-1",
+      worktreeId: WORKTREE_ID,
+      runId: RUN_ID,
+      repoId: REPO_ID,
+    },
+    {
+      load: async () => buildWorktree({ status: "error" }),
+      archive: async () => buildWorktree({ status: "archived" }),
+    }
+  );
+  assert.equal(archived.status, "archived");
+});
+
 test("prune requires archive and removes only the persisted checkout", async () => {
   await assert.rejects(
     pruneWorktree(
@@ -275,6 +294,31 @@ test("prune requires archive and removes only the persisted checkout", async () 
   assert.equal(pruned.status, "pruned");
   assert.match(command, new RegExp(WORKTREE_ID));
   assert.doesNotMatch(command, /sandbox (stop|pause|delete)/);
+});
+
+test("forced prune releases an archived binding when its sandbox is gone", async () => {
+  let marked = false;
+  const pruned = await pruneWorktree(
+    {
+      userId: "user-1",
+      worktreeId: WORKTREE_ID,
+      runId: RUN_ID,
+      repoId: REPO_ID,
+      force: true,
+    },
+    {
+      load: async () => buildWorktree({ status: "archived" }),
+      execute: async () => {
+        throw new Error("Sandbox not found");
+      },
+      markPruned: async () => {
+        marked = true;
+        return buildWorktree({ status: "pruned" });
+      },
+    }
+  );
+  assert.equal(pruned.status, "pruned");
+  assert.equal(marked, true);
 });
 
 test("lifecycle actions reject a worktree from another mission", async () => {

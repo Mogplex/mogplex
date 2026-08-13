@@ -120,24 +120,24 @@ function WorktreeRow({
           </button>
         ) : null}
         {worktree.status === "active" ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void runAction("rebase")}
-              disabled={busy !== null}
-              className="border-ink-700 text-ink-200 hover:bg-ink-800 flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
-            >
-              <Refresh className="size-3" /> Rebase
-            </button>
-            <button
-              type="button"
-              onClick={() => void runAction("archive")}
-              disabled={busy !== null}
-              className="border-ink-700 text-ink-200 hover:bg-ink-800 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
-            >
-              Archive
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => void runAction("rebase")}
+            disabled={busy !== null}
+            className="border-ink-700 text-ink-200 hover:bg-ink-800 flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+          >
+            <Refresh className="size-3" /> Rebase
+          </button>
+        ) : null}
+        {worktree.status === "active" || worktree.status === "error" ? (
+          <button
+            type="button"
+            onClick={() => void runAction("archive")}
+            disabled={busy !== null}
+            className="border-ink-700 text-ink-200 hover:bg-ink-800 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+          >
+            Archive
+          </button>
         ) : null}
         {worktree.status === "archived" ? (
           <button
@@ -156,7 +156,8 @@ function WorktreeRow({
             <AlertDialogTitle>Prune this checkout?</AlertDialogTitle>
             <AlertDialogDescription>
               This removes the archived Git checkout from its sandbox. It does
-              not stop the sandbox or delete the branch.
+              not stop the sandbox or delete the branch. If the sandbox no
+              longer exists, the failed binding is still retired.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

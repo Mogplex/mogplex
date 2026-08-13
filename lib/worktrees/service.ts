@@ -93,7 +93,7 @@ export async function spawnWorktree(
   }
 
   const sandbox = await deps.loadSandbox({
-    sandboxId: existing?.sandbox_id ?? input.sandboxId,
+    sandboxId: input.sandboxId,
     userId: input.userId,
     repoId: task.repo_id,
   });
@@ -108,9 +108,10 @@ export async function spawnWorktree(
     );
   }
 
-  const worktree =
-    existing ??
-    (await deps.reserve({
+  let worktree = existing;
+  let ownsCreation = existing?.status === "error";
+  if (!worktree) {
+    const reservation = await deps.reserve({
       userId: input.userId,
       runId: task.run_id,
       taskId: task.id,
@@ -119,8 +120,11 @@ export async function spawnWorktree(
       agentId: task.agent_id,
       branchName: task.branch_name,
       baseBranch: task.base_branch,
-    }));
-  if (worktree.status === "active" || worktree.status === "archived") {
+    });
+    worktree = reservation.worktree;
+    ownsCreation = reservation.created;
+  }
+  if (!ownsCreation) {
     return worktree;
   }
 
@@ -247,8 +251,10 @@ export async function archiveWorktree(
   const deps = { ...defaultDeps, ...overrides };
   const worktree = await requireOwnedWorktree(input, deps);
   if (worktree.status === "archived") return worktree;
-  if (worktree.status !== "active") {
-    throw new WorktreeServiceError("Only active worktrees can be archived");
+  if (worktree.status !== "active" && worktree.status !== "error") {
+    throw new WorktreeServiceError(
+      "Only active or failed worktrees can be archived"
+    );
   }
   return deps.archive(input);
 }
@@ -269,15 +275,19 @@ export async function pruneWorktree(
   if (worktree.status !== "archived") {
     throw new WorktreeServiceError("Archive the worktree before pruning it");
   }
-  const result = await deps.execute({
-    userId: input.userId,
-    sandboxId: worktree.sandbox_id,
-    command: buildPruneWorktreeCommand({
-      checkoutPath: worktree.checkout_path,
-      force: input.force ?? false,
-    }),
-  });
-  const failure = commandFailure(result);
-  if (failure) throw new WorktreeServiceError(failure);
+  try {
+    const result = await deps.execute({
+      userId: input.userId,
+      sandboxId: worktree.sandbox_id,
+      command: buildPruneWorktreeCommand({
+        checkoutPath: worktree.checkout_path,
+        force: input.force ?? false,
+      }),
+    });
+    const failure = commandFailure(result);
+    if (failure && !input.force) throw new WorktreeServiceError(failure);
+  } catch (error) {
+    if (!input.force) throw error;
+  }
   return deps.markPruned(input);
 }

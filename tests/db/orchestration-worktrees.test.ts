@@ -141,27 +141,30 @@ describe("orchestration worktree persistence", () => {
     expect(legacyBackfill?.base_branch).toBe("develop");
   });
 
-  it("keeps lifecycle RPCs service-role only", async () => {
-    const privileges = await db.query<{
-      authenticated: boolean;
-      service_role: boolean;
-    }>(
-      `select
-         has_function_privilege(
-           'authenticated',
-           'public.activate_orchestration_worktree(uuid,uuid,text)',
-           'execute'
-         ) as authenticated,
-         has_function_privilege(
-           'service_role',
-           'public.activate_orchestration_worktree(uuid,uuid,text)',
-           'execute'
-         ) as service_role`
-    );
-    expect(privileges.rows[0]).toEqual({
-      authenticated: false,
-      service_role: true,
-    });
+  it("keeps every worktree RPC service-role only", async () => {
+    const signatures = [
+      "public.activate_orchestration_worktree(uuid,uuid,text)",
+      "public.prune_orchestration_worktree(uuid,uuid)",
+      "public.bind_orchestration_worktree_agent(uuid,uuid,uuid)",
+      "public.create_orchestration_plan(uuid,uuid,text,text,text[],jsonb)",
+    ];
+    for (const signature of signatures) {
+      const privileges = await db.query<{
+        authenticated: boolean;
+        service_role: boolean;
+      }>(
+        `select
+           has_function_privilege('authenticated', $1, 'execute')
+             as authenticated,
+           has_function_privilege('service_role', $1, 'execute')
+             as service_role`,
+        [signature]
+      );
+      expect(privileges.rows[0], signature).toEqual({
+        authenticated: false,
+        service_role: true,
+      });
+    }
   });
 
   it("creates every mission task atomically", async () => {

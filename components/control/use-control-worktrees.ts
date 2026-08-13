@@ -50,6 +50,7 @@ export function useControlWorktrees(input: {
           action,
           worktreeId,
           sessionId: input.sessionId,
+          force: action === "prune",
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
