@@ -53,6 +53,8 @@ export function useControlSend({
             ...requestContext,
           }),
         });
+        // AI SDK transport failures reach useChat.onError before sendMessage
+        // resolves; the ref bridges that callback-only result to the composer.
         return !sendFailureRef.current;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Chat error";

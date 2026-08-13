@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import type { Repo, SandboxRecord } from "@/lib/types";
 import { resolveControlSessionRepo } from "@/lib/control/session-project";
@@ -86,8 +86,18 @@ export function useControlSessionContext({
   selectedMissionId: string;
   missionTitle: string | null;
 }) {
-  const preferredSandboxId = useSandboxStore((state) => state.activeSandboxId);
-  const selectSandbox = useSandboxStore((state) => state.setActiveSandbox);
+  const storeSandboxId = useSandboxStore((state) => state.activeSandboxId);
+  const setStoreSandbox = useSandboxStore((state) => state.setActiveSandbox);
+  const [explicitSandboxId, setExplicitSandboxId] = useState<string | null>(
+    null
+  );
+  const selectSandbox = useCallback(
+    (sandboxId: string) => {
+      setExplicitSandboxId(sandboxId);
+      setStoreSandbox(sandboxId);
+    },
+    [setStoreSandbox]
+  );
   const activeRepo = useMemo(
     () => resolveControlSessionRepo(activeSession, repos),
     [activeSession, repos]
@@ -98,8 +108,12 @@ export function useControlSessionContext({
     [activeRepo, allSandboxes]
   );
   const activeSandbox = useMemo(
-    () => selectControlActiveSandbox(sandboxes, preferredSandboxId),
-    [preferredSandboxId, sandboxes]
+    () =>
+      selectControlActiveSandbox(
+        sandboxes,
+        explicitSandboxId ?? storeSandboxId
+      ),
+    [explicitSandboxId, sandboxes, storeSandboxId]
   );
 
   const requestContext = useMemo(

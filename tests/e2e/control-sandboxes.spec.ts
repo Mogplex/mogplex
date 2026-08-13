@@ -227,6 +227,12 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await expect.poll(() => chatRequests.length).toBe(2);
   expect(chatRequests[1]?.sandboxId).toBe("rec-paused");
 
+  // Once the user selects a sandbox, a different sandbox completing a
+  // lifecycle action must not silently steal Control request routing.
+  const runningTab = page.getByRole("button", { name: "feat/demo" });
+  await runningTab.click();
+  await expect(runningTab).toHaveAttribute("aria-pressed", "true");
+
   // The Sandboxes tab shows remote compute with real status and actions.
   await page.getByRole("button", { name: "Sandboxes 2" }).click();
   await expect(page.getByRole("heading", { name: "Sandboxes" })).toBeVisible();
@@ -249,6 +255,14 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await page.getByRole("button", { name: "Resume" }).click();
   await expect.poll(() => resumePosted).toBe(true);
   await expect(page.getByText("Running")).toHaveCount(2);
+  await page.getByRole("button", { name: "Chat" }).click();
+  await page
+    .getByPlaceholder("Ask for follow-up changes or attach images")
+    .fill("Keep using the explicitly selected sandbox");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => chatRequests.length).toBe(3);
+  expect(chatRequests[2]?.sandboxId).toBe("rec-1");
+  await page.getByRole("button", { name: "Sandboxes 2" }).click();
 
   // Preview opens the real sandbox URL in a modal and closes again.
   await page.getByRole("button", { name: "Preview" }).first().click();
