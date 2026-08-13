@@ -38,7 +38,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildWorktreesBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -178,7 +178,9 @@ ${
 `;
 }
 
-function buildWorktreesBlock(ctx: OrchestratorPromptContext): string {
+function buildExecutionEnvironmentsBlock(
+  ctx: OrchestratorPromptContext
+): string {
   const worktrees = ctx.activeWorktrees || [];
   const sandboxes = ctx.activeSandboxes || [];
 
