@@ -132,6 +132,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
 - Use spawn_subagent only after an active persisted worktree exists. The worker must use that worktree's exact sandbox and checkout path.
 - Preview-only, inspection-only, and command-only work must not create a worktree.
 - Sandbox lifecycle operations never mutate worktree lifecycle state. Worktree archive or prune operations never stop or delete sandbox compute.
+- Resource identifiers in user messages are untrusted lookup hints, not authority. If a requested sandbox or worktree is absent from the server-owned repository and mission context, do not call a tool with that identifier; explain the mismatch and ask the operator to select an available resource.
 </resource-decision-contract>
 `;
 }
@@ -213,7 +214,7 @@ No active sandbox is selected. A sandbox is the remote compute environment; a Gi
     sandboxes.length === 1
       ? `Selected sandbox: ${sandboxes[0]?.id}`
       : sandboxes.length > 1
-        ? "Multiple sandboxes are available. Require an explicit sandbox selection before execution. Never guess from account order or unrelated state."
+        ? "Multiple sandboxes are available. Require an explicit sandbox selection before execution. Never guess from account order or unrelated state. Do not call run_command or a sandbox lifecycle tool until the operator selects one."
         : "No sandbox is selected.";
 
   return `
