@@ -65,6 +65,9 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain("Multiple sandboxes are available");
     expect(prompt).toContain("Never guess");
     expect(prompt).toContain(
+      "fallback never applies while multiple sandboxes are listed"
+    );
+    expect(prompt).toContain(
       "Do not call run_command or a sandbox lifecycle tool until the operator selects one"
     );
   });

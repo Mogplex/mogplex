@@ -100,6 +100,7 @@ export async function executeControlChatRequest(input: {
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
       sandboxId: selectedSandboxId,
+      sandboxSelectionRequired: activeSandboxes.length > 1,
       repoId: input.body.repoId,
       repoOwner: input.body.repoOwner,
       repoName: input.body.repoName,

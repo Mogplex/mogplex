@@ -286,6 +286,28 @@ describe("sandbox command tool contract", () => {
     expect(fetched).toBe(false);
   });
 
+  it("disables fallback when server-owned context requires selection", async () => {
+    installSandboxRows([{ id: "sandbox-1" }]);
+    let fetched = false;
+    global.fetch = async () => {
+      fetched = true;
+      return Response.json({ exitCode: 0 });
+    };
+    const tool = createTerminalExec(
+      undefined,
+      "user-1",
+      "00000000-0000-4000-8000-000000000001",
+      false
+    ) as unknown as {
+      execute: (input: { command: string }) => Promise<unknown>;
+    };
+
+    await expect(tool.execute({ command: "pwd" })).resolves.toMatchObject({
+      reason: "multiple_sandboxes",
+    });
+    expect(fetched).toBe(false);
+  });
+
   it("returns the started sandbox identity from sandbox_start", async () => {
     global.fetch = async () =>
       Response.json(

@@ -128,7 +128,8 @@ const terminalParams = z.object({
 export function createTerminalExec(
   sandboxId?: string,
   userId?: string,
-  repoId?: string
+  repoId?: string,
+  allowSandboxFallback = true
 ) {
   let selectedSandboxId = sandboxId;
   // Track the selected/resolved sandbox across calls within this tool instance.
@@ -146,6 +147,15 @@ export function createTerminalExec(
         return {
           error: requestHeaders.error,
           reason: requestHeaders.reason,
+          command,
+        };
+      }
+
+      if (!cachedSandbox && !allowSandboxFallback) {
+        return {
+          error:
+            "Multiple sandboxes are available for this repository. Select one explicitly before continuing.",
+          reason: "multiple_sandboxes" as const,
           command,
         };
       }
@@ -349,12 +359,22 @@ function formatSandboxStopResult(
       "Sandbox compute stopped. Its record and worktree bindings remain available for restart.",
   };
 }
-export function createStopSandbox(userId?: string) {
+export function createStopSandbox(
+  userId?: string,
+  serverSelectedSandboxId?: string
+) {
   return defineTool({
     description:
       "Stop sandbox compute while preserving its sandbox record and worktree bindings for restart. Use this when the user asks to stop or shut down the preview. This does not delete the sandbox record.",
     inputSchema: stopSandboxParams,
     execute: async ({ sandboxId }: z.infer<typeof stopSandboxParams>) => {
+      if (serverSelectedSandboxId && sandboxId !== serverSelectedSandboxId) {
+        return {
+          error:
+            "The requested sandbox is not the server-selected sandbox for this session.",
+          reason: "sandbox_mismatch" as const,
+        };
+      }
       const baseUrl = resolveAppBaseUrl();
       const requestHeaders = getSandboxRequestHeaders(userId);
       if ("error" in requestHeaders) {

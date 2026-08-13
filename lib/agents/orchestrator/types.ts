@@ -43,6 +43,8 @@ export type OrchestratorToolDef = {
 export type OrchestratorToolContext = {
   userId: string;
   sandboxId?: string | null;
+  /** Server-owned context found multiple sandboxes, so fallback is unsafe. */
+  sandboxSelectionRequired?: boolean;
   repoId?: string | null;
   repoOwner?: string | null;
   repoName?: string | null;

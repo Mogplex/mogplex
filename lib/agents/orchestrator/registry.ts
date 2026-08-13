@@ -137,14 +137,15 @@ function buildToolForDef(
     return createTerminalExec(
       ctx.sandboxId ?? undefined,
       ctx.userId,
-      ctx.repoId ?? undefined
+      ctx.repoId ?? undefined,
+      !ctx.sandboxSelectionRequired
     );
   }
   if (def.name === "sandbox_start") {
     return createStartSandbox(ctx.userId);
   }
   if (def.name === "sandbox_stop") {
-    return createStopSandbox(ctx.userId);
+    return ctx.sandboxId ? createStopSandbox(ctx.userId, ctx.sandboxId) : null;
   }
   if (def.name === "open_pr") {
     return ctx.githubToken

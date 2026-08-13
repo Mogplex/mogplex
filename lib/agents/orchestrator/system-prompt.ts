@@ -126,7 +126,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   return `
 <resource-decision-contract>
 - Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. Starting a sandbox never creates a worktree.
-- Use run_command for a shell command in the selected sandbox. With no selection it may fall back to exactly one repo-scoped running sandbox or start one for the active repository; it returns the resolved sandbox identity and never implies or creates a worktree.
+- Use run_command for a shell command in the selected sandbox. When no sandbox is listed, it may fall back to exactly one repo-scoped running sandbox or start one for the active repository. That fallback never applies while multiple sandboxes are listed. The result returns the resolved sandbox identity and never implies or creates a worktree.
 - Use plan_mission to create task identities before isolated coding work.
 - Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.
 - Use spawn_subagent only after an active persisted worktree exists. The worker must use that worktree's exact sandbox and checkout path.

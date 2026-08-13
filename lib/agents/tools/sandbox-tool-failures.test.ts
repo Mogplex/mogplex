@@ -62,6 +62,26 @@ describe("sandbox tool failure telemetry", () => {
     });
   });
 
+  it("rejects a stop identifier outside server-selected context", async () => {
+    let fetched = false;
+    global.fetch = async () => {
+      fetched = true;
+      return Response.json({});
+    };
+    const tool = createStopSandbox("user-1", "sandbox-selected") as unknown as {
+      execute: (input: { sandboxId: string }) => Promise<unknown>;
+    };
+
+    await expect(
+      tool.execute({ sandboxId: "sandbox-injected" })
+    ).resolves.toEqual({
+      error:
+        "The requested sandbox is not the server-selected sandbox for this session.",
+      reason: "sandbox_mismatch",
+    });
+    expect(fetched).toBe(false);
+  });
+
   it("classifies delegated-auth and write failures", async () => {
     delete process.env.INTERNAL_API_SECRET;
     const unauthorized = createWriteFile(
