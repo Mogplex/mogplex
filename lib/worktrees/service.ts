@@ -1,5 +1,6 @@
 import {
   buildCreateWorktreeCommand,
+  buildPruneReservedWorktreeCommand,
   buildPruneWorktreeCommand,
   buildRebaseWorktreeCommand,
   buildWorktreeDiffCommand,
@@ -360,24 +361,27 @@ export async function pruneWorktree(
   if (worktree.status !== "archived") {
     throw new WorktreeServiceError("Archive the worktree before pruning it");
   }
-  if (isReservedCheckoutPath(worktree.checkout_path)) {
-    return deps.markPruned(input);
-  }
   try {
     const result = await deps.execute({
       userId: input.userId,
       sandboxId: worktree.sandbox_id,
-      command: buildPruneWorktreeCommand({
-        checkoutPath: worktree.checkout_path,
-        // `force` retires a binding only after the executor confirms the
-        // sandbox is gone. It must never turn into `git worktree --force`.
-        force: false,
-      }),
+      command: isReservedCheckoutPath(worktree.checkout_path)
+        ? buildPruneReservedWorktreeCommand({ worktreeId: worktree.id })
+        : buildPruneWorktreeCommand({
+            checkoutPath: worktree.checkout_path,
+            // `force` retires a binding only after the executor confirms the
+            // sandbox is gone. It must never turn into `git worktree --force`.
+            force: false,
+          }),
     });
     const failure = commandFailure(result);
     if (failure) throw new WorktreeServiceError(failure);
   } catch (error) {
-    if (error instanceof WorktreeExecutorError && error.status === 404) {
+    if (
+      error instanceof WorktreeExecutorError &&
+      error.status === 404 &&
+      error.code === "sandbox_not_found"
+    ) {
       if (!input.force) {
         throw new WorktreeServiceError(error.message, {
           forceEligible: true,

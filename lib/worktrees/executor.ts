@@ -4,7 +4,8 @@ import type { WorktreeCommandResult } from "./types";
 export class WorktreeExecutorError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly code?: string
   ) {
     super(message);
     this.name = "WorktreeExecutorError";
@@ -40,11 +41,13 @@ export async function executeWorktreeCommand(input: {
     stdout?: string;
     stderr?: string;
     error?: string;
+    code?: string;
   };
   if (!response.ok) {
     throw new WorktreeExecutorError(
       body.error || body.stderr || "Worktree command failed",
-      response.status
+      response.status,
+      body.code
     );
   }
   return {

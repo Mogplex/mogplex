@@ -16,7 +16,10 @@ describe("executeWorktreeCommand", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        Response.json({ error: "Sandbox not found" }, { status: 404 })
+        Response.json(
+          { error: "Sandbox not found", code: "sandbox_not_found" },
+          { status: 404 }
+        )
       )
     );
 
@@ -26,6 +29,8 @@ describe("executeWorktreeCommand", () => {
         sandboxId: "sandbox-1",
         command: "git status",
       })
-    ).rejects.toEqual(new WorktreeExecutorError("Sandbox not found", 404));
+    ).rejects.toEqual(
+      new WorktreeExecutorError("Sandbox not found", 404, "sandbox_not_found")
+    );
   });
 });

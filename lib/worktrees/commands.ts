@@ -116,3 +116,20 @@ repo_root="$(git rev-parse --show-toplevel)"
 git -C "$repo_root" worktree remove${force} "$checkout_path"
 git -C "$repo_root" worktree prune`;
 }
+
+export function buildPruneReservedWorktreeCommand(input: {
+  worktreeId: string;
+}): string {
+  assertWorktreeId(input.worktreeId);
+  return `set -eu
+MOGPLEX_WORKTREE_ID=${shellQuote(input.worktreeId)}
+repo_root="$(git rev-parse --show-toplevel)"
+checkout_path="$repo_root/.worktrees/$MOGPLEX_WORKTREE_ID"
+if git -C "$repo_root" worktree list --porcelain | grep -Fx "worktree $checkout_path" >/dev/null 2>&1; then
+  git -C "$repo_root" worktree remove "$checkout_path"
+elif [ -e "$checkout_path" ]; then
+  echo "Refusing to remove an unmanaged checkout at $checkout_path" >&2
+  exit 1
+fi
+git -C "$repo_root" worktree prune`;
+}

@@ -124,6 +124,12 @@ export function createSandboxExecPostHandler(
       }
     );
     if (!sandboxData.ok) {
+      if (sandboxData.status === 404) {
+        return NextResponse.json(
+          { error: sandboxData.error, code: "sandbox_not_found" },
+          { status: 404 }
+        );
+      }
       return buildSandboxRouteErrorResponse(sandboxData);
     }
     if (sandboxData.record.sandbox_id === "pending") {
