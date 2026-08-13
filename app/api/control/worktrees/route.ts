@@ -167,7 +167,7 @@ function worktreeErrorResponse(error: unknown) {
   if (error instanceof WorktreeServiceError) {
     const notFound = error.message === "Worktree not found";
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message, forceEligible: error.forceEligible },
       { status: notFound ? 404 : 409 }
     );
   }

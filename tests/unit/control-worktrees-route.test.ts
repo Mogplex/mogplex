@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { WorktreeServiceError } from "../../lib/worktrees/service";
 import type { OrchestrationWorktreeDTO } from "../../lib/worktrees/types";
 
 const WORKTREE_ID = "11111111-2222-4333-8444-555555555555";
@@ -170,4 +171,36 @@ test("POST rejects lifecycle actions without an owned mission session", async ()
     })
   );
   assert.equal(response.status, 404);
+});
+
+test("POST marks only recoverable git prune failures as force eligible", async () => {
+  const { createControlWorktreesPostHandler } = await loadRoute();
+  const handler = createControlWorktreesPostHandler({
+    requireUserId: async () => "user-1",
+    loadSession: async () => ({
+      repo_id: REPO_ID,
+      orchestration_run_id: RUN_ID,
+    }),
+    prune: async () => {
+      throw new WorktreeServiceError("Sandbox not found", {
+        forceEligible: true,
+      });
+    },
+  });
+  const response = await handler(
+    new Request("https://app.mogplex.com/api/control/worktrees", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "prune",
+        worktreeId: WORKTREE_ID,
+        sessionId: "session-1",
+      }),
+    })
+  );
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "Sandbox not found",
+    forceEligible: true,
+  });
 });

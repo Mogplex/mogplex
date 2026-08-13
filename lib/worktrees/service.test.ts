@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { archiveWorktree, spawnWorktree } from "./service";
+import { WorktreeExecutorError } from "./executor";
+import { archiveWorktree, pruneWorktree, spawnWorktree } from "./service";
 import type { OrchestrationWorktreeDTO, WorktreeTaskContext } from "./types";
 
 const IDS = {
@@ -114,5 +115,28 @@ describe("spawnWorktree reservation recovery", () => {
         }
       )
     ).resolves.toBe(archived);
+  });
+
+  it("offers force retirement only when an archived sandbox is gone", async () => {
+    const archived = worktree("archived");
+    await expect(
+      pruneWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+        },
+        {
+          load: async () => archived,
+          execute: async () => {
+            throw new WorktreeExecutorError("Sandbox not found", 404);
+          },
+        }
+      )
+    ).rejects.toMatchObject({
+      message: "Sandbox not found",
+      forceEligible: true,
+    });
   });
 });

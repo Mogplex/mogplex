@@ -59,8 +59,13 @@ export function useControlWorktrees(input: {
       });
       const body = (await response.json().catch(() => ({}))) as {
         error?: string;
+        forceEligible?: boolean;
       };
-      if (!response.ok) throw new Error(body.error || "Worktree action failed");
+      if (!response.ok) {
+        throw Object.assign(new Error(body.error || "Worktree action failed"), {
+          forceEligible: body.forceEligible === true,
+        });
+      }
       await refresh();
     },
     [input.sessionId, refresh]

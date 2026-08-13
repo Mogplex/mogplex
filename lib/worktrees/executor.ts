@@ -1,6 +1,16 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import type { WorktreeCommandResult } from "./types";
 
+export class WorktreeExecutorError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "WorktreeExecutorError";
+  }
+}
+
 function resolveAppBaseUrl(): string {
   return (
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -32,7 +42,10 @@ export async function executeWorktreeCommand(input: {
     error?: string;
   };
   if (!response.ok) {
-    throw new Error(body.error || body.stderr || "Worktree command failed");
+    throw new WorktreeExecutorError(
+      body.error || body.stderr || "Worktree command failed",
+      response.status
+    );
   }
   return {
     exitCode: body.exitCode ?? null,

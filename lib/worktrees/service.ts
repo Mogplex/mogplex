@@ -5,7 +5,7 @@ import {
   buildWorktreeDiffCommand,
   parseCreatedWorktreePath,
 } from "./commands";
-import { executeWorktreeCommand } from "./executor";
+import { executeWorktreeCommand, WorktreeExecutorError } from "./executor";
 import {
   activateWorktree,
   archiveWorktreeRecord,
@@ -23,9 +23,12 @@ import type { OrchestrationWorktreeDTO, WorktreeCommandResult } from "./types";
 import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 
 export class WorktreeServiceError extends Error {
-  constructor(message: string) {
+  readonly forceEligible: boolean;
+
+  constructor(message: string, options: { forceEligible?: boolean } = {}) {
     super(message);
     this.name = "WorktreeServiceError";
+    this.forceEligible = options.forceEligible ?? false;
   }
 }
 
@@ -301,9 +304,28 @@ export async function pruneWorktree(
       }),
     });
     const failure = commandFailure(result);
-    if (failure && !input.force) throw new WorktreeServiceError(failure);
+    if (failure) {
+      if (!input.force) {
+        throw new WorktreeServiceError(failure, { forceEligible: true });
+      }
+      console.warn("[worktrees] force-retiring checkout after git failure", {
+        worktreeId: worktree.id,
+        error: failure,
+      });
+    }
   } catch (error) {
-    if (!input.force) throw error;
+    if (!input.force) {
+      if (error instanceof WorktreeExecutorError && error.status === 404) {
+        throw new WorktreeServiceError(error.message, {
+          forceEligible: true,
+        });
+      }
+      throw error;
+    }
+    console.warn("[worktrees] force-retiring checkout after executor failure", {
+      worktreeId: worktree.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
   return deps.markPruned(input);
 }

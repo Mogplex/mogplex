@@ -132,10 +132,11 @@ export async function reclaimStaleCreatingWorktree(input: {
   userId: string;
   expectedUpdatedAt: string;
 }): Promise<OrchestrationWorktreeDTO | null> {
-  const cutoff = staleWorktreeReservationCutoff();
+  const now = Date.now();
+  const cutoff = staleWorktreeReservationCutoff(now);
   const { data, error } = await supabaseAdmin
     .from(WORKTREES)
-    .update({ error: null })
+    .update({ error: null, updated_at: new Date(now).toISOString() })
     .eq("id", input.worktreeId)
     .eq("user_id", input.userId)
     .eq("status", "creating")

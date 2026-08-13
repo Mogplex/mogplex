@@ -51,7 +51,13 @@ function WorktreeRow({
       setError(
         actionError instanceof Error ? actionError.message : "Action failed"
       );
-      if (action === "prune" && !force) setForcePruneOpen(true);
+      const forceEligible =
+        actionError instanceof Error &&
+        "forceEligible" in actionError &&
+        actionError.forceEligible === true;
+      if (action === "prune" && !force && forceEligible) {
+        setForcePruneOpen(true);
+      }
     } finally {
       setBusy(null);
     }
