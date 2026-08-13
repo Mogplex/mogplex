@@ -168,4 +168,12 @@ test("control sessions: history list, restore, persist, and new session", async 
   await expect(
     sidebar.getByRole("button", { name: /Earlier investigation/ })
   ).toBeVisible();
+
+  // Archiving clears both the selection and its now-dead deep link.
+  await page.getByRole("button", { name: "More options" }).click();
+  await page.getByRole("menuitem", { name: "Archive" }).click();
+  await expect(page).toHaveURL(/\/control$/);
+  await expect(
+    sidebar.getByRole("button", { name: /Fix billing/ })
+  ).toHaveCount(0);
 });

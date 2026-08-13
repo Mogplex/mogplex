@@ -144,7 +144,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
   const projectPicker = page.getByLabel("Project", { exact: true });
   await expect(projectPicker).toBeVisible();
   await expect(projectPicker).toHaveAttribute("data-slot", "select-trigger");
-  await expect(projectPicker).toHaveAttribute("data-value", "repo-1");
+  await expect(projectPicker).toContainText("acme/widgets");
   await projectPicker.click();
   await expect(
     page.getByRole("option", { name: "acme/widgets" })
@@ -361,18 +361,16 @@ test("control composer creates a new project when no repos are connected", async
   await page.goto(scopedPath("control"));
   await page.waitForLoadState("networkidle");
 
-  // With no repos the composer must be creating a new project, not leaving
-  // the session unfiled.
+  // With no repos the composer must create a project instead of leaving it unfiled.
   const projectPicker = page.getByLabel("Project", { exact: true });
   await expect(projectPicker).toHaveAttribute("data-slot", "select-trigger");
-  await expect(projectPicker).toHaveAttribute("data-value", "new");
+  await expect(projectPicker).toContainText("New project…");
   const nameInput = page.getByLabel("New project name");
   await expect(nameInput).toBeVisible();
 
   await page
     .getByPlaceholder("Ask anything or run a command...")
     .fill("Rebuild the analytics dashboard");
-  // Untouched, the new project would take a slug derived from the mission.
   await expect(nameInput).toHaveAttribute(
     "placeholder",
     "rebuild-the-analytics-dashboard"
@@ -383,6 +381,10 @@ test("control composer creates a new project when no repos are connected", async
   await expect.poll(() => sessionCreates.length, { timeout: 10_000 }).toBe(1);
   await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(1);
   expect(sessionCreates[0]?.project).toBe("analytics-redesign");
+  await page.getByRole("button", { name: /Worktrees/ }).click();
+  await expect(
+    page.getByText("No repository linked", { exact: false })
+  ).toBeVisible();
   expect(sessionCreates[0]?.repo_id).toBeNull();
   expect(chatRequests[0]).toMatchObject({
     conversationId: "sess-e2e-new",

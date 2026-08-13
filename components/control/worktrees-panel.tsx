@@ -295,6 +295,7 @@ function WorktreeCard({
  */
 export function WorktreesPanel({
   sandboxes,
+  hasRepository,
   focusSandboxId,
   onClearFocus,
   canMerge,
@@ -302,6 +303,7 @@ export function WorktreesPanel({
   onSpawn,
 }: {
   sandboxes: SandboxRecord[];
+  hasRepository: boolean;
   focusSandboxId: string | null;
   onClearFocus: () => void;
   canMerge: boolean;
@@ -358,6 +360,12 @@ export function WorktreesPanel({
           Spawn worktree
         </button>
       </div>
+      {!hasRepository ? (
+        <div className="mb-4 rounded-lg border border-ink-700 bg-ink-900/60 px-4 py-3 text-[12.5px] text-ink-300">
+          No repository linked to this session. Select a repository-backed
+          project to start a sandbox.
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {sandboxes.map((sandbox) => (
           <WorktreeCard

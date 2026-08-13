@@ -40,6 +40,7 @@ import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
 import { useSessionUsage } from "./use-session-usage";
 import { useControlSessionContext } from "./use-control-session-context";
+import { useControlSessionUrl } from "./use-control-session-url";
 import { canonicalizeControlSessionProjects } from "@/lib/control/session-project";
 
 export type ControlShellProps = {
@@ -136,6 +137,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
 
   const {
     sessions,
+    sessionsLoaded,
     selectSession,
     createSession,
     updateSession,
@@ -301,17 +303,13 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     });
   }, [activeRepo, launchRepoSandbox]);
 
-  useEffect(() => {
-    if (!sessionId || searchParams.get("mission") === sessionId) return;
-    const next = new URLSearchParams(searchParams.toString());
-    next.set("mission", sessionId);
-    // Avoid an App Router remount racing the freshly created local session.
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${scopedHref(scope, "/control")}?${next.toString()}`
-    );
-  }, [scope, searchParams, sessionId]);
+  useControlSessionUrl({
+    scope,
+    searchParams,
+    sessionId,
+    sessions,
+    sessionsLoaded,
+  });
 
   const handleMergeSandbox = useCallback(
     (sandbox: SandboxRecord) => {
@@ -419,6 +417,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           {view === "worktrees" ? (
             <WorktreesPanel
               sandboxes={sandboxes}
+              hasRepository={Boolean(activeRepo)}
               focusSandboxId={focusSandboxId}
               onClearFocus={() => setFocusSandboxId(null)}
               canMerge={hasSession && !chatPending}

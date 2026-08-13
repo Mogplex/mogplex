@@ -150,7 +150,6 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
             <SelectTrigger
               id="control-project"
               aria-label="Project"
-              data-value={selectedRepoId}
               className="border-border bg-secondary text-secondary-foreground h-8 w-64 max-w-full px-2 text-xs font-medium shadow-none"
             >
               <SelectValue />

@@ -32,6 +32,7 @@ export function useControlSessions({
   deepLinkTarget?: string | null;
 }) {
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const updatedAtRef = useRef<string | null>(null);
   const pendingRestoreRef = useRef<UIMessage[] | null>(null);
   const mutationRevisionRef = useRef(0);
@@ -43,6 +44,7 @@ export function useControlSessions({
     const res = await fetch("/api/control/sessions");
     if (!res.ok) return;
     const fetched = (await res.json()) as ControlSessionSummary[];
+    setSessionsLoaded(true);
     // An initial list request can finish after a new session was created.
     // Merge it without overwriting local mutations or reviving archives.
     if (revision !== mutationRevisionRef.current) {
@@ -234,6 +236,7 @@ export function useControlSessions({
 
   return {
     sessions,
+    sessionsLoaded,
     selectSession,
     createSession,
     updateSession,
