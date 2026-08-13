@@ -3,7 +3,7 @@
 import { ChatBubble, ViewColumns3 } from "iconoir-react";
 import type { SandboxRecord } from "@/lib/types";
 
-export type ControlView = "chat" | "worktrees";
+export type ControlView = "chat" | "sandboxes";
 
 const DOT_CLASS: Record<string, string> = {
   running: "bg-sky-400 animate-pulse",
@@ -21,8 +21,8 @@ const TAB_ON = "bg-ink-800 font-medium text-white";
 const TAB_OFF = "text-ink-400 hover:bg-ink-850 hover:text-ink-200";
 
 /**
- * Workspace switcher under the top bar: Chat vs Worktrees panel, plus one
- * mono branch tab per sandbox. Sandbox tabs jump to the Worktrees panel and
+ * Workspace switcher under the top bar: Chat vs Sandboxes panel, plus one
+ * mono branch tab per sandbox. Branch tabs jump to the Sandboxes panel and
  * ring the matching card (mirrors the reference behavior).
  */
 export function WorkspaceTabs({
@@ -49,12 +49,12 @@ export function WorkspaceTabs({
       </button>
       <button
         type="button"
-        aria-pressed={view === "worktrees"}
-        onClick={() => onViewChange("worktrees")}
-        className={`${TAB_BASE} ${view === "worktrees" ? TAB_ON : TAB_OFF}`}
+        aria-pressed={view === "sandboxes"}
+        onClick={() => onViewChange("sandboxes")}
+        className={`${TAB_BASE} ${view === "sandboxes" ? TAB_ON : TAB_OFF}`}
       >
         <ViewColumns3 className="size-3.5 shrink-0" strokeWidth={1.8} />
-        Worktrees
+        Sandboxes
         {sandboxes.length > 0 ? (
           <span className="rounded bg-ink-700 px-1.5 text-[10.5px] leading-4 text-ink-200">
             {sandboxes.length}

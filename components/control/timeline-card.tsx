@@ -30,7 +30,6 @@ type Props = {
   event: TimelineEvent
   eventIndex: number
   getWorktree: (id: string) => Worktree | undefined
-  onSelectWorktree: (id: string, tab?: string) => void
   onApprove: (eventIndex: number) => void
   onToolApprovalResponse?: (response: ToolApprovalResponse) => void
 }
@@ -185,7 +184,7 @@ function ToolApprovalCard({
   )
 }
 
-export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree, onApprove, onToolApprovalResponse }: Props) {
+export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onToolApprovalResponse }: Props) {
   const style = KIND_STYLES[event.kind] || KIND_STYLES.tool
   const Icon = style.icon
   const isSubdued = event.kind === "tool" || event.kind === "delegate"
@@ -246,14 +245,13 @@ export function TimelineCard({ event, eventIndex, getWorktree, onSelectWorktree,
             {(event as DelegateEvent).chips.map((chipId) => {
               const wt = getWorktree(chipId)
               return (
-                <button
+                <span
                   key={chipId}
-                  onClick={() => onSelectWorktree(chipId)}
-                  className="flex items-center gap-1.5 rounded border border-ink-700 bg-ink-850 px-2 py-1 text-[10px] font-medium hover:bg-secondary"
+                  className="flex items-center gap-1.5 rounded border border-ink-700 bg-ink-850 px-2 py-1 text-[10px] font-medium"
                 >
                   <span className={`size-1.5 rounded-full ${WORKTREE_STATE_DOT[wt?.state || "archived"]}`} />
                   {chipId} {wt && `· ${wt.agent}`}
-                </button>
+                </span>
               )
             })}
           </div>

@@ -9,7 +9,6 @@ type Props = {
   events: TimelineEvent[]
   worktrees: Worktree[]
   getWorktree: (id: string) => Worktree | undefined
-  onSelectWorktree: (id: string, tab?: string) => void
   onApprove: (eventIndex: number) => void
   onToolApprovalResponse?: (response: ToolApprovalResponse) => void
   pending: boolean
@@ -22,7 +21,6 @@ export function Timeline({
   events,
   worktrees: _worktrees,
   getWorktree,
-  onSelectWorktree,
   onApprove,
   onToolApprovalResponse,
   pending,
@@ -51,7 +49,6 @@ export function Timeline({
             event={event}
             eventIndex={idx}
             getWorktree={getWorktree}
-            onSelectWorktree={onSelectWorktree}
             onApprove={onApprove}
             onToolApprovalResponse={onToolApprovalResponse}
           />

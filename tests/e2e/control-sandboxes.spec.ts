@@ -72,7 +72,7 @@ function sandboxRecord(
   };
 }
 
-test("control worktrees panel shows live sandbox cards and preview", async ({
+test("control sandboxes panel shows live sandbox cards and preview", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
@@ -177,16 +177,16 @@ test("control worktrees panel shows live sandbox cards and preview", async ({
     page.getByText("acme/widgets", { exact: true }).last()
   ).toBeVisible();
 
-  // One tab per active sandbox appears next to Chat / Worktrees.
+  // One branch tab per active sandbox appears next to Chat / Sandboxes.
   await expect(page.getByRole("button", { name: "feat/demo" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "feat/unrelated" })
   ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Worktrees 1" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sandboxes 1" })).toBeVisible();
 
-  // The Worktrees tab shows a card per sandbox with real status and actions.
-  await page.getByRole("button", { name: /Worktrees/ }).click();
-  await expect(page.getByRole("heading", { name: "Worktrees" })).toBeVisible();
+  // The Sandboxes tab shows remote compute with real status and actions.
+  await page.getByRole("button", { name: "Sandboxes 1" }).click();
+  await expect(page.getByRole("heading", { name: "Sandboxes" })).toBeVisible();
   await expect(page.getByText("sbx_live123")).toHaveCount(0);
   await expect(page.getByText("feat/demo").first()).toBeVisible();
   await expect(page.getByText("Running").first()).toBeVisible();
@@ -218,6 +218,6 @@ test("control worktrees panel shows live sandbox cards and preview", async ({
 
   // The dashed spawn card stays available.
   await expect(
-    page.getByRole("button", { name: /Spawn worktree/ }).first()
+    page.getByRole("button", { name: /Start sandbox/ }).first()
   ).toBeVisible();
 });

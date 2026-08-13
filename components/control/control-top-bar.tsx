@@ -56,7 +56,7 @@ export type ControlTopBarProps = {
   /** Streams an instruction to the agent (same path as the composer). */
   onSendInstruction: (text: string) => void;
   onOpenTerminal: () => void;
-  onSpawnWorktree: () => void;
+  onStartSandbox: () => void;
   onScheduleAutomation: () => void;
   onRename: (title: string) => void;
   onArchive: () => void;
@@ -113,7 +113,7 @@ export function ControlTopBar({
   repoFullName,
   onSendInstruction,
   onOpenTerminal,
-  onSpawnWorktree,
+  onStartSandbox,
   onScheduleAutomation,
   onRename,
   onArchive,
@@ -248,8 +248,8 @@ export function ControlTopBar({
               Deploy preview
             </Item>
             <DropdownMenuSeparator className={SEPARATOR_CLASS} />
-            <Item icon={Package} onSelect={onSpawnWorktree}>
-              Spawn worktree
+            <Item icon={Package} onSelect={onStartSandbox}>
+              Start sandbox
             </Item>
             <Item icon={Clock} onSelect={onScheduleAutomation}>
               Schedule automation

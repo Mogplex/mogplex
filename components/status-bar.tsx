@@ -148,7 +148,7 @@ export function StatusBar() {
           className="flex shrink-0 items-center gap-[5px] hover:text-foreground"
         >
           <Terminal className="size-3" strokeWidth={1.8} />
-          <span>Sandbox checkout</span>
+          <span>Sandboxes</span>
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-4 pl-4">
           <span className="shrink-0 text-secondary-foreground">{datetime}</span>

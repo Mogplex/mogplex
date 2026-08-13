@@ -38,7 +38,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildWorktreesBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -178,15 +178,17 @@ ${
 `;
 }
 
-function buildWorktreesBlock(ctx: OrchestratorPromptContext): string {
+function buildExecutionEnvironmentsBlock(
+  ctx: OrchestratorPromptContext
+): string {
   const worktrees = ctx.activeWorktrees || [];
   const sandboxes = ctx.activeSandboxes || [];
 
   if (worktrees.length === 0 && sandboxes.length === 0) {
     return `
-<worktrees>
-No active worktrees. Use spawn_worktree to create isolated work environments for tasks.
-</worktrees>
+<execution-environments>
+No active sandbox is selected. A sandbox is the remote compute environment; a Git worktree is a separate checkout within an environment. One does not imply the other.
+</execution-environments>
 `;
   }
 
@@ -200,13 +202,15 @@ No active worktrees. Use spawn_worktree to create isolated work environments for
   );
 
   return `
-<worktrees>
+<execution-environments>
+Sandboxes and Git worktrees are separate resources. Never infer a worktree from a sandbox record.
+
 Active worktrees:
 ${worktreeLines.length > 0 ? worktreeLines.join("\n") : "(none)"}
 
 Active sandboxes:
 ${sandboxLines.length > 0 ? sandboxLines.join("\n") : "(none)"}
-</worktrees>
+</execution-environments>
 `;
 }
 

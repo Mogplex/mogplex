@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeControlChatMessages } from "../../app/api/control/chat/_lib/messages";
+import { resolveControlPromptSandboxes } from "../../app/api/control/chat/_lib/context";
 import { buildOrchestratorSystemPrompt } from "../../lib/agents/orchestrator/system-prompt";
 
 test("control chat normalization preserves AI SDK file parts", () => {
@@ -185,4 +186,139 @@ test("plan mode adds explicit non-mutation intent to the orchestrator prompt", (
   assert.match(prompt, /Permissions: Ask First/);
   assert.match(prompt, /planning only/);
   assert.match(prompt, /do not spawn workers or mutate repository files/);
+  assert.doesNotMatch(prompt, /Use spawn_worktree/);
+});
+
+test("orchestrator prompt keeps sandboxes and worktrees distinct", () => {
+  const prompt = buildOrchestratorSystemPrompt({
+    repoFullName: "acme/demo",
+    activeSandboxes: [
+      { id: "sandbox-record-1", branch: "feat/context", status: "running" },
+    ],
+  });
+
+  assert.match(prompt, /Sandboxes and Git worktrees are separate resources/);
+  assert.match(prompt, /Active worktrees:\n\(none\)/);
+  assert.match(
+    prompt,
+    /sandbox-record-1: branch=feat\/context, status=running/
+  );
+});
+
+test("control prompt sandbox context comes from an owned server record", async () => {
+  const sandboxes = await resolveControlPromptSandboxes(
+    new Request("https://app.mogplex.com/api/control/chat"),
+    {
+      messages: [],
+      repoId: "repo-1",
+      repoBranch: "client-invented-branch",
+      sandboxId: "sandbox-record-1",
+    },
+    {
+      loadSandboxRecord: async () => ({
+        ok: true,
+        auth: {} as never,
+        record: {
+          id: "sandbox-record-1",
+          sandbox_id: "sbx-runtime-1",
+          repo_id: "repo-1",
+          working_branch: "feat/server-owned",
+          status: "running",
+        },
+        repo: null,
+        rootDirectory: null,
+      }),
+    }
+  );
+
+  assert.deepEqual(sandboxes, [
+    {
+      id: "sandbox-record-1",
+      branch: "feat/server-owned",
+      status: "running",
+    },
+  ]);
+});
+
+test("control prompt rejects a sandbox from a different repository", async () => {
+  const warnings: Array<Record<string, unknown>> = [];
+  const sandboxes = await resolveControlPromptSandboxes(
+    new Request("https://app.mogplex.com/api/control/chat"),
+    { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-2" },
+    {
+      loadSandboxRecord: async () => ({
+        ok: true,
+        auth: {} as never,
+        record: {
+          id: "sandbox-record-2",
+          sandbox_id: "sbx-runtime-2",
+          repo_id: "repo-2",
+          working_branch: "feat/unrelated",
+          status: "running",
+        },
+        repo: null,
+        rootDirectory: null,
+      }),
+      warn: (_message, context) => warnings.push(context),
+    }
+  );
+
+  assert.deepEqual(sandboxes, []);
+  assert.deepEqual(warnings, [
+    {
+      sandboxId: "sandbox-record-2",
+      repoId: "repo-1",
+      sandboxRepoId: "repo-2",
+    },
+  ]);
+});
+
+test("control prompt degrades when the sandbox loader returns a failure", async () => {
+  const warnings: Array<Record<string, unknown>> = [];
+  const sandboxes = await resolveControlPromptSandboxes(
+    new Request("https://app.mogplex.com/api/control/chat"),
+    { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-1" },
+    {
+      loadSandboxRecord: async () => ({
+        ok: false,
+        status: 503,
+        error: "Sandbox credentials unavailable",
+      }),
+      warn: (_message, context) => warnings.push(context),
+    }
+  );
+
+  assert.deepEqual(sandboxes, []);
+  assert.deepEqual(warnings, [
+    {
+      sandboxId: "sandbox-record-1",
+      repoId: "repo-1",
+      status: 503,
+      error: "Sandbox credentials unavailable",
+    },
+  ]);
+});
+
+test("control prompt degrades when the sandbox loader throws", async () => {
+  const failure = new Error("credential lookup timed out");
+  const warnings: Array<Record<string, unknown>> = [];
+  const sandboxes = await resolveControlPromptSandboxes(
+    new Request("https://app.mogplex.com/api/control/chat"),
+    { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-1" },
+    {
+      loadSandboxRecord: async () => {
+        throw failure;
+      },
+      warn: (_message, context) => warnings.push(context),
+    }
+  );
+
+  assert.deepEqual(sandboxes, []);
+  assert.deepEqual(warnings, [
+    {
+      sandboxId: "sandbox-record-1",
+      repoId: "repo-1",
+      error: failure,
+    },
+  ]);
 });

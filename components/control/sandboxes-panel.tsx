@@ -174,7 +174,7 @@ function PreviewModal({
   );
 }
 
-function WorktreeCard({
+function SandboxCard({
   sandbox,
   focused,
   registerRef,
@@ -289,18 +289,19 @@ function WorktreeCard({
 }
 
 /**
- * Worktrees panel: one card per sandbox from the live sandbox store, with
+ * Sandboxes panel: one card per remote compute environment from the live
+ * sandbox store, with
  * real launch/dev logs, status badges, elapsed timers, preview modal, stop,
- * and agent-driven merge. The dashed card spawns a new sandbox worktree.
+ * and agent-driven merge. Git worktrees are a separate orchestration resource.
  */
-export function WorktreesPanel({
+export function SandboxesPanel({
   sandboxes,
   hasRepository,
   focusSandboxId,
   onClearFocus,
   canMerge,
   onMerge,
-  onSpawn,
+  onStartSandbox,
 }: {
   sandboxes: SandboxRecord[];
   hasRepository: boolean;
@@ -308,7 +309,7 @@ export function WorktreesPanel({
   onClearFocus: () => void;
   canMerge: boolean;
   onMerge: (sandbox: SandboxRecord) => void;
-  onSpawn: () => void;
+  onStartSandbox: () => void;
 }) {
   const launchLogs = useSandboxStore((state) => state.logs);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
@@ -344,7 +345,7 @@ export function WorktreesPanel({
     <div className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-center gap-2 pb-4">
         <h2 className="text-[12px] font-semibold tracking-wider text-ink-300 uppercase">
-          Worktrees
+          Sandboxes
         </h2>
         <span className="text-[12.5px] text-ink-400">
           {sandboxes.length === 0
@@ -353,23 +354,22 @@ export function WorktreesPanel({
         </span>
         <button
           type="button"
-          onClick={onSpawn}
+          onClick={onStartSandbox}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-850 px-3 py-1.5 text-[12.5px] font-medium text-ink-200 transition-colors hover:bg-ink-800"
         >
           <Plus className="size-3.5" strokeWidth={2} />
-          Spawn worktree
+          Start sandbox
         </button>
       </div>
       {!hasRepository ? (
         <div className="mb-4 rounded-lg border border-ink-700 bg-ink-900/60 px-4 py-3 text-[12.5px] text-ink-300">
-          No repository is linked to this session. Account sandboxes are not
-          shown as worktrees. Start a new mission and select a connected
-          repository to create one.
+          No repository is linked to this session. Start a new mission and
+          select a connected repository to create a sandbox.
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {sandboxes.map((sandbox) => (
-          <WorktreeCard
+          <SandboxCard
             key={sandbox.id}
             sandbox={sandbox}
             focused={ringId === sandbox.id}
@@ -382,15 +382,15 @@ export function WorktreesPanel({
         ))}
         <button
           type="button"
-          onClick={onSpawn}
+          onClick={onStartSandbox}
           className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 bg-ink-900/40 text-ink-400 transition-colors hover:border-ink-600 hover:bg-ink-900 hover:text-ink-200"
         >
           <span className="flex size-9 items-center justify-center rounded-lg border border-ink-700 bg-ink-850">
             <Plus className="size-4" strokeWidth={2} />
           </span>
-          <span className="text-[13px] font-medium">Spawn worktree</span>
+          <span className="text-[13px] font-medium">Start sandbox</span>
           <span className="text-[12px]">
-            Launches a new sandbox on its own branch
+            Creates remote compute for the selected repository
           </span>
         </button>
       </div>

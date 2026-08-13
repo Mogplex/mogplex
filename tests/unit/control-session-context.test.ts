@@ -5,7 +5,7 @@ import {
   selectControlSessionSandboxes,
 } from "../../components/control/use-control-session-context";
 
-test("selectControlSessionSandboxes does not treat account sandboxes as worktrees", () => {
+test("selectControlSessionSandboxes requires the session repository", () => {
   const sandboxes = [
     { id: "sandbox-1", repo_id: "repo-1" },
     { id: "sandbox-2", repo_id: "repo-2" },
