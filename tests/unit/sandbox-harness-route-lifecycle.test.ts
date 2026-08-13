@@ -135,11 +135,40 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
     await loadSandboxHarnessRouteModule();
   const aiCall = buildAiCall();
   const pullRequestUrl = "https://github.com/acme/repo/pull/42";
+  const worktreeId = "11111111-2222-4333-8444-555555555555";
+  const checkoutPath = `/vercel/sandbox/.worktrees/${worktreeId}`;
   let completionMetadata: Record<string, unknown> | undefined;
   let publishedPrompt: string | undefined;
+  let synchronizedCwd: string | undefined;
+  let harnessCwd: string | undefined;
 
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
+    loadOwnedWorktreeBinding: async (input) => {
+      assert.deepEqual(input, {
+        worktreeId,
+        userId: "user-123",
+        sandboxId: "sandbox-1",
+        repoId: "repo-123",
+      });
+      return {
+        id: worktreeId,
+        sandbox_id: "sandbox-1",
+        repo_id: "repo-123",
+        branch_name: "mogplex/task/mission/checkout",
+        base_branch: "main",
+        checkout_path: checkoutPath,
+        status: "active",
+      };
+    },
+    syncHarnessGitWorkspace: async (_sandbox, input) => {
+      synchronizedCwd = input.cwd;
+      return {
+        baseBranch: input.baseBranch,
+        workingBranch: input.workingBranch,
+        createdBranch: false,
+      };
+    },
     publishHarnessPullRequest: async (_sandbox, input) => {
       publishedPrompt = input.prompt;
       return {
@@ -161,8 +190,9 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
         gatewayApiKey: "gateway-key",
       }),
     getSandbox: async () => ({}) as never,
-    runHarness: async () =>
-      ({
+    runHarness: async (_sandbox, _harness, _prompt, _env, options) => {
+      harnessCwd = options?.cwd;
+      return {
         installed: false,
         installLogs: "",
         command: {
@@ -173,7 +203,8 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
           wait: async () => ({ exitCode: 0 }),
           kill: async () => {},
         },
-      }) as never,
+      } as never;
+    },
     renewSandboxActivityLease: async () => 0,
     stopSandboxRecord: async () => null,
     touchSandboxLastActive: async () => {},
@@ -208,6 +239,7 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
         body: JSON.stringify({
           harness: "codex",
           prompt: "Fix checkout",
+          worktreeId,
         }),
       },
     }),
@@ -227,11 +259,16 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
     }
   );
   assert.equal(completionMetadata?.pull_request_url, pullRequestUrl);
-  assert.equal(completionMetadata?.working_branch, "mogplex/test-branch");
+  assert.equal(
+    completionMetadata?.working_branch,
+    "mogplex/task/mission/checkout"
+  );
   assert.deepEqual(completionMetadata?.auto_committed_files, [
     "components/checkout.tsx",
   ]);
   assert.equal(publishedPrompt, "Fix checkout");
+  assert.equal(synchronizedCwd, checkoutPath);
+  assert.equal(harnessCwd, checkoutPath);
   assert.match(
     String(
       events.find(

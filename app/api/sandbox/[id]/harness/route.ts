@@ -90,6 +90,7 @@ export function createSandboxHarnessPostHandler(
       aiCallId?: string | null;
       prepareOnly?: boolean;
       slackImageAttachments?: unknown;
+      worktreeId?: string | null;
     };
     try {
       body = await request.json();
@@ -142,6 +143,22 @@ export function createSandboxHarnessPostHandler(
 
     const { context, record } = sandboxData;
     const repoRecord = sandboxData.repo as HarnessRepoRecord | null;
+    const worktree = body.worktreeId
+      ? await deps.loadOwnedWorktreeBinding({
+          worktreeId: body.worktreeId,
+          userId: creds.userId,
+          sandboxId: id,
+          repoId: record.repo_id,
+        })
+      : null;
+    if (body.worktreeId && !worktree) {
+      return NextResponse.json(
+        { error: "Active worktree not found in this sandbox" },
+        { status: 404 }
+      );
+    }
+    const executionRoot =
+      worktree?.checkout_path ?? sandboxData.rootDirectory ?? null;
     const memoryScope = buildHarnessMemoryScope({
       repoId: record.repo_id || null,
       sandboxId: record.sandbox_id,
@@ -216,10 +233,10 @@ export function createSandboxHarnessPostHandler(
       harnessId,
       conversationId: body.conversationId || null,
       repoId: record.repo_id || null,
-      rootDirectory: sandboxData.rootDirectory ?? null,
+      rootDirectory: executionRoot,
       sandboxId: record.sandbox_id,
-      baseBranch: record.base_branch,
-      workingBranch: record.working_branch,
+      baseBranch: worktree?.base_branch ?? record.base_branch,
+      workingBranch: worktree?.branch_name ?? record.working_branch,
       previewUrl: record.preview_url,
       aiCallId: aiCall.id,
     };
@@ -286,7 +303,7 @@ export function createSandboxHarnessPostHandler(
           continue: body.continue,
           resumeSessionId: body.resumeSessionId,
           mode: normalizedMode,
-          cwd: sandboxData.rootDirectory || undefined,
+          cwd: executionRoot || undefined,
           runtimeEnv,
           mcpConfigPath,
           shouldCancel: async () =>
@@ -358,7 +375,7 @@ export function createSandboxHarnessPostHandler(
           harnessId,
           conversationId: body.conversationId || null,
           repoId: record.repo_id || null,
-          rootDirectory: sandboxData.rootDirectory ?? null,
+          rootDirectory: executionRoot,
           sandboxId: record.sandbox_id,
           aiCallId: aiCall.id,
           aiCallStartedAt: aiCall.started_at,

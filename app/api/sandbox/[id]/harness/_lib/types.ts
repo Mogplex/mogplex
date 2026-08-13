@@ -66,12 +66,28 @@ export type HarnessSandboxRecord = {
   repo: HarnessRepoRecord | HarnessRepoRecord[] | null;
 };
 
+export type HarnessWorktreeBinding = {
+  id: string;
+  sandbox_id: string;
+  repo_id: string;
+  branch_name: string;
+  base_branch: string;
+  checkout_path: string;
+  status: string;
+};
+
 export type SandboxHarnessPostDeps = {
   getSandboxServiceCredentials: typeof getSandboxServiceCredentials;
   loadOwnedSandboxRecord: (
     sandboxId: string,
     userId: string
   ) => Promise<HarnessSandboxRecord | null>;
+  loadOwnedWorktreeBinding: (input: {
+    worktreeId: string;
+    userId: string;
+    sandboxId: string;
+    repoId: string | null;
+  }) => Promise<HarnessWorktreeBinding | null>;
   resolveSandboxAiAccess: typeof resolveSandboxAiAccess;
   getSandbox: typeof getSandbox;
   runHarness: typeof runHarness;

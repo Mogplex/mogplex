@@ -10,6 +10,7 @@ import {
   buildStartDeps,
   buildUser,
   type AiCall,
+  type StartMogplexApiRunDeps,
 } from "./helpers/mogplex-api-runs-fixtures";
 
 test("startMogplexApiRun creates a pending external run with ai_call metadata", async () => {
@@ -79,6 +80,112 @@ test("startMogplexApiRun creates a pending external run with ai_call metadata", 
   assert.equal(result.run.rootDirectory, "apps/web");
   assert.equal(inserted.length, 1);
   assert.equal(acceptedEvents.length, 1);
+});
+
+test("startMogplexApiRun binds an active worktree to its exact sandbox, branch, and checkout", async () => {
+  const worktreeId = "11111111-2222-4333-8444-555555555555";
+  const sandboxRecordId = "22222222-2222-4222-8222-222222222222";
+  const checkoutPath = `/vercel/sandbox/.worktrees/${worktreeId}`;
+  const inserted: Array<Parameters<StartMogplexApiRunDeps["insertRun"]>[0]> =
+    [];
+
+  await startMogplexApiRun({
+    user: buildUser(),
+    idempotencyKey: "worktree-run-1",
+    body: {
+      repoId: "repo-1",
+      prompt: "Fix it in the assigned checkout",
+      harness: "codex",
+      worktreeId,
+    },
+    deps: buildStartDeps({
+      loadOwnedWorktree: async (input) => {
+        assert.deepEqual(input, { userId: "user-123", worktreeId });
+        return {
+          worktree: {
+            id: worktreeId,
+            user_id: "user-123",
+            run_id: "33333333-3333-4333-8333-333333333333",
+            task_id: "44444444-4444-4444-8444-444444444444",
+            repo_id: "repo-1",
+            sandbox_id: sandboxRecordId,
+            agent_id: null,
+            branch_name: "mogplex/task/mission/fix",
+            base_branch: "main",
+            checkout_path: checkoutPath,
+            status: "active",
+            latest_commit_sha: null,
+            error: null,
+            metadata: {},
+            created_at: "2026-08-13T00:00:00.000Z",
+            updated_at: "2026-08-13T00:00:00.000Z",
+            archived_at: null,
+            pruned_at: null,
+          },
+          sandbox: { id: sandboxRecordId, sandbox_id: "sbx_worktree" },
+        };
+      },
+      findActiveSandbox: async () => {
+        throw new Error("must reuse the worktree sandbox");
+      },
+      insertRun: async (input) => {
+        inserted.push(input);
+        return buildRunRow({
+          request_hash: input.requestHash,
+          sandbox_record_id: input.sandbox?.id ?? null,
+          sandbox_id: input.sandbox?.sandbox_id ?? null,
+          worktree_id: input.normalized.worktreeId,
+          base_branch: input.normalized.baseBranch,
+          working_branch: input.normalized.workingBranch,
+          create_branch: input.normalized.createBranch,
+          root_directory: input.normalized.rootDirectory,
+        });
+      },
+    }),
+  });
+
+  assert.equal(inserted.length, 1);
+  assert.deepEqual(inserted[0]!.sandbox, {
+    id: sandboxRecordId,
+    sandbox_id: "sbx_worktree",
+  });
+  assert.partialDeepStrictEqual(inserted[0]!.normalized, {
+    worktreeId,
+    baseBranch: "main",
+    workingBranch: "mogplex/task/mission/fix",
+    createBranch: false,
+    rootDirectory: checkoutPath,
+  });
+});
+
+test("startMogplexApiRun replays a worktree run after the checkout is archived", async () => {
+  const worktreeId = "11111111-2222-4333-8444-555555555555";
+  const existing = buildRunRow({
+    idempotency_key: "worktree-replay",
+    worktree_id: worktreeId,
+    prompt: "Fix it",
+    working_branch: "mogplex/task/mission/fix",
+    root_directory: `/vercel/sandbox/.worktrees/${worktreeId}`,
+  });
+  const result = await startMogplexApiRun({
+    user: buildUser(),
+    idempotencyKey: "worktree-replay",
+    body: {
+      repoId: "repo-1",
+      prompt: "Fix it",
+      harness: "codex",
+      worktreeId,
+    },
+    deps: buildStartDeps({
+      loadRunByIdempotencyKey: async () => existing,
+      loadOwnedWorktree: async () => {
+        throw new Error("a replay must not require a live worktree");
+      },
+    }),
+  });
+
+  assert.equal(result.replayed, true);
+  assert.equal(result.run.worktreeId, worktreeId);
 });
 
 test("startMogplexApiRun merges extraMetadata without clobbering core fields", async () => {

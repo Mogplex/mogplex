@@ -17,6 +17,7 @@ import {
   buildControlChatRunMetadata,
   buildControlGatewayContext,
   resolveControlPromptSandboxes,
+  resolveControlPromptWorktrees,
   resolveGithubTokenForRepo,
 } from "./context";
 import {
@@ -70,9 +71,10 @@ export async function executeControlChatRequest(input: {
     const activeCall = aiCall;
 
     // Build orchestrator context
-    const [githubToken, activeSandboxes] = await Promise.all([
+    const [githubToken, activeSandboxes, worktreeContext] = await Promise.all([
       resolveGithubTokenForRepo(input.userId, input.body.repoId),
       resolveControlPromptSandboxes(input.req, input.body),
+      resolveControlPromptWorktrees(input.userId, input.body),
     ]);
 
     const toolContext: OrchestratorToolContext = {
@@ -86,6 +88,7 @@ export async function executeControlChatRequest(input: {
       githubToken,
       teamId,
       missionId: input.body.missionId,
+      orchestrationRunId: worktreeContext.orchestrationRunId,
       conversationId: scope.conversationId,
       aiCallId: activeCall.id,
       controlMode: input.body.mode ?? null,
@@ -105,6 +108,7 @@ export async function executeControlChatRequest(input: {
       controlPermissions: input.body.permissions ?? undefined,
       controlMode: input.body.mode ?? undefined,
       activeSandboxes,
+      activeWorktrees: worktreeContext.worktrees,
     };
 
     // Build tools with policy wrapping

@@ -40,8 +40,8 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
     name: "rebase_worktree",
     category: "git",
     description: "Rebase a worktree branch onto the latest base",
-    access: "mutation",
-    implemented: false,
+    access: "approval",
+    implemented: true,
   },
   {
     name: "cherry_pick",
@@ -63,6 +63,13 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
     description: "Show diff between current branch and base branch",
     access: "read",
     implemented: false,
+  },
+  {
+    name: "diff_worktree",
+    category: "git",
+    description: "Show the persisted worktree diff from its base branch",
+    access: "read",
+    implemented: true,
   },
   {
     name: "merge_changeset",
@@ -125,7 +132,10 @@ export const createBranchSchema = z.object({
 
 export const rebaseWorktreeSchema = z.object({
   worktreeId: z.string().describe("Worktree to rebase"),
-  onto: z.string().optional().describe("Branch to rebase onto"),
+});
+
+export const diffWorktreeSchema = z.object({
+  worktreeId: z.string().uuid().describe("Worktree to diff"),
 });
 
 export const cherryPickSchema = z.object({
@@ -181,6 +191,7 @@ export const GIT_SCHEMAS: Record<string, z.ZodType> = {
   cherry_pick: cherryPickSchema,
   diff_worktrees: diffWorktreesSchema,
   diff_base: diffBaseSchema,
+  diff_worktree: diffWorktreeSchema,
   merge_changeset: mergeChangesetSchema,
   resolve_conflict: resolveConflictSchema,
   comment_inline: commentInlineSchema,

@@ -11,7 +11,6 @@ import type { UIMessage } from "ai";
 import {
   MISSION_PERMISSION_OPTIONS,
   type Mission,
-  type Worktree,
   type ControlSeedData,
 } from "@/lib/control/types";
 import type { SandboxRecord } from "@/lib/types";
@@ -25,7 +24,10 @@ import { scopedHref } from "@/lib/scoped-href";
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
 import { useRepos } from "@/hooks/use-repos";
 import { toast } from "@/hooks/use-toast";
-import { SandboxLaunchProvider, useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
+import {
+  SandboxLaunchProvider,
+  useSandboxLaunchActions,
+} from "@/components/sandbox-launch-provider";
 import { useToolApprovalHandler } from "./use-tool-approval-handler";
 import { buildCombinedTimeline } from "./build-combined-timeline";
 import { ControlTopBar } from "./control-top-bar";
@@ -42,6 +44,8 @@ import { useSessionUsage } from "./use-session-usage";
 import { useControlSessionContext } from "./use-control-session-context";
 import { useControlSessionUrl } from "./use-control-session-url";
 import { canonicalizeControlSessionProjects } from "@/lib/control/session-project";
+import { useControlWorktrees } from "./use-control-worktrees";
+import { WorktreesPanel } from "./worktrees-panel";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
@@ -59,13 +63,15 @@ function downloadTextFile(filename: string, contents: string) {
   URL.revokeObjectURL(url);
 }
 
-function ControlShellInner({ initialData, initialMissionId }: ControlShellProps) {
+function ControlShellInner({
+  initialData,
+  initialMissionId,
+}: ControlShellProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { scope } = useParams<{ scope: string }>();
 
   const [missions, setMissions] = useState<Mission[]>(initialData.missions);
-  const [worktrees] = useState<Worktree[]>(initialData.worktrees);
   const workspaces = initialData.workspaces;
 
   const [selectedMissionId, setSelectedMissionId] = useState<string>(
@@ -88,10 +94,8 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     [workspaces]
   );
 
-  const getWorktree = useCallback(
-    (id: string) => worktrees.find((w) => w.id === id),
-    [worktrees]
-  );
+  const getWorktree = (id: string) =>
+    initialData.worktrees.find((worktree) => worktree.id === id);
 
   const transport = useMemo(
     () =>
@@ -111,8 +115,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   } = useChat({
     transport,
     id: `control-${sessionId ?? selectedMissionId}`,
-    sendAutomaticallyWhen:
-      lastAssistantMessageIsCompleteWithApprovalResponses,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onFinish: ({ messages: finishedMessages }) => {
       persistRef.current(finishedMessages);
     },
@@ -122,6 +125,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   });
 
   const chatPending = status === "streaming" || status === "submitted";
+  const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
 
   useSandboxSync();
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
@@ -182,7 +186,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   }, [persist]);
 
   const [composerInput, setComposerInput] = useState("");
-
   const pendingInitialMessageRef = usePendingInitialMessage({
     selectedMissionId,
     status,
@@ -197,11 +200,9 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     clearComposer: () => setComposerInput(""),
     requestContext,
   });
-
   const handleToolApprovalResponse = useToolApprovalHandler(
     addToolApprovalResponse
   );
-
   const handleCreateMission = useCallback(
     async (
       text: string,
@@ -212,11 +213,16 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       const id = generateMissionId();
       const missionTitle =
         text.slice(0, 80) || options.files[0]?.filename || "New mission";
-      // Persist the chat session before re-keying useChat so the first
-      // message streams straight into the durable session's chat. Every
-      // session is tied to the project chosen in the composer (a connected
-      // repo or a newly named project).
-      await createSession(missionTitle, project, repoId);
+      const createdSessionId = await createSession(
+        missionTitle,
+        project,
+        repoId,
+        text
+      );
+      if (!createdSessionId) {
+        setChatError("Could not create the mission session. Please try again.");
+        return;
+      }
       const newMissionObj: Mission = {
         id,
         title: missionTitle.slice(0, 80),
@@ -238,15 +244,11 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       setSelectedMissionId(id);
       setNewMission(false);
       setChatError(null);
-      // Sent via effect once useChat re-keys to the new mission; sending here
-      // would stream the reply into the previous mission's discarded chat.
       pendingInitialMessageRef.current = { missionId: id, text, options };
     },
     [createSession, pendingInitialMessageRef]
   );
 
-  // Live usage from the session's ai_calls (keyed by streamed ai_call_id
-  // metadata); drives the composer's context ring.
   const sessionUsage = useSessionUsage(messages, chatPending);
   const usageTokens = sessionUsage.inputTokens + sessionUsage.outputTokens;
 
@@ -271,8 +273,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   );
   const hasSession = Boolean(sessionId || mission);
 
-  // Header/menus act through the agent: it runs in the mission sandbox, so
-  // git and shell work is an instruction it executes, not a local call.
   const sendInstruction = useCallback(
     (text: string) => {
       setView("chat");
@@ -335,10 +335,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "") || "control-session";
-    downloadTextFile(
-      `${slug}.md`,
-      buildTranscriptMarkdown(title, messages)
-    );
+    downloadTextFile(`${slug}.md`, buildTranscriptMarkdown(title, messages));
   }, [messages, activeSession?.title, mission?.title]);
 
   useEffect(() => {
@@ -347,9 +344,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     return () => window.removeEventListener(CONTROL_VIEW_EVENT, listener);
   }, []);
 
-  // With no missions there is nothing to show but the composer — unless a
-  // persisted session is selected, in which case its restored conversation
-  // renders in the main view.
   if (newMission || (!mission && !sessionId)) {
     return (
       <NewMissionView
@@ -366,7 +360,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   }
 
   return (
-    <div className="app-control-shell flex h-full overflow-hidden bg-ink-950 text-ink-100">
+    <div className="app-control-shell bg-ink-950 text-ink-100 flex h-full overflow-hidden">
       <SessionList
         sessions={displaySessions}
         selectedId={sessionId}
@@ -407,6 +401,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           view={view}
           onViewChange={setView}
           sandboxes={sandboxes}
+          worktrees={controlWorktrees.worktrees}
           onFocusSandbox={(id) => {
             setView("sandboxes");
             setFocusSandboxId(id);
@@ -424,15 +419,21 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
               onMerge={handleMergeSandbox}
               onStartSandbox={handleStartSandbox}
             />
+          ) : view === "worktrees" ? (
+            <WorktreesPanel
+              worktrees={controlWorktrees.worktrees}
+              loading={controlWorktrees.loading}
+              onAction={controlWorktrees.act}
+              onDiff={controlWorktrees.loadDiff}
+            />
           ) : (
             <>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <Timeline
                   events={combinedTimeline}
-                  worktrees={worktrees}
+                  worktrees={initialData.worktrees}
                   getWorktree={getWorktree}
                   onApprove={(idx) => {
-                    // Mark approval as resolved
                     const event = combinedTimeline[idx];
                     if (event?.kind === "approval") {
                       setMissions((prev) =>
@@ -465,7 +466,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                 />
                 {chatError && (
                   <div className="mx-auto w-full max-w-5xl px-4 py-2 sm:px-6">
-                    <div className="rounded border border-accent-amber/30 bg-accent-amber/5 px-3 py-2 text-xs text-accent-amber">
+                    <div className="border-accent-amber/30 bg-accent-amber/5 text-accent-amber rounded border px-3 py-2 text-xs">
                       {chatError}
                     </div>
                   </div>

@@ -30,6 +30,18 @@ import {
   createSummarizeHistoryTool,
 } from "./tools/memory-impl";
 import { createRequestApprovalTool } from "./tools/governance-impl";
+import {
+  createPlanMissionTool,
+  createSpawnSubagentTool,
+} from "./tools/planning-impl";
+import {
+  createArchiveWorktreeTool,
+  createDiffWorktreeTool,
+  createListWorktreesTool,
+  createPruneWorktreeTool,
+  createRebaseWorktreeTool,
+  createSpawnWorktreeTool,
+} from "./tools/worktree-impl";
 import { PLANNING_TOOLS, PLANNING_SCHEMAS } from "./tools/planning";
 import { FILESYSTEM_TOOLS, FILESYSTEM_SCHEMAS } from "./tools/filesystem";
 import { GIT_TOOLS, GIT_SCHEMAS } from "./tools/git";
@@ -183,6 +195,30 @@ function buildToolForDef(
     }
     if (def.name === "request_approval") {
       return createRequestApprovalTool(ctx);
+    }
+    if (def.name === "plan_mission") {
+      return createPlanMissionTool(ctx);
+    }
+    if (def.name === "spawn_worktree") {
+      return createSpawnWorktreeTool(ctx);
+    }
+    if (def.name === "list_worktrees") {
+      return createListWorktreesTool(ctx);
+    }
+    if (def.name === "archive_worktree") {
+      return createArchiveWorktreeTool(ctx);
+    }
+    if (def.name === "prune_worktree") {
+      return createPruneWorktreeTool(ctx);
+    }
+    if (def.name === "rebase_worktree") {
+      return createRebaseWorktreeTool(ctx);
+    }
+    if (def.name === "diff_worktree") {
+      return createDiffWorktreeTool(ctx);
+    }
+    if (def.name === "spawn_subagent") {
+      return createSpawnSubagentTool(ctx);
     }
   }
 

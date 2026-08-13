@@ -26,6 +26,8 @@ export type ControlSessionSummary = {
   project: string | null;
   /** Exact connected repository used for agent and sandbox context. */
   repo_id: string | null;
+  /** Server-owned orchestration run backing the mission and worktrees. */
+  orchestration_run_id: string | null;
   pinned: boolean;
   updated_at: string;
 };

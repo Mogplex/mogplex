@@ -3,9 +3,11 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { validateControlSessionRepoAccess } from "@/lib/control/session-repo-access";
 import { pickControlSessionUpdateFields } from "@/lib/control/session-update";
+import { createOrchestrationRun } from "@/lib/orchestrations/store";
+import { validateOrchestrationBranchName } from "@/lib/orchestrations/validation";
 
 const LIST_COLUMNS =
-  "id, title, project, repo_id, pinned, archived, created_at, updated_at";
+  "id, title, project, repo_id, orchestration_run_id, pinned, archived, created_at, updated_at";
 
 async function getSessionRecord(id: string, userId: string) {
   const { data, error } = await supabaseAdmin
@@ -61,6 +63,7 @@ export async function POST(req: Request) {
     title?: string;
     project?: string | null;
     repo_id?: unknown;
+    request?: string;
   };
   const repoAccess = await validateControlSessionRepoAccess({
     request: req,
@@ -73,8 +76,27 @@ export async function POST(req: Request) {
       { status: repoAccess.status }
     );
   }
+  const { data: repo, error: repoError } = repoAccess.value
+    ? await supabaseAdmin
+        .from("repos")
+        .select("default_branch")
+        .eq("id", repoAccess.value)
+        .single()
+    : { data: null, error: null };
+  if (repoError) {
+    return NextResponse.json(
+      { error: "Failed to load repository" },
+      { status: 500 }
+    );
+  }
+  const baseBranch = validateOrchestrationBranchName(
+    repo?.default_branch?.trim() || "main"
+  );
+  if (!baseBranch.ok) {
+    return NextResponse.json({ error: baseBranch.error }, { status: 400 });
+  }
 
-  const { data, error } = await supabaseAdmin
+  const { data: session, error } = await supabaseAdmin
     .from("control_sessions")
     .insert({
       user_id: userId,
@@ -85,14 +107,57 @@ export async function POST(req: Request) {
     .select("*")
     .single();
 
-  if (error || !data) {
+  if (error || !session) {
     return NextResponse.json(
       { error: error?.message || "Failed to create session" },
       { status: 500 }
     );
   }
 
-  return NextResponse.json(data);
+  if (!repoAccess.value) return NextResponse.json(session);
+
+  let createdRunId: string | null = null;
+  try {
+    const run = await createOrchestrationRun({
+      userId,
+      repoId: repoAccess.value,
+      title: session.title,
+      request: body.request?.trim() || session.title,
+      baseBranch: baseBranch.value,
+    });
+    createdRunId = run.id;
+    const { data: linked, error: linkError } = await supabaseAdmin
+      .from("control_sessions")
+      .update({ orchestration_run_id: run.id })
+      .eq("id", session.id)
+      .eq("user_id", userId)
+      .select("*")
+      .single();
+    if (linkError || !linked) {
+      throw new Error(linkError?.message || "Failed to link orchestration run");
+    }
+    return NextResponse.json(linked);
+  } catch (runError) {
+    await Promise.all([
+      supabaseAdmin
+        .from("control_sessions")
+        .delete()
+        .eq("id", session.id)
+        .eq("user_id", userId),
+      createdRunId
+        ? supabaseAdmin
+            .from("orchestration_runs")
+            .delete()
+            .eq("id", createdRunId)
+            .eq("user_id", userId)
+        : Promise.resolve(),
+    ]);
+    console.error("[control/sessions] failed to create mission run", runError);
+    return NextResponse.json(
+      { error: "Failed to create mission" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PUT(req: Request) {

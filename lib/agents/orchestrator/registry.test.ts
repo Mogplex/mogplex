@@ -22,6 +22,7 @@ const FULL_CONTEXT: OrchestratorToolContext = {
   githubToken: "ghs_test-token",
   teamId: "team-1",
   missionId: "mission-1",
+  orchestrationRunId: "11111111-2222-4333-8444-555555555555",
   conversationId: "conversation-1",
   workspaceSessionId: "ws-session-1",
   aiCallId: "ai-call-1",

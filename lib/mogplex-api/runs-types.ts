@@ -28,6 +28,7 @@ export type StartMogplexApiRunRequest = {
   conversationId?: unknown;
   workspaceSessionId?: unknown;
   mode?: unknown;
+  worktreeId?: unknown;
 };
 
 export type ExternalAgentRunRow = {
@@ -37,6 +38,7 @@ export type ExternalAgentRunRow = {
   ai_call_id: string;
   sandbox_record_id: string | null;
   sandbox_id: string | null;
+  worktree_id: string | null;
   idempotency_key: string;
   request_hash: string;
   harness: MogplexApiRunHarness;
@@ -62,6 +64,7 @@ export type MogplexApiRunDetail = {
   aiCallId: string;
   sandboxRecordId: string | null;
   sandboxId: string | null;
+  worktreeId: string | null;
   repoId: string;
   harness: MogplexApiRunHarness;
   status: MogplexApiRunStatus;

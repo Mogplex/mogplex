@@ -44,6 +44,7 @@ export function buildRunRow(
     ai_call_id: "call-1",
     sandbox_record_id: "sandbox-record-1",
     sandbox_id: "sbx_123",
+    worktree_id: null,
     idempotency_key: "idem-1",
     request_hash: "hash-1",
     harness: "codex",
@@ -139,6 +140,7 @@ export function buildStartDeps(
     loadRunByIdempotencyKey: async () => null,
     loadRunById: async () => null,
     findActiveSandbox: async () => null,
+    loadOwnedWorktree: async () => null,
     createAiCall: async () => buildAiCall(),
     markAiCallFailed: async () => {},
     insertRun: async (input) =>

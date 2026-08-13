@@ -50,6 +50,21 @@ export const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
 
     return (data as HarnessSandboxRecord | null) ?? null;
   },
+  async loadOwnedWorktreeBinding(input) {
+    let query = supabaseAdmin
+      .from("orchestration_worktrees")
+      .select(
+        "id, sandbox_id, repo_id, branch_name, base_branch, checkout_path, status"
+      )
+      .eq("id", input.worktreeId)
+      .eq("user_id", input.userId)
+      .eq("sandbox_id", input.sandboxId)
+      .eq("status", "active");
+    if (input.repoId) query = query.eq("repo_id", input.repoId);
+    const { data, error } = await query.maybeSingle();
+    if (error) throw new Error(`Failed to load worktree: ${error.message}`);
+    return data;
+  },
   resolveSandboxAiAccess,
   getSandbox,
   runHarness,

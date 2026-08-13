@@ -45,6 +45,7 @@ export type NormalizedStartRequest = {
   conversationId: string | null;
   workspaceSessionId: string | null;
   mode: string | null;
+  worktreeId: string | null;
 };
 
 export function normalizeOptionalString(value: unknown) {
@@ -144,6 +145,7 @@ export function normalizeStartRequest(input: {
     conversationId: normalizeOptionalString(input.body.conversationId),
     workspaceSessionId: normalizeOptionalString(input.body.workspaceSessionId),
     mode: normalizeOptionalString(input.body.mode),
+    worktreeId: normalizeOptionalString(input.body.worktreeId),
   };
   // The generated branch is derived from the pre-branch logical request, then
   // included in the persisted request hash. Retrying the same request with the
@@ -201,5 +203,6 @@ export function buildRunMetadata(input: {
     root_directory: input.normalized.rootDirectory,
     sandbox_record_id: input.sandbox?.id ?? null,
     sandbox_id: input.sandbox?.sandbox_id ?? null,
+    worktree_id: input.normalized.worktreeId,
   };
 }
