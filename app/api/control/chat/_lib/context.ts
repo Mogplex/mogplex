@@ -42,6 +42,7 @@ type ControlPromptSandboxDeps = {
   ) => Promise<
     LoadedSandboxRouteRecord<ControlPromptSandboxRecord> | SandboxRouteFailure
   >;
+  warn?: (message: string, context: Record<string, unknown>) => void;
 };
 
 const defaultControlPromptSandboxDeps: ControlPromptSandboxDeps = {
@@ -51,6 +52,7 @@ const defaultControlPromptSandboxDeps: ControlPromptSandboxDeps = {
       sandboxId,
       options
     ),
+  warn: (message, context) => console.warn(message, context),
 };
 
 /**
@@ -65,10 +67,32 @@ export async function resolveControlPromptSandboxes(
 ): Promise<Array<{ id: string; branch: string; status: string }>> {
   if (!body.sandboxId || !body.repoId) return [];
 
-  const loaded = await deps.loadSandboxRecord(request, body.sandboxId, {
-    select: "id, sandbox_id, repo_id, working_branch, status",
-  });
-  if (!loaded.ok || loaded.record.repo_id !== body.repoId) return [];
+  let loaded:
+    | LoadedSandboxRouteRecord<ControlPromptSandboxRecord>
+    | SandboxRouteFailure;
+  try {
+    loaded = await deps.loadSandboxRecord(request, body.sandboxId, {
+      select: "id, sandbox_id, repo_id, working_branch, status",
+    });
+  } catch (error) {
+    deps.warn?.("[control] sandbox prompt context lookup threw", {
+      sandboxId: body.sandboxId,
+      repoId: body.repoId,
+      error,
+    });
+    return [];
+  }
+
+  if (!loaded.ok) {
+    deps.warn?.("[control] sandbox prompt context unavailable", {
+      sandboxId: body.sandboxId,
+      repoId: body.repoId,
+      status: loaded.status,
+      error: loaded.error,
+    });
+    return [];
+  }
+  if (loaded.record.repo_id !== body.repoId) return [];
 
   return [
     {

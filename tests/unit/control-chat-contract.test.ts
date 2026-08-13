@@ -263,3 +263,53 @@ test("control prompt rejects a sandbox from a different repository", async () =>
 
   assert.deepEqual(sandboxes, []);
 });
+
+test("control prompt degrades when the sandbox loader returns a failure", async () => {
+  const warnings: Array<Record<string, unknown>> = [];
+  const sandboxes = await resolveControlPromptSandboxes(
+    new Request("https://app.mogplex.com/api/control/chat"),
+    { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-1" },
+    {
+      loadSandboxRecord: async () => ({
+        ok: false,
+        status: 503,
+        error: "Sandbox credentials unavailable",
+      }),
+      warn: (_message, context) => warnings.push(context),
+    }
+  );
+
+  assert.deepEqual(sandboxes, []);
+  assert.deepEqual(warnings, [
+    {
+      sandboxId: "sandbox-record-1",
+      repoId: "repo-1",
+      status: 503,
+      error: "Sandbox credentials unavailable",
+    },
+  ]);
+});
+
+test("control prompt degrades when the sandbox loader throws", async () => {
+  const failure = new Error("credential lookup timed out");
+  const warnings: Array<Record<string, unknown>> = [];
+  const sandboxes = await resolveControlPromptSandboxes(
+    new Request("https://app.mogplex.com/api/control/chat"),
+    { messages: [], repoId: "repo-1", sandboxId: "sandbox-record-1" },
+    {
+      loadSandboxRecord: async () => {
+        throw failure;
+      },
+      warn: (_message, context) => warnings.push(context),
+    }
+  );
+
+  assert.deepEqual(sandboxes, []);
+  assert.deepEqual(warnings, [
+    {
+      sandboxId: "sandbox-record-1",
+      repoId: "repo-1",
+      error: failure,
+    },
+  ]);
+});

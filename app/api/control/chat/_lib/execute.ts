@@ -70,10 +70,10 @@ export async function executeControlChatRequest(input: {
     const activeCall = aiCall;
 
     // Build orchestrator context
-    const githubToken = await resolveGithubTokenForRepo(
-      input.userId,
-      input.body.repoId
-    );
+    const [githubToken, activeSandboxes] = await Promise.all([
+      resolveGithubTokenForRepo(input.userId, input.body.repoId),
+      resolveControlPromptSandboxes(input.req, input.body),
+    ]);
 
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
@@ -92,10 +92,6 @@ export async function executeControlChatRequest(input: {
       controlPermissions: input.body.permissions ?? null,
     };
 
-    const activeSandboxes = await resolveControlPromptSandboxes(
-      input.req,
-      input.body
-    );
     const promptContext: OrchestratorPromptContext = {
       repoFullName: input.body.repoFullName ?? undefined,
       repoOwner: input.body.repoOwner ?? undefined,
