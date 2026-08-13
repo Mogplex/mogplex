@@ -16,7 +16,7 @@ import {
 import { resolveBootstrapContext } from "./client-bootstrap-context";
 import {
   launchDetachedDevCommand,
-  runRuntimePrerequisitePhase,
+  streamRuntimePrerequisitePhase,
   streamCommandPhase,
   streamPreviewSignal,
 } from "./client-bootstrap-phases";
@@ -216,7 +216,7 @@ export async function* bootstrapFromBaselineSnapshotStreaming(
   yield* runBaselineCheckoutPhase(sandbox, context, opts);
   // Bun must exist before a drift-triggered install when it is the package
   // manager, and before dev when any script in the repo invokes it.
-  await runRuntimePrerequisitePhase(
+  yield* streamRuntimePrerequisitePhase(
     sandbox,
     context.requiresBun,
     context.runtimeEnv,

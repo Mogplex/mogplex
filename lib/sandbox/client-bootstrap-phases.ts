@@ -185,6 +185,33 @@ export async function runRuntimePrerequisitePhase(
   return installLog;
 }
 
+export async function* streamRuntimePrerequisitePhase(
+  sandbox: Sandbox,
+  requiresBun: boolean,
+  runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
+  previewUrl: string
+): AsyncGenerator<SandboxBootstrapStreamEvent, string> {
+  if (!requiresBun) return "";
+
+  yield {
+    type: "log",
+    phase: "install",
+    data: "Ensuring Bun runtime is available...\n",
+  };
+  const installLog = await runRuntimePrerequisitePhase(
+    sandbox,
+    requiresBun,
+    runtimeEnv,
+    previewUrl
+  );
+  yield {
+    type: "log",
+    phase: "install",
+    data: "Bun runtime ready.\n",
+  };
+  return installLog;
+}
+
 export async function* streamCommandPhase(
   command: SandboxStreamingCommand,
   phase: SandboxBootstrapLogPhase

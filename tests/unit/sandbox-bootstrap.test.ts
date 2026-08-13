@@ -36,6 +36,8 @@ test("extracts explicit dev ports from commands", async () => {
 test("detects dev commands that require Bun", async () => {
   const { commandRequiresBun } = await import("../../lib/sandbox/client-shell");
   assert.equal(commandRequiresBun("bun run src/index.tsx"), true);
+  assert.equal(commandRequiresBun("bunx --bun vite dev"), true);
+  assert.equal(commandRequiresBun("bunx convex dev"), true);
   assert.equal(commandRequiresBun("pnpm --filter @mogplex/tui dev"), false);
   assert.equal(commandRequiresBun("echo bunny"), false);
 });
@@ -71,6 +73,19 @@ test("bun usage probe detects a nested workspace script invoking bun", async () 
     "packages/tui/package.json": JSON.stringify({
       name: "@mogplex/tui",
       scripts: { dev: "bun run src/index.tsx" },
+    }),
+  });
+
+  assert.equal(await runBunUsageProbe(root), "1");
+});
+
+test("bun usage probe detects a nested workspace script invoking bunx", async () => {
+  const root = await makeProbeFixture({
+    "package.json": JSON.stringify({
+      scripts: { dev: "pnpm --filter web dev" },
+    }),
+    "apps/web/package.json": JSON.stringify({
+      scripts: { dev: "bunx --bun vite dev" },
     }),
   });
 
@@ -122,9 +137,57 @@ test("builds a pinned Bun install command for sandbox previews", async () => {
     )
   );
   assert.match(command, /export PATH="\$BUN_INSTALL\/bin:\$PATH"/);
+  assert.match(command, /bun_sha256=/);
+  assert.match(command, /bun-linux-x64-baseline/);
+  assert.match(command, /\/proc\/cpuinfo/);
+  assert.match(command, /command -v curl/);
+  assert.match(command, /command -v sha256sum/);
+  assert.match(command, /sha256sum -c -/);
+  assert.match(command, /printf '%s {2}%s\\n'/);
+  assert.match(command, /command -v unzip/);
+  assert.ok(
+    command.indexOf("set -eu") < command.indexOf("if ! command -v bun"),
+    "strict shell mode must cover the pre-installed Bun path"
+  );
+  assert.match(
+    command,
+    /ln -sf "\$\(command -v bun\)" "\$BUN_INSTALL\/bin\/bunx"/
+  );
+  assert.throws(
+    () => buildEnsureBunCommand("1.3.11"),
+    /does not have pinned sandbox checksums/
+  );
   assert.match(
     buildWithBunOnPathCommand("bun run src/index.tsx"),
     /export PATH="\$BUN_INSTALL\/bin:\$PATH"\nbun run src\/index\.tsx/
+  );
+});
+
+test("Bun prerequisite failures retain setup diagnostics", async () => {
+  const { runRuntimePrerequisitePhase } =
+    await import("../../lib/sandbox/client-bootstrap-phases");
+  const { SandboxBootstrapError } =
+    await import("../../lib/sandbox/client-validation");
+  const runCommand = async () => ({
+    stdout: async () => "",
+    stderr: async () => "bun archive checksum mismatch",
+    exitCode: 1,
+  });
+
+  await assert.rejects(
+    () =>
+      runRuntimePrerequisitePhase(
+        { runCommand } as never,
+        true,
+        {} as never,
+        "https://preview.example.test"
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof SandboxBootstrapError);
+      assert.equal(error.message, "Runtime prerequisite failed (bun)");
+      assert.equal(error.installLog, "bun archive checksum mismatch");
+      return true;
+    }
   );
 });
 
@@ -306,6 +369,14 @@ test("bootstrapFromSnapshotStreaming installs Bun and puts it on PATH when the r
     const devLaunch = shCommands.find((command) => command.includes("dev.log"));
     assert.ok(devLaunch, "expected a dev server launch command");
     assert.match(devLaunch, /export PATH="\$BUN_INSTALL\/bin:\$PATH"/);
+    assert.deepEqual(events.slice(0, 2), [
+      {
+        type: "log",
+        phase: "install",
+        data: "Ensuring Bun runtime is available...\n",
+      },
+      { type: "log", phase: "install", data: "Bun runtime ready.\n" },
+    ]);
     assert.deepEqual(events.at(-1), { type: "status", status: "running" });
   } finally {
     globalThis.fetch = originalFetch;

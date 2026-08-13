@@ -4,6 +4,17 @@ import type { BootstrapDetection, BootstrapStrategy } from "./client-types";
 
 export const SANDBOX_BUN_VERSION = "1.3.10";
 
+// Published in the pinned release's SHASUMS256.txt:
+// https://github.com/oven-sh/bun/releases/tag/bun-v1.3.10
+const SANDBOX_BUN_SHA256 = {
+  "bun-linux-aarch64":
+    "fa5ecb25cafa8e8f5c87a0f833719d46dd0af0a86c7837d806531212d55636d3",
+  "bun-linux-x64-baseline":
+    "41201a8c5ee74a9dcbb1ce25a1104f1f929838b57a845aa78d98379b0ce7cde2",
+  "bun-linux-x64":
+    "f57bc0187e39623de716ba3a389fda5486b2d7be7131a980ba54dc7b733d2e08",
+} as const;
+
 export function escapeShell(value: string) {
   return value.replace(/'/g, String.raw`'\''`);
 }
@@ -44,7 +55,7 @@ export function buildDetachedDevLaunchCommand(devCommand: string) {
 }
 
 export function commandRequiresBun(command: string | null | undefined) {
-  return /(?:^|[\s;&|()])bun(?:$|[\s;&|()])/.test(command ?? "");
+  return /(?:^|[\s;&|()])bunx?(?:$|[\s;&|()])/.test(command ?? "");
 }
 
 export function buildWithBunOnPathCommand(command: string) {
@@ -60,27 +71,43 @@ export function buildEnsureBunCommand(version = SANDBOX_BUN_VERSION) {
   if (!/^[0-9A-Za-z._-]+$/.test(version)) {
     throw new TypeError("Bun version must be a release tag fragment");
   }
+  if (version !== SANDBOX_BUN_VERSION) {
+    throw new TypeError("Bun version does not have pinned sandbox checksums");
+  }
 
   const bunInstallDefault = ["$", "{BUN_INSTALL:-$HOME/.bun}"].join("");
   const bunTargetExpansion = ["$", "{bun_target}"].join("");
 
   return `export BUN_INSTALL="${bunInstallDefault}"
 export PATH="$BUN_INSTALL/bin:$PATH"
+set -eu
+mkdir -p "$BUN_INSTALL/bin"
 if ! command -v bun >/dev/null 2>&1; then
-  set -eu
   arch="$(uname -m)"
   case "$arch" in
-    x86_64|amd64) bun_target="bun-linux-x64" ;;
-    aarch64|arm64) bun_target="bun-linux-aarch64" ;;
+    x86_64|amd64)
+      if grep -qw avx2 /proc/cpuinfo; then
+        bun_target="bun-linux-x64"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-x64"]}"
+      else
+        bun_target="bun-linux-x64-baseline"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-x64-baseline"]}"
+      fi
+      ;;
+    aarch64|arm64) bun_target="bun-linux-aarch64"; bun_sha256="${SANDBOX_BUN_SHA256["bun-linux-aarch64"]}" ;;
     *) echo "Unsupported Bun sandbox architecture: $arch" >&2; exit 1 ;;
   esac
   bun_zip="/tmp/mogplex-${bunTargetExpansion}.zip"
-  mkdir -p "$BUN_INSTALL/bin"
+  command -v curl >/dev/null 2>&1 || { echo "Bun install requires curl" >&2; exit 1; }
+  command -v unzip >/dev/null 2>&1 || { echo "Bun install requires unzip" >&2; exit 1; }
+  command -v sha256sum >/dev/null 2>&1 || { echo "Bun install requires sha256sum" >&2; exit 1; }
   curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${version}/${bunTargetExpansion}.zip" -o "$bun_zip"
+  printf '%s  %s\\n' "$bun_sha256" "$bun_zip" | sha256sum -c -
   unzip -q -o "$bun_zip" -d "$BUN_INSTALL"
   mv "$BUN_INSTALL/$bun_target/bun" "$BUN_INSTALL/bin/bun"
   chmod +x "$BUN_INSTALL/bin/bun"
   rm -rf "$BUN_INSTALL/$bun_target" "$bun_zip"
+fi
+if ! command -v bunx >/dev/null 2>&1; then
+  ln -sf "$(command -v bun)" "$BUN_INSTALL/bin/bunx"
 fi
 bun --version`;
 }
@@ -100,7 +127,7 @@ export function buildDetectBunUsageScript() {
     "const fs = require('fs');",
     "const path = require('path');",
     "const SKIP = new Set(['node_modules', '.git', '.next', 'dist', 'out', '.turbo', 'build']);",
-    "const BUN = /(?:^|[\\s;&|()])bun(?:$|[\\s;&|()])/;",
+    "const BUN = /(?:^|[\\s;&|()])bunx?(?:$|[\\s;&|()])/;",
     "let found = false;",
     "function walk(dir, depth) {",
     "  if (found || depth > 4) return;",
