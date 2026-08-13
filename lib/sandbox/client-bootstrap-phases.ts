@@ -19,6 +19,7 @@ import {
   buildSelectiveRebuildCommand,
   buildEnsureBunCommand,
   buildWithBunOnPathCommand,
+  SANDBOX_BUN_VERSION,
 } from "./client-shell";
 import {
   NO_DEV_SCRIPT_MESSAGE,
@@ -182,6 +183,33 @@ export async function runRuntimePrerequisitePhase(
     });
   }
 
+  return installLog;
+}
+
+export async function* streamRuntimePrerequisitePhase(
+  sandbox: Sandbox,
+  requiresBun: boolean,
+  runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
+  previewUrl: string
+): AsyncGenerator<SandboxBootstrapStreamEvent, string> {
+  if (!requiresBun) return "";
+
+  yield {
+    type: "log",
+    phase: "install",
+    data: "Ensuring Bun runtime is available...\n",
+  };
+  const installLog = await runRuntimePrerequisitePhase(
+    sandbox,
+    requiresBun,
+    runtimeEnv,
+    previewUrl
+  );
+  yield {
+    type: "log",
+    phase: "install",
+    data: `Bun ${SANDBOX_BUN_VERSION} ready.\n`,
+  };
   return installLog;
 }
 

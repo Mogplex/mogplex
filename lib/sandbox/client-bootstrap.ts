@@ -16,6 +16,7 @@ import {
   launchDetachedDevCommand,
   runInstallPhase,
   runRuntimePrerequisitePhase,
+  streamRuntimePrerequisitePhase,
   runWorkspaceBuildPhase,
   runSelectiveRebuildPhase,
   streamCommandPhase,
@@ -47,7 +48,7 @@ export async function* bootstrapFromSnapshotStreaming(
   // Skip install — deps are already in the snapshot. Bun (when the repo
   // needs it) is also in the snapshot, but the ensure is an idempotent
   // no-op then and covers snapshots captured before bun support landed.
-  await runRuntimePrerequisitePhase(
+  yield* streamRuntimePrerequisitePhase(
     sandbox,
     context.requiresBun,
     context.runtimeEnv,
@@ -203,7 +204,7 @@ export async function* bootstrapSandboxStreaming(
   // --- Runtime prerequisites ---
   // Bun must exist before install when it is the package manager, and
   // before dev when any script in the repo invokes it.
-  await runRuntimePrerequisitePhase(
+  yield* streamRuntimePrerequisitePhase(
     sandbox,
     context.requiresBun,
     context.runtimeEnv,
