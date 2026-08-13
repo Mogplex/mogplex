@@ -25,6 +25,7 @@ import {
 } from "@/lib/control/session-project";
 import { ModelChip, type ComposerSendOptions } from "./composer";
 import {
+  appendControlComposerFiles,
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
@@ -62,7 +63,9 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
     existingCount: files.length,
     onAttachments: useCallback(
       (attachments: ControlComposerFile[]) =>
-        setFiles((current) => [...current, ...attachments]),
+        setFiles((current) =>
+          appendControlComposerFiles(current, attachments)
+        ),
       []
     ),
     onError: setAttachmentError,

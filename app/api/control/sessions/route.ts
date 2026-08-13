@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { parseControlSessionRepoId } from "@/lib/control/session-project";
+import { pickControlSessionUpdateFields } from "@/lib/control/session-update";
 
 const LIST_COLUMNS =
   "id, title, project, repo_id, pinned, archived, created_at, updated_at";
@@ -108,7 +109,7 @@ export async function PUT(req: Request) {
     }
     body.repo_id = parsedRepoId.value;
   }
-  const { id, expected_updated_at: expectedUpdatedAt, ...fields } = body;
+  const { id, expected_updated_at: expectedUpdatedAt } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
@@ -119,6 +120,8 @@ export async function PUT(req: Request) {
       { status: 400 }
     );
   }
+
+  const fields = pickControlSessionUpdateFields(body);
 
   const { data, error } = await supabaseAdmin
     .from("control_sessions")

@@ -15,6 +15,14 @@ type ContextSandbox = Pick<
   "id" | "working_branch" | "base_branch"
 >;
 
+export function selectControlSessionSandboxes<T extends { repo_id: string }>(
+  activeRepo: { id: string } | null,
+  allSandboxes: T[]
+): T[] {
+  if (!activeRepo) return [];
+  return allSandboxes.filter((sandbox) => sandbox.repo_id === activeRepo.id);
+}
+
 export function buildControlSessionRequestContext({
   activeRepo,
   activeSandbox,
@@ -69,10 +77,7 @@ export function useControlSessionContext({
   );
 
   const sandboxes = useMemo(
-    () =>
-      activeRepo
-        ? allSandboxes.filter((sandbox) => sandbox.repo_id === activeRepo.id)
-        : [],
+    () => selectControlSessionSandboxes(activeRepo, allSandboxes),
     [activeRepo, allSandboxes]
   );
   const activeSandbox = sandboxes[0] ?? null;

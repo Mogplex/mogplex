@@ -383,7 +383,7 @@ test("control composer creates a new project when no repos are connected", async
   expect(sessionCreates[0]?.project).toBe("analytics-redesign");
   await page.getByRole("button", { name: /Worktrees/ }).click();
   await expect(
-    page.getByText("No repository linked", { exact: false })
+    page.getByText(/Account sandboxes are not shown as worktrees/)
   ).toBeVisible();
   expect(sessionCreates[0]?.repo_id).toBeNull();
   expect(chatRequests[0]).toMatchObject({

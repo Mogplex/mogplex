@@ -16,6 +16,7 @@ import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { Mission, MissionPermissions } from "@/lib/control/types";
 import {
+  appendControlComposerFiles,
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
@@ -248,7 +249,9 @@ export function Composer({
     existingCount: files.length,
     onAttachments: useCallback(
       (attachments: ControlComposerFile[]) =>
-        setFiles((current) => [...current, ...attachments]),
+        setFiles((current) =>
+          appendControlComposerFiles(current, attachments)
+        ),
       []
     ),
     onError: setAttachmentError,

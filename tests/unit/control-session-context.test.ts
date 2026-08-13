@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildControlSessionRequestContext } from "../../components/control/use-control-session-context";
+import {
+  buildControlSessionRequestContext,
+  selectControlSessionSandboxes,
+} from "../../components/control/use-control-session-context";
+
+test("selectControlSessionSandboxes does not treat account sandboxes as worktrees", () => {
+  const sandboxes = [
+    { id: "sandbox-1", repo_id: "repo-1" },
+    { id: "sandbox-2", repo_id: "repo-2" },
+  ];
+
+  assert.deepEqual(selectControlSessionSandboxes(null, sandboxes), []);
+  assert.deepEqual(selectControlSessionSandboxes({ id: "repo-1" }, sandboxes), [
+    sandboxes[0],
+  ]);
+});
 
 test("buildControlSessionRequestContext omits mission and branch context without a repo", () => {
   assert.deepEqual(

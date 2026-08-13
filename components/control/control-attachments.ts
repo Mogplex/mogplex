@@ -6,8 +6,15 @@ export type ControlComposerFile = {
   url: string;
 };
 
-const MAX_CONTROL_ATTACHMENT_COUNT = 5;
+export const MAX_CONTROL_ATTACHMENT_COUNT = 5;
 const MAX_CONTROL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+export function appendControlComposerFiles(
+  current: ControlComposerFile[],
+  incoming: ControlComposerFile[]
+): ControlComposerFile[] {
+  return [...current, ...incoming].slice(0, MAX_CONTROL_ATTACHMENT_COUNT);
+}
 
 export async function readControlComposerFiles(
   selectedFiles: File[],
