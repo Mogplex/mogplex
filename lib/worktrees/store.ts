@@ -100,6 +100,19 @@ export async function reserveWorktree(input: {
     .select("*")
     .single();
   if (error || !data) {
+    if (error?.code === "23505") {
+      const winner = await findLiveWorktreeForTask({
+        taskId: input.taskId,
+        userId: input.userId,
+      });
+      if (
+        winner?.run_id === input.runId &&
+        winner.repo_id === input.repoId &&
+        winner.sandbox_id === input.sandboxId
+      ) {
+        return winner;
+      }
+    }
     throw new WorktreeStoreError(
       "reserve",
       error?.message ?? "no row returned"

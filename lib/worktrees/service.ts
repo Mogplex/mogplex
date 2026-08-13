@@ -71,18 +71,29 @@ export async function spawnWorktree(
   overrides: Partial<WorktreeServiceDeps> = {}
 ): Promise<OrchestrationWorktreeDTO> {
   const deps = { ...defaultDeps, ...overrides };
+  const task = await deps.loadTask(input);
+  if (!task) throw new WorktreeServiceError("Orchestration task not found");
   const existing = await deps.findLiveForTask({
     taskId: input.taskId,
     userId: input.userId,
   });
+  if (
+    existing &&
+    (existing.run_id !== task.run_id || existing.repo_id !== task.repo_id)
+  ) {
+    throw new WorktreeServiceError("Worktree belongs to another mission");
+  }
+  if (existing && existing.sandbox_id !== input.sandboxId) {
+    throw new WorktreeServiceError(
+      "Worktree is already reserved in another sandbox"
+    );
+  }
   if (existing?.status === "active" || existing?.status === "archived") {
     return existing;
   }
 
-  const task = await deps.loadTask(input);
-  if (!task) throw new WorktreeServiceError("Orchestration task not found");
   const sandbox = await deps.loadSandbox({
-    sandboxId: input.sandboxId,
+    sandboxId: existing?.sandbox_id ?? input.sandboxId,
     userId: input.userId,
     repoId: task.repo_id,
   });
@@ -109,6 +120,9 @@ export async function spawnWorktree(
       branchName: task.branch_name,
       baseBranch: task.base_branch,
     }));
+  if (worktree.status === "active" || worktree.status === "archived") {
+    return worktree;
+  }
 
   try {
     const result = await deps.execute({

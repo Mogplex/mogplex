@@ -113,12 +113,76 @@ test("spawn is idempotent for an existing active task checkout", async () => {
     },
     {
       findLiveForTask: async () => existing,
-      loadTask: async () => {
-        throw new Error("must not load");
-      },
+      loadTask: async () => buildTask(),
     }
   );
   assert.equal(result, existing);
+});
+
+test("spawn rejects reuse across missions or sandboxes", async () => {
+  await assert.rejects(
+    spawnWorktree(
+      {
+        userId: "user-1",
+        runId: RUN_ID,
+        taskId: TASK_ID,
+        sandboxId: SANDBOX_ID,
+      },
+      {
+        loadTask: async () => buildTask(),
+        findLiveForTask: async () =>
+          buildWorktree({
+            run_id: "66666666-6666-4666-8666-666666666666",
+          }),
+      }
+    ),
+    /another mission/
+  );
+
+  await assert.rejects(
+    spawnWorktree(
+      {
+        userId: "user-1",
+        runId: RUN_ID,
+        taskId: TASK_ID,
+        sandboxId: "77777777-7777-4777-8777-777777777777",
+      },
+      {
+        loadTask: async () => buildTask(),
+        findLiveForTask: async () => buildWorktree({ status: "error" }),
+      }
+    ),
+    /another sandbox/
+  );
+});
+
+test("spawn returns the concurrent reservation winner without recreating it", async () => {
+  let executed = false;
+  const winner = buildWorktree();
+  const result = await spawnWorktree(
+    {
+      userId: "user-1",
+      runId: RUN_ID,
+      taskId: TASK_ID,
+      sandboxId: SANDBOX_ID,
+    },
+    {
+      loadTask: async () => buildTask(),
+      findLiveForTask: async () => null,
+      loadSandbox: async () => ({
+        id: SANDBOX_ID,
+        repo_id: REPO_ID,
+        status: "running",
+      }),
+      reserve: async () => winner,
+      execute: async () => {
+        executed = true;
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+    }
+  );
+  assert.equal(result, winner);
+  assert.equal(executed, false);
 });
 
 test("rebase and diff force execution into the persisted checkout", async () => {

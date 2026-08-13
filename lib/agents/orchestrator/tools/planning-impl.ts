@@ -179,7 +179,7 @@ export function createSpawnSubagentTool(
             keyId: `control:${ctx.aiCallId ?? ctx.conversationId ?? "session"}`,
             scopes: ["runs:write"],
           },
-          idempotencyKey: `control:${ctx.aiCallId ?? "run"}:${worktree.id}:${promptHash}`,
+          idempotencyKey: `control:${ctx.aiCallId ?? ctx.conversationId ?? "run"}:${worktree.id}:${promptHash}`,
           body: {
             repoId: ctx.repoId,
             prompt: taskPrompt,

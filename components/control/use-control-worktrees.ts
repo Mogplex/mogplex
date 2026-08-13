@@ -30,6 +30,8 @@ export function useControlWorktrees(input: {
         sessionId: input.sessionId,
         worktrees: body.worktrees ?? [],
       });
+    } catch (error) {
+      console.warn("[control] failed to refresh worktrees", error);
     } finally {
       setLoading(false);
     }

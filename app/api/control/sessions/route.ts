@@ -138,7 +138,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(linked);
   } catch (runError) {
-    await Promise.all([
+    const [sessionCleanup, runCleanup] = await Promise.all([
       supabaseAdmin
         .from("control_sessions")
         .delete()
@@ -150,8 +150,16 @@ export async function POST(req: Request) {
             .delete()
             .eq("id", createdRunId)
             .eq("user_id", userId)
-        : Promise.resolve(),
+        : Promise.resolve({ error: null }),
     ]);
+    if (sessionCleanup.error || runCleanup.error) {
+      console.error("[control/sessions] mission rollback was incomplete", {
+        sessionId: session.id,
+        runId: createdRunId,
+        sessionError: sessionCleanup.error,
+        runError: runCleanup.error,
+      });
+    }
     console.error("[control/sessions] failed to create mission run", runError);
     return NextResponse.json(
       { error: "Failed to create mission" },
