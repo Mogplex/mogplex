@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCreateWorktreeCommand,
+  buildPruneReservedWorktreeCommand,
   buildPruneWorktreeCommand,
   buildRebaseWorktreeCommand,
   parseCreatedWorktreePath,
@@ -71,4 +72,18 @@ test("rebase and prune always target the persisted checkout path", () => {
   assert.match(rebase, /git rebase --abort/);
   assert.match(prune, /worktree remove --force/);
   assert.match(prune, new RegExp(WORKTREE_ID));
+});
+
+test("reservation cleanup derives and removes only its managed checkout", () => {
+  const prune = buildPruneReservedWorktreeCommand({
+    worktreeId: WORKTREE_ID,
+  });
+
+  assert.match(
+    prune,
+    /checkout_path="\$repo_root\/\.worktrees\/\$MOGPLEX_WORKTREE_ID"/
+  );
+  assert.match(prune, /worktree list --porcelain/);
+  assert.match(prune, /worktree remove "\$checkout_path"/);
+  assert.doesNotMatch(prune, /worktree remove --force/);
 });

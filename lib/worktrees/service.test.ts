@@ -231,7 +231,11 @@ describe("spawnWorktree reservation recovery", () => {
         {
           load: async () => archived,
           execute: async () => {
-            throw new WorktreeExecutorError("Sandbox not found", 404);
+            throw new WorktreeExecutorError(
+              "Sandbox not found",
+              404,
+              "sandbox_not_found"
+            );
           },
         }
       )
@@ -280,7 +284,11 @@ describe("spawnWorktree reservation recovery", () => {
         {
           load: async () => worktree("archived"),
           execute: async () => {
-            throw new WorktreeExecutorError("Sandbox not found", 404);
+            throw new WorktreeExecutorError(
+              "Sandbox not found",
+              404,
+              "sandbox_not_found"
+            );
           },
           markPruned,
         }
@@ -312,8 +320,12 @@ describe("spawnWorktree reservation recovery", () => {
     expect(markPruned).not.toHaveBeenCalled();
   });
 
-  it("prunes a reservation placeholder without executing git", async () => {
-    const execute = vi.fn();
+  it("checks for a crash-window checkout before pruning a reservation", async () => {
+    const execute = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+    }));
     const pruned = worktree("pruned");
     await expect(
       pruneWorktree(
@@ -333,6 +345,37 @@ describe("spawnWorktree reservation recovery", () => {
         }
       )
     ).resolves.toBe(pruned);
-    expect(execute).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandboxId: IDS.sandbox,
+        command: expect.stringContaining(
+          `checkout_path="$repo_root/.worktrees/$MOGPLEX_WORKTREE_ID"`
+        ),
+      })
+    );
+  });
+
+  it("does not force-retire a binding for an untyped executor 404", async () => {
+    const markPruned = vi.fn();
+    await expect(
+      pruneWorktree(
+        {
+          userId: "user-1",
+          worktreeId: IDS.worktree,
+          runId: IDS.run,
+          repoId: IDS.repo,
+          force: true,
+        },
+        {
+          load: async () => worktree("archived"),
+          execute: async () => {
+            throw new WorktreeExecutorError("Route not found", 404);
+          },
+          markPruned,
+        }
+      )
+    ).rejects.toThrow("Route not found");
+    expect(markPruned).not.toHaveBeenCalled();
   });
 });

@@ -179,7 +179,10 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock when the sandbox is mi
 
   assert.equal(response.status, 404);
   assert.deepEqual(callOrder, ["load"]);
-  assert.deepEqual(await response.json(), { error: "Not found" });
+  assert.deepEqual(await response.json(), {
+    error: "Not found",
+    code: "sandbox_not_found",
+  });
 });
 
 test("POST /api/sandbox/[id]/exec does not acquire a lock when sandbox credentials are forbidden", async () => {

@@ -389,7 +389,11 @@ test("forced prune releases an archived binding when its sandbox is gone", async
     {
       load: async () => buildWorktree({ status: "archived" }),
       execute: async () => {
-        throw new WorktreeExecutorError("Sandbox not found", 404);
+        throw new WorktreeExecutorError(
+          "Sandbox not found",
+          404,
+          "sandbox_not_found"
+        );
       },
       markPruned: async () => {
         marked = true;
