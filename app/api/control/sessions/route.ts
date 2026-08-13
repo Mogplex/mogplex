@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
-import { parseControlSessionRepoId } from "@/lib/control/session-project";
+import { validateControlSessionRepoAccess } from "@/lib/control/session-repo-access";
 import { pickControlSessionUpdateFields } from "@/lib/control/session-update";
 
 const LIST_COLUMNS =
@@ -62,9 +62,16 @@ export async function POST(req: Request) {
     project?: string | null;
     repo_id?: unknown;
   };
-  const parsedRepoId = parseControlSessionRepoId(body.repo_id);
-  if (!parsedRepoId.ok) {
-    return NextResponse.json({ error: "Invalid repo_id" }, { status: 400 });
+  const repoAccess = await validateControlSessionRepoAccess({
+    request: req,
+    userId,
+    repoId: body.repo_id,
+  });
+  if (!repoAccess.ok) {
+    return NextResponse.json(
+      { error: repoAccess.error },
+      { status: repoAccess.status }
+    );
   }
 
   const { data, error } = await supabaseAdmin
@@ -73,7 +80,7 @@ export async function POST(req: Request) {
       user_id: userId,
       title: body.title?.trim() || "New session",
       project: body.project?.trim().slice(0, 160) || null,
-      repo_id: parsedRepoId.value,
+      repo_id: repoAccess.value,
     })
     .select("*")
     .single();
@@ -103,11 +110,18 @@ export async function PUT(req: Request) {
     archived?: boolean;
   };
   if (Object.hasOwn(body, "repo_id")) {
-    const parsedRepoId = parseControlSessionRepoId(body.repo_id);
-    if (!parsedRepoId.ok) {
-      return NextResponse.json({ error: "Invalid repo_id" }, { status: 400 });
+    const repoAccess = await validateControlSessionRepoAccess({
+      request: req,
+      userId,
+      repoId: body.repo_id,
+    });
+    if (!repoAccess.ok) {
+      return NextResponse.json(
+        { error: repoAccess.error },
+        { status: repoAccess.status }
+      );
     }
-    body.repo_id = parsedRepoId.value;
+    body.repo_id = repoAccess.value;
   }
   const { id, expected_updated_at: expectedUpdatedAt } = body;
 
