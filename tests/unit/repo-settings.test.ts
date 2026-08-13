@@ -11,6 +11,17 @@ test("resolveConfiguredDevPort treats auto mode as unset", async () => {
   assert.equal(resolveConfiguredDevPort("5173", false), 5173);
 });
 
+test("resolveSandboxPath keeps relative files inside an absolute worktree checkout", async () => {
+  const { resolveSandboxPath } = await loadRepoSettings();
+  assert.equal(
+    resolveSandboxPath(
+      "/vercel/sandbox/.worktrees/11111111-2222-4333-8444-555555555555///",
+      "./.mcp/config.json"
+    ),
+    "/vercel/sandbox/.worktrees/11111111-2222-4333-8444-555555555555/.mcp/config.json"
+  );
+});
+
 test("normalizeRepoSettings preserves dev_port_auto", async () => {
   const { normalizeRepoSettings } = await loadRepoSettings();
   const result = normalizeRepoSettings({
