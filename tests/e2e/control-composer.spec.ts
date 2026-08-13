@@ -381,9 +381,9 @@ test("control composer creates a new project when no repos are connected", async
   await expect.poll(() => sessionCreates.length, { timeout: 10_000 }).toBe(1);
   await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(1);
   expect(sessionCreates[0]?.project).toBe("analytics-redesign");
-  await page.getByRole("button", { name: /Worktrees/ }).click();
+  await page.locator("button[aria-pressed]", { hasText: "Sandboxes" }).click();
   await expect(
-    page.getByText(/Account sandboxes are not shown as worktrees/)
+    page.getByText(/No repository is linked to this session/)
   ).toBeVisible();
   expect(sessionCreates[0]?.repo_id).toBeNull();
   expect(chatRequests[0]).toMatchObject({
