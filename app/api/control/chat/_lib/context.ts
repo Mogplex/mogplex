@@ -2,11 +2,6 @@ import { releaseLimitClaim } from "@/lib/request-limits";
 import { resolveUserDefaultModelId } from "@/lib/models/default-model";
 import type { GatewayCallContext } from "@/lib/models/gateway-provider-routing";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import {
-  loadOwnedSandboxRouteRecord,
-  type LoadedSandboxRouteRecord,
-  type SandboxRouteFailure,
-} from "@/lib/sandbox/route-context";
 import type {
   ControlChatRequestBody,
   ControlChatRunScope,
@@ -17,6 +12,14 @@ import type {
   ResourceDecisionSource,
   ResourceRejectionReason,
 } from "@/lib/agents/orchestrator/resource-telemetry";
+
+export {
+  resolveControlPromptSandboxContext,
+  resolveControlPromptSandboxes,
+  resolveControlToolSandboxId,
+  resolveSelectedControlSandboxId,
+  type ControlPromptSandboxContext,
+} from "./sandbox-context";
 
 /**
  * Extract scope identifiers from the request body for event tracking.
@@ -30,35 +33,6 @@ export function getControlChatRunScope(
     missionId: body.missionId || null,
   };
 }
-
-type ControlPromptSandboxRecord = {
-  id: string;
-  sandbox_id: string;
-  repo_id: string;
-  working_branch: string;
-  status: string;
-};
-
-type ControlPromptSandboxDeps = {
-  loadSandboxRecord: (
-    request: Request,
-    sandboxId: string,
-    options: { select: string }
-  ) => Promise<
-    LoadedSandboxRouteRecord<ControlPromptSandboxRecord> | SandboxRouteFailure
-  >;
-  warn?: (message: string, context: Record<string, unknown>) => void;
-};
-
-const defaultControlPromptSandboxDeps: ControlPromptSandboxDeps = {
-  loadSandboxRecord: (request, sandboxId, options) =>
-    loadOwnedSandboxRouteRecord<ControlPromptSandboxRecord>(
-      request,
-      sandboxId,
-      options
-    ),
-  warn: (message, context) => console.warn(message, context),
-};
 
 type ControlPromptWorktreeSession = {
   user_id: string;
@@ -106,16 +80,6 @@ export type ControlPromptWorktreeContext = {
   }>;
 };
 
-export type ControlPromptSandboxContext = {
-  decisionSource: ResourceDecisionSource;
-  rejectionReason: ResourceRejectionReason | null;
-  selected: {
-    recordId: string;
-    runtimeId: string;
-  } | null;
-  sandboxes: Array<{ id: string; branch: string; status: string }>;
-};
-
 function resolveWorktreeSession(
   session: ControlPromptWorktreeSession | null,
   userId: string,
@@ -130,12 +94,6 @@ function resolveWorktreeSession(
   return session.orchestration_run_id
     ? { ok: true, runId: session.orchestration_run_id }
     : { ok: false, reason: "mission_not_linked" };
-}
-
-function sandboxLoadRejection(status: number): ResourceRejectionReason {
-  return status === 404 || status === 410
-    ? "sandbox_not_found"
-    : "sandbox_unavailable";
 }
 
 function nullable<T>(value: T | null | undefined): T | null {
@@ -164,13 +122,6 @@ function worktreeRequestPreflight(body: ControlChatRequestBody) {
     return { rejectionReason: "mission_mismatch" as const };
   }
   return null;
-}
-
-/** Exactly one validated record may become the selected tool sandbox. */
-export function resolveSelectedControlSandboxId(
-  sandboxes: ReadonlyArray<{ id: string }>
-): string | null {
-  return sandboxes.length === 1 ? (sandboxes[0]?.id ?? null) : null;
 }
 
 /** Load worktrees only through the owned Control session and its linked run. */
@@ -222,92 +173,6 @@ export async function resolveControlPromptWorktrees(
     });
     return { ...empty, rejectionReason: "worktree_lookup_failed" };
   }
-}
-
-/**
- * Load the selected sandbox from server-owned state before adding it to the
- * system prompt. A client-provided sandbox id is only a lookup hint; it must
- * never manufacture sandbox or worktree context for the orchestrator.
- */
-export async function resolveControlPromptSandboxContext(
-  request: Request,
-  body: ControlChatRequestBody,
-  deps: ControlPromptSandboxDeps = defaultControlPromptSandboxDeps
-): Promise<ControlPromptSandboxContext> {
-  const empty: ControlPromptSandboxContext = {
-    decisionSource: "none",
-    rejectionReason: null,
-    selected: null,
-    sandboxes: [],
-  };
-  const warn = deps.warn ?? (() => {});
-  if (!body.sandboxId) return empty;
-  if (!body.repoId) {
-    return { ...empty, rejectionReason: "repo_not_selected" };
-  }
-
-  let loaded:
-    | LoadedSandboxRouteRecord<ControlPromptSandboxRecord>
-    | SandboxRouteFailure;
-  try {
-    loaded = await deps.loadSandboxRecord(request, body.sandboxId, {
-      select: "id, sandbox_id, repo_id, working_branch, status",
-    });
-  } catch (error) {
-    warn("[control] sandbox prompt context lookup threw", {
-      sandboxId: body.sandboxId,
-      repoId: body.repoId,
-      error,
-    });
-    return { ...empty, rejectionReason: "sandbox_lookup_failed" };
-  }
-
-  if (!loaded.ok) {
-    warn("[control] sandbox prompt context unavailable", {
-      sandboxId: body.sandboxId,
-      repoId: body.repoId,
-      status: loaded.status,
-      error: loaded.error,
-    });
-    return {
-      ...empty,
-      rejectionReason: sandboxLoadRejection(loaded.status),
-    };
-  }
-  if (loaded.record.repo_id !== body.repoId) {
-    warn("[control] sandbox prompt context repo mismatch", {
-      sandboxId: body.sandboxId,
-      repoId: body.repoId,
-      sandboxRepoId: loaded.record.repo_id,
-    });
-    return { ...empty, rejectionReason: "repo_mismatch" };
-  }
-
-  return {
-    decisionSource: "server_validated_request",
-    rejectionReason: null,
-    selected: {
-      recordId: loaded.record.id,
-      runtimeId: loaded.record.sandbox_id,
-    },
-    sandboxes: [
-      {
-        id: loaded.record.id,
-        branch: loaded.record.working_branch,
-        status: loaded.record.status,
-      },
-    ],
-  };
-}
-
-/** Backwards-compatible prompt-only view of the validated sandbox context. */
-export async function resolveControlPromptSandboxes(
-  request: Request,
-  body: ControlChatRequestBody,
-  deps: ControlPromptSandboxDeps = defaultControlPromptSandboxDeps
-) {
-  return (await resolveControlPromptSandboxContext(request, body, deps))
-    .sandboxes;
 }
 
 /**

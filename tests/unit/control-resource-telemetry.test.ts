@@ -18,6 +18,7 @@ test("control resource context telemetry preserves server-owned identity boundar
     sandboxContext: {
       decisionSource: "server_validated_request",
       rejectionReason: null,
+      selectionRequired: false,
       selected: {
         recordId: "sandbox-record-1",
         runtimeId: "sbx-provider-1",

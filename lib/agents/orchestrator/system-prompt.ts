@@ -204,6 +204,7 @@ function buildExecutionEnvironmentsBlock(
     return `
 <execution-environments>
 No active sandbox is selected. A sandbox is the remote compute environment; a Git worktree is a separate checkout within an environment. One does not imply the other.
+run_command may fall back only when exactly one repo-scoped running sandbox exists. When several are available it fails closed and the operator must select one.
 </execution-environments>
 `;
   }
