@@ -7,6 +7,7 @@ import {
   pruneWorktree,
   rebaseWorktree,
   spawnWorktree,
+  WorktreeServiceError,
 } from "@/lib/worktrees/service";
 import { defineTool } from "../helpers";
 import type { OrchestratorToolContext } from "../types";
@@ -22,6 +23,7 @@ function missingRun() {
   return {
     status: "error" as const,
     error: "This Control session is not linked to an orchestration run.",
+    reason: "mission_not_linked" as const,
   };
 }
 
@@ -34,6 +36,10 @@ function toolError(error: unknown) {
   return {
     status: "error" as const,
     error: error instanceof Error ? error.message : "Worktree operation failed",
+    reason:
+      error instanceof WorktreeServiceError
+        ? error.reason
+        : ("operation_failed" as const),
   };
 }
 
@@ -45,7 +51,11 @@ export function createSpawnWorktreeTool(ctx: OrchestratorToolContext): Tool {
     execute: async ({ taskId }: z.infer<typeof spawnWorktreeSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
       if (!ctx.sandboxId) {
-        return { status: "error" as const, error: "Select a sandbox first." };
+        return {
+          status: "error" as const,
+          error: "Select a sandbox first.",
+          reason: "sandbox_not_selected" as const,
+        };
       }
       try {
         const worktree = await spawnWorktree({

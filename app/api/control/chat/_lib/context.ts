@@ -13,6 +13,10 @@ import type {
   ControlChatRunMetadata,
 } from "./types";
 import { listWorktrees } from "@/lib/worktrees/service";
+import type {
+  ResourceDecisionSource,
+  ResourceRejectionReason,
+} from "@/lib/agents/orchestrator/resource-telemetry";
 
 /**
  * Extract scope identifiers from the request body for event tracking.
@@ -56,12 +60,17 @@ const defaultControlPromptSandboxDeps: ControlPromptSandboxDeps = {
   warn: (message, context) => console.warn(message, context),
 };
 
+type ControlPromptWorktreeSession = {
+  user_id: string;
+  repo_id: string | null;
+  orchestration_run_id: string | null;
+};
+
 type ControlPromptWorktreeDeps = {
-  loadSession: (input: { conversationId: string; userId: string }) => Promise<{
-    user_id: string;
-    repo_id: string | null;
-    orchestration_run_id: string | null;
-  } | null>;
+  loadSession: (input: {
+    conversationId: string;
+    userId: string;
+  }) => Promise<ControlPromptWorktreeSession | null>;
   listWorktrees: typeof listWorktrees;
   warn?: (message: string, context: Record<string, unknown>) => void;
 };
@@ -82,7 +91,10 @@ const defaultControlPromptWorktreeDeps: ControlPromptWorktreeDeps = {
 };
 
 export type ControlPromptWorktreeContext = {
+  controlSessionId: string | null;
   orchestrationRunId: string | null;
+  decisionSource: ResourceDecisionSource;
+  rejectionReason: ResourceRejectionReason | null;
   worktrees: Array<{
     id: string;
     taskId: string;
@@ -93,6 +105,66 @@ export type ControlPromptWorktreeContext = {
     agentId?: string;
   }>;
 };
+
+export type ControlPromptSandboxContext = {
+  decisionSource: ResourceDecisionSource;
+  rejectionReason: ResourceRejectionReason | null;
+  selected: {
+    recordId: string;
+    runtimeId: string;
+  } | null;
+  sandboxes: Array<{ id: string; branch: string; status: string }>;
+};
+
+function resolveWorktreeSession(
+  session: ControlPromptWorktreeSession | null,
+  userId: string,
+  repoId: string
+):
+  | { ok: true; runId: string }
+  | { ok: false; reason: ResourceRejectionReason } {
+  if (!session) return { ok: false, reason: "session_not_found" };
+  if (session.user_id !== userId || session.repo_id !== repoId) {
+    return { ok: false, reason: "repo_mismatch" };
+  }
+  return session.orchestration_run_id
+    ? { ok: true, runId: session.orchestration_run_id }
+    : { ok: false, reason: "mission_not_linked" };
+}
+
+function sandboxLoadRejection(status: number): ResourceRejectionReason {
+  return status === 404 || status === 410
+    ? "sandbox_not_found"
+    : "sandbox_unavailable";
+}
+
+function nullable<T>(value: T | null | undefined): T | null {
+  return value ?? null;
+}
+
+function presentPromptWorktree(
+  worktree: Awaited<ReturnType<typeof listWorktrees>>[number]
+) {
+  return {
+    id: worktree.id,
+    taskId: worktree.task_id,
+    branch: worktree.branch_name,
+    status: worktree.status,
+    sandboxId: worktree.sandbox_id,
+    checkoutPath: worktree.checkout_path,
+    ...(worktree.agent_id ? { agentId: worktree.agent_id } : {}),
+  };
+}
+
+function worktreeRequestPreflight(body: ControlChatRequestBody) {
+  if (!body.conversationId || !body.repoId) {
+    return { rejectionReason: null };
+  }
+  if (body.missionId && body.missionId !== body.conversationId) {
+    return { rejectionReason: "mission_mismatch" as const };
+  }
+  return null;
+}
 
 /** Exactly one validated record may become the selected tool sandbox. */
 export function resolveSelectedControlSandboxId(
@@ -107,46 +179,48 @@ export async function resolveControlPromptWorktrees(
   body: ControlChatRequestBody,
   deps: ControlPromptWorktreeDeps = defaultControlPromptWorktreeDeps
 ): Promise<ControlPromptWorktreeContext> {
-  const empty = { orchestrationRunId: null, worktrees: [] };
-  if (!body.conversationId || !body.repoId) return empty;
+  const empty = {
+    controlSessionId: null,
+    orchestrationRunId: null,
+    decisionSource: "none" as const,
+    rejectionReason: null,
+    worktrees: [],
+  };
+  const warn = deps.warn ?? (() => {});
+  const preflight = worktreeRequestPreflight(body);
+  if (preflight) return { ...empty, ...preflight };
+  const conversationId = body.conversationId!;
+  const repoId = body.repoId!;
   try {
     const session = await deps.loadSession({
-      conversationId: body.conversationId,
+      conversationId,
       userId,
     });
-    if (
-      session?.user_id !== userId ||
-      session.repo_id !== body.repoId ||
-      !session.orchestration_run_id
-    ) {
-      return empty;
+    const sessionResolution = resolveWorktreeSession(session, userId, repoId);
+    if (!sessionResolution.ok) {
+      return { ...empty, rejectionReason: sessionResolution.reason };
     }
     const worktrees = await deps.listWorktrees({
       userId,
-      runId: session.orchestration_run_id,
-      repoId: body.repoId,
+      runId: sessionResolution.runId,
+      repoId,
     });
     return {
-      orchestrationRunId: session.orchestration_run_id,
+      controlSessionId: conversationId,
+      orchestrationRunId: sessionResolution.runId,
+      decisionSource: "owned_control_session",
+      rejectionReason: null,
       worktrees: worktrees
         .filter((worktree) => worktree.status !== "archived")
-        .map((worktree) => ({
-          id: worktree.id,
-          taskId: worktree.task_id,
-          branch: worktree.branch_name,
-          status: worktree.status,
-          sandboxId: worktree.sandbox_id,
-          checkoutPath: worktree.checkout_path,
-          ...(worktree.agent_id ? { agentId: worktree.agent_id } : {}),
-        })),
+        .map(presentPromptWorktree),
     };
   } catch (error) {
-    deps.warn?.("[control] worktree prompt context unavailable", {
-      conversationId: body.conversationId,
-      repoId: body.repoId,
+    warn("[control] worktree prompt context unavailable", {
+      conversationId,
+      repoId,
       error,
     });
-    return empty;
+    return { ...empty, rejectionReason: "worktree_lookup_failed" };
   }
 }
 
@@ -155,12 +229,22 @@ export async function resolveControlPromptWorktrees(
  * system prompt. A client-provided sandbox id is only a lookup hint; it must
  * never manufacture sandbox or worktree context for the orchestrator.
  */
-export async function resolveControlPromptSandboxes(
+export async function resolveControlPromptSandboxContext(
   request: Request,
   body: ControlChatRequestBody,
   deps: ControlPromptSandboxDeps = defaultControlPromptSandboxDeps
-): Promise<Array<{ id: string; branch: string; status: string }>> {
-  if (!body.sandboxId || !body.repoId) return [];
+): Promise<ControlPromptSandboxContext> {
+  const empty: ControlPromptSandboxContext = {
+    decisionSource: "none",
+    rejectionReason: null,
+    selected: null,
+    sandboxes: [],
+  };
+  const warn = deps.warn ?? (() => {});
+  if (!body.sandboxId) return empty;
+  if (!body.repoId) {
+    return { ...empty, rejectionReason: "repo_not_selected" };
+  }
 
   let loaded:
     | LoadedSandboxRouteRecord<ControlPromptSandboxRecord>
@@ -170,39 +254,60 @@ export async function resolveControlPromptSandboxes(
       select: "id, sandbox_id, repo_id, working_branch, status",
     });
   } catch (error) {
-    deps.warn?.("[control] sandbox prompt context lookup threw", {
+    warn("[control] sandbox prompt context lookup threw", {
       sandboxId: body.sandboxId,
       repoId: body.repoId,
       error,
     });
-    return [];
+    return { ...empty, rejectionReason: "sandbox_lookup_failed" };
   }
 
   if (!loaded.ok) {
-    deps.warn?.("[control] sandbox prompt context unavailable", {
+    warn("[control] sandbox prompt context unavailable", {
       sandboxId: body.sandboxId,
       repoId: body.repoId,
       status: loaded.status,
       error: loaded.error,
     });
-    return [];
+    return {
+      ...empty,
+      rejectionReason: sandboxLoadRejection(loaded.status),
+    };
   }
   if (loaded.record.repo_id !== body.repoId) {
-    deps.warn?.("[control] sandbox prompt context repo mismatch", {
+    warn("[control] sandbox prompt context repo mismatch", {
       sandboxId: body.sandboxId,
       repoId: body.repoId,
       sandboxRepoId: loaded.record.repo_id,
     });
-    return [];
+    return { ...empty, rejectionReason: "repo_mismatch" };
   }
 
-  return [
-    {
-      id: loaded.record.id,
-      branch: loaded.record.working_branch,
-      status: loaded.record.status,
+  return {
+    decisionSource: "server_validated_request",
+    rejectionReason: null,
+    selected: {
+      recordId: loaded.record.id,
+      runtimeId: loaded.record.sandbox_id,
     },
-  ];
+    sandboxes: [
+      {
+        id: loaded.record.id,
+        branch: loaded.record.working_branch,
+        status: loaded.record.status,
+      },
+    ],
+  };
+}
+
+/** Backwards-compatible prompt-only view of the validated sandbox context. */
+export async function resolveControlPromptSandboxes(
+  request: Request,
+  body: ControlChatRequestBody,
+  deps: ControlPromptSandboxDeps = defaultControlPromptSandboxDeps
+) {
+  return (await resolveControlPromptSandboxContext(request, body, deps))
+    .sandboxes;
 }
 
 /**
@@ -214,17 +319,23 @@ export function buildControlChatRunMetadata(
 ): ControlChatRunMetadata {
   return {
     surface: "control",
-    sandbox_id: body.sandboxId ?? null,
-    repo: body.repoFullName ?? null,
-    repo_owner: body.repoOwner ?? null,
-    repo_name: body.repoName ?? null,
-    repo_branch: body.repoBranch ?? null,
+    sandbox_id: null,
+    sandbox_hint_id: nullable(body.sandboxId),
+    sandbox_runtime_id: null,
+    sandbox_selection_source: null,
+    sandbox_rejection_reason: null,
+    repo: nullable(body.repoFullName),
+    repo_owner: nullable(body.repoOwner),
+    repo_name: nullable(body.repoName),
+    repo_branch: nullable(body.repoBranch),
     team_id: teamId,
-    mission_id: body.missionId ?? null,
-    scope: body.scope ?? null,
-    target: body.target ?? null,
-    permissions: body.permissions ?? null,
-    mode: body.mode ?? null,
+    mission_id: null,
+    mission_hint_id: nullable(body.missionId),
+    orchestration_run_id: null,
+    scope: nullable(body.scope),
+    target: nullable(body.target),
+    permissions: nullable(body.permissions),
+    mode: nullable(body.mode),
   };
 }
 

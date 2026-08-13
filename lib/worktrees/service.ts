@@ -30,20 +30,34 @@ import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 export class WorktreeServiceError extends Error {
   readonly forceEligible: boolean;
   readonly kind: "not_found" | "conflict";
+  readonly reason: WorktreeServiceRejectionReason;
 
   constructor(
     message: string,
     options: {
       forceEligible?: boolean;
       kind?: "not_found" | "conflict";
+      reason?: WorktreeServiceRejectionReason;
     } = {}
   ) {
     super(message);
     this.name = "WorktreeServiceError";
     this.forceEligible = options.forceEligible ?? false;
     this.kind = options.kind ?? "conflict";
+    this.reason = options.reason ?? "operation_failed";
   }
 }
+
+export type WorktreeServiceRejectionReason =
+  | "mission_mismatch"
+  | "operation_failed"
+  | "sandbox_inactive"
+  | "sandbox_mismatch"
+  | "sandbox_not_found"
+  | "stale_resource"
+  | "task_not_found"
+  | "worktree_invalid_state"
+  | "worktree_not_found";
 
 type WorktreeServiceDeps = {
   loadTask: typeof loadOwnedWorktreeTask;
@@ -95,7 +109,12 @@ export async function spawnWorktree(
 ): Promise<OrchestrationWorktreeDTO> {
   const deps = { ...defaultDeps, ...overrides };
   const task = await deps.loadTask(input);
-  if (!task) throw new WorktreeServiceError("Orchestration task not found");
+  if (!task) {
+    throw new WorktreeServiceError("Orchestration task not found", {
+      kind: "not_found",
+      reason: "task_not_found",
+    });
+  }
   const existing = await deps.findLiveForTask({
     taskId: input.taskId,
     userId: input.userId,
@@ -104,11 +123,14 @@ export async function spawnWorktree(
     existing &&
     (existing.run_id !== task.run_id || existing.repo_id !== task.repo_id)
   ) {
-    throw new WorktreeServiceError("Worktree belongs to another mission");
+    throw new WorktreeServiceError("Worktree belongs to another mission", {
+      reason: "mission_mismatch",
+    });
   }
   if (existing && existing.sandbox_id !== input.sandboxId) {
     throw new WorktreeServiceError(
-      "Worktree is already reserved in another sandbox"
+      "Worktree is already reserved in another sandbox",
+      { reason: "sandbox_mismatch" }
     );
   }
   if (existing?.status === "active" || existing?.status === "archived") {
@@ -120,14 +142,20 @@ export async function spawnWorktree(
     userId: input.userId,
     repoId: task.repo_id,
   });
-  if (!sandbox) throw new WorktreeServiceError("Sandbox not found");
+  if (!sandbox) {
+    throw new WorktreeServiceError("Sandbox not found", {
+      kind: "not_found",
+      reason: "sandbox_not_found",
+    });
+  }
   if (
     !ACTIVE_SANDBOX_STATUSES.includes(
       sandbox.status as (typeof ACTIVE_SANDBOX_STATUSES)[number]
     )
   ) {
     throw new WorktreeServiceError(
-      "Resume the sandbox before creating a worktree"
+      "Resume the sandbox before creating a worktree",
+      { reason: "sandbox_inactive" }
     );
   }
 
@@ -165,11 +193,14 @@ export async function spawnWorktree(
     worktree = reservation.worktree;
     ownsCreation = reservation.created;
     if (worktree.run_id !== task.run_id || worktree.repo_id !== task.repo_id) {
-      throw new WorktreeServiceError("Worktree belongs to another mission");
+      throw new WorktreeServiceError("Worktree belongs to another mission", {
+        reason: "mission_mismatch",
+      });
     }
     if (worktree.sandbox_id !== sandbox.id) {
       throw new WorktreeServiceError(
-        "Worktree is already reserved in another sandbox"
+        "Worktree is already reserved in another sandbox",
+        { reason: "sandbox_mismatch" }
       );
     }
   }
@@ -245,7 +276,10 @@ async function requireOwnedWorktree(
 ): Promise<OrchestrationWorktreeDTO> {
   const worktree = await deps.load(input);
   if (worktree?.run_id !== input.runId || worktree.repo_id !== input.repoId) {
-    throw new WorktreeServiceError("Worktree not found", { kind: "not_found" });
+    throw new WorktreeServiceError("Worktree not found", {
+      kind: "not_found",
+      reason: "worktree_not_found",
+    });
   }
   return worktree;
 }
@@ -262,7 +296,9 @@ export async function rebaseWorktree(
   const deps = { ...defaultDeps, ...overrides };
   const worktree = await requireOwnedWorktree(input, deps);
   if (worktree.status !== "active") {
-    throw new WorktreeServiceError("Only active worktrees can be rebased");
+    throw new WorktreeServiceError("Only active worktrees can be rebased", {
+      reason: "worktree_invalid_state",
+    });
   }
   const result = await deps.execute({
     userId: input.userId,
@@ -289,10 +325,14 @@ export async function diffWorktree(
   const deps = { ...defaultDeps, ...overrides };
   const worktree = await requireOwnedWorktree(input, deps);
   if (worktree.status === "pruned") {
-    throw new WorktreeServiceError("Pruned worktrees have no checkout");
+    throw new WorktreeServiceError("Pruned worktrees have no checkout", {
+      reason: "worktree_invalid_state",
+    });
   }
   if (isReservedCheckoutPath(worktree.checkout_path)) {
-    throw new WorktreeServiceError("Worktree has no checkout yet");
+    throw new WorktreeServiceError("Worktree has no checkout yet", {
+      reason: "worktree_invalid_state",
+    });
   }
   const result = await deps.execute({
     userId: input.userId,
@@ -323,7 +363,8 @@ export async function archiveWorktree(
     worktree.status !== "error"
   ) {
     throw new WorktreeServiceError(
-      "Only creating, active, or failed worktrees can be archived"
+      "Only creating, active, or failed worktrees can be archived",
+      { reason: "worktree_invalid_state" }
     );
   }
   if (
@@ -331,7 +372,8 @@ export async function archiveWorktree(
     !isStaleWorktreeReservation(worktree.updated_at)
   ) {
     throw new WorktreeServiceError(
-      "Wait for worktree creation to finish before archiving"
+      "Wait for worktree creation to finish before archiving",
+      { reason: "worktree_invalid_state" }
     );
   }
   const archived = await deps.archive({
@@ -340,7 +382,9 @@ export async function archiveWorktree(
       worktree.status === "creating" ? worktree.updated_at : undefined,
   });
   if (!archived) {
-    throw new WorktreeServiceError("Worktree changed; refresh and retry");
+    throw new WorktreeServiceError("Worktree changed; refresh and retry", {
+      reason: "stale_resource",
+    });
   }
   return archived;
 }
@@ -359,7 +403,9 @@ export async function pruneWorktree(
   const worktree = await requireOwnedWorktree(input, deps);
   if (worktree.status === "pruned") return worktree;
   if (worktree.status !== "archived") {
-    throw new WorktreeServiceError("Archive the worktree before pruning it");
+    throw new WorktreeServiceError("Archive the worktree before pruning it", {
+      reason: "worktree_invalid_state",
+    });
   }
   try {
     // The reservation probe may resume a stopped sandbox so it can verify and
@@ -388,6 +434,7 @@ export async function pruneWorktree(
       if (!input.force) {
         throw new WorktreeServiceError(error.message, {
           forceEligible: true,
+          reason: "sandbox_not_found",
         });
       }
       console.warn("[worktrees] retiring binding for missing sandbox", {

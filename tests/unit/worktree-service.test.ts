@@ -6,6 +6,7 @@ import {
   pruneWorktree,
   rebaseWorktree,
   spawnWorktree,
+  WorktreeServiceError,
 } from "../../lib/worktrees/service";
 import { WorktreeExecutorError } from "../../lib/worktrees/executor";
 import type {
@@ -165,6 +166,46 @@ test("spawn rejects reuse across missions or sandboxes", async () => {
       }
     ),
     /another sandbox/
+  );
+});
+
+test("spawn exposes stable fail-closed reasons for invented tasks and mismatched sandboxes", async () => {
+  await assert.rejects(
+    spawnWorktree(
+      {
+        userId: "user-1",
+        runId: RUN_ID,
+        taskId: "client-invented-task",
+        sandboxId: SANDBOX_ID,
+      },
+      {
+        loadTask: async () => null,
+      }
+    ),
+    (error: unknown) =>
+      error instanceof WorktreeServiceError &&
+      error.reason === "task_not_found" &&
+      error.kind === "not_found"
+  );
+
+  await assert.rejects(
+    spawnWorktree(
+      {
+        userId: "user-1",
+        runId: RUN_ID,
+        taskId: TASK_ID,
+        sandboxId: "client-invented-sandbox",
+      },
+      {
+        loadTask: async () => buildTask(),
+        findLiveForTask: async () => null,
+        loadSandbox: async () => null,
+      }
+    ),
+    (error: unknown) =>
+      error instanceof WorktreeServiceError &&
+      error.reason === "sandbox_not_found" &&
+      error.kind === "not_found"
   );
 });
 
@@ -417,5 +458,37 @@ test("lifecycle actions reject a worktree from another mission", async () => {
       { load: async () => buildWorktree() }
     ),
     /Worktree not found/
+  );
+});
+
+test("lifecycle actions fail closed for wrong repo and stale worktree identifiers", async () => {
+  await assert.rejects(
+    diffWorktree(
+      {
+        userId: "user-1",
+        worktreeId: WORKTREE_ID,
+        runId: RUN_ID,
+        repoId: "wrong-repo",
+      },
+      { load: async () => buildWorktree() }
+    ),
+    (error: unknown) =>
+      error instanceof WorktreeServiceError &&
+      error.reason === "worktree_not_found"
+  );
+
+  await assert.rejects(
+    archiveWorktree(
+      {
+        userId: "user-1",
+        worktreeId: "stale-worktree",
+        runId: RUN_ID,
+        repoId: REPO_ID,
+      },
+      { load: async () => null }
+    ),
+    (error: unknown) =>
+      error instanceof WorktreeServiceError &&
+      error.reason === "worktree_not_found"
   );
 });

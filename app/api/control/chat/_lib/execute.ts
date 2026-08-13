@@ -17,13 +17,14 @@ import {
   buildControlChatRunMetadata,
   buildControlGatewayContext,
   resolveSelectedControlSandboxId,
-  resolveControlPromptSandboxes,
+  resolveControlPromptSandboxContext,
   resolveControlPromptWorktrees,
   resolveGithubTokenForRepo,
 } from "./context";
 import {
   createToolCallStartHandler,
   createToolCallFinishHandler,
+  recordControlResourceContext,
 } from "./telemetry";
 import {
   markControlRunStreaming,
@@ -53,7 +54,7 @@ export async function executeControlChatRequest(input: {
   limitClaimId: string | null;
   callStartedAt: string;
 }) {
-  const scope = getControlChatRunScope(input.body);
+  let scope = getControlChatRunScope(input.body);
   const teamId = readActiveTeamIdHeader(input.req);
   let aiCall: ActiveControlCall | null = null;
 
@@ -72,15 +73,33 @@ export async function executeControlChatRequest(input: {
     const activeCall = aiCall;
 
     // Build orchestrator context
-    const [githubToken, activeSandboxes, worktreeContext] = await Promise.all([
+    const [githubToken, sandboxContext, worktreeContext] = await Promise.all([
       resolveGithubTokenForRepo(input.userId, input.body.repoId),
-      resolveControlPromptSandboxes(input.req, input.body),
+      resolveControlPromptSandboxContext(input.req, input.body),
       resolveControlPromptWorktrees(input.userId, input.body),
     ]);
+    // Replace the client hint with the owned, server-validated session and
+    // fail closed to no mission when the hint cannot be validated.
+    scope = {
+      ...scope,
+      missionId: worktreeContext.controlSessionId,
+    };
+    const activeSandboxes = sandboxContext.sandboxes;
+    const selectedSandboxId = resolveSelectedControlSandboxId(activeSandboxes);
+
+    // Both writes are fail-open, but awaiting them preserves ordering so
+    // qualification never observes a decision without its owning context.
+    await recordControlResourceContext({
+      activeCall,
+      userId: input.userId,
+      scope,
+      sandboxContext,
+      worktreeContext,
+    });
 
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
-      sandboxId: resolveSelectedControlSandboxId(activeSandboxes),
+      sandboxId: selectedSandboxId,
       repoId: input.body.repoId,
       repoOwner: input.body.repoOwner,
       repoName: input.body.repoName,
@@ -88,7 +107,7 @@ export async function executeControlChatRequest(input: {
       repoBaseBranch: input.body.repoBaseBranch,
       githubToken,
       teamId,
-      missionId: input.body.missionId,
+      missionId: scope.missionId,
       orchestrationRunId: worktreeContext.orchestrationRunId,
       conversationId: scope.conversationId,
       aiCallId: activeCall.id,
@@ -102,7 +121,7 @@ export async function executeControlChatRequest(input: {
       repoName: input.body.repoName ?? undefined,
       repoBranch: input.body.repoBranch ?? undefined,
       repoBaseBranch: input.body.repoBaseBranch ?? undefined,
-      missionId: input.body.missionId ?? undefined,
+      missionId: scope.missionId ?? undefined,
       missionTitle: input.body.missionTitle ?? undefined,
       controlScope: input.body.scope ?? undefined,
       controlTarget: input.body.target ?? undefined,
@@ -181,7 +200,13 @@ export async function executeControlChatRequest(input: {
       experimental_onToolCallFinish: createToolCallFinishHandler(
         activeCall,
         input.userId,
-        scope
+        scope,
+        {
+          repoId: scope.repoId,
+          missionId: scope.missionId,
+          orchestrationRunId: worktreeContext.orchestrationRunId,
+          selectedSandboxId,
+        }
       ),
       async onAbort({ steps }) {
         if (finalized) return;

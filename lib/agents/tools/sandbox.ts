@@ -4,6 +4,7 @@ import {
   getSandboxRequestHeaders,
   resolveOrCreateSandbox,
   type SandboxResolution,
+  type SandboxResolutionFailure,
 } from "./sandbox-resolution";
 
 export { resolveOrCreateSandbox } from "./sandbox-resolution";
@@ -81,6 +82,11 @@ async function retryExecAfterSandboxLoss(
   result:
     | ReturnType<typeof formatSandboxExecResult>
     | ReturnType<typeof formatSandboxExecError>
+    | {
+        error: string;
+        reason: SandboxResolutionFailure["reason"];
+        command: string;
+      }
     | null;
 } | null> {
   if (res.status !== 404 && res.status !== 410) return null;
@@ -92,7 +98,11 @@ async function retryExecAfterSandboxLoss(
   if ("error" in resolution) {
     return {
       sandbox: null,
-      result: { error: resolution.error, command: ctx.command },
+      result: {
+        error: resolution.error,
+        reason: resolution.reason,
+        command: ctx.command,
+      },
     };
   }
 
@@ -133,7 +143,11 @@ export function createTerminalExec(
     execute: async ({ command, cwd }: z.infer<typeof terminalParams>) => {
       const requestHeaders = getSandboxRequestHeaders(userId);
       if ("error" in requestHeaders) {
-        return { error: requestHeaders.error, command };
+        return {
+          error: requestHeaders.error,
+          reason: requestHeaders.reason,
+          command,
+        };
       }
 
       // Resolve sandbox at execution time (not build time)
@@ -144,7 +158,11 @@ export function createTerminalExec(
           selectedSandboxId
         );
         if (resolution && "error" in resolution) {
-          return { error: resolution.error, command };
+          return {
+            error: resolution.error,
+            reason: resolution.reason,
+            command,
+          };
         }
         cachedSandbox = resolution;
       }
@@ -152,6 +170,7 @@ export function createTerminalExec(
       if (!cachedSandbox) {
         return {
           error: "No sandbox available. Select a repository first.",
+          reason: "repo_not_selected" as const,
           command,
         };
       }
@@ -204,11 +223,21 @@ export function createWriteFile(userId?: string, sandboxId?: string) {
       "Write content to a file in the server-selected sandbox. The sandbox identity is fixed by the active session and cannot be supplied by the model.",
     inputSchema: writeFileParams,
     execute: async ({ path, content }: z.infer<typeof writeFileParams>) => {
-      if (!sandboxId) return { error: "Select a sandbox first." };
+      if (!sandboxId) {
+        return {
+          error: "Select a sandbox first.",
+          reason: "sandbox_not_selected" as const,
+        };
+      }
       const baseUrl = resolveAppBaseUrl();
 
       const requestHeaders = getSandboxRequestHeaders(userId);
-      if ("error" in requestHeaders) return { error: requestHeaders.error };
+      if ("error" in requestHeaders) {
+        return {
+          error: requestHeaders.error,
+          reason: requestHeaders.reason,
+        };
+      }
 
       const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}/files`, {
         method: "PUT",
@@ -218,7 +247,10 @@ export function createWriteFile(userId?: string, sandboxId?: string) {
 
       if (!res.ok) {
         const data = await res.json();
-        return { error: (data.error as string) || "Write failed" };
+        return {
+          error: (data.error as string) || "Write failed",
+          reason: "operation_failed" as const,
+        };
       }
 
       return { ok: true, path, sandboxId };
@@ -241,11 +273,19 @@ export function createStartSandbox(userId?: string) {
     inputSchema: startSandboxParams,
     execute: async ({ repoId }: z.infer<typeof startSandboxParams>) => {
       const requestHeaders = getSandboxRequestHeaders(userId);
-      if ("error" in requestHeaders) return { error: requestHeaders.error };
+      if ("error" in requestHeaders) {
+        return {
+          error: requestHeaders.error,
+          reason: requestHeaders.reason,
+        };
+      }
 
       const sandbox = await resolveOrCreateSandbox(userId, repoId);
       if (!sandbox) {
-        return { error: "Failed to start sandbox" };
+        return {
+          error: "Failed to start sandbox",
+          reason: "sandbox_unavailable" as const,
+        };
       }
       if ("error" in sandbox) return sandbox;
 
@@ -260,6 +300,7 @@ export function createStartSandbox(userId?: string) {
         ok: true,
         sandboxId: sandbox.sandboxId,
         status: sandbox.status,
+        sandboxResolution: sandbox.source,
         message,
       };
     },
@@ -295,6 +336,7 @@ function formatSandboxStopResult(
       error:
         readStopResponseString(stoppedSandbox?.error_summary?.current_error) ??
         "Sandbox stop could not be confirmed. Its record remains available for reconciliation.",
+      reason: "sandbox_unavailable" as const,
       sandboxId,
       status: status ?? "unknown",
     };
@@ -315,7 +357,12 @@ export function createStopSandbox(userId?: string) {
     execute: async ({ sandboxId }: z.infer<typeof stopSandboxParams>) => {
       const baseUrl = resolveAppBaseUrl();
       const requestHeaders = getSandboxRequestHeaders(userId);
-      if ("error" in requestHeaders) return { error: requestHeaders.error };
+      if ("error" in requestHeaders) {
+        return {
+          error: requestHeaders.error,
+          reason: requestHeaders.reason,
+        };
+      }
       const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}/stop`, {
         method: "POST",
         headers: requestHeaders.headers,
@@ -326,6 +373,10 @@ export function createStopSandbox(userId?: string) {
       if (!res.ok) {
         return {
           error: readStopResponseString(data.error) ?? "Failed to stop sandbox",
+          reason:
+            res.status === 404 || res.status === 410
+              ? ("sandbox_not_found" as const)
+              : ("sandbox_unavailable" as const),
         };
       }
       return formatSandboxStopResult(data, sandboxId);

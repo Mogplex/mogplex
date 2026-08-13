@@ -25,7 +25,8 @@ const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function installSandboxRows(
   running: RunningSandbox[],
-  repoLookup: { id: string } | null = null
+  repoLookup: { id: string } | null = null,
+  repoLookupError: { message: string } | null = null
 ) {
   const sandboxQuery = {
     select: () => sandboxQuery,
@@ -36,7 +37,7 @@ function installSandboxRows(
   const repoQuery = {
     select: () => repoQuery,
     eq: () => repoQuery,
-    maybeSingle: async () => ({ data: repoLookup, error: null }),
+    maybeSingle: async () => ({ data: repoLookup, error: repoLookupError }),
   };
   Object.defineProperty(supabaseAdmin, "from", {
     configurable: true,
@@ -121,6 +122,7 @@ describe("sandbox resolution contract", () => {
     ).toEqual({
       error:
         "Multiple running sandboxes are available for this repository. Select one explicitly before continuing.",
+      reason: "multiple_sandboxes",
     });
   });
 
@@ -178,7 +180,20 @@ describe("sandbox resolution contract", () => {
     await expect(resolveOrCreateSandbox("user-1")).resolves.toBeNull();
     await expect(
       resolveOrCreateSandbox("user-1", "acme/missing")
-    ).resolves.toBeNull();
+    ).resolves.toEqual({
+      error: "Failed to start sandbox",
+      reason: "repo_mismatch",
+    });
+  });
+
+  it("distinguishes repository lookup failures from ownership mismatches", async () => {
+    installSandboxRows([], null, { message: "database unavailable" });
+    await expect(
+      resolveOrCreateSandbox("user-1", "acme/unavailable")
+    ).resolves.toEqual({
+      error: "Failed to start sandbox",
+      reason: "repo_lookup_failed",
+    });
   });
 
   it("surfaces delegated-auth configuration failures", async () => {
@@ -187,11 +202,23 @@ describe("sandbox resolution contract", () => {
       resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
     ).resolves.toEqual({
       error: "INTERNAL_API_SECRET is required for delegated internal API calls",
+      reason: "auth_unavailable",
     });
   });
 });
 
 describe("sandbox command tool contract", () => {
+  it("classifies missing repository context without attempting execution", async () => {
+    const tool = createTerminalExec(undefined, "user-1") as unknown as {
+      execute: (input: { command: string }) => Promise<unknown>;
+    };
+    await expect(tool.execute({ command: "pwd" })).resolves.toEqual({
+      error: "No sandbox available. Select a repository first.",
+      reason: "repo_not_selected",
+      command: "pwd",
+    });
+  });
+
   it("surfaces delegated-auth failures instead of blaming repo selection", async () => {
     delete process.env.INTERNAL_API_SECRET;
     let fetched = false;
@@ -209,6 +236,7 @@ describe("sandbox command tool contract", () => {
 
     await expect(tool.execute({ command: "pwd" })).resolves.toEqual({
       error: "INTERNAL_API_SECRET is required for delegated internal API calls",
+      reason: "auth_unavailable",
       command: "pwd",
     });
     expect(fetched).toBe(false);
@@ -280,7 +308,6 @@ describe("sandbox command tool contract", () => {
       status: "running",
     });
   });
-
   it("does not resurrect a dead selected sandbox after re-resolution fails", async () => {
     const urls: string[] = [];
     global.fetch = async (input) => {
@@ -355,6 +382,7 @@ describe("sandbox command tool contract", () => {
 
     await expect(tool.execute({ command: "pwd" })).resolves.toEqual({
       error: "INTERNAL_API_SECRET is required for delegated internal API calls",
+      reason: "auth_unavailable",
       command: "pwd",
     });
   });
@@ -389,8 +417,10 @@ describe("sandbox write tool contract", () => {
     };
     await expect(
       unboundTool.execute({ path: "src/a.ts", content: "export {};" })
-    ).resolves.toEqual({ error: "Select a sandbox first." });
-
+    ).resolves.toEqual({
+      error: "Select a sandbox first.",
+      reason: "sandbox_not_selected",
+    });
     global.fetch = async () => Response.json({ ok: true });
     const boundTool = createWriteFile(
       "user-1",
