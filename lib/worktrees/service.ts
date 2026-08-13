@@ -9,6 +9,7 @@ import { executeWorktreeCommand, WorktreeExecutorError } from "./executor";
 import {
   activateWorktree,
   archiveWorktreeRecord,
+  claimErroredWorktree,
   findLiveWorktreeForTask,
   listOwnedWorktrees,
   loadOwnedWorktree,
@@ -16,11 +17,12 @@ import {
   loadOwnedWorktreeTask,
   markWorktreeError,
   markWorktreePruned,
-  isStaleWorktreeReservation,
   isReservedCheckoutPath,
   reclaimStaleCreatingWorktree,
+  recordMaterializedWorktree,
   reserveWorktree,
 } from "./store";
+import { isStaleWorktreeReservation } from "./constants";
 import type { OrchestrationWorktreeDTO, WorktreeCommandResult } from "./types";
 import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 
@@ -48,6 +50,8 @@ type WorktreeServiceDeps = {
   findLiveForTask: typeof findLiveWorktreeForTask;
   reserve: typeof reserveWorktree;
   reclaimCreating: typeof reclaimStaleCreatingWorktree;
+  claimError: typeof claimErroredWorktree;
+  recordMaterialized: typeof recordMaterializedWorktree;
   execute: typeof executeWorktreeCommand;
   activate: typeof activateWorktree;
   markError: typeof markWorktreeError;
@@ -63,6 +67,8 @@ const defaultDeps: WorktreeServiceDeps = {
   findLiveForTask: findLiveWorktreeForTask,
   reserve: reserveWorktree,
   reclaimCreating: reclaimStaleCreatingWorktree,
+  claimError: claimErroredWorktree,
+  recordMaterialized: recordMaterializedWorktree,
   execute: executeWorktreeCommand,
   activate: activateWorktree,
   markError: markWorktreeError,
@@ -125,7 +131,16 @@ export async function spawnWorktree(
   }
 
   let worktree = existing;
-  let ownsCreation = existing?.status === "error";
+  let ownsCreation = false;
+  if (existing?.status === "error") {
+    const claimed = await deps.claimError({
+      worktreeId: existing.id,
+      userId: input.userId,
+      expectedUpdatedAt: existing.updated_at,
+    });
+    worktree = claimed ?? existing;
+    ownsCreation = claimed !== null;
+  }
   if (existing?.status === "creating") {
     const reclaimed = await deps.reclaimCreating({
       worktreeId: existing.id,
@@ -164,6 +179,13 @@ export async function spawnWorktree(
   }
 
   try {
+    if (!isReservedCheckoutPath(worktree.checkout_path)) {
+      return deps.activate({
+        worktreeId: worktree.id,
+        userId: input.userId,
+        checkoutPath: worktree.checkout_path,
+      });
+    }
     const result = await deps.execute({
       userId: input.userId,
       sandboxId: sandbox.id,
@@ -181,6 +203,11 @@ export async function spawnWorktree(
         "Git did not report the managed worktree path"
       );
     }
+    worktree = await deps.recordMaterialized({
+      worktreeId: worktree.id,
+      userId: input.userId,
+      checkoutPath,
+    });
     return deps.activate({
       worktreeId: worktree.id,
       userId: input.userId,

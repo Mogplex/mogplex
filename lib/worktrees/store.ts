@@ -130,17 +130,6 @@ export function staleWorktreeReservationCutoff(now = Date.now()): string {
   return new Date(now - WORKTREE_RESERVATION_STALE_MS).toISOString();
 }
 
-export function isStaleWorktreeReservation(
-  updatedAt: string,
-  now = Date.now()
-): boolean {
-  const updatedAtMs = Date.parse(updatedAt);
-  return (
-    Number.isFinite(updatedAtMs) &&
-    updatedAtMs < now - WORKTREE_RESERVATION_STALE_MS
-  );
-}
-
 export async function reclaimStaleCreatingWorktree(input: {
   worktreeId: string;
   userId: string;
@@ -161,6 +150,51 @@ export async function reclaimStaleCreatingWorktree(input: {
   if (error)
     throw new WorktreeStoreError("reclaim stale reservation", error.message);
   return data as OrchestrationWorktreeDTO | null;
+}
+
+export async function claimErroredWorktree(input: {
+  worktreeId: string;
+  userId: string;
+  expectedUpdatedAt: string;
+}): Promise<OrchestrationWorktreeDTO | null> {
+  const { data, error } = await supabaseAdmin
+    .from(WORKTREES)
+    .update({
+      status: "creating",
+      error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.worktreeId)
+    .eq("user_id", input.userId)
+    .eq("status", "error")
+    .eq("updated_at", input.expectedUpdatedAt)
+    .select("*")
+    .maybeSingle();
+  if (error)
+    throw new WorktreeStoreError("claim failed worktree", error.message);
+  return data as OrchestrationWorktreeDTO | null;
+}
+
+export async function recordMaterializedWorktree(input: {
+  worktreeId: string;
+  userId: string;
+  checkoutPath: string;
+}): Promise<OrchestrationWorktreeDTO> {
+  const { data, error } = await supabaseAdmin
+    .from(WORKTREES)
+    .update({ checkout_path: input.checkoutPath })
+    .eq("id", input.worktreeId)
+    .eq("user_id", input.userId)
+    .eq("status", "creating")
+    .select("*")
+    .single();
+  if (error || !data) {
+    throw new WorktreeStoreError(
+      "record materialized checkout",
+      error?.message ?? "creating worktree not found"
+    );
+  }
+  return data as OrchestrationWorktreeDTO;
 }
 
 export async function activateWorktree(input: {

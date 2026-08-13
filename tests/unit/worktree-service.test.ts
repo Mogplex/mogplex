@@ -75,7 +75,10 @@ test("spawn creates a real checkout and persists the server-reported path", asyn
         status: "running",
       }),
       reserve: async () => ({
-        worktree: buildWorktree({ status: "creating" }),
+        worktree: buildWorktree({
+          status: "creating",
+          checkout_path: `/.reserved/.worktrees/${WORKTREE_ID}`,
+        }),
         created: true,
       }),
       execute: async ({ sandboxId, command, cwd }) => {
@@ -92,6 +95,11 @@ test("spawn creates a real checkout and persists the server-reported path", asyn
         activations.push(input);
         return buildWorktree();
       },
+      recordMaterialized: async (input) =>
+        buildWorktree({
+          status: "creating",
+          checkout_path: input.checkoutPath,
+        }),
       markError: async () => {},
     }
   );
@@ -193,6 +201,7 @@ test("spawn returns an in-flight concurrent reservation without recreating it", 
 test("spawn atomically reclaims and resumes a stale creating reservation", async () => {
   const stale = buildWorktree({
     status: "creating",
+    checkout_path: `/.reserved/.worktrees/${WORKTREE_ID}`,
     updated_at: "2026-08-12T23:00:00.000Z",
   });
   let reclaimedInput: unknown;
@@ -225,6 +234,11 @@ test("spawn atomically reclaims and resumes a stale creating reservation", async
         };
       },
       activate: async () => buildWorktree(),
+      recordMaterialized: async (input) =>
+        buildWorktree({
+          status: "creating",
+          checkout_path: input.checkoutPath,
+        }),
       markError: async () => {},
     }
   );

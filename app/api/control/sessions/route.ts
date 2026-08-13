@@ -138,24 +138,22 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(linked);
   } catch (runError) {
-    const [sessionCleanup, runCleanup] = await Promise.all([
-      Promise.resolve(
-        supabaseAdmin
-          .from("control_sessions")
-          .delete()
-          .eq("id", session.id)
-          .eq("user_id", userId)
-      ).catch((error: unknown) => ({ error })),
-      createdRunId
-        ? Promise.resolve(
-            supabaseAdmin
-              .from("orchestration_runs")
-              .delete()
-              .eq("id", createdRunId)
-              .eq("user_id", userId)
-          ).catch((error: unknown) => ({ error }))
-        : Promise.resolve({ error: null }),
-    ]);
+    const sessionCleanup = await Promise.resolve(
+      supabaseAdmin
+        .from("control_sessions")
+        .delete()
+        .eq("id", session.id)
+        .eq("user_id", userId)
+    ).catch((error: unknown) => ({ error }));
+    const runCleanup = createdRunId
+      ? await Promise.resolve(
+          supabaseAdmin
+            .from("orchestration_runs")
+            .delete()
+            .eq("id", createdRunId)
+            .eq("user_id", userId)
+        ).catch((error: unknown) => ({ error }))
+      : { error: null };
     if (sessionCleanup.error || runCleanup.error) {
       console.error("[control/sessions] mission rollback was incomplete", {
         sessionId: session.id,

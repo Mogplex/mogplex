@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { GitBranch, Refresh, Trash } from "iconoir-react";
-import { WORKTREE_RESERVATION_STALE_MS } from "@/lib/worktrees/constants";
+import { isStaleWorktreeReservation } from "@/lib/worktrees/constants";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
 import {
   AlertDialog,
@@ -25,11 +25,7 @@ const STATUS_STYLE: Record<string, string> = {
 function canArchiveWorktree(worktree: OrchestrationWorktreeDTO): boolean {
   if (worktree.status === "active" || worktree.status === "error") return true;
   if (worktree.status !== "creating") return false;
-  const updatedAt = Date.parse(worktree.updated_at);
-  return (
-    Number.isFinite(updatedAt) &&
-    updatedAt < Date.now() - WORKTREE_RESERVATION_STALE_MS
-  );
+  return isStaleWorktreeReservation(worktree.updated_at);
 }
 
 function WorktreeRow({

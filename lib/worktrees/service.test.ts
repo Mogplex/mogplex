@@ -103,7 +103,10 @@ describe("spawnWorktree reservation recovery", () => {
   });
 
   it("resumes git work only after atomically reclaiming a stale reservation", async () => {
-    const creating = worktree("creating");
+    const creating = {
+      ...worktree("creating"),
+      checkout_path: `/.reserved/.worktrees/${IDS.worktree}`,
+    };
     const execute = vi.fn(async () => ({
       exitCode: 0,
       stdout: `MOGPLEX_WORKTREE_PATH=${creating.checkout_path}\n`,
@@ -120,11 +123,38 @@ describe("spawnWorktree reservation recovery", () => {
       }),
       reclaimCreating: async () => creating,
       execute,
+      recordMaterialized: async ({ checkoutPath }) => ({
+        ...creating,
+        checkout_path: checkoutPath,
+      }),
       activate: async () => active,
       markError: async () => undefined,
     });
     expect(result).toBe(active);
     expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("reactivates an atomically claimed materialized checkout without recreating it", async () => {
+    const failed = worktree("error");
+    const claimed = { ...failed, status: "creating" as const };
+    const execute = vi.fn();
+    const active = worktree("active");
+    await expect(
+      spawnWorktree(input, {
+        loadTask: async () => task(),
+        findLiveForTask: async () => failed,
+        loadSandbox: async () => ({
+          id: IDS.sandbox,
+          repo_id: IDS.repo,
+          status: "running",
+        }),
+        claimError: async () => claimed,
+        execute,
+        activate: async () => active,
+        markError: async () => undefined,
+      })
+    ).resolves.toBe(active);
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("lets an operator archive a stuck creating reservation", async () => {

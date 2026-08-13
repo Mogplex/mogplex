@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isStaleWorktreeReservation } from "./constants";
 import {
   buildReservedCheckoutPath,
   isReservedCheckoutPath,
-  isStaleWorktreeReservation,
   reserveWorktree,
   staleWorktreeReservationCutoff,
 } from "./store";
