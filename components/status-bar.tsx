@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { useParams, usePathname } from "next/navigation"
 import useSWR from "swr"
-import { GitBranch, Terminal } from "iconoir-react"
+import { Server } from "iconoir-react"
 import { scopedHref } from "@/lib/scoped-href"
 import { useSandboxStore } from "@/hooks/use-sandbox"
 import {
@@ -43,10 +43,10 @@ export function StatusBar() {
 
   const { data: repos } = useSWR<Repo[]>("/api/repos", fetcher)
   const sandboxesById = useSandboxStore((state) => state.sandboxesById)
-  const latestSandbox =
-    Object.values(sandboxesById).sort((a, b) =>
-      (b.last_active_at ?? "").localeCompare(a.last_active_at ?? "")
-    )[0] ?? null
+  const selectedSandboxId = useSandboxStore((state) => state.activeSandboxId)
+  const selectedSandbox = selectedSandboxId
+    ? sandboxesById[selectedSandboxId] ?? null
+    : null
   const { user } = useUser()
   const githubPrimaryAction = user?.github_primary_action
     || (!user?.github_connected
@@ -134,11 +134,12 @@ export function StatusBar() {
   if (isControlRoute) {
     return (
       <div className="app-statusbar flex h-8 items-center gap-4 overflow-x-auto border-t border-border bg-card px-3 font-mono text-[10px] tracking-wide text-muted-foreground uppercase whitespace-nowrap">
-        {latestSandbox && (
+        {selectedSandbox && (
           <span className="flex shrink-0 items-center gap-[5px]">
-            <GitBranch className="size-3" strokeWidth={1.8} />
+            <Server className="size-3" strokeWidth={1.8} />
+            <span>Selected sandbox:</span>
             <span className="font-mono text-secondary-foreground normal-case">
-              {latestSandbox.working_branch}
+              {selectedSandbox.runtime_summary.sandbox_id || selectedSandbox.id}
             </span>
           </span>
         )}
@@ -147,7 +148,7 @@ export function StatusBar() {
           onClick={() => window.dispatchEvent(new Event(CONTROL_VIEW_EVENT))}
           className="flex shrink-0 items-center gap-[5px] hover:text-foreground"
         >
-          <Terminal className="size-3" strokeWidth={1.8} />
+          <Server className="size-3" strokeWidth={1.8} />
           <span>Sandboxes</span>
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-4 pl-4">

@@ -36,6 +36,7 @@ test("stop fallback publishes a manual stop reason", async () => {
     const stopped = useSandboxStore.getState().sandboxesById[record.id];
     assert.equal(stopped?.runtime_summary.status, "stopped");
     assert.equal(stopped?.stop_reason, "manual");
+    assert.equal(useSandboxStore.getState().activeSandboxId, record.id);
   } finally {
     globalThis.fetch = originalFetch;
     useSandboxStore.setState({

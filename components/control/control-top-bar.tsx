@@ -49,7 +49,7 @@ export type ControlTopBarProps = {
   hasSession: boolean;
   /** A run is streaming; agent instructions are blocked until it ends. */
   chatPending: boolean;
-  /** Preview URL of the most recently active running sandbox, if any. */
+  /** Preview URL of the selected running sandbox, if any. */
   previewUrl: string | null;
   /** full_name of the repo behind the active sandbox, if known. */
   repoFullName: string | null;
@@ -269,6 +269,7 @@ export function ControlTopBar({
             {previewUrl ? (
               <Item
                 icon={Eye}
+                title={previewUrl}
                 onSelect={() =>
                   window.open(previewUrl, "_blank", "noreferrer")
                 }

@@ -9,7 +9,6 @@ import {
 } from "ai";
 import type { UIMessage } from "ai";
 import { MISSION_PERMISSION_OPTIONS, type Mission, type ControlSeedData } from "@/lib/control/types";
-import type { SandboxRecord } from "@/lib/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
@@ -125,7 +124,7 @@ function ControlShellInner({
   const chatPending = status === "streaming" || status === "submitted";
   const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
 
-  useSandboxSync();
+  const { loading: sandboxesLoading } = useSandboxSync();
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
   const allSandboxes = useMemo(
     () =>
@@ -260,15 +259,10 @@ function ControlShellInner({
     [messages]
   );
 
-  const previewUrl = useMemo(
-    () =>
-      sandboxes.find(
-        (sandbox) =>
-          sandbox.runtime_summary.status === "running" &&
-          sandbox.runtime_summary.preview_url
-      )?.runtime_summary.preview_url ?? null,
-    [sandboxes]
-  );
+  const previewUrl =
+    activeSandbox?.runtime_summary.status === "running"
+      ? (activeSandbox.runtime_summary.preview_url ?? null)
+      : null;
   const hasSession = Boolean(sessionId || mission);
 
   const sendInstruction = useCallback(
@@ -308,15 +302,6 @@ function ControlShellInner({
     sessions,
     sessionsLoaded,
   });
-
-  const handleMergeSandbox = useCallback(
-    (sandbox: SandboxRecord) => {
-      sendInstruction(
-        `Merge the \`${sandbox.working_branch}\` branch into \`${sandbox.base_branch}\`: commit any pending changes with a conventional commit message, switch to the base branch, merge, resolve any conflicts, and push.`
-      );
-    },
-    [sendInstruction]
-  );
 
   const handleCopyLink = useCallback(() => {
     const target = sessionId ?? selectedMissionId;
@@ -408,21 +393,28 @@ function ControlShellInner({
           }}
         />
 
-        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <div
+          id={`control-${view}-panel`}
+          role="tabpanel"
+          aria-labelledby={`control-${view}-tab`}
+          className="relative flex min-h-0 flex-1 overflow-hidden"
+        >
           {view === "sandboxes" ? (
             <SandboxesPanel
               sandboxes={sandboxes}
+              loading={sandboxesLoading}
               hasRepository={Boolean(activeRepo)}
+              selectedSandboxId={activeSandbox?.id ?? null}
               focusSandboxId={focusSandboxId}
               onClearFocus={() => setFocusSandboxId(null)}
-              canMerge={hasSession && !chatPending}
-              onMerge={handleMergeSandbox}
+              onSelectSandbox={selectSandbox}
               onStartSandbox={handleStartSandbox}
             />
           ) : view === "worktrees" ? (
             <WorktreesPanel
               worktrees={controlWorktrees.worktrees}
               loading={controlWorktrees.loading}
+              error={controlWorktrees.error}
               onRefresh={controlWorktrees.refresh}
               onAction={controlWorktrees.act}
               onDiff={controlWorktrees.loadDiff}

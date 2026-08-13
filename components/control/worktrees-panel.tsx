@@ -28,6 +28,10 @@ function canArchiveWorktree(worktree: OrchestrationWorktreeDTO): boolean {
   return isStaleWorktreeReservation(worktree.updated_at);
 }
 
+function worktreeStatusStyle(status: string): string {
+  return STATUS_STYLE[status] ?? STATUS_STYLE.archived;
+}
+
 function WorktreeRow({
   worktree,
   onAction,
@@ -44,6 +48,7 @@ function WorktreeRow({
   const [busy, setBusy] = useState<string | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [pruneOpen, setPruneOpen] = useState(false);
   const [forcePruneOpen, setForcePruneOpen] = useState(false);
   const runAction = async (
@@ -71,19 +76,31 @@ function WorktreeRow({
   };
 
   return (
-    <div className="border-ink-800 border-b py-4 last:border-b-0">
+    <section
+      role="region"
+      aria-label={`Worktree for task ${worktree.task_id}`}
+      className="border-ink-800 border-b py-4 last:border-b-0"
+    >
       <div className="flex min-w-0 items-center gap-2">
         <GitBranch className="text-ink-400 size-4 shrink-0" strokeWidth={1.8} />
-        <span className="text-ink-100 min-w-0 truncate font-mono text-[12.5px]">
-          {worktree.branch_name}
+        <span className="text-ink-100 min-w-0 truncate text-[12.5px] font-medium">
+          Task <span className="font-mono">{worktree.task_id}</span>
         </span>
         <span
-          className={`rounded-full border px-2 py-0.5 text-[10.5px] ${STATUS_STYLE[worktree.status] ?? STATUS_STYLE.archived}`}
+          aria-label={`Worktree status: ${worktree.status}`}
+          className={`rounded-full border px-2 py-0.5 text-[10.5px] ${worktreeStatusStyle(worktree.status)}`}
         >
-          {worktree.status}
+          {worktree.status.charAt(0).toUpperCase() + worktree.status.slice(1)}
         </span>
       </div>
       <dl className="mt-3 grid gap-2 text-[11.5px] sm:grid-cols-[7rem_minmax(0,1fr)]">
+        <dt className="text-ink-500">Branch</dt>
+        <dd
+          className="text-ink-300 truncate font-mono"
+          title={worktree.branch_name}
+        >
+          {worktree.branch_name}
+        </dd>
         <dt className="text-ink-500">Checkout</dt>
         <dd
           className="text-ink-300 truncate font-mono"
@@ -91,12 +108,10 @@ function WorktreeRow({
         >
           {worktree.checkout_path}
         </dd>
-        <dt className="text-ink-500">Sandbox binding</dt>
+        <dt className="text-ink-500">Runs in sandbox</dt>
         <dd className="text-ink-300 truncate font-mono">
           {worktree.sandbox_id}
         </dd>
-        <dt className="text-ink-500">Task</dt>
-        <dd className="text-ink-300 truncate font-mono">{worktree.task_id}</dd>
         {worktree.agent_id ? (
           <>
             <dt className="text-ink-500">Agent run</dt>
@@ -151,11 +166,11 @@ function WorktreeRow({
         {canArchiveWorktree(worktree) ? (
           <button
             type="button"
-            onClick={() => void runAction("archive")}
+            onClick={() => setArchiveOpen(true)}
             disabled={busy !== null}
             className="border-ink-700 text-ink-200 hover:bg-ink-800 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
           >
-            Archive
+            Archive worktree
           </button>
         ) : null}
         {worktree.status === "archived" ? (
@@ -169,13 +184,31 @@ function WorktreeRow({
           </button>
         ) : null}
       </div>
+      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <AlertDialogContent className="border-ink-700 bg-ink-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this worktree?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archive marks the worktree inactive. Its Git checkout, branch,
+              worktree record, and sandbox compute stay.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void runAction("archive")}>
+              Archive worktree
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={pruneOpen} onOpenChange={setPruneOpen}>
         <AlertDialogContent className="border-ink-700 bg-ink-900">
           <AlertDialogHeader>
             <AlertDialogTitle>Prune this checkout?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the archived Git checkout from its sandbox. It does
-              not stop the sandbox or delete the branch.
+              Prune removes the archived Git checkout and releases its task
+              binding. The Git branch, pruned worktree record, and sandbox
+              compute stay.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -194,9 +227,9 @@ function WorktreeRow({
           <AlertDialogHeader>
             <AlertDialogTitle>Retire the sandbox binding?</AlertDialogTitle>
             <AlertDialogDescription>
-              Git could not remove the checkout. Use this only when the sandbox
-              no longer exists. Mogplex will retire the database binding but
-              will not delete the branch.
+              Git could not reach the checkout because its sandbox no longer
+              exists. Retire the task binding while keeping the Git branch and
+              pruned worktree record. No sandbox compute is changed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -210,19 +243,21 @@ function WorktreeRow({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </section>
   );
 }
 
 export function WorktreesPanel({
   worktrees,
   loading,
+  error,
   onRefresh,
   onAction,
   onDiff,
 }: {
   worktrees: OrchestrationWorktreeDTO[];
   loading: boolean;
+  error: string | null;
   onRefresh: () => Promise<void>;
   onAction: (
     action: "rebase" | "archive" | "prune",
@@ -240,7 +275,7 @@ export function WorktreesPanel({
           </h2>
           <span className="text-ink-400 text-[12.5px]">
             {loading
-              ? "Loading"
+              ? "Loading checkouts"
               : `${worktrees.length} checkout${worktrees.length === 1 ? "" : "s"}`}
           </span>
           <button
@@ -253,14 +288,36 @@ export function WorktreesPanel({
           </button>
         </div>
         <p className="text-ink-500 mt-1 max-w-2xl text-xs leading-5">
-          Isolated Git checkouts assigned to mission tasks. Sandbox compute can
-          stop or resume without changing this list.
+          Task-specific Git checkouts inside sandbox compute. Archiving or
+          pruning a worktree does not stop its sandbox.
         </p>
       </div>
-      {!loading && worktrees.length === 0 ? (
+      {error ? (
+        <div
+          role="alert"
+          className="border-delr/30 bg-delr/5 text-delr mt-4 rounded-lg border px-4 py-3 text-xs"
+        >
+          {error}
+        </div>
+      ) : null}
+      {loading ? (
+        <div
+          role="status"
+          className="py-8"
+          aria-label="Loading worktree checkouts"
+        >
+          <span className="sr-only">Loading worktree checkouts</span>
+          <div className="bg-ink-800 h-3 w-40 animate-pulse rounded" />
+          <div className="bg-ink-850 mt-3 h-3 w-full max-w-lg animate-pulse rounded" />
+          <div className="bg-ink-850 mt-2 h-3 w-3/4 max-w-md animate-pulse rounded" />
+        </div>
+      ) : worktrees.length === 0 ? (
         <div className="text-ink-400 py-10 text-sm">
-          No worktrees. Delegating a task creates its checkout in a selected
-          sandbox.
+          <p className="text-ink-200 font-medium">No worktrees yet</p>
+          <p className="text-ink-500 mt-1 max-w-xl text-xs leading-5">
+            Delegating a coding task creates its isolated checkout inside the
+            selected sandbox. Starting compute alone does not create one.
+          </p>
         </div>
       ) : (
         worktrees.map((worktree) => (

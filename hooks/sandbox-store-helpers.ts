@@ -392,8 +392,7 @@ export async function executeStop(
     );
     return {
       ...nextIndexes,
-      activeSandboxId:
-        state.activeSandboxId === recordId ? null : state.activeSandboxId,
+      activeSandboxId: state.activeSandboxId,
     };
   });
 }
