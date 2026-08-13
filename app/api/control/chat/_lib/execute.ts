@@ -85,6 +85,8 @@ export async function executeControlChatRequest(input: {
     const activeSandboxes = sandboxContext.sandboxes;
     const selectedSandboxId = resolveSelectedControlSandboxId(activeSandboxes);
 
+    // Persist the validated resource snapshot before tool streaming so
+    // qualification never observes a decision without its owning context.
     await recordControlResourceContext({
       activeCall,
       userId: input.userId,

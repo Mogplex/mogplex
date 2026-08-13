@@ -1,40 +1,47 @@
 const RESOURCE_TELEMETRY_SCHEMA_VERSION = 1;
 const MAX_TELEMETRY_WORKTREES = 50;
 
-export type ResourceDecisionSource =
-  | "none"
-  | "server_validated_request"
-  | "owned_control_session"
-  | "selected"
-  | "reused_running"
-  | "reused_pending"
-  | "created"
-  | "server_selected"
-  | "owned_route_validation"
-  | "persisted_worktree_binding";
+export const RESOURCE_DECISION_SOURCES = [
+  "none",
+  "server_validated_request",
+  "owned_control_session",
+  "selected",
+  "reused_running",
+  "reused_pending",
+  "created",
+  "server_selected",
+  "owned_route_validation",
+  "persisted_worktree_binding",
+] as const;
+
+export type ResourceDecisionSource = (typeof RESOURCE_DECISION_SOURCES)[number];
+
+const RESOURCE_REJECTION_REASONS = [
+  "auth_unavailable",
+  "mission_mismatch",
+  "mission_not_linked",
+  "multiple_sandboxes",
+  "operation_failed",
+  "repo_lookup_failed",
+  "repo_mismatch",
+  "repo_not_selected",
+  "sandbox_inactive",
+  "sandbox_lookup_failed",
+  "sandbox_mismatch",
+  "sandbox_not_found",
+  "sandbox_not_selected",
+  "sandbox_unavailable",
+  "session_not_found",
+  "stale_resource",
+  "task_not_found",
+  "tool_execution_failed",
+  "worktree_invalid_state",
+  "worktree_lookup_failed",
+  "worktree_not_found",
+] as const;
 
 export type ResourceRejectionReason =
-  | "auth_unavailable"
-  | "mission_mismatch"
-  | "mission_not_linked"
-  | "multiple_sandboxes"
-  | "operation_failed"
-  | "repo_lookup_failed"
-  | "repo_mismatch"
-  | "repo_not_selected"
-  | "sandbox_inactive"
-  | "sandbox_lookup_failed"
-  | "sandbox_mismatch"
-  | "sandbox_not_found"
-  | "sandbox_not_selected"
-  | "sandbox_unavailable"
-  | "session_not_found"
-  | "stale_resource"
-  | "task_not_found"
-  | "tool_execution_failed"
-  | "worktree_invalid_state"
-  | "worktree_lookup_failed"
-  | "worktree_not_found";
+  (typeof RESOURCE_REJECTION_REASONS)[number];
 
 export type ResourceContextScope = {
   repoId: string | null;
@@ -98,29 +105,15 @@ const RESOURCE_ACTIONS: Record<string, ResourceAction> = {
   write_file: "write_file",
 };
 
-const RESOURCE_REJECTION_REASONS = new Set<ResourceRejectionReason>([
-  "auth_unavailable",
-  "mission_mismatch",
-  "mission_not_linked",
-  "multiple_sandboxes",
-  "operation_failed",
-  "repo_lookup_failed",
-  "repo_mismatch",
-  "repo_not_selected",
-  "sandbox_inactive",
-  "sandbox_lookup_failed",
-  "sandbox_mismatch",
-  "sandbox_not_found",
-  "sandbox_not_selected",
-  "sandbox_unavailable",
-  "session_not_found",
-  "stale_resource",
-  "task_not_found",
-  "tool_execution_failed",
-  "worktree_invalid_state",
-  "worktree_lookup_failed",
-  "worktree_not_found",
+const TOOL_DECISION_SOURCES = new Set<string>([
+  "selected",
+  "reused_running",
+  "reused_pending",
+  "created",
 ]);
+const RESOURCE_REJECTION_REASON_SET = new Set<string>(
+  RESOURCE_REJECTION_REASONS
+);
 
 export function isOrchestratorResourceTool(toolName: string) {
   return Object.hasOwn(RESOURCE_ACTIONS, toolName);
@@ -138,20 +131,14 @@ function readString(record: Record<string, unknown> | null, key: string) {
 }
 
 function readDecisionSource(value: unknown): ResourceDecisionSource | null {
-  switch (value) {
-    case "selected":
-    case "reused_running":
-    case "reused_pending":
-    case "created":
-      return value;
-    default:
-      return null;
-  }
+  return typeof value === "string" && TOOL_DECISION_SOURCES.has(value)
+    ? (value as ResourceDecisionSource)
+    : null;
 }
 
 function readRejectionReason(value: unknown): ResourceRejectionReason | null {
   if (typeof value !== "string") return null;
-  return RESOURCE_REJECTION_REASONS.has(value as ResourceRejectionReason)
+  return RESOURCE_REJECTION_REASON_SET.has(value)
     ? (value as ResourceRejectionReason)
     : null;
 }

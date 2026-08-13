@@ -64,6 +64,27 @@ export function createToolCallFinishPayload(
   resourceScope?: ResourceContextScope
 ) {
   const resourceTool = isOrchestratorResourceTool(event.toolCall.toolName);
+  const resourceDecision = resourceScope
+    ? buildResourceDecisionTelemetry(event, resourceScope)
+    : null;
+  const message = event.success
+    ? `Tool finished: ${event.toolCall.toolName}`
+    : `Tool failed: ${event.toolCall.toolName}`;
+  const commonPayload = {
+    tool_call_id: event.toolCall.toolCallId,
+    duration_ms: event.durationMs,
+    success: event.success,
+    step_number: event.stepNumber ?? null,
+    ...(resourceDecision ? { resource_decision: resourceDecision } : {}),
+  };
+
+  if (resourceTool) {
+    return {
+      message,
+      payload: { ...commonPayload, resource_payload_omitted: true },
+    };
+  }
+
   const input = sanitizeToolPayload(event.toolCall.input);
   const output = event.success ? sanitizeToolPayload(event.output) : undefined;
   const error = event.success
@@ -71,32 +92,19 @@ export function createToolCallFinishPayload(
     : event.error instanceof Error
       ? event.error.message
       : String(event.error);
-  const resourceDecision = resourceScope
-    ? buildResourceDecisionTelemetry(event, resourceScope)
-    : null;
 
   return {
-    message: event.success
-      ? `Tool finished: ${event.toolCall.toolName}`
-      : `Tool failed: ${event.toolCall.toolName}`,
+    message,
     payload: {
-      tool_call_id: event.toolCall.toolCallId,
-      ...(resourceTool
-        ? { resource_payload_omitted: true }
-        : {
-            input,
-            input_preview: previewTelemetryValue(input),
-            ...(event.success
-              ? {
-                  output,
-                  output_preview: previewTelemetryValue(output),
-                }
-              : { error }),
-          }),
-      duration_ms: event.durationMs,
-      success: event.success,
-      step_number: event.stepNumber ?? null,
-      ...(resourceDecision ? { resource_decision: resourceDecision } : {}),
+      ...commonPayload,
+      input,
+      input_preview: previewTelemetryValue(input),
+      ...(event.success
+        ? {
+            output,
+            output_preview: previewTelemetryValue(output),
+          }
+        : { error }),
     },
   };
 }
