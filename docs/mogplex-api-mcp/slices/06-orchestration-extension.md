@@ -46,12 +46,20 @@ type StartMogplexOrchestrationRequest = {
 
 ## Orchestration Semantics
 
-The external orchestration API should preserve the existing mental model:
+The external orchestration API must keep the execution and Git resources
+distinct:
 
-> Sandboxes are Git trees.
+> Sandboxes provide isolated compute. Worktrees provide isolated Git
+> checkouts. An orchestration task binds them explicitly; neither record may be
+> inferred from the other.
+
+A sandbox can exist without a worktree. A worktree can be stopped while its
+branch and task record remain. Starting a sandbox must not increment worktree
+counts or create a worktree record implicitly.
 
 Every task should have:
 
+- worktree identity and checkout path,
 - task branch,
 - base branch,
 - root directory,

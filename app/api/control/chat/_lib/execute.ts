@@ -16,6 +16,7 @@ import {
   getControlChatRunScope,
   buildControlChatRunMetadata,
   buildControlGatewayContext,
+  resolveControlPromptSandboxes,
   resolveGithubTokenForRepo,
 } from "./context";
 import {
@@ -91,6 +92,10 @@ export async function executeControlChatRequest(input: {
       controlPermissions: input.body.permissions ?? null,
     };
 
+    const activeSandboxes = await resolveControlPromptSandboxes(
+      input.req,
+      input.body
+    );
     const promptContext: OrchestratorPromptContext = {
       repoFullName: input.body.repoFullName ?? undefined,
       repoOwner: input.body.repoOwner ?? undefined,
@@ -103,6 +108,7 @@ export async function executeControlChatRequest(input: {
       controlTarget: input.body.target ?? undefined,
       controlPermissions: input.body.permissions ?? undefined,
       controlMode: input.body.mode ?? undefined,
+      activeSandboxes,
     };
 
     // Build tools with policy wrapping

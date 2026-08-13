@@ -13,7 +13,7 @@ export function formatCost(cost: number): string {
 
 /**
  * Window event the status bar dispatches to switch the control route to the
- * worktrees panel ("Sandbox checkout" segment).
+ * sandboxes panel ("Sandboxes" segment).
  */
 export const CONTROL_VIEW_EVENT = "mogplex:control-view";
 

@@ -30,7 +30,7 @@ import { useToolApprovalHandler } from "./use-tool-approval-handler";
 import { buildCombinedTimeline } from "./build-combined-timeline";
 import { ControlTopBar } from "./control-top-bar";
 import { WorkspaceTabs, type ControlView } from "./workspace-tabs";
-import { WorktreesPanel } from "./worktrees-panel";
+import { SandboxesPanel } from "./sandboxes-panel";
 import { ChangedFilesCard } from "./changed-files-card";
 import { Timeline } from "./timeline";
 import { Composer } from "./composer";
@@ -286,19 +286,19 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     [handleSend]
   );
 
-  const handleSpawnWorktree = useCallback(() => {
+  const handleStartSandbox = useCallback(() => {
     const repo = activeRepo;
     if (!repo) {
       toast({
         title: "No repository connected",
-        description: "Connect a repository before spawning worktrees.",
+        description: "Connect a repository before starting a sandbox.",
         variant: "destructive",
       });
       return;
     }
     void launchRepoSandbox(repo, {
       source: "control",
-      trigger: "spawn-worktree",
+      trigger: "control-start-sandbox",
       intent: { kind: "start_fresh", interactive: true },
     });
   }, [activeRepo, launchRepoSandbox]);
@@ -342,7 +342,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   }, [messages, activeSession?.title, mission?.title]);
 
   useEffect(() => {
-    const listener = () => setView("worktrees");
+    const listener = () => setView("sandboxes");
     window.addEventListener(CONTROL_VIEW_EVENT, listener);
     return () => window.removeEventListener(CONTROL_VIEW_EVENT, listener);
   }, []);
@@ -390,7 +390,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           onOpenTerminal={() =>
             router.push(scopedHref(scope, "/projects/workspace"))
           }
-          onSpawnWorktree={handleSpawnWorktree}
+          onStartSandbox={handleStartSandbox}
           onScheduleAutomation={() =>
             router.push(scopedHref(scope, "/automations"))
           }
@@ -408,21 +408,21 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           onViewChange={setView}
           sandboxes={sandboxes}
           onFocusSandbox={(id) => {
-            setView("worktrees");
+            setView("sandboxes");
             setFocusSandboxId(id);
           }}
         />
 
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          {view === "worktrees" ? (
-            <WorktreesPanel
+          {view === "sandboxes" ? (
+            <SandboxesPanel
               sandboxes={sandboxes}
               hasRepository={Boolean(activeRepo)}
               focusSandboxId={focusSandboxId}
               onClearFocus={() => setFocusSandboxId(null)}
               canMerge={hasSession && !chatPending}
               onMerge={handleMergeSandbox}
-              onSpawn={handleSpawnWorktree}
+              onSpawn={handleStartSandbox}
             />
           ) : (
             <>
@@ -431,7 +431,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                   events={combinedTimeline}
                   worktrees={worktrees}
                   getWorktree={getWorktree}
-                  onSelectWorktree={() => setView("worktrees")}
                   onApprove={(idx) => {
                     // Mark approval as resolved
                     const event = combinedTimeline[idx];
