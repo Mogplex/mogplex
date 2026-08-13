@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { GitBranch, Refresh, Trash } from "iconoir-react";
+import { WORKTREE_RESERVATION_STALE_MS } from "@/lib/worktrees/constants";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
 import {
   AlertDialog,
@@ -21,14 +22,13 @@ const STATUS_STYLE: Record<string, string> = {
   error: "border-delr/25 bg-delr/10 text-delr",
 };
 
-const STALE_CREATING_MS = 5 * 60 * 1000;
-
 function canArchiveWorktree(worktree: OrchestrationWorktreeDTO): boolean {
   if (worktree.status === "active" || worktree.status === "error") return true;
   if (worktree.status !== "creating") return false;
   const updatedAt = Date.parse(worktree.updated_at);
   return (
-    Number.isFinite(updatedAt) && updatedAt < Date.now() - STALE_CREATING_MS
+    Number.isFinite(updatedAt) &&
+    updatedAt < Date.now() - WORKTREE_RESERVATION_STALE_MS
   );
 }
 

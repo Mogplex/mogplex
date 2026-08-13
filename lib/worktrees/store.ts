@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { WORKTREE_RESERVATION_STALE_MS } from "./constants";
 import type {
   OrchestrationWorktreeDTO,
   WorktreeSandboxContext,
@@ -113,11 +114,7 @@ export async function reserveWorktree(input: {
         taskId: input.taskId,
         userId: input.userId,
       });
-      if (
-        winner?.run_id === input.runId &&
-        winner.repo_id === input.repoId &&
-        winner.sandbox_id === input.sandboxId
-      ) {
+      if (winner) {
         return { worktree: winner, created: false };
       }
     }
@@ -129,10 +126,8 @@ export async function reserveWorktree(input: {
   return { worktree: data as OrchestrationWorktreeDTO, created: true };
 }
 
-const STALE_WORKTREE_RESERVATION_MS = 5 * 60 * 1000;
-
 export function staleWorktreeReservationCutoff(now = Date.now()): string {
-  return new Date(now - STALE_WORKTREE_RESERVATION_MS).toISOString();
+  return new Date(now - WORKTREE_RESERVATION_STALE_MS).toISOString();
 }
 
 export function isStaleWorktreeReservation(
@@ -142,7 +137,7 @@ export function isStaleWorktreeReservation(
   const updatedAtMs = Date.parse(updatedAt);
   return (
     Number.isFinite(updatedAtMs) &&
-    updatedAtMs < now - STALE_WORKTREE_RESERVATION_MS
+    updatedAtMs < now - WORKTREE_RESERVATION_STALE_MS
   );
 }
 

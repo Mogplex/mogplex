@@ -74,6 +74,34 @@ describe("spawnWorktree reservation recovery", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("maps a concurrent reservation in another sandbox to a conflict", async () => {
+    const execute = vi.fn();
+    await expect(
+      spawnWorktree(input, {
+        loadTask: async () => task(),
+        findLiveForTask: async () => null,
+        loadSandbox: async () => ({
+          id: IDS.sandbox,
+          repo_id: IDS.repo,
+          status: "running",
+        }),
+        reserve: async () => ({
+          worktree: {
+            ...worktree("creating"),
+            sandbox_id: "66666666-6666-4666-8666-666666666666",
+          },
+          created: false,
+        }),
+        execute,
+      })
+    ).rejects.toMatchObject({
+      name: "WorktreeServiceError",
+      message: "Worktree is already reserved in another sandbox",
+      kind: "conflict",
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("resumes git work only after atomically reclaiming a stale reservation", async () => {
     const creating = worktree("creating");
     const execute = vi.fn(async () => ({

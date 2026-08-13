@@ -148,8 +148,18 @@ export async function spawnWorktree(
     });
     worktree = reservation.worktree;
     ownsCreation = reservation.created;
+    if (worktree.run_id !== task.run_id || worktree.repo_id !== task.repo_id) {
+      throw new WorktreeServiceError("Worktree belongs to another mission");
+    }
+    if (worktree.sandbox_id !== sandbox.id) {
+      throw new WorktreeServiceError(
+        "Worktree is already reserved in another sandbox"
+      );
+    }
   }
   if (!ownsCreation) {
+    // A concurrent creator still owns the lease. Callers must treat this as a
+    // lifecycle snapshot and wait for a later list/stream update before bind.
     return worktree;
   }
 
