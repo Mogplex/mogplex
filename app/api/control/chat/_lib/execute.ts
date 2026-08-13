@@ -78,6 +78,8 @@ export async function executeControlChatRequest(input: {
       resolveControlPromptSandboxContext(input.req, input.body),
       resolveControlPromptWorktrees(input.userId, input.body),
     ]);
+    // Replace the client hint with the owned, server-validated session and
+    // fail closed to no mission when the hint cannot be validated.
     scope = {
       ...scope,
       missionId: worktreeContext.controlSessionId,
@@ -85,7 +87,7 @@ export async function executeControlChatRequest(input: {
     const activeSandboxes = sandboxContext.sandboxes;
     const selectedSandboxId = resolveSelectedControlSandboxId(activeSandboxes);
 
-    // Persist the validated resource snapshot before tool streaming so
+    // Both writes are fail-open, but awaiting them preserves ordering so
     // qualification never observes a decision without its owning context.
     await recordControlResourceContext({
       activeCall,
