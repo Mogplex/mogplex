@@ -66,9 +66,16 @@ function createMonacoColorConverter() {
     context.clearRect(0, 0, 1, 1)
     context.fillRect(0, 0, 1, 1)
     const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data
-    const toHex = (channel: number) => channel.toString(16).padStart(2, "0")
-    return `#${toHex(red)}${toHex(green)}${toHex(blue)}${alpha === 255 ? "" : toHex(alpha)}`
+    const byteToHex = (channel: number) => channel.toString(16).padStart(2, "0")
+    return `#${byteToHex(red)}${byteToHex(green)}${byteToHex(blue)}${alpha === 255 ? "" : byteToHex(alpha)}`
   }
+}
+
+let monacoColorConverter: ReturnType<typeof createMonacoColorConverter> | undefined
+
+function getMonacoColorConverter() {
+  monacoColorConverter ??= createMonacoColorConverter()
+  return monacoColorConverter
 }
 
 function getThemePalette() {
@@ -77,11 +84,11 @@ function getThemePalette() {
   }
 
   const styles = getComputedStyle(document.documentElement)
-  const toHex = createMonacoColorConverter()
+  const normalizeColor = getMonacoColorConverter()
   const read = (token: string) => {
     const value = styles.getPropertyValue(token).trim()
     if (!value) throw new Error(`Missing Monaco theme token: ${token}`)
-    return toHex(value)
+    return normalizeColor(value)
   }
 
   return {
