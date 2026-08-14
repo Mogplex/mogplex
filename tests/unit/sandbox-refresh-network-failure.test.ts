@@ -32,7 +32,7 @@ test("background sandbox refresh keeps existing state when fetch rejects", async
     useSandboxStore.getState().sandboxesById[existing.id];
 
   try {
-    await assert.doesNotReject(useSandboxStore.getState().refresh());
+    assert.equal(await useSandboxStore.getState().refresh(), false);
     assert.equal(
       useSandboxStore.getState().sandboxesById[existing.id],
       storedBeforeRefresh

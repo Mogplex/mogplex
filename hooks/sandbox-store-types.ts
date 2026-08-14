@@ -63,7 +63,7 @@ export type SandboxStore = {
   pause: (recordId: string) => Promise<void>;
   resume: (recordId: string) => Promise<SandboxRecord | null>;
   deleteRecord: (recordId: string) => Promise<void>;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
   getSandboxForRepo: (
     repoId: string,
     options?: {

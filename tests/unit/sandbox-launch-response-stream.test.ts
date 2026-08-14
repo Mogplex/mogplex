@@ -148,3 +148,28 @@ test("consumeSandboxLaunchResponse keeps summary-backed error state before retur
     launchAttemptId: "launch-attempt-1",
   });
 });
+
+test("consumeSandboxLaunchResponse surfaces a failed fallback refresh", async () => {
+  const { buildSandboxStateKey, consumeSandboxLaunchResponse } =
+    await loadSandboxStore();
+  const repoId = "repo-1";
+  const launchKey = buildSandboxStateKey(repoId, "main", null);
+  const harness = createStoreHarness(repoId);
+  const response = buildSseResponse([{ type: "log", data: "Starting..." }]);
+  const get = () => ({
+    ...harness.get(),
+    refresh: async () => false,
+    getSandboxForRepo: () => null,
+  });
+
+  await assert.rejects(
+    consumeSandboxLaunchResponse(
+      repoId,
+      launchKey,
+      response,
+      harness.set as never,
+      get as never
+    ),
+    /inventory refresh failed/
+  );
+});
