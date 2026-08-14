@@ -269,7 +269,7 @@ function ControlShellInner({
       : null;
   const hasSession = Boolean(sessionId || mission);
   const chatError =
-    localChatError ?? persistError ?? activeChatError?.message ?? null;
+    localChatError ?? activeChatError?.message ?? persistError ?? null;
 
   const sendInstruction = useCallback(
     (text: string) => {

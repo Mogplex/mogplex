@@ -127,3 +127,23 @@ test("ControlChatRegistry serializes overlapping persists per session", async ()
 
   registry.dispose();
 });
+
+test("ControlChatRegistry coalesces same-tick persists to the newest transcript", async () => {
+  const persisted: string[] = [];
+  const registry = new ControlChatRegistry(
+    async (_sessionId, messages) => {
+      persisted.push(messages[0]?.id ?? "missing");
+    },
+    () => {},
+    () => {}
+  );
+  const older = [userMessage("older", "one")];
+  const newer = [userMessage("newer", "two")];
+
+  const first = registry.persistFinishedMessages("session-a", older);
+  const second = registry.persistFinishedMessages("session-a", newer);
+  await Promise.all([first, second]);
+
+  assert.deepEqual(persisted, ["newer"]);
+  registry.dispose();
+});
