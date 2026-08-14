@@ -137,7 +137,10 @@ export function useControlSessions({
   const persistSession = useCallback(
     async (targetSessionId: string, messages: UIMessage[]) => {
       const expected = updatedAtBySessionRef.current.get(targetSessionId);
-      if (!expected || messages.length === 0) return;
+      if (messages.length === 0) return;
+      if (!expected) {
+        throw new Error("Cannot persist control session without a revision");
+      }
 
       const put = (expectedUpdatedAt: string) =>
         fetch("/api/control/sessions", {
@@ -157,11 +160,15 @@ export function useControlSessions({
         const fresh = await fetch(
           `/api/control/sessions?id=${targetSessionId}`
         );
-        if (!fresh.ok) return;
+        if (!fresh.ok) {
+          throw new Error(`Failed to rebase control session (${fresh.status})`);
+        }
         const record = (await fresh.json()) as SessionRecord;
         res = await put(record.updated_at);
       }
-      if (!res.ok) return;
+      if (!res.ok) {
+        throw new Error(`Failed to persist control session (${res.status})`);
+      }
 
       const { session } = (await res.json()) as { session: SessionRecord };
       mutationRevisionRef.current += 1;

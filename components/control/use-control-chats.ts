@@ -18,6 +18,8 @@ export class ControlChatRegistry {
   private readonly chats = new Map<string, Chat<UIMessage>>();
   private readonly hydrated = new Set<string>();
   private readonly persisting = new Set<string>();
+  private readonly persistFailed = new Set<string>();
+  private readonly persistRevisions = new Map<string, number>();
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly transport = new DefaultChatTransport<UIMessage>({
     api: "/api/control/chat",
@@ -32,8 +34,38 @@ export class ControlChatRegistry {
     private readonly onSnapshot: (
       sessionId: string,
       chat: Chat<UIMessage>
-    ) => void
+    ) => void,
+    private readonly onPersistState: (
+      sessionId: string,
+      failed: boolean
+    ) => void = () => {}
   ) {}
+
+  async persistFinishedMessages(sessionId: string, messages: UIMessage[]) {
+    const revision = (this.persistRevisions.get(sessionId) ?? 0) + 1;
+    this.persistRevisions.set(sessionId, revision);
+    this.persisting.add(sessionId);
+    try {
+      await this.onPersist(sessionId, messages);
+      if (this.persistRevisions.get(sessionId) === revision) {
+        this.persistFailed.delete(sessionId);
+        this.onPersistState(sessionId, false);
+      }
+    } catch (error) {
+      if (this.persistRevisions.get(sessionId) === revision) {
+        this.persistFailed.add(sessionId);
+        this.onPersistState(sessionId, true);
+      }
+      console.error("[control] failed to persist chat", {
+        sessionId,
+        error,
+      });
+    } finally {
+      if (this.persistRevisions.get(sessionId) === revision) {
+        this.persisting.delete(sessionId);
+      }
+    }
+  }
 
   get(sessionId: string) {
     const existing = this.chats.get(sessionId);
@@ -45,15 +77,7 @@ export class ControlChatRegistry {
       sendAutomaticallyWhen:
         lastAssistantMessageIsCompleteWithApprovalResponses,
       onFinish: ({ messages }) => {
-        this.persisting.add(sessionId);
-        void this.onPersist(sessionId, messages)
-          .catch((error) => {
-            console.error("[control] failed to persist chat", {
-              sessionId,
-              error,
-            });
-          })
-          .finally(() => this.persisting.delete(sessionId));
+        void this.persistFinishedMessages(sessionId, messages);
       },
     });
     this.chats.set(sessionId, chat);
@@ -79,7 +103,9 @@ export class ControlChatRegistry {
     const chat = this.get(sessionId);
     if (
       this.hydrated.has(sessionId) &&
-      (isRunning(chat) || this.persisting.has(sessionId))
+      (isRunning(chat) ||
+        this.persisting.has(sessionId) ||
+        this.persistFailed.has(sessionId))
     ) {
       return false;
     }
@@ -96,6 +122,8 @@ export class ControlChatRegistry {
     this.chats.delete(sessionId);
     this.hydrated.delete(sessionId);
     this.persisting.delete(sessionId);
+    this.persistFailed.delete(sessionId);
+    this.persistRevisions.delete(sessionId);
     this.onStatus(sessionId, false);
   }
 
@@ -121,6 +149,9 @@ export function useControlChats({
     ReadonlySet<string>
   >(() => new Set());
   const [snapshots, setSnapshots] = useState<Record<string, ChatSnapshot>>({});
+  const [persistErrors, setPersistErrors] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const updateRunningState = useCallback(
     (sessionId: string, running: boolean) => {
       setRunningSessionIds((current) => {
@@ -156,8 +187,26 @@ export function useControlChats({
     },
     []
   );
+  const recordPersistState = useCallback(
+    (sessionId: string, failed: boolean) => {
+      setPersistErrors((current) => {
+        if (current.has(sessionId) === failed) return current;
+        const next = new Set(current);
+        if (failed) next.add(sessionId);
+        else next.delete(sessionId);
+        return next;
+      });
+    },
+    []
+  );
   const [registry] = useState(
-    () => new ControlChatRegistry(onPersist, updateRunningState, updateSnapshot)
+    () =>
+      new ControlChatRegistry(
+        onPersist,
+        updateRunningState,
+        updateSnapshot,
+        recordPersistState
+      )
   );
   const activeChat = useMemo(
     () => registry.get(activeChatId),
@@ -177,6 +226,12 @@ export function useControlChats({
   const removeSession = useCallback(
     (sessionId: string) => {
       registry.remove(sessionId);
+      setPersistErrors((current) => {
+        if (!current.has(sessionId)) return current;
+        const next = new Set(current);
+        next.delete(sessionId);
+        return next;
+      });
       setSnapshots((current) => {
         if (!(sessionId in current)) return current;
         const next = { ...current };
@@ -196,6 +251,9 @@ export function useControlChats({
     status,
     stop: activeChat.stop,
     error,
+    persistError: persistErrors.has(activeChatId)
+      ? "This chat finished, but its messages could not be saved. They remain available in this tab; retry before closing it."
+      : null,
     clearError: activeChat.clearError,
     addToolApprovalResponse: activeChat.addToolApprovalResponse,
     runningSessionIds,

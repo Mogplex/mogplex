@@ -45,3 +45,40 @@ test("ControlChatRegistry observes independent real Chat stores", () => {
 
   registry.dispose();
 });
+
+test("ControlChatRegistry preserves local messages until persistence recovers", async () => {
+  let settlePersist: ((result: "resolve" | "reject") => void) | undefined;
+  const persistErrors: string[] = [];
+  const registry = new ControlChatRegistry(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        settlePersist = (result) =>
+          result === "resolve" ? resolve() : reject(new Error("offline"));
+      }),
+    () => {},
+    () => {},
+    (sessionId, failed) => {
+      if (failed) persistErrors.push(sessionId);
+    }
+  );
+  const local = [userMessage("local", "unsaved")];
+  const stale = [userMessage("stale", "server")];
+
+  assert.equal(registry.hydrate("session-a", local), true);
+  const failedPersist = registry.persistFinishedMessages("session-a", local);
+  assert.equal(registry.hydrate("session-a", stale), false);
+  settlePersist?.("reject");
+  await failedPersist;
+
+  assert.equal(registry.hydrate("session-a", stale), false);
+  assert.deepEqual(registry.get("session-a").messages, local);
+  assert.deepEqual(persistErrors, ["session-a"]);
+
+  const recoveredPersist = registry.persistFinishedMessages("session-a", local);
+  assert.equal(registry.hydrate("session-a", stale), false);
+  settlePersist?.("resolve");
+  await recoveredPersist;
+  assert.equal(registry.hydrate("session-a", stale), true);
+
+  registry.dispose();
+});
