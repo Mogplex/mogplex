@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   loadObservabilityStatsRoute,
   buildStats,
-  buildJobRun,
+  buildJobRunStats,
 } from "./helpers/observability-stats-route-fixtures";
 
 test("GET /api/observability/stats formats and propagates the RPC aggregates", async () => {
@@ -41,10 +41,8 @@ test("GET /api/observability/stats formats and propagates the RPC aggregates", a
         },
         reconciliation_pending: 3,
       }),
-      jobRuns: [],
+      jobRuns: buildJobRunStats(),
     }),
-    isRepairableJobRun: () => false,
-    getJobRunPendingAnchor: () => null,
   });
 
   const response = await handler();
@@ -101,9 +99,10 @@ test("GET /api/observability/stats zeroes rate and duration for an empty window"
   const handler = createObservabilityStatsGetHandler({
     requireUserId: async () => "user-123",
     getNow: () => new Date("2026-04-21T15:30:00.000Z"),
-    loadSnapshot: async () => ({ stats: buildStats(), jobRuns: [] }),
-    isRepairableJobRun: () => false,
-    getJobRunPendingAnchor: () => null,
+    loadSnapshot: async () => ({
+      stats: buildStats(),
+      jobRuns: buildJobRunStats(),
+    }),
   });
 
   const response = await handler();
@@ -123,18 +122,12 @@ test("GET /api/observability/stats counts the same repairable pending set used b
     getNow: () => new Date("2026-04-21T15:30:00.000Z"),
     loadSnapshot: async () => ({
       stats: buildStats(),
-      jobRuns: [
-        buildJobRun({
-          id: "repairable",
-          status: "pending",
-          last_start_attempt_at: "2026-04-21T12:00:00.000Z",
-        }),
-        buildJobRun({ id: "waiting", status: "pending" }),
-        buildJobRun({ id: "complete", status: "success" }),
-      ],
+      jobRuns: buildJobRunStats({
+        total: 3,
+        pending: 2,
+        repairable_pending: 1,
+      }),
     }),
-    isRepairableJobRun: (run) => Boolean(run.last_start_attempt_at),
-    getJobRunPendingAnchor: () => null,
   });
 
   const response = await handler();
@@ -170,10 +163,8 @@ test("GET /api/observability/stats forwards from/to query params to the snapshot
     getNow: () => new Date("2026-04-21T15:30:00.000Z"),
     loadSnapshot: async ({ from, to, nowIso }) => {
       observed = { from, to, nowIso };
-      return { stats: buildStats(), jobRuns: [] };
+      return { stats: buildStats(), jobRuns: buildJobRunStats() };
     },
-    isRepairableJobRun: () => false,
-    getJobRunPendingAnchor: () => null,
   });
 
   const url = new URL(
@@ -203,10 +194,8 @@ test("GET /api/observability/stats ignores malformed from/to values", async () =
     getNow: () => new Date("2026-04-21T15:30:00.000Z"),
     loadSnapshot: async ({ from, to }) => {
       observed = { from, to };
-      return { stats: buildStats(), jobRuns: [] };
+      return { stats: buildStats(), jobRuns: buildJobRunStats() };
     },
-    isRepairableJobRun: () => false,
-    getJobRunPendingAnchor: () => null,
   });
 
   const url = new URL(
@@ -220,52 +209,21 @@ test("GET /api/observability/stats ignores malformed from/to values", async () =
   assert.deepEqual(observed, { from: undefined, to: undefined });
 });
 
-test("GET /api/observability/stats success rate counts only terminal runs, excluding pending/running/cancelled", async () => {
+test("GET /api/observability/stats calculates the job-run success rate from aggregate totals", async () => {
   const { createObservabilityStatsGetHandler } =
     await loadObservabilityStatsRoute();
   const now = new Date("2026-04-21T15:30:00.000Z");
-  const inWindow = "2026-04-21T12:00:00.000Z";
-  const beforeWindow = "2026-04-19T12:00:00.000Z";
 
   const handler = createObservabilityStatsGetHandler({
     requireUserId: async () => "user-123",
     getNow: () => now,
     loadSnapshot: async () => ({
       stats: buildStats(),
-      jobRuns: [
-        buildJobRun({ id: "ok-1", status: "success", completed_at: inWindow }),
-        buildJobRun({ id: "ok-2", status: "success", completed_at: inWindow }),
-        buildJobRun({ id: "ok-3", status: "success", completed_at: inWindow }),
-        buildJobRun({ id: "fail-1", status: "failed", completed_at: inWindow }),
-        buildJobRun({
-          id: "running-1",
-          status: "running",
-          completed_at: null,
-          started_at: inWindow,
-        }),
-        buildJobRun({
-          id: "pending-1",
-          status: "pending",
-          completed_at: null,
-          started_at: null,
-          created_at: inWindow,
-        }),
-        buildJobRun({
-          id: "cancelled-1",
-          status: "cancelled",
-          completed_at: inWindow,
-        }),
-        buildJobRun({
-          id: "old-success",
-          status: "success",
-          completed_at: beforeWindow,
-          started_at: beforeWindow,
-          created_at: beforeWindow,
-        }),
-      ],
+      jobRuns: buildJobRunStats({
+        concluded_in_range: 4,
+        successful_in_range: 3,
+      }),
     }),
-    isRepairableJobRun: () => false,
-    getJobRunPendingAnchor: () => null,
   });
 
   const response = await handler();
@@ -276,67 +234,24 @@ test("GET /api/observability/stats success rate counts only terminal runs, exclu
   assert.equal(body.summary.job_runs_success_rate_in_range, 75);
 });
 
-test("GET /api/observability/stats windows job-run stats to the from/to range instead of a fixed 24h", async () => {
+test("GET /api/observability/stats propagates aggregated job-run window stats", async () => {
   const { createObservabilityStatsGetHandler } =
     await loadObservabilityStatsRoute();
   const now = new Date("2026-04-21T15:30:00.000Z");
-  const inRange = "2026-04-10T12:00:00.000Z";
-  const beforeRange = "2026-03-30T12:00:00.000Z";
-  const last24hOnly = "2026-04-21T10:00:00.000Z";
 
   const handler = createObservabilityStatsGetHandler({
     requireUserId: async () => "user-123",
     getNow: () => now,
     loadSnapshot: async () => ({
       stats: buildStats(),
-      jobRuns: [
-        buildJobRun({
-          id: "failed-in-range",
-          status: "failed",
-          started_at: inRange,
-          completed_at: inRange,
-        }),
-        buildJobRun({
-          id: "failed-before-range",
-          status: "failed",
-          started_at: beforeRange,
-          created_at: beforeRange,
-          completed_at: beforeRange,
-        }),
-        buildJobRun({
-          id: "failed-last-24h-only",
-          status: "failed",
-          started_at: last24hOnly,
-          created_at: last24hOnly,
-          completed_at: last24hOnly,
-        }),
-        buildJobRun({
-          id: "success-in-range",
-          status: "success",
-          started_at: inRange,
-          completed_at: inRange,
-        }),
-        buildJobRun({
-          id: "repaired-in-range",
-          status: "success",
-          started_at: inRange,
-          completed_at: inRange,
-          last_start_source: "repair",
-          last_start_attempt_at: inRange,
-        }),
-        buildJobRun({
-          id: "repaired-before-range",
-          status: "success",
-          started_at: beforeRange,
-          created_at: beforeRange,
-          completed_at: beforeRange,
-          last_start_source: "repair",
-          last_start_attempt_at: beforeRange,
-        }),
-      ],
+      jobRuns: buildJobRunStats({
+        total: 6,
+        failed_in_range: 1,
+        repaired_in_range: 1,
+        concluded_in_range: 3,
+        successful_in_range: 2,
+      }),
     }),
-    isRepairableJobRun: () => false,
-    getJobRunPendingAnchor: () => null,
   });
 
   const url = new URL(
@@ -362,17 +277,27 @@ test("GET /api/observability/stats passes the selected window to the snapshot lo
     await loadObservabilityStatsRoute();
   const now = new Date("2026-04-21T15:30:00.000Z");
 
-  const observed: { windowStartIso?: string; windowEndIso?: string }[] = [];
+  const observed: {
+    windowStartIso?: string;
+    windowEndIso?: string;
+    repairableBeforeIso?: string;
+  }[] = [];
   const makeHandler = () =>
     createObservabilityStatsGetHandler({
       requireUserId: async () => "user-123",
       getNow: () => now,
-      loadSnapshot: async ({ windowStartIso, windowEndIso }) => {
-        observed.push({ windowStartIso, windowEndIso });
-        return { stats: buildStats(), jobRuns: [] };
+      loadSnapshot: async ({
+        windowStartIso,
+        windowEndIso,
+        repairableBeforeIso,
+      }) => {
+        observed.push({
+          windowStartIso,
+          windowEndIso,
+          repairableBeforeIso,
+        });
+        return { stats: buildStats(), jobRuns: buildJobRunStats() };
       },
-      isRepairableJobRun: () => false,
-      getJobRunPendingAnchor: () => null,
     });
 
   const rangedUrl = new URL(
@@ -387,10 +312,12 @@ test("GET /api/observability/stats passes the selected window to the snapshot lo
     {
       windowStartIso: "2026-04-08T00:00:00.000Z",
       windowEndIso: "2026-04-15T00:00:00.000Z",
+      repairableBeforeIso: "2026-04-21T15:28:00.000Z",
     },
     {
       windowStartIso: "2026-04-20T15:30:00.000Z",
       windowEndIso: undefined,
+      repairableBeforeIso: "2026-04-21T15:28:00.000Z",
     },
   ]);
 });
@@ -406,10 +333,8 @@ test("GET /api/observability/stats surfaces server-side dispatch outcome counts 
       stats: buildStats({
         dispatch: { suppressed: 7, deferred: 3, start_failed: 2 },
       }),
-      jobRuns: [],
+      jobRuns: buildJobRunStats(),
     }),
-    isRepairableJobRun: () => false,
-    getJobRunPendingAnchor: () => null,
   });
 
   const response = await handler();
