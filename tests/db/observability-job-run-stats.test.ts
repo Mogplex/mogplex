@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MIGRATION =
   "supabase/migrations/20260814231500_observability_job_run_stats.sql";
+const NEON_MIGRATION =
+  "neon/migrations/20260814233000_observability_job_run_stats.sql";
 const USER_ID = "00000000-0000-4000-8000-000000000173";
 const OTHER_USER_ID = "00000000-0000-4000-8000-000000000999";
 const LARGE_HISTORY_USER_ID = "00000000-0000-4000-8000-000000001005";
@@ -57,6 +59,15 @@ afterAll(async () => {
 });
 
 describe("observability job-run stats", () => {
+  it("keeps the serving Neon migration aligned with the Supabase schema", async () => {
+    const [supabaseSql, neonSql] = await Promise.all([
+      readFile(path.join(REPO_ROOT, MIGRATION), "utf8"),
+      readFile(path.join(REPO_ROOT, NEON_MIGRATION), "utf8"),
+    ]);
+
+    expect(neonSql).toBe(supabaseSql);
+  });
+
   it("keeps the aggregate RPC service-role only", async () => {
     const { rows } = await db.query<{
       anon_can_execute: boolean;
