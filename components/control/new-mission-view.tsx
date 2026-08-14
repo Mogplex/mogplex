@@ -5,7 +5,7 @@ import type { Repo } from "@/lib/types";
 import type { ComposerSendOptions } from "./composer";
 import { NewMissionComposer } from "./new-mission-composer";
 import { SessionList } from "./session-list";
-import type { ControlSessionSummary } from "./session-list";
+import type { ControlSessionSummary } from "@/lib/control/session-types";
 
 /**
  * Standalone view shown when there is no mission selected (fresh load or the

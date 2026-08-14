@@ -7,7 +7,7 @@ import {
   persistControlSessionMessages,
   type ControlSessionRecord,
 } from "@/lib/control/session-persistence";
-import type { ControlSessionSummary } from "./session-list";
+import type { ControlSessionSummary } from "@/lib/control/session-types";
 
 /**
  * DB-backed control chat sessions: list, create, restore, and persist.

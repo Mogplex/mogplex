@@ -1,9 +1,7 @@
 import type { UIMessage } from "ai";
-import type { ControlSessionSummary } from "@/components/control/session-list";
+import type { ControlSessionRecord } from "./session-types";
 
-export type ControlSessionRecord = ControlSessionSummary & {
-  messages: UIMessage[];
-};
+export type { ControlSessionRecord } from "./session-types";
 
 type SessionFetch = (
   input: string,

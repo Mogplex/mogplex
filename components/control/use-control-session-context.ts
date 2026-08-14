@@ -5,7 +5,7 @@ import { useSandboxStore } from "@/hooks/use-sandbox";
 import type { Repo, SandboxRecord } from "@/lib/types";
 import { resolveControlSessionRepo } from "@/lib/control/session-project";
 import type { ControlChatRequestContext } from "./control-chat-request";
-import type { ControlSessionSummary } from "./session-list";
+import type { ControlSessionSummary } from "@/lib/control/session-types";
 
 type ContextRepo = Pick<
   Repo,
