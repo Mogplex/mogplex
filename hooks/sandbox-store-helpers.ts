@@ -278,7 +278,12 @@ export async function consumeSandboxLaunchResponse(
     return finalSandbox;
   }
 
-  await get().refresh();
+  const refreshed = await get().refresh();
+  if (!refreshed) {
+    throw new Error(
+      "Sandbox launch stream ended before a ready event and inventory refresh failed"
+    );
+  }
   return get().getSandboxForRepo(repoId, { ...launchScope });
 }
 
@@ -436,9 +441,9 @@ export async function executeRefresh(set: SandboxSetState) {
     // Refresh runs in background sync and realtime callbacks. Preserve the
     // last known inventory when the network is unavailable instead of leaking
     // an unhandled rejection from a fire-and-forget caller.
-    return;
+    return false;
   }
-  if (!res.ok) return;
+  if (!res.ok) return false;
   const { sandboxes } = await res.json();
   const sandboxesById: Record<string, SandboxRecord> = {};
   for (const sandbox of sandboxes) {
@@ -454,4 +459,5 @@ export async function executeRefresh(set: SandboxSetState) {
       : null;
     return { ...nextIndexes, activeSandboxId };
   });
+  return true;
 }
