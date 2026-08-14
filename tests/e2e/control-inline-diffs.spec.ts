@@ -5,6 +5,7 @@ import {
   mockBaseChrome,
   mockControlSessionBootstrap,
 } from "./helpers/automation-control-plane-fixtures";
+import { capturePageErrors } from "./helpers/page-errors";
 
 const SAMPLE_PATCH = [
   "diff --git a/lib/auth.ts b/lib/auth.ts",
@@ -23,6 +24,7 @@ const SAMPLE_PATCH = [
 test("control chat renders agent diffs inline when tools produce a patch", async ({
   page,
 }) => {
+  const pageErrors = capturePageErrors(page);
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
   await mockControlSessionBootstrap(page);
@@ -68,6 +70,11 @@ test("control chat renders agent diffs inline when tools produce a patch", async
   await page
     .getByPlaceholder("Ask anything or run a command...")
     .fill("Patch the login flow");
+  const persistedSession = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/control/sessions") &&
+      response.request().method() === "PUT"
+  );
   await page.getByRole("button", { name: "Start mission" }).click();
 
   // The diff renders inline in the conversation: per-file stats plus the
@@ -79,4 +86,6 @@ test("control chat renders agent diffs inline when tools produce a patch", async
   await expect(conversation.getByText("-1").first()).toBeVisible();
   // The diff viewer tokenizes lines, so match a stable token fragment.
   await expect(conversation.getByText(/audit\('login'/).first()).toBeVisible();
+  await persistedSession;
+  expect(pageErrors).toEqual([]);
 });

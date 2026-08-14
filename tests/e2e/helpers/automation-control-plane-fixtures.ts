@@ -74,6 +74,15 @@ export async function mockControlSessionBootstrap(page: Page) {
       };
       return fulfillJson(route, session);
     }
+    if (request.method() === "PUT" && session) {
+      const body = request.postDataJSON() as { messages?: unknown[] };
+      session = {
+        ...session,
+        messages: body.messages ?? session.messages,
+        updated_at: "2026-08-13T00:00:01.000Z",
+      };
+      return fulfillJson(route, { ok: true, session });
+    }
     const id = new URL(request.url()).searchParams.get("id");
     return fulfillJson(route, id ? session : session ? [session] : []);
   });
