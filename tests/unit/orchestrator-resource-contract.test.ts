@@ -34,7 +34,13 @@ test("orchestrator prompt keeps sandboxes and worktrees distinct", () => {
   });
 
   assert.match(prompt, /Sandboxes and Git worktrees are separate resources/);
-  assert.match(prompt, /sandbox_start.*runtime or preview/i);
+  assert.match(prompt, /runtime or preview compute.*sandbox_start/i);
+  assert.match(
+    prompt,
+    /explicit request.*runtime or preview compute.*already authorization/i
+  );
+  assert.match(prompt, /sandbox_start immediately as the first tool/i);
+  assert.match(prompt, /whole requested outcome.*MUST be the only tool/);
   assert.match(prompt, /run_command.*selected sandbox/i);
   assert.match(prompt, /plan_mission.*task identities/i);
   assert.match(prompt, /spawn_worktree.*planned task/i);

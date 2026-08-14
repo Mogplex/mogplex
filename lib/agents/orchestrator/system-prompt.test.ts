@@ -92,10 +92,10 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "sandbox_start is the exact callable equivalent: call it immediately"
+      "Use sandbox_start immediately as the first tool; when compute provisioning is the whole requested outcome, it MUST be the only tool"
     );
     expect(prompt).toContain(
-      "without offering planning alternatives or asking for clarification"
+      "do not describe the mismatch, ask whether to proceed, or wait for reconfirmation"
     );
   });
 
