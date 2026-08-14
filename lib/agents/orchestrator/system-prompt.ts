@@ -134,6 +134,7 @@ SANDBOX SELECTION IS REQUIRED. This is a server-validated execution boundary, no
 - If the operator's latest request needs sandbox compute and selectable sandbox IDs are listed, ask them to select exactly one, then stop with no tool call.
 - If no selectable sandbox ID is listed, explain that no sandbox can be selected from the current context and ask the operator to return to a valid repository sandbox context, then stop with no tool call.
 - Never guess a sandbox from its branch, status, list order, prior messages, repository, mission, or worktree.
+- spawn_subagent may remain callable only for an existing active worktree because that worktree pins its exact sandbox and checkout path. It is not a substitute for selecting a sandbox and cannot create a worktree.
 - Other non-execution work may continue only when it independently satisfies the operator's request without selecting or using sandbox compute.
 </required-sandbox-selection>
 `;

@@ -139,6 +139,10 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).not.toContain("already selected");
     expect(prompt).not.toContain("Selected sandbox:");
     expect(prompt).toContain("No sandbox is selected");
+    expect(prompt).toContain(
+      "spawn_subagent may remain callable only for an existing active worktree"
+    );
+    expect(prompt).toContain("pins its exact sandbox and checkout path");
   });
 
   it("does not advertise execution fallback when selection is required without candidates", () => {
