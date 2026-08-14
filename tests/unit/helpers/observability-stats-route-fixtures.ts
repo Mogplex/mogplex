@@ -1,5 +1,7 @@
-import type { JobRunRow } from "../../../lib/job-run-service";
-import type { ObservabilityStatsAggregates } from "../../../app/api/observability/stats/route";
+import type {
+  ObservabilityJobRunAggregates,
+  ObservabilityStatsAggregates,
+} from "../../../app/api/observability/stats/route";
 
 export async function loadObservabilityStatsRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -11,8 +13,8 @@ export async function loadObservabilityStatsRoute() {
 // The row-level aggregation (token breakdown preference, null-cost exclusion,
 // sandbox window clamping, limit-event grouping) lives in the
 // observability_stats_snapshot RPC now — these tests cover the handler's
-// remaining responsibilities: formatting, job-run windowing, and faithful
-// propagation of the aggregates.
+// remaining responsibilities: formatting and faithful propagation of the
+// aggregates.
 export type StatsOverrides = {
   calls?: Partial<ObservabilityStatsAggregates["calls"]>;
   today?: Partial<ObservabilityStatsAggregates["today"]>;
@@ -64,36 +66,19 @@ export function buildStats(
   };
 }
 
-export function buildJobRun(
-  overrides: Partial<JobRunRow> & Pick<JobRunRow, "id">
-): JobRunRow {
+export function buildJobRunStats(
+  overrides: Partial<ObservabilityJobRunAggregates> = {}
+): ObservabilityJobRunAggregates {
   return {
-    assignment_id: null,
-    trigger_id: null,
-    flow_id: "flow-1",
-    flow_version_id: null,
-    runtime_provider: null,
-    runtime_run_id: null,
-    workflow_run_id: null,
-    retry_of_job_run_id: null,
-    status: "success",
-    created_at: "2026-04-21T12:00:00.000Z",
-    started_at: "2026-04-21T12:00:00.000Z",
-    completed_at: "2026-04-21T12:00:00.000Z",
-    input_tokens: null,
-    output_tokens: null,
-    cost_usd: null,
-    duration_ms: null,
-    error: null,
-    start_attempts: 0,
-    last_start_attempt_at: null,
-    last_start_error: null,
-    last_start_source: null,
-    cancel_requested_at: null,
-    cancelled_at: null,
-    cancel_reason: null,
-    cancel_error: null,
-    metadata: null,
+    total: 0,
+    running: 0,
+    pending: 0,
+    repairable_pending: 0,
+    failed_in_range: 0,
+    repaired_in_range: 0,
+    concluded_in_range: 0,
+    successful_in_range: 0,
+    oldest_pending_age_ms: 0,
     ...overrides,
   };
 }

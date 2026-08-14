@@ -1,15 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireUserId } from "@/lib/auth";
-import { getJobRunPendingAnchor, isRepairableJobRun } from "@/lib/job-runs";
-import { loadUserJobRuns } from "@/lib/job-run-service";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { STALE_PENDING_JOB_THRESHOLD_MS } from "@/lib/workflows/job-run-repair";
 
 // Shape of the observability_stats_snapshot RPC result. All ai_calls,
 // sandboxes, dispatch, and limit_events aggregation happens in Postgres
 // (migration 20260731011500) — PostgREST aggregates are disabled on this
 // project and row-level fetches truncate at the query cap, so summing in JS
-// undercounts once a window exceeds it. Job-run stats stay in TS below
-// because they reuse repair/pending-anchor logic shared with other routes.
+// undercounts once a window exceeds it. Job-run aggregation lives in the
+// observability_job_run_stats RPC so large histories do not require paginated
+// row transfers.
 export type ObservabilityStatsAggregates = {
   calls: {
     total: number;
@@ -34,9 +34,21 @@ export type ObservabilityStatsAggregates = {
   reconciliation_pending: number;
 };
 
+export type ObservabilityJobRunAggregates = {
+  total: number;
+  running: number;
+  pending: number;
+  repairable_pending: number;
+  failed_in_range: number;
+  repaired_in_range: number;
+  concluded_in_range: number;
+  successful_in_range: number;
+  oldest_pending_age_ms: number;
+};
+
 type ObservabilityStatsSnapshot = {
   stats: ObservabilityStatsAggregates;
-  jobRuns: Awaited<ReturnType<typeof loadUserJobRuns>>["runs"];
+  jobRuns: ObservabilityJobRunAggregates;
 };
 
 type ObservabilityStatsGetDeps = {
@@ -49,6 +61,7 @@ type ObservabilityStatsGetDeps = {
     // Selected range end; undefined means "now" (open-ended).
     windowEndIso?: string;
     nowIso: string;
+    repairableBeforeIso: string;
     // Date (not ISO string) so the value is guaranteed to round-trip through
     // toISOString() before reaching the RPC parameter.
     reconciliationStaleBefore: Date;
@@ -56,8 +69,6 @@ type ObservabilityStatsGetDeps = {
     to?: string;
   }) => Promise<ObservabilityStatsSnapshot>;
   getNow: () => Date;
-  getJobRunPendingAnchor: typeof getJobRunPendingAnchor;
-  isRepairableJobRun: typeof isRepairableJobRun;
 };
 
 const defaultObservabilityStatsGetDeps: ObservabilityStatsGetDeps = {
@@ -68,6 +79,7 @@ const defaultObservabilityStatsGetDeps: ObservabilityStatsGetDeps = {
     windowStartIso,
     windowEndIso,
     nowIso,
+    repairableBeforeIso,
     reconciliationStaleBefore,
     from,
     to,
@@ -83,7 +95,13 @@ const defaultObservabilityStatsGetDeps: ObservabilityStatsGetDeps = {
         p_now: nowIso,
         p_reconciliation_stale_before: reconciliationStaleBefore.toISOString(),
       }),
-      loadUserJobRuns(userId),
+      supabaseAdmin.rpc("observability_job_run_stats", {
+        p_user_id: userId,
+        p_window_start: windowStartIso,
+        p_window_end: windowEndIso ?? nowIso,
+        p_now: nowIso,
+        p_repairable_before: repairableBeforeIso,
+      }),
     ]);
 
     if (statsResult.error) {
@@ -91,15 +109,18 @@ const defaultObservabilityStatsGetDeps: ObservabilityStatsGetDeps = {
         `observability stats snapshot RPC failed: ${statsResult.error.message}`
       );
     }
+    if (jobRunsResult.error) {
+      throw new Error(
+        `observability job-run stats RPC failed: ${jobRunsResult.error.message}`
+      );
+    }
 
     return {
       stats: statsResult.data as ObservabilityStatsAggregates,
-      jobRuns: jobRunsResult.runs,
+      jobRuns: jobRunsResult.data as ObservabilityJobRunAggregates,
     };
   },
   getNow: () => new Date(),
-  getJobRunPendingAnchor,
-  isRepairableJobRun,
 };
 
 function normalizeIsoParam(value: string | null): string | undefined {
@@ -137,80 +158,29 @@ export function createObservabilityStatsGetHandler(
     // range it degrades to the historical rolling 24h window.
     const windowStartIso =
       fromParam ?? new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const windowStartMs = new Date(windowStartIso).getTime();
-    const windowEndMs = toParam ? new Date(toParam).getTime() : now.getTime();
     const { stats, jobRuns } = await deps.loadSnapshot({
       userId,
       todayStartIso: todayStart.toISOString(),
       windowStartIso,
       windowEndIso: toParam,
       nowIso: now.toISOString(),
+      repairableBeforeIso: new Date(
+        now.getTime() - STALE_PENDING_JOB_THRESHOLD_MS
+      ).toISOString(),
       reconciliationStaleBefore,
       from: fromParam,
       to: toParam,
     });
 
     const totalCalls = stats.calls.total;
-
-    const isWithinWindow = (when: string | null | undefined) => {
-      if (!when) return false;
-      const ms = new Date(when).getTime();
-      return ms >= windowStartMs && ms <= windowEndMs;
-    };
-
-    const totalJobRuns = jobRuns.length;
-    const runningJobRuns = jobRuns.filter(
-      (run) => run.status === "running"
-    ).length;
-    const pendingJobRuns = jobRuns.filter(
-      (run) => run.status === "pending"
-    ).length;
-    const repairablePendingJobRuns = jobRuns.filter((run) =>
-      deps.isRepairableJobRun(run)
-    ).length;
-    // "Failed" counts failures that *started* in the window (started_at),
-    // which is deliberately a different anchor from the success-rate denominator
-    // below (concludedInRange, anchored on completed_at). These answer different
-    // questions — "failures that began in the window" vs "verdicts reached in
-    // the window" — so a long-running job that started before the window but
-    // failed inside it shows up in the rate but not this count. Keep them
-    // distinct on purpose.
-    const failedJobRunsInRange = jobRuns.filter((run) => {
-      if (run.status !== "failed") return false;
-      return isWithinWindow(run.started_at || run.created_at);
-    }).length;
-    const repairedJobRunsInRange = jobRuns.filter((run) => {
-      if (run.last_start_source !== "repair") return false;
-      return isWithinWindow(run.last_start_attempt_at);
-    }).length;
-    // Success rate is over runs that reached a terminal verdict in the window.
-    // pending/running are still in flight, and cancelled runs are aborted
-    // (neither a success nor a failure) — counting any of them in the
-    // denominator understates the rate. Anchor on completed_at, the moment the
-    // verdict was actually reached.
-    const concludedInRange = jobRuns.filter((run) => {
-      if (run.status !== "success" && run.status !== "failed") return false;
-      return isWithinWindow(
-        run.completed_at || run.started_at || run.created_at
-      );
-    });
-    const successfulInRange = concludedInRange.filter(
-      (run) => run.status === "success"
-    ).length;
     // null (not 0) when nothing concluded in the window, so the UI can render
     // "—" instead of an alarming 0% for an account that simply had no runs.
     const successRateInRange =
-      concludedInRange.length > 0
-        ? Math.round((successfulInRange / concludedInRange.length) * 1000) / 10
+      jobRuns.concluded_in_range > 0
+        ? Math.round(
+            (jobRuns.successful_in_range / jobRuns.concluded_in_range) * 1000
+          ) / 10
         : null;
-    const oldestPendingAgeMs = jobRuns
-      .filter((run) => run.status === "pending")
-      .map((run) => deps.getJobRunPendingAnchor(run))
-      .filter((anchor): anchor is string => typeof anchor === "string")
-      .reduce((oldest, anchor) => {
-        const age = now.getTime() - new Date(anchor).getTime();
-        return oldest === 0 ? age : Math.max(oldest, age);
-      }, 0);
 
     return NextResponse.json({
       summary: {
@@ -229,22 +199,22 @@ export function createObservabilityStatsGetHandler(
         sandbox_time_ms: stats.sandboxes.window_time_ms,
         sandbox_active: stats.sandboxes.active,
         sandbox_total: stats.sandboxes.total,
-        job_runs_total: totalJobRuns,
-        job_runs_running: runningJobRuns,
-        job_runs_pending: pendingJobRuns,
+        job_runs_total: jobRuns.total,
+        job_runs_running: jobRuns.running,
+        job_runs_pending: jobRuns.pending,
         // The response key is retained for compatibility; this is the same
         // repairability predicate used by the Runs `only_repairable` filter.
-        job_runs_stale_pending: repairablePendingJobRuns,
-        job_runs_failed_in_range: failedJobRunsInRange,
-        job_runs_repaired_in_range: repairedJobRunsInRange,
-        job_runs_concluded_in_range: concludedInRange.length,
+        job_runs_stale_pending: jobRuns.repairable_pending,
+        job_runs_failed_in_range: jobRuns.failed_in_range,
+        job_runs_repaired_in_range: jobRuns.repaired_in_range,
+        job_runs_concluded_in_range: jobRuns.concluded_in_range,
         job_runs_success_rate_in_range: successRateInRange,
         suppressed_in_range: stats.dispatch.suppressed,
         deferred_in_range: stats.dispatch.deferred,
         start_failed_in_range: stats.dispatch.start_failed,
         limit_allowed_in_range: stats.limits.allowed,
         limit_denied_in_range: stats.limits.denied,
-        oldest_pending_age_ms: oldestPendingAgeMs,
+        oldest_pending_age_ms: jobRuns.oldest_pending_age_ms,
       },
       by_model: stats.calls.by_model,
       by_type: stats.calls.by_type,
