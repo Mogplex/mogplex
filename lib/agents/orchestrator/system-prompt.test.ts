@@ -54,10 +54,13 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "Exactly one running sandbox is listed, so it is already selected. Reuse it for execution"
+      "Exactly one running sandbox is listed, so it is already selected"
     );
     expect(prompt).toContain(
-      "unless the operator explicitly asks for a new or fresh sandbox"
+      "Reuse it directly for ordinary execution without a redundant sandbox_start call"
+    );
+    expect(prompt).toContain(
+      "call sandbox_start as directed above; it safely reuses the running sandbox rather than creating duplicate compute"
     );
     expect(prompt).toContain(
       "The first emitted tool call MUST be plan_mission."

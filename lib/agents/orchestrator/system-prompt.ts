@@ -149,7 +149,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
     if (ctx.sandboxSelectionRequired) return "";
     if ((ctx.activeSandboxes ?? []).length !== 1 || !soleSandbox) return "";
     return soleSandbox.status === "running"
-      ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it for execution; do not make a redundant sandbox_start call unless the operator explicitly asks for a new or fresh sandbox.\n"
+      ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it directly for ordinary execution without a redundant sandbox_start call. If the operator explicitly asks to provision, start, or prepare runtime or preview compute, call sandbox_start as directed above; it safely reuses the running sandbox rather than creating duplicate compute.\n"
       : `- The sole listed sandbox is ${soleSandbox.status}, not usable compute. When execution is authorized, use sandbox_start to resume or replace it before running commands.\n`;
   })();
   const runCommandGuidance = ctx.sandboxSelectionRequired
