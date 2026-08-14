@@ -429,7 +429,15 @@ export async function executeDeleteRecord(
   });
 }
 export async function executeRefresh(set: SandboxSetState) {
-  const res = await fetch("/api/sandbox");
+  let res: Response;
+  try {
+    res = await fetch("/api/sandbox");
+  } catch {
+    // Refresh runs in background sync and realtime callbacks. Preserve the
+    // last known inventory when the network is unavailable instead of leaking
+    // an unhandled rejection from a fire-and-forget caller.
+    return;
+  }
   if (!res.ok) return;
   const { sandboxes } = await res.json();
   const sandboxesById: Record<string, SandboxRecord> = {};
