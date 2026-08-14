@@ -107,7 +107,51 @@ function getThemePalette() {
   }
 }
 
+let monacoWorkersConfigured = false
+
+function configureMonacoWorkers() {
+  if (monacoWorkersConfigured) {
+    return
+  }
+
+  globalThis.MonacoEnvironment = {
+    getWorker(_workerId, label) {
+      // Keep every worker URL as an inline literal so bundlers can emit it.
+      if (label === "json") {
+        return new Worker(
+          new URL("./monaco-workers/json.worker.ts", import.meta.url),
+          { name: label, type: "module" }
+        )
+      }
+      if (label === "css" || label === "scss" || label === "less") {
+        return new Worker(
+          new URL("./monaco-workers/css.worker.ts", import.meta.url),
+          { name: label, type: "module" }
+        )
+      }
+      if (label === "html" || label === "handlebars" || label === "razor") {
+        return new Worker(
+          new URL("./monaco-workers/html.worker.ts", import.meta.url),
+          { name: label, type: "module" }
+        )
+      }
+      if (label === "typescript" || label === "javascript") {
+        return new Worker(
+          new URL("./monaco-workers/typescript.worker.ts", import.meta.url),
+          { name: label, type: "module" }
+        )
+      }
+      return new Worker(
+        new URL("./monaco-workers/editor.worker.ts", import.meta.url),
+        { name: label, type: "module" }
+      )
+    },
+  }
+  monacoWorkersConfigured = true
+}
+
 async function applyMonacoTheme(mode: MonacoThemeMode) {
+  configureMonacoWorkers()
   const monaco = await import("monaco-editor")
   const palette = getThemePalette()
   const foreground = toMonacoHex(palette.foreground)

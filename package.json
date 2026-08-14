@@ -161,7 +161,7 @@
     "libsodium-wrappers": "^0.8.2",
     "lucide-react": "^1.30.0",
     "media-chrome": "^4.19.2",
-    "monaco-editor": "^0.52.0",
+    "monaco-editor": "^0.56.0",
     "motion": "^13.0.0",
     "nanoid": "^6.0.1",
     "next": "16.2.11",
