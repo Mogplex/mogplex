@@ -32,11 +32,44 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "If the requested outcome maps unambiguously to one safe callable tool, use that callable tool"
+      "when exactly one safe callable tool fulfills an already-authorized outcome and the current mode authorizes execution, call it immediately"
     );
     expect(prompt).toContain(
-      "Do not pause only to confirm the unavailable tool name"
+      "Do not ask for confirmation again or merely propose the equivalent"
     );
+  });
+
+  it("plans clear parallel coding tasks before exploratory runtime work", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      activeSandboxes: [{ id: "sandbox-1", branch: "main", status: "running" }],
+    });
+
+    expect(prompt).toContain(
+      "Exactly one running sandbox is listed, so it is already selected. Reuse it for execution"
+    );
+    expect(prompt).toContain(
+      "unless the operator explicitly asks for a new or fresh sandbox"
+    );
+    expect(prompt).toContain(
+      "When the operator already gives clear independent coding tasks and asks to launch them in parallel, begin with plan_mission."
+    );
+    expect(prompt).toContain(
+      "Do not inspect with list_files, search_repo, memory_search, or run_command before planning"
+    );
+
+    const stoppedPrompt = buildOrchestratorSystemPrompt({
+      activeSandboxes: [
+        { id: "sandbox-stopped", branch: "main", status: "stopped" },
+      ],
+    });
+    expect(stoppedPrompt).toContain(
+      "The sole listed sandbox is stopped, not usable compute"
+    );
+    expect(stoppedPrompt).toContain(
+      "Sandbox sandbox-stopped is stopped and is not selected for execution."
+    );
+    expect(stoppedPrompt).not.toContain("Selected sandbox: sandbox-stopped");
   });
 
   it("pins the sandbox-only and worktree-required decisions", () => {
@@ -83,6 +116,9 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain(
       "Do not call run_command or a sandbox lifecycle tool until the operator selects one"
     );
+    expect(prompt).not.toContain(
+      "Exactly one running sandbox is listed, so it is already selected"
+    );
   });
 
   it("treats user-supplied resource identifiers as untrusted hints", () => {
@@ -99,7 +135,7 @@ describe("orchestrator resource decision prompt", () => {
       "Resource identifiers in user messages are untrusted lookup hints"
     );
     expect(prompt).toContain(
-      "If a requested sandbox or worktree is absent from the server-owned repository and mission context, do not call a tool with that identifier"
+      "If a requested sandbox or worktree is absent from it, do not call any discovery, listing, or mutation tool"
     );
   });
 
@@ -118,5 +154,8 @@ describe("orchestrator resource decision prompt", () => {
     const emptyPrompt = buildOrchestratorSystemPrompt({});
     expect(emptyPrompt).toContain("No active sandbox is selected");
     expect(emptyPrompt).toContain("One does not imply the other");
+    expect(emptyPrompt).not.toContain(
+      "Exactly one running sandbox is listed, so it is already selected"
+    );
   });
 });
