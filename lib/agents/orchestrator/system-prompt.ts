@@ -142,6 +142,8 @@ SANDBOX SELECTION IS REQUIRED. This is a server-validated execution boundary, no
 
 function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   if (ctx.controlMode === "plan") return "";
+  const sandboxStartAvailable =
+    !ctx.availableToolNames || ctx.availableToolNames.includes("sandbox_start");
   const soleSandbox = (ctx.activeSandboxes ?? [])[0];
   const sandboxReuseGuidance = (() => {
     if (ctx.sandboxSelectionRequired) return "";
@@ -153,9 +155,10 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   const runCommandGuidance = ctx.sandboxSelectionRequired
     ? "- run_command and sandbox lifecycle tools are unavailable until the operator selects a sandbox. Do not attempt them or substitute another tool.\n"
     : "- Use run_command for a shell command in the selected sandbox. When no sandbox is listed, it may fall back to exactly one repo-scoped running sandbox or start one for the active repository. That fallback never applies while multiple sandboxes are listed: run_command and sandbox lifecycle tools are withheld until the operator selects one. The result returns the resolved sandbox identity and never implies or creates a worktree.\n";
-  const sandboxStartGuidance = ctx.sandboxSelectionRequired
-    ? ""
-    : "- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. Starting a sandbox never creates a worktree.\n";
+  const sandboxStartGuidance =
+    ctx.sandboxSelectionRequired || !sandboxStartAvailable
+      ? ""
+      : "- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. Starting a sandbox never creates a worktree.\n";
   const spawnWorktreeGuidance = ctx.sandboxSelectionRequired
     ? "- spawn_worktree is unavailable until the operator selects a sandbox.\n"
     : "- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.\n";

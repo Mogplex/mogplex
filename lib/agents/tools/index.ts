@@ -153,8 +153,8 @@ export function buildStaticTools(
     bash: createTerminalExec(sandboxId, userId, repoId),
     read_file: createReadFile(githubToken, repoDefaults),
     list_files: createListFiles(githubToken, repoDefaults),
-    start_sandbox: createStartSandbox(userId),
     stop_sandbox: createStopSandbox(userId),
+    ...(repoId ? { start_sandbox: createStartSandbox(userId, repoId) } : {}),
     ...memoryTools,
     ...(userId
       ? {

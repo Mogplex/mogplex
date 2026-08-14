@@ -39,6 +39,14 @@ describe("orchestrator resource decision prompt", () => {
     );
   });
 
+  it("does not recommend sandbox startup when it is not callable", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      availableToolNames: ["run_command", "plan_mission"],
+    });
+
+    expect(prompt).not.toContain("Use sandbox_start for an explicit runtime");
+  });
+
   it("plans clear parallel coding tasks before exploratory runtime work", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",
