@@ -46,7 +46,10 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "Exactly one active sandbox is listed, so it is already selected. Reuse it; do not call sandbox_start again."
+      "Exactly one running sandbox is listed, so it is already selected. Reuse it for execution"
+    );
+    expect(prompt).toContain(
+      "unless the operator explicitly asks for a new or fresh sandbox"
     );
     expect(prompt).toContain(
       "When the operator already gives clear independent coding tasks and asks to launch them in parallel, begin with plan_mission."
@@ -60,9 +63,13 @@ describe("orchestrator resource decision prompt", () => {
         { id: "sandbox-stopped", branch: "main", status: "stopped" },
       ],
     });
-    expect(stoppedPrompt).not.toContain(
-      "Exactly one active sandbox is listed, so it is already selected"
+    expect(stoppedPrompt).toContain(
+      "The sole listed sandbox is stopped, not usable compute"
     );
+    expect(stoppedPrompt).toContain(
+      "Sandbox sandbox-stopped is stopped and is not selected for execution."
+    );
+    expect(stoppedPrompt).not.toContain("Selected sandbox: sandbox-stopped");
   });
 
   it("pins the sandbox-only and worktree-required decisions", () => {
@@ -110,7 +117,7 @@ describe("orchestrator resource decision prompt", () => {
       "Do not call run_command or a sandbox lifecycle tool until the operator selects one"
     );
     expect(prompt).not.toContain(
-      "Exactly one active sandbox is listed, so it is already selected"
+      "Exactly one running sandbox is listed, so it is already selected"
     );
   });
 
@@ -148,7 +155,7 @@ describe("orchestrator resource decision prompt", () => {
     expect(emptyPrompt).toContain("No active sandbox is selected");
     expect(emptyPrompt).toContain("One does not imply the other");
     expect(emptyPrompt).not.toContain(
-      "Exactly one active sandbox is listed, so it is already selected"
+      "Exactly one running sandbox is listed, so it is already selected"
     );
   });
 });

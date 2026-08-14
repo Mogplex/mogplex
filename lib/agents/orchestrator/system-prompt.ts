@@ -123,11 +123,12 @@ When a worker agent fails or gets stuck:
 function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   if (ctx.controlMode === "plan") return "";
   const soleSandbox = (ctx.activeSandboxes ?? [])[0];
-  const sandboxReuseGuidance =
-    (ctx.activeSandboxes ?? []).length === 1 &&
-    soleSandbox?.status === "running"
-      ? "- Exactly one active sandbox is listed, so it is already selected. Reuse it; do not call sandbox_start again.\n"
-      : "";
+  const sandboxReuseGuidance = (() => {
+    if ((ctx.activeSandboxes ?? []).length !== 1 || !soleSandbox) return "";
+    return soleSandbox.status === "running"
+      ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it for execution; do not make a redundant sandbox_start call unless the operator explicitly asks for a new or fresh sandbox.\n"
+      : `- The sole listed sandbox is ${soleSandbox.status}, not usable compute. When execution is authorized, use sandbox_start to resume or replace it before running commands.\n`;
+  })();
 
   return `
 <resource-decision-contract>
@@ -225,12 +226,15 @@ run_command may fall back only when exactly one repo-scoped running sandbox exis
   const sandboxLines = sandboxes.map(
     (s) => `- ${s.id}: branch=${s.branch}, status=${s.status}`
   );
+  const soleSandbox = sandboxes[0];
   const sandboxSelection =
-    sandboxes.length === 1
-      ? `Selected sandbox: ${sandboxes[0]?.id}`
-      : sandboxes.length > 1
-        ? "Multiple sandboxes are available. Require an explicit sandbox selection before execution. Never guess from account order or unrelated state. Do not call run_command or a sandbox lifecycle tool until the operator selects one."
-        : "No sandbox is selected.";
+    sandboxes.length === 1 && soleSandbox?.status === "running"
+      ? `Selected sandbox: ${soleSandbox.id}`
+      : sandboxes.length === 1 && soleSandbox
+        ? `Sandbox ${soleSandbox.id} is ${soleSandbox.status} and is not selected for execution.`
+        : sandboxes.length > 1
+          ? "Multiple sandboxes are available. Require an explicit sandbox selection before execution. Never guess from account order or unrelated state. Do not call run_command or a sandbox lifecycle tool until the operator selects one."
+          : "No sandbox is selected.";
 
   return `
 <execution-environments>
