@@ -158,7 +158,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   const sandboxStartGuidance =
     ctx.sandboxSelectionRequired || !sandboxStartAvailable
       ? ""
-      : "- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. Starting a sandbox never creates a worktree.\n";
+      : "- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. If the operator names a different unavailable capability for that same outcome, sandbox_start is the exact callable equivalent: call it immediately without offering planning alternatives or asking for clarification. Starting a sandbox never creates a worktree.\n";
   const spawnWorktreeGuidance = ctx.sandboxSelectionRequired
     ? "- spawn_worktree is unavailable until the operator selects a sandbox.\n"
     : "- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.\n";
@@ -167,7 +167,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
 <resource-decision-contract>
 ${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
 - Use plan_mission to create task identities before isolated coding work.
-- When the operator already gives clear independent coding tasks and asks to launch them in parallel, begin with plan_mission. Do not inspect with list_files, search_repo, memory_search, or run_command before planning unless the operator requests discovery or the task boundaries are genuinely unclear.
+- When the operator gives one or more clear coding tasks and asks to launch workers, begin with exactly one plan_mission call. Supply tasks as the JSON array required by the tool schema, never as a serialized string. Do not inspect with list_files, search_repo, memory_search, or run_command before planning unless the operator requests discovery or the task boundaries are genuinely unclear.
 ${spawnWorktreeGuidance}- Use spawn_subagent only after an active persisted worktree exists. The worker must use that worktree's exact sandbox and checkout path.
 - Preview-only, inspection-only, and command-only work must not create a worktree.
 - Sandbox lifecycle operations never mutate worktree lifecycle state. Worktree archive or prune operations never stop or delete sandbox compute.

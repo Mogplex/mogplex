@@ -39,7 +39,7 @@ export function createPlanMissionTool(
   const deps = { ...defaultPlanMissionDeps, ...overrides };
   return defineTool({
     description:
-      "Persist the mission plan as orchestration specs and runnable tasks. Each returned task ID can be assigned its own worktree.",
+      "Persist one complete mission plan as orchestration specs and runnable tasks. Call once after constructing the full input; tasks must be a JSON array of task objects, never a serialized string. Each returned task ID can be assigned its own worktree.",
     inputSchema: planMissionSchema,
     execute: async (input: z.infer<typeof planMissionSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
