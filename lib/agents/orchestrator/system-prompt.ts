@@ -122,8 +122,10 @@ When a worker agent fails or gets stuck:
 
 function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   if (ctx.controlMode === "plan") return "";
+  const soleSandbox = (ctx.activeSandboxes ?? [])[0];
   const sandboxReuseGuidance =
-    (ctx.activeSandboxes ?? []).length === 1
+    (ctx.activeSandboxes ?? []).length === 1 &&
+    soleSandbox?.status === "running"
       ? "- Exactly one active sandbox is listed, so it is already selected. Reuse it; do not call sandbox_start again.\n"
       : "";
 

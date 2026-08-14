@@ -54,6 +54,15 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain(
       "Do not inspect with list_files, search_repo, memory_search, or run_command before planning"
     );
+
+    const stoppedPrompt = buildOrchestratorSystemPrompt({
+      activeSandboxes: [
+        { id: "sandbox-stopped", branch: "main", status: "stopped" },
+      ],
+    });
+    expect(stoppedPrompt).not.toContain(
+      "Exactly one active sandbox is listed, so it is already selected"
+    );
   });
 
   it("pins the sandbox-only and worktree-required decisions", () => {
