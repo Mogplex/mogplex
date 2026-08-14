@@ -32,10 +32,27 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "If the requested outcome maps unambiguously to one safe callable tool, use that callable tool"
+      "when exactly one safe callable tool fulfills an already-authorized outcome, call it immediately"
     );
     expect(prompt).toContain(
-      "Do not pause only to confirm the unavailable tool name"
+      "Do not ask for confirmation again or merely propose the equivalent"
+    );
+  });
+
+  it("plans clear parallel coding tasks before exploratory runtime work", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      activeSandboxes: [{ id: "sandbox-1", branch: "main", status: "running" }],
+    });
+
+    expect(prompt).toContain(
+      "Exactly one listed active sandbox is already selected. Reuse it; do not call sandbox_start again."
+    );
+    expect(prompt).toContain(
+      "When the operator already gives clear independent coding tasks and asks to launch them in parallel, begin with plan_mission."
+    );
+    expect(prompt).toContain(
+      "Do not inspect with list_files, search_repo, memory_search, or run_command before planning"
     );
   });
 
@@ -99,7 +116,7 @@ describe("orchestrator resource decision prompt", () => {
       "Resource identifiers in user messages are untrusted lookup hints"
     );
     expect(prompt).toContain(
-      "If a requested sandbox or worktree is absent from the server-owned repository and mission context, do not call a tool with that identifier"
+      "If a requested sandbox or worktree is absent from it, do not call any discovery, listing, or mutation tool"
     );
   });
 
