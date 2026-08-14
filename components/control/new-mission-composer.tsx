@@ -26,6 +26,7 @@ import {
 import { ModelChip, type ComposerSendOptions } from "./composer";
 import {
   appendControlComposerFiles,
+  consumeControlFileInput,
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
@@ -218,11 +219,10 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
               multiple
               className="sr-only"
               onChange={async (event) => {
-                const selectedFiles = Array.from(
-                  event.currentTarget.files ?? []
+                const selectedFiles = consumeControlFileInput(
+                  event.currentTarget
                 );
                 await addFiles(selectedFiles);
-                event.currentTarget.value = "";
               }}
             />
             <button

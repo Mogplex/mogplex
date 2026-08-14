@@ -17,6 +17,7 @@ import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { Mission, MissionPermissions } from "@/lib/control/types";
 import {
   appendControlComposerFiles,
+  consumeControlFileInput,
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
@@ -369,9 +370,10 @@ export function Composer({
             className="sr-only"
             multiple
             onChange={async (event) => {
-              const selectedFiles = Array.from(event.currentTarget.files ?? []);
+              const selectedFiles = consumeControlFileInput(
+                event.currentTarget
+              );
               await addFiles(selectedFiles);
-              event.currentTarget.value = "";
             }}
           />
           <ModelChip

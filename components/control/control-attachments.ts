@@ -16,6 +16,14 @@ export function appendControlComposerFiles(
   return [...current, ...incoming].slice(0, MAX_CONTROL_ATTACHMENT_COUNT);
 }
 
+export function consumeControlFileInput(
+  input: Pick<HTMLInputElement, "files" | "value">
+): File[] {
+  const selectedFiles = Array.from(input.files ?? []);
+  input.value = "";
+  return selectedFiles;
+}
+
 export async function readControlComposerFiles(
   selectedFiles: File[],
   existingCount: number
