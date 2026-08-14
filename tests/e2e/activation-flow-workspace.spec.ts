@@ -7,6 +7,7 @@ import {
   mockActivationFlow,
   waitForTrackedEvent,
 } from "./helpers/activation-fixtures";
+import { capturePageErrors } from "./helpers/page-errors";
 
 const workspacePath = `/${connectedUser.username}/projects/workspace`;
 
@@ -245,6 +246,33 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
 
   await expect(page.getByText("panes: 3")).toBeVisible();
   await expect(page.locator('[data-pane-type="files"]')).toHaveCount(0);
+});
+
+test("workspace editor accepts the active theme colors", async ({ page }) => {
+  const pageErrors = capturePageErrors(page);
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page);
+
+  await page.goto(workspacePath);
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("home-sync-repos").click();
+  await page.getByTestId("home-open-workspace-repo-1").click();
+
+  await page.getByTitle("Add pane").first().click();
+  await page.getByRole("menuitem", { name: "Files" }).first().click();
+  await page
+    .locator('[data-pane-type="files"]')
+    .getByRole("treeitem", { name: "package.json" })
+    .click();
+
+  const editorPane = page.locator('[data-pane-type="editor"]');
+  await expect(editorPane.locator(".monaco-editor")).toBeVisible();
+  await expect(editorPane).not.toContainText("Illegal value for token color");
+  expect(
+    pageErrors.filter((message) =>
+      message.includes("Illegal value for token color")
+    )
+  ).toEqual([]);
 });
 
 test("terminal session survives navigation away from the workspace", async ({
