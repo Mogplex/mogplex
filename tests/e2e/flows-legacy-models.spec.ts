@@ -245,7 +245,6 @@ test("flows inspector highlights legacy hidden model overrides and supports quic
   // Selecting a node opens the inspector on its own now; the separate
   // `.flows-inspector-toggle` control no longer exists.
   await expect(page.locator(".flows-inspector")).toBeVisible();
-  expect(pageErrors).toEqual([]);
   await expect(page.getByTestId("flows-legacy-model-warning")).toBeVisible();
   await expect(
     page.getByText("This node override is not enabled for this account.")
@@ -292,6 +291,7 @@ test("flows inspector highlights legacy hidden model overrides and supports quic
       return agentNode?.data.modelOverride;
     })
     .toBe("minimax/minimax-m2.5");
+  expect(pageErrors).toEqual([]);
 });
 
 test("workflows model override selector flags a disabled current override as legacy", async ({
@@ -461,7 +461,6 @@ test("workflows model override selector flags a disabled current override as leg
   const agentNode = page.getByTestId("rf__node-agent-a");
   await agentNode.click();
   await expect(page.locator(".flows-inspector")).toBeVisible();
-  expect(pageErrors).toEqual([]);
 
   await expect(page.getByTestId("flows-legacy-model-warning")).toBeVisible();
   await expect(
@@ -485,4 +484,5 @@ test("workflows model override selector flags a disabled current override as leg
   );
   await expect(enabledOption).toHaveCount(1);
   await expect(enabledOption).not.toHaveText(/^Legacy · /);
+  expect(pageErrors).toEqual([]);
 });

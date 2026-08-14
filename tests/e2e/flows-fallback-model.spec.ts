@@ -181,7 +181,6 @@ test("flows inspector saves a user-picked fallback model for upstream issues", a
   const agentNode = page.getByTestId("rf__node-agent-a");
   await agentNode.click();
   await expect(page.locator(".flows-inspector")).toBeVisible();
-  expect(pageErrors).toEqual([]);
 
   // Unset by default: the shared fallback pool applies.
   const fallbackSelect = page.getByLabel("Fallback model", { exact: true });
@@ -203,4 +202,5 @@ test("flows inspector saves a user-picked fallback model for upstream issues", a
       return agent?.data.fallbackModelOverride;
     })
     .toBe("openai/gpt-5.4");
+  expect(pageErrors).toEqual([]);
 });
