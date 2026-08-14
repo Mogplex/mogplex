@@ -5,6 +5,7 @@ import {
   scopedPath,
 } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
+import { capturePageErrors } from "./helpers/page-errors";
 import type { Route } from "@playwright/test";
 import type { FlowNode } from "../../lib/types";
 
@@ -32,6 +33,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 test("flows inspector highlights legacy hidden model overrides and supports quick replacement", async ({
   page,
 }) => {
+  const pageErrors = capturePageErrors(page);
   // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
   // the 1280px dock-mode threshold.
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -239,9 +241,7 @@ test("flows inspector highlights legacy hidden model overrides and supports quic
   await expect(page.getByTestId("flows-legacy-model-banner")).toBeVisible();
 
   const agentNode = page.getByTestId("rf__node-agent-a");
-  await agentNode.dispatchEvent("pointerdown", { button: 0 });
-  await agentNode.dispatchEvent("pointerup", { button: 0 });
-  await agentNode.dispatchEvent("click");
+  await agentNode.click();
   // Selecting a node opens the inspector on its own now; the separate
   // `.flows-inspector-toggle` control no longer exists.
   await expect(page.locator(".flows-inspector")).toBeVisible();
@@ -291,11 +291,13 @@ test("flows inspector highlights legacy hidden model overrides and supports quic
       return agentNode?.data.modelOverride;
     })
     .toBe("minimax/minimax-m2.5");
+  expect(pageErrors).toEqual([]);
 });
 
 test("workflows model override selector flags a disabled current override as legacy", async ({
   page,
 }) => {
+  const pageErrors = capturePageErrors(page);
   await enableScopedE2EAuth(page);
 
   const disabledModelId = "anthropic/claude-sonnet-4.6";
@@ -457,9 +459,7 @@ test("workflows model override selector flags a disabled current override as leg
   await page.waitForLoadState("networkidle");
 
   const agentNode = page.getByTestId("rf__node-agent-a");
-  await agentNode.dispatchEvent("pointerdown", { button: 0 });
-  await agentNode.dispatchEvent("pointerup", { button: 0 });
-  await agentNode.dispatchEvent("click");
+  await agentNode.click();
   await expect(page.locator(".flows-inspector")).toBeVisible();
 
   await expect(page.getByTestId("flows-legacy-model-warning")).toBeVisible();
@@ -484,4 +484,5 @@ test("workflows model override selector flags a disabled current override as leg
   );
   await expect(enabledOption).toHaveCount(1);
   await expect(enabledOption).not.toHaveText(/^Legacy · /);
+  expect(pageErrors).toEqual([]);
 });
