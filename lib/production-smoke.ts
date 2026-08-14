@@ -161,7 +161,7 @@ async function checkWorkspacesSelect() {
   return "Queried workspaces with billing and Vercel link fields";
 }
 
-async function checkControlSessionsSelect() {
+export async function checkControlSessionsSelect() {
   const { error } = await supabaseAdmin
     .from("control_sessions")
     .select("id, user_id, repo_id, orchestration_run_id")
