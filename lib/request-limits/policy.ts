@@ -80,22 +80,11 @@ function evaluateWindowLimit(input: {
 }
 
 export function evaluateChatLimitPolicy(input: {
-  activeChats: number;
   hourlyStarts: readonly string[];
   dailyStarts: readonly string[];
   now?: Date;
 }): LimitDecision {
   const now = input.now ?? new Date();
-
-  if (input.activeChats >= REQUEST_LIMITS.chat.concurrent.value) {
-    return denied({
-      code: "chat_rate_limited",
-      error: "Too many active chat runs",
-      reason: "concurrent_chat_runs_exceeded",
-      retryAfterSeconds: CONCURRENCY_RETRY_AFTER_SECONDS,
-      limit: REQUEST_LIMITS.chat.concurrent,
-    });
-  }
 
   const hourlyDecision = evaluateWindowLimit({
     timestamps: input.hourlyStarts,

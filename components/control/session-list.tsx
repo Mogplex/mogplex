@@ -41,6 +41,7 @@ const DEFAULT_WIDTH = 288;
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 320;
 const MAX_VISIBLE_SESSIONS = 5;
+const EMPTY_WORKING_IDS: ReadonlySet<string> = new Set();
 
 function formatAge(iso: string): string {
   const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
@@ -110,12 +111,12 @@ function SessionRow({
 function ProjectGroupSection({
   group,
   selectedId,
-  workingId,
+  workingIds,
   onSelect,
 }: {
   group: SessionGroup<ControlSessionSummary>;
   selectedId: string | null;
-  workingId: string | null;
+  workingIds: ReadonlySet<string>;
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -154,7 +155,7 @@ function ProjectGroupSection({
               key={session.id}
               session={session}
               selected={session.id === selectedId}
-              working={session.id === workingId}
+              working={workingIds.has(session.id)}
               onSelect={onSelect}
             />
           ))}
@@ -181,14 +182,14 @@ function ProjectGroupSection({
 export function SessionList({
   sessions,
   selectedId,
-  workingId = null,
+  workingIds = EMPTY_WORKING_IDS,
   onSelect,
   onNew,
 }: {
   sessions: ControlSessionSummary[];
   selectedId: string | null;
-  /** Session whose chat is currently streaming (shows a Working row badge). */
-  workingId?: string | null;
+  /** Sessions whose chats are currently streaming (shows Working badges). */
+  workingIds?: ReadonlySet<string>;
   onSelect: (id: string) => void;
   onNew: () => void;
 }) {
@@ -218,6 +219,7 @@ export function SessionList({
     () => sortGroups(groupSessionsByProject(sessions), sortMode),
     [sessions, sortMode]
   );
+  const workingCount = workingIds.size;
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
@@ -260,8 +262,16 @@ export function SessionList({
           <Plus className="size-4" strokeWidth={2} />
         </button>
         <div className="mt-2 flex flex-1 justify-center text-ink-400">
+          {workingCount > 0 ? (
+            <span
+              aria-label={`${workingCount} ${workingCount === 1 ? "session" : "sessions"} working`}
+              title={`${workingCount} working`}
+              className="mt-1 size-1.5 shrink-0 animate-pulse rounded-full bg-sky-400"
+            />
+          ) : null}
           <span className="text-[10px] font-semibold tracking-wide uppercase [writing-mode:vertical-rl]">
             Sessions · {sessions.length}
+            {workingCount > 0 ? ` · ${workingCount} working` : ""}
           </span>
         </div>
       </aside>
@@ -351,7 +361,7 @@ export function SessionList({
               key={group.project ?? "__general__"}
               group={group}
               selectedId={selectedId}
-              workingId={workingId}
+              workingIds={workingIds}
               onSelect={onSelect}
             />
           ))

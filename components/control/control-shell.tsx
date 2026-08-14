@@ -1,11 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-} from "ai";
 import type { UIMessage } from "ai";
 import {
   MISSION_PERMISSION_OPTIONS,
@@ -45,12 +40,14 @@ import { canonicalizeControlSessionProjects } from "@/lib/control/session-projec
 import { useControlWorktrees } from "./use-control-worktrees";
 import { WorktreesPanel } from "./worktrees-panel";
 import { downloadTextFile } from "./download-text-file";
+import { useControlChats } from "./use-control-chats";
+import { useControlChatError } from "./use-control-chat-error";
+import { useControlChatComposer } from "./use-control-chat-composer";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
 };
-
 function ControlShellInner({
   initialData,
   initialMissionId,
@@ -68,10 +65,10 @@ function ControlShellInner({
   const [view, setView] = useState<ControlView>("chat");
   const [focusSandboxId, setFocusSandboxId] = useState<string | null>(null);
   const [newMission, setNewMission] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const sendFailureRef = useRef(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const persistRef = useRef<(messages: UIMessage[]) => void>(() => {});
+  const persistRef = useRef<(sessionId: string, messages: UIMessage[]) => void>(
+    () => {}
+  );
 
   const mission = useMemo(
     () => missions.find((m) => m.id === selectedMissionId) || missions[0],
@@ -86,32 +83,26 @@ function ControlShellInner({
   const getWorktree = (id: string) =>
     initialData.worktrees.find((worktree) => worktree.id === id);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/control/chat",
-      }),
-    []
-  );
-
+  const activeChatId =
+    (sessionId ?? selectedMissionId) || "unselected-control-session";
+  const persistChat = useCallback((id: string, finished: UIMessage[]) => {
+    persistRef.current(id, finished);
+  }, []);
   const {
     messages,
-    setMessages,
     sendMessage,
     status,
     stop,
+    error: activeChatError,
+    clearError: clearActiveChatError,
+    activeChat,
+    runningSessionIds,
+    setSessionMessages,
+    removeSession,
     addToolApprovalResponse,
-  } = useChat({
-    transport,
-    id: `control-${sessionId ?? selectedMissionId}`,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-    onFinish: ({ messages: finishedMessages }) => {
-      persistRef.current(finishedMessages);
-    },
-    onError: (error) => {
-      sendFailureRef.current = true;
-      setChatError(error.message || "Chat error");
-    },
+  } = useControlChats({
+    activeChatId,
+    onPersist: persistChat,
   });
 
   const chatPending = status === "streaming" || status === "submitted";
@@ -135,12 +126,12 @@ function ControlShellInner({
     selectSession,
     createSession,
     updateSession,
-    persist,
+    persistSession,
   } = useControlSessions({
     sessionId,
     setSessionId,
-    chatStatus: status,
-    setMessages,
+    setSessionMessages,
+    removeSessionMessages: removeSession,
     deepLinkTarget: searchParams.get("mission"),
   });
 
@@ -175,12 +166,17 @@ function ControlShellInner({
   );
 
   useEffect(() => {
-    persistRef.current = (finished) => {
-      void persist(finished);
+    persistRef.current = (id, finished) => {
+      void persistSession(id, finished);
     };
-  }, [persist]);
+  }, [persistSession]);
 
-  const [composerInput, setComposerInput] = useState("");
+  const { error: localChatError, setError: setChatError } =
+    useControlChatError(activeChatId);
+  const getActiveChatError = useCallback(() => activeChat.error, [activeChat]);
+
+  const [composerInput, setComposerInput] =
+    useControlChatComposer(activeChatId);
   const pendingInitialMessageRef = usePendingInitialMessage({
     selectedMissionId,
     status,
@@ -192,7 +188,8 @@ function ControlShellInner({
   const handleSend = useControlSend({
     sendMessage,
     setChatError,
-    sendFailureRef,
+    clearChatError: clearActiveChatError,
+    getChatError: getActiveChatError,
     requestContext,
   });
   const handleToolApprovalResponse = useToolApprovalHandler(
@@ -251,16 +248,13 @@ function ControlShellInner({
       pendingInitialMessageRef.current = { missionId: id, text, options };
       return true;
     },
-    [createSession, mutateRepos, pendingInitialMessageRef, repos]
+    [createSession, mutateRepos, pendingInitialMessageRef, repos, setChatError]
   );
 
   const sessionUsage = useSessionUsage(messages, chatPending);
   const usageTokens = sessionUsage.inputTokens + sessionUsage.outputTokens;
 
-  const combinedTimeline = useMemo(
-    () => buildCombinedTimeline(mission?.timeline, messages),
-    [mission?.timeline, messages]
-  );
+  const combinedTimeline = buildCombinedTimeline(mission?.timeline, messages);
 
   const hasChanges = useMemo(
     () => collectChangedFiles(messages).length > 0,
@@ -272,6 +266,7 @@ function ControlShellInner({
       ? (activeSandbox.runtime_summary.preview_url ?? null)
       : null;
   const hasSession = Boolean(sessionId || mission);
+  const chatError = localChatError ?? activeChatError?.message ?? null;
 
   const sendInstruction = useCallback(
     (text: string) => {
@@ -341,6 +336,7 @@ function ControlShellInner({
         repos={repos}
         sessions={displaySessions}
         sessionId={sessionId}
+        workingIds={runningSessionIds}
         canCancel={Boolean(mission || sessionId)}
         onCancel={() => setNewMission(false)}
         onCreate={handleCreateMission}
@@ -355,7 +351,7 @@ function ControlShellInner({
       <SessionList
         sessions={displaySessions}
         selectedId={sessionId}
-        workingId={chatPending ? sessionId : null}
+        workingIds={runningSessionIds}
         onSelect={handleSelectSession}
         onNew={() => setNewMission(true)}
       />
@@ -431,6 +427,7 @@ function ControlShellInner({
             <>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <Timeline
+                  key={activeChatId}
                   events={combinedTimeline}
                   worktrees={initialData.worktrees}
                   getWorktree={getWorktree}

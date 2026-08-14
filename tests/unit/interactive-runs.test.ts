@@ -154,8 +154,7 @@ test("isStaleLiveInteractiveCall hides orphaned streaming chats after the stale 
 
   // Chat runs are bounded by the serverless streaming timeout, so a chat
   // past the chat stale threshold must be reported as stale regardless of
-  // any anchor fields the row may carry — keeps parity with
-  // claim_chat_limit_admission.
+  // any anchor fields the row may carry.
   assert.equal(
     isStaleLiveInteractiveCall(
       {

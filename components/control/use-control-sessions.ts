@@ -14,30 +14,29 @@ type SessionRecord = ControlSessionSummary & {
  * Messages sync whole-array with optimistic concurrency on updated_at
  * (same pattern as the pane workspace's conversations store).
  *
- * sessionId state lives in the caller so the useChat instance can key
- * itself by the active session.
+ * updated_at revisions are tracked per session so background chat completions
+ * persist to their own rows even after the user selects another session.
  */
 export function useControlSessions({
   sessionId,
   setSessionId,
-  chatStatus,
-  setMessages,
+  setSessionMessages,
+  removeSessionMessages,
   deepLinkTarget,
 }: {
   sessionId: string | null;
   setSessionId: (id: string | null) => void;
-  chatStatus: string;
-  setMessages: (messages: UIMessage[]) => void;
+  setSessionMessages: (sessionId: string, messages: UIMessage[]) => void;
+  removeSessionMessages: (sessionId: string) => void;
   /** Session id from the URL (?mission=) to restore once the list loads. */
   deepLinkTarget?: string | null;
 }) {
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
-  const updatedAtRef = useRef<string | null>(null);
-  const pendingRestoreRef = useRef<UIMessage[] | null>(null);
+  const updatedAtBySessionRef = useRef(new Map<string, string>());
   const mutationRevisionRef = useRef(0);
   const removedSessionIdsRef = useRef(new Set<string>());
-  const [restoreTick, setRestoreTick] = useState(0);
+  const selectionRevisionRef = useRef(0);
 
   const refreshList = useCallback(async () => {
     const revision = mutationRevisionRef.current;
@@ -45,6 +44,11 @@ export function useControlSessions({
     if (!res.ok) return;
     const fetched = (await res.json()) as ControlSessionSummary[];
     setSessionsLoaded(true);
+    for (const session of fetched) {
+      if (!updatedAtBySessionRef.current.has(session.id)) {
+        updatedAtBySessionRef.current.set(session.id, session.updated_at);
+      }
+    }
     // An initial list request can finish after a new session was created.
     // Merge it without overwriting local mutations or reviving archives.
     if (revision !== mutationRevisionRef.current) {
@@ -62,24 +66,17 @@ export function useControlSessions({
 
   const selectSession = useCallback(
     async (id: string) => {
+      const revision = ++selectionRevisionRef.current;
       const res = await fetch(`/api/control/sessions?id=${id}`);
       if (!res.ok) return;
       const record = (await res.json()) as SessionRecord;
-      updatedAtRef.current = record.updated_at;
-      pendingRestoreRef.current = record.messages ?? [];
+      updatedAtBySessionRef.current.set(record.id, record.updated_at);
+      setSessionMessages(record.id, record.messages ?? []);
+      if (revision !== selectionRevisionRef.current) return;
       setSessionId(record.id);
-      setRestoreTick((tick) => tick + 1);
     },
-    [setSessionId]
+    [setSessionId, setSessionMessages]
   );
-
-  // Restore messages once the re-keyed chat instance is live.
-  useEffect(() => {
-    if (!pendingRestoreRef.current || chatStatus !== "ready") return;
-    const restore = pendingRestoreRef.current;
-    pendingRestoreRef.current = null;
-    setMessages(restore);
-  }, [chatStatus, restoreTick, setMessages]);
 
   // Deep link: ?mission=<session id> restores that session's history.
   const deepLinkedRef = useRef(false);
@@ -90,7 +87,7 @@ export function useControlSessions({
     }
     deepLinkedRef.current = true;
     if (deepLinkTarget === sessionId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- restores a deep-linked session once the list loads
+
     void selectSession(deepLinkTarget);
   }, [sessions, deepLinkTarget, selectSession, sessionId]);
 
@@ -115,7 +112,8 @@ export function useControlSessions({
       const record = (await res.json()) as SessionRecord;
       mutationRevisionRef.current += 1;
       removedSessionIdsRef.current.delete(record.id);
-      updatedAtRef.current = record.updated_at;
+      updatedAtBySessionRef.current.set(record.id, record.updated_at);
+      setSessionMessages(record.id, record.messages ?? []);
       setSessions((current) => [
         {
           id: record.id,
@@ -131,20 +129,20 @@ export function useControlSessions({
       setSessionId(record.id);
       return record.id;
     },
-    [setSessionId]
+    [setSessionId, setSessionMessages]
   );
 
-  const persist = useCallback(
-    async (messages: UIMessage[]) => {
-      const expected = updatedAtRef.current;
-      if (!sessionId || !expected || messages.length === 0) return;
+  const persistSession = useCallback(
+    async (targetSessionId: string, messages: UIMessage[]) => {
+      const expected = updatedAtBySessionRef.current.get(targetSessionId);
+      if (!expected || messages.length === 0) return;
 
       const put = (expectedUpdatedAt: string) =>
         fetch("/api/control/sessions", {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            id: sessionId,
+            id: targetSessionId,
             messages,
             expected_updated_at: expectedUpdatedAt,
           }),
@@ -154,7 +152,9 @@ export function useControlSessions({
       if (res.status === 409) {
         // Another tab/device won the race: rebase on its timestamp and
         // retry once with our newer message array.
-        const fresh = await fetch(`/api/control/sessions?id=${sessionId}`);
+        const fresh = await fetch(
+          `/api/control/sessions?id=${targetSessionId}`
+        );
         if (!fresh.ok) return;
         const record = (await fresh.json()) as SessionRecord;
         res = await put(record.updated_at);
@@ -163,16 +163,16 @@ export function useControlSessions({
 
       const { session } = (await res.json()) as { session: SessionRecord };
       mutationRevisionRef.current += 1;
-      updatedAtRef.current = session.updated_at;
+      updatedAtBySessionRef.current.set(targetSessionId, session.updated_at);
       setSessions((current) =>
         current.map((entry) =>
-          entry.id === sessionId
+          entry.id === targetSessionId
             ? { ...entry, updated_at: session.updated_at }
             : entry
         )
       );
     },
-    [sessionId]
+    []
   );
 
   /**
@@ -186,7 +186,9 @@ export function useControlSessions({
       pinned?: boolean;
       archived?: boolean;
     }): Promise<boolean> => {
-      const expected = updatedAtRef.current;
+      const expected = sessionId
+        ? updatedAtBySessionRef.current.get(sessionId)
+        : null;
       if (!sessionId || !expected) return false;
 
       const put = (expectedUpdatedAt: string) =>
@@ -211,14 +213,15 @@ export function useControlSessions({
 
       const { session } = (await res.json()) as { session: SessionRecord };
       mutationRevisionRef.current += 1;
-      updatedAtRef.current = session.updated_at;
+      updatedAtBySessionRef.current.set(sessionId, session.updated_at);
       if (fields.archived) {
         removedSessionIdsRef.current.add(sessionId);
+        updatedAtBySessionRef.current.delete(sessionId);
         setSessions((current) =>
           current.filter((entry) => entry.id !== sessionId)
         );
+        removeSessionMessages(sessionId);
         setSessionId(null);
-        setMessages([]);
         return true;
       }
       if (fields.archived === false) {
@@ -238,7 +241,7 @@ export function useControlSessions({
       );
       return true;
     },
-    [sessionId, setSessionId, setMessages]
+    [removeSessionMessages, sessionId, setSessionId]
   );
 
   return {
@@ -247,7 +250,7 @@ export function useControlSessions({
     selectSession,
     createSession,
     updateSession,
-    persist,
+    persistSession,
     refreshList,
   };
 }
