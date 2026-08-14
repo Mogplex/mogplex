@@ -6,6 +6,7 @@ import {
   parseSelect,
   quoteIdent,
   SqlBuilder,
+  type BooleanFilter,
   type Filter,
   type Queryable,
 } from "../sql";
@@ -23,7 +24,7 @@ export type WriteBuilderState = {
   onConflict: string | null;
   ignoreDuplicates: boolean;
   filters: Filter[];
-  orFilters: Filter[][];
+  orFilters: BooleanFilter[][];
   single: boolean;
   maybeSingle: boolean;
 };

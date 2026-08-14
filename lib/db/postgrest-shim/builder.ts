@@ -1,7 +1,12 @@
 // Core PostgREST-compatible query builder class.
 
 import { SchemaCache } from "../schema-cache";
-import { parseOrString, type Filter, type Queryable } from "../sql";
+import {
+  parseOrString,
+  type BooleanFilter,
+  type Filter,
+  type Queryable,
+} from "../sql";
 import type { ShimResult } from "./types";
 import { toShimError } from "./types";
 import { executeSelect } from "./builder-select";
@@ -20,7 +25,7 @@ type BuilderState = {
   onConflict: string | null;
   ignoreDuplicates: boolean;
   filters: Filter[];
-  orFilters: Filter[][];
+  orFilters: BooleanFilter[][];
   orders: Order[];
   limit: number | null;
   offset: number | null;
