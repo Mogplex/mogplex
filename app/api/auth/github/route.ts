@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { buildAppUrl } from "@/lib/app-url";
 import { getGithubAppInstallUrl, hasGithubAppConfig } from "@/lib/github-app";
 import { getUserId } from "@/lib/auth";
+import { GITHUB_OAUTH_SCOPE } from "@/lib/github-oauth";
 
 function requireEnv(name: "GITHUB_CLIENT_ID") {
   const value = process.env[name]?.trim();
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
   const params = new URLSearchParams({
     client_id: requireEnv("GITHUB_CLIENT_ID"),
     redirect_uri: buildAppUrl("/api/auth/github/callback", request).toString(),
-    scope: "repo read:user",
+    scope: GITHUB_OAUTH_SCOPE,
     state,
   });
 

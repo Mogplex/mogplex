@@ -8,7 +8,11 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
 import type { UIMessage } from "ai";
-import { MISSION_PERMISSION_OPTIONS, type Mission, type ControlSeedData } from "@/lib/control/types";
+import {
+  MISSION_PERMISSION_OPTIONS,
+  type Mission,
+  type ControlSeedData,
+} from "@/lib/control/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
@@ -41,22 +45,12 @@ import { useControlSessionUrl } from "./use-control-session-url";
 import { canonicalizeControlSessionProjects } from "@/lib/control/session-project";
 import { useControlWorktrees } from "./use-control-worktrees";
 import { WorktreesPanel } from "./worktrees-panel";
+import { downloadTextFile } from "./download-text-file";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
 };
-
-function downloadTextFile(filename: string, contents: string) {
-  const url = URL.createObjectURL(
-    new Blob([contents], { type: "text/markdown" })
-  );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
 
 function ControlShellInner({
   initialData,
@@ -133,7 +127,7 @@ function ControlShellInner({
       ),
     [sandboxesById]
   );
-  const { repos } = useRepos();
+  const { repos, mutate: mutateRepos } = useRepos();
   const { launchRepoSandbox } = useSandboxLaunchActions();
 
   const {
@@ -158,15 +152,20 @@ function ControlShellInner({
   const activeSession =
     displaySessions.find((entry) => entry.id === sessionId) ?? null;
 
-  const { activeRepo, sandboxes, activeSandbox, requestContext, selectSandbox } =
-    useControlSessionContext({
-      activeSession,
-      repos,
-      allSandboxes,
-      sessionId,
-      selectedMissionId,
-      missionTitle: activeSession?.title ?? mission?.title ?? null,
-    });
+  const {
+    activeRepo,
+    sandboxes,
+    activeSandbox,
+    requestContext,
+    selectSandbox,
+  } = useControlSessionContext({
+    activeSession,
+    repos,
+    allSandboxes,
+    sessionId,
+    selectedMissionId,
+    missionTitle: activeSession?.title ?? mission?.title ?? null,
+  });
 
   const handleSelectSession = useCallback(
     (id: string) => {
@@ -205,8 +204,14 @@ function ControlShellInner({
       text: string,
       project: string,
       repoId: string | null,
-      options: ComposerSendOptions
+      options: ComposerSendOptions,
+      createdRepo?: (typeof repos)[number]
     ) => {
+      if (createdRepo)
+        await mutateRepos(
+          [createdRepo, ...repos.filter((repo) => repo.id !== createdRepo.id)],
+          { revalidate: false }
+        );
       const id = generateMissionId();
       const missionTitle =
         text.slice(0, 80) || options.files[0]?.filename || "New mission";
@@ -218,7 +223,7 @@ function ControlShellInner({
       );
       if (!createdSessionId) {
         setChatError("Could not create the mission session. Please try again.");
-        return;
+        return false;
       }
       const newMissionObj: Mission = {
         id,
@@ -242,8 +247,9 @@ function ControlShellInner({
       setNewMission(false);
       setChatError(null);
       pendingInitialMessageRef.current = { missionId: id, text, options };
+      return true;
     },
-    [createSession, pendingInitialMessageRef]
+    [createSession, mutateRepos, pendingInitialMessageRef, repos]
   );
 
   const sessionUsage = useSessionUsage(messages, chatPending);

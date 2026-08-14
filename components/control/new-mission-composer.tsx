@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Attachment,
   SendDiagonal,
@@ -16,7 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useModels } from "@/hooks/use-models";
+import { fetchWithActiveTeam } from "@/components/active-scope-provider";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
+import { validateGithubRepoName } from "@/lib/github-repo-name";
+import {
+  GITHUB_ORG_READ_SCOPE,
+  GITHUB_REAUTHORIZE_HEADER,
+} from "@/lib/github-oauth";
+import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import type { Repo } from "@/lib/types";
 import {
   defaultProjectChoice,
@@ -30,8 +37,10 @@ import {
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
+import { NewProjectFields, type AvailabilityState } from "./new-project-fields";
 
 const NEW_PROJECT = "new";
+const LAST_GITHUB_OWNER_KEY = "mogplex:last-github-repo-owner";
 
 type Props = {
   repos: Repo[];
@@ -40,8 +49,9 @@ type Props = {
     text: string,
     project: string,
     repoId: string | null,
-    options: ComposerSendOptions
-  ) => void;
+    options: ComposerSendOptions,
+    createdRepo?: Repo
+  ) => Promise<boolean>;
 };
 
 export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
@@ -50,23 +60,28 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
   // no repos are connected). Repos load async, so the default resolves late.
   const [choice, setChoice] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
+  const [ownerTargets, setOwnerTargets] = useState<GithubRepoOwnerTarget[]>([]);
+  const [ownerLogin, setOwnerLogin] = useState("");
+  const [ownersLoading, setOwnersLoading] = useState(true);
+  const [ownersError, setOwnersError] = useState<string | null>(null);
+  const [ownersAction, setOwnersAction] = useState<{
+    href: string;
+    label: string;
+  } | null>(null);
+  const [availability, setAvailability] = useState<AvailabilityState>("idle");
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { modelIds, defaultModelId } = useModels();
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const {
-    isDraggingFiles,
-    addFiles,
-    dropZoneProps,
-  } = useControlFileDrop({
+  const { isDraggingFiles, addFiles, dropZoneProps } = useControlFileDrop({
     existingCount: files.length,
     onAttachments: useCallback(
       (attachments: ControlComposerFile[]) =>
-        setFiles((current) =>
-          appendControlComposerFiles(current, attachments)
-        ),
+        setFiles((current) => appendControlComposerFiles(current, attachments)),
       []
     ),
     onError: setAttachmentError,
@@ -76,50 +91,205 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
   const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
 
   const selectedRepoId = choice ?? defaultProjectChoice(repos);
+  const effectiveNewProjectName =
+    newProjectName.trim() || deriveProjectName(text);
+  const nameValidation = useMemo(
+    () => validateGithubRepoName(effectiveNewProjectName),
+    [effectiveNewProjectName]
+  );
+
+  useEffect(() => {
+    if (selectedRepoId !== NEW_PROJECT) return;
+    const controller = new AbortController();
+    setOwnersLoading(true);
+    setOwnersError(null);
+    setOwnersAction(null);
+    fetch("/api/github/owners", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("GitHub accounts unavailable");
+        const data = (await response.json()) as unknown;
+        return {
+          targets: Array.isArray(data) ? (data as GithubRepoOwnerTarget[]) : [],
+          reauthorizeScope: response.headers.get(GITHUB_REAUTHORIZE_HEADER),
+        };
+      })
+      .then(({ targets, reauthorizeScope }) => {
+        setOwnerTargets(targets);
+        const saved = window.localStorage.getItem(LAST_GITHUB_OWNER_KEY);
+        const preferred = targets.find(
+          (target) => target.login.toLowerCase() === saved?.toLowerCase()
+        );
+        setOwnerLogin(preferred?.login ?? targets[0]?.login ?? "");
+        const reconnectHref = `/api/auth/login/github?next=${encodeURIComponent(window.location.pathname)}`;
+        if (targets.length === 0) {
+          setOwnersError("GitHub must be connected to create a project.");
+          setOwnersAction({ href: reconnectHref, label: "Connect GitHub" });
+        } else if (reauthorizeScope === GITHUB_ORG_READ_SCOPE) {
+          setOwnersError("Reconnect GitHub to use organization accounts.");
+          setOwnersAction({ href: reconnectHref, label: "Reconnect GitHub" });
+        }
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        setOwnerTargets([]);
+        setOwnerLogin("");
+        setOwnersError("GitHub accounts unavailable.");
+        setOwnersAction(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOwnersLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [selectedRepoId]);
+
+  useEffect(() => {
+    if (selectedRepoId !== NEW_PROJECT || !ownerLogin) {
+      setAvailability("idle");
+      return;
+    }
+    if (!nameValidation.ok) {
+      setAvailability("invalid");
+      return;
+    }
+
+    const controller = new AbortController();
+    setAvailability("checking");
+    const timeoutId = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        owner: ownerLogin,
+        name: nameValidation.name,
+      });
+      fetch(`/api/github/repos/availability?${params}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const data = (await response.json()) as {
+            availability?: AvailabilityState;
+          };
+          if (!response.ok) {
+            return "unverified";
+          }
+          return data.availability ?? "unverified";
+        })
+        .then(setAvailability)
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return;
+          }
+          setAvailability("unverified");
+        });
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [nameValidation, ownerLogin, selectedRepoId]);
+
+  const hasMissionInput = Boolean(text.trim() || files.length > 0);
+  const newProjectBlocked =
+    selectedRepoId === NEW_PROJECT &&
+    (ownersLoading ||
+      !ownerLogin ||
+      !nameValidation.ok ||
+      availability === "idle" ||
+      availability === "checking" ||
+      availability === "taken" ||
+      availability === "invalid");
+  const submitDisabled = !hasMissionInput || newProjectBlocked || submitting;
 
   const cyclePermissions = useCallback(() => {
     setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length);
   }, []);
 
-  const handleSubmit = useCallback(() => {
-    if (!text.trim() && files.length === 0) return;
+  const handleSubmit = useCallback(async () => {
+    if (submitDisabled) return;
+    setProjectError(null);
+    setSubmitting(true);
+
     // Every session is tied to a project: the selected repo, or a new project
     // named explicitly (falling back to a slug derived from the mission).
     const repo = repos.find((r) => r.id === selectedRepoId);
-    const project = repo
-      ? repoProjectName(repo)
-      : newProjectName.trim() || deriveProjectName(text);
-    onCreate(text.trim(), project, repo?.id ?? null, {
+    const options: ComposerSendOptions = {
       model: modelId,
       permissions: MISSION_PERMISSION_OPTIONS[permissionsIdx],
       mode: "run",
       files,
-    });
-    setText("");
-    setFiles([]);
+    };
+
+    try {
+      let createdRepo: Repo | undefined;
+      if (!repo) {
+        if (!nameValidation.ok) return;
+        const response = await fetchWithActiveTeam("/api/github/repos", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            owner_login: ownerLogin,
+            name: nameValidation.name,
+          }),
+        });
+        const data = (await response.json()) as Repo & { error?: string };
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to create repository");
+        }
+        createdRepo = data;
+        window.localStorage.setItem(LAST_GITHUB_OWNER_KEY, ownerLogin);
+      }
+
+      const targetRepo = repo ?? createdRepo;
+      const created = await onCreate(
+        text.trim(),
+        targetRepo ? repoProjectName(targetRepo) : effectiveNewProjectName,
+        targetRepo?.id ?? null,
+        options,
+        createdRepo
+      );
+      if (created) {
+        setText("");
+        setFiles([]);
+      } else if (createdRepo) {
+        setChoice(createdRepo.id);
+        setProjectError(
+          "Repository created, but the mission could not start. Try again."
+        );
+      }
+    } catch (error) {
+      setProjectError(
+        error instanceof Error ? error.message : "Failed to create repository"
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }, [
-    text,
+    effectiveNewProjectName,
     files,
+    modelId,
+    nameValidation,
+    onCreate,
+    ownerLogin,
+    permissionsIdx,
     repos,
     selectedRepoId,
-    newProjectName,
-    modelId,
-    permissionsIdx,
-    onCreate,
+    submitDisabled,
+    text,
   ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (
-        e.key === "Enter" &&
-        !e.shiftKey &&
-        (text.trim() || files.length > 0)
-      ) {
+      if (e.key === "Enter" && !e.shiftKey && !submitDisabled) {
         e.preventDefault();
-        handleSubmit();
+        void handleSubmit();
       }
     },
-    [text, files.length, handleSubmit]
+    [handleSubmit, submitDisabled]
   );
 
   return (
@@ -147,10 +317,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
           >
             Project
           </label>
-          <Select
-            value={selectedRepoId}
-            onValueChange={setChoice}
-          >
+          <Select value={selectedRepoId} onValueChange={setChoice}>
             <SelectTrigger
               id="control-project"
               aria-label="Project"
@@ -168,12 +335,18 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
             </SelectContent>
           </Select>
           {selectedRepoId === NEW_PROJECT ? (
-            <input
-              value={newProjectName}
-              onChange={(event) => setNewProjectName(event.target.value)}
-              placeholder={deriveProjectName(text)}
-              aria-label="New project name"
-              className="border-border bg-secondary text-secondary-foreground placeholder:text-muted-foreground h-8 w-48 rounded-md border px-2 text-xs outline-none"
+            <NewProjectFields
+              ownerTargets={ownerTargets}
+              ownerLogin={ownerLogin}
+              onOwnerChange={setOwnerLogin}
+              ownersLoading={ownersLoading}
+              ownersError={ownersError}
+              ownersAction={ownersAction}
+              name={newProjectName}
+              onNameChange={setNewProjectName}
+              namePlaceholder={deriveProjectName(text)}
+              nameValidation={nameValidation}
+              availability={availability}
             />
           ) : null}
         </div>
@@ -189,7 +362,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
           }`}
         >
           {isDraggingFiles ? (
-            <div className="pointer-events-none absolute inset-x-0 top-0 bg-accent-blue px-3 py-1 text-center text-[11px] font-medium text-primary-foreground">
+            <div className="bg-accent-blue text-primary-foreground pointer-events-none absolute inset-x-0 top-0 px-3 py-1 text-center text-[11px] font-medium">
               Drop images or files to attach
             </div>
           ) : null}
@@ -259,16 +432,16 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
                 </button>
               ) : null}
               <button
-                onClick={handleSubmit}
-                disabled={!text.trim() && files.length === 0}
+                onClick={() => void handleSubmit()}
+                disabled={submitDisabled}
                 className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
-                  text.trim() || files.length > 0
+                  !submitDisabled
                     ? "bg-primary text-primary-foreground hover:bg-brand-accent-hover"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                 }`}
               >
                 <SendDiagonal className="size-3.5" strokeWidth={1.8} />
-                Start mission
+                {submitting ? "Creating project…" : "Start mission"}
               </button>
             </div>
           </div>
@@ -303,6 +476,9 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
             <p className="text-accent-red mt-2 text-[11px]">
               {attachmentError}
             </p>
+          ) : null}
+          {projectError ? (
+            <p className="text-accent-red mt-2 text-[11px]">{projectError}</p>
           ) : null}
         </div>
 

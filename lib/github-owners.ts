@@ -2,6 +2,16 @@ type GithubOrgPayload = {
   login?: string;
 };
 
+type GithubOrgCreationSettings = {
+  members_can_create_repositories?: boolean;
+  members_can_create_private_repositories?: boolean;
+};
+
+type GithubOrgMembership = {
+  role?: "admin" | "member";
+  state?: "active" | "pending";
+};
+
 export type GithubInstallationOwner = {
   installation_id: number;
   account_login: string | null;
@@ -46,14 +56,39 @@ async function githubOAuthFetch<T>(token: string, url: string) {
   return response.json() as Promise<T>;
 }
 
+export async function fetchGithubCurrentUserContext(token: string) {
+  const response = await fetch("https://api.github.com/user", {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      `GitHub owner lookup failed (${response.status}): ${await response.text()}`
+    );
+  }
+  const user = (await response.json()) as { login?: string };
+  const scopesHeader = response.headers.get("x-oauth-scopes");
+  return {
+    login:
+      typeof user.login === "string" && user.login.trim()
+        ? user.login.trim()
+        : null,
+    oauthScopes:
+      scopesHeader === null
+        ? null
+        : scopesHeader
+            .split(",")
+            .map((scope) => scope.trim())
+            .filter(Boolean),
+  };
+}
+
 export async function fetchGithubCurrentUserLogin(token: string) {
-  const user = await githubOAuthFetch<{ login?: string }>(
-    token,
-    "https://api.github.com/user"
-  );
-  return typeof user.login === "string" && user.login.trim()
-    ? user.login.trim()
-    : null;
+  return (await fetchGithubCurrentUserContext(token)).login;
 }
 
 export async function fetchGithubUserOrgs(token: string) {
@@ -64,6 +99,56 @@ export async function fetchGithubUserOrgs(token: string) {
   return orgs
     .map((org) => (typeof org.login === "string" ? org.login.trim() : ""))
     .filter(Boolean);
+}
+
+export function canCreatePrivateGithubOrgRepo(
+  settings: GithubOrgCreationSettings,
+  membership: GithubOrgMembership
+) {
+  if (membership.state !== "active") return false;
+  if (membership.role === "admin") return true;
+  if (settings.members_can_create_repositories === false) return false;
+  return settings.members_can_create_private_repositories !== false;
+}
+
+export async function filterCreatableGithubOrgLogins(
+  token: string,
+  orgLogins: string[]
+) {
+  const results: Array<string | null> = [];
+  const concurrency = 4;
+
+  for (let index = 0; index < orgLogins.length; index += concurrency) {
+    const batch = await Promise.all(
+      orgLogins.slice(index, index + concurrency).map(async (login) => {
+        try {
+          const encodedLogin = encodeURIComponent(login);
+          const [settings, membership] = await Promise.all([
+            githubOAuthFetch<GithubOrgCreationSettings>(
+              token,
+              `https://api.github.com/orgs/${encodedLogin}`
+            ),
+            githubOAuthFetch<GithubOrgMembership>(
+              token,
+              `https://api.github.com/user/memberships/orgs/${encodedLogin}`
+            ),
+          ]);
+          return canCreatePrivateGithubOrgRepo(settings, membership)
+            ? login
+            : null;
+        } catch (error) {
+          console.warn("[github-owners] repo creation permission unavailable", {
+            login,
+            error,
+          });
+          return null;
+        }
+      })
+    );
+    results.push(...batch);
+  }
+
+  return results.flatMap((login) => (login ? [login] : []));
 }
 
 export function buildGithubRepoOwnerTargets(input: {

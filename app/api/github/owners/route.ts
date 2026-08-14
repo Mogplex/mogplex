@@ -1,51 +1,37 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
-import {
-  fetchGithubCurrentUserLogin,
-  fetchGithubUserOrgs,
-  buildGithubRepoOwnerTargets,
-} from "@/lib/github-owners";
+import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
 import { getOAuthToken } from "@/lib/oauth-tokens";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import {
+  GITHUB_ORG_READ_SCOPE,
+  GITHUB_REAUTHORIZE_HEADER,
+} from "@/lib/github-oauth";
 
 export async function GET() {
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
 
-  const [githubToken, profileResult, installationsResult] = await Promise.all([
-    getOAuthToken(userId, "github").catch(() => null),
-    supabaseAdmin
-      .from("profiles")
-      .select("github_username")
-      .eq("id", userId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from("github_installations")
-      .select("installation_id, account_login, account_type, target_type")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
-  ]);
+  const githubToken = await getOAuthToken(userId, "github").catch(() => null);
 
   if (!githubToken) {
     return NextResponse.json([]);
   }
 
-  const profileUsername =
-    profileResult.data?.github_username ||
-    (await fetchGithubCurrentUserLogin(githubToken));
-  const orgLogins = await fetchGithubUserOrgs(githubToken).catch((error) => {
-    console.error("[github-owners] failed to load GitHub orgs", {
+  try {
+    const { targets, oauthScopes } = await loadGithubRepoCreationOwnerTargets(
+      userId,
+      githubToken
+    );
+    const headers =
+      oauthScopes !== null && !oauthScopes.includes(GITHUB_ORG_READ_SCOPE)
+        ? { [GITHUB_REAUTHORIZE_HEADER]: GITHUB_ORG_READ_SCOPE }
+        : undefined;
+    return NextResponse.json(targets, { headers });
+  } catch (error) {
+    console.error("[github-owners] failed to load repo creation owners", {
       userId,
       error,
     });
-    return [] as string[];
-  });
-
-  return NextResponse.json(
-    buildGithubRepoOwnerTargets({
-      githubUsername: profileUsername,
-      installations: installationsResult.data || [],
-      orgLogins,
-    })
-  );
+    return NextResponse.json([], { status: 502 });
+  }
 }

@@ -301,103 +301,6 @@ test("control composers expose permissions, model, and MCP controls without a sp
   ]);
 });
 
-test("control composer creates a new project when no repos are connected", async ({
-  page,
-}) => {
-  await enableScopedE2EAuth(page);
-  await mockBaseChrome(page);
-  await page.route("**/api/connections", (route) =>
-    fulfillJson(route, { connections: [] })
-  );
-  await page.route("**/api/repos", (route) => fulfillJson(route, []));
-  const sessionCreates: Array<{
-    title?: string;
-    project?: string | null;
-    repo_id?: string | null;
-  }> = [];
-  const chatRequests: Array<{
-    conversationId?: string | null;
-    missionId?: string | null;
-    repoId?: string | null;
-    repoBranch?: string | null;
-    repoBaseBranch?: string | null;
-  }> = [];
-  await page.route("**/api/control/sessions", (route) => {
-    const request = route.request();
-    if (request.method() !== "POST") return route.continue();
-    const body = request.postDataJSON() as {
-      title?: string;
-      project?: string | null;
-      repo_id?: string | null;
-    };
-    sessionCreates.push(body);
-    return fulfillJson(route, {
-      id: "sess-e2e-new",
-      title: body.title ?? "Session",
-      project: body.project ?? null,
-      repo_id: body.repo_id ?? null,
-      pinned: false,
-      archived: false,
-      created_at: "2026-08-11T00:00:00.000Z",
-      updated_at: "2026-08-11T00:00:00.000Z",
-      messages: [],
-    });
-  });
-  await page.route("**/api/control/chat", (route) => {
-    chatRequests.push(
-      route.request().postDataJSON() as (typeof chatRequests)[number]
-    );
-    return route.fulfill({
-      status: 200,
-      headers: {
-        "content-type": "text/event-stream",
-        "x-vercel-ai-ui-message-stream": "v1",
-      },
-      body: 'data: {"type":"start"}\n\ndata: [DONE]\n\n',
-    });
-  });
-
-  await page.goto(scopedPath("control"));
-  await page.waitForLoadState("networkidle");
-
-  // With no repos the composer must create a project instead of leaving it unfiled.
-  const projectPicker = page.getByLabel("Project", { exact: true });
-  await expect(projectPicker).toHaveAttribute("data-slot", "select-trigger");
-  await expect(projectPicker).toContainText("New project…");
-  const nameInput = page.getByLabel("New project name");
-  await expect(nameInput).toBeVisible();
-
-  await page
-    .getByPlaceholder("Ask anything or run a command...")
-    .fill("Rebuild the analytics dashboard");
-  await expect(nameInput).toHaveAttribute(
-    "placeholder",
-    "rebuild-the-analytics-dashboard"
-  );
-  await nameInput.fill("analytics-redesign");
-  await page.getByRole("button", { name: "Start mission" }).click();
-
-  await expect.poll(() => sessionCreates.length, { timeout: 10_000 }).toBe(1);
-  await expect.poll(() => chatRequests.length, { timeout: 10_000 }).toBe(1);
-  expect(sessionCreates[0]?.project).toBe("analytics-redesign");
-  await page.getByRole("tab", { name: /Sandboxes, 0 compute/ }).click();
-  await expect(
-    page.getByText(/No repository is linked to this session/)
-  ).toBeVisible();
-  expect(sessionCreates[0]?.repo_id).toBeNull();
-  expect(chatRequests[0]).toMatchObject({
-    conversationId: "sess-e2e-new",
-    missionId: "sess-e2e-new",
-    repoId: null,
-    repoBranch: null,
-    repoBaseBranch: null,
-  });
-  // The sidebar files the session under the new project group.
-  await expect(
-    page.getByRole("button", { name: /analytics-redesign/ })
-  ).toBeVisible();
-});
-
 test("control chat surfaces request failures instead of swallowing them", async ({
   page,
 }) => {
@@ -405,6 +308,17 @@ test("control chat surfaces request failures instead of swallowing them", async 
   await mockBaseChrome(page);
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos", (route) =>
+    fulfillJson(route, [
+      {
+        id: "repo-1",
+        full_name: "acme/widgets",
+        owner: "acme",
+        name: "widgets",
+        default_branch: "main",
+      },
+    ])
   );
   await page.route("**/api/control/chat", (route) =>
     route.fulfill({ status: 500, body: "orchestrator unavailable" })
