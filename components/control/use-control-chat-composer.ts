@@ -19,6 +19,14 @@ export function useControlChatComposer(sessionId: string) {
     },
     [sessionId]
   );
+  const removeDraft = useCallback((targetSessionId: string) => {
+    setDrafts((current) => {
+      if (!(targetSessionId in current)) return current;
+      const next = { ...current };
+      delete next[targetSessionId];
+      return next;
+    });
+  }, []);
 
-  return [drafts[sessionId] ?? "", setDraft] as const;
+  return [drafts[sessionId] ?? "", setDraft, removeDraft] as const;
 }

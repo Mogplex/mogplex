@@ -19,6 +19,14 @@ export function useControlChatError(activeChatId: string) {
     },
     [activeChatId]
   );
+  const removeError = useCallback((sessionId: string) => {
+    setErrors((current) => {
+      if (!(sessionId in current)) return current;
+      const next = { ...current };
+      delete next[sessionId];
+      return next;
+    });
+  }, []);
 
-  return { error: errors[activeChatId] ?? null, setError };
+  return { error: errors[activeChatId] ?? null, setError, removeError };
 }
