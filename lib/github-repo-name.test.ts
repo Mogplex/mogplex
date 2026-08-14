@@ -37,7 +37,15 @@ describe("GitHub repository names", () => {
     });
     expect(validateGithubRepoName("..")).toEqual({
       ok: false,
-      message: "Choose a repository name other than . or ...",
+      message: "Repository names cannot contain only or end with periods.",
+    });
+    expect(validateGithubRepoName("...")).toEqual({
+      ok: false,
+      message: "Repository names cannot contain only or end with periods.",
+    });
+    expect(validateGithubRepoName("analytics.")).toEqual({
+      ok: false,
+      message: "Repository names cannot contain only or end with periods.",
     });
     expect(validateGithubRepoName("a".repeat(101))).toEqual({
       ok: false,

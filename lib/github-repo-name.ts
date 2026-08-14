@@ -29,10 +29,10 @@ export function validateGithubRepoName(
       message: "Use letters, numbers, periods, hyphens, or underscores.",
     };
   }
-  if (name === "." || name === "..") {
+  if (/^\.+$/.test(name) || name.endsWith(".")) {
     return {
       ok: false,
-      message: "Choose a repository name other than . or ...",
+      message: "Repository names cannot contain only or end with periods.",
     };
   }
   if (name.length > GITHUB_REPO_NAME_MAX_LENGTH) {

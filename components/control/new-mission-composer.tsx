@@ -122,7 +122,13 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
         const preferred = targets.find(
           (target) => target.login.toLowerCase() === saved?.toLowerCase()
         );
-        setOwnerLogin(preferred?.login ?? targets[0]?.login ?? "");
+        setOwnerLogin((current) =>
+          targets.some(
+            (target) => target.login.toLowerCase() === current.toLowerCase()
+          )
+            ? current
+            : (preferred?.login ?? targets[0]?.login ?? "")
+        );
         const reconnectHref = `/api/auth/login/github?next=${encodeURIComponent(window.location.pathname)}`;
         if (targets.length === 0) {
           setOwnersError("GitHub must be connected to create a project.");
@@ -178,7 +184,9 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
           }
           return data.availability ?? "unverified";
         })
-        .then(setAvailability)
+        .then((state) => {
+          if (!controller.signal.aborted) setAvailability(state);
+        })
         .catch((error) => {
           if (error instanceof DOMException && error.name === "AbortError") {
             return;

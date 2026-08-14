@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
@@ -222,7 +221,10 @@ function ControlShellInner({
         text
       );
       if (!createdSessionId) {
-        setChatError("Could not create the mission session. Please try again.");
+        if (!createdRepo)
+          setChatError(
+            "Could not create the mission session. Please try again."
+          );
         return false;
       }
       const newMissionObj: Mission = {
