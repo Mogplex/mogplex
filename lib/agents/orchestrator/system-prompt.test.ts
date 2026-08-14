@@ -44,7 +44,10 @@ describe("orchestrator resource decision prompt", () => {
       availableToolNames: ["run_command", "plan_mission"],
     });
 
-    expect(prompt).not.toContain("Use sandbox_start for an explicit runtime");
+    expect(prompt).not.toContain(
+      "Use sandbox_start immediately as the first tool"
+    );
+    expect(prompt).not.toContain("already authorization to act");
   });
 
   it("does not reference a withheld sandbox lifecycle tool for a sole sandbox", () => {
