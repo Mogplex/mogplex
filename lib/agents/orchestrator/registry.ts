@@ -145,7 +145,7 @@ function buildToolForDef(
   }
   if (def.name === "sandbox_start") {
     if (ctx.sandboxSelectionRequired) return null;
-    return createStartSandbox(ctx.userId);
+    return ctx.repoId ? createStartSandbox(ctx.userId, ctx.repoId) : null;
   }
   if (def.name === "sandbox_stop") {
     return ctx.sandboxId && !ctx.sandboxSelectionRequired

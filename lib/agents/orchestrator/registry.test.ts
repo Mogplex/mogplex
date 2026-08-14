@@ -89,6 +89,12 @@ describe("buildOrchestratorTools", () => {
     });
     expect(withoutSandbox.write_file).toBeUndefined();
     expect(withoutSandbox.sandbox_stop).toBeUndefined();
+
+    const withoutRepository = buildOrchestratorTools({
+      ...FULL_CONTEXT,
+      repoId: null,
+    });
+    expect(withoutRepository.sandbox_start).toBeUndefined();
   });
 
   it("omits sandbox execution tools while server-owned selection is ambiguous", () => {
@@ -131,6 +137,16 @@ describe("buildOrchestratorTools", () => {
       shape: Record<string, unknown>;
     };
     expect(Object.keys(schema.shape)).toEqual(["taskId"]);
+  });
+
+  it("keeps the sandbox start repository server-owned", () => {
+    const schema = tools.sandbox_start.inputSchema as unknown as {
+      shape: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.shape)).toEqual([]);
+    expect(tools.sandbox_start.description).toMatch(
+      /server-selected active repository/i
+    );
   });
 
   it("keeps the selected sandbox server-owned when writing a file", () => {

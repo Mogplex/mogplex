@@ -308,6 +308,34 @@ describe("sandbox command tool contract", () => {
       status: "running",
     });
   });
+
+  it("uses the server-selected repository without model input", async () => {
+    const repoId = "00000000-0000-4000-8000-000000000001";
+    let requestBody: unknown;
+    global.fetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Response.json(
+        {
+          sandbox: {
+            id: "sandbox-server-scoped",
+            runtime_summary: { status: "running" },
+          },
+        },
+        { headers: { "Content-Type": "application/json" } }
+      );
+    };
+    const tool = createStartSandbox("user-1", repoId) as unknown as {
+      inputSchema: { shape: Record<string, unknown> };
+      execute: (input: Record<string, never>) => Promise<unknown>;
+    };
+
+    expect(Object.keys(tool.inputSchema.shape)).toEqual([]);
+    await expect(tool.execute({})).resolves.toMatchObject({
+      ok: true,
+      sandboxId: "sandbox-server-scoped",
+    });
+    expect(requestBody).toMatchObject({ repoId });
+  });
   it("does not resurrect a dead selected sandbox after re-resolution fails", async () => {
     const urls: string[] = [];
     global.fetch = async (input) => {

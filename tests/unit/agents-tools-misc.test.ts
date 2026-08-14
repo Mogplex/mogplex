@@ -22,6 +22,24 @@ test("buildStaticTools exposes inputSchema for every built-in tool", async () =>
   }
 });
 
+test("buildStaticTools keeps sandbox startup repository server-owned", async () => {
+  const { buildStaticTools } = await loadToolsModule();
+  const withoutRepository = buildStaticTools(undefined, "user-123");
+  assert.equal("start_sandbox" in withoutRepository, false);
+
+  const withRepository = buildStaticTools(
+    undefined,
+    "user-123",
+    null,
+    undefined,
+    "repo-server-owned"
+  ) as Record<string, unknown>;
+  const startSandbox = withRepository.start_sandbox as {
+    inputSchema: { shape: Record<string, unknown> };
+  };
+  assert.deepEqual(Object.keys(startSandbox.inputSchema.shape), []);
+});
+
 test("webFetch rejects localhost targets before fetching", async () => {
   const { webFetch } = await loadToolsModule();
   const tool = webFetch as unknown as {
