@@ -109,21 +109,19 @@ describe("orchestrator resource decision prompt", () => {
         { id: "sandbox-2", branch: "feat/a", status: "running" },
       ],
     });
-    expect(prompt).toContain("Multiple sandboxes are available");
+    expect(prompt).toContain("No sandbox is selected");
     expect(prompt).toContain("SANDBOX SELECTION IS REQUIRED");
     expect(prompt).toContain(
-      "ask them to select exactly one of the listed sandbox IDs, then stop with no tool call"
+      "ask them to select exactly one, then stop with no tool call"
     );
     expect(prompt).toContain(
-      "Do not attempt run_command, sandbox_start, sandbox_stop, write_file"
+      "Do not attempt run_command, sandbox_start, sandbox_stop, write_file, spawn_worktree"
     );
     expect(prompt).toContain("Never guess");
     expect(prompt).toContain(
-      "fallback never applies while multiple sandboxes are listed"
+      "run_command and sandbox lifecycle tools are unavailable until the operator selects a sandbox"
     );
-    expect(prompt).toContain(
-      "Do not call run_command or a sandbox lifecycle tool until the operator selects one"
-    );
+    expect(prompt).not.toContain("may fall back");
     expect(prompt).not.toContain(
       "Exactly one running sandbox is listed, so it is already selected"
     );
@@ -138,6 +136,20 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain("SANDBOX SELECTION IS REQUIRED");
     expect(prompt).toContain("This is a server-validated execution boundary");
     expect(prompt).toContain("Never guess a sandbox");
+    expect(prompt).not.toContain("already selected");
+    expect(prompt).not.toContain("Selected sandbox:");
+    expect(prompt).toContain("No sandbox is selected");
+  });
+
+  it("does not advertise execution fallback when selection is required without candidates", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      sandboxSelectionRequired: true,
+      activeSandboxes: [],
+    });
+
+    expect(prompt).toContain("no selectable sandbox is listed");
+    expect(prompt).toContain("Do not use repository fallback");
+    expect(prompt).not.toContain("run_command may fall back");
   });
 
   it("treats user-supplied resource identifiers as untrusted hints", () => {
