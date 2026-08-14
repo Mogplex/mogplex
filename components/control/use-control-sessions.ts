@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { mergeControlSessionLists } from "@/lib/control/session-list-merge";
 import {
-  persistControlSessionMessages,
+  persistBackedControlSessionMessages,
   type ControlSessionRecord,
 } from "@/lib/control/session-persistence";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
@@ -137,16 +137,12 @@ export function useControlSessions({
   const persistSession = useCallback(
     async (targetSessionId: string, messages: UIMessage[]) => {
       const expected = updatedAtBySessionRef.current.get(targetSessionId);
-      if (messages.length === 0) return;
-      // Seeded mission chats do not have a database row and intentionally
-      // remain local-only until a control session is created.
-      if (!expected) return;
-
-      const session = await persistControlSessionMessages({
+      const session = await persistBackedControlSessionMessages({
         sessionId: targetSessionId,
         messages,
         expectedUpdatedAt: expected,
       });
+      if (!session) return;
       mutationRevisionRef.current += 1;
       updatedAtBySessionRef.current.set(targetSessionId, session.updated_at);
       setSessions((current) =>

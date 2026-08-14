@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { UIMessage } from "ai";
-import { persistControlSessionMessages } from "../../lib/control/session-persistence";
+import {
+  persistBackedControlSessionMessages,
+  persistControlSessionMessages,
+} from "../../lib/control/session-persistence";
 
 const messages: UIMessage[] = [
   { id: "message-1", role: "user", parts: [{ type: "text", text: "hi" }] },
@@ -14,6 +17,22 @@ function jsonResponse(status: number, body: unknown) {
     json: async () => body,
   };
 }
+
+test("mission-only chats without a database revision stay local", async () => {
+  let requests = 0;
+  const persisted = await persistBackedControlSessionMessages({
+    sessionId: "mission-only",
+    messages,
+    expectedUpdatedAt: undefined,
+    fetcher: async () => {
+      requests += 1;
+      return jsonResponse(500, {});
+    },
+  });
+
+  assert.equal(persisted, null);
+  assert.equal(requests, 0);
+});
 
 test("persistControlSessionMessages rejects a failed write", async () => {
   await assert.rejects(

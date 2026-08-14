@@ -50,3 +50,21 @@ export async function persistControlSessionMessages({
   };
   return session;
 }
+
+export async function persistBackedControlSessionMessages({
+  expectedUpdatedAt,
+  ...input
+}: {
+  sessionId: string;
+  messages: UIMessage[];
+  expectedUpdatedAt: string | undefined;
+  fetcher?: SessionFetch;
+}): Promise<ControlSessionRecord | null> {
+  // Seeded mission chats do not have a database row. Their messages are
+  // intentionally local-only until a control session is created.
+  if (input.messages.length === 0 || !expectedUpdatedAt) return null;
+  return persistControlSessionMessages({
+    ...input,
+    expectedUpdatedAt,
+  });
+}
