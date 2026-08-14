@@ -8,9 +8,7 @@ function userMessage(id: string, text: string): UIMessage {
 }
 
 async function flushMicrotasks() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 test("ControlChatRegistry observes independent real Chat stores", () => {

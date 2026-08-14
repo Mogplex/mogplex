@@ -62,11 +62,11 @@ export class ControlChatRegistry {
       if (this.persistQueues.get(sessionId) === operation) {
         this.persistFailed.add(sessionId);
         this.onPersistState(sessionId, true);
+        console.error("[control] failed to persist chat", {
+          sessionId,
+          error,
+        });
       }
-      console.error("[control] failed to persist chat", {
-        sessionId,
-        error,
-      });
     } finally {
       if (this.persistQueues.get(sessionId) === operation) {
         this.persistQueues.delete(sessionId);
@@ -109,6 +109,8 @@ export class ControlChatRegistry {
 
   hydrate(sessionId: string, messages: UIMessage[]) {
     const chat = this.get(sessionId);
+    // Preserve local messages after any failed write, including a permanent
+    // rejection such as a remotely archived session, so they can be copied.
     if (
       this.hydrated.has(sessionId) &&
       (isRunning(chat) ||
@@ -260,7 +262,7 @@ export function useControlChats({
     stop: activeChat.stop,
     error,
     persistError: persistErrors.has(activeChatId)
-      ? "This chat finished, but its messages could not be saved. They remain available in this tab; send another message to retry."
+      ? "This chat finished, but its messages could not be saved. They remain available in this tab. Copy them before closing; sending another message retries saving."
       : null,
     clearError: activeChat.clearError,
     addToolApprovalResponse: activeChat.addToolApprovalResponse,
