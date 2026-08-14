@@ -100,6 +100,7 @@ describe("buildOrchestratorTools", () => {
     expect(ambiguousSandbox.run_command).toBeUndefined();
     expect(ambiguousSandbox.sandbox_start).toBeUndefined();
     expect(ambiguousSandbox.sandbox_stop).toBeUndefined();
+    expect(ambiguousSandbox.write_file).toBeUndefined();
   });
 
   it("describes the sandbox and worktree decision contract consistently", () => {
