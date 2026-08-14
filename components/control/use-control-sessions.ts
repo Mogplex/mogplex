@@ -26,7 +26,7 @@ export function useControlSessions({
 }: {
   sessionId: string | null;
   setSessionId: (id: string | null) => void;
-  setSessionMessages: (sessionId: string, messages: UIMessage[]) => void;
+  setSessionMessages: (sessionId: string, messages: UIMessage[]) => boolean;
   removeSessionMessages: (sessionId: string) => void;
   /** Session id from the URL (?mission=) to restore once the list loads. */
   deepLinkTarget?: string | null;
@@ -70,8 +70,10 @@ export function useControlSessions({
       const res = await fetch(`/api/control/sessions?id=${id}`);
       if (!res.ok) return;
       const record = (await res.json()) as SessionRecord;
-      updatedAtBySessionRef.current.set(record.id, record.updated_at);
-      setSessionMessages(record.id, record.messages ?? []);
+      const hydrated = setSessionMessages(record.id, record.messages ?? []);
+      if (hydrated) {
+        updatedAtBySessionRef.current.set(record.id, record.updated_at);
+      }
       if (revision !== selectionRevisionRef.current) return;
       setSessionId(record.id);
     },

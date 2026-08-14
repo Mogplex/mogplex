@@ -132,7 +132,7 @@ test("control chats keep independent streams, status, and cancellation across sw
       orchestration_run_id: null,
       pinned: false,
       archived: false,
-      messages: [],
+      messages: [] as unknown[],
       created_at: NOW,
       updated_at: NOW,
     },
@@ -144,7 +144,7 @@ test("control chats keep independent streams, status, and cancellation across sw
       orchestration_run_id: null,
       pinned: false,
       archived: false,
-      messages: [],
+      messages: [] as unknown[],
       created_at: NOW,
       updated_at: NOW,
     },
@@ -171,6 +171,7 @@ test("control chats keep independent streams, status, and cancellation across sw
       };
       persisted.set(body.id, body.messages ?? []);
       const session = sessions.find((entry) => entry.id === body.id)!;
+      session.messages = body.messages ?? [];
       return fulfillJson(route, {
         ok: true,
         session: {

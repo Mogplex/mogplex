@@ -14,9 +14,10 @@ function isRunning(chat: Chat<UIMessage>) {
 
 type ChatSnapshot = Pick<Chat<UIMessage>, "error" | "messages" | "status">;
 
-class ControlChatRegistry {
+export class ControlChatRegistry {
   private readonly chats = new Map<string, Chat<UIMessage>>();
   private readonly hydrated = new Set<string>();
+  private readonly persisting = new Set<string>();
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly transport = new DefaultChatTransport<UIMessage>({
     api: "/api/control/chat",
@@ -26,7 +27,7 @@ class ControlChatRegistry {
     private readonly onPersist: (
       sessionId: string,
       messages: UIMessage[]
-    ) => void,
+    ) => Promise<void>,
     private readonly onStatus: (sessionId: string, running: boolean) => void,
     private readonly onSnapshot: (
       sessionId: string,
@@ -43,9 +44,23 @@ class ControlChatRegistry {
       transport: this.transport,
       sendAutomaticallyWhen:
         lastAssistantMessageIsCompleteWithApprovalResponses,
-      onFinish: ({ messages }) => this.onPersist(sessionId, messages),
+      onFinish: ({ messages }) => {
+        this.persisting.add(sessionId);
+        void this.onPersist(sessionId, messages)
+          .catch((error) => {
+            console.error("[control] failed to persist chat", {
+              sessionId,
+              error,
+            });
+          })
+          .finally(() => this.persisting.delete(sessionId));
+      },
     });
     this.chats.set(sessionId, chat);
+    // The public useChat hook owns one Chat at a time, so this registry uses
+    // the installed @ai-sdk/react Chat store callbacks to observe N retained
+    // instances. On SDK upgrades, verify these tilde-prefixed names and their
+    // callback timing with control-chat-registry.test.ts.
     const unsubscribers = [
       chat["~registerMessagesCallback"](() => this.onSnapshot(sessionId, chat)),
       chat["~registerStatusCallback"](() => {
@@ -61,9 +76,16 @@ class ControlChatRegistry {
   }
 
   hydrate(sessionId: string, messages: UIMessage[]) {
-    if (this.hydrated.has(sessionId)) return;
-    this.get(sessionId).messages = messages;
+    const chat = this.get(sessionId);
+    if (
+      this.hydrated.has(sessionId) &&
+      (isRunning(chat) || this.persisting.has(sessionId))
+    ) {
+      return false;
+    }
+    chat.messages = messages;
     this.hydrated.add(sessionId);
+    return true;
   }
 
   remove(sessionId: string) {
@@ -73,6 +95,7 @@ class ControlChatRegistry {
     this.unsubscribers.delete(sessionId);
     this.chats.delete(sessionId);
     this.hydrated.delete(sessionId);
+    this.persisting.delete(sessionId);
     this.onStatus(sessionId, false);
   }
 
@@ -92,7 +115,7 @@ export function useControlChats({
   onPersist,
 }: {
   activeChatId: string;
-  onPersist: (sessionId: string, messages: UIMessage[]) => void;
+  onPersist: (sessionId: string, messages: UIMessage[]) => Promise<void>;
 }) {
   const [runningSessionIds, setRunningSessionIds] = useState<
     ReadonlySet<string>
@@ -146,9 +169,8 @@ export function useControlChats({
   const error = activeSnapshot?.error ?? activeChat.error;
 
   const setSessionMessages = useCallback(
-    (sessionId: string, messages: UIMessage[]) => {
-      registry.hydrate(sessionId, messages);
-    },
+    (sessionId: string, messages: UIMessage[]) =>
+      registry.hydrate(sessionId, messages),
     [registry]
   );
 

@@ -66,10 +66,9 @@ function ControlShellInner({
   const [focusSandboxId, setFocusSandboxId] = useState<string | null>(null);
   const [newMission, setNewMission] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const persistRef = useRef<(sessionId: string, messages: UIMessage[]) => void>(
-    () => {}
-  );
-
+  const persistRef = useRef<
+    (sessionId: string, messages: UIMessage[]) => Promise<void>
+  >(async () => {});
   const mission = useMemo(
     () => missions.find((m) => m.id === selectedMissionId) || missions[0],
     [missions, selectedMissionId]
@@ -82,11 +81,10 @@ function ControlShellInner({
 
   const getWorktree = (id: string) =>
     initialData.worktrees.find((worktree) => worktree.id === id);
-
   const activeChatId =
     (sessionId ?? selectedMissionId) || "unselected-control-session";
   const persistChat = useCallback((id: string, finished: UIMessage[]) => {
-    persistRef.current(id, finished);
+    return persistRef.current(id, finished);
   }, []);
   const {
     messages,
@@ -104,7 +102,22 @@ function ControlShellInner({
     activeChatId,
     onPersist: persistChat,
   });
-
+  const {
+    error: localChatError,
+    setError: setChatError,
+    removeError: removeChatError,
+  } = useControlChatError(activeChatId);
+  const [composerInput, setComposerInput, removeComposerDraft] =
+    useControlChatComposer(activeChatId);
+  const removeSessionState = useCallback(
+    (id: string) => {
+      removeSession(id);
+      removeChatError(id);
+      removeComposerDraft(id);
+    },
+    [removeChatError, removeComposerDraft, removeSession]
+  );
+  const getActiveChatError = useCallback(() => activeChat.error, [activeChat]);
   const chatPending = status === "streaming" || status === "submitted";
   const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
 
@@ -119,7 +132,6 @@ function ControlShellInner({
   );
   const { repos, mutate: mutateRepos } = useRepos();
   const { launchRepoSandbox } = useSandboxLaunchActions();
-
   const {
     sessions,
     sessionsLoaded,
@@ -131,7 +143,7 @@ function ControlShellInner({
     sessionId,
     setSessionId,
     setSessionMessages,
-    removeSessionMessages: removeSession,
+    removeSessionMessages: removeSessionState,
     deepLinkTarget: searchParams.get("mission"),
   });
 
@@ -166,17 +178,8 @@ function ControlShellInner({
   );
 
   useEffect(() => {
-    persistRef.current = (id, finished) => {
-      void persistSession(id, finished);
-    };
+    persistRef.current = persistSession;
   }, [persistSession]);
-
-  const { error: localChatError, setError: setChatError } =
-    useControlChatError(activeChatId);
-  const getActiveChatError = useCallback(() => activeChat.error, [activeChat]);
-
-  const [composerInput, setComposerInput] =
-    useControlChatComposer(activeChatId);
   const pendingInitialMessageRef = usePendingInitialMessage({
     selectedMissionId,
     status,
