@@ -47,6 +47,19 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).not.toContain("Use sandbox_start for an explicit runtime");
   });
 
+  it("does not reference a withheld sandbox lifecycle tool for a sole sandbox", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      availableToolNames: ["run_command", "plan_mission"],
+      activeSandboxes: [{ id: "sandbox-1", branch: "main", status: "running" }],
+    });
+
+    expect(prompt).not.toContain("call sandbox_start as directed above");
+    expect(prompt).toContain("no sandbox lifecycle action is callable");
+    expect(prompt).toContain(
+      "do not pretend ordinary reuse fulfilled that request"
+    );
+  });
+
   it("plans clear parallel coding tasks before exploratory runtime work", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",

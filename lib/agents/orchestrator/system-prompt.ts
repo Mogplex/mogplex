@@ -148,9 +148,14 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   const sandboxReuseGuidance = (() => {
     if (ctx.sandboxSelectionRequired) return "";
     if ((ctx.activeSandboxes ?? []).length !== 1 || !soleSandbox) return "";
-    return soleSandbox.status === "running"
-      ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it directly for ordinary execution without a redundant sandbox_start call. If the operator explicitly asks to provision, start, or prepare runtime or preview compute, call sandbox_start as directed above; it safely reuses the running sandbox rather than creating duplicate compute.\n"
-      : `- The sole listed sandbox is ${soleSandbox.status}, not usable compute. When execution is authorized, use sandbox_start to resume or replace it before running commands.\n`;
+    if (soleSandbox.status === "running") {
+      return sandboxStartAvailable
+        ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it directly for ordinary execution without a redundant sandbox_start call. If the operator explicitly asks to provision, start, or prepare runtime or preview compute, call sandbox_start as directed above; it safely reuses the running sandbox rather than creating duplicate compute.\n"
+        : "- Exactly one running sandbox is listed, so it is already selected. Reuse it directly for ordinary execution. If the operator explicitly asks to provision, start, or prepare compute, report that no sandbox lifecycle action is callable; do not pretend ordinary reuse fulfilled that request.\n";
+    }
+    return sandboxStartAvailable
+      ? `- The sole listed sandbox is ${soleSandbox.status}, not usable compute. When execution is authorized, use sandbox_start to resume or replace it before running commands.\n`
+      : `- The sole listed sandbox is ${soleSandbox.status}, not usable compute, and no sandbox lifecycle action is callable. Report that limitation instead of attempting execution.\n`;
   })();
   const runCommandGuidance = ctx.sandboxSelectionRequired
     ? "- run_command and sandbox lifecycle tools are unavailable until the operator selects a sandbox. Do not attempt them or substitute another tool.\n"
