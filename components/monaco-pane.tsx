@@ -107,7 +107,13 @@ function getThemePalette() {
   }
 }
 
+let monacoWorkersConfigured = false
+
 function configureMonacoWorkers() {
+  if (monacoWorkersConfigured) {
+    return
+  }
+
   globalThis.MonacoEnvironment = {
     getWorker(_workerId, label) {
       if (label === "json") {
@@ -140,6 +146,7 @@ function configureMonacoWorkers() {
       )
     },
   }
+  monacoWorkersConfigured = true
 }
 
 async function applyMonacoTheme(mode: MonacoThemeMode) {
