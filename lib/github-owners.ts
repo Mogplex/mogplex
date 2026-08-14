@@ -115,32 +115,38 @@ export async function filterCreatableGithubOrgLogins(
   token: string,
   orgLogins: string[]
 ) {
-  const results = await Promise.all(
-    orgLogins.map(async (login) => {
-      try {
-        const encodedLogin = encodeURIComponent(login);
-        const [settings, membership] = await Promise.all([
-          githubOAuthFetch<GithubOrgCreationSettings>(
-            token,
-            `https://api.github.com/orgs/${encodedLogin}`
-          ),
-          githubOAuthFetch<GithubOrgMembership>(
-            token,
-            `https://api.github.com/user/memberships/orgs/${encodedLogin}`
-          ),
-        ]);
-        return canCreatePrivateGithubOrgRepo(settings, membership)
-          ? login
-          : null;
-      } catch (error) {
-        console.warn("[github-owners] repo creation permission unavailable", {
-          login,
-          error,
-        });
-        return null;
-      }
-    })
-  );
+  const results: Array<string | null> = [];
+  const concurrency = 4;
+
+  for (let index = 0; index < orgLogins.length; index += concurrency) {
+    const batch = await Promise.all(
+      orgLogins.slice(index, index + concurrency).map(async (login) => {
+        try {
+          const encodedLogin = encodeURIComponent(login);
+          const [settings, membership] = await Promise.all([
+            githubOAuthFetch<GithubOrgCreationSettings>(
+              token,
+              `https://api.github.com/orgs/${encodedLogin}`
+            ),
+            githubOAuthFetch<GithubOrgMembership>(
+              token,
+              `https://api.github.com/user/memberships/orgs/${encodedLogin}`
+            ),
+          ]);
+          return canCreatePrivateGithubOrgRepo(settings, membership)
+            ? login
+            : null;
+        } catch (error) {
+          console.warn("[github-owners] repo creation permission unavailable", {
+            login,
+            error,
+          });
+          return null;
+        }
+      })
+    );
+    results.push(...batch);
+  }
 
   return results.flatMap((login) => (login ? [login] : []));
 }

@@ -45,6 +45,31 @@ describe("GitHub repository owners", () => {
     ]);
   });
 
+  it("preserves a matching personal GitHub App installation", () => {
+    expect(
+      buildGithubRepoOwnerTargets({
+        githubUsername: "alex",
+        installations: [
+          {
+            installation_id: 84,
+            account_login: "alex",
+            account_type: "User",
+            target_type: "User",
+          },
+        ],
+        orgLogins: [],
+      })
+    ).toEqual([
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: 84,
+        scope_label: "Personal",
+        source: "oauth+installation",
+      },
+    ]);
+  });
+
   it("allows active owners regardless of member policy", () => {
     expect(
       canCreatePrivateGithubOrgRepo(
@@ -98,6 +123,29 @@ describe("GitHub repository owners", () => {
       ])
     ).resolves.toEqual(["acme labs"]);
     expect(warning).toHaveBeenCalledOnce();
+  });
+
+  it("bounds organization permission request concurrency", async () => {
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      activeRequests -= 1;
+      return Response.json(
+        String(input).includes("/user/memberships/")
+          ? { state: "active", role: "admin" }
+          : { members_can_create_private_repositories: true }
+      );
+    });
+
+    const orgs = Array.from({ length: 9 }, (_, index) => `org-${index}`);
+    await expect(
+      filterCreatableGithubOrgLogins("token", orgs)
+    ).resolves.toEqual(orgs);
+    expect(maxActiveRequests).toBeLessThanOrEqual(8);
+    expect(fetch).toHaveBeenCalledTimes(18);
   });
 
   it("loads the current login and granted OAuth scopes together", async () => {

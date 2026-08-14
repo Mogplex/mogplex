@@ -11,6 +11,7 @@ import {
   extractGithubApiErrorMessage,
   fetchGithubRepo,
   GithubRepoCreateError,
+  isRecoverableGithubRepoCreateConflict,
 } from "@/lib/github-create";
 import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
@@ -205,7 +206,12 @@ export function createGithubRepoPostHandler(
             });
             return null;
           });
-        if (!existingRepo) throw error;
+        if (
+          !existingRepo ||
+          !isRecoverableGithubRepoCreateConflict(existingRepo)
+        ) {
+          throw error;
+        }
         createdRepo = existingRepo;
       }
       await deps.upsertGithubReposForUser(userId, [createdRepo], {

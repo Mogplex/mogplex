@@ -238,6 +238,8 @@ test("POST /api/github/repos reconciles a repository left by a partial create", 
       name: "widgets",
       owner: { login: "acme" },
       default_branch: "main",
+      created_at: new Date().toISOString(),
+      size: 0,
     }),
     upsertGithubReposForUser: async (_userId, repos) => {
       importedGithubId = repos[0]?.id ?? null;

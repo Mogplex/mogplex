@@ -174,7 +174,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
             availability?: AvailabilityState;
           };
           if (!response.ok) {
-            return response.status === 400 ? "invalid" : "unverified";
+            return "unverified";
           }
           return data.availability ?? "unverified";
         })

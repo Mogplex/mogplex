@@ -228,3 +228,46 @@ test("new project explains GitHub connection and org-scope requirements", async 
     page.getByRole("link", { name: "Reconnect GitHub" })
   ).toHaveAttribute("href", /\/api\/auth\/login\/github\?next=/);
 });
+
+test("new project remains actionable when availability auth expires", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos", (route) => fulfillJson(route, []));
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  await page.route("**/api/github/owners", (route) =>
+    fulfillJson(route, [
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: null,
+        scope_label: "Personal",
+        source: "oauth",
+      },
+    ])
+  );
+  await page.route("**/api/github/repos/availability**", (route) =>
+    fulfillJson(
+      route,
+      { availability: "invalid", error: "Connect GitHub account first" },
+      400
+    )
+  );
+
+  await page.goto(scopedPath("control"));
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Ship account settings");
+  await expect(
+    page.getByText("Availability could not be verified. You can still try.")
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start mission" })
+  ).toBeEnabled();
+});

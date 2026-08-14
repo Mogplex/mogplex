@@ -3,6 +3,8 @@ import type { GithubRepoPayload } from "@/lib/github-sync";
 export type GithubRepoVisibility = "public" | "private";
 export type GithubRepoAvailability = "available" | "taken" | "unverified";
 
+const GITHUB_CREATE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
+
 export class GithubRepoCreateError extends Error {
   status: number;
   body: string;
@@ -103,6 +105,21 @@ export async function fetchGithubRepo(
     );
   }
   return response.json() as Promise<GithubRepoPayload>;
+}
+
+export function isRecoverableGithubRepoCreateConflict(
+  repo: GithubRepoPayload,
+  now = Date.now()
+) {
+  const createdAt = Date.parse(repo.created_at ?? "");
+  return (
+    Number.isFinite(createdAt) &&
+    createdAt <= now &&
+    now - createdAt <= GITHUB_CREATE_RECOVERY_WINDOW_MS &&
+    typeof repo.size === "number" &&
+    repo.size >= 0 &&
+    repo.size <= 1
+  );
 }
 
 export function extractGithubApiErrorMessage(body: string) {
