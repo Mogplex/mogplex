@@ -60,7 +60,10 @@ describe("orchestrator resource decision prompt", () => {
       "unless the operator explicitly asks for a new or fresh sandbox"
     );
     expect(prompt).toContain(
-      "When the operator already gives clear independent coding tasks and asks to launch them in parallel, begin with plan_mission."
+      "When the operator gives one or more clear coding tasks and asks to launch workers, begin with exactly one plan_mission call."
+    );
+    expect(prompt).toContain(
+      "Supply tasks as the JSON array required by the tool schema, never as a serialized string."
     );
     expect(prompt).toContain(
       "Do not inspect with list_files, search_repo, memory_search, or run_command before planning"
@@ -78,6 +81,19 @@ describe("orchestrator resource decision prompt", () => {
       "Sandbox sandbox-stopped is stopped and is not selected for execution."
     );
     expect(stoppedPrompt).not.toContain("Selected sandbox: sandbox-stopped");
+  });
+
+  it("maps an unavailable preview capability directly to sandbox_start", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      availableToolNames: ["sandbox_start"],
+    });
+
+    expect(prompt).toContain(
+      "sandbox_start is the exact callable equivalent: call it immediately"
+    );
+    expect(prompt).toContain(
+      "without offering planning alternatives or asking for clarification"
+    );
   });
 
   it("pins the sandbox-only and worktree-required decisions", () => {

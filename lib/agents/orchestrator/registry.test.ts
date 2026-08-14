@@ -111,6 +111,9 @@ describe("buildOrchestratorTools", () => {
   });
 
   it("describes the sandbox and worktree decision contract consistently", () => {
+    expect(tools.plan_mission.description).toMatch(
+      /call once.*tasks must be a JSON array/i
+    );
     expect(tools.sandbox_start.description).toMatch(/runtime|preview/i);
     expect(tools.sandbox_start.description).toMatch(
       /does not create.*worktree/i
