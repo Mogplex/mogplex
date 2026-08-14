@@ -116,6 +116,7 @@ function configureMonacoWorkers() {
 
   globalThis.MonacoEnvironment = {
     getWorker(_workerId, label) {
+      // Keep every worker URL as an inline literal so bundlers can emit it.
       if (label === "json") {
         return new Worker(
           new URL("./monaco-workers/json.worker.ts", import.meta.url),
