@@ -107,6 +107,9 @@ export function canCreatePrivateGithubOrgRepo(
 ) {
   if (membership.state !== "active") return false;
   if (membership.role === "admin") return true;
+  // GitHub can omit repository-creation policy fields when the token cannot
+  // read org settings. Treat unknown as potentially allowed so valid private
+  // memberships stay visible; the create API remains the enforcement point.
   if (settings.members_can_create_repositories === false) return false;
   return settings.members_can_create_private_repositories !== false;
 }

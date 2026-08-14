@@ -135,12 +135,20 @@ export function createGithubRepoPostHandler(
     }
     const { scope } = scopeResolution;
 
-    let body: { owner_login?: unknown; name?: unknown };
+    let parsedBody: unknown;
     try {
-      body = (await request.json()) as typeof body;
+      parsedBody = await request.json();
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
+    if (
+      !parsedBody ||
+      typeof parsedBody !== "object" ||
+      Array.isArray(parsedBody)
+    ) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const body = parsedBody as { owner_login?: unknown; name?: unknown };
 
     const nameValidation = validateGithubRepoName(body.name);
     if (!nameValidation.ok) {
@@ -162,6 +170,8 @@ export function createGithubRepoPostHandler(
 
     let ownerTargets: GithubRepoOwnerTarget[];
     try {
+      // Revalidate live at the mutation boundary. Reusing a client-provided or
+      // cached target could create a repository after org permissions changed.
       ownerTargets = await deps.loadOwnerTargets(userId, token);
     } catch (error) {
       console.error("[github-repo-create] owner lookup failed", {

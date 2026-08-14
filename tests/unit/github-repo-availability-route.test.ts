@@ -52,7 +52,7 @@ test("GET availability rejects invalid names before calling GitHub", async () =>
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
     availability: "invalid",
-    error: "Choose a repository name other than . or ...",
+    error: "Repository names cannot contain only or end with periods.",
   });
   assert.equal(checks, 0);
 });

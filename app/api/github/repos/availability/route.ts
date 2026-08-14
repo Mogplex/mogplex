@@ -59,6 +59,12 @@ export function createGithubRepoAvailabilityGetHandler(
       );
     }
 
+    // This debounced read-only probe intentionally accepts an arbitrary owner:
+    // GitHub still limits the result to repositories visible to this user's
+    // token. Re-loading permission-filtered org targets here would fan out two
+    // extra GitHub requests per org on every keystroke. The mutating POST below
+    // this route's namespace recomputes and enforces the allowed owner targets.
+
     let availability: GithubRepoAvailability;
     try {
       availability = await deps.checkAvailability(

@@ -35,6 +35,24 @@ test("POST /api/github/repos preserves authentication failures", async () => {
   assert.equal(creates, 0);
 });
 
+test("POST /api/github/repos rejects a null JSON body", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const handler = createGithubRepoPostHandler({
+    requireUserId: async () => "user-123",
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/github/repos", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "null",
+    })
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "Invalid JSON body" });
+});
+
 test("POST /api/github/repos creates an org repo before returning its Mogplex row", async () => {
   const { createGithubRepoPostHandler } = await loadRoute();
   let createInput: Record<string, unknown> | null = null;

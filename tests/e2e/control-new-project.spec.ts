@@ -146,6 +146,9 @@ test("new mission validates and creates an org-scoped project before starting", 
       "Repository created, but the mission could not start. Try again."
     )
   ).toBeVisible();
+  await expect(
+    page.getByText("Could not create the mission session. Please try again.")
+  ).toHaveCount(0);
   await expect(page.getByText("acme/Analytics-redesign")).toBeVisible();
   await page.getByRole("button", { name: "Start mission" }).click();
 
@@ -270,4 +273,60 @@ test("new project remains actionable when availability auth expires", async ({
   await expect(
     page.getByRole("button", { name: "Start mission" })
   ).toBeEnabled();
+});
+
+test("new project preserves the selected owner while switching projects", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos", (route) =>
+    fulfillJson(route, [
+      {
+        id: "repo-1",
+        full_name: "acme/widgets",
+        owner: "acme",
+        name: "widgets",
+        default_branch: "main",
+      },
+    ])
+  );
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  await page.route("**/api/github/owners", (route) =>
+    fulfillJson(route, [
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: null,
+        scope_label: "Personal",
+        source: "oauth",
+      },
+      {
+        login: "acme",
+        kind: "org",
+        github_installation_id: 42,
+        scope_label: "Org",
+        source: "oauth+installation",
+      },
+    ])
+  );
+
+  await page.goto(scopedPath("control"));
+  const projectPicker = page.getByLabel("Project", { exact: true });
+  await projectPicker.click();
+  await page.getByRole("option", { name: "New project" }).click();
+  const ownerPicker = page.getByLabel("GitHub owner");
+  await ownerPicker.click();
+  await page.getByRole("option", { name: /acme.*Org/ }).click();
+  await projectPicker.click();
+  await page.getByRole("option", { name: "acme/widgets" }).click();
+  await projectPicker.click();
+  await page.getByRole("option", { name: "New project" }).click();
+
+  await expect(ownerPicker).toContainText("acme");
 });
