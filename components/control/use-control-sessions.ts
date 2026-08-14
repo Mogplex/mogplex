@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { mergeControlSessionLists } from "@/lib/control/session-list-merge";
+import {
+  persistControlSessionMessages,
+  type ControlSessionRecord,
+} from "@/lib/control/session-persistence";
 import type { ControlSessionSummary } from "./session-list";
-
-type SessionRecord = ControlSessionSummary & {
-  messages: UIMessage[];
-};
 
 /**
  * DB-backed control chat sessions: list, create, restore, and persist.
@@ -69,7 +69,7 @@ export function useControlSessions({
       const revision = ++selectionRevisionRef.current;
       const res = await fetch(`/api/control/sessions?id=${id}`);
       if (!res.ok) return;
-      const record = (await res.json()) as SessionRecord;
+      const record = (await res.json()) as ControlSessionRecord;
       const hydrated = setSessionMessages(record.id, record.messages ?? []);
       if (hydrated) {
         updatedAtBySessionRef.current.set(record.id, record.updated_at);
@@ -111,7 +111,7 @@ export function useControlSessions({
         }),
       });
       if (!res.ok) return null;
-      const record = (await res.json()) as SessionRecord;
+      const record = (await res.json()) as ControlSessionRecord;
       mutationRevisionRef.current += 1;
       removedSessionIdsRef.current.delete(record.id);
       updatedAtBySessionRef.current.set(record.id, record.updated_at);
@@ -138,39 +138,15 @@ export function useControlSessions({
     async (targetSessionId: string, messages: UIMessage[]) => {
       const expected = updatedAtBySessionRef.current.get(targetSessionId);
       if (messages.length === 0) return;
-      if (!expected) {
-        throw new Error("Cannot persist control session without a revision");
-      }
+      // Seeded mission chats do not have a database row and intentionally
+      // remain local-only until a control session is created.
+      if (!expected) return;
 
-      const put = (expectedUpdatedAt: string) =>
-        fetch("/api/control/sessions", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: targetSessionId,
-            messages,
-            expected_updated_at: expectedUpdatedAt,
-          }),
-        });
-
-      let res = await put(expected);
-      if (res.status === 409) {
-        // Another tab/device won the race: rebase on its timestamp and
-        // retry once with our newer message array.
-        const fresh = await fetch(
-          `/api/control/sessions?id=${targetSessionId}`
-        );
-        if (!fresh.ok) {
-          throw new Error(`Failed to rebase control session (${fresh.status})`);
-        }
-        const record = (await fresh.json()) as SessionRecord;
-        res = await put(record.updated_at);
-      }
-      if (!res.ok) {
-        throw new Error(`Failed to persist control session (${res.status})`);
-      }
-
-      const { session } = (await res.json()) as { session: SessionRecord };
+      const session = await persistControlSessionMessages({
+        sessionId: targetSessionId,
+        messages,
+        expectedUpdatedAt: expected,
+      });
       mutationRevisionRef.current += 1;
       updatedAtBySessionRef.current.set(targetSessionId, session.updated_at);
       setSessions((current) =>
@@ -215,12 +191,14 @@ export function useControlSessions({
       if (res.status === 409) {
         const fresh = await fetch(`/api/control/sessions?id=${sessionId}`);
         if (!fresh.ok) return false;
-        const record = (await fresh.json()) as SessionRecord;
+        const record = (await fresh.json()) as ControlSessionRecord;
         res = await put(record.updated_at);
       }
       if (!res.ok) return false;
 
-      const { session } = (await res.json()) as { session: SessionRecord };
+      const { session } = (await res.json()) as {
+        session: ControlSessionRecord;
+      };
       mutationRevisionRef.current += 1;
       updatedAtBySessionRef.current.set(sessionId, session.updated_at);
       if (fields.archived) {

@@ -7,6 +7,12 @@ function userMessage(id: string, text: string): UIMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
 }
 
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 test("ControlChatRegistry observes independent real Chat stores", () => {
   const snapshots: Array<{ sessionId: string; messages: UIMessage[] }> = [];
   const registry = new ControlChatRegistry(
@@ -67,6 +73,7 @@ test("ControlChatRegistry preserves local messages until persistence recovers", 
   assert.equal(registry.hydrate("session-a", local), true);
   const failedPersist = registry.persistFinishedMessages("session-a", local);
   assert.equal(registry.hydrate("session-a", stale), false);
+  await flushMicrotasks();
   settlePersist?.("reject");
   await failedPersist;
 
@@ -76,9 +83,49 @@ test("ControlChatRegistry preserves local messages until persistence recovers", 
 
   const recoveredPersist = registry.persistFinishedMessages("session-a", local);
   assert.equal(registry.hydrate("session-a", stale), false);
+  await flushMicrotasks();
   settlePersist?.("resolve");
   await recoveredPersist;
   assert.equal(registry.hydrate("session-a", stale), true);
+
+  registry.dispose();
+});
+
+test("ControlChatRegistry serializes overlapping persists per session", async () => {
+  const starts: string[] = [];
+  const settlements: Array<(result: "resolve" | "reject") => void> = [];
+  const states: boolean[] = [];
+  const registry = new ControlChatRegistry(
+    (_sessionId, messages) =>
+      new Promise<void>((resolve, reject) => {
+        starts.push(messages[0]?.id ?? "missing");
+        settlements.push((result) =>
+          result === "resolve" ? resolve() : reject(new Error("offline"))
+        );
+      }),
+    () => {},
+    () => {},
+    (_sessionId, failed) => states.push(failed)
+  );
+  const older = [userMessage("older", "one")];
+  const newer = [userMessage("newer", "two")];
+
+  registry.hydrate("session-a", older);
+  const first = registry.persistFinishedMessages("session-a", older);
+  await flushMicrotasks();
+  assert.deepEqual(starts, ["older"]);
+  const second = registry.persistFinishedMessages("session-a", newer);
+
+  settlements[0]?.("resolve");
+  await first;
+  await flushMicrotasks();
+  assert.deepEqual(starts, ["older", "newer"]);
+  assert.deepEqual(states, []);
+
+  settlements[1]?.("reject");
+  await second;
+  assert.deepEqual(states, [true]);
+  assert.equal(registry.hydrate("session-a", older), false);
 
   registry.dispose();
 });

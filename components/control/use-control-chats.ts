@@ -19,7 +19,7 @@ export class ControlChatRegistry {
   private readonly hydrated = new Set<string>();
   private readonly persisting = new Set<string>();
   private readonly persistFailed = new Set<string>();
-  private readonly persistRevisions = new Map<string, number>();
+  private readonly persistQueues = new Map<string, Promise<void>>();
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly transport = new DefaultChatTransport<UIMessage>({
     api: "/api/control/chat",
@@ -42,17 +42,24 @@ export class ControlChatRegistry {
   ) {}
 
   async persistFinishedMessages(sessionId: string, messages: UIMessage[]) {
-    const revision = (this.persistRevisions.get(sessionId) ?? 0) + 1;
-    this.persistRevisions.set(sessionId, revision);
+    const previous = this.persistQueues.get(sessionId);
+    let operation: Promise<void>;
+    operation = (previous ?? Promise.resolve())
+      .catch(() => {})
+      .then(async () => {
+        if (this.persistQueues.get(sessionId) !== operation) return;
+        await this.onPersist(sessionId, messages);
+      });
+    this.persistQueues.set(sessionId, operation);
     this.persisting.add(sessionId);
     try {
-      await this.onPersist(sessionId, messages);
-      if (this.persistRevisions.get(sessionId) === revision) {
+      await operation;
+      if (this.persistQueues.get(sessionId) === operation) {
         this.persistFailed.delete(sessionId);
         this.onPersistState(sessionId, false);
       }
     } catch (error) {
-      if (this.persistRevisions.get(sessionId) === revision) {
+      if (this.persistQueues.get(sessionId) === operation) {
         this.persistFailed.add(sessionId);
         this.onPersistState(sessionId, true);
       }
@@ -61,7 +68,8 @@ export class ControlChatRegistry {
         error,
       });
     } finally {
-      if (this.persistRevisions.get(sessionId) === revision) {
+      if (this.persistQueues.get(sessionId) === operation) {
+        this.persistQueues.delete(sessionId);
         this.persisting.delete(sessionId);
       }
     }
@@ -123,7 +131,7 @@ export class ControlChatRegistry {
     this.hydrated.delete(sessionId);
     this.persisting.delete(sessionId);
     this.persistFailed.delete(sessionId);
-    this.persistRevisions.delete(sessionId);
+    this.persistQueues.delete(sessionId);
     this.onStatus(sessionId, false);
   }
 
@@ -252,7 +260,7 @@ export function useControlChats({
     stop: activeChat.stop,
     error,
     persistError: persistErrors.has(activeChatId)
-      ? "This chat finished, but its messages could not be saved. They remain available in this tab; retry before closing it."
+      ? "This chat finished, but its messages could not be saved. They remain available in this tab; send another message to retry."
       : null,
     clearError: activeChat.clearError,
     addToolApprovalResponse: activeChat.addToolApprovalResponse,
