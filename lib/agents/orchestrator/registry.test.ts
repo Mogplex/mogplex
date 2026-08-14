@@ -116,6 +116,12 @@ describe("buildOrchestratorTools", () => {
     );
     expect(tools.sandbox_start.description).toMatch(/runtime|preview/i);
     expect(tools.sandbox_start.description).toMatch(
+      /explicit request.*authorizes calling this tool immediately/i
+    );
+    expect(tools.sandbox_start.description).toMatch(
+      /unavailable tool.*do not ask for reconfirmation/i
+    );
+    expect(tools.sandbox_start.description).toMatch(
       /does not create.*worktree/i
     );
     expect(tools.run_command.description).toMatch(/selected sandbox/i);

@@ -44,7 +44,36 @@ describe("orchestrator resource decision prompt", () => {
       availableToolNames: ["run_command", "plan_mission"],
     });
 
-    expect(prompt).not.toContain("Use sandbox_start for an explicit runtime");
+    expect(prompt).not.toContain(
+      "Use sandbox_start immediately as the first tool"
+    );
+    expect(prompt).not.toContain("already authorization to act");
+  });
+
+  it("does not reference a withheld sandbox lifecycle tool for a sole sandbox", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      availableToolNames: ["run_command", "plan_mission"],
+      activeSandboxes: [{ id: "sandbox-1", branch: "main", status: "running" }],
+    });
+
+    expect(prompt).not.toContain("call sandbox_start as directed above");
+    expect(prompt).toContain("no sandbox lifecycle action is callable");
+    expect(prompt).toContain(
+      "do not pretend ordinary reuse fulfilled that request"
+    );
+
+    const stoppedPrompt = buildOrchestratorSystemPrompt({
+      availableToolNames: ["run_command", "plan_mission"],
+      activeSandboxes: [
+        { id: "sandbox-stopped", branch: "main", status: "stopped" },
+      ],
+    });
+    expect(stoppedPrompt).toContain(
+      "not usable compute, and no sandbox lifecycle action is callable"
+    );
+    expect(stoppedPrompt).toContain(
+      "Report that limitation instead of attempting execution"
+    );
   });
 
   it("plans clear parallel coding tasks before exploratory runtime work", () => {
@@ -54,10 +83,13 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "Exactly one running sandbox is listed, so it is already selected. Reuse it for execution"
+      "Exactly one running sandbox is listed, so it is already selected"
     );
     expect(prompt).toContain(
-      "unless the operator explicitly asks for a new or fresh sandbox"
+      "Reuse it directly for ordinary execution without a redundant sandbox_start call"
+    );
+    expect(prompt).toContain(
+      "call sandbox_start as directed above; it safely reuses the running sandbox rather than creating duplicate compute"
     );
     expect(prompt).toContain(
       "The first emitted tool call MUST be plan_mission."
@@ -92,10 +124,10 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "sandbox_start is the exact callable equivalent: call it immediately"
+      "Use sandbox_start immediately as the first tool; when compute provisioning is the whole requested outcome, it MUST be the only tool"
     );
     expect(prompt).toContain(
-      "without offering planning alternatives or asking for clarification"
+      "do not describe the mismatch, ask whether to proceed, or wait for reconfirmation"
     );
   });
 

@@ -148,9 +148,14 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   const sandboxReuseGuidance = (() => {
     if (ctx.sandboxSelectionRequired) return "";
     if ((ctx.activeSandboxes ?? []).length !== 1 || !soleSandbox) return "";
-    return soleSandbox.status === "running"
-      ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it for execution; do not make a redundant sandbox_start call unless the operator explicitly asks for a new or fresh sandbox.\n"
-      : `- The sole listed sandbox is ${soleSandbox.status}, not usable compute. When execution is authorized, use sandbox_start to resume or replace it before running commands.\n`;
+    if (soleSandbox.status === "running") {
+      return sandboxStartAvailable
+        ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it directly for ordinary execution without a redundant sandbox_start call. If the operator explicitly asks to provision, start, or prepare runtime or preview compute, call sandbox_start as directed above; it safely reuses the running sandbox rather than creating duplicate compute.\n"
+        : "- Exactly one running sandbox is listed, so it is already selected. Reuse it directly for ordinary execution. If the operator explicitly asks to provision, start, or prepare compute, report that no sandbox lifecycle action is callable; do not pretend ordinary reuse fulfilled that request.\n";
+    }
+    return sandboxStartAvailable
+      ? `- The sole listed sandbox is ${soleSandbox.status}, not usable compute. When execution is authorized, use sandbox_start to resume or replace it before running commands.\n`
+      : `- The sole listed sandbox is ${soleSandbox.status}, not usable compute, and no sandbox lifecycle action is callable. Report that limitation instead of attempting execution.\n`;
   })();
   const runCommandGuidance = ctx.sandboxSelectionRequired
     ? "- run_command and sandbox lifecycle tools are unavailable until the operator selects a sandbox. Do not attempt them or substitute another tool.\n"
@@ -158,7 +163,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   const sandboxStartGuidance =
     ctx.sandboxSelectionRequired || !sandboxStartAvailable
       ? ""
-      : "- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. If the operator names a different unavailable capability for that same outcome, sandbox_start is the exact callable equivalent: call it immediately without offering planning alternatives or asking for clarification. Starting a sandbox never creates a worktree.\n";
+      : "- An explicit request to provision, start, or prepare runtime or preview compute is already authorization to act. Use sandbox_start immediately as the first tool; when compute provisioning is the whole requested outcome, it MUST be the only tool. If the operator also names an unavailable tool with the same effect, ignore that spelling: do not describe the mismatch, ask whether to proceed, or wait for reconfirmation. Starting a sandbox never creates a worktree.\n";
   const spawnWorktreeGuidance = ctx.sandboxSelectionRequired
     ? "- spawn_worktree is unavailable until the operator selects a sandbox.\n"
     : "- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.\n";

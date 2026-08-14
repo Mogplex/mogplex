@@ -306,7 +306,7 @@ export function createStartSandbox(userId?: string, serverRepoId?: string) {
   if (serverRepoId) {
     return defineTool({
       description:
-        "Start or reuse sandbox compute for the server-selected active repository when runtime or preview work needs a machine. The repository cannot be supplied by the model, and this does not create or imply a Git worktree.",
+        "Start or reuse sandbox compute for the server-selected active repository when runtime or preview work needs a machine. An explicit request to provision, start, or prepare that compute authorizes calling this tool immediately, even if the request also names an unavailable tool with the same effect; do not ask for reconfirmation. The repository cannot be supplied by the model, and this does not create or imply a Git worktree.",
       inputSchema: startServerSelectedSandboxParams,
       execute: async () => startSandbox(userId, serverRepoId),
     });
@@ -314,7 +314,7 @@ export function createStartSandbox(userId?: string, serverRepoId?: string) {
 
   return defineTool({
     description:
-      "Start or reuse sandbox compute for an explicit runtime or preview request, or when execution needs a machine and no suitable sandbox is selected. This does not create or imply a Git worktree.",
+      "Start or reuse sandbox compute for an explicit runtime or preview request, or when execution needs a machine and no suitable sandbox is selected. An explicit request to provision, start, or prepare that compute authorizes calling this tool immediately, even if the request also names an unavailable tool with the same effect; do not ask for reconfirmation. This does not create or imply a Git worktree.",
     inputSchema: startSandboxParams,
     execute: async ({ repoId }: z.infer<typeof startSandboxParams>) =>
       startSandbox(userId, repoId),
