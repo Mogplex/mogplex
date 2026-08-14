@@ -28,6 +28,17 @@ test("control sessions: history list, restore, persist, and new session", async 
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
+  await page.route("**/api/repos", (route) =>
+    fulfillJson(route, [
+      {
+        id: "repo-1",
+        full_name: "acme/widgets",
+        owner: "acme",
+        name: "widgets",
+        default_branch: "main",
+      },
+    ])
+  );
 
   const putBodies: Array<{ id?: string; messages?: unknown[] }> = [];
   let posted = false;

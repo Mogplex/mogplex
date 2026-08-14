@@ -309,6 +309,17 @@ test("control chat surfaces request failures instead of swallowing them", async 
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
+  await page.route("**/api/repos", (route) =>
+    fulfillJson(route, [
+      {
+        id: "repo-1",
+        full_name: "acme/widgets",
+        owner: "acme",
+        name: "widgets",
+        default_branch: "main",
+      },
+    ])
+  );
   await page.route("**/api/control/chat", (route) =>
     route.fulfill({ status: 500, body: "orchestrator unavailable" })
   );
