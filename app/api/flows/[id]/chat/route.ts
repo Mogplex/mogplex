@@ -30,10 +30,9 @@ const CHAT_ROUTE_KEY: Parameters<typeof releaseLimitClaim>[0]["routeKey"] &
 
 /**
  * Wrap a streaming Response so `release()` runs when the body stream finishes,
- * errors, or is cancelled by the client — not at dispatch time. This is what
- * gives the concurrent_chat_runs claim a meaningful hold window: without it,
- * the claim would be released as soon as streamText() returns the Response
- * object and N parallel requests could all pass the concurrency gate.
+ * errors, or is cancelled by the client. Flow-assistant calls do not create an
+ * ai_calls row, so close is the point where their provisional admission event
+ * is replaced by the durable hourly/daily start record.
  *
  * If the response has no body (shouldn't happen for a UI message stream), we
  * release immediately and pass through.
@@ -150,18 +149,13 @@ export function createFlowAssistantChatPostHandler(
       );
     }
 
-    // Throttle flow-assistant turns against the same per-user chat admission
-    // pool as the main chat route (concurrent_chat_runs + hourly/daily starts).
+    // Meter flow-assistant turns against the same per-user hourly/daily start
+    // windows as the main chat route.
     // Unlike the main chat route we do NOT link the claim to an ai_calls row,
     // so we have to release the claim ourselves. We release on stream
-    // completion/cancel/error (not at dispatch) so the concurrent_chat_runs
-    // slot is actually held for the duration of the stream — otherwise the
-    // concurrency gate collapses to near-zero ms and provides no back-pressure.
-    // The unmatched claim would also otherwise be counted as a provisional
-    // concurrent chat for ~5 min by claim_chat_limit_admission's NOT EXISTS
-    // ai_calls branch. On stream close we replace the provisional claim row
-    // with a claim-less allowed event so hourly/daily start windows still
-    // meter accepted flow-assistant turns without keeping a concurrent slot.
+    // completion/cancel/error; on close we replace the provisional claim row
+    // with a claim-less allowed event so accepted flow-assistant turns remain
+    // in the start windows.
     let limit: ChatLimitDecision;
     try {
       limit = await deps.enforceChatLimits({ userId });

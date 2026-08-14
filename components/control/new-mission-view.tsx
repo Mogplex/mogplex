@@ -15,6 +15,7 @@ export function NewMissionView({
   repos,
   sessions,
   sessionId,
+  workingIds,
   canCancel,
   onCancel,
   onCreate,
@@ -24,6 +25,7 @@ export function NewMissionView({
   repos: Repo[];
   sessions: ControlSessionSummary[];
   sessionId: string | null;
+  workingIds: ReadonlySet<string>;
   canCancel: boolean;
   onCancel: () => void;
   onCreate: (
@@ -41,6 +43,7 @@ export function NewMissionView({
       <SessionList
         sessions={sessions}
         selectedId={sessionId}
+        workingIds={workingIds}
         onSelect={onSelectSession}
         onNew={onNewSession}
       />

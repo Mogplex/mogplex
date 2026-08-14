@@ -5,10 +5,8 @@
  * before it reaches a user.
  *
  * Targets, in priority order:
- *   1. ai_calls          — chat: 5 min, agent: 6 hr (matches the SQL
- *                           liveness filter in claim_chat_limit_admission
- *                           so a reaped row stops blocking new chats
- *                           immediately)
+ *   1. ai_calls          — chat: 5 min, agent: 6 hr (keeps crashed streams
+ *                           out of live-run status surfaces)
  *   2. repos             — snapshot_build_token stuck > 15 min
  *   3. job_runs          — status='running' past 6 hr (Trigger.dev
  *                           workflow died silently)

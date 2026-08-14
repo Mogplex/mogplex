@@ -3,7 +3,6 @@
 // event recording for each limit type.
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { ACTIVE_CHAT_STALE_THRESHOLD_MS } from "@/lib/interactive-runs";
 import {
   evaluateSandboxExecLimitPolicy,
   evaluateSnapshotBuildLimitPolicy,
@@ -23,9 +22,6 @@ export async function enforceChatLimits(input: {
   rpc?: LimitRpc;
 }) {
   const now = input.now ?? new Date();
-  // Keep the SQL liveness threshold in sync with the UI/presenter threshold
-  // in lib/interactive-runs.ts. A chat run older than this is a zombie from
-  // an interrupted stream and must not block new chats.
   return claimAtomicLimitDecision(
     "claim_chat_limit_admission",
     {
@@ -33,9 +29,6 @@ export async function enforceChatLimits(input: {
       p_repo_id: input.repoId ?? null,
       p_sandbox_id: input.sandboxId ?? null,
       p_now: now.toISOString(),
-      p_stale_threshold_seconds: Math.floor(
-        ACTIVE_CHAT_STALE_THRESHOLD_MS / 1000
-      ),
     },
     input.rpc
   );

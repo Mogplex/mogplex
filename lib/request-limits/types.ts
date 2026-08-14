@@ -54,7 +54,6 @@ export type LimitEventInsert = {
 
 export const REQUEST_LIMITS = {
   chat: {
-    concurrent: { name: "concurrent_chat_runs", value: 2, windowSeconds: 0 },
     hourlyStarts: {
       name: "chat_starts_per_hour",
       value: 30,

@@ -345,8 +345,7 @@ export function isStaleLiveInteractiveCall(
 
   // Chat streams are bounded by the serverless streaming timeout (max ~5 min
   // on Vercel Pro), so the chat threshold applies uniformly regardless of
-  // anchor presence. This keeps the UI presenter aligned with the SQL
-  // rate-limit gate (claim_chat_limit_admission).
+  // anchor presence. This keeps stale chat rows out of live-run UI.
   //
   // Non-chat interactive runs (agent jobs via Trigger.dev) can legitimately
   // run for hours. They keep the longer threshold whether or not they have

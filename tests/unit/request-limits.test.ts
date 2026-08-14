@@ -12,7 +12,6 @@ test("chat limit policy allows requests under all thresholds", async () => {
   const now = new Date("2026-03-23T12:00:00.000Z");
 
   const decision = evaluateChatLimitPolicy({
-    activeChats: 1,
     hourlyStarts: ["2026-03-23T11:30:00.000Z"],
     dailyStarts: ["2026-03-23T02:00:00.000Z"],
     now,
@@ -21,20 +20,16 @@ test("chat limit policy allows requests under all thresholds", async () => {
   assert.deepEqual(decision, { allowed: true });
 });
 
-test("chat limit policy denies when concurrent chat cap is reached", async () => {
+test("chat limit policy does not block parallel active chats", async () => {
   const { evaluateChatLimitPolicy } = await loadRequestLimits();
 
   const decision = evaluateChatLimitPolicy({
-    activeChats: 2,
     hourlyStarts: [],
     dailyStarts: [],
     now: new Date("2026-03-23T12:00:00.000Z"),
   });
 
-  assert.equal(decision.allowed, false);
-  if (decision.allowed) return;
-  assert.equal(decision.code, "chat_rate_limited");
-  assert.equal(decision.reason, "concurrent_chat_runs_exceeded");
+  assert.deepEqual(decision, { allowed: true });
 });
 
 test("snapshot build policy denies during cooldown when a snapshot already exists", async () => {
@@ -172,12 +167,7 @@ test("enforceChatLimits returns an allowed claim id from the atomic RPC", async 
       assert.equal(args?.p_repo_id, "repo-123");
       assert.equal(args?.p_sandbox_id, "sandbox-123");
       assert.equal(args?.p_now, now.toISOString());
-      const { ACTIVE_CHAT_STALE_THRESHOLD_MS } =
-        await import("../../lib/interactive-runs");
-      assert.equal(
-        args?.p_stale_threshold_seconds,
-        Math.floor(ACTIVE_CHAT_STALE_THRESHOLD_MS / 1000)
-      );
+      assert.equal(args?.p_stale_threshold_seconds, undefined);
 
       return {
         data: [
