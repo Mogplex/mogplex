@@ -6,7 +6,11 @@ const baseURL = `http://localhost:${port}`;
 const testServerEnv =
   `PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass ` +
   `BETTER_AUTH_SECRET=playwright-better-auth-secret-at-least-32-chars ` +
-  `BETTER_AUTH_URL=${baseURL} NEXT_PUBLIC_APP_URL=${baseURL}`;
+  `BETTER_AUTH_URL=${baseURL} NEXT_PUBLIC_APP_URL=${baseURL} ` +
+  // Production builds load .env.local, including real Sentry DSNs. Explicitly
+  // clear both ingestion paths so fixture-only localhost failures cannot be
+  // reported as production incidents.
+  `SENTRY_DSN= NEXT_PUBLIC_SENTRY_DSN=`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
