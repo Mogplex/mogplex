@@ -58,6 +58,19 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain(
       "do not pretend ordinary reuse fulfilled that request"
     );
+
+    const stoppedPrompt = buildOrchestratorSystemPrompt({
+      availableToolNames: ["run_command", "plan_mission"],
+      activeSandboxes: [
+        { id: "sandbox-stopped", branch: "main", status: "stopped" },
+      ],
+    });
+    expect(stoppedPrompt).toContain(
+      "not usable compute, and no sandbox lifecycle action is callable"
+    );
+    expect(stoppedPrompt).toContain(
+      "Report that limitation instead of attempting execution"
+    );
   });
 
   it("plans clear parallel coding tasks before exploratory runtime work", () => {
