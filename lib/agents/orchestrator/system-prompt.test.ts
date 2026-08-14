@@ -32,10 +32,10 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "when exactly one safe callable tool fulfills an already-authorized outcome and the current mode authorizes execution, call it immediately"
+      "when exactly one safe callable tool fulfills an already-authorized outcome with the same effect and risk"
     );
     expect(prompt).toContain(
-      "Do not ask for confirmation again or merely propose the equivalent"
+      "The operator's authorization of that outcome also authorizes the exact safe substitute"
     );
   });
 
@@ -136,6 +136,24 @@ describe("orchestrator resource decision prompt", () => {
     );
     expect(prompt).toContain(
       "If a requested sandbox or worktree is absent from it, do not call any discovery, listing, or mutation tool"
+    );
+    expect(prompt).toContain(
+      "Do not call list_worktrees to recheck it, and never infer a worktree from a sandbox"
+    );
+  });
+
+  it("stops after completing a runtime or lifecycle request", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      activeSandboxes: [],
+      activeWorktrees: [],
+    });
+
+    expect(prompt).toContain(
+      "After a requested runtime or lifecycle action succeeds, stop."
+    );
+    expect(prompt).toContain(
+      "Do not expand the request into repository inspection, commands, or setup"
     );
   });
 
