@@ -17,6 +17,8 @@ export type OrchestratorPromptContext = {
   controlMode?: string;
   /** Exact tool names exposed to this model invocation. */
   availableToolNames?: string[];
+  /** Server-owned signal that execution must wait for an operator choice. */
+  sandboxSelectionRequired?: boolean;
   activeSandboxes?: Array<{
     id: string;
     branch: string;
@@ -43,7 +45,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -118,6 +120,22 @@ When a worker agent fails or gets stuck:
 3. Use only the callable tools to gather evidence or continue safely
 4. Report any capability gap explicitly instead of inventing a tool call
 </debugging>`;
+}
+
+function buildRequiredSandboxSelectionBlock(
+  ctx: OrchestratorPromptContext
+): string {
+  if (!ctx.sandboxSelectionRequired) return "";
+
+  return `
+<required-sandbox-selection>
+SANDBOX SELECTION IS REQUIRED. This is a server-validated execution boundary, not a suggestion.
+- Do not attempt run_command, sandbox_start, sandbox_stop, write_file, or any substitute execution or sandbox-lifecycle tool in this turn. Those tools are intentionally not callable.
+- If the operator's latest request needs sandbox compute, ask them to select exactly one of the listed sandbox IDs, then stop with no tool call.
+- Never guess a sandbox from its branch, status, list order, prior messages, repository, mission, or worktree.
+- Other non-execution work may continue only when it independently satisfies the operator's request without selecting or using sandbox compute.
+</required-sandbox-selection>
+`;
 }
 
 function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {

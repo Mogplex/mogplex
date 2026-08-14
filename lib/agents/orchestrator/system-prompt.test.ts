@@ -103,12 +103,20 @@ describe("orchestrator resource decision prompt", () => {
 
   it("requires explicit selection for multiple sandboxes", () => {
     const prompt = buildOrchestratorSystemPrompt({
+      sandboxSelectionRequired: true,
       activeSandboxes: [
         { id: "sandbox-1", branch: "main", status: "running" },
         { id: "sandbox-2", branch: "feat/a", status: "running" },
       ],
     });
     expect(prompt).toContain("Multiple sandboxes are available");
+    expect(prompt).toContain("SANDBOX SELECTION IS REQUIRED");
+    expect(prompt).toContain(
+      "ask them to select exactly one of the listed sandbox IDs, then stop with no tool call"
+    );
+    expect(prompt).toContain(
+      "Do not attempt run_command, sandbox_start, sandbox_stop, write_file"
+    );
     expect(prompt).toContain("Never guess");
     expect(prompt).toContain(
       "fallback never applies while multiple sandboxes are listed"
@@ -119,6 +127,17 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).not.toContain(
       "Exactly one running sandbox is listed, so it is already selected"
     );
+  });
+
+  it("uses the server-owned ambiguity signal instead of inferring the gate", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      sandboxSelectionRequired: true,
+      activeSandboxes: [{ id: "sandbox-1", branch: "main", status: "running" }],
+    });
+
+    expect(prompt).toContain("SANDBOX SELECTION IS REQUIRED");
+    expect(prompt).toContain("This is a server-validated execution boundary");
+    expect(prompt).toContain("Never guess a sandbox");
   });
 
   it("treats user-supplied resource identifiers as untrusted hints", () => {
