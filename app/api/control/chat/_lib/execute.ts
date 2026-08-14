@@ -128,6 +128,7 @@ export async function executeControlChatRequest(input: {
       controlTarget: input.body.target ?? undefined,
       controlPermissions: input.body.permissions ?? undefined,
       controlMode: input.body.mode ?? undefined,
+      sandboxSelectionRequired: sandboxContext.selectionRequired,
       activeSandboxes,
       activeWorktrees: worktreeContext.worktrees,
     };

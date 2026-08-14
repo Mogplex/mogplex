@@ -11,6 +11,7 @@ export type ProductionSmokeCheckName =
   | "repos_select"
   | "repo_workspace_ids_select"
   | "workspaces_select"
+  | "control_sessions_select"
   | "github_installations_count"
   | "repo_baseline_snapshot_metadata"
   | "review_run_observability_projection";
@@ -31,6 +32,7 @@ type ProductionSmokeDeps = {
   checkReposSelect: () => Promise<string>;
   checkRepoWorkspaceIdsSelect: () => Promise<string>;
   checkWorkspacesSelect: () => Promise<string>;
+  checkControlSessionsSelect: () => Promise<string>;
   checkGithubInstallationsCount: () => Promise<string>;
   checkRepoBaselineSnapshotMetadata: () => Promise<string>;
   checkReviewRunObservabilityProjection: () => Promise<string>;
@@ -157,6 +159,16 @@ async function checkWorkspacesSelect() {
 
   if (error) throw new Error(error.message);
   return "Queried workspaces with billing and Vercel link fields";
+}
+
+export async function checkControlSessionsSelect() {
+  const { error } = await supabaseAdmin
+    .from("control_sessions")
+    .select("id, user_id, repo_id, orchestration_run_id")
+    .limit(1);
+
+  if (error) throw new Error(error.message);
+  return "Queried Control sessions with repository and orchestration context";
 }
 
 async function checkGithubInstallationsCount() {
@@ -310,6 +322,7 @@ const defaultDeps: ProductionSmokeDeps = {
   checkReposSelect,
   checkRepoWorkspaceIdsSelect,
   checkWorkspacesSelect,
+  checkControlSessionsSelect,
   checkGithubInstallationsCount,
   checkRepoBaselineSnapshotMetadata,
   checkReviewRunObservabilityProjection,
@@ -343,6 +356,7 @@ export async function runProductionSmokeChecks(
     runCheck("repos_select", deps.checkReposSelect),
     runCheck("repo_workspace_ids_select", deps.checkRepoWorkspaceIdsSelect),
     runCheck("workspaces_select", deps.checkWorkspacesSelect),
+    runCheck("control_sessions_select", deps.checkControlSessionsSelect),
     runCheck("github_installations_count", deps.checkGithubInstallationsCount),
     runCheck(
       "repo_baseline_snapshot_metadata",

@@ -183,7 +183,7 @@ function buildToolForDef(
     return createPlanMissionTool(ctx);
   }
   if (def.name === "spawn_worktree") {
-    return createSpawnWorktreeTool(ctx);
+    return ctx.sandboxSelectionRequired ? null : createSpawnWorktreeTool(ctx);
   }
   if (def.name === "list_worktrees") {
     return createListWorktreesTool(ctx);

@@ -92,14 +92,19 @@ test("one sandbox is selected without inventing a worktree", () => {
 test("multiple sandboxes require explicit selection", () => {
   const prompt = buildOrchestratorSystemPrompt({
     repoFullName: "acme/demo",
+    sandboxSelectionRequired: true,
     activeSandboxes: [
       { id: "sandbox-record-1", branch: "main", status: "running" },
       { id: "sandbox-record-2", branch: "feat/a", status: "running" },
     ],
   });
-  assert.match(prompt, /Multiple sandboxes are available/);
-  assert.match(prompt, /require an explicit sandbox selection/i);
+  assert.match(prompt, /No sandbox is selected/);
+  assert.match(prompt, /must explicitly select one of the listed sandbox IDs/i);
   assert.match(prompt, /Never guess/i);
+  assert.match(prompt, /SANDBOX SELECTION IS REQUIRED/);
+  assert.match(prompt, /then stop with no tool call/i);
+  assert.match(prompt, /server-validated execution boundary/i);
+  assert.doesNotMatch(prompt, /Selected sandbox:/);
 });
 
 test("parallel worktrees retain distinct task checkout identities", () => {

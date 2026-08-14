@@ -17,6 +17,8 @@ export type OrchestratorPromptContext = {
   controlMode?: string;
   /** Exact tool names exposed to this model invocation. */
   availableToolNames?: string[];
+  /** Server-owned signal that execution must wait for an operator choice. */
+  sandboxSelectionRequired?: boolean;
   activeSandboxes?: Array<{
     id: string;
     branch: string;
@@ -43,7 +45,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -120,25 +122,50 @@ When a worker agent fails or gets stuck:
 </debugging>`;
 }
 
+function buildRequiredSandboxSelectionBlock(
+  ctx: OrchestratorPromptContext
+): string {
+  if (!ctx.sandboxSelectionRequired) return "";
+
+  return `
+<required-sandbox-selection>
+SANDBOX SELECTION IS REQUIRED. This is a server-validated execution boundary, not a suggestion.
+- Do not attempt run_command, sandbox_start, sandbox_stop, write_file, spawn_worktree, or any substitute execution or sandbox-lifecycle tool in this turn. Those tools are intentionally not callable.
+- If the operator's latest request needs sandbox compute and selectable sandbox IDs are listed, ask them to select exactly one, then stop with no tool call.
+- If no selectable sandbox ID is listed, explain that no sandbox can be selected from the current context and ask the operator to return to a valid repository sandbox context, then stop with no tool call.
+- Never guess a sandbox from its branch, status, list order, prior messages, repository, mission, or worktree.
+- spawn_subagent may remain callable only for an existing active worktree because that worktree pins its exact sandbox and checkout path. It is not a substitute for selecting a sandbox and cannot create a worktree.
+- Other non-execution work may continue only when it independently satisfies the operator's request without selecting or using sandbox compute.
+</required-sandbox-selection>
+`;
+}
+
 function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   if (ctx.controlMode === "plan") return "";
   const soleSandbox = (ctx.activeSandboxes ?? [])[0];
   const sandboxReuseGuidance = (() => {
+    if (ctx.sandboxSelectionRequired) return "";
     if ((ctx.activeSandboxes ?? []).length !== 1 || !soleSandbox) return "";
     return soleSandbox.status === "running"
       ? "- Exactly one running sandbox is listed, so it is already selected. Reuse it for execution; do not make a redundant sandbox_start call unless the operator explicitly asks for a new or fresh sandbox.\n"
       : `- The sole listed sandbox is ${soleSandbox.status}, not usable compute. When execution is authorized, use sandbox_start to resume or replace it before running commands.\n`;
   })();
+  const runCommandGuidance = ctx.sandboxSelectionRequired
+    ? "- run_command and sandbox lifecycle tools are unavailable until the operator selects a sandbox. Do not attempt them or substitute another tool.\n"
+    : "- Use run_command for a shell command in the selected sandbox. When no sandbox is listed, it may fall back to exactly one repo-scoped running sandbox or start one for the active repository. That fallback never applies while multiple sandboxes are listed: run_command and sandbox lifecycle tools are withheld until the operator selects one. The result returns the resolved sandbox identity and never implies or creates a worktree.\n";
+  const sandboxStartGuidance = ctx.sandboxSelectionRequired
+    ? ""
+    : "- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. Starting a sandbox never creates a worktree.\n";
+  const spawnWorktreeGuidance = ctx.sandboxSelectionRequired
+    ? "- spawn_worktree is unavailable until the operator selects a sandbox.\n"
+    : "- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.\n";
 
   return `
 <resource-decision-contract>
-- Use sandbox_start for an explicit runtime or preview request, or when execution needs compute and no suitable sandbox is selected. Starting a sandbox never creates a worktree.
-${sandboxReuseGuidance}- Use run_command for a shell command in the selected sandbox. When no sandbox is listed, it may fall back to exactly one repo-scoped running sandbox or start one for the active repository. That fallback never applies while multiple sandboxes are listed: run_command and sandbox lifecycle tools are withheld until the operator selects one. The result returns the resolved sandbox identity and never implies or creates a worktree.
-- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
+${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
 - Use plan_mission to create task identities before isolated coding work.
 - When the operator already gives clear independent coding tasks and asks to launch them in parallel, begin with plan_mission. Do not inspect with list_files, search_repo, memory_search, or run_command before planning unless the operator requests discovery or the task boundaries are genuinely unclear.
-- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.
-- Use spawn_subagent only after an active persisted worktree exists. The worker must use that worktree's exact sandbox and checkout path.
+${spawnWorktreeGuidance}- Use spawn_subagent only after an active persisted worktree exists. The worker must use that worktree's exact sandbox and checkout path.
 - Preview-only, inspection-only, and command-only work must not create a worktree.
 - Sandbox lifecycle operations never mutate worktree lifecycle state. Worktree archive or prune operations never stop or delete sandbox compute.
 </resource-decision-contract>
@@ -211,6 +238,15 @@ function buildExecutionEnvironmentsBlock(
   const sandboxes = ctx.activeSandboxes || [];
 
   if (worktrees.length === 0 && sandboxes.length === 0) {
+    if (ctx.sandboxSelectionRequired) {
+      return `
+<execution-environments>
+Sandbox selection is required, but no selectable sandbox is listed in the current server-owned context. Do not use repository fallback or attempt an execution tool. Ask the operator to return to a valid repository sandbox context.
+Active worktrees: (none)
+Active sandboxes: (none)
+</execution-environments>
+`;
+    }
     return `
 <execution-environments>
 No active sandbox is selected. A sandbox is the remote compute environment; a Git worktree is a separate checkout within an environment. One does not imply the other.
@@ -230,13 +266,15 @@ run_command may fall back only when exactly one repo-scoped running sandbox exis
   );
   const soleSandbox = sandboxes[0];
   const sandboxSelection =
-    sandboxes.length === 1 && soleSandbox?.status === "running"
-      ? `Selected sandbox: ${soleSandbox.id}`
-      : sandboxes.length === 1 && soleSandbox
-        ? `Sandbox ${soleSandbox.id} is ${soleSandbox.status} and is not selected for execution.`
-        : sandboxes.length > 1
-          ? "Multiple sandboxes are available. Require an explicit sandbox selection before execution. Never guess from account order or unrelated state. Do not call run_command or a sandbox lifecycle tool until the operator selects one."
-          : "No sandbox is selected.";
+    ctx.sandboxSelectionRequired && sandboxes.length > 0
+      ? "No sandbox is selected. The operator must explicitly select one of the listed sandbox IDs before execution. Never infer selection from the number of entries."
+      : sandboxes.length === 1 && soleSandbox?.status === "running"
+        ? `Selected sandbox: ${soleSandbox.id}`
+        : sandboxes.length === 1 && soleSandbox
+          ? `Sandbox ${soleSandbox.id} is ${soleSandbox.status} and is not selected for execution.`
+          : sandboxes.length > 1
+            ? "Multiple sandboxes are available. Require an explicit sandbox selection before execution. Never guess from account order or unrelated state. Do not call run_command or a sandbox lifecycle tool until the operator selects one."
+            : "No sandbox is selected.";
 
   return `
 <execution-environments>
