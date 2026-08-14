@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   appendControlComposerFiles,
+  consumeControlFileInput,
   type ControlComposerFile,
 } from "../../components/control/control-attachments";
 
@@ -33,4 +34,17 @@ test("appendControlComposerFiles enforces the cap against current state", () => 
     afterConcurrentRead.map((file) => file.id),
     ["one", "two", "three", "four", "five"]
   );
+});
+
+test("consumeControlFileInput captures files before resetting the input", () => {
+  const selectedFile = { name: "mission.txt" } as File;
+  const input = {
+    files: [selectedFile],
+    value: "C:\\fakepath\\mission.txt",
+  } as unknown as Pick<HTMLInputElement, "files" | "value">;
+
+  const selectedFiles = consumeControlFileInput(input);
+
+  assert.deepEqual(selectedFiles, [selectedFile]);
+  assert.equal(input.value, "");
 });
