@@ -138,8 +138,7 @@ function buildToolForDef(
     return createTerminalExec(
       ctx.sandboxId ?? undefined,
       ctx.userId,
-      ctx.repoId ?? undefined,
-      !ctx.sandboxSelectionRequired
+      ctx.repoId ?? undefined
     );
   }
   if (def.name === "sandbox_start") {
@@ -147,7 +146,9 @@ function buildToolForDef(
     return createStartSandbox(ctx.userId);
   }
   if (def.name === "sandbox_stop") {
-    return ctx.sandboxId ? createStopSandbox(ctx.userId, ctx.sandboxId) : null;
+    return ctx.sandboxId && !ctx.sandboxSelectionRequired
+      ? createStopSandbox(ctx.userId, ctx.sandboxId)
+      : null;
   }
   if (def.name === "open_pr") {
     return ctx.githubToken

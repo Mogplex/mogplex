@@ -94,7 +94,6 @@ describe("buildOrchestratorTools", () => {
   it("omits sandbox execution tools while server-owned selection is ambiguous", () => {
     const ambiguousSandbox = buildOrchestratorTools({
       ...FULL_CONTEXT,
-      sandboxId: null,
       sandboxSelectionRequired: true,
     });
 

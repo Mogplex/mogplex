@@ -29,7 +29,6 @@ describe("orchestrator resource decision prompt", () => {
   it("uses an unambiguous callable equivalent for an unavailable tool name", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",
-      availableToolNames: ["sandbox_start"],
     });
 
     expect(prompt).toContain(
