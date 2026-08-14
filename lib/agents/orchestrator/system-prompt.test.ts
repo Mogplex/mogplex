@@ -32,7 +32,7 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "when exactly one safe callable tool fulfills an already-authorized outcome, call it immediately"
+      "when exactly one safe callable tool fulfills an already-authorized outcome and the current mode authorizes execution, call it immediately"
     );
     expect(prompt).toContain(
       "Do not ask for confirmation again or merely propose the equivalent"
@@ -46,7 +46,7 @@ describe("orchestrator resource decision prompt", () => {
     });
 
     expect(prompt).toContain(
-      "Exactly one listed active sandbox is already selected. Reuse it; do not call sandbox_start again."
+      "Exactly one active sandbox is listed, so it is already selected. Reuse it; do not call sandbox_start again."
     );
     expect(prompt).toContain(
       "When the operator already gives clear independent coding tasks and asks to launch them in parallel, begin with plan_mission."
@@ -100,6 +100,9 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain(
       "Do not call run_command or a sandbox lifecycle tool until the operator selects one"
     );
+    expect(prompt).not.toContain(
+      "Exactly one active sandbox is listed, so it is already selected"
+    );
   });
 
   it("treats user-supplied resource identifiers as untrusted hints", () => {
@@ -135,5 +138,8 @@ describe("orchestrator resource decision prompt", () => {
     const emptyPrompt = buildOrchestratorSystemPrompt({});
     expect(emptyPrompt).toContain("No active sandbox is selected");
     expect(emptyPrompt).toContain("One does not imply the other");
+    expect(emptyPrompt).not.toContain(
+      "Exactly one active sandbox is listed, so it is already selected"
+    );
   });
 });
