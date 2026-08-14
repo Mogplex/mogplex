@@ -52,6 +52,58 @@ test("control prompt inventories multiple running repo sandboxes and requires se
   assert.equal(resolveControlToolSandboxId(context), null);
 });
 
+test("control prompt clears selection requirement after validating an explicit choice", async () => {
+  const selected = {
+    id: "sandbox-record-2",
+    sandbox_id: "sbx-runtime-2",
+    repo_id: "repo-1",
+    working_branch: "feat/two",
+    status: "running",
+  };
+  const context = await resolveControlPromptSandboxContext(
+    request,
+    "user-1",
+    {
+      messages: [],
+      repoId: "repo-1",
+      sandboxId: selected.id,
+    },
+    {
+      listRepoSandboxes: async () => [
+        {
+          id: "sandbox-record-1",
+          sandbox_id: "sbx-runtime-1",
+          repo_id: "repo-1",
+          working_branch: "main",
+          status: "running",
+        },
+        selected,
+      ],
+      loadSandboxRecord: async () => ({
+        ok: true,
+        auth: {} as never,
+        record: selected,
+        repo: null,
+        rootDirectory: null,
+      }),
+    }
+  );
+
+  assert.deepEqual(context, {
+    decisionSource: "server_validated_request",
+    rejectionReason: null,
+    selectionRequired: false,
+    selected: {
+      recordId: "sandbox-record-2",
+      runtimeId: "sbx-runtime-2",
+    },
+    sandboxes: [
+      { id: "sandbox-record-2", branch: "feat/two", status: "running" },
+    ],
+  });
+  assert.equal(resolveControlToolSandboxId(context), "sandbox-record-2");
+});
+
 test("control prompt server-selects exactly one running repo sandbox", async () => {
   const context = await resolveControlPromptSandboxContext(
     request,
