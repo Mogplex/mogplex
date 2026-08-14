@@ -260,6 +260,53 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>
+              {data.tier === "free" ? "Top up PAYG balance" : "Add balance"}
+            </h2>
+          </CardTitle>
+          <CardDescription>
+            Prepaid usage credits. Purchased balance never expires.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {canStartBillingFlow ? (
+            TOPUP_PRESETS.map((preset) => (
+              <Button
+                key={preset.lookupKey}
+                disabled={
+                  pendingAction !== null || data.status === "frozen_topups"
+                }
+                onClick={() =>
+                  redirectTo(preset.lookupKey, "/api/stripe/checkout", {
+                    kind: "topup",
+                    preset: preset.lookupKey,
+                    attemptId: getTopupAttemptId(preset.lookupKey),
+                  })
+                }
+              >
+                {pendingAction === preset.lookupKey
+                  ? "Redirecting…"
+                  : `Top up ${formatUsd(preset.amountCents)}`}
+              </Button>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {canManageBilling
+                ? "Billing changes are not configured on this deployment."
+                : "Only a team owner or admin can add funds."}
+            </p>
+          )}
+          {data.status === "frozen_topups" ? (
+            <p className="basis-full text-sm text-destructive">
+              Top-ups are paused for this account. Contact support for help.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="border-b">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
@@ -415,54 +462,6 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
             <p className="pt-5 text-sm text-muted-foreground">
               Your team&apos;s balance and plan are visible here. Ask a team
               owner or admin to make billing changes.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>
-              {data.tier === "free" ? "Top up PAYG balance" : "Add balance"}
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            Prepaid usage credits. Purchased balance never expires.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {canStartBillingFlow ? (
-            TOPUP_PRESETS.map((preset) => (
-              <Button
-                key={preset.lookupKey}
-                variant="outline"
-                disabled={
-                  pendingAction !== null || data.status === "frozen_topups"
-                }
-                onClick={() =>
-                  redirectTo(preset.lookupKey, "/api/stripe/checkout", {
-                    kind: "topup",
-                    preset: preset.lookupKey,
-                    attemptId: getTopupAttemptId(preset.lookupKey),
-                  })
-                }
-              >
-                {pendingAction === preset.lookupKey
-                  ? "Redirecting…"
-                  : `Add ${formatUsd(preset.amountCents)}`}
-              </Button>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {canManageBilling
-                ? "Billing changes are not configured on this deployment."
-                : "Only a team owner or admin can add funds."}
-            </p>
-          )}
-          {data.status === "frozen_topups" ? (
-            <p className="basis-full text-sm text-destructive">
-              Top-ups are paused for this account. Contact support for help.
             </p>
           ) : null}
         </CardContent>

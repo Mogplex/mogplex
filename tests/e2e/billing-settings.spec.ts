@@ -116,9 +116,22 @@ test("billing is a first-class personal Settings tab with live checkout actions"
     "href",
     "https://github.com/mogplex/mogplex/blob/main/docs/self-hosting.md"
   );
-  await expect(page.getByRole("button", { name: "Add $10.00" })).toBeVisible();
+  const topupHeading = page.getByRole("heading", {
+    name: "Top up PAYG balance",
+  });
+  const plansHeading = page.getByRole("heading", { name: "Plans" });
+  await expect(topupHeading).toBeVisible();
+  await expect(plansHeading).toBeVisible();
+  const sectionHeadings = await page.locator("h2").allTextContents();
+  expect(sectionHeadings.indexOf("Top up PAYG balance")).toBeLessThan(
+    sectionHeadings.indexOf("Plans")
+  );
 
-  await page.getByRole("button", { name: "Add $10.00" }).click();
+  const topupButton = page.getByRole("button", { name: "Top up $10.00" });
+  await expect(topupButton).toBeVisible();
+  await expect(topupButton).toHaveClass(/bg-primary/);
+
+  await topupButton.click();
   await expect.poll(() => checkoutBodies.length).toBe(1);
   expect(checkoutBodies[0]).toMatchObject({
     kind: "topup",
@@ -269,7 +282,7 @@ test("team members get a read-only billing surface", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Manage plan" })).toHaveCount(
     0
   );
-  await expect(page.getByRole("button", { name: /Add \$/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Top up \$/ })).toHaveCount(0);
 });
 
 test("frozen top-ups stay disabled with an actionable message", async ({
@@ -295,7 +308,9 @@ test("frozen top-ups stay disabled with an actionable message", async ({
 
   await page.goto(scopedPath("settings?tab=billing"));
 
-  await expect(page.getByRole("button", { name: "Add $10.00" })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Top up $10.00" })
+  ).toBeDisabled();
   await expect(
     page.getByText(
       "Top-ups are paused for this account. Contact support for help."
@@ -318,7 +333,7 @@ test("billing-disabled deployments show a neutral OSS state", async ({
     page.getByText("Billing is not enabled on this deployment.")
   ).toBeVisible();
   await expect(page.getByText(/beta/i)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Choose|Add \$/ })).toHaveCount(
-    0
-  );
+  await expect(
+    page.getByRole("button", { name: /Choose|Top up \$/ })
+  ).toHaveCount(0);
 });
