@@ -284,7 +284,15 @@ export async function consumeSandboxLaunchResponse(
       "Sandbox launch stream ended before a ready event and inventory refresh failed"
     );
   }
-  return get().getSandboxForRepo(repoId, { ...launchScope });
+  const reconciledSandbox = get().getSandboxForRepo(repoId, {
+    ...launchScope,
+  });
+  if (!reconciledSandbox) {
+    throw new Error(
+      "Sandbox launch stream ended before a ready event and the refreshed inventory did not contain the sandbox"
+    );
+  }
+  return reconciledSandbox;
 }
 
 export async function executeExtend(
@@ -434,21 +442,29 @@ export async function executeDeleteRecord(
   });
 }
 export async function executeRefresh(set: SandboxSetState) {
-  let res: Response;
-  try {
-    res = await fetch("/api/sandbox");
-  } catch {
-    // Refresh runs in background sync and realtime callbacks. Preserve the
-    // last known inventory when the network is unavailable instead of leaking
-    // an unhandled rejection from a fire-and-forget caller.
-    return false;
-  }
-  if (!res.ok) return false;
-  const { sandboxes } = await res.json();
   const sandboxesById: Record<string, SandboxRecord> = {};
-  for (const sandbox of sandboxes) {
-    const normalized = toSandboxRecord(sandbox);
-    sandboxesById[normalized.id] = normalized;
+  try {
+    const res = await fetch("/api/sandbox");
+    if (!res.ok) return false;
+    const payload: unknown = await res.json();
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      !("sandboxes" in payload) ||
+      !Array.isArray(payload.sandboxes)
+    ) {
+      return false;
+    }
+    for (const sandbox of payload.sandboxes) {
+      if (!sandbox || typeof sandbox !== "object") return false;
+      const normalized = toSandboxRecord(sandbox as SandboxRecord);
+      sandboxesById[normalized.id] = normalized;
+    }
+  } catch {
+    // Refresh runs in background sync and realtime callbacks. Preserve the last
+    // known inventory for network and response-decoding failures instead of
+    // leaking an unhandled rejection from a fire-and-forget caller.
+    return false;
   }
   set((state) => {
     const nextIndexes = rebuildSandboxIndexes(sandboxesById);
