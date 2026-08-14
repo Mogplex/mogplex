@@ -7,6 +7,7 @@ import {
   mockActivationFlow,
   waitForTrackedEvent,
 } from "./helpers/activation-fixtures";
+import { capturePageErrors } from "./helpers/page-errors";
 
 const workspacePath = `/${connectedUser.username}/projects/workspace`;
 
@@ -247,7 +248,10 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
   await expect(page.locator('[data-pane-type="files"]')).toHaveCount(0);
 });
 
-test("workspace editor accepts the active theme colors", async ({ page }) => {
+test("workspace editor starts language diagnostics without page errors", async ({
+  page,
+}) => {
+  const pageErrors = capturePageErrors(page);
   await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
 
@@ -266,6 +270,15 @@ test("workspace editor accepts the active theme colors", async ({ page }) => {
   const editorPane = page.locator('[data-pane-type="editor"]');
   await expect(editorPane.locator(".monaco-editor")).toBeVisible();
   await expect(editorPane).not.toContainText("Illegal value for token color");
+
+  const editorLines = editorPane.locator(".view-lines");
+  await expect(editorLines).toContainText("demo-app");
+  await editorLines.click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type('{"name":');
+
+  await expect(editorPane.locator(".squiggly-error").first()).toBeVisible();
+  expect(pageErrors).toEqual([]);
 });
 
 test("terminal session survives navigation away from the workspace", async ({
