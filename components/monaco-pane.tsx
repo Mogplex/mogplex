@@ -42,16 +42,53 @@ function withAlpha(color: string, alphaHex: string) {
   return color
 }
 
+function createMonacoColorConverter() {
+  const canvas = document.createElement("canvas")
+  canvas.width = 1
+  canvas.height = 1
+  const context = canvas.getContext("2d", { willReadFrequently: true })
+  if (!context) throw new Error("Could not initialize Monaco theme colors")
+
+  return (color: string) => {
+    if (!CSS.supports("color", color)) {
+      throw new Error(`Invalid Monaco theme color: ${color}`)
+    }
+
+    context.fillStyle = "#010203"
+    context.fillStyle = color
+    const firstParse = context.fillStyle
+    context.fillStyle = "#040506"
+    context.fillStyle = color
+    if (context.fillStyle !== firstParse) {
+      throw new Error(`Unsupported Monaco theme color: ${color}`)
+    }
+
+    context.clearRect(0, 0, 1, 1)
+    context.fillRect(0, 0, 1, 1)
+    const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data
+    const byteToHex = (channel: number) => channel.toString(16).padStart(2, "0")
+    return `#${byteToHex(red)}${byteToHex(green)}${byteToHex(blue)}${alpha === 255 ? "" : byteToHex(alpha)}`
+  }
+}
+
+let monacoColorConverter: ReturnType<typeof createMonacoColorConverter> | undefined
+
+function getMonacoColorConverter() {
+  monacoColorConverter ??= createMonacoColorConverter()
+  return monacoColorConverter
+}
+
 function getThemePalette() {
   if (typeof window === "undefined") {
     throw new Error("Monaco theme tokens are only available in the browser")
   }
 
   const styles = getComputedStyle(document.documentElement)
+  const normalizeColor = getMonacoColorConverter()
   const read = (token: string) => {
     const value = styles.getPropertyValue(token).trim()
     if (!value) throw new Error(`Missing Monaco theme token: ${token}`)
-    return value
+    return normalizeColor(value)
   }
 
   return {
