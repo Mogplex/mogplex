@@ -1,9 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildGithubRepoOwnerTargets,
   canCreatePrivateGithubOrgRepo,
+  filterCreatableGithubOrgLogins,
 } from "./github-owners";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("GitHub repository owners", () => {
   it("merges OAuth and installation scope without duplicates", () => {
@@ -60,5 +65,36 @@ describe("GitHub repository owners", () => {
         { state: "active", role: "member" }
       )
     ).toBe(false);
+  });
+
+  it("filters organizations through live settings and membership checks", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/orgs/broken")) {
+        return new Response("unavailable", { status: 503 });
+      }
+      if (url.includes("/orgs/acme%20labs")) {
+        return Response.json(
+          url.includes("/user/memberships/")
+            ? { state: "active", role: "admin" }
+            : { members_can_create_repositories: false }
+        );
+      }
+      return Response.json(
+        url.includes("/user/memberships/")
+          ? { state: "active", role: "member" }
+          : { members_can_create_private_repositories: false }
+      );
+    });
+
+    await expect(
+      filterCreatableGithubOrgLogins("token", [
+        "acme labs",
+        "restricted",
+        "broken",
+      ])
+    ).resolves.toEqual(["acme labs"]);
+    expect(warning).toHaveBeenCalledOnce();
   });
 });

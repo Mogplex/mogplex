@@ -27,6 +27,10 @@ describe("GitHub repository names", () => {
   });
 
   it("rejects empty, reserved, and overlong names", () => {
+    expect(validateGithubRepoName(null)).toEqual({
+      ok: false,
+      message: "Use letters, numbers, periods, hyphens, or underscores.",
+    });
     expect(validateGithubRepoName("🚀")).toEqual({
       ok: false,
       message: "Use letters, numbers, periods, hyphens, or underscores.",
