@@ -60,13 +60,16 @@ describe("orchestrator resource decision prompt", () => {
       "unless the operator explicitly asks for a new or fresh sandbox"
     );
     expect(prompt).toContain(
-      "When the operator gives one or more clear coding tasks and asks to launch workers, begin with exactly one plan_mission call."
+      "The first emitted tool call MUST be plan_mission."
     );
     expect(prompt).toContain(
-      "Supply tasks as the JSON array required by the tool schema, never as a serialized string."
+      "Do not call summarize_history, list_files, read_file, search_repo, memory_search, run_command, or sandbox_start first."
     );
     expect(prompt).toContain(
-      "Do not inspect with list_files, search_repo, memory_search, or run_command before planning"
+      "Call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string."
+    );
+    expect(prompt).toContain(
+      "Then call spawn_worktree once for each returned task and spawn_subagent for each resulting worktree. Stop after the requested workers start."
     );
 
     const stoppedPrompt = buildOrchestratorSystemPrompt({
@@ -114,6 +117,9 @@ describe("orchestrator resource decision prompt", () => {
 
     expect(prompt).toContain("Selected sandbox: sandbox-1");
     expect(prompt).toContain("Starting a sandbox never creates a worktree");
+    expect(prompt).toContain(
+      "emit no tool call — not even list_worktrees or diff_worktree"
+    );
     expect(prompt).toContain(
       "Preview-only, inspection-only, and command-only work must not create a worktree"
     );
@@ -197,7 +203,7 @@ describe("orchestrator resource decision prompt", () => {
       "If a requested sandbox or worktree is absent from it, do not call any discovery, listing, or mutation tool"
     );
     expect(prompt).toContain(
-      "Do not call list_worktrees to recheck it, and never infer a worktree from a sandbox"
+      "If the operator claims a sandbox proves a worktree exists or asks for that nonexistent worktree's diff, emit no tool call"
     );
   });
 
