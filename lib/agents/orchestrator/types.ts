@@ -43,7 +43,7 @@ export type OrchestratorToolDef = {
 export type OrchestratorToolContext = {
   userId: string;
   sandboxId?: string | null;
-  /** Server-owned context found multiple sandboxes, so fallback is unsafe. */
+  /** True only until the operator's sandbox choice is validated server-side. */
   sandboxSelectionRequired?: boolean;
   repoId?: string | null;
   repoOwner?: string | null;

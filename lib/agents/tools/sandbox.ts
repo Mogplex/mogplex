@@ -128,8 +128,7 @@ const terminalParams = z.object({
 export function createTerminalExec(
   sandboxId?: string,
   userId?: string,
-  repoId?: string,
-  allowSandboxFallback = true
+  repoId?: string
 ) {
   let selectedSandboxId = sandboxId;
   // Track the selected/resolved sandbox across calls within this tool instance.
@@ -147,15 +146,6 @@ export function createTerminalExec(
         return {
           error: requestHeaders.error,
           reason: requestHeaders.reason,
-          command,
-        };
-      }
-
-      if (!cachedSandbox && !allowSandboxFallback) {
-        return {
-          error:
-            "Multiple sandboxes are available for this repository. Select one explicitly before continuing.",
-          reason: "multiple_sandboxes" as const,
           command,
         };
       }
