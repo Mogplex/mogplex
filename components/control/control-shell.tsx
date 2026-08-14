@@ -73,7 +73,6 @@ function ControlShellInner({
     () => missions.find((m) => m.id === selectedMissionId) || missions[0],
     [missions, selectedMissionId]
   );
-
   const getWorkspace = useCallback(
     (id: string) => workspaces.find((w) => w.id === id),
     [workspaces]
@@ -92,6 +91,7 @@ function ControlShellInner({
     status,
     stop,
     error: activeChatError,
+    persistError,
     clearError: clearActiveChatError,
     activeChat,
     runningSessionIds,
@@ -256,7 +256,6 @@ function ControlShellInner({
 
   const sessionUsage = useSessionUsage(messages, chatPending);
   const usageTokens = sessionUsage.inputTokens + sessionUsage.outputTokens;
-
   const combinedTimeline = buildCombinedTimeline(mission?.timeline, messages);
 
   const hasChanges = useMemo(
@@ -269,7 +268,8 @@ function ControlShellInner({
       ? (activeSandbox.runtime_summary.preview_url ?? null)
       : null;
   const hasSession = Boolean(sessionId || mission);
-  const chatError = localChatError ?? activeChatError?.message ?? null;
+  const chatError =
+    localChatError ?? activeChatError?.message ?? persistError ?? null;
 
   const sendInstruction = useCallback(
     (text: string) => {

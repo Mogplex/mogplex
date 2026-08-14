@@ -17,20 +17,10 @@ import {
   projectColorClass,
   type SessionGroup,
 } from "@/lib/control/session-groups";
+import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { usePanelWidth } from "@/hooks/use-panel-width";
 
-export type ControlSessionSummary = {
-  id: string;
-  title: string;
-  /** Project the session belongs to; null groups under "General". */
-  project: string | null;
-  /** Exact connected repository used for agent and sandbox context. */
-  repo_id: string | null;
-  /** Server-owned orchestration run backing the mission and worktrees. */
-  orchestration_run_id: string | null;
-  pinned: boolean;
-  updated_at: string;
-};
+export type { ControlSessionSummary } from "@/lib/control/session-types";
 
 type SortMode = "recent" | "alpha";
 
