@@ -15,6 +15,7 @@ test("runProductionSmokeChecks returns ok when all checks succeed", async () => 
     checkReposSelect: async () => "repos ok",
     checkRepoWorkspaceIdsSelect: async () => "repo workspace ids ok",
     checkWorkspacesSelect: async () => "workspaces ok",
+    checkControlSessionsSelect: async () => "control sessions ok",
     checkGithubInstallationsCount: async () => "installations ok",
     checkRepoBaselineSnapshotMetadata: async () => "baseline ok",
     checkReviewRunObservabilityProjection: async () =>
@@ -30,6 +31,11 @@ test("runProductionSmokeChecks returns ok when all checks succeed", async () => 
       detail: "repo workspace ids ok",
     },
     { name: "workspaces_select", ok: true, detail: "workspaces ok" },
+    {
+      name: "control_sessions_select",
+      ok: true,
+      detail: "control sessions ok",
+    },
     {
       name: "github_installations_count",
       ok: true,
@@ -57,6 +63,9 @@ test("runProductionSmokeChecks captures failures and keeps later checks running"
     },
     checkRepoWorkspaceIdsSelect: async () => "repo workspace ids ok",
     checkWorkspacesSelect: async () => "workspaces ok",
+    checkControlSessionsSelect: async () => {
+      throw new Error("missing control_sessions table");
+    },
     checkGithubInstallationsCount: async () => {
       throw new Error("installations unavailable");
     },
@@ -74,6 +83,11 @@ test("runProductionSmokeChecks captures failures and keeps later checks running"
       detail: "repo workspace ids ok",
     },
     { name: "workspaces_select", ok: true, detail: "workspaces ok" },
+    {
+      name: "control_sessions_select",
+      ok: false,
+      detail: "missing control_sessions table",
+    },
     {
       name: "github_installations_count",
       ok: false,
@@ -98,6 +112,7 @@ test("runProductionSmokeChecks reports baseline snapshot drift as a failure", as
     checkReposSelect: async () => "ok",
     checkRepoWorkspaceIdsSelect: async () => "ok",
     checkWorkspacesSelect: async () => "ok",
+    checkControlSessionsSelect: async () => "ok",
     checkGithubInstallationsCount: async () => "ok",
     checkRepoBaselineSnapshotMetadata: async () => {
       throw new Error("column snapshot_lockfile_hash does not exist");
@@ -120,6 +135,7 @@ test("runProductionSmokeChecks reports review observability projection failures"
     checkReposSelect: async () => "ok",
     checkRepoWorkspaceIdsSelect: async () => "ok",
     checkWorkspacesSelect: async () => "ok",
+    checkControlSessionsSelect: async () => "ok",
     checkGithubInstallationsCount: async () => "ok",
     checkRepoBaselineSnapshotMetadata: async () => "ok",
     checkReviewRunObservabilityProjection: async () => {
