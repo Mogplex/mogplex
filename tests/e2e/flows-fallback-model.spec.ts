@@ -5,6 +5,7 @@ import {
   scopedPath,
 } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
+import { capturePageErrors } from "./helpers/page-errors";
 import type { Route } from "@playwright/test";
 import type { FlowNode } from "../../lib/types";
 
@@ -72,6 +73,7 @@ const modelFixture = {
 test("flows inspector saves a user-picked fallback model for upstream issues", async ({
   page,
 }) => {
+  const pageErrors = capturePageErrors(page);
   // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
   // the 1280px dock-mode threshold.
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -177,10 +179,9 @@ test("flows inspector saves a user-picked fallback model for upstream issues", a
   await page.waitForLoadState("networkidle");
 
   const agentNode = page.getByTestId("rf__node-agent-a");
-  await agentNode.dispatchEvent("pointerdown", { button: 0 });
-  await agentNode.dispatchEvent("pointerup", { button: 0 });
-  await agentNode.dispatchEvent("click");
+  await agentNode.click();
   await expect(page.locator(".flows-inspector")).toBeVisible();
+  expect(pageErrors).toEqual([]);
 
   // Unset by default: the shared fallback pool applies.
   const fallbackSelect = page.getByLabel("Fallback model", { exact: true });
