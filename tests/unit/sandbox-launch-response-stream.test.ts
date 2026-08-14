@@ -173,3 +173,28 @@ test("consumeSandboxLaunchResponse surfaces a failed fallback refresh", async ()
     /inventory refresh failed/
   );
 });
+
+test("consumeSandboxLaunchResponse surfaces a missing sandbox after fallback refresh", async () => {
+  const { buildSandboxStateKey, consumeSandboxLaunchResponse } =
+    await loadSandboxStore();
+  const repoId = "repo-1";
+  const launchKey = buildSandboxStateKey(repoId, "main", null);
+  const harness = createStoreHarness(repoId);
+  const response = buildSseResponse([{ type: "log", data: "Starting..." }]);
+  const get = () => ({
+    ...harness.get(),
+    refresh: async () => true,
+    getSandboxForRepo: () => null,
+  });
+
+  await assert.rejects(
+    consumeSandboxLaunchResponse(
+      repoId,
+      launchKey,
+      response,
+      harness.set as never,
+      get as never
+    ),
+    /refreshed inventory did not contain the sandbox/
+  );
+});
