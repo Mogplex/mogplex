@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildGithubRepoOwnerTargets,
   canCreatePrivateGithubOrgRepo,
+  fetchGithubCurrentUserContext,
+  fetchGithubCurrentUserLogin,
   filterCreatableGithubOrgLogins,
 } from "./github-owners";
 
@@ -96,5 +98,30 @@ describe("GitHub repository owners", () => {
       ])
     ).resolves.toEqual(["acme labs"]);
     expect(warning).toHaveBeenCalledOnce();
+  });
+
+  it("loads the current login and granted OAuth scopes together", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      Response.json(
+        { login: " alex " },
+        { headers: { "x-oauth-scopes": "repo, read:org, read:user" } }
+      )
+    );
+
+    await expect(fetchGithubCurrentUserContext("token")).resolves.toEqual({
+      login: "alex",
+      oauthScopes: ["repo", "read:org", "read:user"],
+    });
+    await expect(fetchGithubCurrentUserLogin("token")).resolves.toBe("alex");
+  });
+
+  it("surfaces current-user lookup failures", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("forbidden", { status: 403 })
+    );
+
+    await expect(fetchGithubCurrentUserContext("token")).rejects.toThrow(
+      "GitHub owner lookup failed (403): forbidden"
+    );
   });
 });

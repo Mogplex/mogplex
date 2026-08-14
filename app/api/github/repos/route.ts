@@ -9,6 +9,7 @@ import { requireUserId } from "@/lib/auth";
 import {
   createGithubRepo,
   extractGithubApiErrorMessage,
+  fetchGithubRepo,
   GithubRepoCreateError,
 } from "@/lib/github-create";
 import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
@@ -74,6 +75,7 @@ type GithubRepoPostRouteDeps = {
     token: string
   ) => Promise<GithubRepoOwnerTarget[]>;
   createGithubRepo: typeof createGithubRepo;
+  fetchGithubRepo: typeof fetchGithubRepo;
   upsertGithubReposForUser: typeof upsertGithubReposForUser;
   loadRepoByGithubId: (
     scope: ProductResourceScope,
@@ -105,8 +107,10 @@ export function createGithubRepoPostHandler(
     requireUserId,
     resolveActiveTeamCapabilities,
     getGithubToken: getOAuthToken,
-    loadOwnerTargets: loadGithubRepoCreationOwnerTargets,
+    loadOwnerTargets: async (userId, token) =>
+      (await loadGithubRepoCreationOwnerTargets(userId, token)).targets,
     createGithubRepo,
+    fetchGithubRepo,
     upsertGithubReposForUser,
     loadRepoByGithubId,
     ...overrides,
@@ -179,11 +183,31 @@ export function createGithubRepoPostHandler(
     }
 
     try {
-      const createdRepo = await deps.createGithubRepo(token, {
-        owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
-        name: nameValidation.name,
-        visibility: "private",
-      });
+      let createdRepo: Awaited<ReturnType<typeof createGithubRepo>>;
+      try {
+        createdRepo = await deps.createGithubRepo(token, {
+          owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
+          name: nameValidation.name,
+          visibility: "private",
+        });
+      } catch (error) {
+        if (!(error instanceof GithubRepoCreateError) || error.status !== 422) {
+          throw error;
+        }
+        const existingRepo = await deps
+          .fetchGithubRepo(token, ownerTarget.login, nameValidation.name)
+          .catch((lookupError) => {
+            console.warn("[github-repo-create] conflict lookup failed", {
+              userId,
+              owner: ownerTarget.login,
+              name: nameValidation.name,
+              error: lookupError,
+            });
+            return null;
+          });
+        if (!existingRepo) throw error;
+        createdRepo = existingRepo;
+      }
       await deps.upsertGithubReposForUser(userId, [createdRepo], {
         githubInstallationId: ownerTarget.github_installation_id,
         productTeamId: scope.productTeamId,

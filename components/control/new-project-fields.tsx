@@ -1,6 +1,7 @@
 "use client";
 
 import type { GithubRepoNameValidation } from "@/lib/github-repo-name";
+import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import {
   Select,
   SelectContent,
@@ -8,14 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-export type GithubOwnerTarget = {
-  login: string;
-  kind: "personal" | "org";
-  github_installation_id: number | null;
-  scope_label: string;
-  source: "oauth" | "installation" | "oauth+installation";
-};
 
 export type AvailabilityState =
   | "idle"
@@ -31,17 +24,19 @@ export function NewProjectFields({
   onOwnerChange,
   ownersLoading,
   ownersError,
+  ownersAction,
   name,
   onNameChange,
   namePlaceholder,
   nameValidation,
   availability,
 }: {
-  ownerTargets: GithubOwnerTarget[];
+  ownerTargets: GithubRepoOwnerTarget[];
   ownerLogin: string;
   onOwnerChange: (value: string) => void;
   ownersLoading: boolean;
   ownersError: string | null;
+  ownersAction: { href: string; label: string } | null;
   name: string;
   onNameChange: (value: string) => void;
   namePlaceholder: string;
@@ -83,7 +78,17 @@ export function NewProjectFields({
       </div>
       <div className="min-h-4 text-[11px] leading-4" aria-live="polite">
         {ownersError ? (
-          <span className="text-accent-red">{ownersError}</span>
+          <span className="text-accent-red">
+            {ownersError}
+            {ownersAction ? (
+              <>
+                {" "}
+                <a className="underline" href={ownersAction.href}>
+                  {ownersAction.label}
+                </a>
+              </>
+            ) : null}
+          </span>
         ) : !nameValidation.ok ? (
           <span className="text-accent-red">{nameValidation.message}</span>
         ) : (

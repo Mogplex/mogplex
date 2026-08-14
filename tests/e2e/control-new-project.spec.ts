@@ -177,3 +177,54 @@ test("new mission validates and creates an org-scoped project before starting", 
     )
   ).toBe("acme");
 });
+
+test("new project explains GitHub connection and org-scope requirements", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos", (route) => fulfillJson(route, []));
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  await page.route("**/api/github/owners", (route) => fulfillJson(route, []));
+
+  await page.goto(scopedPath("control"));
+  await expect(
+    page.getByText("GitHub must be connected to create a project.")
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Connect GitHub" })
+  ).toHaveAttribute("href", /\/api\/auth\/login\/github\?next=/);
+  await expect(
+    page.getByRole("button", { name: "Start mission" })
+  ).toBeDisabled();
+
+  await page.unroute("**/api/github/owners");
+  await page.route("**/api/github/owners", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "x-mogplex-github-reauthorize": "read:org" },
+      body: JSON.stringify([
+        {
+          login: "alex",
+          kind: "personal",
+          github_installation_id: null,
+          scope_label: "Personal",
+          source: "oauth",
+        },
+      ]),
+    })
+  );
+  await page.reload();
+  await expect(
+    page.getByText("Reconnect GitHub to use organization accounts.")
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Reconnect GitHub" })
+  ).toHaveAttribute("href", /\/api\/auth\/login\/github\?next=/);
+});

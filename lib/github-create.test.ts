@@ -1,9 +1,40 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { checkGithubRepoAvailability } from "./github-create";
+import { checkGithubRepoAvailability, fetchGithubRepo } from "./github-create";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("GitHub repository lookup", () => {
+  it("returns an existing repository for idempotent create recovery", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ id: 42, full_name: "acme/widgets" }))
+    );
+
+    await expect(fetchGithubRepo("token", "acme", "widgets")).resolves.toEqual({
+      id: 42,
+      full_name: "acme/widgets",
+    });
+  });
+
+  it("distinguishes a missing repository from provider failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response("", { status: 404 }))
+        .mockResolvedValueOnce(new Response("upstream", { status: 500 }))
+    );
+
+    await expect(
+      fetchGithubRepo("token", "acme", "missing")
+    ).resolves.toBeNull();
+    await expect(fetchGithubRepo("token", "acme", "broken")).rejects.toThrow(
+      "GitHub repo lookup failed (500): upstream"
+    );
+  });
 });
 
 describe("GitHub repository availability", () => {

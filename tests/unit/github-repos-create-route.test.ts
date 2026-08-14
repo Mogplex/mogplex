@@ -196,6 +196,7 @@ test("POST /api/github/repos maps GitHub name collisions to 409", async () => {
         })
       );
     },
+    fetchGithubRepo: async () => null,
   });
 
   const response = await handler(
@@ -210,4 +211,55 @@ test("POST /api/github/repos maps GitHub name collisions to 409", async () => {
   assert.deepEqual(await response.json(), {
     error: "Repository creation failed: name already exists",
   });
+});
+
+test("POST /api/github/repos reconciles a repository left by a partial create", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const { GithubRepoCreateError } = await import("../../lib/github-create");
+  let importedGithubId: number | null = null;
+  const handler = createGithubRepoPostHandler({
+    requireUserId: async () => "user-123",
+    getGithubToken: async () => "github-token",
+    loadOwnerTargets: async () => [
+      {
+        login: "acme",
+        kind: "org",
+        github_installation_id: 42,
+        scope_label: "Org",
+        source: "oauth+installation",
+      },
+    ],
+    createGithubRepo: async () => {
+      throw new GithubRepoCreateError(422, "name already exists");
+    },
+    fetchGithubRepo: async () => ({
+      id: 456,
+      full_name: "acme/widgets",
+      name: "widgets",
+      owner: { login: "acme" },
+      default_branch: "main",
+    }),
+    upsertGithubReposForUser: async (_userId, repos) => {
+      importedGithubId = repos[0]?.id ?? null;
+    },
+    loadRepoByGithubId: async () => ({
+      id: "repo-456",
+      full_name: "acme/widgets",
+      owner: "acme",
+      name: "widgets",
+      default_branch: "main",
+    }),
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/github/repos", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ owner_login: "acme", name: "widgets" }),
+    })
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(importedGithubId, 456);
+  assert.equal((await response.json()).id, "repo-456");
 });

@@ -80,6 +80,31 @@ export async function checkGithubRepoAvailability(
   );
 }
 
+export async function fetchGithubRepo(
+  token: string,
+  owner: string,
+  name: string
+): Promise<GithubRepoPayload | null> {
+  const response = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cache: "no-store",
+    }
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(
+      `GitHub repo lookup failed (${response.status}): ${await response.text()}`
+    );
+  }
+  return response.json() as Promise<GithubRepoPayload>;
+}
+
 export function extractGithubApiErrorMessage(body: string) {
   try {
     const parsed = JSON.parse(body) as {

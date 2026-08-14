@@ -56,14 +56,39 @@ async function githubOAuthFetch<T>(token: string, url: string) {
   return response.json() as Promise<T>;
 }
 
+export async function fetchGithubCurrentUserContext(token: string) {
+  const response = await fetch("https://api.github.com/user", {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      `GitHub owner lookup failed (${response.status}): ${await response.text()}`
+    );
+  }
+  const user = (await response.json()) as { login?: string };
+  const scopesHeader = response.headers.get("x-oauth-scopes");
+  return {
+    login:
+      typeof user.login === "string" && user.login.trim()
+        ? user.login.trim()
+        : null,
+    oauthScopes:
+      scopesHeader === null
+        ? null
+        : scopesHeader
+            .split(",")
+            .map((scope) => scope.trim())
+            .filter(Boolean),
+  };
+}
+
 export async function fetchGithubCurrentUserLogin(token: string) {
-  const user = await githubOAuthFetch<{ login?: string }>(
-    token,
-    "https://api.github.com/user"
-  );
-  return typeof user.login === "string" && user.login.trim()
-    ? user.login.trim()
-    : null;
+  return (await fetchGithubCurrentUserContext(token)).login;
 }
 
 export async function fetchGithubUserOrgs(token: string) {

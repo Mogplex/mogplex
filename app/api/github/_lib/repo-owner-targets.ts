@@ -1,6 +1,6 @@
 import {
   buildGithubRepoOwnerTargets,
-  fetchGithubCurrentUserLogin,
+  fetchGithubCurrentUserContext,
   fetchGithubUserOrgs,
   filterCreatableGithubOrgLogins,
 } from "@/lib/github-owners";
@@ -10,7 +10,7 @@ export async function loadGithubRepoCreationOwnerTargets(
   userId: string,
   token: string
 ) {
-  const [profileResult, installationsResult, currentLogin] = await Promise.all([
+  const [profileResult, installationsResult, currentUser] = await Promise.all([
     supabaseAdmin
       .from("profiles")
       .select("github_username")
@@ -21,7 +21,10 @@ export async function loadGithubRepoCreationOwnerTargets(
       .select("installation_id, account_login, account_type, target_type")
       .eq("user_id", userId)
       .order("created_at", { ascending: false }),
-    fetchGithubCurrentUserLogin(token).catch(() => null),
+    fetchGithubCurrentUserContext(token).catch(() => ({
+      login: null,
+      oauthScopes: null,
+    })),
   ]);
 
   if (profileResult.error) {
@@ -49,9 +52,10 @@ export async function loadGithubRepoCreationOwnerTargets(
   const creatableOrgSet = new Set(
     creatableOrgLogins.map((login) => login.toLowerCase())
   );
-  return buildGithubRepoOwnerTargets({
+  const targets = buildGithubRepoOwnerTargets({
     githubUsername:
-      currentLogin || (profileResult.data?.github_username as string | null),
+      currentUser.login ||
+      (profileResult.data?.github_username as string | null),
     installations: installationsResult.data || [],
     orgLogins: creatableOrgLogins,
   }).filter(
@@ -59,4 +63,5 @@ export async function loadGithubRepoCreationOwnerTargets(
       target.kind === "personal" ||
       creatableOrgSet.has(target.login.toLowerCase())
   );
+  return { targets, oauthScopes: currentUser.oauthScopes };
 }

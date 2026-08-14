@@ -19,6 +19,11 @@ import { useModels } from "@/hooks/use-models";
 import { fetchWithActiveTeam } from "@/components/active-scope-provider";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import { validateGithubRepoName } from "@/lib/github-repo-name";
+import {
+  GITHUB_ORG_READ_SCOPE,
+  GITHUB_REAUTHORIZE_HEADER,
+} from "@/lib/github-oauth";
+import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import type { Repo } from "@/lib/types";
 import {
   defaultProjectChoice,
@@ -32,11 +37,7 @@ import {
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
-import {
-  NewProjectFields,
-  type AvailabilityState,
-  type GithubOwnerTarget,
-} from "./new-project-fields";
+import { NewProjectFields, type AvailabilityState } from "./new-project-fields";
 
 const NEW_PROJECT = "new";
 const LAST_GITHUB_OWNER_KEY = "mogplex:last-github-repo-owner";
@@ -59,10 +60,14 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
   // no repos are connected). Repos load async, so the default resolves late.
   const [choice, setChoice] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
-  const [ownerTargets, setOwnerTargets] = useState<GithubOwnerTarget[]>([]);
+  const [ownerTargets, setOwnerTargets] = useState<GithubRepoOwnerTarget[]>([]);
   const [ownerLogin, setOwnerLogin] = useState("");
   const [ownersLoading, setOwnersLoading] = useState(true);
   const [ownersError, setOwnersError] = useState<string | null>(null);
+  const [ownersAction, setOwnersAction] = useState<{
+    href: string;
+    label: string;
+  } | null>(null);
   const [availability, setAvailability] = useState<AvailabilityState>("idle");
   const [projectError, setProjectError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -98,6 +103,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
     const controller = new AbortController();
     setOwnersLoading(true);
     setOwnersError(null);
+    setOwnersAction(null);
     fetch("/api/github/owners", {
       cache: "no-store",
       signal: controller.signal,
@@ -105,15 +111,26 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
       .then(async (response) => {
         if (!response.ok) throw new Error("GitHub accounts unavailable");
         const data = (await response.json()) as unknown;
-        return Array.isArray(data) ? (data as GithubOwnerTarget[]) : [];
+        return {
+          targets: Array.isArray(data) ? (data as GithubRepoOwnerTarget[]) : [],
+          reauthorizeScope: response.headers.get(GITHUB_REAUTHORIZE_HEADER),
+        };
       })
-      .then((targets) => {
+      .then(({ targets, reauthorizeScope }) => {
         setOwnerTargets(targets);
         const saved = window.localStorage.getItem(LAST_GITHUB_OWNER_KEY);
         const preferred = targets.find(
           (target) => target.login.toLowerCase() === saved?.toLowerCase()
         );
         setOwnerLogin(preferred?.login ?? targets[0]?.login ?? "");
+        const reconnectHref = `/api/auth/login/github?next=${encodeURIComponent(window.location.pathname)}`;
+        if (targets.length === 0) {
+          setOwnersError("GitHub must be connected to create a project.");
+          setOwnersAction({ href: reconnectHref, label: "Connect GitHub" });
+        } else if (reauthorizeScope === GITHUB_ORG_READ_SCOPE) {
+          setOwnersError("Reconnect GitHub to use organization accounts.");
+          setOwnersAction({ href: reconnectHref, label: "Reconnect GitHub" });
+        }
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -122,6 +139,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
         setOwnerTargets([]);
         setOwnerLogin("");
         setOwnersError("GitHub accounts unavailable.");
+        setOwnersAction(null);
       })
       .finally(() => {
         if (!controller.signal.aborted) setOwnersLoading(false);
@@ -323,6 +341,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
               onOwnerChange={setOwnerLogin}
               ownersLoading={ownersLoading}
               ownersError={ownersError}
+              ownersAction={ownersAction}
               name={newProjectName}
               onNameChange={setNewProjectName}
               namePlaceholder={deriveProjectName(text)}
