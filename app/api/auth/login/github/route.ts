@@ -6,6 +6,7 @@ import {
   WAITLIST_COOKIE_NAME,
   verifyWaitlistCookieValue,
 } from "@/lib/waitlist";
+import { GITHUB_OAUTH_SCOPE } from "@/lib/github-oauth";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     provider: "github",
     options: {
       redirectTo: callbackUrl.toString(),
-      scopes: "read:user user:email repo",
+      scopes: GITHUB_OAUTH_SCOPE,
     },
   });
 

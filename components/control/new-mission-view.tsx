@@ -30,8 +30,9 @@ export function NewMissionView({
     text: string,
     project: string,
     repoId: string | null,
-    options: ComposerSendOptions
-  ) => void;
+    options: ComposerSendOptions,
+    createdRepo?: Repo
+  ) => Promise<boolean>;
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
 }) {

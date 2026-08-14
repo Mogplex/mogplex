@@ -1,6 +1,7 @@
 import type { GithubRepoPayload } from "@/lib/github-sync";
 
 export type GithubRepoVisibility = "public" | "private";
+export type GithubRepoAvailability = "available" | "taken" | "unverified";
 
 export class GithubRepoCreateError extends Error {
   status: number;
@@ -51,6 +52,32 @@ export async function createGithubRepo(
   }
 
   return response.json() as Promise<GithubRepoPayload>;
+}
+
+export async function checkGithubRepoAvailability(
+  token: string,
+  owner: string,
+  name: string
+): Promise<GithubRepoAvailability> {
+  const response = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cache: "no-store",
+    }
+  );
+
+  if (response.status === 404) return "available";
+  if (response.ok) return "taken";
+  if (response.status === 403 || response.status === 429) return "unverified";
+
+  throw new Error(
+    `GitHub repo availability check failed (${response.status}): ${await response.text()}`
+  );
 }
 
 export function extractGithubApiErrorMessage(body: string) {
