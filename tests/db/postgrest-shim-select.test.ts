@@ -5,6 +5,7 @@ import {
   createPostgrestTestDb,
   type TestIds,
   USER_A,
+  USER_B,
 } from "./helpers/postgrest-shim-fixtures";
 
 let pglite: PGlite;
@@ -174,6 +175,19 @@ describe("select + filters", () => {
       .or(`last_active_at.is.null,last_active_at.lt.${cutoff}`)
       .order("name");
     expect(orTemplate.data).toEqual([{ name: "alpha" }, { name: "beta" }]);
+  });
+
+  it("supports nested and() groups inside or() filters", async () => {
+    const nestedGroups = await db
+      .from("repos")
+      .select("name")
+      .or(
+        `and(user_id.eq.${USER_A},name.eq.alpha),and(user_id.eq.${USER_B},name.eq.gamma)`
+      )
+      .order("name");
+
+    expect(nestedGroups.error).toBeNull();
+    expect(nestedGroups.data).toEqual([{ name: "alpha" }, { name: "gamma" }]);
   });
 
   it("orders with nulls handling, limits, and ranges", async () => {

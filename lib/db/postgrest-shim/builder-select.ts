@@ -3,10 +3,12 @@
 import { SchemaCache } from "../schema-cache";
 import {
   compileColumnPath,
+  compileBooleanFilter,
   compileFilter,
   parseSelect,
   quoteIdent,
   SqlBuilder,
+  type BooleanFilter,
   type Filter,
   type ParsedEmbed,
   type ParsedSelect,
@@ -23,7 +25,7 @@ export type SelectBuilderState = {
   countMode: "exact" | null;
   head: boolean;
   filters: Filter[];
-  orFilters: Filter[][];
+  orFilters: BooleanFilter[][];
   orders: Order[];
   limit: number | null;
   offset: number | null;
@@ -141,7 +143,7 @@ export async function buildWhere(
   table: string,
   qualifier: string,
   tableFilters: Filter[],
-  orFilters: Filter[][],
+  orFilters: BooleanFilter[][],
   parsed: ParsedSelect | null,
   embedFilters: Map<string, Filter[]>,
   sql: SqlBuilder,
@@ -151,7 +153,9 @@ export async function buildWhere(
     compileFilter(filter, qualifier, sql)
   );
   for (const group of orFilters) {
-    const parts = group.map((filter) => compileFilter(filter, qualifier, sql));
+    const parts = group.map((filter) =>
+      compileBooleanFilter(filter, qualifier, sql)
+    );
     conditions.push(`(${parts.join(" OR ")})`);
   }
   // !inner embeds constrain parent rows to those with a matching embed row.

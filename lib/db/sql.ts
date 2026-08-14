@@ -74,6 +74,13 @@ export type Filter = {
   negated: boolean;
 };
 
+export type BooleanFilter =
+  | Filter
+  | {
+      operator: "and" | "or";
+      filters: BooleanFilter[];
+    };
+
 const OP_SQL: Record<string, string> = {
   eq: "=",
   neq: "<>",
@@ -147,22 +154,57 @@ const IS_VALUES: Record<string, unknown> = {
   false: false,
 };
 
-// Parses PostgREST's or() condition string: `a.is.null,b.neq.stopped,c.gt.5`.
-export function parseOrString(conditions: string): Filter[] {
-  return splitTopLevel(conditions).map((part) => {
-    const match = part.match(OR_PART_PATTERN);
-    if (!match) {
+function parseBooleanFilter(part: string): BooleanFilter {
+  for (const operator of ["and", "or"] as const) {
+    const prefix = `${operator}(`;
+    if (!part.startsWith(prefix)) continue;
+    if (!part.endsWith(")")) {
       throw new Error(
         `postgrest-shim: cannot parse or() part ${JSON.stringify(part)}`
       );
     }
-    const [, path, notPrefix, op, rawValue] = match;
-    const value =
-      (op === "is" || op === "isdistinct") && rawValue in IS_VALUES
-        ? IS_VALUES[rawValue]
-        : rawValue;
-    return { path, op, value, negated: Boolean(notPrefix) };
-  });
+    const filters = splitTopLevel(part.slice(prefix.length, -1)).map(
+      parseBooleanFilter
+    );
+    if (filters.length === 0) {
+      throw new Error(
+        `postgrest-shim: cannot parse or() part ${JSON.stringify(part)}`
+      );
+    }
+    return { operator, filters };
+  }
+
+  const match = part.match(OR_PART_PATTERN);
+  if (!match) {
+    throw new Error(
+      `postgrest-shim: cannot parse or() part ${JSON.stringify(part)}`
+    );
+  }
+  const [, path, notPrefix, op, rawValue] = match;
+  const value =
+    (op === "is" || op === "isdistinct") && rawValue in IS_VALUES
+      ? IS_VALUES[rawValue]
+      : rawValue;
+  return { path, op, value, negated: Boolean(notPrefix) };
+}
+
+export function compileBooleanFilter(
+  filter: BooleanFilter,
+  qualifier: string,
+  sql: SqlBuilder
+): string {
+  if (!("operator" in filter)) return compileFilter(filter, qualifier, sql);
+
+  const separator = filter.operator === "and" ? " AND " : " OR ";
+  return `(${filter.filters
+    .map((child) => compileBooleanFilter(child, qualifier, sql))
+    .join(separator)})`;
+}
+
+// Parses PostgREST's or() condition string, including nested boolean groups:
+// `a.is.null,and(b.eq.ready,c.gt.5)`.
+export function parseOrString(conditions: string): BooleanFilter[] {
+  return splitTopLevel(conditions).map(parseBooleanFilter);
 }
 
 // ---------------------------------------------------------------------------
