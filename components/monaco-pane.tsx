@@ -54,8 +54,16 @@ function createMonacoColorConverter() {
       throw new Error(`Invalid Monaco theme color: ${color}`)
     }
 
-    context.clearRect(0, 0, 1, 1)
+    context.fillStyle = "#010203"
     context.fillStyle = color
+    const firstParse = context.fillStyle
+    context.fillStyle = "#040506"
+    context.fillStyle = color
+    if (context.fillStyle !== firstParse) {
+      throw new Error(`Unsupported Monaco theme color: ${color}`)
+    }
+
+    context.clearRect(0, 0, 1, 1)
     context.fillRect(0, 0, 1, 1)
     const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data
     const toHex = (channel: number) => channel.toString(16).padStart(2, "0")

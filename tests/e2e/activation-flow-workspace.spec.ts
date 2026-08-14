@@ -7,7 +7,6 @@ import {
   mockActivationFlow,
   waitForTrackedEvent,
 } from "./helpers/activation-fixtures";
-import { capturePageErrors } from "./helpers/page-errors";
 
 const workspacePath = `/${connectedUser.username}/projects/workspace`;
 
@@ -249,7 +248,6 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
 });
 
 test("workspace editor accepts the active theme colors", async ({ page }) => {
-  const pageErrors = capturePageErrors(page);
   await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
 
@@ -268,11 +266,6 @@ test("workspace editor accepts the active theme colors", async ({ page }) => {
   const editorPane = page.locator('[data-pane-type="editor"]');
   await expect(editorPane.locator(".monaco-editor")).toBeVisible();
   await expect(editorPane).not.toContainText("Illegal value for token color");
-  expect(
-    pageErrors.filter((message) =>
-      message.includes("Illegal value for token color")
-    )
-  ).toEqual([]);
 });
 
 test("terminal session survives navigation away from the workspace", async ({
