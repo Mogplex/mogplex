@@ -1,4 +1,5 @@
 import type { Connection } from "@/lib/types";
+import { needsNativeOAuthMigration } from "./presets";
 
 export type ConnectionDisplayState = {
   isDisabled: boolean;
@@ -17,7 +18,7 @@ export type PresetConnectionState = {
 
 export type PresetConnectionDisplayInput = {
   presetId: string;
-  usesManagedConnectionAuth: boolean;
+  requiresOAuth: boolean;
 };
 
 function getPresetConnectionRank(
@@ -35,15 +36,14 @@ export function getConnectionDisplayState(
     Connection,
     "id" | "auth_type" | "health_status" | "is_enabled" | "oauth_authorized_at"
   > & {
-    needsManagedAuthReconnect?: boolean;
+    needsOAuthMigration?: boolean;
   },
   excludedIds: ReadonlySet<string> = new Set()
 ): ConnectionDisplayState {
   const isDisabled = !connection.is_enabled;
   const isExcluded = excludedIds.has(connection.id);
-  const needsManagedAuthReconnect =
-    connection.needsManagedAuthReconnect === true;
-  const oauthActionLabel = needsManagedAuthReconnect
+  const needsOAuthMigration = connection.needsOAuthMigration === true;
+  const oauthActionLabel = needsOAuthMigration
     ? "Reconnect"
     : connection.auth_type === "oauth"
       ? connection.oauth_authorized_at
@@ -88,17 +88,17 @@ export function getPresetConnectionState(
     };
   }
 
-  const legacyManagedAuthConnection =
-    preset.usesManagedConnectionAuth && connection.auth_type !== "oauth";
+  const needsOAuthMigration =
+    preset.requiresOAuth && needsNativeOAuthMigration(connection);
   const state = getConnectionDisplayState(
     {
       ...connection,
-      needsManagedAuthReconnect: legacyManagedAuthConnection,
+      needsOAuthMigration,
     },
     excludedIds
   );
   const pendingOAuthAuthorization =
-    !legacyManagedAuthConnection &&
+    !needsOAuthMigration &&
     connection.auth_type === "oauth" &&
     !connection.oauth_authorized_at;
   const detail =
@@ -108,15 +108,13 @@ export function getPresetConnectionState(
         ? "Disabled"
         : state.isExcluded
           ? "Excluded from this project"
-          : legacyManagedAuthConnection
-            ? "Reconnect with OAuth to replace the legacy token-based setup"
+          : needsOAuthMigration
+            ? "Reconnect with OAuth to migrate this connection to native authorization"
             : pendingOAuthAuthorization
               ? "OAuth authorization required"
               : null;
   const label =
-    state.isAvailable &&
-    !pendingOAuthAuthorization &&
-    !legacyManagedAuthConnection
+    state.isAvailable && !pendingOAuthAuthorization && !needsOAuthMigration
       ? "Connected"
       : "Configured";
 

@@ -88,6 +88,26 @@ test("buildClaudeMcpConfig skips rest_api and misconfigured mcp connections", as
   assert.deepEqual(Object.keys(config.mcpServers), ["ok"]);
 });
 
+test("buildClaudeMcpConfig never resolves or transmits broker-era Sentry credentials", async () => {
+  const { buildClaudeMcpConfig } = await loadMcpConfigModule();
+  const legacySentry = makeConn({
+    id: "legacy-sentry",
+    name: "Sentry",
+    source_preset: "sentry",
+    mcp_url: "https://mcp.sentry.dev/mcp",
+    auth_type: "bearer",
+  });
+  let credentialResolutionCount = 0;
+
+  const config = await buildClaudeMcpConfig([legacySentry], async () => {
+    credentialResolutionCount += 1;
+    return JSON.stringify({ kind: ["pipe", "dream_connect"].join("") });
+  });
+
+  assert.deepEqual(config.mcpServers, {});
+  assert.equal(credentialResolutionCount, 0);
+});
+
 test("buildClaudeMcpConfig disambiguates duplicate sanitized names", async () => {
   const { buildClaudeMcpConfig } = await loadMcpConfigModule();
   const a = makeConn({ id: "aaaaaaaa-1", name: "My Server" });

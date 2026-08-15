@@ -53,15 +53,11 @@ export function useConnectionActions({
     []
   );
 
-  const initiateOAuth = useCallback(
-    (conn: Pick<Connection, "id" | "source_preset">) => {
-      window.location.href = getConnectionAuthorizationPath({
-        connectionId: conn.id,
-        sourcePreset: conn.source_preset,
-      });
-    },
-    []
-  );
+  const initiateOAuth = useCallback((conn: Pick<Connection, "id">) => {
+    window.location.href = getConnectionAuthorizationPath({
+      connectionId: conn.id,
+    });
+  }, []);
 
   const addPresetConnection = useCallback(
     async (

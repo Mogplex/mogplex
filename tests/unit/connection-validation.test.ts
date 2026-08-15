@@ -38,7 +38,7 @@ test("oauth presets normalize without requiring an inline credential", () => {
   assert.equal(input.source_preset, "notion");
 });
 
-test("managed auth presets normalize without inline credentials or OAuth client fields", () => {
+test("native OAuth presets normalize without inline credentials or OAuth client fields", () => {
   const input = normalizeConnectionCreateInput({
     source_preset: "sentry",
     credentials: "",
@@ -135,7 +135,7 @@ test("mcp_server connections reject private network targets", () => {
   );
 });
 
-test("managed auth oauth presets are not treated as misconfigured without native OAuth endpoints", () => {
+test("dynamic OAuth presets are not treated as misconfigured before discovery", () => {
   assert.equal(
     isConnectionMisconfigured({
       type: "mcp_server",
@@ -144,10 +144,47 @@ test("managed auth oauth presets are not treated as misconfigured without native
       mcp_url: "https://mcp.sentry.dev/mcp",
       mcp_transport: "http",
       oauth_client_id: null,
+      oauth_authorized_at: null,
       oauth_authorize_url: null,
       oauth_token_url: null,
       source_preset: "sentry",
     }),
     false
+  );
+});
+
+test("broker-era OAuth preset rows stay out of runtime until native reconnect", () => {
+  assert.equal(
+    isConnectionMisconfigured({
+      type: "mcp_server",
+      auth_type: "bearer",
+      base_url: null,
+      mcp_url: "https://mcp.sentry.dev/mcp",
+      mcp_transport: "http",
+      oauth_client_id: null,
+      oauth_authorized_at: null,
+      oauth_authorize_url: null,
+      oauth_token_url: null,
+      source_preset: "sentry",
+    }),
+    true
+  );
+});
+
+test("authorized broker-era OAuth rows stay out of runtime until native reconnect", () => {
+  assert.equal(
+    isConnectionMisconfigured({
+      type: "mcp_server",
+      auth_type: "oauth",
+      base_url: null,
+      mcp_url: "https://mcp.sentry.dev/mcp",
+      mcp_transport: "http",
+      oauth_client_id: null,
+      oauth_authorized_at: "2026-03-18T00:00:00.000Z",
+      oauth_authorize_url: null,
+      oauth_token_url: null,
+      source_preset: "sentry",
+    }),
+    true
   );
 });

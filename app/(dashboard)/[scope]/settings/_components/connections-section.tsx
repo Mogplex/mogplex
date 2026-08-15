@@ -8,7 +8,6 @@ import { fetchJsonObject } from "@/lib/client-fetch"
 import {
   CONNECTION_PRESETS,
   getConnectionAuthorizationPath,
-  usesManagedConnectionAuth,
 } from "@/lib/connections/presets"
 import { getPresetConnectionState } from "@/lib/connections/presentation"
 import { SlackFill } from "@/components/settings/icons"
@@ -65,10 +64,9 @@ export function ConnectionsSection() {
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
   }, [oauthStatus, pathname, router])
 
-  const initiateOAuth = useCallback((connection: Pick<Connection, "id" | "source_preset">) => {
+  const initiateOAuth = useCallback((connection: Pick<Connection, "id">) => {
     window.location.href = getConnectionAuthorizationPath({
       connectionId: connection.id,
-      sourcePreset: connection.source_preset,
     })
   }, [])
 
@@ -80,7 +78,7 @@ export function ConnectionsSection() {
           getPresetConnectionState(
             {
               presetId: preset.id,
-              usesManagedConnectionAuth: usesManagedConnectionAuth(preset),
+              requiresOAuth: preset.auth_type === "oauth",
             },
             connections
           ),

@@ -237,7 +237,7 @@ export function PresetGrid({
                   )}
                   {preset.auth_type === "oauth" ? (
                     <div className="text-[11px] text-muted-foreground leading-tight">
-                      {getConnectionPresetAuthorizationDescription(preset)}
+                      {getConnectionPresetAuthorizationDescription()}
                     </div>
                   ) : (
                     preset.auth_fields.map(field => (

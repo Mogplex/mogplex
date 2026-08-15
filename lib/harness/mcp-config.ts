@@ -92,7 +92,7 @@ export async function buildClaudeMcpConfig(
   // the rejected case loses the input — and the original code's
   // `if (result.status !== "fulfilled") continue` silently dropped any
   // MCP whose credential resolution failed (expired refresh token,
-  // Pipedream broker outage, etc.). Now each rejection flows through
+  // OAuth provider outage, etc.). Now each rejection flows through
   // the connection_runtime_load_failed emit on the harness surface.
   type ResolveOutcome =
     | {

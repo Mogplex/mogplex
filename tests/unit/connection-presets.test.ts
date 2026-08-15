@@ -109,23 +109,30 @@ test("manual setup hint calls out removed advanced providers", () => {
   assert.match(CONNECTION_PRESET_MANUAL_HINT, /Add Connection/);
 });
 
-test("managed auth presets route through the brokered authorization endpoint", () => {
+test("oauth presets route through Mogplex native OAuth authorization", () => {
   assert.equal(
     getConnectionAuthorizationPath({
       connectionId: "conn-sentry",
-      sourcePreset: "sentry",
     }),
-    "/api/connections/managed-auth?connectionId=conn-sentry"
+    "/api/connections/oauth?connectionId=conn-sentry"
   );
   assert.equal(
     getConnectionAuthorizationPath({
       connectionId: "conn-notion",
-      sourcePreset: "notion",
     }),
     "/api/connections/oauth?connectionId=conn-notion"
   );
   assert.match(
-    getConnectionPresetAuthorizationDescription(getConnectionPreset("sentry")),
-    /Pipedream Connect/
+    getConnectionPresetAuthorizationDescription(),
+    /Mogplex will discover the MCP auth server/
   );
+
+  assert.deepEqual(getConnectionPreset("sentry")?.oauth_config, {
+    discovery: "rfc9728",
+    registration: "dynamic",
+    use_pkce: true,
+    use_resource_indicator: true,
+    token_endpoint_auth_method: "none",
+    scopes: ["org:read", "project:write", "team:write", "event:write"],
+  });
 });

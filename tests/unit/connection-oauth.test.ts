@@ -3,6 +3,8 @@ import test from "node:test";
 import type { Connection } from "../../lib/types";
 import { encrypt } from "../../lib/connections/encryption";
 
+type FetchInput = string | URL | Request;
+
 function createConnection(overrides: Partial<Connection> = {}): Connection {
   return {
     id: "conn-oauth",
@@ -43,11 +45,6 @@ async function loadOAuthHelpers() {
   // Test-only key so connection-encryption helpers can run in isolation.
   process.env.CONNECTIONS_ENCRYPTION_KEY =
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-  process.env.PIPEDREAM_CLIENT_ID = "pd-client";
-  process.env.PIPEDREAM_CLIENT_SECRET = "pd-secret";
-  process.env.PIPEDREAM_PROJECT_ID = "proj_test";
-  process.env.PIPEDREAM_PROJECT_ENVIRONMENT = "development";
-  process.env.PIPEDREAM_CONNECT_WEBHOOK_SIGNING_KEY = "pd-webhook-secret";
   return import("../../lib/connections/oauth");
 }
 
@@ -69,6 +66,7 @@ test("buildAuthorizeUrl adds PKCE parameters and provider-specific authorize par
       {
         codeChallenge: generatePkceChallenge(verifier),
         authorizeParams: { prompt: "consent" },
+        resource: "https://mcp.notion.com/mcp",
       }
     )
   );
@@ -77,12 +75,330 @@ test("buildAuthorizeUrl adds PKCE parameters and provider-specific authorize par
   assert.equal(authorizeUrl.searchParams.get("state"), "state-123");
   assert.equal(authorizeUrl.searchParams.get("code_challenge_method"), "S256");
   assert.equal(authorizeUrl.searchParams.get("prompt"), "consent");
+  assert.equal(
+    authorizeUrl.searchParams.get("resource"),
+    "https://mcp.notion.com/mcp"
+  );
 });
 
-test("getValidAccessToken resolves brokered Sentry OAuth credentials through Pipedream", async () => {
+test("exchangeCodeForTokens binds the token request to the Sentry MCP resource", async () => {
   const originalFetch = global.fetch;
 
-  global.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (isStoredConnectionStateFetch(url)) {
+      return Response.json({
+        encrypted_credentials: encrypt(JSON.stringify({})),
+      });
+    }
+
+    if (url === "https://mcp.sentry.dev/oauth/token") {
+      const body = new URLSearchParams(String(init?.body));
+      assert.equal(body.get("grant_type"), "authorization_code");
+      assert.equal(body.get("resource"), "https://mcp.sentry.dev/mcp");
+      assert.equal(body.get("code_verifier"), "pkce-verifier");
+      return Response.json({
+        access_token: "sentry-mcp-access-token",
+        refresh_token: "sentry-mcp-refresh-token",
+        expires_in: 3600,
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { exchangeCodeForTokens } = await loadOAuthHelpers();
+    const tokens = await exchangeCodeForTokens(
+      createConnection({
+        source_preset: "sentry",
+        mcp_url: "https://mcp.sentry.dev/mcp",
+        oauth_client_id: "sentry-client",
+        oauth_authorize_url: "https://mcp.sentry.dev/oauth/authorize",
+        oauth_token_url: "https://mcp.sentry.dev/oauth/token",
+      }),
+      "authorization-code",
+      "https://mogplex.example/api/connections/oauth/callback",
+      { codeVerifier: "pkce-verifier" }
+    );
+
+    assert.equal(tokens.access_token, "sentry-mcp-access-token");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("native OAuth preparation accepts broker-era Sentry rows only for OAuth presets", async () => {
+  const { canPrepareOAuthConnection } = await loadOAuthHelpers();
+
+  assert.equal(
+    canPrepareOAuthConnection(
+      createConnection({ auth_type: "bearer", source_preset: "sentry" })
+    ),
+    true
+  );
+  assert.equal(
+    canPrepareOAuthConnection(
+      createConnection({ auth_type: "bearer", source_preset: "supabase" })
+    ),
+    false
+  );
+});
+
+test("prepareOAuthConnection replaces legacy scopes with the native Sentry preset contract", async () => {
+  const originalFetch = global.fetch;
+  const updateBodies: Array<Record<string, unknown>> = [];
+
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (
+      url === "https://mcp.sentry.dev/mcp/.well-known/oauth-protected-resource"
+    ) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    if (
+      url === "https://mcp.sentry.dev/.well-known/oauth-protected-resource/mcp"
+    ) {
+      return Response.json({
+        resource: "https://mcp.sentry.dev/mcp",
+        authorization_servers: ["https://mcp.sentry.dev"],
+      });
+    }
+    if (
+      url === "https://mcp.sentry.dev/.well-known/oauth-authorization-server"
+    ) {
+      return Response.json({
+        authorization_endpoint: "https://mcp.sentry.dev/oauth/authorize",
+        token_endpoint: "https://mcp.sentry.dev/oauth/token",
+        registration_endpoint: "https://mcp.sentry.dev/oauth/register",
+      });
+    }
+    if (url === "https://mcp.sentry.dev/oauth/register") {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      assert.equal(body.scope, "org:read project:write team:write event:write");
+      return Response.json({ client_id: "native-sentry-client" });
+    }
+    if (url.startsWith("https://example.supabase.co/rest/v1/connections?")) {
+      updateBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>
+      );
+      return Response.json({});
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { prepareOAuthConnection } = await loadOAuthHelpers();
+    const prepared = await prepareOAuthConnection(
+      createConnection({
+        auth_type: "bearer",
+        source_preset: "sentry",
+        mcp_url: "https://mcp.sentry.dev/mcp",
+        oauth_client_id: null,
+        oauth_authorize_url: null,
+        oauth_token_url: null,
+        oauth_scopes: "event:read",
+      }),
+      {
+        redirectUri: "https://mogplex.example/api/connections/oauth/callback",
+        origin: "https://mogplex.example",
+      }
+    );
+
+    assert.equal(prepared.connection.oauth_client_id, "native-sentry-client");
+    assert.equal(prepared.connection.auth_type, "bearer");
+    assert.equal(
+      prepared.connection.oauth_scopes,
+      "org:read project:write team:write event:write"
+    );
+    assert.equal(updateBodies.length, 2);
+    assert.equal(
+      updateBodies[0]?.oauth_scopes,
+      "org:read project:write team:write event:write"
+    );
+    assert.equal(updateBodies[0]?.auth_type, undefined);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("prepareOAuthConnection refreshes PKCE and preset scopes for a registered Sentry client", async () => {
+  const originalFetch = global.fetch;
+  const updateBodies: Array<Record<string, unknown>> = [];
+
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (url.startsWith("https://example.supabase.co/rest/v1/connections?")) {
+      updateBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>
+      );
+      return Response.json({});
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { prepareOAuthConnection } = await loadOAuthHelpers();
+    const prepared = await prepareOAuthConnection(
+      createConnection({
+        source_preset: "sentry",
+        mcp_url: "https://mcp.sentry.dev/mcp",
+        oauth_client_id: "registered-sentry-client",
+        oauth_authorize_url: "https://mcp.sentry.dev/oauth/authorize",
+        oauth_token_url: "https://mcp.sentry.dev/oauth/token",
+        oauth_scopes: "event:read",
+      }),
+      {
+        redirectUri: "https://mogplex.example/api/connections/oauth/callback",
+        origin: "https://mogplex.example",
+      }
+    );
+
+    assert.ok(prepared.codeVerifier);
+    assert.ok(prepared.codeVerifier.length >= 43);
+    assert.equal(
+      prepared.connection.oauth_scopes,
+      "org:read project:write team:write event:write"
+    );
+    assert.equal(updateBodies.length, 1);
+    assert.equal(updateBodies[0]?.auth_type, undefined);
+    assert.equal(
+      updateBodies[0]?.oauth_scopes,
+      "org:read project:write team:write event:write"
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("storeOAuthTokensWithRetry completes legacy migration only with the token write", async () => {
+  const originalFetch = global.fetch;
+  const tokenWrites: Array<Record<string, unknown>> = [];
+  const storedState = {
+    encrypted_credentials: encrypt(
+      JSON.stringify({ access_token: "native-access-token" })
+    ),
+    updated_at: "2026-04-22T00:01:00.000Z",
+    oauth_authorized_at: "2026-04-22T00:01:00.000Z",
+    oauth_token_expires_at: "2026-04-22T01:01:00.000Z",
+  };
+
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (
+      url.startsWith("https://example.supabase.co/rest/v1/connections?") &&
+      init?.method === "PATCH"
+    ) {
+      tokenWrites.push(
+        JSON.parse(String(init.body)) as Record<string, unknown>
+      );
+      return Response.json(storedState);
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { storeOAuthTokensWithRetry } = await loadOAuthHelpers();
+    const stored = await storeOAuthTokensWithRetry(
+      "conn-oauth",
+      {
+        encrypted_credentials: encrypt(
+          JSON.stringify({ credential: "legacy-broker-token" })
+        ),
+        updated_at: "2026-04-22T00:00:00.000Z",
+        oauth_authorized_at: null,
+        oauth_token_expires_at: null,
+      },
+      { access_token: "native-access-token", expires_in: 3600 }
+    );
+
+    assert.deepEqual(stored, storedState);
+    assert.equal(tokenWrites.length, 1);
+    assert.equal(tokenWrites[0]?.auth_type, "oauth");
+    assert.ok(typeof tokenWrites[0]?.encrypted_credentials === "string");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("storeOAuthTokensWithRetry fails when both token writes lose the CAS race", async () => {
+  const originalFetch = global.fetch;
+  let patchCount = 0;
+  const staleState = {
+    encrypted_credentials: encrypt(
+      JSON.stringify({ credential: "legacy-broker-token" })
+    ),
+    updated_at: "2026-04-22T00:00:00.000Z",
+    oauth_authorized_at: null,
+    oauth_token_expires_at: null,
+  };
+
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (
+      url.startsWith("https://example.supabase.co/rest/v1/connections?") &&
+      init?.method === "PATCH"
+    ) {
+      patchCount += 1;
+      return Response.json(null);
+    }
+    if (isStoredConnectionStateFetch(url) && init?.method === "GET") {
+      return Response.json(staleState);
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { storeOAuthTokensWithRetry } = await loadOAuthHelpers();
+    const stored = await storeOAuthTokensWithRetry("conn-oauth", staleState, {
+      access_token: "native-access-token",
+    });
+
+    assert.equal(patchCount, 2);
+    assert.equal(stored, null);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("getValidAccessToken returns a native Sentry MCP OAuth token", async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (input: FetchInput) => {
     const url =
       typeof input === "string"
         ? input
@@ -94,55 +410,13 @@ test("getValidAccessToken resolves brokered Sentry OAuth credentials through Pip
       return Response.json({
         encrypted_credentials: encrypt(
           JSON.stringify({
-            kind: "pipedream_connect",
-            provider: "sentry",
-            account_id: "apn_sentry_123",
-            app_slug: "sentry",
-            account_name: "Acme Sentry",
-            external_user_id: "user-1",
-            authorized_scopes: ["event:read"],
-            connected_at: "2026-04-22T00:00:00.000Z",
-            expires_at: null,
+            access_token: "sentry-mcp-access-token",
+            refresh_token: "sentry-mcp-refresh-token",
           })
         ),
         updated_at: "2026-04-22T00:00:00.000Z",
         oauth_authorized_at: "2026-04-22T00:00:00.000Z",
-        oauth_token_expires_at: null,
-      });
-    }
-
-    if (url === "https://api.pipedream.com/v1/oauth/token") {
-      assert.equal(init?.method, "POST");
-      return Response.json({
-        access_token: "pd-access-token",
-        token_type: "Bearer",
-        expires_in: 3600,
-      });
-    }
-
-    if (
-      url ===
-      "https://api.pipedream.com/v1/connect/proj_test/accounts/apn_sentry_123?include_credentials=true"
-    ) {
-      return Response.json({
-        id: "apn_sentry_123",
-        name: "Acme Sentry",
-        external_id: "user-1",
-        healthy: true,
-        dead: null,
-        app: {
-          id: "oa_sentry",
-          name_slug: "sentry",
-          name: "Sentry",
-          auth_type: "oauth",
-        },
-        created_at: "2026-04-22T00:00:00.000Z",
-        updated_at: "2026-04-22T00:00:00.000Z",
-        authorized_scopes: ["event:read"],
-        credentials: {
-          oauth_access_token: "sentry-oauth-access-token",
-        },
-        expires_at: null,
+        oauth_token_expires_at: "2099-04-22T01:00:00.000Z",
       });
     }
 
@@ -154,32 +428,22 @@ test("getValidAccessToken resolves brokered Sentry OAuth credentials through Pip
     const accessToken = await getValidAccessToken(
       createConnection({
         source_preset: "sentry",
-        oauth_client_id: null,
-        oauth_authorize_url: null,
-        oauth_token_url: null,
+        oauth_client_id: "sentry-client",
+        oauth_authorize_url: "https://mcp.sentry.dev/oauth/authorize",
+        oauth_token_url: "https://mcp.sentry.dev/oauth/token",
         updated_at: "2026-04-22T00:00:00.000Z",
       })
     );
 
-    assert.equal(accessToken, "sentry-oauth-access-token");
+    assert.equal(accessToken, "sentry-mcp-access-token");
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test("getValidAccessToken warns when managed auth credentials cannot be decrypted", async () => {
+test("getValidAccessToken fails closed when native credentials cannot be decrypted", async () => {
   const originalFetch = global.fetch;
-  const originalWarn = console.warn;
-  let warned = false;
-
-  console.warn = (...args: unknown[]) => {
-    warned = true;
-    assert.equal(
-      args[0],
-      "[managed-auth] failed to decrypt managed auth credentials"
-    );
-  };
-  global.fetch = async (input: string | URL | Request) => {
+  global.fetch = async (input: FetchInput) => {
     const url =
       typeof input === "string"
         ? input
@@ -214,9 +478,7 @@ test("getValidAccessToken warns when managed auth credentials cannot be decrypte
         ),
       /Unsupported state or unable to authenticate data|Invalid authentication tag|unable to authenticate data/i
     );
-    assert.equal(warned, true);
   } finally {
     global.fetch = originalFetch;
-    console.warn = originalWarn;
   }
 });

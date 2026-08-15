@@ -4,7 +4,9 @@ import { buildAppUrl, getCanonicalAppUrl } from "@/lib/app-url";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildAuthorizeUrl,
+  canPrepareOAuthConnection,
   generatePkceChallenge,
+  getOAuthResourceIndicator,
   prepareOAuthConnection,
 } from "@/lib/connections/oauth";
 import { requireUserId } from "@/lib/auth";
@@ -40,7 +42,7 @@ export async function GET(req: Request) {
 
   try {
     const conn = data as Connection;
-    if (conn.auth_type !== "oauth") {
+    if (!canPrepareOAuthConnection(conn)) {
       return NextResponse.json(
         { error: "Connection is not configured for OAuth" },
         { status: 400 }
@@ -101,6 +103,7 @@ export async function GET(req: Request) {
           ? generatePkceChallenge(prepared.codeVerifier)
           : undefined,
         authorizeParams: preset?.oauth_config?.authorize_params,
+        resource: getOAuthResourceIndicator(resolvedConnection),
       }
     );
     return NextResponse.redirect(authorizeUrl);
