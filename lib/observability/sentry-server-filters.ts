@@ -18,6 +18,20 @@ function topFrameFilename(event: Sentry.Event): string {
   return frames.at(-1)?.filename ?? "";
 }
 
+const SCOPE_LAYOUT_MISSING_HEADERS_ERROR =
+  "ScopeLayout: x-mogplex-scope-* headers missing for scoped route";
+const VERCEL_SUSPENSE_CACHE_HOST_SUFFIX = ".suspense-cache.vercel-infra.com";
+
+function requestHeader(event: Sentry.Event, name: string): string {
+  const headers = event.request?.headers;
+  if (!headers) return "";
+
+  const entry = Object.entries(headers).find(
+    ([key]) => key.toLowerCase() === name.toLowerCase()
+  );
+  return entry?.[1] ?? "";
+}
+
 export function isDevelopmentHttpAbortEvent(event: Sentry.Event): boolean {
   return (
     event.environment === "development" &&
@@ -26,10 +40,27 @@ export function isDevelopmentHttpAbortEvent(event: Sentry.Event): boolean {
   );
 }
 
+export function isVercelSuspenseCacheScopeHeaderEvent(
+  event: Sentry.Event
+): boolean {
+  const suspenseCacheHost = requestHeader(
+    event,
+    "x-vercel-sc-host"
+  ).toLowerCase();
+
+  return (
+    exceptionValue(event) === SCOPE_LAYOUT_MISSING_HEADERS_ERROR &&
+    suspenseCacheHost.endsWith(VERCEL_SUSPENSE_CACHE_HOST_SUFFIX)
+  );
+}
+
 export function beforeSendServerEvent<TEvent extends Sentry.Event>(
   event: TEvent
 ): TEvent | null {
-  if (isDevelopmentHttpAbortEvent(event)) {
+  if (
+    isDevelopmentHttpAbortEvent(event) ||
+    isVercelSuspenseCacheScopeHeaderEvent(event)
+  ) {
     return null;
   }
 
