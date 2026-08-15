@@ -5,7 +5,7 @@ import type { SlackEventTaskDeps, SlackPostedMessageRef } from "./types";
 /** Slack rate-limits chat.update at roughly 1/sec/channel. */
 const SLACK_UPDATE_MIN_INTERVAL_MS = 1_000;
 
-function readSlackMessageRef(key: string): SlackPostedMessageRef | null {
+export function readSlackMessageRef(key: string): SlackPostedMessageRef | null {
   let stored: unknown;
   try {
     stored = metadata.get(key);
@@ -83,8 +83,10 @@ export async function updateMessageBestEffort(
 ) {
   try {
     await deps.updateMessage(botToken, input);
+    return true;
   } catch (error) {
     console.warn(`[slack-event] ${context} failed`, error);
+    return false;
   }
 }
 
@@ -96,8 +98,31 @@ export async function postMessageBestEffort(
 ) {
   try {
     await deps.postMessage(botToken, input);
+    return true;
   } catch (error) {
     console.warn(`[slack-event] ${label} failed`, error);
+    return false;
+  }
+}
+
+const SLACK_TERMINAL_STATE_METADATA_KEY = "slackTerminalState";
+
+export type SlackTerminalState = "delivered" | "failed";
+
+export function readSlackTerminalState(): SlackTerminalState | null {
+  try {
+    const state = metadata.get(SLACK_TERMINAL_STATE_METADATA_KEY);
+    return state === "delivered" || state === "failed" ? state : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSlackTerminalState(state: SlackTerminalState) {
+  try {
+    await metadata.set(SLACK_TERMINAL_STATE_METADATA_KEY, state).flush();
+  } catch {
+    // Unit tests invoke the task body without Trigger run metadata.
   }
 }
 

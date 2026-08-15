@@ -27,6 +27,7 @@ import {
   postOrReuseSlackMessage,
   updateMessageBestEffort,
   postMessageBestEffort,
+  saveSlackTerminalState,
 } from "./messaging";
 import {
   getSlackReplyThreadTs,
@@ -35,6 +36,7 @@ import {
 } from "./channel-state";
 import {
   buildSlackConversationalSystemSuffix,
+  fitSlackMessageText,
   formatSlackConversationalReply,
 } from "./system";
 import { evaluateSlackRepoAgentPolicy } from "./policy";
@@ -43,6 +45,10 @@ import { buildSlackThreadContext } from "./thread-context";
 
 /** A blank/empty Slack message is rejected - always send something. */
 const PLACEHOLDER_TEXT = "_Thinking..._";
+
+// Trigger hard-stops this task at 15 minutes. Abort the model first so the
+// normal catch path still has time to replace the Slack placeholder.
+export const SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS = 13 * 60 * 1_000;
 
 async function buildConversationalAgentInput(input: {
   deps: SlackEventTaskDeps;
@@ -201,6 +207,7 @@ export async function runConversationalMode(input: {
         channelLinkState: resolvedChannelLinkState,
         attribution,
       }),
+      abortSignal: AbortSignal.timeout(SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS),
     });
     completed = { agentResult, attachments, userMessage };
   } catch (error) {
@@ -209,7 +216,7 @@ export async function runConversationalMode(input: {
       eventId: payload.eventId,
       error,
     });
-    await updateMessageBestEffort(
+    const terminalFailureDelivered = await updateMessageBestEffort(
       deps,
       botToken,
       {
@@ -219,18 +226,23 @@ export async function runConversationalMode(input: {
       },
       "agent error placeholder update"
     );
+    if (terminalFailureDelivered) {
+      await saveSlackTerminalState("failed");
+    }
     throw error;
   }
 
   const { agentResult, attachments, userMessage } = completed;
 
   const finalText = formatFinalSlackText(agentResult.finalText);
+  const slackFinalText = fitSlackMessageText(finalText);
 
   await deps.updateMessage(botToken, {
     channel: payload.channelId,
     ts: placeholder.ts,
-    text: finalText,
+    text: slackFinalText,
   });
+  await saveSlackTerminalState("delivered");
 
   await persistConversationTurn({
     deps,
@@ -353,7 +365,7 @@ export async function runRepoAgentMode(input: {
         policy.quotaReservation
       );
     }
-    await (placeholder
+    const terminalFailureDelivered = await (placeholder
       ? updateMessageBestEffort(
           deps,
           botToken,
@@ -374,6 +386,9 @@ export async function runRepoAgentMode(input: {
           },
           "repo-agent error notice"
         ));
+    if (terminalFailureDelivered) {
+      await saveSlackTerminalState("failed");
+    }
     throw error;
   }
 
@@ -396,6 +411,7 @@ export async function runRepoAgentMode(input: {
       buildCancelRunActionsBlock(runStart.runId),
     ],
   });
+  await saveSlackTerminalState("delivered");
 
   return {
     outcome: "repo_agent_run_started",

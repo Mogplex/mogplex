@@ -36,6 +36,12 @@ import {
   sendSlackAccountLinkNotice,
   runConversationalMode,
   runRepoAgentMode,
+  getSlackReplyThreadTs,
+  postOrReuseSlackMessage,
+  readSlackMessageRef,
+  readSlackTerminalState,
+  saveSlackTerminalState,
+  updateMessageBestEffort,
 } from "./slack-event-lib";
 
 export const SLACK_EVENT_TASK_MAX_DURATION_SECONDS = 60 * 15;
@@ -95,6 +101,79 @@ const defaultDeps: SlackEventTaskDeps = {
   buildSlackLinkUrl: (token) =>
     buildAppUrl(`/slack/link?token=${encodeURIComponent(token)}`).toString(),
 };
+
+const SLACK_TERMINAL_FAILURE_TEXT =
+  ":warning: Mogplex couldn't finish this response. Try again from Slack or open Mogplex for details.";
+
+function getSlackFailurePlaceholder(payload: SlackEventTaskPayload) {
+  for (const key of [
+    "slackConversationalPlaceholder",
+    "slackRepoAgentPlaceholder",
+  ]) {
+    const ref = readSlackMessageRef(key);
+    if (
+      ref?.channel === payload.channelId &&
+      ref.threadTs === payload.threadTs &&
+      ref.eventId === payload.eventId
+    ) {
+      return ref;
+    }
+  }
+  return null;
+}
+
+export async function recoverSlackEventTerminalFailure(
+  payload: SlackEventTaskPayload,
+  overrides: Partial<SlackEventTaskDeps> = {},
+  placeholderOverride?: { channel: string; ts: string }
+) {
+  if (readSlackTerminalState()) return true;
+
+  const deps: SlackEventTaskDeps = { ...defaultDeps, ...overrides };
+  const botToken = await deps.getBotToken(payload.teamId);
+  if (!botToken) return false;
+
+  const placeholder =
+    placeholderOverride ?? getSlackFailurePlaceholder(payload);
+  if (
+    placeholder &&
+    (await updateMessageBestEffort(
+      deps,
+      botToken,
+      {
+        channel: placeholder.channel,
+        ts: placeholder.ts,
+        text: SLACK_TERMINAL_FAILURE_TEXT,
+      },
+      "terminal failure placeholder recovery"
+    ))
+  ) {
+    await saveSlackTerminalState("failed");
+    return true;
+  }
+
+  try {
+    await postOrReuseSlackMessage({
+      deps,
+      botToken,
+      channelId: payload.channelId,
+      threadTs: payload.threadTs,
+      postThreadTs: getSlackReplyThreadTs(payload),
+      eventId: payload.eventId,
+      metadataKey: "slackTerminalFailureFallback",
+      text: SLACK_TERMINAL_FAILURE_TEXT,
+    });
+    await saveSlackTerminalState("failed");
+    return true;
+  } catch (error) {
+    console.error("[slack-event] terminal failure recovery failed", {
+      teamId: payload.teamId,
+      eventId: payload.eventId,
+      error,
+    });
+    return false;
+  }
+}
 
 export async function runSlackEventTask(
   payload: SlackEventTaskPayload,
@@ -192,6 +271,9 @@ export const handleSlackEventTask = task({
   id: TRIGGER_TASK_IDS.slackEventHandler,
   maxDuration: SLACK_EVENT_TASK_MAX_DURATION_SECONDS,
   retry: { maxAttempts: 2 },
+  onFailure: async ({ payload }) => {
+    await recoverSlackEventTerminalFailure(payload);
+  },
   run: async (payload: SlackEventTaskPayload) => {
     metadata.set("teamId", payload.teamId);
     metadata.set("eventId", payload.eventId);
