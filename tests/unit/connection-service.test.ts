@@ -53,7 +53,7 @@ test("createConnection encrypts credentials before inserting", async () => {
       auth_header: "Authorization",
       mcp_transport: "http",
       mcp_url: "https://mcp.sentry.dev/mcp",
-      credentials: '{"kind":"pipedream_connect","account_id":"apn_sentry_123"}',
+      credentials: '{"access_token":"sentry-token-123"}',
       source_preset: "sentry",
     });
 
@@ -62,11 +62,11 @@ test("createConnection encrypts credentials before inserting", async () => {
     assert.equal(insertedRow.user_id, "user-1");
     assert.notEqual(
       insertedRow.encrypted_credentials,
-      '{"kind":"pipedream_connect","account_id":"apn_sentry_123"}'
+      '{"access_token":"sentry-token-123"}'
     );
     assert.equal(
       decrypt(insertedRow.encrypted_credentials as string),
-      '{"kind":"pipedream_connect","account_id":"apn_sentry_123"}'
+      '{"access_token":"sentry-token-123"}'
     );
   } finally {
     Object.defineProperty(supabaseAdmin, "from", {
@@ -104,7 +104,7 @@ test("updateConnection encrypts credentials before updating", async () => {
   try {
     const { updateConnection } = await loadConnectionService();
     await updateConnection("conn-1", {
-      credentials: '{"kind":"pipedream_connect","account_id":"apn_sentry_456"}',
+      credentials: '{"access_token":"sentry-token-456"}',
     });
 
     assert.equal(updatedId, "conn-1");
@@ -112,11 +112,11 @@ test("updateConnection encrypts credentials before updating", async () => {
     const updatedRow = updated as Record<string, unknown>;
     assert.notEqual(
       updatedRow.encrypted_credentials,
-      '{"kind":"pipedream_connect","account_id":"apn_sentry_456"}'
+      '{"access_token":"sentry-token-456"}'
     );
     assert.equal(
       decrypt(updatedRow.encrypted_credentials as string),
-      '{"kind":"pipedream_connect","account_id":"apn_sentry_456"}'
+      '{"access_token":"sentry-token-456"}'
     );
     assert.equal(typeof updatedRow.updated_at, "string");
   } finally {
@@ -156,7 +156,7 @@ test("upsertConnectionBySourcePreset encrypts credentials before rpc upsert", as
       auth_header: "Authorization",
       mcp_transport: "http",
       mcp_url: "https://mcp.sentry.dev/mcp",
-      credentials: '{"kind":"pipedream_connect","account_id":"apn_sentry_789"}',
+      credentials: '{"access_token":"sentry-token-789"}',
       description: "Error tracking",
       oauth_scopes: "event:read",
     });
@@ -169,11 +169,11 @@ test("upsertConnectionBySourcePreset encrypts credentials before rpc upsert", as
     assert.equal(upsertArgs.p_source_preset, "sentry");
     assert.notEqual(
       upsertArgs.p_encrypted_credentials,
-      '{"kind":"pipedream_connect","account_id":"apn_sentry_789"}'
+      '{"access_token":"sentry-token-789"}'
     );
     assert.equal(
       decrypt(upsertArgs.p_encrypted_credentials as string),
-      '{"kind":"pipedream_connect","account_id":"apn_sentry_789"}'
+      '{"access_token":"sentry-token-789"}'
     );
   } finally {
     Object.defineProperty(supabaseAdmin, "rpc", {

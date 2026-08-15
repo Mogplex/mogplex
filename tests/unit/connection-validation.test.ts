@@ -38,7 +38,7 @@ test("oauth presets normalize without requiring an inline credential", () => {
   assert.equal(input.source_preset, "notion");
 });
 
-test("managed auth presets normalize without inline credentials or OAuth client fields", () => {
+test("native OAuth presets normalize without inline credentials or OAuth client fields", () => {
   const input = normalizeConnectionCreateInput({
     source_preset: "sentry",
     credentials: "",
@@ -135,7 +135,7 @@ test("mcp_server connections reject private network targets", () => {
   );
 });
 
-test("managed auth oauth presets are not treated as misconfigured without native OAuth endpoints", () => {
+test("dynamic OAuth presets are not treated as misconfigured before discovery", () => {
   assert.equal(
     isConnectionMisconfigured({
       type: "mcp_server",

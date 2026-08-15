@@ -68,14 +68,14 @@ test("oauth display state shows connect before the first authorization completes
   assert.equal(displayState.oauthActionLabel, "Connect");
 });
 
-test("legacy managed auth rows surface reconnect even before migration completes", () => {
+test("legacy non-OAuth rows surface reconnect before native migration completes", () => {
   const displayState = getConnectionDisplayState({
     ...createConnection({
       auth_type: "bearer",
       source_preset: "sentry",
       oauth_authorized_at: null,
     }),
-    needsManagedAuthReconnect: true,
+    needsOAuthMigration: true,
   });
 
   assert.equal(displayState.oauthActionLabel, "Reconnect");
@@ -83,7 +83,7 @@ test("legacy managed auth rows surface reconnect even before migration completes
 
 test("preset state treats disabled or excluded preset rows as configured, not addable", () => {
   const disabledPreset = getPresetConnectionState(
-    { presetId: "supabase", usesManagedConnectionAuth: false },
+    { presetId: "supabase", requiresOAuth: false },
     [createConnection({ is_enabled: false })]
   );
 
@@ -92,7 +92,7 @@ test("preset state treats disabled or excluded preset rows as configured, not ad
   assert.equal(disabledPreset.detail, "Disabled");
 
   const excludedPreset = getPresetConnectionState(
-    { presetId: "supabase", usesManagedConnectionAuth: false },
+    { presetId: "supabase", requiresOAuth: false },
     [createConnection()],
     new Set(["conn-1"])
   );
@@ -102,7 +102,7 @@ test("preset state treats disabled or excluded preset rows as configured, not ad
   assert.equal(excludedPreset.detail, "Excluded from this project");
 
   const oauthPreset = getPresetConnectionState(
-    { presetId: "notion", usesManagedConnectionAuth: false },
+    { presetId: "notion", requiresOAuth: true },
     [
       createConnection({
         auth_type: "oauth",
@@ -117,7 +117,7 @@ test("preset state treats disabled or excluded preset rows as configured, not ad
   assert.equal(oauthPreset.detail, "OAuth authorization required");
 
   const sentryLegacyPreset = getPresetConnectionState(
-    { presetId: "sentry", usesManagedConnectionAuth: true },
+    { presetId: "sentry", requiresOAuth: true },
     [
       createConnection({
         auth_type: "bearer",
@@ -134,7 +134,7 @@ test("preset state treats disabled or excluded preset rows as configured, not ad
 
 test("preset state prefers the available connection when duplicate historical rows exist", () => {
   const state = getPresetConnectionState(
-    { presetId: "supabase", usesManagedConnectionAuth: false },
+    { presetId: "supabase", requiresOAuth: false },
     [
       createConnection({
         id: "conn-disabled",

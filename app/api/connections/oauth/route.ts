@@ -101,6 +101,10 @@ export async function GET(req: Request) {
           ? generatePkceChallenge(prepared.codeVerifier)
           : undefined,
         authorizeParams: preset?.oauth_config?.authorize_params,
+        resource:
+          resolvedConnection.type === "mcp_server"
+            ? (resolvedConnection.mcp_url ?? undefined)
+            : undefined,
       }
     );
     return NextResponse.redirect(authorizeUrl);

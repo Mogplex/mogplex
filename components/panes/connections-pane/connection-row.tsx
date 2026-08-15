@@ -1,6 +1,6 @@
 "use client"
 
-import { getConnectionPreset, usesManagedConnectionAuth } from "@/lib/connections/presets"
+import { getConnectionPreset } from "@/lib/connections/presets"
 import { getConnectionDisplayState } from "@/lib/connections/presentation"
 import {
   formatConnectionLastTested,
@@ -39,8 +39,8 @@ export function ConnectionRow({ conn, isExcluded, hasRepo, togglingId, deletingI
   const displayState = getConnectionDisplayState(
     {
       ...conn,
-      needsManagedAuthReconnect:
-        usesManagedConnectionAuth(preset) && conn.auth_type !== "oauth",
+      needsOAuthMigration:
+        preset?.auth_type === "oauth" && conn.auth_type !== "oauth",
     },
     new Set(isExcluded ? [conn.id] : [])
   )

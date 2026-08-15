@@ -320,9 +320,6 @@ export function isConnectionMisconfigured(
     return true;
   if (connection.auth_type === "oauth") {
     const preset = getConnectionPreset(connection.source_preset);
-    if (preset?.oauth_flow === "pipedream_connect") {
-      return false;
-    }
     if (preset?.oauth_config?.registration === "dynamic") {
       return false;
     }

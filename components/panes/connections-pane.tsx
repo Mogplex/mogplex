@@ -8,7 +8,6 @@ import {
   CONNECTION_PRESETS,
   CONNECTION_PRESET_MANUAL_HINT,
   getConnectionPresetAuthorizationDescription,
-  usesManagedConnectionAuth,
 } from "@/lib/connections/presets"
 import type { ConnectionPreset } from "@/lib/connections/presets"
 import { getPresetConnectionState } from "@/lib/connections/presentation"
@@ -89,7 +88,7 @@ export function ConnectionsPane() {
       getPresetConnectionState(
         {
           presetId: preset.id,
-          usesManagedConnectionAuth: usesManagedConnectionAuth(preset),
+          requiresOAuth: preset.auth_type === "oauth",
         },
         connections,
         excludedSet

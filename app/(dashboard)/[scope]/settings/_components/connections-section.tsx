@@ -8,7 +8,6 @@ import { fetchJsonObject } from "@/lib/client-fetch"
 import {
   CONNECTION_PRESETS,
   getConnectionAuthorizationPath,
-  usesManagedConnectionAuth,
 } from "@/lib/connections/presets"
 import { getPresetConnectionState } from "@/lib/connections/presentation"
 import { SlackFill } from "@/components/settings/icons"
@@ -80,7 +79,7 @@ export function ConnectionsSection() {
           getPresetConnectionState(
             {
               presetId: preset.id,
-              usesManagedConnectionAuth: usesManagedConnectionAuth(preset),
+              requiresOAuth: preset.auth_type === "oauth",
             },
             connections
           ),

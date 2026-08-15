@@ -4,10 +4,6 @@ import { encrypt, decrypt } from "./encryption";
 import { updateConnection } from "./service";
 import { getConnectionPreset } from "./presets";
 import {
-  getSentryManagedAuthAccessToken,
-  parsePipedreamManagedAuthCredentials,
-} from "./pipedream-connect";
-import {
   discoverOAuthMetadata,
   registerOAuthClient,
   generatePkceVerifier,
@@ -76,22 +72,6 @@ function parseCredentialsSafely(encrypted: string | null): OAuthCredentials {
   }
 }
 
-function parseManagedAuthCredentialsSafely(encrypted: string | null) {
-  if (!encrypted) {
-    return null;
-  }
-
-  try {
-    return parsePipedreamManagedAuthCredentials(decrypt(encrypted));
-  } catch (error) {
-    console.warn(
-      "[managed-auth] failed to decrypt managed auth credentials",
-      error
-    );
-    return null;
-  }
-}
-
 async function getStoredOAuthConnectionState(
   connectionId: string
 ): Promise<StoredOAuthConnectionState | null> {
@@ -130,23 +110,21 @@ export async function prepareOAuthConnection(
 
   let nextConnection = { ...connection };
   let metadata: OAuthMetadata | null = null;
+  const oauthScopes =
+    preset.oauth_config.scopes?.join(" ") ?? nextConnection.oauth_scopes;
 
   if (!nextConnection.oauth_authorize_url || !nextConnection.oauth_token_url) {
     metadata = await discoverOAuthMetadata(nextConnection.mcp_url!);
     await updateConnection(nextConnection.id, {
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
-      oauth_scopes:
-        nextConnection.oauth_scopes ?? preset.oauth_config.scopes?.join(" "),
+      oauth_scopes: oauthScopes,
     });
     nextConnection = {
       ...nextConnection,
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
-      oauth_scopes:
-        nextConnection.oauth_scopes ??
-        preset.oauth_config.scopes?.join(" ") ??
-        null,
+      oauth_scopes: oauthScopes ?? null,
     };
   }
 
@@ -171,8 +149,7 @@ export async function prepareOAuthConnection(
       oauth_client_id: registration.client_id,
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
-      oauth_scopes:
-        nextConnection.oauth_scopes ?? preset.oauth_config.scopes?.join(" "),
+      oauth_scopes: oauthScopes,
       ...(credentials ? { credentials } : {}),
     });
 
@@ -181,10 +158,7 @@ export async function prepareOAuthConnection(
       oauth_client_id: registration.client_id,
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
-      oauth_scopes:
-        nextConnection.oauth_scopes ??
-        preset.oauth_config.scopes?.join(" ") ??
-        null,
+      oauth_scopes: oauthScopes ?? null,
     };
   }
 
@@ -268,6 +242,7 @@ export function buildAuthorizeUrl(
   options?: {
     codeChallenge?: string;
     authorizeParams?: Record<string, string>;
+    resource?: string;
   }
 ): string {
   const url = new URL(connection.oauth_authorize_url!);
@@ -281,6 +256,9 @@ export function buildAuthorizeUrl(
   if (options?.codeChallenge) {
     url.searchParams.set("code_challenge", options.codeChallenge);
     url.searchParams.set("code_challenge_method", "S256");
+  }
+  if (options?.resource) {
+    url.searchParams.set("resource", options.resource);
   }
   for (const [key, value] of Object.entries(options?.authorizeParams ?? {})) {
     url.searchParams.set(key, value);
@@ -321,6 +299,9 @@ export async function exchangeCodeForTokens(
       client_id: connection.oauth_client_id!,
       code,
       redirect_uri: redirectUri,
+      ...(connection.type === "mcp_server" && connection.mcp_url
+        ? { resource: connection.mcp_url }
+        : {}),
       ...(creds.client_secret ? { client_secret: creds.client_secret } : {}),
       ...(options?.codeVerifier ? { code_verifier: options.codeVerifier } : {}),
     }),
@@ -371,6 +352,9 @@ export async function refreshOAuthToken(
       grant_type: "refresh_token",
       client_id: connection.oauth_client_id!,
       refresh_token: creds.refresh_token,
+      ...(connection.type === "mcp_server" && connection.mcp_url
+        ? { resource: connection.mcp_url }
+        : {}),
       ...(creds.client_secret ? { client_secret: creds.client_secret } : {}),
     }),
   });
@@ -412,19 +396,6 @@ export async function getValidAccessToken(
   connection: Connection
 ): Promise<string> {
   const current = await getStoredOAuthConnectionState(connection.id);
-  const managedAuth = parseManagedAuthCredentialsSafely(
-    current?.encrypted_credentials ?? null
-  );
-
-  if (managedAuth) {
-    // Managed auth stores only the broker account reference in Mogplex, not a
-    // cached provider token. We intentionally resolve through Pipedream on
-    // every call so refresh / revocation stays centralized there.
-    const { accessToken } = await getSentryManagedAuthAccessToken(
-      managedAuth.account_id
-    );
-    return accessToken;
-  }
 
   if (!current?.encrypted_credentials) {
     throw new Error("No credentials found for OAuth connection");

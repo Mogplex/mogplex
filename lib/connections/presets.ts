@@ -5,14 +5,13 @@ export type ConnectionPreset = {
   mcp_url?: string;
   mcp_transport: "http" | "sse";
   auth_type: "bearer" | "api_key" | "oauth" | "none";
-  oauth_flow?: "dynamic" | "pipedream_connect";
   mcp_url_field?: {
     label: string;
     placeholder: string;
     secret?: boolean;
   };
   oauth_config?: {
-    discovery: "rfc9470";
+    discovery: "rfc9728";
     registration: "dynamic";
     use_pkce: boolean;
     token_endpoint_auth_method: "none" | "client_secret_post";
@@ -58,9 +57,8 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
     mcp_url: "https://mcp.notion.com/mcp",
     mcp_transport: "http",
     auth_type: "oauth",
-    oauth_flow: "dynamic",
     oauth_config: {
-      discovery: "rfc9470",
+      discovery: "rfc9728",
       registration: "dynamic",
       use_pkce: true,
       token_endpoint_auth_method: "none",
@@ -116,8 +114,14 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
     mcp_url: "https://mcp.sentry.dev/mcp",
     mcp_transport: "http",
     auth_type: "oauth",
-    oauth_flow: "pipedream_connect",
-    auth_fields: [], // credentials are brokered via Pipedream Connect
+    oauth_config: {
+      discovery: "rfc9728",
+      registration: "dynamic",
+      use_pkce: true,
+      token_endpoint_auth_method: "none",
+      scopes: ["org:read", "project:write", "team:write", "event:write"],
+    },
+    auth_fields: [],
     docs_url: "https://docs.sentry.io/product/sentry-mcp/",
   },
   {
@@ -163,31 +167,15 @@ export function getConnectionPreset(
   return CONNECTION_PRESETS.find((preset) => preset.id === presetId) ?? null;
 }
 
-export function usesManagedConnectionAuth(
-  preset: Pick<ConnectionPreset, "auth_type" | "oauth_flow"> | null | undefined
-) {
-  return (
-    preset?.auth_type === "oauth" && preset.oauth_flow === "pipedream_connect"
-  );
-}
-
 export function getConnectionAuthorizationPath(input: {
   connectionId: string;
   sourcePreset?: string | null;
 }) {
-  const preset = getConnectionPreset(input.sourcePreset);
-  const path = usesManagedConnectionAuth(preset)
-    ? "/api/connections/managed-auth"
-    : "/api/connections/oauth";
-  return `${path}?connectionId=${encodeURIComponent(input.connectionId)}`;
+  return `/api/connections/oauth?connectionId=${encodeURIComponent(input.connectionId)}`;
 }
 
 export function getConnectionPresetAuthorizationDescription(
-  preset: Pick<ConnectionPreset, "auth_type" | "oauth_flow"> | null | undefined
+  _preset: Pick<ConnectionPreset, "auth_type"> | null | undefined
 ) {
-  if (usesManagedConnectionAuth(preset)) {
-    return "Connect through the provider OAuth flow. Mogplex uses Pipedream Connect to manage the authorization and refresh the access token for Sentry.";
-  }
-
   return "Connect through the provider OAuth flow. Mogplex will discover the MCP auth server and register the client automatically.";
 }
