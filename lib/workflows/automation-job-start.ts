@@ -4,6 +4,7 @@
  */
 
 import { runs, tasks } from "@trigger.dev/sdk/v3";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
@@ -79,9 +80,10 @@ async function startTriggerAutomationRun(
 
 export async function startAutomationJobRun(
   jobRunId: string,
-  source: JobRunStartSource = "webhook"
+  source: JobRunStartSource = "webhook",
+  adminClient: SupabaseClient = supabaseAdmin
 ): Promise<StartedAutomationJob> {
-  const { data: job, error } = await supabaseAdmin
+  const { data: job, error } = await adminClient
     .from("job_runs")
     .select(
       "id, status, runtime_provider, runtime_run_id, workflow_run_id, cancel_requested_at, cancelled_at"
@@ -116,6 +118,7 @@ export async function startAutomationJobRun(
     jobRunId,
     source,
     statusHint: job.status,
+    adminClient,
   });
 
   if (attempt.notFound) {
@@ -143,9 +146,9 @@ export async function startAutomationJobRun(
   let claim: Awaited<ReturnType<typeof claimPendingJob>>;
 
   try {
-    dispatchContext = await loadStartDispatchContext(jobRunId);
+    dispatchContext = await loadStartDispatchContext(jobRunId, adminClient);
 
-    const scope = await loadAutomationScopeForJobRun(jobRunId);
+    const scope = await loadAutomationScopeForJobRun(jobRunId, adminClient);
     releasedScope = scope
       ? {
           sourceKind: scope.sourceKind,
@@ -161,6 +164,7 @@ export async function startAutomationJobRun(
       repoId: releasedScope.repoId,
       installationId: releasedScope.installationId,
       claimedAt: attempt.attemptedAt,
+      adminClient,
     });
   } catch (error) {
     const message =
@@ -170,6 +174,7 @@ export async function startAutomationJobRun(
       source,
       attemptedAt: attempt.attemptedAt,
       error: message,
+      adminClient,
     });
     await recordStartDispatchEvent({
       context: dispatchContext,
@@ -177,6 +182,7 @@ export async function startAutomationJobRun(
       outcome: "start_failed",
       reason: message,
       source,
+      adminClient,
     });
     throw error;
   }
@@ -197,6 +203,7 @@ export async function startAutomationJobRun(
         source,
         attemptedAt: attempt.attemptedAt,
         error: describeStartGuardReason(claim.reason as StartGuardReason),
+        adminClient,
       });
       await recordStartDispatchEvent({
         context: dispatchContext,
@@ -204,6 +211,7 @@ export async function startAutomationJobRun(
         outcome: "deferred",
         reason: claim.reason,
         source,
+        adminClient,
       });
       return {
         started: false,
@@ -237,12 +245,13 @@ export async function startAutomationJobRun(
       error instanceof Error
         ? error.message
         : "Failed to start background runtime";
-    await resetClaimedJobToPending(jobRunId);
+    await resetClaimedJobToPending(jobRunId, adminClient);
     await recordStartAttemptError({
       jobRunId,
       source,
       attemptedAt: attempt.attemptedAt,
       error: message,
+      adminClient,
     });
     await recordStartDispatchEvent({
       context: dispatchContext,
@@ -250,12 +259,13 @@ export async function startAutomationJobRun(
       outcome: "start_failed",
       reason: message,
       source,
+      adminClient,
     });
     throw error;
   }
 
   const { runtimeRunId } = startedRun;
-  const { error: updateError } = await supabaseAdmin
+  const { error: updateError } = await adminClient
     .from("job_runs")
     .update({
       runtime_provider: startedRun.provider,
@@ -299,7 +309,7 @@ export async function startAutomationJobRun(
     }
 
     if (!cancelErrorMessage) {
-      await resetClaimedJobToPending(jobRunId);
+      await resetClaimedJobToPending(jobRunId, adminClient);
     }
 
     const startError = cancelErrorMessage
@@ -311,6 +321,7 @@ export async function startAutomationJobRun(
       source,
       attemptedAt: attempt.attemptedAt,
       error: startError,
+      adminClient,
     });
     await recordStartDispatchEvent({
       context: dispatchContext,
@@ -324,6 +335,7 @@ export async function startAutomationJobRun(
         persist_error: updateError.message,
         cancel_error: cancelErrorMessage,
       },
+      adminClient,
     });
 
     return {
@@ -338,6 +350,7 @@ export async function startAutomationJobRun(
     jobRunId,
     outcome: "started",
     source,
+    adminClient,
   });
 
   return {

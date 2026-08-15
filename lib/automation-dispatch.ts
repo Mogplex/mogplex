@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import {
@@ -128,8 +129,10 @@ export async function logAutomationDispatchEvent(input: {
   outcome: AutomationDispatchEventOutcome;
   reason?: string | null;
   metadata?: Record<string, unknown> | null;
+  adminClient?: SupabaseClient;
 }) {
-  const { error } = await supabaseAdmin
+  const adminClient = input.adminClient ?? supabaseAdmin;
+  const { error } = await adminClient
     .from("automation_dispatch_events")
     .insert({
       user_id: input.userId,

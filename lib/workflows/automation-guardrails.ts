@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
@@ -145,7 +146,10 @@ function toNullableNumber(value: unknown) {
   return null;
 }
 
-async function loadScopeRefs(rows: JobRunScopeRow[]) {
+async function loadScopeRefs(
+  rows: JobRunScopeRow[],
+  adminClient: SupabaseClient = supabaseAdmin
+) {
   const assignmentIds = Array.from(
     new Set(rows.map((row) => row.assignment_id).filter(Boolean) as string[])
   );
@@ -158,19 +162,19 @@ async function loadScopeRefs(rows: JobRunScopeRow[]) {
 
   const [assignmentsResult, triggersResult, flowsResult] = await Promise.all([
     assignmentIds.length > 0
-      ? supabaseAdmin
+      ? adminClient
           .from("assignments")
           .select("id, repo_id, type")
           .in("id", assignmentIds)
       : Promise.resolve({ data: [], error: null }),
     triggerIds.length > 0
-      ? supabaseAdmin
+      ? adminClient
           .from("triggers")
           .select("id, installation_id, event")
           .in("id", triggerIds)
       : Promise.resolve({ data: [], error: null }),
     flowIds.length > 0
-      ? supabaseAdmin
+      ? adminClient
           .from("flows")
           .select("id, installation_id")
           .in("id", flowIds)
@@ -200,7 +204,7 @@ async function loadScopeRefs(rows: JobRunScopeRow[]) {
 
   const { data: repos, error: reposError } =
     repoIds.length > 0
-      ? await supabaseAdmin
+      ? await adminClient
           .from("repos")
           .select("id, github_installation_id")
           .in("id", repoIds)
@@ -303,8 +307,11 @@ export async function loadAutomationScopesByStatus(
   return typedRows.map((row) => resolveScopeForStoredRun(row, refs));
 }
 
-export async function loadAutomationScopeForJobRun(jobRunId: string) {
-  const { data: row, error } = await supabaseAdmin
+export async function loadAutomationScopeForJobRun(
+  jobRunId: string,
+  adminClient: SupabaseClient = supabaseAdmin
+) {
+  const { data: row, error } = await adminClient
     .from("job_runs")
     .select(
       "id, assignment_id, trigger_id, flow_id, status, created_at, metadata"
@@ -318,7 +325,7 @@ export async function loadAutomationScopeForJobRun(jobRunId: string) {
 
   if (!row) return null;
 
-  const refs = await loadScopeRefs([row as JobRunScopeRow]);
+  const refs = await loadScopeRefs([row as JobRunScopeRow], adminClient);
   return resolveScopeForStoredRun(row as JobRunScopeRow, refs);
 }
 
