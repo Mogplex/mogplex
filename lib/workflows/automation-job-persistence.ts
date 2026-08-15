@@ -4,6 +4,7 @@
  */
 
 import { replaceJobRunReviewFindings } from "@/lib/review-findings";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { capturedUsageAiCallColumns } from "@/lib/observability/usage";
 import {
@@ -107,10 +108,12 @@ export async function recordStartAttempt(input: {
   jobRunId: string;
   source: JobRunStartSource;
   statusHint?: string | null;
+  adminClient?: SupabaseClient;
 }) {
+  const adminClient = input.adminClient ?? supabaseAdmin;
   const attemptedAt = new Date().toISOString();
 
-  const { data, error } = await supabaseAdmin.rpc(
+  const { data, error } = await adminClient.rpc(
     "record_job_run_start_attempt",
     {
       p_job_run_id: input.jobRunId,
@@ -144,8 +147,10 @@ export async function recordStartAttemptError(input: {
   source: JobRunStartSource;
   attemptedAt: string;
   error: string;
+  adminClient?: SupabaseClient;
 }) {
-  const { error } = await supabaseAdmin
+  const adminClient = input.adminClient ?? supabaseAdmin;
+  const { error } = await adminClient
     .from("job_runs")
     .update({
       last_start_attempt_at: input.attemptedAt,
@@ -164,8 +169,10 @@ export async function claimPendingJob(input: {
   repoId: string | null;
   installationId: number | null;
   claimedAt: string;
+  adminClient?: SupabaseClient;
 }) {
-  const { data, error } = await supabaseAdmin.rpc("claim_automation_job_run", {
+  const adminClient = input.adminClient ?? supabaseAdmin;
+  const { data, error } = await adminClient.rpc("claim_automation_job_run", {
     p_job_run_id: input.jobRunId,
     p_repo_id: input.repoId,
     p_installation_id: input.installationId,
@@ -192,8 +199,11 @@ export async function claimPendingJob(input: {
   };
 }
 
-export async function resetClaimedJobToPending(jobRunId: string) {
-  const { error } = await supabaseAdmin
+export async function resetClaimedJobToPending(
+  jobRunId: string,
+  adminClient: SupabaseClient = supabaseAdmin
+) {
+  const { error } = await adminClient
     .from("job_runs")
     .update({
       status: "pending",

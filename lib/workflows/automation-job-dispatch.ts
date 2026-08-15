@@ -3,6 +3,7 @@
  * Extracted from automation-job-workflow.ts for modularity.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAutomationDispatchEvent } from "@/lib/automation-dispatch";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { coerceGraph, getStartConfig } from "@/lib/flows/graph";
@@ -60,6 +61,7 @@ export async function recordStartDispatchEvent(input: {
   reason?: string | null;
   source: JobRunStartSource;
   metadata?: Record<string, unknown> | null;
+  adminClient?: SupabaseClient;
 }) {
   if (!input.context?.userId) return;
 
@@ -84,6 +86,7 @@ export async function recordStartDispatchEvent(input: {
         start_source: input.source,
         ...input.metadata,
       },
+      adminClient: input.adminClient,
     });
   } catch (error) {
     console.error("[automation-job] failed to log start dispatch event", {
@@ -135,9 +138,10 @@ export async function recordControlDispatchEvent(input: {
 
 async function loadFlowDefinitionForDispatch(
   flowVersionId: string,
-  flowId?: string | null
+  flowId: string | null | undefined,
+  adminClient: SupabaseClient
 ) {
-  const { data: version, error: versionError } = await supabaseAdmin
+  const { data: version, error: versionError } = await adminClient
     .from("flow_versions")
     .select("*")
     .eq("id", flowVersionId)
@@ -156,9 +160,10 @@ async function loadFlowDefinitionForDispatch(
 }
 
 export async function loadStartDispatchContext(
-  jobRunId: string
+  jobRunId: string,
+  adminClient: SupabaseClient = supabaseAdmin
 ): Promise<StartDispatchContext | null> {
-  const { data: job, error } = await supabaseAdmin
+  const { data: job, error } = await adminClient
     .from("job_runs")
     .select(
       "id, assignment_id, trigger_id, flow_id, flow_version_id, retry_of_job_run_id, metadata"
@@ -175,7 +180,7 @@ export async function loadStartDispatchContext(
   const metadata = (job.metadata ?? {}) as Record<string, unknown>;
 
   if (job.assignment_id) {
-    const { data: assignment, error: assignmentError } = await supabaseAdmin
+    const { data: assignment, error: assignmentError } = await adminClient
       .from("assignments")
       .select("id, repo_id, type, repos(user_id, github_installation_id)")
       .eq("id", job.assignment_id)
@@ -215,7 +220,7 @@ export async function loadStartDispatchContext(
   }
 
   if (job.trigger_id) {
-    const { data: trigger, error: triggerError } = await supabaseAdmin
+    const { data: trigger, error: triggerError } = await adminClient
       .from("triggers")
       .select("id, user_id, installation_id, event")
       .eq("id", job.trigger_id)
@@ -274,7 +279,7 @@ export async function loadStartDispatchContext(
           : null;
 
     const { data: flow, error: flowError } = flowId
-      ? await supabaseAdmin
+      ? await adminClient
           .from("flows")
           .select("id, user_id, installation_id")
           .eq("id", flowId)
@@ -288,7 +293,7 @@ export async function loadStartDispatchContext(
     }
 
     const startConfig = flowVersionId
-      ? await loadFlowDefinitionForDispatch(flowVersionId, flowId)
+      ? await loadFlowDefinitionForDispatch(flowVersionId, flowId, adminClient)
       : null;
     const flowEvent = startConfig
       ? (getStartConfig(startConfig.graph)?.event ?? null)
