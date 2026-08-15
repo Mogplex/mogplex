@@ -16,7 +16,7 @@ after(() => {
 test("shortens oversized agent replies before updating the Slack placeholder", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
   const updates: string[] = [];
-  const oversizedReply = "a".repeat(4_001);
+  const oversizedReply = `${"a".repeat(3_998)}😀😀`;
   let agentAbortSignal: AbortSignal | undefined;
 
   const result = await runSlackEventTask(basePayload, {
@@ -54,6 +54,49 @@ test("shortens oversized agent replies before updating the Slack placeholder", a
   assert.match(updates[0], /shortened to fit Slack/i);
   assert.ok(agentAbortSignal instanceof AbortSignal);
   assert.equal(agentAbortSignal.aborted, false);
+});
+
+test("does not recover a Slack reply that already reached a terminal state", async () => {
+  const { recoverSlackEventTerminalFailure } = await loadSlackEventTask();
+  let dependencyCalls = 0;
+
+  const recovered = await recoverSlackEventTerminalFailure(
+    basePayload,
+    {
+      getBotToken: async () => {
+        dependencyCalls += 1;
+        return "xoxb-test";
+      },
+      updateMessage: async (_token, input) => {
+        dependencyCalls += 1;
+        return { channel: input.channel, ts: input.ts };
+      },
+      postMessage: async (_token, input) => {
+        dependencyCalls += 1;
+        return { channel: input.channel, ts: "1700000000.001000" };
+      },
+    },
+    undefined,
+    {
+      read: () => "delivered",
+      save: async () => undefined,
+    }
+  );
+
+  assert.equal(recovered, true);
+  assert.equal(dependencyCalls, 0);
+});
+
+test("does not throw when Slack bot token recovery fails", async () => {
+  const { recoverSlackEventTerminalFailure } = await loadSlackEventTask();
+
+  const recovered = await recoverSlackEventTerminalFailure(basePayload, {
+    getBotToken: async () => {
+      throw new Error("database unavailable");
+    },
+  });
+
+  assert.equal(recovered, false);
 });
 
 test("replaces a known placeholder after the Trigger task exhausts retries", async () => {

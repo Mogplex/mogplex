@@ -105,6 +105,16 @@ const defaultDeps: SlackEventTaskDeps = {
 const SLACK_TERMINAL_FAILURE_TEXT =
   ":warning: Mogplex couldn't finish this response. Try again from Slack or open Mogplex for details.";
 
+type SlackTerminalStateStore = {
+  read: typeof readSlackTerminalState;
+  save: typeof saveSlackTerminalState;
+};
+
+const defaultSlackTerminalStateStore: SlackTerminalStateStore = {
+  read: readSlackTerminalState,
+  save: saveSlackTerminalState,
+};
+
 function getSlackFailurePlaceholder(payload: SlackEventTaskPayload) {
   for (const key of [
     "slackConversationalPlaceholder",
@@ -125,12 +135,23 @@ function getSlackFailurePlaceholder(payload: SlackEventTaskPayload) {
 export async function recoverSlackEventTerminalFailure(
   payload: SlackEventTaskPayload,
   overrides: Partial<SlackEventTaskDeps> = {},
-  placeholderOverride?: { channel: string; ts: string }
+  placeholderOverride?: { channel: string; ts: string },
+  terminalStateStore: SlackTerminalStateStore = defaultSlackTerminalStateStore
 ) {
-  if (readSlackTerminalState()) return true;
+  if (terminalStateStore.read()) return true;
 
   const deps: SlackEventTaskDeps = { ...defaultDeps, ...overrides };
-  const botToken = await deps.getBotToken(payload.teamId);
+  let botToken: string | null;
+  try {
+    botToken = await deps.getBotToken(payload.teamId);
+  } catch (error) {
+    console.error("[slack-event] terminal failure token lookup failed", {
+      teamId: payload.teamId,
+      eventId: payload.eventId,
+      error,
+    });
+    return false;
+  }
   if (!botToken) return false;
 
   const placeholder =
@@ -148,7 +169,7 @@ export async function recoverSlackEventTerminalFailure(
       "terminal failure placeholder recovery"
     ))
   ) {
-    await saveSlackTerminalState("failed");
+    await terminalStateStore.save("failed");
     return true;
   }
 
@@ -163,7 +184,7 @@ export async function recoverSlackEventTerminalFailure(
       metadataKey: "slackTerminalFailureFallback",
       text: SLACK_TERMINAL_FAILURE_TEXT,
     });
-    await saveSlackTerminalState("failed");
+    await terminalStateStore.save("failed");
     return true;
   } catch (error) {
     console.error("[slack-event] terminal failure recovery failed", {

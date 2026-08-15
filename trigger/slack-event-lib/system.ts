@@ -63,12 +63,16 @@ export function formatSlackConversationalReply(text: string) {
 }
 
 export function fitSlackMessageText(text: string) {
-  const characters = Array.from(text);
-  if (characters.length <= SLACK_MESSAGE_TEXT_MAX_CHARS) return text;
+  if (text.length <= SLACK_MESSAGE_TEXT_MAX_CHARS) return text;
 
   const prefixLength =
-    SLACK_MESSAGE_TEXT_MAX_CHARS - Array.from(SLACK_SHORTENED_SUFFIX).length;
-  return `${characters.slice(0, prefixLength).join("")}${SLACK_SHORTENED_SUFFIX}`;
+    SLACK_MESSAGE_TEXT_MAX_CHARS - SLACK_SHORTENED_SUFFIX.length;
+  let prefix = text.slice(0, prefixLength);
+  const finalCodeUnit = prefix.charCodeAt(prefix.length - 1);
+  if (finalCodeUnit >= 55_296 && finalCodeUnit <= 56_319) {
+    prefix = prefix.slice(0, -1);
+  }
+  return `${prefix}${SLACK_SHORTENED_SUFFIX}`;
 }
 
 export async function sendSlackAccountLinkNotice(input: {
