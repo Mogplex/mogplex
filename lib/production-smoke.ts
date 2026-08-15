@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getAutomationCostState,
   getAutomationStatusPresentation,
@@ -29,13 +30,17 @@ export type ProductionSmokeSummary = {
 };
 
 type ProductionSmokeDeps = {
-  checkReposSelect: () => Promise<string>;
-  checkRepoWorkspaceIdsSelect: () => Promise<string>;
-  checkWorkspacesSelect: () => Promise<string>;
-  checkControlSessionsSelect: () => Promise<string>;
-  checkGithubInstallationsCount: () => Promise<string>;
-  checkRepoBaselineSnapshotMetadata: () => Promise<string>;
-  checkReviewRunObservabilityProjection: () => Promise<string>;
+  checkReposSelect: (client: SupabaseClient) => Promise<string>;
+  checkRepoWorkspaceIdsSelect: (client: SupabaseClient) => Promise<string>;
+  checkWorkspacesSelect: (client: SupabaseClient) => Promise<string>;
+  checkControlSessionsSelect: (client: SupabaseClient) => Promise<string>;
+  checkGithubInstallationsCount: (client: SupabaseClient) => Promise<string>;
+  checkRepoBaselineSnapshotMetadata: (
+    client: SupabaseClient
+  ) => Promise<string>;
+  checkReviewRunObservabilityProjection: (
+    client: SupabaseClient
+  ) => Promise<string>;
 };
 
 type ReviewRunObservabilitySample = {
@@ -131,8 +136,8 @@ export function buildReviewRunObservabilitySamples(
   return samples;
 }
 
-async function checkReposSelect() {
-  const { error } = await supabaseAdmin
+async function checkReposSelect(client: SupabaseClient = supabaseAdmin) {
+  const { error } = await client
     .from("repos")
     .select(REPO_SELECT_WITH_WORKSPACE)
     .limit(1);
@@ -141,18 +146,17 @@ async function checkReposSelect() {
   return "Queried repos with workspace join";
 }
 
-async function checkRepoWorkspaceIdsSelect() {
-  const { error } = await supabaseAdmin
-    .from("repos")
-    .select("workspace_id")
-    .limit(1);
+async function checkRepoWorkspaceIdsSelect(
+  client: SupabaseClient = supabaseAdmin
+) {
+  const { error } = await client.from("repos").select("workspace_id").limit(1);
 
   if (error) throw new Error(error.message);
   return "Queried repo workspace ids";
 }
 
-async function checkWorkspacesSelect() {
-  const { error } = await supabaseAdmin
+async function checkWorkspacesSelect(client: SupabaseClient = supabaseAdmin) {
+  const { error } = await client
     .from("workspaces")
     .select(WORKSPACE_COLUMNS)
     .limit(1);
@@ -161,8 +165,10 @@ async function checkWorkspacesSelect() {
   return "Queried workspaces with billing and Vercel link fields";
 }
 
-export async function checkControlSessionsSelect() {
-  const { error } = await supabaseAdmin
+export async function checkControlSessionsSelect(
+  client: SupabaseClient = supabaseAdmin
+) {
+  const { error } = await client
     .from("control_sessions")
     .select("id, user_id, repo_id, orchestration_run_id")
     .limit(1);
@@ -171,8 +177,10 @@ export async function checkControlSessionsSelect() {
   return "Queried Control sessions with repository and orchestration context";
 }
 
-async function checkGithubInstallationsCount() {
-  const { error } = await supabaseAdmin
+async function checkGithubInstallationsCount(
+  client: SupabaseClient = supabaseAdmin
+) {
+  const { error } = await client
     .from("github_installations")
     .select("*", { count: "exact", head: true });
 
@@ -186,8 +194,10 @@ async function checkGithubInstallationsCount() {
  * set but `snapshot_lockfile_hash` is missing — which would indicate a
  * pre-fast-spawn snapshot that the baseline-restore path would reject.
  */
-async function checkRepoBaselineSnapshotMetadata() {
-  const { data, error } = await supabaseAdmin
+async function checkRepoBaselineSnapshotMetadata(
+  client: SupabaseClient = supabaseAdmin
+) {
+  const { data, error } = await client
     .from("repos")
     .select(
       "id, snapshot_id, snapshot_lockfile_hash, snapshot_created_at, snapshot_commit_sha"
@@ -268,8 +278,10 @@ export function summarizeReviewRunObservabilityProjection(
   })`;
 }
 
-async function checkReviewRunObservabilityProjection() {
-  const { data: failures, error: failuresError } = await supabaseAdmin
+async function checkReviewRunObservabilityProjection(
+  client: SupabaseClient = supabaseAdmin
+) {
+  const { data: failures, error: failuresError } = await client
     .from("automation_dispatch_events")
     .select("job_run_id, source_type, reason, metadata, created_at")
     .eq("event_kind", "control")
@@ -299,7 +311,7 @@ async function checkReviewRunObservabilityProjection() {
 
   const { data: jobs, error: jobsError } =
     jobIds.length > 0
-      ? await supabaseAdmin
+      ? await client
           .from("job_runs")
           .select("id, status, cost_usd, error, metadata")
           .in("id", jobIds)
@@ -330,10 +342,11 @@ const defaultDeps: ProductionSmokeDeps = {
 
 async function runCheck(
   name: ProductionSmokeCheckName,
-  fn: () => Promise<string>
+  fn: (client: SupabaseClient) => Promise<string>,
+  client: SupabaseClient
 ): Promise<ProductionSmokeCheckResult> {
   try {
-    const detail = await fn();
+    const detail = await fn(client);
     return { name, ok: true, detail };
   } catch (error) {
     const detail =
@@ -345,7 +358,8 @@ async function runCheck(
 }
 
 export async function runProductionSmokeChecks(
-  overrides: Partial<ProductionSmokeDeps> = {}
+  overrides: Partial<ProductionSmokeDeps> = {},
+  client: SupabaseClient = supabaseAdmin
 ): Promise<ProductionSmokeSummary> {
   const deps: ProductionSmokeDeps = {
     ...defaultDeps,
@@ -353,18 +367,32 @@ export async function runProductionSmokeChecks(
   };
 
   const checks = await Promise.all([
-    runCheck("repos_select", deps.checkReposSelect),
-    runCheck("repo_workspace_ids_select", deps.checkRepoWorkspaceIdsSelect),
-    runCheck("workspaces_select", deps.checkWorkspacesSelect),
-    runCheck("control_sessions_select", deps.checkControlSessionsSelect),
-    runCheck("github_installations_count", deps.checkGithubInstallationsCount),
+    runCheck("repos_select", deps.checkReposSelect, client),
+    runCheck(
+      "repo_workspace_ids_select",
+      deps.checkRepoWorkspaceIdsSelect,
+      client
+    ),
+    runCheck("workspaces_select", deps.checkWorkspacesSelect, client),
+    runCheck(
+      "control_sessions_select",
+      deps.checkControlSessionsSelect,
+      client
+    ),
+    runCheck(
+      "github_installations_count",
+      deps.checkGithubInstallationsCount,
+      client
+    ),
     runCheck(
       "repo_baseline_snapshot_metadata",
-      deps.checkRepoBaselineSnapshotMetadata
+      deps.checkRepoBaselineSnapshotMetadata,
+      client
     ),
     runCheck(
       "review_run_observability_projection",
-      deps.checkReviewRunObservabilityProjection
+      deps.checkReviewRunObservabilityProjection,
+      client
     ),
   ]);
 
