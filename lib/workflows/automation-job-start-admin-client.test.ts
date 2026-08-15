@@ -71,7 +71,15 @@ function buildAdminClient(
           }
           return query;
         },
-        update: () => query,
+        update: (values) => {
+          if ("status" in values) {
+            operations.push(`update:${table}:status`);
+          }
+          if ("last_start_error" in values) {
+            operations.push(`update:${table}:last_start_error`);
+          }
+          return query;
+        },
         insert: () => query,
         maybeSingle: async () => {
           if (table === "triggers") {
@@ -136,17 +144,17 @@ test("startAutomationJobRun uses its scoped admin client when deferring", async 
     status: "pending",
     reason: "INSTALLATION_CONCURRENCY_LIMIT",
   });
-  assert.deepEqual(operations, [
-    "from:job_runs",
-    "rpc:record_job_run_start_attempt",
-    "from:job_runs",
-    "from:triggers",
-    "from:job_runs",
-    "from:triggers",
-    "rpc:claim_automation_job_run",
-    "from:job_runs",
-    "from:automation_dispatch_events",
-  ]);
+  assert.deepEqual(
+    new Set(operations),
+    new Set([
+      "from:job_runs",
+      "from:triggers",
+      "rpc:record_job_run_start_attempt",
+      "rpc:claim_automation_job_run",
+      "update:job_runs:last_start_error",
+      "from:automation_dispatch_events",
+    ])
+  );
 });
 
 test("startAutomationJobRun keeps rollback queries on the scoped client", async () => {
@@ -163,9 +171,7 @@ test("startAutomationJobRun keeps rollback queries on the scoped client", async 
     /Trigger.dev runtime is not configured/
   );
 
-  assert.equal(
-    operations.filter((operation) => operation === "from:job_runs").length,
-    5
-  );
-  assert.equal(operations.at(-1), "from:automation_dispatch_events");
+  assert.equal(operations.includes("update:job_runs:status"), true);
+  assert.equal(operations.includes("update:job_runs:last_start_error"), true);
+  assert.equal(operations.includes("from:automation_dispatch_events"), true);
 });

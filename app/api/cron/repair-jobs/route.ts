@@ -60,10 +60,15 @@ export function createRepairJobsGetHandler(
           message: "No stale pending jobs",
           scanned: jobs?.length ?? 0,
           started: 0,
+          deferred: 0,
           failed: 0,
         });
       }
 
+      // One PoolClient intentionally serializes the batch's database work and
+      // stays checked out across runtime dispatch. Repair batches are bounded
+      // by the existing scan limit, and this prevents every nested starter
+      // query from independently checking out another connection.
       const results = await Promise.all(
         repairableJobs.map(async (job) => {
           try {

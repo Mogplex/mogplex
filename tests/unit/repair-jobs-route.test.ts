@@ -79,3 +79,31 @@ test("repair-jobs keeps loading and nested starts inside one admin connection", 
   assert.equal(body.started, 2);
   assert.equal(body.failed, 0);
 });
+
+test("repair-jobs returns consistent counters for an empty batch", async () => {
+  const query = {
+    select: () => query,
+    eq: () => query,
+    order: () => query,
+    limit: async () => ({ data: [], error: null }),
+  };
+  const adminClient = {
+    from: () => query,
+  } as unknown as SupabaseClient;
+  const handler = createRepairJobsGetHandler({
+    requireMachineApiAuth: () => null,
+    withSupabaseAdminConnection: (operation) => operation(adminClient),
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/cron/repair-jobs")
+  );
+
+  assert.deepEqual(await response.json(), {
+    message: "No stale pending jobs",
+    scanned: 0,
+    started: 0,
+    deferred: 0,
+    failed: 0,
+  });
+});
