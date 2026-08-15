@@ -6,6 +6,7 @@
 // resolvable so DB-less environments still run the rest of the suite.
 import crypto from "node:crypto";
 import { expect, test } from "@playwright/test";
+import { verifyPassword } from "better-auth/crypto";
 import { Pool } from "pg";
 import { resolveNeonDatabaseUrl } from "./helpers/neon";
 
@@ -58,12 +59,23 @@ test.describe("better-auth against real Neon", () => {
     expect(created.rows[0].emailVerified).toBe(false);
 
     const credential = await pool.query(
-      'select "providerId" from "account" where "userId" = $1',
+      'select "providerId", "password" from "account" where "userId" = $1',
       [created.rows[0].id]
     );
     expect(credential.rows.map((row) => row.providerId)).toContain(
       "credential"
     );
+    const storedPassword = credential.rows.find(
+      (row) => row.providerId === "credential"
+    )?.password;
+    if (typeof storedPassword !== "string") {
+      throw new TypeError("Credential account did not persist a password hash");
+    }
+    expect(storedPassword).toMatch(/^[0-9a-f]{32}:[0-9a-f]{128}$/);
+    expect(storedPassword).not.toBe(password);
+    await expect(
+      verifyPassword({ hash: storedPassword, password })
+    ).resolves.toBe(true);
 
     // requireEmailVerification gates sign-in until the address is verified.
     const unverifiedSignIn = await request.post("/api/auth/sign-in/email", {

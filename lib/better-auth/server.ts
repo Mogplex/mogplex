@@ -13,6 +13,10 @@ import { mcp } from "better-auth/plugins";
 import { sso } from "@better-auth/sso";
 import { dash } from "@better-auth/infra";
 import { cliTokenTtl } from "@/lib/better-auth/cli-token-ttl";
+import {
+  hashAccountPassword,
+  verifyAccountPassword,
+} from "@/lib/better-auth/password";
 import { Pool } from "pg";
 import { createProfileForBetterAuthUser } from "@/lib/auth/better-auth-profile";
 import { sendAuthActionEmail } from "@/lib/email/send-auth-action-email";
@@ -156,6 +160,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    password: {
+      hash: hashAccountPassword,
+      verify: verifyAccountPassword,
+    },
     sendResetPassword: async ({ user, url }) => {
       const result = await sendAuthActionEmail({
         kind: "reset-password",
