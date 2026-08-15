@@ -248,7 +248,7 @@ export function ConnectionsPane() {
                 </div>
               ) : activePreset.auth_type === "oauth" ? (
                 <div className="flex-1 text-[11px] text-muted-foreground">
-                  {getConnectionPresetAuthorizationDescription(activePreset)}
+                  {getConnectionPresetAuthorizationDescription()}
                 </div>
               ) : (
                 <input

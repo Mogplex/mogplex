@@ -113,19 +113,17 @@ test("oauth presets route through Mogplex native OAuth authorization", () => {
   assert.equal(
     getConnectionAuthorizationPath({
       connectionId: "conn-sentry",
-      sourcePreset: "sentry",
     }),
     "/api/connections/oauth?connectionId=conn-sentry"
   );
   assert.equal(
     getConnectionAuthorizationPath({
       connectionId: "conn-notion",
-      sourcePreset: "notion",
     }),
     "/api/connections/oauth?connectionId=conn-notion"
   );
   assert.match(
-    getConnectionPresetAuthorizationDescription(getConnectionPreset("sentry")),
+    getConnectionPresetAuthorizationDescription(),
     /Mogplex will discover the MCP auth server/
   );
 

@@ -124,14 +124,12 @@ export async function prepareOAuthConnection(
   if (!nextConnection.oauth_authorize_url || !nextConnection.oauth_token_url) {
     metadata = await discoverOAuthMetadata(nextConnection.mcp_url!);
     await updateConnection(nextConnection.id, {
-      auth_type: "oauth",
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
       oauth_scopes: oauthScopes,
     });
     nextConnection = {
       ...nextConnection,
-      auth_type: "oauth",
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
       oauth_scopes: oauthScopes ?? null,
@@ -156,7 +154,6 @@ export async function prepareOAuthConnection(
       : undefined;
 
     await updateConnection(nextConnection.id, {
-      auth_type: "oauth",
       oauth_client_id: registration.client_id,
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
@@ -166,7 +163,6 @@ export async function prepareOAuthConnection(
 
     nextConnection = {
       ...nextConnection,
-      auth_type: "oauth",
       oauth_client_id: registration.client_id,
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
@@ -174,17 +170,12 @@ export async function prepareOAuthConnection(
     };
   }
 
-  if (
-    nextConnection.auth_type !== "oauth" ||
-    nextConnection.oauth_scopes !== (oauthScopes ?? null)
-  ) {
+  if (nextConnection.oauth_scopes !== (oauthScopes ?? null)) {
     await updateConnection(nextConnection.id, {
-      auth_type: "oauth",
       oauth_scopes: oauthScopes ?? null,
     });
     nextConnection = {
       ...nextConnection,
-      auth_type: "oauth",
       oauth_scopes: oauthScopes ?? null,
     };
   }
@@ -207,6 +198,7 @@ async function compareAndSwapOAuthConnectionState(
   };
 
   const update: Record<string, unknown> = {
+    auth_type: "oauth",
     encrypted_credentials: encrypt(JSON.stringify(nextCredentials)),
     oauth_authorized_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -258,7 +250,7 @@ export async function storeOAuthTokensWithRetry(
     current = await getStoredOAuthConnectionState(connectionId);
   }
 
-  return current;
+  return null;
 }
 
 /** Build the OAuth authorize URL with state + redirect */

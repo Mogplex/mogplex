@@ -219,7 +219,7 @@ test("prepareOAuthConnection replaces legacy scopes with the native Sentry prese
     );
 
     assert.equal(prepared.connection.oauth_client_id, "native-sentry-client");
-    assert.equal(prepared.connection.auth_type, "oauth");
+    assert.equal(prepared.connection.auth_type, "bearer");
     assert.equal(
       prepared.connection.oauth_scopes,
       "org:read project:write team:write event:write"
@@ -229,7 +229,7 @@ test("prepareOAuthConnection replaces legacy scopes with the native Sentry prese
       updateBodies[0]?.oauth_scopes,
       "org:read project:write team:write event:write"
     );
-    assert.equal(updateBodies[0]?.auth_type, "oauth");
+    assert.equal(updateBodies[0]?.auth_type, undefined);
   } finally {
     global.fetch = originalFetch;
   }
@@ -281,11 +281,115 @@ test("prepareOAuthConnection refreshes PKCE and preset scopes for a registered S
       "org:read project:write team:write event:write"
     );
     assert.equal(updateBodies.length, 1);
-    assert.equal(updateBodies[0]?.auth_type, "oauth");
+    assert.equal(updateBodies[0]?.auth_type, undefined);
     assert.equal(
       updateBodies[0]?.oauth_scopes,
       "org:read project:write team:write event:write"
     );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("storeOAuthTokensWithRetry completes legacy migration only with the token write", async () => {
+  const originalFetch = global.fetch;
+  const tokenWrites: Array<Record<string, unknown>> = [];
+  const storedState = {
+    encrypted_credentials: encrypt(
+      JSON.stringify({ access_token: "native-access-token" })
+    ),
+    updated_at: "2026-04-22T00:01:00.000Z",
+    oauth_authorized_at: "2026-04-22T00:01:00.000Z",
+    oauth_token_expires_at: "2026-04-22T01:01:00.000Z",
+  };
+
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (
+      url.startsWith("https://example.supabase.co/rest/v1/connections?") &&
+      init?.method === "PATCH"
+    ) {
+      tokenWrites.push(
+        JSON.parse(String(init.body)) as Record<string, unknown>
+      );
+      return Response.json(storedState);
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { storeOAuthTokensWithRetry } = await loadOAuthHelpers();
+    const stored = await storeOAuthTokensWithRetry(
+      "conn-oauth",
+      {
+        encrypted_credentials: encrypt(
+          JSON.stringify({ credential: "legacy-broker-token" })
+        ),
+        updated_at: "2026-04-22T00:00:00.000Z",
+        oauth_authorized_at: null,
+        oauth_token_expires_at: null,
+      },
+      { access_token: "native-access-token", expires_in: 3600 }
+    );
+
+    assert.deepEqual(stored, storedState);
+    assert.equal(tokenWrites.length, 1);
+    assert.equal(tokenWrites[0]?.auth_type, "oauth");
+    assert.ok(typeof tokenWrites[0]?.encrypted_credentials === "string");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("storeOAuthTokensWithRetry fails when both token writes lose the CAS race", async () => {
+  const originalFetch = global.fetch;
+  let patchCount = 0;
+  const staleState = {
+    encrypted_credentials: encrypt(
+      JSON.stringify({ credential: "legacy-broker-token" })
+    ),
+    updated_at: "2026-04-22T00:00:00.000Z",
+    oauth_authorized_at: null,
+    oauth_token_expires_at: null,
+  };
+
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (
+      url.startsWith("https://example.supabase.co/rest/v1/connections?") &&
+      init?.method === "PATCH"
+    ) {
+      patchCount += 1;
+      return Response.json(null);
+    }
+    if (isStoredConnectionStateFetch(url) && init?.method === "GET") {
+      return Response.json(staleState);
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { storeOAuthTokensWithRetry } = await loadOAuthHelpers();
+    const stored = await storeOAuthTokensWithRetry("conn-oauth", staleState, {
+      access_token: "native-access-token",
+    });
+
+    assert.equal(patchCount, 2);
+    assert.equal(stored, null);
   } finally {
     global.fetch = originalFetch;
   }

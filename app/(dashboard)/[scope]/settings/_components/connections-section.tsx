@@ -64,10 +64,9 @@ export function ConnectionsSection() {
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
   }, [oauthStatus, pathname, router])
 
-  const initiateOAuth = useCallback((connection: Pick<Connection, "id" | "source_preset">) => {
+  const initiateOAuth = useCallback((connection: Pick<Connection, "id">) => {
     window.location.href = getConnectionAuthorizationPath({
       connectionId: connection.id,
-      sourcePreset: connection.source_preset,
     })
   }, [])
 

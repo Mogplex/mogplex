@@ -169,13 +169,10 @@ export function getConnectionPreset(
 
 export function getConnectionAuthorizationPath(input: {
   connectionId: string;
-  sourcePreset?: string | null;
 }) {
   return `/api/connections/oauth?connectionId=${encodeURIComponent(input.connectionId)}`;
 }
 
-export function getConnectionPresetAuthorizationDescription(
-  _preset: Pick<ConnectionPreset, "auth_type"> | null | undefined
-) {
+export function getConnectionPresetAuthorizationDescription() {
   return "Connect through the provider OAuth flow. Mogplex will discover the MCP auth server and register the client automatically.";
 }
