@@ -7,7 +7,7 @@ import {
   parseScopeContextHeaders,
 } from "../../lib/scope-context";
 
-test("missing middleware scope headers can be treated as not found at the route boundary", () => {
+test("missing middleware scope headers remain distinguishable at the route boundary", () => {
   assert.equal(parseScopeContextHeaders(new Headers()), null);
 });
 
