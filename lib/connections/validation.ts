@@ -318,8 +318,11 @@ export function isConnectionMisconfigured(
     (!connection.mcp_url || !connection.mcp_transport)
   )
     return true;
+  const preset = getConnectionPreset(connection.source_preset);
+  if (preset?.auth_type === "oauth" && connection.auth_type !== "oauth") {
+    return true;
+  }
   if (connection.auth_type === "oauth") {
-    const preset = getConnectionPreset(connection.source_preset);
     if (preset?.oauth_config?.registration === "dynamic") {
       return false;
     }

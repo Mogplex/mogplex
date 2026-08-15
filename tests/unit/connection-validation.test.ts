@@ -151,3 +151,20 @@ test("dynamic OAuth presets are not treated as misconfigured before discovery", 
     false
   );
 });
+
+test("broker-era OAuth preset rows stay out of runtime until native reconnect", () => {
+  assert.equal(
+    isConnectionMisconfigured({
+      type: "mcp_server",
+      auth_type: "bearer",
+      base_url: null,
+      mcp_url: "https://mcp.sentry.dev/mcp",
+      mcp_transport: "http",
+      oauth_client_id: null,
+      oauth_authorize_url: null,
+      oauth_token_url: null,
+      source_preset: "sentry",
+    }),
+    true
+  );
+});
