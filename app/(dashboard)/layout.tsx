@@ -25,9 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 aria-label="Mogplex home"
                 className="flex items-center gap-3 rounded-xl text-foreground outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
               >
-                <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-                  <MogplexMark className="size-5" />
-                </span>
+                <MogplexMark className="size-8" />
                 <span className="text-[20px] font-semibold tracking-normal">
                   mogplex
                 </span>
