@@ -2,7 +2,6 @@
 // without DATABASE_URL (CI builds, Supabase-backend deployments) stays
 // side-effect-free — the pool only connects on first query.
 import { Pool, types } from "pg";
-import type { Queryable } from "./postgrest-shim";
 
 const toNumber = Number;
 
@@ -68,7 +67,7 @@ export const SHIM_TYPE_PARSERS: Record<number, (value: string) => unknown> = {
 
 let pool: Pool | null = null;
 
-export function getNeonPool(): Queryable {
+export function getNeonPool(): Pool {
   if (!pool) {
     pool = new Pool({
       // mogplex_DATABASE_URL is the Neon Vercel-integration var (managed,

@@ -26,11 +26,13 @@ import {
 export async function loadReaperSandboxes(deps: SandboxReaperRunnerDeps) {
   try {
     const [activeSandboxes, staleStoppedSandboxes, abandonedPausedSandboxes] =
-      await Promise.all([
-        deps.loadActiveSandboxes(),
-        deps.loadStaleStoppedSandboxes(),
-        deps.loadAbandonedPausedSandboxes(),
-      ]);
+      await deps.withSupabaseAdminConnection((client) =>
+        Promise.all([
+          deps.loadActiveSandboxes(client),
+          deps.loadStaleStoppedSandboxes(client),
+          deps.loadAbandonedPausedSandboxes(client),
+        ])
+      );
 
     return {
       activeSandboxes,

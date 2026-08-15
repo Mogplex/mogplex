@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import {
   STALE_PAUSING_THRESHOLD_MS,
@@ -11,7 +12,9 @@ import type {
   FreshIdleState,
 } from "@/lib/sandbox/reaper-types";
 
-export async function loadActiveSandboxes(): Promise<ReaperSandboxRecord[]> {
+export async function loadActiveSandboxes(
+  client: SupabaseClient = supabaseAdmin
+): Promise<ReaperSandboxRecord[]> {
   const select =
     "id, sandbox_id, user_id, status, health_status, exec_lock_token, persistent, created_at, last_active_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, repo:repos(sandbox_timeout_ms, sandbox_idle_timeout_ms, workspace:workspaces(sandbox_timeout_ms, sandbox_idle_timeout_ms))";
   const pausingCutoffIso = new Date(
@@ -20,13 +23,13 @@ export async function loadActiveSandboxes(): Promise<ReaperSandboxRecord[]> {
   const [activeResult, stalePausingResult] = await Promise.all([
     // Oldest first + capped: if the active set ever exceeds the cap, the
     // stalest sandboxes are still seen this sweep and the rest next sweep.
-    supabaseAdmin
+    client
       .from("sandboxes")
       .select(select)
       .in("status", ["running", "installing", "creating"])
       .order("created_at", { ascending: true })
       .limit(10000),
-    supabaseAdmin
+    client
       .from("sandboxes")
       .select(select)
       .eq("status", SANDBOX_PAUSING_STATUS)
@@ -131,11 +134,11 @@ export async function loadFreshIdleState(
   return data as FreshIdleState | null;
 }
 
-export async function loadAbandonedPausedSandboxes(): Promise<
-  AbandonedPausedSandboxRecord[]
-> {
+export async function loadAbandonedPausedSandboxes(
+  client: SupabaseClient = supabaseAdmin
+): Promise<AbandonedPausedSandboxRecord[]> {
   const cutoffIso = new Date(Date.now() - PAUSED_SANDBOX_TTL_MS).toISOString();
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await client
     .from("sandboxes")
     .select(
       "id, sandbox_id, user_id, last_active_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id"
