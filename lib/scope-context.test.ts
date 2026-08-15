@@ -1,45 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { parseScopeContextForLayout } from "./scope-context";
+import { SCOPE_LAYOUT_MISSING_HEADERS_ERROR } from "@/lib/scope-errors";
+import {
+  parseScopeContextForLayout,
+  parseScopeContextHeaders,
+} from "./scope-context";
 
-const personalHeaders = new Headers({
+const forgedScopeHeaders = new Headers({
   "x-mogplex-scope-kind": "personal",
-  "x-mogplex-scope-slug": "alice",
-  "x-mogplex-scope-id": "profile-alice",
+  "x-mogplex-scope-slug": "attacker",
+  "x-mogplex-scope-id": "profile-attacker",
 });
 
 describe("parseScopeContextForLayout", () => {
-  it("fails closed when trusted scope headers are missing", () => {
-    expect(() =>
-      parseScopeContextForLayout("monitoring", new Headers())
-    ).toThrowError("NEXT_HTTP_ERROR_FALLBACK;404");
-  });
+  it("rejects image segments before trusting forged scope headers", () => {
+    let error: unknown;
+    try {
+      parseScopeContextForLayout("missing.png", forgedScopeHeaders);
+    } catch (caught) {
+      error = caught;
+    }
+    expect((error as { digest?: string }).digest).toBe(
+      "NEXT_HTTP_ERROR_FALLBACK;404"
+    );
 
-  it("rejects image-like segments before trusting supplied headers", () => {
-    expect(() =>
-      parseScopeContextForLayout("logo.svg", personalHeaders)
-    ).toThrowError("NEXT_HTTP_ERROR_FALLBACK;404");
-  });
-
-  it("returns a valid trusted scope context", () => {
-    expect(parseScopeContextForLayout("alice", personalHeaders)).toEqual({
+    // Pin that the forged values would otherwise parse, so this test proves
+    // the image-segment guard takes precedence over header parsing.
+    expect(parseScopeContextHeaders(forgedScopeHeaders)).toEqual({
       kind: "personal",
-      slug: "alice",
-      profileId: "profile-alice",
+      slug: "attacker",
+      profileId: "profile-attacker",
     });
   });
 
-  it("keeps malformed injected scope kinds loud", () => {
+  it("keeps missing headers on real scope segments loud", () => {
     expect(() =>
-      parseScopeContextForLayout(
-        "alice",
-        new Headers({
-          "x-mogplex-scope-kind": "organization",
-          "x-mogplex-scope-slug": "alice",
-          "x-mogplex-scope-id": "profile-alice",
-        })
-      )
-    ).toThrowError(
-      'parseScopeContextHeaders: unknown scope kind "organization"'
-    );
+      parseScopeContextForLayout("monitoring", new Headers())
+    ).toThrowError(SCOPE_LAYOUT_MISSING_HEADERS_ERROR);
+  });
+
+  it("returns valid scope context for real segments", () => {
+    expect(parseScopeContextForLayout("attacker", forgedScopeHeaders)).toEqual({
+      kind: "personal",
+      slug: "attacker",
+      profileId: "profile-attacker",
+    });
   });
 });

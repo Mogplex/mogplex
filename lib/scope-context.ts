@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { SCOPE_LAYOUT_MISSING_HEADERS_ERROR } from "@/lib/scope-errors";
 
 export type ScopeContext =
   | { kind: "personal"; slug: string; profileId: string }
@@ -43,13 +44,11 @@ export function parseScopeContextForLayout(
   h: ScopeHeaders
 ): ScopeContext {
   // Image requests bypass proxy.ts, so their scope headers are untrusted.
-  // Missing headers can also occur on framework-owned cache renders that do
-  // not pass through the proxy. Both cases must fail closed without reporting
-  // an application error; malformed injected headers still throw below.
+  // Reject the segment before parsing any potentially forged values.
   if (isImageAssetScopeSegment(scopeSegment)) notFound();
 
   const scope = parseScopeContextHeaders(h);
-  if (!scope) notFound();
+  if (!scope) throw new Error(SCOPE_LAYOUT_MISSING_HEADERS_ERROR);
   return scope;
 }
 
