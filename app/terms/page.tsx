@@ -52,9 +52,10 @@ export default function TermsPage() {
             What are the basics of using Mogplex?
           </h2>
           <p>
-            You sign in with a supported identity provider (currently GitHub,
-            Google, or Microsoft). You must be of legal age to form a binding
-            contract, and if you accept these Terms on behalf of an
+            You sign in with an email address and password, through single
+            sign-on (SSO), or with a supported identity provider (currently
+            GitHub, Google, or Microsoft). You must be of legal age to form a
+            binding contract, and if you accept these Terms on behalf of an
             organization, you represent that you are authorized to bind it.
           </p>
           <p>

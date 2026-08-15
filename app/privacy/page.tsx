@@ -30,10 +30,12 @@ export default function PrivacyPage() {
           <h2 className="text-lg text-foreground">1. Data we collect</h2>
           <ul className="list-disc pl-6 space-y-1">
             <li>
-              <strong>Account data:</strong> your name, email address, and
-              avatar from the identity provider you sign in with (GitHub,
-              Google, or Microsoft), plus the OAuth tokens needed to act on
-              connected accounts within the scopes you approve
+              <strong>Account data:</strong> your name and email address; a
+              hash of your password if you sign up with one; and, if you sign
+              in through single sign-on or an identity provider (GitHub,
+              Google, or Microsoft), your avatar and profile from that
+              provider plus the OAuth tokens needed to act on connected
+              accounts within the scopes you approve
             </li>
             <li>
               <strong>Content you provide:</strong> prompts, agent
