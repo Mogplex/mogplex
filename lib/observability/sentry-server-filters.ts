@@ -1,5 +1,5 @@
 import type * as Sentry from "@sentry/nextjs";
-import { SCOPE_LAYOUT_MISSING_HEADERS_ERROR } from "@/lib/scope-context";
+import { SCOPE_LAYOUT_MISSING_HEADERS_ERROR } from "@/lib/scope-errors";
 
 // node-postgres emits one `pg.connect` span for each socket a Pool opens. A
 // cold serverless instance may open several in parallel, which Sentry's N+1
@@ -34,10 +34,11 @@ function requestHeader(event: Sentry.Event, name: string): string | undefined {
 function isScopedAppRouterRender(event: Sentry.Event): boolean {
   const nextjs = event.contexts?.nextjs;
   const mechanism = event.exception?.values?.[0]?.mechanism;
+  if (!nextjs) return false;
 
   return (
     mechanism?.type === NEXT_REQUEST_ERROR_MECHANISM &&
-    nextjs?.router_kind === "App Router" &&
+    nextjs.router_kind === "App Router" &&
     nextjs.router_path === "/[scope]" &&
     nextjs.route_type === "render"
   );
@@ -59,6 +60,9 @@ export function isVercelSuspenseCacheScopeHeaderEvent(
     "x-vercel-sc-host"
   )?.toLowerCase();
 
+  // This signature was validated against the captured production MOGPLEX-A
+  // payload. Every condition intentionally fails toward retaining the event,
+  // so ordinary matcher regressions and unrelated cache errors still page.
   return (
     exceptionValue(event) === SCOPE_LAYOUT_MISSING_HEADERS_ERROR &&
     isScopedAppRouterRender(event) &&

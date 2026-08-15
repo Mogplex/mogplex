@@ -1,6 +1,6 @@
 import type * as Sentry from "@sentry/nextjs";
 import { describe, expect, it } from "vitest";
-import { SCOPE_LAYOUT_MISSING_HEADERS_ERROR } from "@/lib/scope-context";
+import { SCOPE_LAYOUT_MISSING_HEADERS_ERROR } from "@/lib/scope-errors";
 import {
   beforeSendServerEvent,
   isDevelopmentHttpAbortEvent,

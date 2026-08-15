@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
-
-export const SCOPE_LAYOUT_MISSING_HEADERS_ERROR =
-  "ScopeLayout: x-mogplex-scope-* headers missing for scoped route";
+import { notFound } from "next/navigation";
+import { SCOPE_LAYOUT_MISSING_HEADERS_ERROR } from "@/lib/scope-errors";
 
 export type ScopeContext =
   | { kind: "personal"; slug: string; profileId: string }
@@ -38,6 +37,19 @@ export function parseScopeContextHeaders(h: ScopeHeaders): ScopeContext | null {
   if (kind === "personal") return { kind, slug, profileId: id };
   if (kind === "team") return { kind, slug, teamId: id };
   throw new Error(`parseScopeContextHeaders: unknown scope kind "${kind}"`);
+}
+
+export function parseScopeContextForLayout(
+  scopeSegment: string,
+  h: ScopeHeaders
+): ScopeContext {
+  // Image requests bypass proxy.ts, so their scope headers are untrusted.
+  // Reject the segment before parsing any potentially forged values.
+  if (isImageAssetScopeSegment(scopeSegment)) notFound();
+
+  const scope = parseScopeContextHeaders(h);
+  if (!scope) throw new Error(SCOPE_LAYOUT_MISSING_HEADERS_ERROR);
+  return scope;
 }
 
 // Server-only. Reads the x-mogplex-scope-* headers set by proxy.ts.
