@@ -56,6 +56,9 @@ export {
   updateMessageBestEffort,
   postMessageBestEffort,
   createDebouncedSlackUpdater,
+  readSlackMessageRef,
+  readSlackTerminalState,
+  saveSlackTerminalState,
 } from "./messaging";
 
 // Re-export channel-state functions
