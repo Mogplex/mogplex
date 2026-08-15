@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 let smoke: typeof import("./production-smoke");
@@ -29,6 +30,76 @@ afterAll(() => {
 });
 
 describe("production Control session smoke", () => {
+  it("runs every database probe through the supplied admin client", async () => {
+    const tables: string[] = [];
+    const buildQuery = (table: string) => {
+      const result = {
+        data:
+          table === "automation_dispatch_events"
+            ? [
+                {
+                  job_run_id: "job-1",
+                  source_type: "pr_review",
+                  reason: "failed",
+                  metadata: null,
+                  created_at: "2026-08-15T13:00:00.000Z",
+                },
+              ]
+            : table === "job_runs"
+              ? [
+                  {
+                    id: "job-1",
+                    status: "failed",
+                    cost_usd: null,
+                    error: "Review failed",
+                    metadata: null,
+                  },
+                ]
+              : [],
+        error: null,
+        count: 0,
+      };
+      const resultPromise = Promise.resolve(result);
+      const query = {
+        select: () => query,
+        eq: () => query,
+        in: () => query,
+        not: () => query,
+        order: () => query,
+        limit: () => resultPromise,
+        then: resultPromise.then.bind(resultPromise),
+      };
+      return query;
+    };
+    const adminClient = {
+      from: (table: string) => {
+        tables.push(table);
+        return buildQuery(table);
+      },
+    } as unknown as SupabaseClient;
+    Object.defineProperty(supabaseAdmin, "from", {
+      configurable: true,
+      writable: true,
+      value: () => {
+        throw new Error("global admin client used");
+      },
+    });
+
+    const summary = await smoke.runProductionSmokeChecks({}, adminClient);
+
+    expect(summary.ok).toBe(true);
+    expect(tables).toEqual([
+      "repos",
+      "repos",
+      "workspaces",
+      "control_sessions",
+      "github_installations",
+      "repos",
+      "automation_dispatch_events",
+      "job_runs",
+    ]);
+  });
+
   it("queries the table and columns used by Control session/worktree APIs", async () => {
     const tables: string[] = [];
     const query = {
