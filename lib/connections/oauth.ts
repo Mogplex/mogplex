@@ -131,8 +131,28 @@ export async function prepareOAuthConnection(
   const oauthScopes =
     preset.oauth_config.scopes?.join(" ") ?? nextConnection.oauth_scopes;
 
+  // Older preset rows may predate the pinned MCP URL. Restore the trusted
+  // preset endpoint before discovery instead of sending users into a generic
+  // OAuth setup failure that can only be fixed by recreating the connection.
+  if (!nextConnection.mcp_url && preset.mcp_url) {
+    await updateConnection(nextConnection.id, {
+      mcp_url: preset.mcp_url,
+      mcp_transport: preset.mcp_transport,
+    });
+    nextConnection = {
+      ...nextConnection,
+      mcp_url: preset.mcp_url,
+      mcp_transport: preset.mcp_transport,
+    };
+  }
+
+  const mcpUrl = nextConnection.mcp_url;
+  if (!mcpUrl) {
+    throw new Error("OAuth MCP connection is missing its server URL");
+  }
+
   if (!nextConnection.oauth_authorize_url || !nextConnection.oauth_token_url) {
-    metadata = await discoverOAuthMetadata(nextConnection.mcp_url!);
+    metadata = await discoverOAuthMetadata(mcpUrl);
     await updateConnection(nextConnection.id, {
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
@@ -147,7 +167,7 @@ export async function prepareOAuthConnection(
   }
 
   if (!nextConnection.oauth_client_id) {
-    metadata ??= await discoverOAuthMetadata(nextConnection.mcp_url!);
+    metadata ??= await discoverOAuthMetadata(mcpUrl);
     const registration = await registerOAuthClient(
       metadata,
       options.redirectUri,
@@ -181,6 +201,8 @@ export async function prepareOAuthConnection(
   }
 
   if (nextConnection.oauth_scopes !== (oauthScopes ?? null)) {
+    // Keep the preset scope contract authoritative for already-registered
+    // reconnecting rows whose discovery and registration metadata is intact.
     await updateConnection(nextConnection.id, {
       oauth_scopes: oauthScopes ?? null,
     });
