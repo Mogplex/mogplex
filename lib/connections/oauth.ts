@@ -104,6 +104,16 @@ export function canPrepareOAuthConnection(connection: Connection): boolean {
   return getConnectionPreset(connection.source_preset)?.auth_type === "oauth";
 }
 
+export function getOAuthResourceIndicator(
+  connection: Connection
+): string | undefined {
+  const preset = getConnectionPreset(connection.source_preset);
+  return preset?.oauth_config?.use_resource_indicator &&
+    connection.type === "mcp_server"
+    ? (connection.mcp_url ?? undefined)
+    : undefined;
+}
+
 export async function prepareOAuthConnection(
   connection: Connection,
   options: {
@@ -310,6 +320,7 @@ export async function exchangeCodeForTokens(
     connection.oauth_token_url!,
     "oauth_token_url"
   );
+  const resource = getOAuthResourceIndicator(connection);
   const res = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -318,9 +329,7 @@ export async function exchangeCodeForTokens(
       client_id: connection.oauth_client_id!,
       code,
       redirect_uri: redirectUri,
-      ...(connection.type === "mcp_server" && connection.mcp_url
-        ? { resource: connection.mcp_url }
-        : {}),
+      ...(resource ? { resource } : {}),
       ...(creds.client_secret ? { client_secret: creds.client_secret } : {}),
       ...(options?.codeVerifier ? { code_verifier: options.codeVerifier } : {}),
     }),
@@ -364,6 +373,7 @@ export async function refreshOAuthToken(
     connection.oauth_token_url!,
     "oauth_token_url"
   );
+  const resource = getOAuthResourceIndicator(connection);
   const res = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -371,9 +381,7 @@ export async function refreshOAuthToken(
       grant_type: "refresh_token",
       client_id: connection.oauth_client_id!,
       refresh_token: creds.refresh_token,
-      ...(connection.type === "mcp_server" && connection.mcp_url
-        ? { resource: connection.mcp_url }
-        : {}),
+      ...(resource ? { resource } : {}),
       ...(creds.client_secret ? { client_secret: creds.client_secret } : {}),
     }),
   });

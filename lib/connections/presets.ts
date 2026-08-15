@@ -14,6 +14,7 @@ export type ConnectionPreset = {
     discovery: "rfc9728";
     registration: "dynamic";
     use_pkce: boolean;
+    use_resource_indicator?: boolean;
     token_endpoint_auth_method: "none" | "client_secret_post";
     authorize_params?: Record<string, string>;
     scopes?: string[];
@@ -118,6 +119,7 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
       discovery: "rfc9728",
       registration: "dynamic",
       use_pkce: true,
+      use_resource_indicator: true,
       token_endpoint_auth_method: "none",
       scopes: ["org:read", "project:write", "team:write", "event:write"],
     },

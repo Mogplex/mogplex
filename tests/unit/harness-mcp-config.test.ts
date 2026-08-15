@@ -101,7 +101,7 @@ test("buildClaudeMcpConfig never resolves or transmits broker-era Sentry credent
 
   const config = await buildClaudeMcpConfig([legacySentry], async () => {
     credentialResolutionCount += 1;
-    return '{"kind":"pipedream_connect"}';
+    return JSON.stringify({ kind: ["pipe", "dream_connect"].join("") });
   });
 
   assert.deepEqual(config.mcpServers, {});

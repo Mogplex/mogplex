@@ -6,6 +6,7 @@ import {
   buildAuthorizeUrl,
   canPrepareOAuthConnection,
   generatePkceChallenge,
+  getOAuthResourceIndicator,
   prepareOAuthConnection,
 } from "@/lib/connections/oauth";
 import { requireUserId } from "@/lib/auth";
@@ -102,10 +103,7 @@ export async function GET(req: Request) {
           ? generatePkceChallenge(prepared.codeVerifier)
           : undefined,
         authorizeParams: preset?.oauth_config?.authorize_params,
-        resource:
-          resolvedConnection.type === "mcp_server"
-            ? (resolvedConnection.mcp_url ?? undefined)
-            : undefined,
+        resource: getOAuthResourceIndicator(resolvedConnection),
       }
     );
     return NextResponse.redirect(authorizeUrl);

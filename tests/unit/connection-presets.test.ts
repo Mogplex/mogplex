@@ -131,6 +131,7 @@ test("oauth presets route through Mogplex native OAuth authorization", () => {
     discovery: "rfc9728",
     registration: "dynamic",
     use_pkce: true,
+    use_resource_indicator: true,
     token_endpoint_auth_method: "none",
     scopes: ["org:read", "project:write", "team:write", "event:write"],
   });
