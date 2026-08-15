@@ -22,11 +22,20 @@ import type {
   stopSandbox,
   deleteAbandonedPausedSandbox,
 } from "@/lib/sandbox/reaper-stop";
+import type { withSupabaseAdminConnection } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type SandboxReaperRunnerDeps = {
-  loadActiveSandboxes: () => Promise<ReaperSandboxRecord[]>;
-  loadStaleStoppedSandboxes: () => Promise<StaleStoppedSandboxRecord[]>;
-  loadAbandonedPausedSandboxes: () => Promise<AbandonedPausedSandboxRecord[]>;
+  withSupabaseAdminConnection: typeof withSupabaseAdminConnection;
+  loadActiveSandboxes: (
+    client?: SupabaseClient
+  ) => Promise<ReaperSandboxRecord[]>;
+  loadStaleStoppedSandboxes: (
+    client?: SupabaseClient
+  ) => Promise<StaleStoppedSandboxRecord[]>;
+  loadAbandonedPausedSandboxes: (
+    client?: SupabaseClient
+  ) => Promise<AbandonedPausedSandboxRecord[]>;
   loadBusySandboxIds: () => Promise<Set<string>>;
   getPlatformSandboxCredentials: typeof getPlatformSandboxCredentials;
   loadUserVercelCredentials: typeof loadUserVercelCredentials;

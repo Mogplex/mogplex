@@ -1,6 +1,7 @@
 import type { ActiveSandboxLivenessResult } from "@/lib/sandbox/liveness";
 import { stopSandboxRecord } from "@/lib/sandbox/records";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ReaperSandboxCredentials =
   | {
@@ -79,10 +80,12 @@ export function buildSandboxStopErrorUpdate(status: string, error: string) {
   };
 }
 
-export async function loadStaleStoppedSandboxes() {
+export async function loadStaleStoppedSandboxes(
+  client: SupabaseClient = supabaseAdmin
+) {
   // Oldest first + capped: a periodic sweep; anything beyond the cap is
   // picked up on the next pass instead of loading unbounded rows at once.
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await client
     .from("sandboxes")
     .select("id, sandbox_id, health_status")
     .eq("status", "stopped")

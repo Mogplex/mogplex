@@ -2,6 +2,13 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getNeonPool } from "@/lib/db/pool";
 import { createPostgrestShim } from "@/lib/db/postgrest-shim";
 
+type AdminConnectionRunnerDeps = {
+  getDataBackend: () => string | undefined;
+  getPool: typeof getNeonPool;
+  createShim: typeof createPostgrestShim;
+  defaultClient: SupabaseClient;
+};
+
 let cached: SupabaseClient | null = null;
 
 function resolveAdminClient(): SupabaseClient {
@@ -43,3 +50,34 @@ export const supabaseAdmin: SupabaseClient = new Proxy({} as SupabaseClient, {
       : value;
   },
 });
+
+export function createSupabaseAdminConnectionRunner(
+  overrides: Partial<AdminConnectionRunnerDeps> = {}
+) {
+  const deps: AdminConnectionRunnerDeps = {
+    getDataBackend: () => process.env.MOGPLEX_DATA_BACKEND,
+    getPool: getNeonPool,
+    createShim: createPostgrestShim,
+    defaultClient: supabaseAdmin,
+    ...overrides,
+  };
+
+  return async function withSupabaseAdminConnection<T>(
+    operation: (client: SupabaseClient) => Promise<T>
+  ): Promise<T> {
+    if (deps.getDataBackend() !== "neon") {
+      return operation(deps.defaultClient);
+    }
+
+    const connection = await deps.getPool().connect();
+    try {
+      const client = deps.createShim(connection) as unknown as SupabaseClient;
+      return await operation(client);
+    } finally {
+      connection.release();
+    }
+  };
+}
+
+export const withSupabaseAdminConnection =
+  createSupabaseAdminConnectionRunner();

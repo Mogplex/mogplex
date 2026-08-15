@@ -40,6 +40,36 @@ async function buildSandboxReaperHandler(
   });
 }
 
+test("GET /api/cron/sandbox-reaper reuses one admin client for its loader batch", async () => {
+  const adminClient = { source: "request-scoped" } as never;
+  const loaderClients: unknown[] = [];
+  let connectionRuns = 0;
+  const handler = await buildSandboxReaperHandler({
+    withSupabaseAdminConnection: async (operation) => {
+      connectionRuns += 1;
+      return operation(adminClient);
+    },
+    loadActiveSandboxes: async (client) => {
+      loaderClients.push(client);
+      return [];
+    },
+    loadStaleStoppedSandboxes: async (client) => {
+      loaderClients.push(client);
+      return [];
+    },
+    loadAbandonedPausedSandboxes: async (client) => {
+      loaderClients.push(client);
+      return [];
+    },
+  });
+
+  const response = await handler(buildSandboxReaperRequest());
+
+  assert.equal(response.status, 200);
+  assert.equal(connectionRuns, 1);
+  assert.deepEqual(loaderClients, [adminClient, adminClient, adminClient]);
+});
+
 test("stopSandbox leaves user-billed sandboxes active when credentials cannot be resolved", async () => {
   const { stopSandbox } = await loadSandboxReaperRouteModule();
   let stopped = false;

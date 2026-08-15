@@ -35,6 +35,7 @@ import {
   buildProcessedSandboxesSummary,
 } from "@/lib/sandbox/reaper-types";
 import type { SandboxReaperRunnerDeps } from "@/lib/sandbox/reaper-runner-deps";
+import { withSupabaseAdminConnection } from "@/lib/supabase/admin";
 
 // Re-export all public types
 export type {
@@ -60,6 +61,7 @@ export {
 } from "@/lib/sandbox/reaper-stop";
 
 const defaultSandboxReaperRunnerDeps: SandboxReaperRunnerDeps = {
+  withSupabaseAdminConnection,
   loadActiveSandboxes,
   loadStaleStoppedSandboxes,
   loadAbandonedPausedSandboxes,
