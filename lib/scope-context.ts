@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 
 export type ScopeContext =
   | { kind: "personal"; slug: string; profileId: string }
@@ -35,6 +36,21 @@ export function parseScopeContextHeaders(h: ScopeHeaders): ScopeContext | null {
   if (kind === "personal") return { kind, slug, profileId: id };
   if (kind === "team") return { kind, slug, teamId: id };
   throw new Error(`parseScopeContextHeaders: unknown scope kind "${kind}"`);
+}
+
+export function parseScopeContextForLayout(
+  scopeSegment: string,
+  h: ScopeHeaders
+): ScopeContext {
+  // Image requests bypass proxy.ts, so their scope headers are untrusted.
+  // Missing headers can also occur on framework-owned cache renders that do
+  // not pass through the proxy. Both cases must fail closed without reporting
+  // an application error; malformed injected headers still throw below.
+  if (isImageAssetScopeSegment(scopeSegment)) notFound();
+
+  const scope = parseScopeContextHeaders(h);
+  if (!scope) notFound();
+  return scope;
 }
 
 // Server-only. Reads the x-mogplex-scope-* headers set by proxy.ts.
