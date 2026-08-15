@@ -1,4 +1,4 @@
-import { getConnectionPreset } from "./presets";
+import { getConnectionPreset, needsNativeOAuthMigration } from "./presets";
 import { assertSafeOutboundHttpUrl } from "@/lib/security/outbound-url";
 import type { Connection } from "@/lib/types";
 
@@ -307,6 +307,7 @@ export function isConnectionMisconfigured(
     | "mcp_url"
     | "mcp_transport"
     | "oauth_client_id"
+    | "oauth_authorized_at"
     | "oauth_authorize_url"
     | "oauth_token_url"
     | "source_preset"
@@ -319,7 +320,7 @@ export function isConnectionMisconfigured(
   )
     return true;
   const preset = getConnectionPreset(connection.source_preset);
-  if (preset?.auth_type === "oauth" && connection.auth_type !== "oauth") {
+  if (needsNativeOAuthMigration(connection)) {
     return true;
   }
   if (connection.auth_type === "oauth") {

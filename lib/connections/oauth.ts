@@ -41,6 +41,8 @@ function parseCredentials(encrypted: string): OAuthCredentials {
   const raw = decrypt(encrypted);
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Only native OAuth fields are recognized. Unknown legacy broker payloads
+    // intentionally parse without a token and must fail closed until reconnect.
     return {
       client_secret:
         typeof parsed.client_secret === "string"

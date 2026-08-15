@@ -1,3 +1,5 @@
+import type { Connection } from "@/lib/types";
+
 export type ConnectionPreset = {
   id: string;
   name: string;
@@ -167,6 +169,21 @@ export function getConnectionPreset(
 ): ConnectionPreset | null {
   if (!presetId) return null;
   return CONNECTION_PRESETS.find((preset) => preset.id === presetId) ?? null;
+}
+
+export function needsNativeOAuthMigration(
+  connection: Pick<
+    Connection,
+    "auth_type" | "oauth_authorized_at" | "oauth_client_id" | "source_preset"
+  >
+): boolean {
+  const preset = getConnectionPreset(connection.source_preset);
+  if (preset?.oauth_config?.registration !== "dynamic") return false;
+
+  return (
+    connection.auth_type !== "oauth" ||
+    Boolean(connection.oauth_authorized_at && !connection.oauth_client_id)
+  );
 }
 
 export function getConnectionAuthorizationPath(input: {

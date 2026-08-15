@@ -2,7 +2,10 @@
 
 import { useCallback, useState } from "react"
 import type { Connection } from "@/lib/types"
-import { getConnectionPreset } from "@/lib/connections/presets"
+import {
+  getConnectionPreset,
+  needsNativeOAuthMigration,
+} from "@/lib/connections/presets"
 import { getConnectionDisplayState } from "@/lib/connections/presentation"
 import {
   formatConnectionLastTested,
@@ -108,8 +111,7 @@ export function ConnectionsTable({
             const preset = getConnectionPreset(c.source_preset)
             const displayState = getConnectionDisplayState({
               ...c,
-              needsOAuthMigration:
-                preset?.auth_type === "oauth" && c.auth_type !== "oauth",
+              needsOAuthMigration: needsNativeOAuthMigration(c),
             })
             const RowIcon = getPresetIcon(c.source_preset)
             return (

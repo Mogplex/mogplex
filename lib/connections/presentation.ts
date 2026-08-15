@@ -1,4 +1,5 @@
 import type { Connection } from "@/lib/types";
+import { needsNativeOAuthMigration } from "./presets";
 
 export type ConnectionDisplayState = {
   isDisabled: boolean;
@@ -87,17 +88,17 @@ export function getPresetConnectionState(
     };
   }
 
-  const legacyNonOAuthConnection =
-    preset.requiresOAuth && connection.auth_type !== "oauth";
+  const needsOAuthMigration =
+    preset.requiresOAuth && needsNativeOAuthMigration(connection);
   const state = getConnectionDisplayState(
     {
       ...connection,
-      needsOAuthMigration: legacyNonOAuthConnection,
+      needsOAuthMigration,
     },
     excludedIds
   );
   const pendingOAuthAuthorization =
-    !legacyNonOAuthConnection &&
+    !needsOAuthMigration &&
     connection.auth_type === "oauth" &&
     !connection.oauth_authorized_at;
   const detail =
@@ -107,13 +108,13 @@ export function getPresetConnectionState(
         ? "Disabled"
         : state.isExcluded
           ? "Excluded from this project"
-          : legacyNonOAuthConnection
+          : needsOAuthMigration
             ? "Reconnect with OAuth to migrate this connection to native authorization"
             : pendingOAuthAuthorization
               ? "OAuth authorization required"
               : null;
   const label =
-    state.isAvailable && !pendingOAuthAuthorization && !legacyNonOAuthConnection
+    state.isAvailable && !pendingOAuthAuthorization && !needsOAuthMigration
       ? "Connected"
       : "Configured";
 

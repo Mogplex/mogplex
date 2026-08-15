@@ -130,6 +130,21 @@ test("preset state treats disabled or excluded preset rows as configured, not ad
   assert.equal(sentryLegacyPreset.isAddable, false);
   assert.equal(sentryLegacyPreset.label, "Configured");
   assert.match(sentryLegacyPreset.detail || "", /Reconnect with OAuth/);
+
+  const sentryBrokerPreset = getPresetConnectionState(
+    { presetId: "sentry", requiresOAuth: true },
+    [
+      createConnection({
+        auth_type: "oauth",
+        source_preset: "sentry",
+        oauth_authorized_at: "2026-03-18T00:00:00.000Z",
+        oauth_client_id: null,
+      }),
+    ]
+  );
+
+  assert.equal(sentryBrokerPreset.label, "Configured");
+  assert.match(sentryBrokerPreset.detail || "", /Reconnect with OAuth/);
 });
 
 test("preset state prefers the available connection when duplicate historical rows exist", () => {
