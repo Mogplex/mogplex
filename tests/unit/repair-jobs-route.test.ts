@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createRepairJobsGetHandler } from "../../app/api/cron/repair-jobs/route";
+import { createRepairJobsGetHandler } from "../../app/api/cron/repair-jobs/handler";
 
 function buildPendingJobsClient() {
   const jobs = [
@@ -106,4 +106,37 @@ test("repair-jobs returns consistent counters for an empty batch", async () => {
     deferred: 0,
     failed: 0,
   });
+});
+
+test("repair-jobs returns JSON when admin connection checkout fails", async () => {
+  const handler = createRepairJobsGetHandler({
+    requireMachineApiAuth: () => null,
+    withSupabaseAdminConnection: async () => {
+      throw new Error("pool timeout");
+    },
+  });
+
+  const originalConsoleError = console.error;
+  const logged: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    const response = await handler(
+      new Request("http://localhost/api/cron/repair-jobs")
+    );
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      error: "Failed to load pending jobs",
+    });
+    assert.deepEqual(logged, [
+      [
+        "[job-repair] failed to acquire admin connection",
+        { error: "pool timeout" },
+      ],
+    ]);
+  } finally {
+    console.error = originalConsoleError;
+  }
 });
