@@ -73,6 +73,11 @@ function SignupContent() {
             <SignUpForm verifiedNext={verifiedNext} />
             <AuthDivider />
             <SocialButtons next={next} source="signup_page" />
+            <p className="mpx-auth-muted" data-testid="signup-legal">
+              By creating an account, you agree to the{" "}
+              <Link href="/terms">Terms of Service</Link> and{" "}
+              <Link href="/privacy">Privacy Policy</Link>.
+            </p>
           </>
         )}
       </div>

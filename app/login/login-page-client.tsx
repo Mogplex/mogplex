@@ -115,6 +115,11 @@ function LoginContent() {
                 Use single sign-on (SSO) →
               </Link>
             </div>
+            <p className="mpx-auth-muted" data-testid="login-legal">
+              By continuing, you agree to the{" "}
+              <Link href="/terms">Terms of Service</Link> and{" "}
+              <Link href="/privacy">Privacy Policy</Link>.
+            </p>
           </>
         )}
       </div>
