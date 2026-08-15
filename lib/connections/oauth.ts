@@ -96,6 +96,14 @@ function getTokenExpiry(tokens: OAuthTokenResponse) {
     : null;
 }
 
+export function canPrepareOAuthConnection(connection: Connection): boolean {
+  if (connection.auth_type === "oauth") {
+    return true;
+  }
+
+  return getConnectionPreset(connection.source_preset)?.auth_type === "oauth";
+}
+
 export async function prepareOAuthConnection(
   connection: Connection,
   options: {
@@ -116,12 +124,14 @@ export async function prepareOAuthConnection(
   if (!nextConnection.oauth_authorize_url || !nextConnection.oauth_token_url) {
     metadata = await discoverOAuthMetadata(nextConnection.mcp_url!);
     await updateConnection(nextConnection.id, {
+      auth_type: "oauth",
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
       oauth_scopes: oauthScopes,
     });
     nextConnection = {
       ...nextConnection,
+      auth_type: "oauth",
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
       oauth_scopes: oauthScopes ?? null,
@@ -146,6 +156,7 @@ export async function prepareOAuthConnection(
       : undefined;
 
     await updateConnection(nextConnection.id, {
+      auth_type: "oauth",
       oauth_client_id: registration.client_id,
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
@@ -155,9 +166,25 @@ export async function prepareOAuthConnection(
 
     nextConnection = {
       ...nextConnection,
+      auth_type: "oauth",
       oauth_client_id: registration.client_id,
       oauth_authorize_url: metadata.authorization_endpoint,
       oauth_token_url: metadata.token_endpoint,
+      oauth_scopes: oauthScopes ?? null,
+    };
+  }
+
+  if (
+    nextConnection.auth_type !== "oauth" ||
+    nextConnection.oauth_scopes !== (oauthScopes ?? null)
+  ) {
+    await updateConnection(nextConnection.id, {
+      auth_type: "oauth",
+      oauth_scopes: oauthScopes ?? null,
+    });
+    nextConnection = {
+      ...nextConnection,
+      auth_type: "oauth",
       oauth_scopes: oauthScopes ?? null,
     };
   }

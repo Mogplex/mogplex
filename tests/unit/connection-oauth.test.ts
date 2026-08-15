@@ -134,6 +134,23 @@ test("exchangeCodeForTokens binds the token request to the Sentry MCP resource",
   }
 });
 
+test("native OAuth preparation accepts broker-era Sentry rows only for OAuth presets", async () => {
+  const { canPrepareOAuthConnection } = await loadOAuthHelpers();
+
+  assert.equal(
+    canPrepareOAuthConnection(
+      createConnection({ auth_type: "bearer", source_preset: "sentry" })
+    ),
+    true
+  );
+  assert.equal(
+    canPrepareOAuthConnection(
+      createConnection({ auth_type: "bearer", source_preset: "supabase" })
+    ),
+    false
+  );
+});
+
 test("prepareOAuthConnection replaces legacy scopes with the native Sentry preset contract", async () => {
   const originalFetch = global.fetch;
   const updateBodies: Array<Record<string, unknown>> = [];
@@ -187,6 +204,7 @@ test("prepareOAuthConnection replaces legacy scopes with the native Sentry prese
     const { prepareOAuthConnection } = await loadOAuthHelpers();
     const prepared = await prepareOAuthConnection(
       createConnection({
+        auth_type: "bearer",
         source_preset: "sentry",
         mcp_url: "https://mcp.sentry.dev/mcp",
         oauth_client_id: null,
@@ -201,11 +219,69 @@ test("prepareOAuthConnection replaces legacy scopes with the native Sentry prese
     );
 
     assert.equal(prepared.connection.oauth_client_id, "native-sentry-client");
+    assert.equal(prepared.connection.auth_type, "oauth");
     assert.equal(
       prepared.connection.oauth_scopes,
       "org:read project:write team:write event:write"
     );
     assert.equal(updateBodies.length, 2);
+    assert.equal(
+      updateBodies[0]?.oauth_scopes,
+      "org:read project:write team:write event:write"
+    );
+    assert.equal(updateBodies[0]?.auth_type, "oauth");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("prepareOAuthConnection refreshes PKCE and preset scopes for a registered Sentry client", async () => {
+  const originalFetch = global.fetch;
+  const updateBodies: Array<Record<string, unknown>> = [];
+
+  global.fetch = async (input: FetchInput, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (url.startsWith("https://example.supabase.co/rest/v1/connections?")) {
+      updateBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>
+      );
+      return Response.json({});
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  try {
+    const { prepareOAuthConnection } = await loadOAuthHelpers();
+    const prepared = await prepareOAuthConnection(
+      createConnection({
+        source_preset: "sentry",
+        mcp_url: "https://mcp.sentry.dev/mcp",
+        oauth_client_id: "registered-sentry-client",
+        oauth_authorize_url: "https://mcp.sentry.dev/oauth/authorize",
+        oauth_token_url: "https://mcp.sentry.dev/oauth/token",
+        oauth_scopes: "event:read",
+      }),
+      {
+        redirectUri: "https://mogplex.example/api/connections/oauth/callback",
+        origin: "https://mogplex.example",
+      }
+    );
+
+    assert.ok(prepared.codeVerifier);
+    assert.ok(prepared.codeVerifier.length >= 43);
+    assert.equal(
+      prepared.connection.oauth_scopes,
+      "org:read project:write team:write event:write"
+    );
+    assert.equal(updateBodies.length, 1);
+    assert.equal(updateBodies[0]?.auth_type, "oauth");
     assert.equal(
       updateBodies[0]?.oauth_scopes,
       "org:read project:write team:write event:write"
