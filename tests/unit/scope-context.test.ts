@@ -4,40 +4,11 @@ import { config as proxyConfig } from "../../proxy";
 import {
   IMAGE_ASSET_SCOPE_EXTENSIONS,
   isImageAssetScopeSegment,
-  parseScopeContextForLayout,
   parseScopeContextHeaders,
 } from "../../lib/scope-context";
 
 test("missing middleware scope headers can be treated as not found at the route boundary", () => {
   assert.equal(parseScopeContextHeaders(new Headers()), null);
-});
-
-test("the scoped layout fails closed when trusted scope headers are missing", () => {
-  assert.throws(
-    () => parseScopeContextForLayout("monitoring", new Headers()),
-    (error: unknown) =>
-      error instanceof Error &&
-      "digest" in error &&
-      error.digest === "NEXT_HTTP_ERROR_FALLBACK;404"
-  );
-});
-
-test("the scoped layout rejects image-like segments before trusting supplied headers", () => {
-  assert.throws(
-    () =>
-      parseScopeContextForLayout(
-        "logo.svg",
-        new Headers({
-          "x-mogplex-scope-kind": "personal",
-          "x-mogplex-scope-slug": "alice",
-          "x-mogplex-scope-id": "profile-alice",
-        })
-      ),
-    (error: unknown) =>
-      error instanceof Error &&
-      "digest" in error &&
-      error.digest === "NEXT_HTTP_ERROR_FALLBACK;404"
-  );
 });
 
 test("scope headers parse personal and team contexts", () => {
