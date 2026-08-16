@@ -47,6 +47,7 @@ const BILLING_MIGRATIONS = [
   "20260816120000_capacity_billing_shadow_foundation.sql",
   "20260816140000_capacity_billing_shadow_state.sql",
   "20260816150000_capacity_billing_workflow_admission.sql",
+  "20260816160000_capacity_billing_rollback_status.sql",
 ];
 
 export async function createBillingTestDb(): Promise<PGlite> {

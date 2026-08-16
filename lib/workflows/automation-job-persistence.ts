@@ -200,7 +200,12 @@ export async function claimPendingJob(input: {
   };
 }
 
-export async function resetClaimedJobToPending(
+/**
+ * Atomically releases any admitted Concurrency lease and resets a running job.
+ * The returned status is read under the same job-row lock, so callers can
+ * preserve a concurrent cancellation instead of reporting it as pending.
+ */
+export async function rollbackClaimedJobStart(
   jobRunId: string,
   adminClient: SupabaseClient = supabaseAdmin,
   rollback?: {

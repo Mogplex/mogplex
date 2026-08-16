@@ -51,9 +51,15 @@ function fakeClient(input?: {
     },
     async rpc(name: string, args: Record<string, unknown>) {
       calls.push({ kind: "rpc", name, args });
-      if (name === "rollback_billing_automation_job_start") {
+      if (name === "rollback_billing_automation_job_start_v2") {
         return {
-          data: [input?.rollback ?? { reset: true, lease_released: true }],
+          data: [
+            input?.rollback ?? {
+              reset: true,
+              lease_released: true,
+              job_status: "pending",
+            },
+          ],
           error: null,
         };
       }
@@ -209,7 +215,11 @@ describe("automation workflow capacity adapter", () => {
         },
         client
       )
-    ).resolves.toEqual({ reset: true, leaseReleased: true });
+    ).resolves.toEqual({
+      reset: true,
+      leaseReleased: true,
+      jobStatus: "pending",
+    });
 
     expect(calls.find((call) => call.kind === "rpc")?.args).toEqual({
       p_job_run_id: "job-1",

@@ -12,6 +12,7 @@ const JOB_ONE = "20000000-0000-4000-8000-000000000001";
 const JOB_TWO = "20000000-0000-4000-8000-000000000002";
 const JOB_THREE = "20000000-0000-4000-8000-000000000003";
 const JOB_FOUR = "20000000-0000-4000-8000-000000000004";
+const JOB_FIVE = "20000000-0000-4000-8000-000000000005";
 const ATTEMPTED_AT = "2026-08-16T15:00:00.000Z";
 
 type AdmissionRow = {
@@ -62,9 +63,10 @@ describe("capacity billing workflow admission", () => {
     );
     await db.query(
       `insert into job_runs (id, status, started_at)
-       values ($1, 'running', $5), ($2, 'running', $5),
-              ($3, 'running', $5), ($4, 'running', $5)`,
-      [JOB_ONE, JOB_TWO, JOB_THREE, JOB_FOUR, ATTEMPTED_AT]
+       values ($1, 'running', $6), ($2, 'running', $6),
+              ($3, 'running', $6), ($4, 'running', $6),
+              ($5, 'running', $6)`,
+      [JOB_ONE, JOB_TWO, JOB_THREE, JOB_FOUR, JOB_FIVE, ATTEMPTED_AT]
     );
   });
 
@@ -142,13 +144,16 @@ describe("capacity billing workflow admission", () => {
     const rolledBack = await db.query<{
       reset: boolean;
       lease_released: boolean;
+      job_status: string;
     }>(
-      `select * from rollback_billing_automation_job_start(
+      `select * from rollback_billing_automation_job_start_v2(
          $1, 'dispatch-failed:job-two', $2, '{"provider":"trigger"}'
        )`,
       [JOB_TWO, "2026-08-16T15:11:00.000Z"]
     );
-    expect(rolledBack.rows).toEqual([{ reset: true, lease_released: true }]);
+    expect(rolledBack.rows).toEqual([
+      { reset: true, lease_released: true, job_status: "pending" },
+    ]);
 
     const job = await db.query<{ status: string; started_at: string | null }>(
       `select status, started_at from job_runs where id = $1`,
@@ -174,6 +179,39 @@ describe("capacity billing workflow admission", () => {
       [JOB_TWO]
     );
     expect(historical.rows).toEqual([{ count: 2 }]);
+  });
+
+  it("returns a cancellation observed under the rollback row lock", async () => {
+    await admission(db, {
+      accountId: CANCELLATION_ACCOUNT_ID,
+      jobRunId: JOB_FIVE,
+      attempt: "one",
+    });
+    await db.query(
+      `update job_runs
+       set status = 'cancelled', cancelled_at = $2
+       where id = $1`,
+      [JOB_FIVE, "2026-08-16T15:13:00.000Z"]
+    );
+
+    const rolledBack = await db.query<{
+      reset: boolean;
+      lease_released: boolean;
+      job_status: string;
+    }>(
+      `select * from rollback_billing_automation_job_start_v2(
+         $1, 'capacity-deferred:job-five', $2, '{}'
+       )`,
+      [JOB_FIVE, "2026-08-16T15:14:00.000Z"]
+    );
+
+    expect(rolledBack.rows).toEqual([
+      {
+        reset: false,
+        lease_released: false,
+        job_status: "cancelled",
+      },
+    ]);
   });
 
   it("blocks only enforced accounts and records rejected decisions", async () => {
@@ -357,6 +395,32 @@ describe("capacity billing workflow admission", () => {
          ) as service_role`
     );
     expect(privileges.rows).toEqual([
+      { anon: false, authenticated: false, service_role: true },
+    ]);
+
+    const rollbackPrivileges = await db.query<{
+      anon: boolean;
+      authenticated: boolean;
+      service_role: boolean;
+    }>(
+      `select
+         has_function_privilege(
+           'anon',
+           'public.rollback_billing_automation_job_start_v2(uuid,text,timestamp with time zone,jsonb)',
+           'execute'
+         ) as anon,
+         has_function_privilege(
+           'authenticated',
+           'public.rollback_billing_automation_job_start_v2(uuid,text,timestamp with time zone,jsonb)',
+           'execute'
+         ) as authenticated,
+         has_function_privilege(
+           'service_role',
+           'public.rollback_billing_automation_job_start_v2(uuid,text,timestamp with time zone,jsonb)',
+           'execute'
+         ) as service_role`
+    );
+    expect(rollbackPrivileges.rows).toEqual([
       { anon: false, authenticated: false, service_role: true },
     ]);
   });
