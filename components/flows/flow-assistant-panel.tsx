@@ -135,7 +135,10 @@ export function FlowAssistantPanel({
     >
       <div className="flex items-center gap-3 border-b border-border bg-foreground/[0.02] px-4 py-4">
         <span className="grid size-9 place-items-center rounded-lg border border-accent-blue/20 bg-accent-blue/[0.08] text-accent-blue">
-          <MogplexFace className="size-4" />
+          <MogplexFace
+            className="size-4"
+            mood={busy ? "thinking" : input.trim() ? "listening" : "idle"}
+          />
         </span>
         <div className="min-w-0">
           <div className="text-[11px] font-semibold tracking-[0.16em] text-foreground uppercase">

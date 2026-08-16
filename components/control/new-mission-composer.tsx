@@ -41,6 +41,8 @@ import { NewProjectFields, type AvailabilityState } from "./new-project-fields";
 
 const NEW_PROJECT = "new";
 const LAST_GITHUB_OWNER_KEY = "mogplex:last-github-repo-owner";
+/** Availability states that permit creating the project. */
+const CREATABLE_AVAILABILITY = new Set(["available", "unverified"]);
 
 type Props = {
   repos: Repo[];
@@ -207,10 +209,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
     (ownersLoading ||
       !ownerLogin ||
       !nameValidation.ok ||
-      availability === "idle" ||
-      availability === "checking" ||
-      availability === "taken" ||
-      availability === "invalid");
+      !CREATABLE_AVAILABILITY.has(availability));
   const submitDisabled = !hasMissionInput || newProjectBlocked || submitting;
 
   const cyclePermissions = useCallback(() => {
@@ -307,6 +306,7 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
         <div className="mb-8">
           <MogplexFace
             className="text-foreground mb-3 size-9"
+            mood={submitting ? "thinking" : text.trim() ? "listening" : "idle"}
             aria-hidden="true"
           />
           <h2 className="text-[20px] leading-7 font-semibold">
