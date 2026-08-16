@@ -5,6 +5,7 @@ import {
 } from "@/lib/billing/accounts";
 import { getStripe } from "@/lib/billing/stripe";
 import { findPlanPrice, findTopupPreset } from "@/lib/billing/catalog";
+import { findCapacityRecurringPrice } from "@/lib/billing/capacity-catalog";
 
 type StripeProductSummary = Pick<Stripe.Product, "id" | "metadata">;
 type StripePriceSummary = Pick<
@@ -39,6 +40,40 @@ export type StripeProductDeps = {
 export type ListStripePrices = (
   params: Stripe.PriceListParams
 ) => Promise<{ data: StripePriceSummary[] }>;
+
+type ExpectedCatalogPrice = {
+  amountCents: number;
+  interval: string | null;
+};
+
+function expectedCatalogPrice(lookupKey: string): ExpectedCatalogPrice | null {
+  const plan = findPlanPrice(lookupKey);
+  if (plan) return { amountCents: plan.amountCents, interval: plan.interval };
+  const preset = findTopupPreset(lookupKey);
+  if (preset) return { amountCents: preset.amountCents, interval: null };
+  const capacityPrice = findCapacityRecurringPrice(lookupKey);
+  return capacityPrice
+    ? {
+        amountCents: capacityPrice.amountCents,
+        interval: capacityPrice.interval,
+      }
+    : null;
+}
+
+function catalogPriceMatches(
+  price: StripePriceSummary,
+  expected: ExpectedCatalogPrice | null
+): boolean {
+  if (!expected) return false;
+  return (
+    price.active &&
+    price.currency === "usd" &&
+    price.unit_amount === expected.amountCents &&
+    (expected.interval
+      ? price.recurring?.interval === expected.interval
+      : !price.recurring)
+  );
+}
 
 function defaultCustomerDeps(): StripeCustomerDeps {
   const stripe = getStripe();
@@ -146,16 +181,7 @@ export async function resolveCatalogPriceId(
     );
   }
 
-  const plan = findPlanPrice(lookupKey);
-  const preset = findTopupPreset(lookupKey);
-  const expectedAmount = plan?.amountCents ?? preset?.amountCents;
-  const matches =
-    expectedAmount !== undefined &&
-    price.active &&
-    price.currency === "usd" &&
-    price.unit_amount === expectedAmount &&
-    (plan ? price.recurring?.interval === plan.interval : !price.recurring);
-  if (!matches) {
+  if (!catalogPriceMatches(price, expectedCatalogPrice(lookupKey))) {
     throw new Error(
       `Stripe price for lookup_key "${lookupKey}" does not match the local catalog`
     );

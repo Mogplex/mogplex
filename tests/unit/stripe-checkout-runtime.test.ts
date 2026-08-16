@@ -253,3 +253,27 @@ test("catalog price lookup validates one-time top-up prices", async () => {
     "price_topup"
   );
 });
+
+test("catalog price lookup validates capacity plans and add-ons", async () => {
+  const { resolveCatalogPriceId } = await loadCheckoutRuntime();
+
+  for (const [lookupKey, id, amountCents, interval] of [
+    ["capacity_v2_max_annual", "price_max", 204000, "year"],
+    ["capacity_v2_retained_data_10gb_monthly", "price_storage", 1500, "month"],
+  ] as const) {
+    assert.equal(
+      await resolveCatalogPriceId(lookupKey, async () => ({
+        data: [
+          {
+            id,
+            active: true,
+            unit_amount: amountCents,
+            currency: "usd",
+            recurring: { interval },
+          },
+        ],
+      })),
+      id
+    );
+  }
+});
