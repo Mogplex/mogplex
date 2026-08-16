@@ -11,6 +11,7 @@ export const TRIGGER_TASK_IDS = {
   vercelLinkReconciliation: "reconcile-vercel-links",
   aiCallCostReconciliation: "reconcile-ai-call-costs",
   annualIncludedUsageGrant: "grant-annual-included-usage",
+  capacityAnnualIncludedUsageGrant: "grant-capacity-annual-included-usage",
   aiSpendDivergenceCheck: "check-ai-spend-divergence",
   zombieRowReaper: "zombie-row-reaper",
   slackEventHandler: "handle-slack-event",

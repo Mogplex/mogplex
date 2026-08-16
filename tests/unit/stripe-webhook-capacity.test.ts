@@ -11,6 +11,7 @@ import {
 function capacitySubscription(
   input: {
     plan?: "pro" | "plus" | "max";
+    interval?: "monthly" | "annual";
     status?: Stripe.Subscription.Status;
     includeAddOn?: boolean;
   } = {}
@@ -26,7 +27,7 @@ function capacitySubscription(
             current_period_start: 1_785_542_400,
             price: {
               id: `price_${plan}`,
-              lookup_key: `capacity_v2_${plan}_monthly`,
+              lookup_key: `capacity_v2_${plan}_${input.interval ?? "monthly"}`,
             },
           },
           ...(input.includeAddOn
@@ -77,6 +78,45 @@ test("invoice.paid projects capacity and grants hosted usage only after payment"
   assert.deepEqual(recorded.updates, [
     { id: "acct-1", updates: { status: "active" } },
   ]);
+  assert.deepEqual(recorded.annualGrantReconciliations, [
+    {
+      accountId: "acct-1",
+      keepEntitlementVersion: null,
+      desired: null,
+    },
+  ]);
+});
+
+test("annual capacity invoice schedules the next monthly included-usage grant", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    subscription: capacitySubscription({ interval: "annual" }),
+    capacityBillingOperationsEnabled: true,
+  });
+  const event = invoicePaidEvent();
+  event.created = 1_787_078_400;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.equal(recorded.annualGrantReconciliations.length, 1);
+  assert.deepEqual(recorded.annualGrantReconciliations[0], {
+    accountId: "acct-1",
+    keepEntitlementVersion: 1,
+    desired: {
+      accountId: "acct-1",
+      subscriptionId: "sub_1",
+      entitlementVersion: 1,
+      priceLookupKey: "capacity_v2_pro_annual",
+      includedUsageCents: 500,
+      cycleStartedAt: new Date("2026-08-01T00:00:00.000Z"),
+      occurrence: {
+        offset: 1,
+        period: "2026-09",
+        dueAt: new Date("2026-09-01T00:00:00.000Z"),
+      },
+      sourceEventId: "evt_invoice_paid",
+    },
+  });
 });
 
 test("stale capacity cancellation cannot expire current included usage", async () => {
@@ -257,6 +297,13 @@ test("subscription.deleted closes capacity and expires only included usage", asy
     {
       id: "acct-1",
       updates: { stripe_subscription_id: null, status: "active" },
+    },
+  ]);
+  assert.deepEqual(recorded.annualGrantReconciliations, [
+    {
+      accountId: "acct-1",
+      keepEntitlementVersion: null,
+      desired: null,
     },
   ]);
 });

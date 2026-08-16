@@ -1,6 +1,11 @@
 import type Stripe from "stripe";
 import type { BillingAccount } from "@/lib/billing/accounts";
 import {
+  capacityAnnualGrantScheduleInput,
+  reconcileCapacityAnnualGrantSchedule,
+} from "@/lib/billing/capacity-annual-grants";
+import { findIndividualCapacityPrice } from "@/lib/billing/capacity-catalog";
+import {
   applyCapacityEntitlementSnapshot,
   buildCapacityEntitlementSnapshot,
   type CapacityEntitlementProjectionResult,
@@ -26,6 +31,7 @@ export type CapacityStripeWebhookDeps = {
       stripe_subscription_id?: string | null;
     }
   ) => Promise<void>;
+  reconcileCapacityAnnualGrantSchedule: typeof reconcileCapacityAnnualGrantSchedule;
 };
 
 function stripeEventDate(created: number): Date {
@@ -79,6 +85,41 @@ function shouldContinueAfterProjection(
     console.info(`[stripe-webhook] resuming capacity event ${eventId}`);
   }
   return true;
+}
+
+async function reconcilePaidCapacityAnnualGrant(input: {
+  accountId: string;
+  subscription: Stripe.Subscription;
+  projection: CapacityEntitlementProjectionResult;
+  priceLookupKey: string;
+  includedUsageCents: number;
+  eventId: string;
+  eventCreated: number;
+  deps: CapacityStripeWebhookDeps;
+}) {
+  const resolvedPrice = findIndividualCapacityPrice(input.priceLookupKey);
+  if (!resolvedPrice) {
+    throw new TypeError(`unknown capacity plan ${input.priceLookupKey}`);
+  }
+  const annualSchedule =
+    resolvedPrice.price.interval === "year"
+      ? capacityAnnualGrantScheduleInput({
+          accountId: input.accountId,
+          subscription: input.subscription,
+          entitlementVersion: input.projection.entitlementVersion,
+          priceLookupKey: input.priceLookupKey,
+          includedUsageCents: input.includedUsageCents,
+          sourceEventId: input.eventId,
+          eventCreatedAt: stripeEventDate(input.eventCreated),
+        })
+      : null;
+  await input.deps.reconcileCapacityAnnualGrantSchedule({
+    accountId: input.accountId,
+    keepEntitlementVersion: annualSchedule
+      ? input.projection.entitlementVersion
+      : null,
+    desired: annualSchedule,
+  });
 }
 
 export async function handleCapacityInvoicePaidIfApplicable(input: {
@@ -155,6 +196,16 @@ export async function handleCapacityInvoicePaidIfApplicable(input: {
   if (account.status !== "frozen_topups") {
     await deps.updateAccount(account.id, { status: "active" });
   }
+  await reconcilePaidCapacityAnnualGrant({
+    accountId: account.id,
+    subscription,
+    projection,
+    priceLookupKey: snapshot.plan.priceLookupKey,
+    includedUsageCents: snapshot.plan.hostedUsageCents,
+    eventId: input.eventId,
+    eventCreated: input.eventCreated,
+    deps,
+  });
   return true;
 }
 
@@ -197,6 +248,11 @@ export async function handleCapacitySubscriptionIfApplicable(input: {
     ...(account.status === "frozen_topups"
       ? {}
       : { status: "active" as const }),
+  });
+  await deps.reconcileCapacityAnnualGrantSchedule({
+    accountId: account.id,
+    keepEntitlementVersion: null,
+    desired: null,
   });
   return true;
 }
