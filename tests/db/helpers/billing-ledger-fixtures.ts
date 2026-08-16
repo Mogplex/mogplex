@@ -41,6 +41,7 @@ const BILLING_MIGRATIONS = [
   "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
   "20260805140000_exact_token_usage_accrual.sql",
   "20260805190000_harden_sandbox_billing_close_contract.sql",
+  "20260816120000_capacity_billing_shadow_foundation.sql",
 ];
 
 export async function createBillingTestDb(): Promise<PGlite> {
