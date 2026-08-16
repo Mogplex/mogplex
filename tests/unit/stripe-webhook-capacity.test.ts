@@ -409,6 +409,43 @@ test("subscription_schedule.released restores the current future quantity", asyn
   );
 });
 
+test("subscription_schedule.canceled removes capacity at the event time", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({
+      plan_code: "pro",
+      stripe_subscription_id: "sub_1",
+    }),
+    subscription: capacitySubscription({ status: "canceled" }),
+    capacityBillingOperationsEnabled: true,
+  });
+  const event = {
+    id: "evt_schedule_canceled",
+    type: "subscription_schedule.canceled",
+    created: 1_787_078_600,
+    data: { object: capacitySchedule({ status: "canceled" }) },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.capacityScheduleProjections, [
+    {
+      accountId: "acct-1",
+      subscriptionId: "sub_1",
+      scheduleId: "sub_sched_1",
+      sourceEventId: "evt_schedule_canceled",
+      providerEventCreatedAt: new Date("2026-08-18T18:43:20.000Z"),
+      eventPriority: 100,
+      effectiveAt: new Date("2026-08-18T18:43:20.000Z"),
+      subscriptionItemId: "si_concurrency",
+      lookupKey: "capacity_v2_concurrency_10_monthly",
+      quantity: 0,
+      state: "schedule_canceled",
+      attemptId: "0198f3e8-9c41-4d40-8cb9-4afdfac76f01",
+    },
+  ]);
+});
+
 test("capacity schedule webhooks ignore unmarked schedules and fail closed when disabled", async () => {
   const route = await loadWebhookRoute();
   const ignored = makeDeps({
