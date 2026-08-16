@@ -414,6 +414,7 @@ test("confirmation rejects a signed payload that is not an increase", async () =
       targetQuantity: 1,
       action: "increase",
       prorationDate: NOW.getTime() / 1_000,
+      effectiveAt: NOW.getTime() / 1_000,
       expiresAt: NOW.getTime() / 1_000 + 600,
     },
     "secret"

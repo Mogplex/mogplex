@@ -19,6 +19,7 @@ const payload: CapacityChangePreviewTokenPayload = {
   targetQuantity: 1,
   action: "increase",
   prorationDate: 1_787_078_400,
+  effectiveAt: 1_787_078_400,
   expiresAt: 1_787_079_000,
 };
 
@@ -146,6 +147,7 @@ test("capacity preview tokens reject malformed signed payloads", () => {
   const malformedPayloads = [
     { ...payload, subscriptionItemId: 42 },
     { ...payload, lookupKey: "capacity_v2_unknown" },
+    { ...payload, action: "cancel" },
   ];
   for (const malformed of malformedPayloads) {
     const token = signCapacityChangePreview(
