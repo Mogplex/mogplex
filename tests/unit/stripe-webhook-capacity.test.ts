@@ -79,6 +79,81 @@ test("invoice.paid projects capacity and grants hosted usage only after payment"
   ]);
 });
 
+test("stale capacity cancellation cannot expire current included usage", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({ plan_code: "pro" }),
+    balance: { includedCents: 500, purchasedCents: 900, totalCents: 1_400 },
+    capacityBillingOperationsEnabled: true,
+    capacityProjectionResult: {
+      applied: false,
+      duplicate: false,
+      stale: true,
+      entitlementVersion: 2,
+    },
+  });
+  const event = {
+    id: "evt_stale_capacity_deleted",
+    type: "customer.subscription.deleted",
+    created: 1_787_078_400,
+    data: {
+      object: capacitySubscription({ status: "canceled" }),
+    },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.equal(recorded.capacitySnapshots.length, 1);
+  assert.equal(recorded.ledger.length, 0);
+  assert.equal(recorded.updates.length, 0);
+});
+
+test("duplicate projection resumes idempotent grant recovery", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    subscription: capacitySubscription(),
+    capacityBillingOperationsEnabled: true,
+    capacityProjectionResult: {
+      applied: false,
+      duplicate: true,
+      stale: false,
+      entitlementVersion: 1,
+    },
+  });
+  const event = invoicePaidEvent();
+  event.created = 1_787_078_400;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(
+    recorded.ledger.map((entry) => [entry.kind, entry.deltaCents]),
+    [["grant", 500]]
+  );
+});
+
+test("indeterminate projection cannot change capacity billing state", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    subscription: capacitySubscription(),
+    capacityBillingOperationsEnabled: true,
+    capacityProjectionResult: {
+      applied: false,
+      duplicate: false,
+      stale: false,
+      entitlementVersion: 1,
+    },
+  });
+  const event = invoicePaidEvent();
+  event.created = 1_787_078_400;
+
+  await assert.rejects(
+    route.handleStripeEvent(event, deps),
+    /projection returned no disposition/
+  );
+  assert.equal(recorded.ledger.length, 0);
+  assert.equal(recorded.updates.length, 0);
+});
+
 test("capacity invoice handling fails closed while Gate B operations are disabled", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({
@@ -179,7 +254,36 @@ test("subscription.deleted closes capacity and expires only included usage", asy
     [["grant_expiry", -500]]
   );
   assert.deepEqual(recorded.updates, [
-    { id: "acct-1", updates: { status: "active" } },
+    {
+      id: "acct-1",
+      updates: { stripe_subscription_id: null, status: "active" },
+    },
+  ]);
+});
+
+test("capacity cancellation preserves a dispute freeze while clearing the subscription", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    account: accountFixture({
+      plan_code: "pro",
+      status: "frozen_topups",
+      stripe_subscription_id: "sub_1",
+    }),
+    capacityBillingOperationsEnabled: true,
+  });
+  const event = {
+    id: "evt_frozen_capacity_deleted",
+    type: "customer.subscription.deleted",
+    created: 1_787_078_400,
+    data: {
+      object: capacitySubscription({ status: "canceled" }),
+    },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.updates, [
+    { id: "acct-1", updates: { stripe_subscription_id: null } },
   ]);
 });
 

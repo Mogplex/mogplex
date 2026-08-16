@@ -3,12 +3,12 @@ import test from "node:test";
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  loadWebhookRoute,
-  billingEventsClient,
-} from "./helpers/stripe-webhook-fixtures";
+  claimStripeEvent,
+  markStripeEventProcessed,
+} from "../../lib/billing/stripe-webhook-events";
+import { billingEventsClient } from "./helpers/stripe-webhook-fixtures";
 
 test("event claims insert a fresh event", async () => {
-  const route = await loadWebhookRoute();
   const { client, calls } = billingEventsClient({});
   const event = {
     id: "evt_fresh",
@@ -17,7 +17,7 @@ test("event claims insert a fresh event", async () => {
   } as Stripe.Event;
 
   assert.equal(
-    await route.claimStripeEvent(
+    await claimStripeEvent(
       event,
       client as unknown as SupabaseClient,
       () => new Date("2026-08-04T20:00:00.000Z")
@@ -28,7 +28,6 @@ test("event claims insert a fresh event", async () => {
 });
 
 test("event claims take over only stale unprocessed duplicate rows", async () => {
-  const route = await loadWebhookRoute();
   const { client, calls } = billingEventsClient({
     insertError: { code: "23505", message: "duplicate" },
     takeoverData: [{ stripe_event_id: "evt_stale" }],
@@ -40,7 +39,7 @@ test("event claims take over only stale unprocessed duplicate rows", async () =>
   } as Stripe.Event;
 
   assert.equal(
-    await route.claimStripeEvent(
+    await claimStripeEvent(
       event,
       client as unknown as SupabaseClient,
       () => new Date("2026-08-04T20:00:00.000Z")
@@ -66,7 +65,6 @@ test("event claims take over only stale unprocessed duplicate rows", async () =>
 });
 
 test("event claims distinguish an in-progress duplicate", async () => {
-  const route = await loadWebhookRoute();
   const { client } = billingEventsClient({
     insertError: { code: "23505", message: "duplicate" },
   });
@@ -77,13 +75,12 @@ test("event claims distinguish an in-progress duplicate", async () => {
   } as Stripe.Event;
 
   assert.equal(
-    await route.claimStripeEvent(event, client as unknown as SupabaseClient),
+    await claimStripeEvent(event, client as unknown as SupabaseClient),
     "in_progress"
   );
 });
 
 test("event claims distinguish an already processed duplicate", async () => {
-  const route = await loadWebhookRoute();
   const { client } = billingEventsClient({
     insertError: { code: "23505", message: "duplicate" },
     processedAt: "2026-08-04T20:00:00.000Z",
@@ -95,13 +92,12 @@ test("event claims distinguish an already processed duplicate", async () => {
   } as Stripe.Event;
 
   assert.equal(
-    await route.claimStripeEvent(event, client as unknown as SupabaseClient),
+    await claimStripeEvent(event, client as unknown as SupabaseClient),
     "processed"
   );
 });
 
 test("event claim storage failures surface instead of acknowledging the webhook", async () => {
-  const route = await loadWebhookRoute();
   const { client } = billingEventsClient({
     insertError: { code: "08006", message: "connection failed" },
   });
@@ -112,16 +108,15 @@ test("event claim storage failures surface instead of acknowledging the webhook"
   } as Stripe.Event;
 
   await assert.rejects(
-    route.claimStripeEvent(event, client as unknown as SupabaseClient),
+    claimStripeEvent(event, client as unknown as SupabaseClient),
     /billing_events insert failed: connection failed/
   );
 });
 
 test("processed event claims record the completion timestamp", async () => {
-  const route = await loadWebhookRoute();
   const { client, calls } = billingEventsClient({});
 
-  await route.markStripeEventProcessed(
+  await markStripeEventProcessed(
     "evt_processed",
     client as unknown as SupabaseClient,
     () => new Date("2026-08-04T20:05:00.000Z")

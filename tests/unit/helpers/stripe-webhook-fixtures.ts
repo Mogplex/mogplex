@@ -1,7 +1,10 @@
 import type Stripe from "stripe";
 
 import type { BillingAccount } from "../../../lib/billing/accounts";
-import type { CapacityEntitlementSnapshot } from "../../../lib/billing/capacity-entitlement-webhooks";
+import type {
+  CapacityEntitlementProjectionResult,
+  CapacityEntitlementSnapshot,
+} from "../../../lib/billing/capacity-entitlement-webhooks";
 import type {
   BillingBalance,
   BillingPeriodGrant,
@@ -50,6 +53,7 @@ export function makeDeps(overrides: {
   refunds?: Array<Partial<Stripe.Refund>>;
   postedRefs?: Set<string>;
   capacityBillingOperationsEnabled?: boolean;
+  capacityProjectionResult?: CapacityEntitlementProjectionResult;
 }) {
   const account = overrides.account ?? accountFixture();
   const recorded: Recorded = { ledger: [], updates: [], capacitySnapshots: [] };
@@ -124,12 +128,14 @@ export function makeDeps(overrides: {
       snapshot: CapacityEntitlementSnapshot;
     }) => {
       recorded.capacitySnapshots.push(input);
-      return {
-        applied: true,
-        duplicate: false,
-        stale: false,
-        entitlementVersion: 1,
-      };
+      return (
+        overrides.capacityProjectionResult ?? {
+          applied: true,
+          duplicate: false,
+          stale: false,
+          entitlementVersion: 1,
+        }
+      );
     },
   };
   return { deps, recorded, postedRefs };

@@ -3,6 +3,7 @@ import type { BillingAccount } from "@/lib/billing/accounts";
 import {
   applyCapacityEntitlementSnapshot,
   buildCapacityEntitlementSnapshot,
+  type CapacityEntitlementProjectionResult,
 } from "@/lib/billing/capacity-entitlement-webhooks";
 import type {
   BillingPeriodGrant,
@@ -61,6 +62,25 @@ function requireCapacityOperations(deps: CapacityStripeWebhookDeps) {
   }
 }
 
+function shouldContinueAfterProjection(
+  result: CapacityEntitlementProjectionResult,
+  eventId: string
+): boolean {
+  if (result.stale) {
+    console.warn(`[stripe-webhook] ignored stale capacity event ${eventId}`);
+    return false;
+  }
+  if (!result.applied && !result.duplicate) {
+    throw new Error("capacity entitlement projection returned no disposition");
+  }
+  if (result.duplicate) {
+    // Continue idempotent ledger work so a retry can recover from a crash that
+    // happened after the projection but before the grant or expiry completed.
+    console.info(`[stripe-webhook] resuming capacity event ${eventId}`);
+  }
+  return true;
+}
+
 export async function handleCapacityInvoicePaidIfApplicable(input: {
   account: BillingAccount;
   invoice: Stripe.Invoice;
@@ -92,12 +112,13 @@ export async function handleCapacityInvoicePaidIfApplicable(input: {
   if (!snapshot.plan) {
     throw new TypeError("a paid capacity invoice must contain an active plan");
   }
-  await deps.applyCapacityEntitlementSnapshot({
+  const projection = await deps.applyCapacityEntitlementSnapshot({
     accountId: account.id,
     sourceEventId: input.eventId,
     effectiveAt: stripeEventDate(input.eventCreated),
     snapshot,
   });
+  if (!shouldContinueAfterProjection(projection, input.eventId)) return true;
 
   const period = snapshot.plan.periodAnchor.slice(0, 7);
   const grant = await deps.postBillingPeriodGrant({
@@ -160,18 +181,22 @@ export async function handleCapacitySubscriptionIfApplicable(input: {
     });
     return true;
   }
-  await deps.applyCapacityEntitlementSnapshot({
+  const projection = await deps.applyCapacityEntitlementSnapshot({
     accountId: account.id,
     sourceEventId: input.eventId,
     effectiveAt: stripeEventDate(input.eventCreated),
     snapshot,
   });
+  if (!shouldContinueAfterProjection(projection, input.eventId)) return true;
   await deps.expireIncludedCredit({
     accountId: account.id,
     sourceRef: `grantexp:${account.id}:cancel:${subscription.id}`,
   });
-  if (account.status !== "frozen_topups") {
-    await deps.updateAccount(account.id, { status: "active" });
-  }
+  await deps.updateAccount(account.id, {
+    stripe_subscription_id: null,
+    ...(account.status === "frozen_topups"
+      ? {}
+      : { status: "active" as const }),
+  });
   return true;
 }

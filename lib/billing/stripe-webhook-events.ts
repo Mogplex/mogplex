@@ -67,6 +67,9 @@ export async function markStripeEventProcessed(
   client: SupabaseClient = supabaseAdmin,
   now: () => Date = () => new Date()
 ): Promise<void> {
+  // Drop the raw provider payload after success to minimize retained customer
+  // data. Durable billing facts remain in the ledger and entitlement snapshot
+  // tables; failed or interrupted events retain their payload for recovery.
   const { error } = await client
     .from("billing_events")
     .update({ processed_at: now().toISOString(), payload: {} })
