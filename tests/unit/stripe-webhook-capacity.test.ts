@@ -119,6 +119,26 @@ test("annual capacity invoice schedules the next monthly included-usage grant", 
   });
 });
 
+test("elapsed annual cycle preserves current-version pending grants", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    subscription: capacitySubscription({ interval: "annual" }),
+    capacityBillingOperationsEnabled: true,
+  });
+  const event = invoicePaidEvent();
+  event.created = Date.parse("2027-08-01T00:00:00.000Z") / 1_000;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.annualGrantReconciliations, [
+    {
+      accountId: "acct-1",
+      keepEntitlementVersion: 1,
+      desired: null,
+    },
+  ]);
+});
+
 test("stale capacity cancellation cannot expire current included usage", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({

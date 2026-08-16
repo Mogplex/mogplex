@@ -101,21 +101,23 @@ async function reconcilePaidCapacityAnnualGrant(input: {
   if (!resolvedPrice) {
     throw new TypeError(`unknown capacity plan ${input.priceLookupKey}`);
   }
-  const annualSchedule =
-    resolvedPrice.price.interval === "year"
-      ? capacityAnnualGrantScheduleInput({
-          accountId: input.accountId,
-          subscription: input.subscription,
-          entitlementVersion: input.projection.entitlementVersion,
-          priceLookupKey: input.priceLookupKey,
-          includedUsageCents: input.includedUsageCents,
-          sourceEventId: input.eventId,
-          eventCreatedAt: stripeEventDate(input.eventCreated),
-        })
-      : null;
+  const isAnnualPrice = resolvedPrice.price.interval === "year";
+  const annualSchedule = isAnnualPrice
+    ? capacityAnnualGrantScheduleInput({
+        accountId: input.accountId,
+        subscription: input.subscription,
+        entitlementVersion: input.projection.entitlementVersion,
+        priceLookupKey: input.priceLookupKey,
+        includedUsageCents: input.includedUsageCents,
+        sourceEventId: input.eventId,
+        eventCreatedAt: stripeEventDate(input.eventCreated),
+      })
+    : null;
   await input.deps.reconcileCapacityAnnualGrantSchedule({
     accountId: input.accountId,
-    keepEntitlementVersion: annualSchedule
+    // An elapsed annual cycle may have no next anchor, but its current-version
+    // run must remain eligible. Only a monthly price cancels every annual run.
+    keepEntitlementVersion: isAnnualPrice
       ? input.projection.entitlementVersion
       : null,
     desired: annualSchedule,

@@ -27,6 +27,9 @@ create table if not exists public.billing_annual_grant_schedules (
   updated_at timestamptz not null default now(),
   constraint billing_annual_grant_schedules_occurrence_key
     unique (account_id, entitlement_version, grant_offset),
+  -- These values are the immutable capacity_v2 commercial contract. A new
+  -- lookup key or amount requires a versioned catalog and database migration;
+  -- the database intentionally fails closed if application data drifts.
   constraint billing_annual_grant_schedules_plan_shape check (
     (price_lookup_key = 'capacity_v2_pro_annual'
       and included_usage_cents = 500)
