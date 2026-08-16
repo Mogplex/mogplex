@@ -12,6 +12,8 @@ const USER_ID = "10000000-0000-4000-8000-000000000002";
 const SANDBOX_ONE_ID = "10000000-0000-4000-8000-000000000003";
 const SANDBOX_TWO_ID = "10000000-0000-4000-8000-000000000004";
 const OPEN_RACE_SANDBOX_ID = "10000000-0000-4000-8000-000000000005";
+const SHADOW_ACCOUNT_ID = "10000000-0000-4000-8000-000000000006";
+const SHADOW_USER_ID = "10000000-0000-4000-8000-000000000007";
 
 function requireLocalTestDatabase(value: string) {
   const parsed = new URL(value);
@@ -59,6 +61,7 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
       "20260805190000_harden_sandbox_billing_close_contract.sql",
       "20260816120000_capacity_billing_shadow_foundation.sql",
+      "20260816140000_capacity_billing_shadow_state.sql",
     ]) {
       const migration = await readFile(
         path.resolve(
@@ -71,8 +74,21 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
     }
     await pool.query(
       `insert into billing_accounts (id, owner_type, owner_user_id)
-       values ($1, 'user', $2)`,
-      [ACCOUNT_ID, USER_ID]
+       values ($1, 'user', $2), ($3, 'user', $4)`,
+      [ACCOUNT_ID, USER_ID, SHADOW_ACCOUNT_ID, SHADOW_USER_ID]
+    );
+    await pool.query(
+      `update billing_accounts
+       set included_concurrency = 2, included_retained_bytes = 100
+       where id = $1`,
+      [SHADOW_ACCOUNT_ID]
+    );
+    await pool.query(
+      `select post_credit_ledger_entry(
+         $1, 100, 'included', 'grant', 'grant:parallel-shadow',
+         '2026-08', '{}'
+       )`,
+      [SHADOW_ACCOUNT_ID]
     );
     await pool.query(
       `insert into sandboxes
@@ -187,5 +203,159 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
          and provider_event_id = 'run-concurrent-1'`
     );
     expect(Number(events.rows[0]?.count)).toBe(1);
+  });
+
+  it("serializes shadow reservation, concurrency, and retained-data decisions", async () => {
+    const reservations = await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        pool.query<{ posted: boolean; would_admit: boolean }>(
+          `select posted, would_admit
+           from record_billing_shadow_reservation(
+             $1, $2, $3, $4, null, 100000, '{}', 'capacity_v2',
+             '2099-08-16T14:00:00.000Z', '{}'
+           )`,
+          [
+            SHADOW_ACCOUNT_ID,
+            `parallel-reservation-${index}`,
+            `parallel-reserve:${index}`,
+            `parallel-operation-${index}`,
+          ]
+        )
+      )
+    );
+    expect(
+      reservations.filter((result) => result.rows[0]?.would_admit)
+    ).toHaveLength(10);
+    expect(reservations.every((result) => result.rows[0]?.posted)).toBe(true);
+
+    const leases = await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        pool.query<{ posted: boolean; would_admit: boolean }>(
+          `select posted, would_admit
+           from record_billing_shadow_capacity_lease(
+             $1, $2, $3, $4, '2026-08-16T12:00:00.000Z', '{}'
+           )`,
+          [
+            SHADOW_ACCOUNT_ID,
+            `parallel-lease-${index}`,
+            `parallel-acquire:${index}`,
+            `parallel-workflow-${index}`,
+          ]
+        )
+      )
+    );
+    expect(leases.filter((result) => result.rows[0]?.would_admit)).toHaveLength(
+      2
+    );
+    expect(leases.every((result) => result.rows[0]?.posted)).toBe(true);
+
+    const retained = await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        pool.query<{ posted: boolean; would_admit: boolean }>(
+          `select posted, would_admit
+           from record_billing_shadow_retained_data_event(
+             $1, 'generated_artifact', $2, 10, $3, $4,
+             '2026-08-16T12:00:00.000Z', '{}'
+           )`,
+          [
+            SHADOW_ACCOUNT_ID,
+            `parallel-artifact-${index}`,
+            `parallel-retained:${index}`,
+            `parallel-operation-${index}`,
+          ]
+        )
+      )
+    );
+    expect(
+      retained.filter((result) => result.rows[0]?.would_admit)
+    ).toHaveLength(10);
+    expect(retained.every((result) => result.rows[0]?.posted)).toBe(true);
+
+    const totals = await pool.query<{
+      open_reservations: string;
+      active_leases: string;
+      logical_bytes: string;
+    }>(
+      `select
+         (select count(*) from billing_open_cost_reservations
+          where account_id = $1) as open_reservations,
+         (select count(*) from billing_active_workflow_capacity_leases
+          where account_id = $1) as active_leases,
+         (select logical_bytes from billing_retained_data_totals
+          where account_id = $1) as logical_bytes`,
+      [SHADOW_ACCOUNT_ID]
+    );
+    expect(totals.rows).toEqual([
+      {
+        open_reservations: "12",
+        active_leases: "12",
+        logical_bytes: "120",
+      },
+    ]);
+  });
+
+  it("deduplicates shadow facts across concurrent deliveries", async () => {
+    const leaseDeliveries = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        pool.query<{ posted: boolean }>(
+          `select posted from record_billing_shadow_capacity_lease(
+             $1, 'same-lease', 'same-acquire', 'same-root-workflow',
+             '2026-08-16T12:00:00.000Z', '{}'
+           )`,
+          [SHADOW_ACCOUNT_ID]
+        )
+      )
+    );
+    expect(
+      leaseDeliveries.filter((delivery) => delivery.rows[0]?.posted)
+    ).toHaveLength(1);
+
+    const reservationDeliveries = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        pool.query<{ posted: boolean }>(
+          `select posted from record_billing_shadow_reservation(
+             $1, 'same-reservation', 'same-reserve', 'same-operation', null,
+             1, '{}', 'capacity_v2', '2099-08-16T14:00:00.000Z', '{}'
+           )`,
+          [SHADOW_ACCOUNT_ID]
+        )
+      )
+    );
+    expect(
+      reservationDeliveries.filter((delivery) => delivery.rows[0]?.posted)
+    ).toHaveLength(1);
+
+    const retainedDeliveries = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        pool.query<{ posted: boolean }>(
+          `select posted from record_billing_shadow_retained_data_event(
+             $1, 'generated_artifact', 'same-artifact', 1,
+             'same-retained', 'same-operation',
+             '2026-08-16T12:00:00.000Z', '{}'
+           )`,
+          [SHADOW_ACCOUNT_ID]
+        )
+      )
+    );
+    expect(
+      retainedDeliveries.filter((delivery) => delivery.rows[0]?.posted)
+    ).toHaveLength(1);
+
+    const facts = await pool.query<{
+      leases: string;
+      reservations: string;
+      retained: string;
+    }>(
+      `select
+         (select count(*) from billing_workflow_capacity_leases
+          where lease_ref = 'same-lease') as leases,
+         (select count(*) from billing_cost_reservations
+          where reservation_ref = 'same-reservation') as reservations,
+         (select count(*) from billing_retained_data_events
+          where source_ref = 'same-retained') as retained`
+    );
+    expect(facts.rows).toEqual([
+      { leases: "1", reservations: "1", retained: "1" },
+    ]);
   });
 });
