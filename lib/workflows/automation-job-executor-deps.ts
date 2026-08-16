@@ -25,11 +25,13 @@ import type { GatewayCallContext } from "@/lib/models/gateway-provider-routing";
 
 import {
   loadPullRequestDetails,
+  fetchPrLiveness,
   resolveAutofixGithubToken,
   resolveAutofixTargetRepo,
   resolveGithubToken,
 } from "@/lib/workflows/automation-job-github";
 import { recordControlDispatchEvent } from "@/lib/workflows/automation-job-dispatch";
+import { finalizeJobRunCancelled } from "@/lib/workflows/job-run-cancel-persistence";
 import {
   isJobRunCancellationRequested,
   throwIfJobRunCancelled,
@@ -77,6 +79,8 @@ export type AutomationJobExecutorDeps = {
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
   resolveAutomationModel: typeof resolveAutomationModel;
   loadPullRequestDetails: typeof loadPullRequestDetails;
+  fetchPrLiveness: typeof fetchPrLiveness;
+  persistJobCancelled: typeof finalizeJobRunCancelled;
   resolveAutofixTargetRepo: typeof resolveAutofixTargetRepo;
   resolveAutofixGithubToken: typeof resolveAutofixGithubToken;
   runAutomationAgent: typeof runAutomationAgent;
@@ -113,6 +117,8 @@ export const defaultAutomationJobExecutorDeps: AutomationJobExecutorDeps = {
   upsertPrReviewTimelineComment,
   resolveAutomationModel,
   loadPullRequestDetails,
+  fetchPrLiveness,
+  persistJobCancelled: finalizeJobRunCancelled,
   resolveAutofixTargetRepo,
   resolveAutofixGithubToken,
   runAutomationAgent,

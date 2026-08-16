@@ -102,7 +102,7 @@ export async function recordStartDispatchEvent(input: {
 export async function recordControlDispatchEvent(input: {
   context: DispatchLogContext | null;
   jobRunId: string;
-  outcome: "completed" | "failed";
+  outcome: "completed" | "failed" | "cancelled";
   reason?: string | null;
   metadata?: Record<string, unknown> | null;
 }) {
