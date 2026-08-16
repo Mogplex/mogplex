@@ -1,6 +1,6 @@
 "use client"
 import "@xyflow/react/dist/style.css"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type CSSProperties } from "react"
 import { useParams } from "next/navigation"
 import { useTheme } from "next-themes"
 import useSWR from "swr"
@@ -27,8 +27,9 @@ import {
   ResponsiveMiniMap, NODE_TYPES, WorkflowSelect, installationAccountTypeLabel, installationAccountLabel, RepositoryScopePicker,
   CanvasContextMenu, SaveTemplateDialog, DeleteTemplateDialog, RunsTabContent, ExecutionBar,
   ConditionInspector, ParallelInspector, JoinInspector, DelayInspector, EndInspector,
-  EditorToolbarHeader, EditorToolbarCompactName, EditorToolbarLegacyBanner,
+  EditorToolbarHeader, EditorToolbarWrappedName, EditorToolbarLegacyBanner,
   SetVariableInspector, TransformInspector, AwaitEventInspector, ActionInspector, NodeLibrarySidebar, AgentInspector, StartInspector,
+  FlowPanelResizer, useFlowToolbarHeight,
   useFlowSelectionState, useFlowCreateBrowseState, useFlowTemplateState, useFlowChromeState, useFlowSavePublishState, useFlowSandboxTestState, useFlowRunActionsState,
   useFlowSavePublishHandlers, useFlowCrudHandlers, useFlowTemplateHandlers, useFlowCanvasHandlers, useFlowDraftMutations, useFlowContextMenuHandlers, useFlowGraphOperations, useFlowRunHandlers, useFlowTestHandlers, useFlowKeyboardEffects,
   useFlowDerivedSelection, useFlowSlackChannels, useFlowDerivedStatus,
@@ -150,6 +151,7 @@ export function FlowsPane() {
   } = useFlowTemplateState()
   const {
     sidebarCollapsed, setSidebarCollapsed, inspectorCollapsed, setInspectorCollapsed,
+    panelWidth, setPanelWidth,
     contextMenu, setContextMenu, spacePanActive, rightSheetAnimateOpen, setRightSheetAnimateOpen,
   } = useFlowChromeState()
   const {
@@ -231,6 +233,8 @@ export function FlowsPane() {
     mutateTeamTemplates, selectedFlow, draft, dirty, activeTeamId, persistFlow,
   })
   const editorRef = useRef<HTMLElement | null>(null)
+  const paneGridRef = useRef<HTMLDivElement | null>(null)
+  const editorToolbarRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const reactFlowRef = useRef<ReactFlowInstance<FlowCanvasNode, FlowCanvasEdge> | null>(null)
   const fittedFlowIdRef = useRef<string | null>(null)
@@ -267,6 +271,8 @@ export function FlowsPane() {
   })
 
   // Effects
+  useFlowToolbarHeight(editorToolbarRef, paneGridRef, Boolean(selectedFlow && draft))
+
   useEffect(() => {
     if (selectedFlowId && visibleFlows.some((f) => f.id === selectedFlowId)) return
     setSelectedFlowId(visibleFlows[0]?.id ?? null)
@@ -324,24 +330,27 @@ export function FlowsPane() {
 
   return (
     <div className="flows-pane relative flex h-full min-h-0 flex-col bg-background">
-      <div data-testid="flow-browser-filters" className="flex h-12 min-h-12 min-w-[760px] items-center gap-2 border-b border-border bg-card px-3">
-        <div className="mr-1 hidden shrink-0 items-center gap-2 lg:flex">
+      <div data-testid="flow-browser-filters" className="flex h-12 min-h-12 items-center gap-2 border-b border-border bg-card px-3">
+        <div className="mr-1 hidden shrink-0 items-center gap-2 @5xl/flows:flex">
           <Github className="size-3.5 text-muted-foreground" />
           <span className="text-[9px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">Viewing</span>
         </div>
-        <WorkflowSelect testId="flow-browser-account" ariaLabel="Filter workflows by GitHub account" value={browseInstallationId}
-          onValueChange={(v) => { setBrowseInstallationId(v); setBrowseRepositories([]) }}
-          className="h-8 max-w-[220px] rounded-md border border-border bg-input px-2.5 text-[11px] font-medium text-foreground"
-          options={[{ value: "all", label: "All GitHub accounts" }, ...(installations || []).map((i) => ({ value: String(i.installation_id), label: `${installationAccountLabel(i)} · ${installationAccountTypeLabel(i.account_type)}` }))]} />
+        <div className="min-w-0 max-w-[220px] flex-1">
+          <WorkflowSelect testId="flow-browser-account" ariaLabel="Filter workflows by GitHub account" value={browseInstallationId}
+            onValueChange={(v) => { setBrowseInstallationId(v); setBrowseRepositories([]) }}
+            className="h-8 w-full min-w-0 rounded-md border border-border bg-input px-2.5 text-[11px] font-medium text-foreground"
+            options={[{ value: "all", label: "All GitHub accounts" }, ...(installations || []).map((i) => ({ value: String(i.installation_id), label: `${installationAccountLabel(i)} · ${installationAccountTypeLabel(i.account_type)}` }))]} />
+        </div>
         <div className="min-w-0 max-w-[260px] flex-1">
           <RepositoryScopePicker accountLabel={browseAccountLabel} options={browseRepositoryOptions.map((r) => r.full_name)} selected={browseRepositories} onChange={setBrowseRepositories}
             ariaLabel="Filter workflows by repository" compact testId="flow-browser-repository" optionTestIdPrefix="flow-browser-repository-option" menuLabel="Repository filter" description="Choose which repositories are visible in the workflow list." />
         </div>
-        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground" title="These filters change what is visible, not when a workflow runs.">{visibleFlows.length} of {(flows || []).length} workflows</span>
+        <span className="ml-auto hidden shrink-0 text-[10px] text-muted-foreground @3xl/flows:inline" title="These filters change what is visible, not when a workflow runs.">{visibleFlows.length} of {(flows || []).length} workflows</span>
       </div>
       {sidebarCollapsed && <button type="button" onClick={() => setSidebarCollapsed(false)} aria-label="Expand sidebar" title="Expand sidebar" className="absolute left-3 top-[60px] z-30 grid size-8 place-items-center rounded-md border border-border bg-card/95 text-muted-foreground shadow-sm transition-colors hover:border-foreground/25 hover:text-foreground"><SidebarExpand className="size-4" /></button>}
       {inspectorDockCollapsed && <button type="button" onClick={() => setInspectorCollapsed(false)} aria-label="Expand inspector" title="Expand inspector" className="flows-inspector-dock-toggle absolute right-3 top-[60px] z-30 size-8 place-items-center rounded-md border border-border bg-card/95 text-muted-foreground shadow-sm transition-colors hover:border-foreground/25 hover:text-foreground"><SidebarExpand className="size-4 rotate-180" /></button>}
-      <div className={cn("flows-pane-grid grid min-h-0 flex-1", inspectorOpen && "flows-pane-grid-inspector-open", assistantPanelOpen && "flows-pane-grid-assistant-open", sidebarCollapsed && "flows-pane-grid-sidebar-collapsed", inspectorDockCollapsed && "flows-pane-grid-inspector-collapsed")}>
+      <div ref={paneGridRef} style={{ "--flows-panel-width": `${panelWidth}px` } as CSSProperties}
+        className={cn("flows-pane-grid grid min-h-0 flex-1", inspectorOpen && "flows-pane-grid-inspector-open", assistantPanelOpen && "flows-pane-grid-assistant-open", sidebarCollapsed && "flows-pane-grid-sidebar-collapsed", inspectorDockCollapsed && "flows-pane-grid-inspector-collapsed")}>
         <NodeLibrarySidebar sidebarCollapsed={sidebarCollapsed} onCollapse={setSidebarCollapsed} flowSearch={flowSearch} onSearchChange={setFlowSearch} draft={draft} visibleFlows={visibleFlows} selectedFlowId={selectedFlowId}
           onSelectFlow={setSelectedFlowId} isLoading={isLoading} templatePickerOpen={templatePickerOpen} onTemplatePickerOpenChange={(open) => { if (open && browseInstallationId !== "all" && browseInstallationId !== createInstallationId) setCreateInstallationId(browseInstallationId); setTemplatePickerOpen(open) }}
           isCreating={isCreating} installations={installations ?? []} createInstallationId={createInstallationId} onCreateInstallationChange={setCreateInstallationId} createRepository={createRepository} onCreateRepositoryChange={setCreateRepository}
@@ -352,21 +361,21 @@ export function FlowsPane() {
           onCreateFlow={(tid, st, ss) => void createFlow(tid, st, ss)} onDeleteTemplate={(t, s) => { setTemplatePickerOpen(false); setTemplateDeleteTarget({ template: t, scope: s }) }}
           onSaveAsTemplate={() => { if (!selectedFlow) return; setSaveTemplateName(selectedFlow.name); setSaveTemplateScope(activeTeamId && teamTemplatesCanWrite ? "team" : "personal"); setTemplatePickerOpen(false); setSaveTemplateOpen(true) }}
           onSelectCanvasNode={selectCanvasNode} onApplyTriggerPreset={applyTriggerPreset} onAddNode={addNode} />
-        <section ref={editorRef} tabIndex={0} onMouseDownCapture={() => editorRef.current?.focus()} className="min-w-0 min-h-0 flex flex-col bg-transparent outline-none">
+        <section ref={editorRef} tabIndex={0} onMouseDownCapture={() => editorRef.current?.focus()} className="flows-editor-column min-w-0 min-h-0 flex flex-col bg-transparent outline-none">
           {!selectedFlow || !draft ? <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Select or create a flow to begin.</div> : (
             <Tabs value={activeFlowTab} onValueChange={setActiveFlowTab} className="relative flex min-h-0 flex-1 flex-col gap-0">
-              <div className={cn("relative z-20 border-b border-border bg-card/92 py-2 pr-3", sidebarCollapsed ? "pl-14" : "pl-3")}>
-                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 lg:flex lg:h-9 lg:justify-between">
+              <div ref={editorToolbarRef} className={cn("relative z-20 border-b border-border bg-card/92 py-2 pr-3", sidebarCollapsed ? "pl-14" : "pl-3")}>
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 @lg/flows-editor:flex @lg/flows-editor:h-9 @lg/flows-editor:justify-between">
                   <EditorToolbarHeader draft={draft} selectedFlow={selectedFlow} flowRuns={flowRuns} flowSuccessRateLabel={flowSuccessRateLabel} dirty={dirty} saveStatus={saveStatus} saveStatusLabel={saveStatusLabel} saveStatusTitle={saveStatusTitle}
                     quietSaveStatus={quietSaveStatus} saveStatusTone={saveStatusTone} saveStatusAnnouncement={saveStatusAnnouncement} saving={saving} publishing={publishing} primaryModifierLabel={primaryModifierLabel} primaryActionLabel={primaryActionLabel}
                     primaryActionClassName={primaryActionClassName} shouldPublishLatestDraft={shouldPublishLatestDraft} canUndo={canUndo} canRedo={canRedo} onFlowNameChange={handleFlowNameChange} onAddAgent={() => addNode("agent")} onUndo={undoDraft}
                     onRedo={redoDraft} onDuplicateFlow={() => void duplicateSelectedFlow()} onDeleteFlow={() => void deleteSelectedFlow()} onPersist={() => void persistFlow({ reason: "manual" })} onPublish={() => void publishFlow()} onToggleStatus={() => void toggleFlowStatus()} />
-                  <TabsList data-testid="flow-view-tabs" className="col-span-2 row-start-2 h-8 shrink-0 justify-self-start gap-1 border border-border bg-card/80 p-1 shadow-sm lg:col-auto lg:row-auto lg:justify-self-auto">
+                  <TabsList data-testid="flow-view-tabs" className="col-span-2 row-start-2 h-8 shrink-0 justify-self-start gap-1 border border-border bg-card/80 p-1 shadow-sm @lg/flows-editor:col-auto @lg/flows-editor:row-auto @lg/flows-editor:justify-self-auto">
                     <TabsTrigger value="editor" className="h-6 rounded-sm px-2.5 py-1 text-[11px]">Canvas</TabsTrigger>
                     <TabsTrigger value="runs" data-testid="flows-runs-tab" className="h-6 rounded-sm px-2.5 py-1 text-[11px]">Runs{flowRuns.length > 0 && <span className="ml-1.5 text-muted-foreground">({flowRuns.length})</span>}</TabsTrigger>
                   </TabsList>
                 </div>
-                <EditorToolbarCompactName draft={draft} selectedFlow={selectedFlow} onFlowNameChange={handleFlowNameChange} />
+                <EditorToolbarWrappedName draft={draft} selectedFlow={selectedFlow} onFlowNameChange={handleFlowNameChange} />
                 <EditorToolbarLegacyBanner effectiveLegacyAgentNodes={effectiveLegacyAgentNodes} />
               </div>
               <TabsContent value="editor" forceMount className="flex-1 min-h-0 relative data-[state=inactive]:hidden">
@@ -404,10 +413,11 @@ export function FlowsPane() {
         <FlowRunDetailsDialog open={Boolean(selectedRunId)} runDetail={selectedRunDetail} runSummary={selectedRunSummary} loading={selectedRunDetailLoading} error={selectedRunDetailError} activeRunActions={activeRunActions} reviewFindingIssueActionId={reviewFindingIssueActionId}
           onOpenChange={(o) => { if (!o) setSelectedRunId(null) }} onRunAction={(j, a) => { void runFlowJobAction(j, a) }} onCreateReviewFindingIssue={(f) => { void createReviewFindingIssue(f) }} />
         {rightSheetOpen && <div className="flows-inspector-backdrop fixed inset-0 z-30 bg-overlay" onClick={() => { if (assistantPanelOpen) setAssistantPanelOpen(false); else clearCanvasSelection() }} />}
-        <aside data-testid="flows-right-sheet" data-state={rightSheetAnimateOpen ? "open" : "closed"} className={cn("flows-inspector min-h-0 flex-col overflow-hidden border-l border-border bg-background p-2", rightSheetOpen && "flows-inspector-open")}>
+        <aside data-testid="flows-right-sheet" data-state={rightSheetAnimateOpen ? "open" : "closed"} className={cn("flows-inspector min-h-0 flex-col overflow-hidden border-l border-border bg-card", rightSheetOpen && "flows-inspector-open")}>
+          <FlowPanelResizer width={panelWidth} onWidthChange={setPanelWidth} gridRef={paneGridRef} />
           {assistantPanelOpen && selectedFlow && draftGraph ? <FlowAssistantPanel key={selectedFlow.id} flowId={selectedFlow.id} graph={draftGraph} onApplyGraph={applyAssistantGraph} /> : !selectedFlow || !selectedNode ? (
-            <div data-testid="flows-inspector-empty" className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card">
-              <div className="border-b border-border px-4 py-4"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-lg border border-border bg-input text-muted-foreground"><Settings className="size-4" /></span><div><div className="text-[11px] font-semibold tracking-[0.16em] text-foreground uppercase">Inspector</div><div className="mt-0.5 text-[10px] text-muted-foreground">Workflow configuration</div></div><button type="button" onClick={() => setInspectorCollapsed(true)} aria-label="Minimize inspector" title="Minimize inspector" className="flows-inspector-dock-toggle ml-auto size-7 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"><SidebarCollapse className="size-3.5 rotate-180" /></button></div></div>
+            <div data-testid="flows-inspector-empty" className="flows-panel-shell">
+              <div className="flows-panel-header"><span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border bg-input text-muted-foreground"><Settings className="size-4" /></span><div className="min-w-0"><div className="text-[11px] font-semibold tracking-[0.16em] text-foreground uppercase">Inspector</div><div className="mt-0.5 truncate text-[10px] text-muted-foreground">Workflow configuration</div></div><button type="button" onClick={() => setInspectorCollapsed(true)} aria-label="Minimize inspector" title="Minimize inspector" className="flows-inspector-dock-toggle ml-auto size-7 shrink-0 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"><SidebarCollapse className="size-3.5 rotate-180" /></button></div>
               <div data-testid="flows-inspector-empty-body" className="flex min-h-0 flex-1 flex-col items-center justify-center-safe overflow-y-auto px-6 py-10 text-center">
                 <div className="grid size-12 place-items-center rounded-full border border-dashed border-border bg-muted text-muted-foreground"><CursorPointer className="size-5" /></div><div className="mt-4 text-sm font-medium text-foreground">Select a node</div>
                 <p className="mt-1.5 max-w-[220px] text-[11px] leading-5 text-muted-foreground">Choose a canvas node or its library trigger to edit configuration, inputs, and runtime behavior.</p>
@@ -415,9 +425,10 @@ export function FlowsPane() {
               </div>
             </div>
           ) : (
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-              <div data-testid="flows-inspector-header" className="flex shrink-0 items-start justify-between gap-4 border-b border-border bg-card px-4 py-4">
-                <div className="min-w-0"><div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground"><span className="grid size-7 place-items-center rounded-md border border-accent-violet/20 bg-accent-violet/[0.08] text-accent-violet"><Settings className="size-3.5" /></span><span className="truncate">{selectedNode.type} · {selectedNode.id}</span></div><div className="mt-1.5 truncate text-base font-semibold text-foreground">{selectedNode.type === "agent" ? flowAgentRoleLabel(selectedAgentNode?.data.role || "review") : selectedNode.type === "action" ? FLOW_ACTION_OPTIONS.find((o) => o.value === selectedActionNode?.data.operation)?.label ?? "Action" : selectedNode.type === "condition" ? "If branch" : selectedNode.type === "parallel" ? "Parallel operator" : selectedNode.type === "join" ? "Merge operator" : selectedNode.type === "delay" ? "Wait operator" : selectedNode.type === "await_event" ? "Await event operator" : selectedNode.type === "set_variable" ? "Set variable operator" : selectedNode.type === "transform" ? "Transform operator" : selectedNode.type === "start" ? "Entry point" : "Exit point"}</div></div>
+            <div className="flows-panel-shell">
+              <div data-testid="flows-inspector-header" className="flows-panel-header justify-between">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-accent-violet/20 bg-accent-violet/[0.08] text-accent-violet"><Settings className="size-4" /></span>
+                <div className="min-w-0 flex-1"><div className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{selectedNode.type} · {selectedNode.id}</div><div className="mt-0.5 truncate text-xs font-semibold text-foreground">{selectedNode.type === "agent" ? flowAgentRoleLabel(selectedAgentNode?.data.role || "review") : selectedNode.type === "action" ? FLOW_ACTION_OPTIONS.find((o) => o.value === selectedActionNode?.data.operation)?.label ?? "Action" : selectedNode.type === "condition" ? "If branch" : selectedNode.type === "parallel" ? "Parallel operator" : selectedNode.type === "join" ? "Merge operator" : selectedNode.type === "delay" ? "Wait operator" : selectedNode.type === "await_event" ? "Await event operator" : selectedNode.type === "set_variable" ? "Set variable operator" : selectedNode.type === "transform" ? "Transform operator" : selectedNode.type === "start" ? "Entry point" : "Exit point"}</div></div>
                 <button type="button" data-testid="flows-inspector-close" onClick={() => clearCanvasSelection()} className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground" aria-label="Close node sheet" title="Close"><Xmark className="size-4" /></button>
               </div>
               <div data-testid="flows-inspector-scroll" className="@container min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5">

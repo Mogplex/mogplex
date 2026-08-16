@@ -1,5 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FlowContextMenuState } from "./types";
+
+/** Docked panel width bounds, in px. */
+export const FLOW_PANEL_MIN_WIDTH = 288;
+export const FLOW_PANEL_MAX_WIDTH = 720;
+export const FLOW_PANEL_DEFAULT_WIDTH = 336;
+
+export function clampFlowPanelWidth(width: number): number {
+  if (!Number.isFinite(width)) return FLOW_PANEL_DEFAULT_WIDTH;
+  return Math.min(
+    FLOW_PANEL_MAX_WIDTH,
+    Math.max(FLOW_PANEL_MIN_WIDTH, Math.round(width))
+  );
+}
 
 export type FlowChromeState = {
   // Sidebar
@@ -8,6 +21,9 @@ export type FlowChromeState = {
   // Inspector
   inspectorCollapsed: boolean;
   setInspectorCollapsed: (collapsed: boolean) => void;
+  /** Width of the docked inspector/assistant column, in px. */
+  panelWidth: number;
+  setPanelWidth: (width: number) => void;
   // Context menu
   contextMenu: FlowContextMenuState | null;
   setContextMenu: (menu: FlowContextMenuState | null) => void;
@@ -31,6 +47,7 @@ export type FlowChromeState = {
 export function useFlowChromeState(): FlowChromeState {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [panelWidth, setPanelWidthState] = useState(FLOW_PANEL_DEFAULT_WIDTH);
   const [contextMenu, setContextMenu] = useState<FlowContextMenuState | null>(
     null
   );
@@ -73,6 +90,22 @@ export function useFlowChromeState(): FlowChromeState {
     );
   }, [inspectorCollapsed]);
 
+  // Hydrate the docked panel width. Written on drag end (not per pointermove),
+  // so the write stays off the drag hot path.
+  useEffect(() => {
+    const stored = window.localStorage.getItem("mplex.flows.panelWidth");
+    if (stored === null) return;
+    const parsed = Number.parseInt(stored, 10);
+    if (Number.isNaN(parsed)) return;
+    setPanelWidthState(clampFlowPanelWidth(parsed));
+  }, []);
+
+  const setPanelWidth = useCallback((width: number) => {
+    const clamped = clampFlowPanelWidth(width);
+    setPanelWidthState(clamped);
+    window.localStorage.setItem("mplex.flows.panelWidth", String(clamped));
+  }, []);
+
   // Space key activates grab-pan mode for the canvas
   useEffect(() => {
     const isTypingTarget = (target: EventTarget | null) => {
@@ -110,6 +143,8 @@ export function useFlowChromeState(): FlowChromeState {
     setSidebarCollapsed,
     inspectorCollapsed,
     setInspectorCollapsed,
+    panelWidth,
+    setPanelWidth,
     contextMenu,
     setContextMenu,
     spacePanActive,

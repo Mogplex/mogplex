@@ -21,8 +21,16 @@ export {
 
 export {
   useFlowChromeState,
+  clampFlowPanelWidth,
+  FLOW_PANEL_DEFAULT_WIDTH,
+  FLOW_PANEL_MAX_WIDTH,
+  FLOW_PANEL_MIN_WIDTH,
   type FlowChromeState,
 } from "./use-flow-chrome-state";
+
+export { FlowPanelResizer, type FlowPanelResizerProps } from "./panel-resizer";
+
+export { useFlowToolbarHeight } from "./use-flow-toolbar-height";
 
 export {
   useFlowSavePublishState,
@@ -235,7 +243,7 @@ export { ExecutionBar, type ExecutionBarProps } from "./execution-bar";
 // Editor toolbar
 export {
   EditorToolbarHeader,
-  EditorToolbarCompactName,
+  EditorToolbarWrappedName,
   EditorToolbarLegacyBanner,
   type EditorToolbarProps,
 } from "./editor-toolbar";

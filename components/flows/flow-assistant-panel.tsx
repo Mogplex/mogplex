@@ -131,10 +131,10 @@ export function FlowAssistantPanel({
     <div
       data-testid="flow-assistant-panel"
       onPointerDownCapture={(event) => event.stopPropagation()}
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card"
+      className="flows-panel-shell"
     >
-      <div className="flex items-center gap-3 border-b border-border bg-foreground/[0.02] px-4 py-4">
-        <span className="grid size-9 place-items-center rounded-lg border border-accent-blue/20 bg-accent-blue/[0.08] text-accent-blue">
+      <div className="flows-panel-header bg-foreground/[0.02]">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-accent-blue/20 bg-accent-blue/[0.08] text-accent-blue">
           <MogplexFace
             className="size-4"
             mood={busy ? "thinking" : input.trim() ? "listening" : "idle"}
@@ -144,11 +144,11 @@ export function FlowAssistantPanel({
           <div className="text-[11px] font-semibold tracking-[0.16em] text-foreground uppercase">
             Flow assistant
           </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
+          <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
             Reshape this workflow
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {messages.length > 0 ? (
             <button
               type="button"

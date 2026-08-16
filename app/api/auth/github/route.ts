@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { buildAppUrl } from "@/lib/app-url";
+import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
 import { getGithubAppInstallUrl, hasGithubAppConfig } from "@/lib/github-app";
 import { getUserId } from "@/lib/auth";
-import { GITHUB_OAUTH_SCOPE } from "@/lib/github-oauth";
+import {
+  GITHUB_OAUTH_SCOPE,
+  GITHUB_RETURN_TO_COOKIE,
+} from "@/lib/github-oauth";
 
 function requireEnv(name: "GITHUB_CLIENT_ID") {
   const value = process.env[name]?.trim();
@@ -14,14 +17,40 @@ function requireEnv(name: "GITHUB_CLIENT_ID") {
 }
 
 export async function GET(request: Request) {
+  const url = new URL(request.url);
   const cookieStore = await cookies();
   const userId = await getUserId();
 
   if (!userId) {
-    return NextResponse.redirect(buildAppUrl("/login", request));
+    // Signed-out callers belong on the sign-in page, never on the legacy
+    // access-code gate — this route only ever serves an existing account.
+    const loginUrl = buildAppUrl("/login", request);
+    const next = normalizeAppRedirectPath(url.searchParams.get("next"));
+    if (next !== "/") loginUrl.searchParams.set("next", next);
+    return NextResponse.redirect(loginUrl);
   }
 
-  if (hasGithubAppConfig()) {
+  // Round-tripped to the callback, which has no query string of its own to
+  // carry it: GitHub controls the redirect back.
+  const returnTo = normalizeAppRedirectPath(url.searchParams.get("next"));
+  if (returnTo === "/") {
+    cookieStore.delete(GITHUB_RETURN_TO_COOKIE);
+  } else {
+    cookieStore.set(GITHUB_RETURN_TO_COOKIE, returnTo, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 600,
+      path: "/",
+    });
+  }
+
+  // Re-authorization has to go through OAuth even when the GitHub App is
+  // configured: only the OAuth grant refreshes token scopes, and the App
+  // install page cannot add a missing `read:org`.
+  const reauthorize = url.searchParams.get("reauthorize") === "1";
+
+  if (hasGithubAppConfig() && !reauthorize) {
     cookieStore.set("github_app_install_pending", "1", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

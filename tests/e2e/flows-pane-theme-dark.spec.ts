@@ -164,8 +164,11 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
     "Laptop rename"
   );
 
+  // Below the wrap point the inline name has no room, so the rename field falls
+  // back to its own full-width row rather than being squeezed to nothing.
   await page.setViewportSize({ width: 390, height: 720 });
-  await expect(page.getByTestId("flow-name-input-compact")).toBeVisible();
+  await expect(page.getByTestId("flow-name-input-compact")).not.toBeVisible();
+  await expect(page.getByTestId("flow-name-input-wrapped")).toBeVisible();
   const scrollMetrics = await page.locator(".flows-pane").evaluate((pane) => {
     const scrollContainer = pane.parentElement?.parentElement;
     return {
@@ -178,7 +181,7 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
     .boundingBox();
   const gridBox = await page.locator(".flows-pane-grid").boundingBox();
   const compactRenameBox = await page
-    .getByTestId("flow-name-input-compact")
+    .getByTestId("flow-name-input-wrapped")
     .boundingBox();
   const publishButtonBox = await page
     .getByTestId("flow-publish-button")
@@ -189,8 +192,12 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
   expect(publishButtonBox).not.toBeNull();
   const railRight = railBox!.x + railBox!.width;
 
+  // Phone widths still scroll the pane horizontally — the editor has a floor
+  // below which its controls cannot honestly coexist. The floor is 560px, not
+  // the old 760px, so tablets and half-width desktop windows now fit.
   expect(scrollMetrics.scrollWidth).toBeGreaterThan(scrollMetrics.clientWidth);
-  expect(gridBox!.width).toBeGreaterThanOrEqual(760);
+  expect(gridBox!.width).toBeGreaterThanOrEqual(560);
+  expect(gridBox!.width).toBeLessThan(760);
   expect(compactRenameBox!.x).toBeGreaterThanOrEqual(railRight);
   expect(compactRenameBox!.width).toBeGreaterThan(120);
   expect(publishButtonBox!.x).toBeGreaterThanOrEqual(railRight);
@@ -215,12 +222,18 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
   expect(tabletTabsBox).not.toBeNull();
   expect(tabletActionsBox).not.toBeNull();
   expect(tabletCanvasBox).not.toBeNull();
-  expect(tabletTabsBox!.y).toBeGreaterThanOrEqual(
-    tabletActionsBox!.y + tabletActionsBox!.height
-  );
+  // The toolbar now measures the editor column rather than the viewport, so at
+  // 768px the tabs share the action row instead of claiming one of their own.
+  // Either way they must clear the canvas and must not overlap the actions.
   expect(tabletTabsBox!.y + tabletTabsBox!.height).toBeLessThanOrEqual(
     tabletCanvasBox!.y
   );
+  const tabsOverlapActions =
+    tabletTabsBox!.y < tabletActionsBox!.y + tabletActionsBox!.height &&
+    tabletActionsBox!.y < tabletTabsBox!.y + tabletTabsBox!.height &&
+    tabletTabsBox!.x < tabletActionsBox!.x + tabletActionsBox!.width &&
+    tabletActionsBox!.x < tabletTabsBox!.x + tabletTabsBox!.width;
+  expect(tabsOverlapActions).toBe(false);
 
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
   const expandSidebarButton = page.getByRole("button", {
@@ -236,7 +249,9 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
     saveStatusBox!.x
   );
 
-  await page.setViewportSize({ width: 1280, height: 720 });
+  // The centred pill needs ~1024px of *editor column*, which the app-shell
+  // sidebar pushes well past a 1280px viewport.
+  await page.setViewportSize({ width: 1760, height: 720 });
   await expect(page.getByTestId("flow-name-input-desktop")).toBeVisible();
 
   // The centered header pill must stay in flow with the action cluster —
