@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   Attachment,
   SendDiagonal,
@@ -18,12 +18,6 @@ import {
 import { useModels } from "@/hooks/use-models";
 import { fetchWithActiveTeam } from "@/components/active-scope-provider";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
-import { validateGithubRepoName } from "@/lib/github-repo-name";
-import {
-  GITHUB_ORG_READ_SCOPE,
-  GITHUB_REAUTHORIZE_HEADER,
-} from "@/lib/github-oauth";
-import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import type { Repo } from "@/lib/types";
 import {
   defaultProjectChoice,
@@ -37,10 +31,13 @@ import {
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
-import { NewProjectFields, type AvailabilityState } from "./new-project-fields";
+import { NewProjectFields, NewProjectStatus } from "./new-project-fields";
+import {
+  LAST_GITHUB_OWNER_KEY,
+  useNewProjectTarget,
+} from "./use-new-project-target";
 
 const NEW_PROJECT = "new";
-const LAST_GITHUB_OWNER_KEY = "mogplex:last-github-repo-owner";
 /** Availability states that permit creating the project. */
 const CREATABLE_AVAILABILITY = new Set(["available", "unverified"]);
 
@@ -62,15 +59,6 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
   // no repos are connected). Repos load async, so the default resolves late.
   const [choice, setChoice] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
-  const [ownerTargets, setOwnerTargets] = useState<GithubRepoOwnerTarget[]>([]);
-  const [ownerLogin, setOwnerLogin] = useState("");
-  const [ownersLoading, setOwnersLoading] = useState(true);
-  const [ownersError, setOwnersError] = useState<string | null>(null);
-  const [ownersAction, setOwnersAction] = useState<{
-    href: string;
-    label: string;
-  } | null>(null);
-  const [availability, setAvailability] = useState<AvailabilityState>("idle");
   const [projectError, setProjectError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
@@ -95,113 +83,19 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
   const selectedRepoId = choice ?? defaultProjectChoice(repos);
   const effectiveNewProjectName =
     newProjectName.trim() || deriveProjectName(text);
-  const nameValidation = useMemo(
-    () => validateGithubRepoName(effectiveNewProjectName),
-    [effectiveNewProjectName]
-  );
-
-  useEffect(() => {
-    if (selectedRepoId !== NEW_PROJECT) return;
-    const controller = new AbortController();
-    setOwnersLoading(true);
-    setOwnersError(null);
-    setOwnersAction(null);
-    fetch("/api/github/owners", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("GitHub accounts unavailable");
-        const data = (await response.json()) as unknown;
-        return {
-          targets: Array.isArray(data) ? (data as GithubRepoOwnerTarget[]) : [],
-          reauthorizeScope: response.headers.get(GITHUB_REAUTHORIZE_HEADER),
-        };
-      })
-      .then(({ targets, reauthorizeScope }) => {
-        setOwnerTargets(targets);
-        const saved = window.localStorage.getItem(LAST_GITHUB_OWNER_KEY);
-        const preferred = targets.find(
-          (target) => target.login.toLowerCase() === saved?.toLowerCase()
-        );
-        setOwnerLogin((current) =>
-          targets.some(
-            (target) => target.login.toLowerCase() === current.toLowerCase()
-          )
-            ? current
-            : (preferred?.login ?? targets[0]?.login ?? "")
-        );
-        const reconnectHref = `/api/auth/login/github?next=${encodeURIComponent(window.location.pathname)}`;
-        if (targets.length === 0) {
-          setOwnersError("GitHub must be connected to create a project.");
-          setOwnersAction({ href: reconnectHref, label: "Connect GitHub" });
-        } else if (reauthorizeScope === GITHUB_ORG_READ_SCOPE) {
-          setOwnersError("Reconnect GitHub to use organization accounts.");
-          setOwnersAction({ href: reconnectHref, label: "Reconnect GitHub" });
-        }
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        setOwnerTargets([]);
-        setOwnerLogin("");
-        setOwnersError("GitHub accounts unavailable.");
-        setOwnersAction(null);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setOwnersLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [selectedRepoId]);
-
-  useEffect(() => {
-    if (selectedRepoId !== NEW_PROJECT || !ownerLogin) {
-      setAvailability("idle");
-      return;
-    }
-    if (!nameValidation.ok) {
-      setAvailability("invalid");
-      return;
-    }
-
-    const controller = new AbortController();
-    setAvailability("checking");
-    const timeoutId = window.setTimeout(() => {
-      const params = new URLSearchParams({
-        owner: ownerLogin,
-        name: nameValidation.name,
-      });
-      fetch(`/api/github/repos/availability?${params}`, {
-        cache: "no-store",
-        signal: controller.signal,
-      })
-        .then(async (response) => {
-          const data = (await response.json()) as {
-            availability?: AvailabilityState;
-          };
-          if (!response.ok) {
-            return "unverified";
-          }
-          return data.availability ?? "unverified";
-        })
-        .then((state) => {
-          if (!controller.signal.aborted) setAvailability(state);
-        })
-        .catch((error) => {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            return;
-          }
-          setAvailability("unverified");
-        });
-    }, 350);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-      controller.abort();
-    };
-  }, [nameValidation, ownerLogin, selectedRepoId]);
+  const {
+    ownerTargets,
+    ownerLogin,
+    setOwnerLogin,
+    ownersLoading,
+    ownersError,
+    ownersAction,
+    availability,
+    nameValidation,
+  } = useNewProjectTarget({
+    enabled: selectedRepoId === NEW_PROJECT,
+    name: effectiveNewProjectName,
+  });
 
   const hasMissionInput = Boolean(text.trim() || files.length > 0);
   const newProjectBlocked =
@@ -318,41 +212,60 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
           </p>
         </div>
 
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <label
-            htmlFor="control-project"
-            className="text-muted-foreground text-xs"
+        {/* Controls on one centred row, status on its own full-width row —
+            keeping the status inside the row made the new-project block taller
+            than the project select and knocked the two out of alignment. */}
+        <div className="mb-4 flex flex-col gap-1">
+          <div
+            data-testid="control-project-row"
+            className="flex flex-wrap items-center gap-2"
           >
-            Project
-          </label>
-          <Select value={selectedRepoId} onValueChange={setChoice}>
-            <SelectTrigger
-              id="control-project"
-              aria-label="Project"
-              className="border-border bg-secondary text-secondary-foreground h-8 w-64 max-w-full px-2 text-xs font-medium shadow-none"
+            <label
+              htmlFor="control-project"
+              className="text-muted-foreground shrink-0 text-xs"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="border-border bg-popover max-h-72 shadow-2xl">
-              {repos.map((repo) => (
-                <SelectItem key={repo.id} value={repo.id}>
-                  {repo.full_name}
-                </SelectItem>
-              ))}
-              <SelectItem value={NEW_PROJECT}>New project…</SelectItem>
-            </SelectContent>
-          </Select>
+              Project
+            </label>
+            <Select value={selectedRepoId} onValueChange={setChoice}>
+              {/* size="sm" is load-bearing: SelectTrigger's own
+                  data-[size=default]:h-9 outranks a plain h-8 utility, so
+                  without it the selects render 36px next to the 32px name
+                  input and the row reads ragged. */}
+              <SelectTrigger
+                size="sm"
+                id="control-project"
+                aria-label="Project"
+                className="border-border bg-secondary text-secondary-foreground h-8 w-64 max-w-full min-w-0 flex-1 px-2 text-xs font-medium shadow-none"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-popover max-h-72 shadow-2xl">
+                {repos.map((repo) => (
+                  <SelectItem key={repo.id} value={repo.id}>
+                    {repo.full_name}
+                  </SelectItem>
+                ))}
+                <SelectItem value={NEW_PROJECT}>New project…</SelectItem>
+              </SelectContent>
+            </Select>
+            {selectedRepoId === NEW_PROJECT ? (
+              <NewProjectFields
+                ownerTargets={ownerTargets}
+                ownerLogin={ownerLogin}
+                onOwnerChange={setOwnerLogin}
+                ownersLoading={ownersLoading}
+                name={newProjectName}
+                onNameChange={setNewProjectName}
+                namePlaceholder={deriveProjectName(text)}
+                availability={availability}
+              />
+            ) : null}
+          </div>
           {selectedRepoId === NEW_PROJECT ? (
-            <NewProjectFields
-              ownerTargets={ownerTargets}
+            <NewProjectStatus
               ownerLogin={ownerLogin}
-              onOwnerChange={setOwnerLogin}
-              ownersLoading={ownersLoading}
               ownersError={ownersError}
               ownersAction={ownersAction}
-              name={newProjectName}
-              onNameChange={setNewProjectName}
-              namePlaceholder={deriveProjectName(text)}
               nameValidation={nameValidation}
               availability={availability}
             />

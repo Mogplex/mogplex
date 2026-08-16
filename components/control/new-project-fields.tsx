@@ -18,66 +18,90 @@ export type AvailabilityState =
   | "unverified"
   | "invalid";
 
+/**
+ * Owner + name controls for a new project.
+ *
+ * Deliberately a fragment, not a wrapper: these sit directly in the composer's
+ * `items-center` project row alongside the project select. Wrapping them in a
+ * column with the status line made the block taller than its siblings, so
+ * centring pushed the project select visibly out of line with them.
+ */
 export function NewProjectFields({
   ownerTargets,
   ownerLogin,
   onOwnerChange,
   ownersLoading,
-  ownersError,
-  ownersAction,
   name,
   onNameChange,
   namePlaceholder,
-  nameValidation,
   availability,
 }: {
   ownerTargets: GithubRepoOwnerTarget[];
   ownerLogin: string;
   onOwnerChange: (value: string) => void;
   ownersLoading: boolean;
-  ownersError: string | null;
-  ownersAction: { href: string; label: string } | null;
   name: string;
   onNameChange: (value: string) => void;
   namePlaceholder: string;
+  availability: AvailabilityState;
+}) {
+  return (
+    <>
+      <Select
+        value={ownerLogin}
+        onValueChange={onOwnerChange}
+        disabled={ownersLoading || ownerTargets.length === 0}
+      >
+        <SelectTrigger
+          size="sm"
+          aria-label="GitHub owner"
+          className="border-border bg-secondary text-secondary-foreground h-8 w-44 max-w-full px-2 text-xs font-medium shadow-none"
+        >
+          <SelectValue
+            placeholder={ownersLoading ? "Loading accounts…" : "GitHub owner"}
+          />
+        </SelectTrigger>
+        <SelectContent className="border-border bg-popover max-h-72 shadow-2xl">
+          {ownerTargets.map((target) => (
+            <SelectItem key={target.login} value={target.login}>
+              {target.login} · {target.scope_label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <input
+        value={name}
+        onChange={(event) => onNameChange(event.target.value)}
+        placeholder={namePlaceholder}
+        aria-label="New project name"
+        aria-invalid={availability === "invalid" || availability === "taken"}
+        className="border-border bg-secondary text-secondary-foreground placeholder:text-muted-foreground focus-visible:ring-ring/50 h-8 w-56 max-w-full min-w-0 flex-1 rounded-md border px-2 text-xs outline-none focus-visible:ring-2"
+      />
+    </>
+  );
+}
+
+/**
+ * Validation / availability line for the new-project controls. Rendered as a
+ * full-width row under the whole project row so a long message reads from the
+ * start of the row instead of hanging off the owner select.
+ */
+export function NewProjectStatus({
+  ownerLogin,
+  ownersError,
+  ownersAction,
+  nameValidation,
+  availability,
+}: {
+  ownerLogin: string;
+  ownersError: string | null;
+  ownersAction: { href: string; label: string } | null;
   nameValidation: GithubRepoNameValidation;
   availability: AvailabilityState;
 }) {
   return (
-    <div className="flex w-full flex-col gap-1 sm:w-auto">
-      <div className="flex flex-wrap gap-2">
-        <Select
-          value={ownerLogin}
-          onValueChange={onOwnerChange}
-          disabled={ownersLoading || ownerTargets.length === 0}
-        >
-          <SelectTrigger
-            aria-label="GitHub owner"
-            className="border-border bg-secondary text-secondary-foreground h-8 w-44 px-2 text-xs font-medium shadow-none"
-          >
-            <SelectValue
-              placeholder={ownersLoading ? "Loading accounts…" : "GitHub owner"}
-            />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-popover max-h-72 shadow-2xl">
-            {ownerTargets.map((target) => (
-              <SelectItem key={target.login} value={target.login}>
-                {target.login} · {target.scope_label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <input
-          value={name}
-          onChange={(event) => onNameChange(event.target.value)}
-          placeholder={namePlaceholder}
-          aria-label="New project name"
-          aria-invalid={availability === "invalid" || availability === "taken"}
-          className="border-border bg-secondary text-secondary-foreground placeholder:text-muted-foreground focus-visible:ring-ring/50 h-8 w-56 rounded-md border px-2 text-xs outline-none focus-visible:ring-2"
-        />
-      </div>
-      <div className="min-h-4 text-[11px] leading-4" aria-live="polite">
-        {ownersError ? (
+    <div className="min-h-4 text-[11px] leading-4" aria-live="polite">
+      {ownersError ? (
           <span className="text-accent-red">
             {ownersError}
             {ownersAction ? (
@@ -117,7 +141,6 @@ export function NewProjectFields({
             ) : null}
           </>
         )}
-      </div>
     </div>
   );
 }

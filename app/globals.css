@@ -1216,16 +1216,35 @@
 
   .flows-pane {
     container-type: inline-size;
+    container-name: flows;
     font-family: var(--font-mono);
   }
 
+  /* The pane is a named container so every breakpoint below reacts to the pane's
+     own width rather than the viewport. The app shell sidebar eats ~270px, so
+     viewport breakpoints consistently over-estimate the room the editor has. */
   .flows-pane-grid {
-    min-width: 760px;
-    grid-template-columns: 220px minmax(0, 1fr);
+    /* Width of the docked right-hand panel (inspector / assistant). The resizer
+       overrides this inline; the fallback covers pre-hydration renders. */
+    --flows-panel-width: 336px;
+    /* Floor, not a layout width: below this the toolbar and library rail have
+       no honest way to coexist, so the pane scrolls horizontally rather than
+       shredding its own controls. Was 760px, which forced that scroll on every
+       tablet and half-width desktop window. */
+    min-width: 560px;
+    grid-template-columns: clamp(168px, 22cqw, 220px) minmax(0, 1fr);
   }
 
   .flows-pane-grid-sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The toolbar lives in the middle column, so its breakpoints have to measure
+     that column — the pane width counts the library sidebar and the docked
+     panel as usable space, which the toolbar never gets. */
+  .flows-editor-column {
+    container-type: inline-size;
+    container-name: flows-editor;
   }
 
   /* Base state: hidden and off-screen. The <aside> always carries
@@ -1241,6 +1260,12 @@
     display: none;
   }
 
+  /* The resize grip only exists while the panel is a docked grid column; the
+     overlay sheet has a fixed width and dismisses itself. */
+  .flows-inspector-resizer {
+    display: none;
+  }
+
   .flows-inspector-open {
     display: flex;
     position: fixed;
@@ -1248,6 +1273,8 @@
     right: 0;
     bottom: 0;
     z-index: 40;
+    /* Fixed, not the resizable docked width: the grip is docked-only, so the
+       overlay sheet has no way to be resized back if a drag left it narrow. */
     width: 400px;
     max-width: calc(100vw - 2rem);
     /* Start off-screen; data-state rules below control the visible position. */
@@ -1282,17 +1309,20 @@
     }
   }
 
-  @container (min-width: 1280px) {
+  /* Docked layout. 1080px (not 1280px) because the pane container already
+     excludes the app shell sidebar: a 1440px laptop gives the pane ~1155px,
+     which is plenty of room for a third column. */
+  @container flows (min-width: 1080px) {
     .flows-pane-grid {
-      grid-template-columns: 220px minmax(0, 1fr) minmax(300px, 336px);
+      grid-template-columns: 220px minmax(0, 1fr) var(--flows-panel-width);
     }
 
     .flows-pane-grid-inspector-open {
-      grid-template-columns: 220px minmax(0, 1fr) minmax(300px, 336px);
+      grid-template-columns: 220px minmax(0, 1fr) var(--flows-panel-width);
     }
 
     .flows-pane-grid-assistant-open {
-      grid-template-columns: 220px minmax(0, 1fr) minmax(360px, 400px);
+      grid-template-columns: 220px minmax(0, 1fr) var(--flows-panel-width);
     }
 
     /* Re-asserted (not redundant): .flows-pane-grid above sets two columns
@@ -1300,15 +1330,19 @@
        single-column collapsed rule. Keep this rule until .flows-pane-grid
        is rewritten with compound-selector specificity. */
     .flows-pane-grid-sidebar-collapsed {
-      grid-template-columns: minmax(0, 1fr) minmax(300px, 336px);
+      grid-template-columns: minmax(0, 1fr) var(--flows-panel-width);
     }
 
     .flows-pane-grid-sidebar-collapsed.flows-pane-grid-inspector-open {
-      grid-template-columns: minmax(0, 1fr) minmax(300px, 336px);
+      grid-template-columns: minmax(0, 1fr) var(--flows-panel-width);
     }
 
     .flows-pane-grid-sidebar-collapsed.flows-pane-grid-assistant-open {
-      grid-template-columns: minmax(0, 1fr) minmax(360px, 400px);
+      grid-template-columns: minmax(0, 1fr) var(--flows-panel-width);
+    }
+
+    .flows-inspector-resizer {
+      display: block;
     }
 
     .flows-pane-grid .flows-inspector,
@@ -1316,9 +1350,10 @@
     .flows-pane-grid-inspector-open .flows-inspector,
     .flows-pane-grid-inspector-open .flows-inspector-open {
       display: flex;
-      position: static;
+      position: relative;
       z-index: auto;
       width: auto;
+      min-width: 0;
       max-width: none;
       transform: none;
       transition: none;
@@ -1358,6 +1393,79 @@
     .flows-inspector-dock-toggle {
       display: grid;
     }
+  }
+
+  /* Drag grip straddling the panel's left border. Sits in the border gutter so
+     it never steals width from the panel content. */
+  .flows-inspector-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -4px;
+    z-index: 20;
+    width: 9px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .flows-inspector-resizer::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+    transition: background-color 120ms ease;
+    content: "";
+  }
+
+  .flows-inspector-resizer:hover::after,
+  .flows-inspector-resizer:focus-visible::after,
+  .flows-inspector-resizer[data-dragging="true"]::after {
+    background: var(--ring);
+  }
+
+  .flows-inspector-resizer:focus-visible {
+    outline: none;
+  }
+
+  /* While a resize is in flight, keep the cursor and kill text selection
+     everywhere — the pointer routinely leaves the 9px grip mid-drag. */
+  .flows-panel-resizing,
+  .flows-panel-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+  }
+
+  /* Shared shell for the docked panels (inspector, empty inspector, assistant).
+     Full-bleed: the panel *is* the column, so it carries no rounding, no inset
+     border, and no gutter against the pane. */
+  .flows-panel-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--card);
+  }
+
+  /* Panel headers are locked to the measured height of the canvas toolbar so
+     the two bottom borders read as one continuous line across the pane.
+     --flows-toolbar-height is set from a ResizeObserver in flows-pane.tsx. */
+  .flows-panel-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: var(--flows-toolbar-height, 53px);
+    padding: 8px 16px;
+    gap: 12px;
+    /* Opaque on purpose: the body scrolls underneath it. */
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
   }
 
   .flows-library-group-label {

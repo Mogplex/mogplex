@@ -89,7 +89,9 @@ export function EditorToolbarHeader({
 
   return (
     <>
-      <div className="col-start-1 row-start-1 flex min-w-0 items-center lg:col-auto lg:row-auto">
+      {/* flex-1 while the inline name lives here; released at the width where
+          the centred pill takes over, so the pill stays optically centred. */}
+      <div className="col-start-1 row-start-1 flex min-w-0 flex-1 items-center gap-2 @lg/flows-editor:col-auto @lg/flows-editor:row-auto @5xl/flows-editor:flex-none">
         <span
           role={saveStatus === "error" ? "alert" : "status"}
           data-testid="flow-save-status-live"
@@ -101,7 +103,7 @@ export function EditorToolbarHeader({
           data-testid="flow-save-status"
           title={saveStatusTitle}
           className={cn(
-            "hidden items-center text-[11px] font-medium md:inline-flex",
+            "hidden shrink-0 items-center text-[11px] font-medium @2xl/flows-editor:inline-flex",
             quietSaveStatus
               ? "gap-1.5 px-1 py-1"
               : "gap-2 rounded-full border px-2.5 py-1.5",
@@ -125,9 +127,35 @@ export function EditorToolbarHeader({
             </button>
           )}
         </div>
+
+        {/* Inline name for the band between "toolbar still fits on one row" and
+            "the centred pill fits". Keeping the name in this row instead of
+            giving it a row of its own is what holds the toolbar one row tall —
+            and so holds its bottom border level with the inspector header.
+            Below @lg the toolbar wraps anyway, and the wrapped row below takes
+            over because there is no horizontal room left for it here. */}
+        <div
+          data-testid="flow-header-inline-name"
+          className="hidden min-w-0 items-center gap-2 @lg/flows-editor:flex @5xl/flows-editor:hidden"
+        >
+          <span className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            selectedFlow.status === "active" ? "bg-accent-green" : "bg-muted-foreground",
+          )} />
+          <input
+            aria-label="Flow name"
+            data-testid="flow-name-input-compact"
+            value={draft.name}
+            onChange={(event) => onFlowNameChange(event.target.value)}
+            className="h-5 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm font-semibold text-foreground shadow-none outline-none"
+          />
+          <span className="hidden shrink-0 text-xs text-muted-foreground @md/flows-editor:inline">
+            {selectedFlow.published_version?.version_number ? `v${selectedFlow.published_version.version_number}` : "draft"}
+          </span>
+        </div>
       </div>
 
-      <div className="hidden min-w-0 flex-1 justify-center xl:flex">
+      <div className="hidden min-w-0 flex-1 justify-center @5xl/flows-editor:flex">
         <div
           data-testid="flow-header-pill"
           className="flex min-w-0 max-w-[520px] items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 shadow-lg"
@@ -161,7 +189,7 @@ export function EditorToolbarHeader({
 
       <div
         data-testid="flow-header-actions"
-        className="relative col-start-2 row-start-1 ml-auto flex min-w-0 items-center justify-end gap-1.5 lg:col-auto lg:row-auto"
+        className="relative col-start-2 row-start-1 ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1.5 @lg/flows-editor:col-auto @lg/flows-editor:row-auto"
       >
         <button
           type="button"
@@ -216,7 +244,7 @@ export function EditorToolbarHeader({
           variant="outline"
           size="sm"
           disabled
-          className="h-8 gap-1.5 border-border bg-foreground/[0.035] px-3 text-xs text-muted-foreground"
+          className="hidden h-8 gap-1.5 border-border bg-foreground/[0.035] px-3 text-xs text-muted-foreground @3xl/flows-editor:inline-flex"
         >
           <Play className="size-3.5" />
           Test run
@@ -245,7 +273,11 @@ export function EditorToolbarHeader({
   )
 }
 
-export function EditorToolbarCompactName({
+/**
+ * Full-width rename row for the narrow widths where the toolbar has already
+ * wrapped and the inline name in the header row would be squeezed to nothing.
+ */
+export function EditorToolbarWrappedName({
   draft,
   selectedFlow,
   onFlowNameChange,
@@ -257,14 +289,14 @@ export function EditorToolbarCompactName({
   if (!selectedFlow || !draft) return null
 
   return (
-    <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-card/80 px-3 py-2 shadow-sm xl:hidden">
+    <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-card/80 px-3 py-2 shadow-sm @lg/flows-editor:hidden">
       <span className={cn(
         "size-1.5 shrink-0 rounded-full",
         selectedFlow.status === "active" ? "bg-accent-green" : "bg-muted-foreground",
       )} />
       <input
         aria-label="Flow name"
-        data-testid="flow-name-input-compact"
+        data-testid="flow-name-input-wrapped"
         value={draft.name}
         onChange={(event) => onFlowNameChange(event.target.value)}
         className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm font-semibold text-foreground shadow-none outline-none"

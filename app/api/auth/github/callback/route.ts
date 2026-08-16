@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { buildAppUrl } from "@/lib/app-url";
+import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
+import { GITHUB_RETURN_TO_COOKIE } from "@/lib/github-oauth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getGithubInstallation, hasGithubAppConfig } from "@/lib/github-app";
 import {
@@ -26,8 +27,26 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const storedState = cookieStore.get("github_oauth_state")?.value;
   const userId = await getUserId();
+
+  // Where the user started. Consumed once, so a stale cookie cannot hijack a
+  // later connect that did not ask for a return path.
+  const returnTo = normalizeAppRedirectPath(
+    cookieStore.get(GITHUB_RETURN_TO_COOKIE)?.value
+  );
+  cookieStore.delete(GITHUB_RETURN_TO_COOKIE);
+
   const redirect = (path: string) =>
     NextResponse.redirect(buildAppUrl(path, request));
+
+  /** Redirect back to the caller's page, preserving the outcome query. */
+  const redirectBack = (query: string) => {
+    if (returnTo === "/") return redirect(`/${query}`);
+    const target = buildAppUrl(returnTo, request);
+    for (const [key, value] of new URLSearchParams(query.replace(/^\?/, ""))) {
+      target.searchParams.set(key, value);
+    }
+    return NextResponse.redirect(target);
+  };
 
   if (installationIdParam && hasGithubAppConfig()) {
     if (!userId) {
@@ -84,11 +103,11 @@ export async function GET(request: Request) {
           "GitHub App repo sync failed after install callback",
           error
         );
-        return redirect("/?github=connected&repo_sync=failed");
+        return redirectBack("?github=connected&repo_sync=failed");
       }
 
       cookieStore.delete("github_app_install_pending");
-      return redirect("/?github=connected");
+      return redirectBack("?github=connected");
     } catch (error) {
       console.error("GitHub App install callback failed", error);
       return redirect("/?error=github_installation_fetch");
@@ -165,8 +184,8 @@ export async function GET(request: Request) {
     await syncGithubReposForUser(userId, access_token);
   } catch (error) {
     console.error("GitHub repo sync failed after OAuth callback", error);
-    return redirect("/?github=connected&repo_sync=failed");
+    return redirectBack("?github=connected&repo_sync=failed");
   }
 
-  return redirect("/?github=connected");
+  return redirectBack("?github=connected");
 }

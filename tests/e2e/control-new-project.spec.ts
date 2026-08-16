@@ -201,7 +201,9 @@ test("new project explains GitHub connection and org-scope requirements", async 
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Connect GitHub" })
-  ).toHaveAttribute("href", /\/api\/auth\/login\/github\?next=/);
+    // The signed-in connect route. /api/auth/login/github is the signup path
+    // and bounces an existing account to /login/beta?error=waitlist_required.
+  ).toHaveAttribute("href", /\/api\/auth\/github\?next=/);
   await expect(
     page.getByRole("button", { name: "Start mission" })
   ).toBeDisabled();
@@ -229,7 +231,9 @@ test("new project explains GitHub connection and org-scope requirements", async 
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Reconnect GitHub" })
-  ).toHaveAttribute("href", /\/api\/auth\/login\/github\?next=/);
+    // reauthorize=1 forces the OAuth grant, the only path that can add the
+    // missing read:org scope where the GitHub App is configured.
+  ).toHaveAttribute("href", /\/api\/auth\/github\?next=[^"]*reauthorize=1/);
 });
 
 test("new project remains actionable when availability auth expires", async ({
