@@ -6,6 +6,15 @@ export function isBillingEnabled(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
+// Capacity catalog mutations stay test-mode-only until Gate B is explicitly
+// approved. Enabling the feature flag with a live key still fails closed.
+export function areCapacityBillingOperationsEnabled(): boolean {
+  return (
+    process.env.CAPACITY_BILLING_OPERATIONS_ENABLED === "true" &&
+    process.env.STRIPE_SECRET_KEY?.startsWith("sk_test_") === true
+  );
+}
+
 let cached: Stripe | null = null;
 
 export function getStripe(): Stripe {
