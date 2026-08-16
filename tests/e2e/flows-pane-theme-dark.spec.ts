@@ -239,6 +239,16 @@ test("workflows pane keeps canvas chrome and native controls in dark mode", asyn
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByTestId("flow-name-input-desktop")).toBeVisible();
 
+  // The centered header pill must stay in flow with the action cluster —
+  // absolute centering let it overlap the Add agent button at xl widths.
+  const pillBox = await page.getByTestId("flow-header-pill").boundingBox();
+  const desktopActionsBox = await page
+    .getByTestId("flow-header-actions")
+    .boundingBox();
+  expect(pillBox).not.toBeNull();
+  expect(desktopActionsBox).not.toBeNull();
+  expect(pillBox!.x + pillBox!.width).toBeLessThanOrEqual(desktopActionsBox!.x);
+
   await page
     .locator(".react-flow__node")
     .filter({ hasText: "NEXTJS-REVIEWER" })

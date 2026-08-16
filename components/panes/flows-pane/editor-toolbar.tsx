@@ -127,8 +127,11 @@ export function EditorToolbarHeader({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 xl:block">
-        <div className="pointer-events-auto flex max-w-[520px] items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 shadow-lg">
+      <div className="hidden min-w-0 flex-1 justify-center xl:flex">
+        <div
+          data-testid="flow-header-pill"
+          className="flex min-w-0 max-w-[520px] items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 shadow-lg"
+        >
           <span className={cn(
             "size-1.5 shrink-0 rounded-full",
             selectedFlow.status === "active" ? "bg-accent-green" : "bg-muted-foreground",
