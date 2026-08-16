@@ -55,12 +55,134 @@ export type ShadowProviderCostEvent = {
   metadata?: Record<string, unknown>;
 };
 
+export type ShadowCostReservation = {
+  accountId: string;
+  reservationRef: string;
+  sourceRef: string;
+  operationRef: string;
+  rootWorkflowRef?: string;
+  reservedMicros: bigint;
+  basis: Record<string, unknown>;
+  basisVersion: string;
+  expiresAt: Date;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShadowReservationDecision = {
+  posted: boolean;
+  wouldAdmit: boolean;
+  balanceMicros: bigint;
+  openReservedMicros: bigint;
+  spendableMicros: bigint;
+};
+
+export type ShadowReservationTerminal = {
+  reservationRef: string;
+  terminalKind: "settled" | "released" | "expired";
+  consumedMicros: bigint;
+  sourceRef: string;
+  terminalAt: Date;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShadowCapacityLease = {
+  accountId: string;
+  leaseRef: string;
+  sourceRef: string;
+  rootWorkflowRef: string;
+  acquiredAt: Date;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShadowCapacityDecision = {
+  posted: boolean;
+  wouldAdmit: boolean;
+  activeBefore: number;
+  concurrencyLimit: number;
+};
+
+export type ShadowCapacityRelease = {
+  leaseRef: string;
+  terminalOutcome:
+    | "success"
+    | "failure"
+    | "cancelled"
+    | "timeout"
+    | "operator_repair";
+  sourceRef: string;
+  releasedAt: Date;
+  metadata?: Record<string, unknown>;
+};
+
+export type RetainedDataResourceType =
+  | "workflow_history"
+  | "node_run_history"
+  | "job_run_history"
+  | "ai_call_history"
+  | "automation_dispatch_history"
+  | "logs_events"
+  | "review_finding"
+  | "generated_artifact"
+  | "customer_upload"
+  | "sandbox_snapshot";
+
+export type ShadowRetainedDataEvent = {
+  accountId: string;
+  resourceType: RetainedDataResourceType;
+  resourceRef: string;
+  deltaBytes: bigint;
+  sourceRef: string;
+  operationRef?: string;
+  occurredAt: Date;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShadowRetainedDataDecision = {
+  posted: boolean;
+  wouldAdmit: boolean;
+  logicalBytes: bigint;
+  retainedLimitBytes: bigint;
+};
+
 function databaseInteger(value: bigint): string {
   return value.toString();
 }
 
 function posted(data: unknown): boolean {
   return data === true;
+}
+
+function databaseBigInt(value: unknown, label: string): bigint {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && !Number.isSafeInteger(value)) {
+    throw new TypeError(`${label} returned an invalid integer`);
+  }
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new TypeError(`${label} returned an invalid integer`);
+  }
+  try {
+    return BigInt(value);
+  } catch {
+    throw new TypeError(`${label} returned an invalid integer`);
+  }
+}
+
+function databaseSafeInteger(value: unknown, label: string): number {
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new TypeError(`${label} returned an invalid integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new TypeError(`${label} returned an invalid integer`);
+  }
+  return parsed;
+}
+
+function databaseBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new TypeError(`${label} returned an invalid boolean`);
+  }
+  return value;
 }
 
 async function postShadowFact(
@@ -72,6 +194,24 @@ async function postShadowFact(
   const { data, error } = await client.rpc(rpc, args);
   if (error) throw new Error(`${label} failed: ${error.message}`);
   return { posted: posted(data) };
+}
+
+async function postShadowRow(
+  client: SupabaseClient,
+  rpc: string,
+  args: Record<string, unknown>,
+  label: string
+): Promise<Record<string, unknown>> {
+  const { data, error } = await client.rpc(rpc, args);
+  if (error) throw new Error(`${label} failed: ${error.message}`);
+  const row = (Array.isArray(data) ? data[0] : data) as Record<
+    string,
+    unknown
+  > | null;
+  if (!row || typeof row !== "object") {
+    throw new Error(`${label} failed: database returned no result`);
+  }
+  return row;
 }
 
 export function recordShadowEntitlementItem(
@@ -130,4 +270,144 @@ export function recordShadowProviderCost(
     },
     "shadow provider cost"
   );
+}
+
+export async function recordShadowCostReservation(
+  reservation: ShadowCostReservation,
+  client: SupabaseClient = supabaseAdmin
+): Promise<ShadowReservationDecision> {
+  const row = await postShadowRow(
+    client,
+    "record_billing_shadow_reservation",
+    {
+      p_account: reservation.accountId,
+      p_reservation_ref: reservation.reservationRef,
+      p_source_ref: reservation.sourceRef,
+      p_operation_ref: reservation.operationRef,
+      p_root_workflow_ref: reservation.rootWorkflowRef ?? null,
+      p_reserved_micros: databaseInteger(reservation.reservedMicros),
+      p_basis: reservation.basis,
+      p_basis_version: reservation.basisVersion,
+      p_expires_at: reservation.expiresAt.toISOString(),
+      p_metadata: reservation.metadata ?? {},
+    },
+    "shadow cost reservation"
+  );
+  return {
+    posted: databaseBoolean(row.posted, "shadow reservation posted"),
+    wouldAdmit: databaseBoolean(row.would_admit, "shadow reservation decision"),
+    balanceMicros: databaseBigInt(row.balance_micros, "shadow balance"),
+    openReservedMicros: databaseBigInt(
+      row.open_reserved_micros,
+      "shadow open reservations"
+    ),
+    spendableMicros: databaseBigInt(
+      row.spendable_micros,
+      "shadow spendable balance"
+    ),
+  };
+}
+
+export function recordShadowReservationTerminal(
+  terminal: ShadowReservationTerminal,
+  client: SupabaseClient = supabaseAdmin
+): Promise<{ posted: boolean }> {
+  return postShadowFact(
+    client,
+    "record_billing_reservation_terminal",
+    {
+      p_reservation_ref: terminal.reservationRef,
+      p_terminal_kind: terminal.terminalKind,
+      p_consumed_micros: databaseInteger(terminal.consumedMicros),
+      p_source_ref: terminal.sourceRef,
+      p_terminal_at: terminal.terminalAt.toISOString(),
+      p_metadata: terminal.metadata ?? {},
+    },
+    "shadow reservation terminal"
+  );
+}
+
+export async function recordShadowCapacityLease(
+  lease: ShadowCapacityLease,
+  client: SupabaseClient = supabaseAdmin
+): Promise<ShadowCapacityDecision> {
+  const row = await postShadowRow(
+    client,
+    "record_billing_shadow_capacity_lease",
+    {
+      p_account: lease.accountId,
+      p_lease_ref: lease.leaseRef,
+      p_source_ref: lease.sourceRef,
+      p_root_workflow_ref: lease.rootWorkflowRef,
+      p_acquired_at: lease.acquiredAt.toISOString(),
+      p_metadata: lease.metadata ?? {},
+    },
+    "shadow capacity lease"
+  );
+  return {
+    posted: databaseBoolean(row.posted, "shadow capacity lease posted"),
+    wouldAdmit: databaseBoolean(row.would_admit, "shadow capacity decision"),
+    activeBefore: databaseSafeInteger(
+      row.active_before,
+      "shadow active concurrency"
+    ),
+    concurrencyLimit: databaseSafeInteger(
+      row.concurrency_limit,
+      "shadow concurrency limit"
+    ),
+  };
+}
+
+export function recordShadowCapacityRelease(
+  release: ShadowCapacityRelease,
+  client: SupabaseClient = supabaseAdmin
+): Promise<{ posted: boolean }> {
+  return postShadowFact(
+    client,
+    "record_billing_capacity_release",
+    {
+      p_lease_ref: release.leaseRef,
+      p_terminal_outcome: release.terminalOutcome,
+      p_source_ref: release.sourceRef,
+      p_released_at: release.releasedAt.toISOString(),
+      p_metadata: release.metadata ?? {},
+    },
+    "shadow capacity release"
+  );
+}
+
+export async function recordShadowRetainedData(
+  event: ShadowRetainedDataEvent,
+  client: SupabaseClient = supabaseAdmin
+): Promise<ShadowRetainedDataDecision> {
+  const row = await postShadowRow(
+    client,
+    "record_billing_shadow_retained_data_event",
+    {
+      p_account: event.accountId,
+      p_resource_type: event.resourceType,
+      p_resource_ref: event.resourceRef,
+      p_delta_bytes: databaseInteger(event.deltaBytes),
+      p_source_ref: event.sourceRef,
+      p_operation_ref: event.operationRef ?? null,
+      p_occurred_at: event.occurredAt.toISOString(),
+      p_metadata: event.metadata ?? {},
+    },
+    "shadow retained data"
+  );
+  return {
+    posted: databaseBoolean(row.posted, "shadow retained data posted"),
+    wouldAdmit: databaseBoolean(
+      row.would_admit,
+      "shadow retained-data decision"
+    ),
+    logicalBytes: databaseBigInt(
+      row.logical_bytes,
+      "shadow logical retained bytes"
+    ),
+    retainedLimitBytes: databaseBigInt(
+      row.retained_limit_bytes,
+      "shadow retained-data limit"
+    ),
+  };
 }

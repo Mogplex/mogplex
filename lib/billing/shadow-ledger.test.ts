@@ -3,8 +3,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import {
+  recordShadowCapacityLease,
+  recordShadowCapacityRelease,
+  recordShadowCostReservation,
   recordShadowEntitlementItem,
   recordShadowProviderCost,
+  recordShadowReservationTerminal,
+  recordShadowRetainedData,
 } from "./shadow-ledger";
 
 type RpcCall = { name: string; args: Record<string, unknown> };
@@ -105,6 +110,168 @@ describe("shadow billing ledger RPC adapter", () => {
       p_account: null,
       p_shared_overhead_category: "platform_operations",
     });
+  });
+
+  it("returns exact shadow reservation decisions and records settlement", async () => {
+    const { client, calls } = rpcClient([
+      [
+        {
+          posted: true,
+          would_admit: false,
+          balance_micros: "1000000",
+          open_reserved_micros: "600000",
+          spendable_micros: "400000",
+        },
+      ],
+      true,
+    ]);
+    await expect(
+      recordShadowCostReservation(
+        {
+          accountId: "account-1",
+          reservationRef: "reservation-1",
+          sourceRef: "reserve:1",
+          operationRef: "operation-1",
+          rootWorkflowRef: "workflow-1",
+          reservedMicros: BigInt(500_000),
+          basis: { bound: "approved" },
+          basisVersion: "capacity_v2",
+          expiresAt: NOW,
+        },
+        client
+      )
+    ).resolves.toEqual({
+      posted: true,
+      wouldAdmit: false,
+      balanceMicros: BigInt(1_000_000),
+      openReservedMicros: BigInt(600_000),
+      spendableMicros: BigInt(400_000),
+    });
+    await expect(
+      recordShadowReservationTerminal(
+        {
+          reservationRef: "reservation-1",
+          terminalKind: "settled",
+          consumedMicros: BigInt(450_000),
+          sourceRef: "settle:1",
+          terminalAt: NOW,
+        },
+        client
+      )
+    ).resolves.toEqual({ posted: true });
+
+    expect(calls[0]?.args).toMatchObject({
+      p_reserved_micros: "500000",
+      p_root_workflow_ref: "workflow-1",
+      p_basis: { bound: "approved" },
+    });
+    expect(calls[1]?.args).toMatchObject({
+      p_terminal_kind: "settled",
+      p_consumed_micros: "450000",
+    });
+  });
+
+  it("returns capacity and retained-data shadow decisions", async () => {
+    const { client, calls } = rpcClient([
+      [
+        {
+          posted: true,
+          would_admit: true,
+          active_before: 1,
+          concurrency_limit: 5,
+        },
+      ],
+      false,
+      [
+        {
+          posted: true,
+          would_admit: false,
+          logical_bytes: "1100000000",
+          retained_limit_bytes: "1000000000",
+        },
+      ],
+    ]);
+    await expect(
+      recordShadowCapacityLease(
+        {
+          accountId: "account-1",
+          leaseRef: "lease-1",
+          sourceRef: "acquire:1",
+          rootWorkflowRef: "workflow-1",
+          acquiredAt: NOW,
+        },
+        client
+      )
+    ).resolves.toEqual({
+      posted: true,
+      wouldAdmit: true,
+      activeBefore: 1,
+      concurrencyLimit: 5,
+    });
+    await expect(
+      recordShadowCapacityRelease(
+        {
+          leaseRef: "lease-1",
+          terminalOutcome: "failure",
+          sourceRef: "release:1",
+          releasedAt: NOW,
+        },
+        client
+      )
+    ).resolves.toEqual({ posted: false });
+    await expect(
+      recordShadowRetainedData(
+        {
+          accountId: "account-1",
+          resourceType: "generated_artifact",
+          resourceRef: "artifact-1",
+          deltaBytes: BigInt(100_000_000),
+          sourceRef: "retained:1",
+          occurredAt: NOW,
+        },
+        client
+      )
+    ).resolves.toEqual({
+      posted: true,
+      wouldAdmit: false,
+      logicalBytes: BigInt(1_100_000_000),
+      retainedLimitBytes: BigInt(1_000_000_000),
+    });
+
+    expect(calls.map((call) => call.name)).toEqual([
+      "record_billing_shadow_capacity_lease",
+      "record_billing_capacity_release",
+      "record_billing_shadow_retained_data_event",
+    ]);
+  });
+
+  it("rejects malformed exact-integer RPC results", async () => {
+    const { client } = rpcClient([
+      [
+        {
+          posted: true,
+          would_admit: true,
+          balance_micros: "not-an-integer",
+          open_reserved_micros: "0",
+          spendable_micros: "0",
+        },
+      ],
+    ]);
+    await expect(
+      recordShadowCostReservation(
+        {
+          accountId: "account-1",
+          reservationRef: "reservation-1",
+          sourceRef: "reserve:1",
+          operationRef: "operation-1",
+          reservedMicros: BigInt(1),
+          basis: {},
+          basisVersion: "capacity_v2",
+          expiresAt: NOW,
+        },
+        client
+      )
+    ).rejects.toThrow(/shadow balance returned an invalid integer/);
   });
 
   it("surfaces RPC failures with the operation name", async () => {
