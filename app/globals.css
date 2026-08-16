@@ -2018,9 +2018,11 @@
   }
 }
 
-/* MogplexFace: pupils drift through a look-around cycle with pauses. They are
-   painted in the background color so they read as dark filled eyes against
-   the mark, whatever the current foreground color is. */
+/* MogplexFace: pupils are painted in the background color so they read as
+   dark filled eyes against the mark, whatever the current foreground color
+   is. Two nested groups keep transforms from clobbering each other — the
+   outer `-pupils` group owns gaze (translate), the inner `-lids` group owns
+   hatch/blink/squint (scale). Moods are driven by `data-mood` on the svg. */
 @keyframes mogplex-look {
   0%,
   14% {
@@ -2043,14 +2045,169 @@
     transform: translate(0, 0);
   }
 }
+/* Pupils pop in with an overshoot when the face mounts — the "spawn" beat. */
+@keyframes mogplex-hatch {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+/* One quick blink per cycle; eyes held open the rest of the time. */
+@keyframes mogplex-blink {
+  0%,
+  91%,
+  97%,
+  100% {
+    transform: scaleY(1);
+  }
+  93%,
+  95% {
+    transform: scaleY(0.12);
+  }
+}
+/* Thinking: eyes scan side to side faster than the idle drift… */
+@keyframes mogplex-scan {
+  0%,
+  100% {
+    transform: translate(-0.7px, 0.15px);
+  }
+  50% {
+    transform: translate(0.7px, 0.15px);
+  }
+}
+/* …while held in a concentrating squint that pulses slightly… */
+@keyframes mogplex-squint {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(0.38);
+  }
+}
+/* …and the whole mark bobs like it's mid-effort. */
+@keyframes mogplex-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4%);
+  }
+}
+/* Pupils occasionally shape-shift: triangle → circle → triangle → square.
+   The cycle is four blink periods (4 × 5.6s) on the same 0.9s delay, and
+   every swap percent sits at a blink midpoint (23.5% + 25% steps) so the
+   change happens behind closed lids and reads as a wink, not a glitch. */
+@keyframes mogplex-shape-tri {
+  0%,
+  23.5%,
+  48.51%,
+  73.5%,
+  98.51%,
+  100% {
+    opacity: 1;
+  }
+  23.51%,
+  48.5%,
+  73.51%,
+  98.5% {
+    opacity: 0;
+  }
+}
+@keyframes mogplex-shape-circle {
+  0%,
+  23.5%,
+  48.51%,
+  100% {
+    opacity: 0;
+  }
+  23.51%,
+  48.5% {
+    opacity: 1;
+  }
+}
+@keyframes mogplex-shape-square {
+  0%,
+  73.5%,
+  98.51%,
+  100% {
+    opacity: 0;
+  }
+  73.51%,
+  98.5% {
+    opacity: 1;
+  }
+}
 .mogplex-face-pupils {
   fill: var(--background, Canvas);
   animation: mogplex-look 7s ease-in-out infinite;
   transform-box: fill-box;
 }
+.mogplex-eyes-circle,
+.mogplex-eyes-square {
+  opacity: 0;
+}
+.mogplex-eyes-tri {
+  animation: mogplex-shape-tri 22.4s linear 0.9s infinite;
+}
+.mogplex-eyes-circle {
+  animation: mogplex-shape-circle 22.4s linear 0.9s infinite;
+}
+.mogplex-eyes-square {
+  animation: mogplex-shape-square 22.4s linear 0.9s infinite;
+}
+.mogplex-face-lids {
+  /* Blink starts after the hatch settles; both animate transform on this
+     group, so the delayed infinite blink takes over once it begins. */
+  animation:
+    mogplex-hatch 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    mogplex-blink 5.6s ease-in-out 0.9s infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+/* Listening (user is typing): gaze drops to the input and holds; the blink
+   cycle keeps running so the face stays alive. */
+.mogplex-face[data-mood="listening"] .mogplex-face-pupils {
+  animation: none;
+  transform: translate(0, 0.55px);
+}
+.mogplex-face[data-mood="thinking"] {
+  animation: mogplex-bob 1.4s ease-in-out infinite;
+}
+.mogplex-face[data-mood="thinking"] .mogplex-face-pupils {
+  animation: mogplex-scan 1.6s ease-in-out infinite;
+}
+.mogplex-face[data-mood="thinking"] .mogplex-face-lids {
+  animation: mogplex-squint 1.6s ease-in-out infinite;
+}
+/* Thinking squints instead of blinking, so there's no closed-lid moment to
+   hide a swap behind — pin the triangles while concentrating. */
+.mogplex-face[data-mood="thinking"] .mogplex-eyes-tri {
+  animation: none;
+  opacity: 1;
+}
+.mogplex-face[data-mood="thinking"] .mogplex-eyes-circle,
+.mogplex-face[data-mood="thinking"] .mogplex-eyes-square {
+  animation: none;
+  opacity: 0;
+}
 @media (prefers-reduced-motion: reduce) {
-  .mogplex-face-pupils {
-    animation: none;
+  .mogplex-face,
+  .mogplex-face-pupils,
+  .mogplex-face-lids,
+  .mogplex-eyes-tri,
+  .mogplex-eyes-circle,
+  .mogplex-eyes-square {
+    animation: none !important;
+  }
+  .mogplex-face[data-mood="listening"] .mogplex-face-pupils {
+    transform: none;
   }
 }
 
