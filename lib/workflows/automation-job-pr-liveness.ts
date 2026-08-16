@@ -99,7 +99,7 @@ function buildSupersedeCancelReason(
 ) {
   if (reason === "pr_closed") {
     const prNumber = resolvePullRequestNumber(args.context.metadata);
-    return `PR #${prNumber ?? "?"} was closed before the review completed`;
+    return `PR #${prNumber ?? "?"} was closed or merged before the review completed`;
   }
   const headRef =
     typeof args.context.metadata.head_ref === "string"

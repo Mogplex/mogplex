@@ -145,6 +145,23 @@ test("fetchPrLiveness reports pr_closed when the PR state is not open", async ()
   );
 });
 
+test("fetchPrLiveness fails open when a 200 PR body cannot be parsed", async () => {
+  const fetchPrLiveness = await loadFetchPrLiveness();
+
+  await withMockedFetch(
+    (url) => {
+      assert.equal(url, PR_URL);
+      return new Response("<<<garbled", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+    async () => {
+      assert.deepEqual(await fetchPrLiveness(livenessInput), { alive: true });
+    }
+  );
+});
+
 test("fetchPrLiveness reports head_branch_deleted when an open PR loses its head branch", async () => {
   const fetchPrLiveness = await loadFetchPrLiveness();
 

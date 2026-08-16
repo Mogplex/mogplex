@@ -233,7 +233,12 @@ export async function fetchPrLiveness(input: {
   const data = (await prRes.json().catch(() => null)) as {
     state?: string;
   } | null;
-  if (data?.state !== "open") {
+  if (!data) {
+    // Fail open when a 200 body cannot be parsed — same rule as 5xx: a
+    // garbled read must not cancel work for a live PR.
+    return { alive: true };
+  }
+  if (data.state !== "open") {
     return { alive: false, reason: "pr_closed" };
   }
 

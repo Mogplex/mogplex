@@ -107,7 +107,7 @@ test("createAutomationJobTask supersedes a PR review when the PR closed before e
   assert.equal(checkRunCreated, false);
   assert.equal(persistedFailure, false);
   assert.deepEqual(persistedCancelled, {
-    reason: "PR #42 was closed before the review completed",
+    reason: "PR #42 was closed or merged before the review completed",
     cancelError: null,
   });
   assert.equal(dispatchEvents.get()?.outcome, "cancelled");
