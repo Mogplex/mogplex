@@ -18,6 +18,7 @@ import {
   pickPreferredRepoVariant,
 } from "@/lib/workflows/automation-job-utils";
 import { GITHUB_PR_ACCESS_FAILURE_PREFIX } from "@/lib/workflows/automation-job-types";
+import type { AutomationPrLivenessResult } from "@/lib/workflows/automation-job-pr-liveness";
 
 export function classifyGithubAppTokenError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -196,6 +197,61 @@ export async function loadPullRequestDetails(input: {
     baseSha: data.base?.sha ?? input.fallbackBaseSha ?? null,
     baseRepoFullName,
   };
+}
+
+export async function fetchPrLiveness(input: {
+  githubToken: string;
+  baseRepoFullName: string;
+  headRepoFullName: string;
+  prNumber: number;
+  headRef: string;
+}): Promise<AutomationPrLivenessResult> {
+  const headers = {
+    Authorization: `Bearer ${input.githubToken}`,
+    Accept: "application/vnd.github+json",
+  };
+
+  const [baseOwner, baseRepo] = input.baseRepoFullName.split("/");
+  if (!baseOwner || !baseRepo) {
+    return { alive: true };
+  }
+
+  const prRes = await fetch(
+    `https://api.github.com/repos/${baseOwner}/${baseRepo}/pulls/${input.prNumber}`,
+    { headers, cache: "no-store" }
+  );
+
+  if (prRes.status === 404) {
+    return { alive: false, reason: "pr_closed" };
+  }
+  if (!prRes.ok) {
+    // Fail open on 5xx / rate limits: a flaky GitHub read must not cancel
+    // real work.
+    return { alive: true };
+  }
+
+  const data = (await prRes.json().catch(() => null)) as {
+    state?: string;
+  } | null;
+  if (data?.state !== "open") {
+    return { alive: false, reason: "pr_closed" };
+  }
+
+  const [headOwner, headRepo] = input.headRepoFullName.split("/");
+  if (!headOwner || !headRepo) {
+    return { alive: true };
+  }
+
+  const branchRes = await fetch(
+    `https://api.github.com/repos/${headOwner}/${headRepo}/branches/${encodeURIComponent(input.headRef)}`,
+    { headers, cache: "no-store" }
+  );
+
+  if (branchRes.status === 404) {
+    return { alive: false, reason: "head_branch_deleted" };
+  }
+
+  return { alive: true };
 }
 
 function buildGithubPrAccessFailureMessage(input: {

@@ -20,6 +20,9 @@ test("createAutomationJobTask defers safe merge actions until the review check i
   let controlDispatchEvent: CapturedControlDispatchEvent | null = null;
 
   const workflow = createAutomationJobTask({
+    // The pre-flight PR liveness check is orthogonal to this ordering test and
+    // would otherwise hit the mocked PR endpoint ahead of the merge gate.
+    fetchPrLiveness: async () => ({ alive: true }),
     resolveJobContext: async () => ({
       context: {
         metadata: {

@@ -54,6 +54,7 @@ import {
   type PrReviewReporter,
 } from "@/lib/workflows/automation-job-pr-review-reporter";
 import { handleAutomationJobFailure } from "@/lib/workflows/automation-job-failure-handler";
+import { supersedeIfVanishedPr } from "@/lib/workflows/automation-job-pr-liveness";
 import type { AutomationJobExecutorDeps } from "@/lib/workflows/automation-job-executor-deps";
 import { executeAutomationContext } from "@/lib/workflows/automation-job-context-executor";
 
@@ -163,6 +164,18 @@ export async function runAutomationJob(
       loadPullRequestDetails: deps.loadPullRequestDetails,
     });
   }
+
+  // Pre-flight: a PR that already closed or lost its head branch is
+  // superseded work — cancel instead of executing and failing on the clone.
+  const supersedeJobArgs = {
+    deps,
+    input,
+    context,
+    dispatchLogContext,
+    githubToken,
+  };
+  const preflightSuperseded = await supersedeIfVanishedPr(supersedeJobArgs);
+  if (preflightSuperseded) return preflightSuperseded;
 
   const reviewHeadSha =
     isPrReview && typeof context.metadata.head_sha === "string"
@@ -287,6 +300,12 @@ export async function runAutomationJob(
         };
       }
 
+      const superseded = await supersedeIfVanishedPr(supersedeJobArgs, {
+        message: flowExecution.message,
+        reviewCheckRunId,
+      });
+      if (superseded) return superseded;
+
       const failure = await failJob(
         flowExecution.message,
         flowExecution.context,
@@ -355,6 +374,11 @@ export async function runAutomationJob(
       };
     }
     const message = error instanceof Error ? error.message : "Unknown error";
+    const superseded = await supersedeIfVanishedPr(supersedeJobArgs, {
+      message,
+      reviewCheckRunId,
+    });
+    if (superseded) return superseded;
     return failJob(
       message,
       context,

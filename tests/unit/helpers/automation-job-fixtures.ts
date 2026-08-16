@@ -39,7 +39,7 @@ export type CapturedAiCallInput = {
 };
 
 export type CapturedControlDispatchEvent = {
-  outcome: "completed" | "failed";
+  outcome: "completed" | "failed" | "cancelled";
   reason: string | null | undefined;
   metadata: Record<string, unknown> | null | undefined;
 };

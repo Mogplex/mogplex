@@ -15,6 +15,7 @@ export const PR_REVIEW_REASON_CODES = {
   githubAuthFailed: "PR_REVIEW_GITHUB_AUTH_FAILED",
   skippedDraft: "SKIPPED_DRAFT_PR",
   skippedBotSynchronize: "SKIPPED_BOT_SYNCHRONIZE",
+  superseded: "PR_REVIEW_SUPERSEDED",
 } as const;
 
 export const AUTOMATION_REASON_CODES = {
@@ -120,6 +121,8 @@ const REASON_LABELS: Record<string, string> = {
   [PR_REVIEW_REASON_CODES.githubAuthFailed]: "GitHub auth failed",
   [PR_REVIEW_REASON_CODES.skippedDraft]: "Skipped draft PR",
   [PR_REVIEW_REASON_CODES.skippedBotSynchronize]: "Skipped bot synchronize",
+  [PR_REVIEW_REASON_CODES.superseded]:
+    "Superseded — PR closed or branch deleted",
 };
 
 export function formatAutomationReasonLabel(
@@ -207,6 +210,7 @@ export function getReviewOutcomeSummary(
     case PR_REVIEW_REASON_CODES.staleHeadSha:
     case PR_REVIEW_REASON_CODES.skippedDraft:
     case PR_REVIEW_REASON_CODES.skippedBotSynchronize:
+    case PR_REVIEW_REASON_CODES.superseded:
       return formatAutomationReasonLabel(normalizedReason, event.metadata);
     default:
       return null;
