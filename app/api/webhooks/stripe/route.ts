@@ -31,11 +31,6 @@ import {
   type LedgerEntry,
 } from "@/lib/billing/ledger";
 
-export {
-  claimStripeEvent,
-  markStripeEventProcessed,
-} from "@/lib/billing/stripe-webhook-events";
-
 // Single Stripe webhook endpoint (pricing-plan 02 §4): verify signature,
 // claim event id in billing_events before processing, ack duplicates fast.
 
