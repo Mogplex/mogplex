@@ -257,6 +257,10 @@ jobs:
       # Must be >= 32 chars — the catch-all auth route 503s below that in
       # production builds.
       BETTER_AUTH_SECRET: e2e-ci-placeholder-secret-0123456789abcdef
+      # Not a real secret: /api/auth/github's OAuth path throws without it,
+      # and e2e specs assert the redirect to github.com/login/oauth/authorize
+      # (maxRedirects: 0 — no real GitHub round trip ever uses this value).
+      GITHUB_CLIENT_ID: e2e-ci-placeholder-client-id
       # Neon connection for the real-database auth specs and (with the
       # backend flip below) every supabaseAdmin call in the server. The auth
       # spec files self-skip when this is unset.
