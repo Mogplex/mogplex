@@ -114,7 +114,9 @@ type ScopeRefs = {
   reposById: Map<string, RepoRef>;
 };
 
-export type StartGuardReason = "INSTALLATION_CONCURRENCY_LIMIT";
+export type StartGuardReason =
+  | "INSTALLATION_CONCURRENCY_LIMIT"
+  | "ACCOUNT_CONCURRENCY_LIMIT";
 
 export type QueueGuardReason =
   | StartGuardReason
@@ -123,6 +125,9 @@ export type QueueGuardReason =
   | "ACTIVE_DUPLICATE";
 
 export function describeStartGuardReason(reason: StartGuardReason) {
+  if (reason === "ACCOUNT_CONCURRENCY_LIMIT") {
+    return "Account Concurrency limit reached";
+  }
   if (reason === "INSTALLATION_CONCURRENCY_LIMIT") {
     return "Installation concurrency limit reached";
   }

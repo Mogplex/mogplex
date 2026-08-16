@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ProductResourceScope } from "@/lib/team-resource-scope";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type BillingAccount = {
   id: string;
@@ -22,12 +23,10 @@ const ACCOUNT_COLUMNS =
   "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, subscription_checkout_generation, status, created_at, updated_at";
 
 export async function findBillingAccountForScope(
-  scope: ProductResourceScope
+  scope: ProductResourceScope,
+  client: SupabaseClient = supabaseAdmin
 ): Promise<BillingAccount | null> {
-  let query = supabaseAdmin
-    .from("billing_accounts")
-    .select(ACCOUNT_COLUMNS)
-    .limit(1);
+  let query = client.from("billing_accounts").select(ACCOUNT_COLUMNS).limit(1);
   query =
     scope.kind === "team"
       ? query
@@ -42,16 +41,17 @@ export async function findBillingAccountForScope(
 }
 
 export async function getOrCreateBillingAccount(
-  scope: ProductResourceScope
+  scope: ProductResourceScope,
+  client: SupabaseClient = supabaseAdmin
 ): Promise<BillingAccount> {
-  const existing = await findBillingAccountForScope(scope);
+  const existing = await findBillingAccountForScope(scope, client);
   if (existing) return existing;
 
   const insert =
     scope.kind === "team"
       ? { owner_type: "team", product_team_id: scope.productTeamId }
       : { owner_type: "user", owner_user_id: scope.userId };
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await client
     .from("billing_accounts")
     .insert(insert)
     .select(ACCOUNT_COLUMNS)
@@ -61,7 +61,7 @@ export async function getOrCreateBillingAccount(
   // Concurrent create for the same scope: the partial unique index rejects
   // the second insert — re-read the winner.
   if (error.code === UNIQUE_VIOLATION) {
-    const winner = await findBillingAccountForScope(scope);
+    const winner = await findBillingAccountForScope(scope, client);
     if (winner) return winner;
   }
   throw new Error(`billing_accounts insert failed: ${error.message}`);

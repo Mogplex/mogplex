@@ -9,6 +9,10 @@ import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
+  ACCOUNT_CONCURRENCY_LIMIT,
+  admitAutomationJobCapacity,
+} from "@/lib/billing/workflow-capacity";
+import {
   describeStartGuardReason,
   loadAutomationScopeForJobRun,
 } from "@/lib/workflows/automation-guardrails";
@@ -230,6 +234,79 @@ export async function startAutomationJobRun(
     };
   }
 
+  let capacity: Awaited<ReturnType<typeof admitAutomationJobCapacity>>;
+  try {
+    capacity = await admitAutomationJobCapacity(
+      {
+        jobRunId,
+        source,
+        attemptedAt: attempt.attemptedAt,
+        context: dispatchContext,
+      },
+      adminClient
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to record workflow capacity admission";
+    await resetClaimedJobToPending(jobRunId, adminClient, {
+      sourceRef: `capacity-admission-failed:${jobRunId}:${attempt.attemptedAt}`,
+      rolledBackAt: attempt.attemptedAt,
+      metadata: { reason: "capacity_admission_failed" },
+    });
+    await recordStartAttemptError({
+      jobRunId,
+      source,
+      attemptedAt: attempt.attemptedAt,
+      error: message,
+      adminClient,
+    });
+    await recordStartDispatchEvent({
+      context: dispatchContext,
+      jobRunId,
+      outcome: "start_failed",
+      reason: message,
+      source,
+      adminClient,
+    });
+    throw error;
+  }
+
+  if (!capacity.admitted) {
+    await resetClaimedJobToPending(jobRunId, adminClient, {
+      sourceRef: `capacity-deferred:${jobRunId}:${attempt.attemptedAt}`,
+      rolledBackAt: attempt.attemptedAt,
+      metadata: { reason: ACCOUNT_CONCURRENCY_LIMIT },
+    });
+    await recordStartAttemptError({
+      jobRunId,
+      source,
+      attemptedAt: attempt.attemptedAt,
+      error: describeStartGuardReason(ACCOUNT_CONCURRENCY_LIMIT),
+      adminClient,
+    });
+    await recordStartDispatchEvent({
+      context: dispatchContext,
+      jobRunId,
+      outcome: "deferred",
+      reason: ACCOUNT_CONCURRENCY_LIMIT,
+      source,
+      metadata: {
+        billing_account_id: capacity.accountId,
+        active_concurrency: capacity.activeBefore,
+        concurrency_limit: capacity.concurrencyLimit,
+      },
+      adminClient,
+    });
+    return {
+      started: false,
+      deferred: true,
+      status: "pending",
+      reason: ACCOUNT_CONCURRENCY_LIMIT,
+    };
+  }
+
   let startedRun: Awaited<ReturnType<typeof startTriggerAutomationRun>>;
   try {
     startedRun = await startTriggerAutomationRun(
@@ -245,7 +322,11 @@ export async function startAutomationJobRun(
       error instanceof Error
         ? error.message
         : "Failed to start background runtime";
-    await resetClaimedJobToPending(jobRunId, adminClient);
+    await resetClaimedJobToPending(jobRunId, adminClient, {
+      sourceRef: `runtime-start-failed:${jobRunId}:${attempt.attemptedAt}`,
+      rolledBackAt: new Date().toISOString(),
+      metadata: { reason: "runtime_start_failed" },
+    });
     await recordStartAttemptError({
       jobRunId,
       source,
@@ -309,7 +390,11 @@ export async function startAutomationJobRun(
     }
 
     if (!cancelErrorMessage) {
-      await resetClaimedJobToPending(jobRunId, adminClient);
+      await resetClaimedJobToPending(jobRunId, adminClient, {
+        sourceRef: `runtime-handle-rollback:${jobRunId}:${attempt.attemptedAt}`,
+        rolledBackAt: new Date().toISOString(),
+        metadata: { reason: RUNTIME_HANDLE_PERSIST_FAILED },
+      });
     }
 
     const startError = cancelErrorMessage
@@ -350,6 +435,15 @@ export async function startAutomationJobRun(
     jobRunId,
     outcome: "started",
     source,
+    metadata: capacity.tracked
+      ? {
+          billing_account_id: capacity.accountId,
+          capacity_accounting_mode: capacity.accountingMode,
+          capacity_would_admit: capacity.wouldAdmit,
+          active_concurrency_before: capacity.activeBefore,
+          concurrency_limit: capacity.concurrencyLimit,
+        }
+      : { capacity_tracking: "unresolved_scope" },
     adminClient,
   });
 

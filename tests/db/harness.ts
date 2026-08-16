@@ -18,6 +18,24 @@ export const SANDBOX_BILLING_SANDBOX_STUB_SQL = /* sql */ `
   )
 `;
 
+export const BILLING_JOB_RUN_STUB_SQL = /* sql */ `
+  create table if not exists public.job_runs (
+    id uuid primary key,
+    status text not null default 'pending',
+    started_at timestamptz,
+    completed_at timestamptz,
+    duration_ms integer,
+    input_tokens integer,
+    output_tokens integer,
+    error text,
+    runtime_provider text,
+    runtime_run_id text,
+    workflow_run_id text,
+    cancel_reason text,
+    cancelled_at timestamptz
+  )
+`;
+
 // Minimal schema for the tables the cost trigger battery exercises.
 //
 // We intentionally don't apply the full Supabase migration chain — most of it
