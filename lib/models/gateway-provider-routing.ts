@@ -17,6 +17,8 @@ const FIREWORKS_PINNED_LAB_PREFIXES = [
 const MODEL_PROVIDER_PINS: Record<string, string[]> = {
   // Baseten serves nemotron-3-ultra (alongside together-ai/deepinfra/blackbox).
   "nvidia/nemotron-3-ultra-550b-a55b": ["baseten"],
+  // Blackbox serves glm-5.2 free as of 2026-08; soft pin while that lasts.
+  "zai/glm-5.2": ["blackbox"],
 };
 
 export type GatewayCallContext = {
