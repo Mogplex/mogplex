@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { getStripe, isBillingEnabled } from "@/lib/billing/stripe";
-import { findPlanPrice, PLAN_PRICES } from "@/lib/billing/catalog";
+import {
+  areCapacityBillingOperationsEnabled,
+  getStripe,
+  isBillingEnabled,
+} from "@/lib/billing/stripe";
+import { findPlanPrice } from "@/lib/billing/catalog";
+import { applyCapacityEntitlementSnapshot } from "@/lib/billing/capacity-entitlement-webhooks";
+import {
+  handleCapacityInvoicePaidIfApplicable,
+  handleCapacitySubscriptionIfApplicable,
+} from "@/lib/billing/capacity-stripe-webhook";
+import {
+  claimStripeEvent,
+  markStripeEventProcessed,
+} from "@/lib/billing/stripe-webhook-events";
+import { handleLegacyInvoicePaid } from "@/lib/billing/legacy-stripe-webhook";
 import {
   findBillingAccountById,
   findBillingAccountByStripeCustomer,
@@ -17,7 +30,11 @@ import {
   type BillingPeriodGrant,
   type LedgerEntry,
 } from "@/lib/billing/ledger";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+
+export {
+  claimStripeEvent,
+  markStripeEventProcessed,
+} from "@/lib/billing/stripe-webhook-events";
 
 // Single Stripe webhook endpoint (pricing-plan 02 §4): verify signature,
 // claim event id in billing_events before processing, ack duplicates fast.
@@ -38,6 +55,8 @@ export type StripeWebhookDeps = {
   retrievePaymentIntent: (id: string) => Promise<Stripe.PaymentIntent>;
   listRefunds: (chargeId: string) => Promise<Stripe.Refund[]>;
   retrieveCharge: (id: string) => Promise<Stripe.Charge>;
+  capacityBillingOperationsEnabled: () => boolean;
+  applyCapacityEntitlementSnapshot: typeof applyCapacityEntitlementSnapshot;
 };
 
 function defaultDeps(): StripeWebhookDeps {
@@ -53,6 +72,8 @@ function defaultDeps(): StripeWebhookDeps {
     listRefunds: async (chargeId) =>
       (await getStripe().refunds.list({ charge: chargeId, limit: 100 })).data,
     retrieveCharge: (id) => getStripe().charges.retrieve(id),
+    capacityBillingOperationsEnabled: areCapacityBillingOperationsEnabled,
+    applyCapacityEntitlementSnapshot,
   };
 }
 
@@ -61,10 +82,6 @@ function customerIdOf(
 ): string | null {
   if (!customer) return null;
   return typeof customer === "string" ? customer : customer.id;
-}
-
-function periodOf(date: Date): string {
-  return date.toISOString().slice(0, 7);
 }
 
 async function handleCheckoutCompleted(
@@ -87,6 +104,8 @@ async function handleCheckoutCompleted(
 
 async function handleInvoicePaid(
   invoice: Stripe.Invoice,
+  eventId: string,
+  eventCreated: number,
   deps: StripeWebhookDeps
 ) {
   const customerId = customerIdOf(invoice.customer);
@@ -100,68 +119,21 @@ async function handleInvoicePaid(
   if (!subscriptionId) return; // one-off invoice — nothing to grant
 
   const subscription = await deps.retrieveSubscription(subscriptionId);
-  const item = subscription.items.data[0];
-  const lookupKey = item?.price.lookup_key;
-  const plan = lookupKey ? findPlanPrice(lookupKey) : null;
-  if (!plan || !item) {
-    throw new Error(
-      `paid invoice ${invoice.id} references an unknown subscription price`
-    );
-  }
-
-  const periodStart = new Date(item.current_period_start * 1000);
-  const period = periodOf(periodStart);
-
-  // The database serializes all ledger writes for this account, claims the
-  // grant, and expires the prior included balance in one transaction. A
-  // redelivery therefore cannot expire fresh credit, and concurrent metering
-  // cannot be swallowed at the period boundary.
-  //
-  // Annual plans: this grants month 1 only (their invoice fires yearly);
-  // months 2–12 come from the grant-annual-included-usage scheduled task
-  // (pricing-plan 02 §5, not yet built) using the same
-  // grant:{account}:{YYYY-MM}:{subscription} source_ref scheme.
-  const grant = await deps.postBillingPeriodGrant({
-    accountId: account.id,
-    deltaCents: plan.includedUsageCents,
-    grantSourceRef: `grant:${account.id}:${period}:${subscription.id}`,
-    expirySourceRef: `grantexp:${account.id}:${period}:${subscription.id}`,
-    period,
-    metadata: { invoice: invoice.id, plan: plan.lookupKey },
-  });
-  const priorIncludedUsageCents = PLAN_PRICES.find(
-    (candidate) => candidate.tier === account.tier
-  )?.includedUsageCents;
   if (
-    !grant.posted &&
-    account.tier !== "free" &&
-    account.tier !== plan.tier &&
-    priorIncludedUsageCents !== undefined &&
-    plan.includedUsageCents > priorIncludedUsageCents
+    await handleCapacityInvoicePaidIfApplicable({
+      account,
+      invoice,
+      subscription,
+      eventId,
+      eventCreated,
+      deps,
+    })
   ) {
-    // A same-period portal upgrade reuses the period grant source_ref. Add
-    // only the entitlement delta after the prorated upgrade invoice is paid;
-    // subscription.updated deliberately does not grant before payment.
-    await deps.postLedgerEntry({
-      accountId: account.id,
-      deltaCents: plan.includedUsageCents - priorIncludedUsageCents,
-      bucket: "included",
-      kind: "grant_adjustment",
-      sourceRef: `grantadj:${account.id}:${subscription.id}:${period}:${plan.lookupKey}`,
-      period,
-      metadata: { invoice: invoice.id, plan: plan.lookupKey },
-    });
+    return;
   }
-  await deps.updateAccount(account.id, {
-    tier: plan.tier,
-    stripe_subscription_id: subscription.id,
-    // Clearing past_due on payment is correct; a dispute freeze is NOT
-    // lifted by a routine renewal — only support does that.
-    ...(account.status === "frozen_topups"
-      ? {}
-      : { status: "active" as const }),
-    period_anchor: periodStart.toISOString().slice(0, 10),
-  });
+  // The legacy handler preserves the existing exact grant and same-period
+  // upgrade behavior while capacity subscriptions use their separate path.
+  await handleLegacyInvoicePaid({ account, invoice, subscription, deps });
 }
 
 async function handleInvoicePaymentFailed(
@@ -222,12 +194,26 @@ function stampedCreditCentsOf(paymentIntent: Stripe.PaymentIntent): number {
 
 async function syncSubscription(
   subscription: Stripe.Subscription,
+  eventId: string,
+  eventCreated: number,
   deps: StripeWebhookDeps
 ) {
   const customerId = customerIdOf(subscription.customer);
   if (!customerId) return;
   const account = await deps.findAccountByCustomer(customerId);
   if (!account) return;
+
+  if (
+    await handleCapacitySubscriptionIfApplicable({
+      account,
+      subscription,
+      eventId,
+      eventCreated,
+      deps,
+    })
+  ) {
+    return;
+  }
 
   if (subscription.status === "canceled") {
     // Drop to Free and expire subscription-included credit; purchased top-up
@@ -345,89 +331,26 @@ export async function handleStripeEvent(
     case "checkout.session.completed":
       return handleCheckoutCompleted(event.data.object, deps);
     case "invoice.paid":
-      return handleInvoicePaid(event.data.object, deps);
+      return handleInvoicePaid(
+        event.data.object,
+        event.id,
+        event.created,
+        deps
+      );
     case "invoice.payment_failed":
       return handleInvoicePaymentFailed(event.data.object, event.created, deps);
     case "payment_intent.succeeded":
       return handlePaymentIntentSucceeded(event.data.object, deps);
     case "customer.subscription.updated":
-      return syncSubscription(event.data.object, deps);
+      return syncSubscription(event.data.object, event.id, event.created, deps);
     case "customer.subscription.deleted":
-      return syncSubscription(event.data.object, deps);
+      return syncSubscription(event.data.object, event.id, event.created, deps);
     case "charge.refunded":
       return handleChargeRefunded(event.data.object, deps);
     case "charge.dispute.created":
       return handleDisputeCreated(event.data.object, deps);
     default:
       return; // unhandled event types are acked and ignored
-  }
-}
-
-// A claim (row with null processed_at) older than this is presumed to
-// belong to a crashed handler and may be taken over by a later delivery.
-const CLAIM_TAKEOVER_MS = 10 * 60 * 1000;
-
-export type StripeEventClaim = "claimed" | "processed" | "in_progress";
-
-// Claims the event id and distinguishes completed duplicates from active
-// work. In-progress duplicates receive a non-2xx response so Stripe keeps
-// retrying until the first handler completes or the stale claim is taken over.
-export async function claimStripeEvent(
-  event: Stripe.Event,
-  client: SupabaseClient = supabaseAdmin,
-  now: () => Date = () => new Date()
-): Promise<StripeEventClaim> {
-  const insert = await client.from("billing_events").insert({
-    stripe_event_id: event.id,
-    type: event.type,
-    payload: event as unknown as Record<string, unknown>,
-  });
-  if (!insert.error) return "claimed";
-  if (insert.error.code !== "23505") {
-    throw new Error(`billing_events insert failed: ${insert.error.message}`);
-  }
-  const claimedAt = now();
-  const cutoff = new Date(
-    claimedAt.getTime() - CLAIM_TAKEOVER_MS
-  ).toISOString();
-  const takeover = await client
-    .from("billing_events")
-    .update({ received_at: claimedAt.toISOString() })
-    .eq("stripe_event_id", event.id)
-    .is("processed_at", null)
-    .lt("received_at", cutoff)
-    .select("stripe_event_id");
-  if (takeover.error) {
-    throw new Error(
-      `billing_events takeover failed: ${takeover.error.message}`
-    );
-  }
-  if ((takeover.data?.length ?? 0) > 0) return "claimed";
-
-  const existing = await client
-    .from("billing_events")
-    .select("processed_at")
-    .eq("stripe_event_id", event.id)
-    .maybeSingle();
-  if (existing.error) {
-    throw new Error(`billing_events lookup failed: ${existing.error.message}`);
-  }
-  return existing.data?.processed_at ? "processed" : "in_progress";
-}
-
-export async function markStripeEventProcessed(
-  eventId: string,
-  client: SupabaseClient = supabaseAdmin,
-  now: () => Date = () => new Date()
-): Promise<void> {
-  const { error } = await client
-    .from("billing_events")
-    .update({ processed_at: now().toISOString(), payload: {} })
-    .eq("stripe_event_id", eventId);
-  if (error) {
-    // The event WAS processed; leaving the claim unprocessed only means a
-    // redundant (idempotent) re-run after the takeover window.
-    console.error(`[stripe-webhook] mark processed failed for ${eventId}`);
   }
 }
 
