@@ -59,10 +59,10 @@ describe("capacity pricing catalog", () => {
     ).toEqual([
       ["Concurrency +10", 500, 10, 0],
       ["Concurrency +50", 1_500, 50, 0],
-      ["Retained data 1", 200, 0, 1],
-      ["Retained data 10", 1_500, 0, 10],
-      ["Retained data 50", 6_000, 0, 50],
-      ["Retained data 100", 10_000, 0, 100],
+      ["Retained data +1 GB", 200, 0, 1],
+      ["Retained data +10 GB", 1_500, 0, 10],
+      ["Retained data +50 GB", 6_000, 0, 50],
+      ["Retained data +100 GB", 10_000, 0, 100],
     ]);
   });
 
