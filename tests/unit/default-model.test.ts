@@ -8,19 +8,21 @@ async function loadDefaultModelModule() {
   return import("../../lib/models/default-model");
 }
 
-test("resolveUsableDefaultModelId prefers the configured MiniMax default when preferences are still empty", async () => {
+test("resolveUsableDefaultModelId prefers the configured GLM default when preferences are still empty", async () => {
   const { resolveUsableDefaultModelId } = await loadDefaultModelModule();
 
+  // zai/glm-5.2 sorts after openai/gpt-5.4, so this asserts the static
+  // default wins over first-usable ordering, not just position.
   const resolved = resolveUsableDefaultModelId(
     null,
     [
-      { id: "minimax/minimax-m2.7", is_available: true },
+      { id: "zai/glm-5.2", is_available: true },
       { id: "openai/gpt-5.4", is_available: true },
     ],
     []
   );
 
-  assert.equal(resolved, "minimax/minimax-m2.7");
+  assert.equal(resolved, "zai/glm-5.2");
 });
 
 test("isUsableDefaultModelId treats missing preference rows as enabled for available models", async () => {
@@ -74,8 +76,8 @@ test("pickUsableDefaultModelId only chooses the static default when it survived 
     "openai/gpt-5.4"
   );
   assert.equal(
-    pickUsableDefaultModelId(null, ["minimax/minimax-m2.7", "openai/gpt-5.4"]),
-    "minimax/minimax-m2.7"
+    pickUsableDefaultModelId(null, ["openai/gpt-5.4", "zai/glm-5.2"]),
+    "zai/glm-5.2"
   );
 });
 
@@ -85,10 +87,7 @@ test("resolveUsableDefaultModelId keeps the static terminal fallback for runtime
   // Runtime/display paths need a concrete ID and never persist it; an
   // unusable fallback fails loudly at invocation. The nullable fail-closed
   // contract lives on pickUsableDefaultModelId / the scoped stored resolver.
-  assert.equal(
-    resolveUsableDefaultModelId(null, [], []),
-    "minimax/minimax-m2.7"
-  );
+  assert.equal(resolveUsableDefaultModelId(null, [], []), "zai/glm-5.2");
 });
 
 test("fallback selection is deterministic and agrees with /api/models regardless of catalog row order", async () => {
