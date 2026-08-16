@@ -36,6 +36,20 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       max: 4,
     });
     await pool.query("drop schema public cascade; create schema public");
+    await pool.query(`
+      do $$ begin
+        create role anon;
+      exception when duplicate_object then null;
+      end $$;
+      do $$ begin
+        create role authenticated;
+      exception when duplicate_object then null;
+      end $$;
+      do $$ begin
+        create role service_role;
+      exception when duplicate_object then null;
+      end $$;
+    `);
     await pool.query(SANDBOX_BILLING_SANDBOX_STUB_SQL);
     for (const migrationName of [
       "20260804200000_billing_foundation.sql",
@@ -44,6 +58,7 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       "20260805070000_sandbox_billing_sessions.sql",
       "20260805090000_sandbox_billing_open_balance_and_close_barrier.sql",
       "20260805190000_harden_sandbox_billing_close_contract.sql",
+      "20260816120000_capacity_billing_shadow_foundation.sql",
     ]) {
       const migration = await readFile(
         path.resolve(
@@ -147,5 +162,30 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       [OPEN_RACE_SANDBOX_ID]
     );
     expect(Number(active.rows[0]!.count)).toBe(1);
+  });
+
+  it("deduplicates one provider cost across concurrent deliveries", async () => {
+    const deliveries = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        pool.query<{ posted: boolean }>(
+          `select record_billing_provider_cost_event(
+             'trigger.dev', 'run-concurrent-1', 'trigger', $1, null,
+             80, 'USD', 80, 100, 'hosted_usage', 'capacity_v2',
+             1, 'run', '2026-08-16T12:00:00.000Z', '{}', '{}'
+           ) as posted`,
+          [ACCOUNT_ID]
+        )
+      )
+    );
+    expect(
+      deliveries.filter((delivery) => delivery.rows[0]?.posted)
+    ).toHaveLength(1);
+
+    const events = await pool.query<{ count: string }>(
+      `select count(*) from billing_provider_cost_events
+       where provider = 'trigger.dev'
+         and provider_event_id = 'run-concurrent-1'`
+    );
+    expect(Number(events.rows[0]?.count)).toBe(1);
   });
 });
