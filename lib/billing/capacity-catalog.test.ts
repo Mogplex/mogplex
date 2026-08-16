@@ -8,6 +8,8 @@ import {
   calculateCapacityEntitlements,
   currentCapacityEntitlementItems,
   findCapacityAddOn,
+  findCapacityRecurringPrice,
+  findIndividualCapacityPrice,
   type CapacityEntitlementItemVersion,
 } from "./capacity-catalog";
 
@@ -166,5 +168,18 @@ describe("capacity pricing catalog", () => {
       "Concurrency +10"
     );
     expect(findCapacityAddOn("missing")).toBeNull();
+  });
+
+  it("resolves plan and add-on prices through one Stripe contract", () => {
+    expect(
+      findIndividualCapacityPrice("capacity_v2_plus_annual")
+    ).toMatchObject({
+      plan: { code: "plus" },
+      price: { amountCents: 102_000, interval: "year" },
+    });
+    expect(
+      findCapacityRecurringPrice("capacity_v2_concurrency_10_monthly")
+    ).toEqual({ amountCents: 500, interval: "month" });
+    expect(findCapacityRecurringPrice("unknown")).toBeNull();
   });
 });

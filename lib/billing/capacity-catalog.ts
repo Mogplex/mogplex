@@ -223,6 +223,34 @@ const ADD_ON_BY_LOOKUP_KEY = new Map(
   CAPACITY_ADD_ONS.map((addOn) => [addOn.lookupKey, addOn])
 );
 
+export function findCapacityAddOn(lookupKey: string): CapacityAddOn | null {
+  return ADD_ON_BY_LOOKUP_KEY.get(lookupKey) ?? null;
+}
+
+export function findIndividualCapacityPrice(lookupKey: string): {
+  plan: IndividualCapacityPlan;
+  price: CapacityPrice;
+} | null {
+  for (const plan of Object.values(INDIVIDUAL_CAPACITY_PLANS)) {
+    for (const price of Object.values(plan.prices)) {
+      if (price.lookupKey === lookupKey) return { plan, price };
+    }
+  }
+  return null;
+}
+
+export function findCapacityRecurringPrice(lookupKey: string): {
+  amountCents: number;
+  interval: CapacityPlanInterval;
+} | null {
+  const planPrice = findIndividualCapacityPrice(lookupKey)?.price;
+  if (planPrice) return planPrice;
+  const addOn = findCapacityAddOn(lookupKey);
+  return addOn
+    ? { amountCents: addOn.amountCents, interval: addOn.interval }
+    : null;
+}
+
 function compareItemVersions(
   left: CapacityEntitlementItemVersion,
   right: CapacityEntitlementItemVersion
@@ -312,8 +340,4 @@ export function calculateCapacityEntitlements(
     recurringAddOnCents,
     activeAddOns,
   };
-}
-
-export function findCapacityAddOn(lookupKey: string): CapacityAddOn | null {
-  return ADD_ON_BY_LOOKUP_KEY.get(lookupKey) ?? null;
 }
