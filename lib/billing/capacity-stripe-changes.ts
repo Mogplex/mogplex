@@ -272,6 +272,7 @@ export async function previewCapacityChange(input: {
       targetQuantity: input.request.quantity,
       action,
       prorationDate: nowSeconds,
+      effectiveAt: effectiveSeconds,
       expiresAt,
     },
     input.signingSecret

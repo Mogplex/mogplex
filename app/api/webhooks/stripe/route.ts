@@ -9,6 +9,11 @@ import { findPlanPrice } from "@/lib/billing/catalog";
 import { reconcileCapacityAnnualGrantSchedule } from "@/lib/billing/capacity-annual-grants";
 import { applyCapacityEntitlementSnapshot } from "@/lib/billing/capacity-entitlement-webhooks";
 import {
+  parseCapacityScheduleIntent,
+  projectCapacityScheduleEvent,
+  recordCapacityScheduleProjection,
+} from "@/lib/billing/capacity-entitlement-schedules";
+import {
   handleCapacityInvoicePaidIfApplicable,
   handleCapacitySubscriptionIfApplicable,
 } from "@/lib/billing/capacity-stripe-webhook";
@@ -53,6 +58,7 @@ export type StripeWebhookDeps = {
   retrieveCharge: (id: string) => Promise<Stripe.Charge>;
   capacityBillingOperationsEnabled: () => boolean;
   applyCapacityEntitlementSnapshot: typeof applyCapacityEntitlementSnapshot;
+  recordCapacityScheduleProjection: typeof recordCapacityScheduleProjection;
   reconcileCapacityAnnualGrantSchedule: typeof reconcileCapacityAnnualGrantSchedule;
 };
 
@@ -71,6 +77,7 @@ function defaultDeps(): StripeWebhookDeps {
     retrieveCharge: (id) => getStripe().charges.retrieve(id),
     capacityBillingOperationsEnabled: areCapacityBillingOperationsEnabled,
     applyCapacityEntitlementSnapshot,
+    recordCapacityScheduleProjection,
     reconcileCapacityAnnualGrantSchedule,
   };
 }
@@ -247,6 +254,32 @@ async function syncSubscription(
   });
 }
 
+async function syncCapacitySchedule(
+  schedule: Stripe.SubscriptionSchedule,
+  eventId: string,
+  eventCreated: number,
+  deps: StripeWebhookDeps
+) {
+  const intent = parseCapacityScheduleIntent(schedule);
+  if (!intent) return;
+  if (!deps.capacityBillingOperationsEnabled()) {
+    throw new Error("Capacity billing operations are disabled");
+  }
+  const customerId = customerIdOf(schedule.customer);
+  if (!customerId) throw new TypeError("capacity schedule has no customer");
+  const account = await deps.findAccountByCustomer(customerId);
+  if (!account) return;
+  const subscription = await deps.retrieveSubscription(intent.subscriptionId);
+  await projectCapacityScheduleEvent({
+    account,
+    schedule,
+    subscription,
+    sourceEventId: eventId,
+    eventCreated,
+    recordProjection: deps.recordCapacityScheduleProjection,
+  });
+}
+
 async function handleChargeRefunded(
   charge: Stripe.Charge,
   deps: StripeWebhookDeps
@@ -343,6 +376,15 @@ export async function handleStripeEvent(
       return syncSubscription(event.data.object, event.id, event.created, deps);
     case "customer.subscription.deleted":
       return syncSubscription(event.data.object, event.id, event.created, deps);
+    case "subscription_schedule.updated":
+    case "subscription_schedule.released":
+    case "subscription_schedule.canceled":
+      return syncCapacitySchedule(
+        event.data.object,
+        event.id,
+        event.created,
+        deps
+      );
     case "charge.refunded":
       return handleChargeRefunded(event.data.object, deps);
     case "charge.dispute.created":

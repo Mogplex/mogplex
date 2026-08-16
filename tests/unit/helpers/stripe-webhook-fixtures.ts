@@ -6,6 +6,7 @@ import type {
   CapacityEntitlementSnapshot,
 } from "../../../lib/billing/capacity-entitlement-webhooks";
 import type { reconcileCapacityAnnualGrantSchedule } from "../../../lib/billing/capacity-annual-grants";
+import type { recordCapacityScheduleProjection } from "../../../lib/billing/capacity-entitlement-schedules";
 import type {
   BillingBalance,
   BillingPeriodGrant,
@@ -47,6 +48,9 @@ export type Recorded = {
   annualGrantReconciliations: Array<
     Parameters<typeof reconcileCapacityAnnualGrantSchedule>[0]
   >;
+  capacityScheduleProjections: Array<
+    Parameters<typeof recordCapacityScheduleProjection>[0]
+  >;
 };
 
 export function makeDeps(overrides: {
@@ -65,6 +69,7 @@ export function makeDeps(overrides: {
     updates: [],
     capacitySnapshots: [],
     annualGrantReconciliations: [],
+    capacityScheduleProjections: [],
   };
   const postedRefs = overrides.postedRefs ?? new Set<string>();
   const deps = {
@@ -145,6 +150,17 @@ export function makeDeps(overrides: {
           entitlementVersion: 1,
         }
       );
+    },
+    recordCapacityScheduleProjection: async (
+      input: Parameters<typeof recordCapacityScheduleProjection>[0]
+    ) => {
+      recorded.capacityScheduleProjections.push(input);
+      return {
+        applied: true,
+        duplicate: false,
+        stale: false,
+        entitlementRecorded: true,
+      };
     },
     reconcileCapacityAnnualGrantSchedule: async (
       input: Parameters<typeof reconcileCapacityAnnualGrantSchedule>[0]

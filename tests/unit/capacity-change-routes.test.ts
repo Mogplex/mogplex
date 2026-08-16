@@ -37,6 +37,13 @@ async function routes() {
   ]);
 }
 
+async function scheduleRoute() {
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
+  return import("../../app/api/billing/capacity/schedule/route");
+}
+
 test("capacity preview authenticates and requires billing.manage", async () => {
   const [{ createCapacityPreviewPostHandler }] = await routes();
   let scopeCalls = 0;
@@ -220,6 +227,97 @@ test("capacity checkout submits the signed preview through the account scope", a
   );
   assert.equal(response.status, 200);
   assert.equal((await response.json()).entitlementStatus, "pending_webhook");
+  assert.deepEqual(serviceInput, {
+    account,
+    previewToken: "signed-preview",
+    attemptId: ATTEMPT_ID,
+    signingSecret: "secret",
+  });
+});
+
+test("capacity schedule requires billing.manage and fails closed before account access", async () => {
+  const { createCapacitySchedulePostHandler } = await scheduleRoute();
+  let requiredCapability: string | undefined;
+  const forbidden = createCapacitySchedulePostHandler({
+    requireUserId: async () => "viewer-1",
+    resolveProductResourceScope: async (input) => {
+      requiredCapability = input.requiredCapability;
+      return { ok: false, status: 403, error: "Forbidden" };
+    },
+  });
+  assert.equal(
+    (
+      await forbidden(
+        new Request("https://example.com/api/billing/capacity/schedule", {
+          method: "POST",
+        })
+      )
+    ).status,
+    403
+  );
+  assert.equal(requiredCapability, "billing.manage");
+
+  let touched = false;
+  const disabled = createCapacitySchedulePostHandler({
+    requireUserId: async () => "user-1",
+    resolveProductResourceScope: async () => scopeResolution,
+    capacityBillingOperationsEnabled: () => false,
+    getOrCreateBillingAccount: async () => {
+      touched = true;
+      return account;
+    },
+    scheduleCapacityDecrease: async () => {
+      touched = true;
+      throw new Error("should not run");
+    },
+  });
+  const response = await disabled(
+    new Request("https://example.com/api/billing/capacity/schedule", {
+      method: "POST",
+      body: JSON.stringify({
+        previewToken: "signed-preview",
+        attemptId: ATTEMPT_ID,
+      }),
+    })
+  );
+  assert.equal(response.status, 503);
+  assert.equal(touched, false);
+});
+
+test("capacity schedule submits the signed preview through the account scope", async () => {
+  const { createCapacitySchedulePostHandler } = await scheduleRoute();
+  let serviceInput: unknown;
+  const handler = createCapacitySchedulePostHandler({
+    requireUserId: async () => "user-1",
+    resolveProductResourceScope: async () => scopeResolution,
+    capacityBillingOperationsEnabled: () => true,
+    getOrCreateBillingAccount: async () => account,
+    signingSecret: () => "secret",
+    scheduleCapacityDecrease: async (input) => {
+      serviceInput = input;
+      return {
+        status: "scheduled",
+        subscriptionId: "sub-1",
+        scheduleId: "sub_sched-1",
+        action: "decrease",
+        resultingQuantity: 1,
+        effectiveAt: "2026-09-16T00:00:00.000Z",
+        prorationBehavior: "none",
+        entitlementStatus: "pending_webhook",
+      };
+    },
+  });
+  const response = await handler(
+    new Request("https://example.com/api/billing/capacity/schedule", {
+      method: "POST",
+      body: JSON.stringify({
+        previewToken: "signed-preview",
+        attemptId: ATTEMPT_ID,
+      }),
+    })
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, "scheduled");
   assert.deepEqual(serviceInput, {
     account,
     previewToken: "signed-preview",

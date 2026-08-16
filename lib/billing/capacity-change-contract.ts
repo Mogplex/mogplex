@@ -21,6 +21,7 @@ export type CapacityChangePreviewTokenPayload = {
   targetQuantity: number;
   action: CapacityChangeAction;
   prorationDate: number;
+  effectiveAt: number;
   expiresAt: number;
 };
 
@@ -153,7 +154,22 @@ function assertPreviewNumbers(
   if (!isNonnegativeSafeInteger(payload.currentQuantity)) invalidPreview();
   if (!isNonnegativeSafeInteger(payload.targetQuantity)) invalidPreview();
   if (!isPositiveSafeInteger(payload.prorationDate)) invalidPreview();
+  if (!isPositiveSafeInteger(payload.effectiveAt)) invalidPreview();
   if (!isPositiveSafeInteger(payload.expiresAt)) invalidPreview();
+}
+
+function assertPreviewAction(
+  payload: Partial<CapacityChangePreviewTokenPayload>
+) {
+  const current = payload.currentQuantity;
+  const target = payload.targetQuantity;
+  if (!isNonnegativeSafeInteger(current) || !isNonnegativeSafeInteger(target)) {
+    invalidPreview();
+  }
+  if (payload.action === "increase" && target > current) return;
+  if (payload.action === "decrease" && target > 0 && target < current) return;
+  if (payload.action === "cancel" && target === 0 && current > 0) return;
+  invalidPreview();
 }
 
 function parsePreviewPayload(
@@ -164,6 +180,7 @@ function parsePreviewPayload(
   assertPreviewIdentity(payload);
   assertPreviewCatalog(payload);
   assertPreviewNumbers(payload);
+  assertPreviewAction(payload);
   return payload as CapacityChangePreviewTokenPayload;
 }
 
