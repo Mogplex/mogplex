@@ -31,7 +31,7 @@ import {
   claimPendingJob,
   recordStartAttempt,
   recordStartAttemptError,
-  resetClaimedJobToPending,
+  rollbackClaimedJobStart,
 } from "@/lib/workflows/automation-job-persistence";
 import {
   loadStartDispatchContext,
@@ -250,7 +250,7 @@ export async function startAutomationJobRun(
       error instanceof Error
         ? error.message
         : "Failed to record workflow capacity admission";
-    await resetClaimedJobToPending(jobRunId, adminClient, {
+    await rollbackClaimedJobStart(jobRunId, adminClient, {
       sourceRef: `capacity-admission-failed:${jobRunId}:${attempt.attemptedAt}`,
       rolledBackAt: attempt.attemptedAt,
       metadata: { reason: "capacity_admission_failed" },
@@ -274,7 +274,7 @@ export async function startAutomationJobRun(
   }
 
   if (!capacity.admitted) {
-    await resetClaimedJobToPending(jobRunId, adminClient, {
+    const rollback = await rollbackClaimedJobStart(jobRunId, adminClient, {
       sourceRef: `capacity-deferred:${jobRunId}:${attempt.attemptedAt}`,
       rolledBackAt: attempt.attemptedAt,
       metadata: { reason: ACCOUNT_CONCURRENCY_LIMIT },
@@ -302,7 +302,7 @@ export async function startAutomationJobRun(
     return {
       started: false,
       deferred: true,
-      status: "pending",
+      status: rollback.jobStatus ?? "pending",
       reason: ACCOUNT_CONCURRENCY_LIMIT,
     };
   }
@@ -322,7 +322,7 @@ export async function startAutomationJobRun(
       error instanceof Error
         ? error.message
         : "Failed to start background runtime";
-    await resetClaimedJobToPending(jobRunId, adminClient, {
+    await rollbackClaimedJobStart(jobRunId, adminClient, {
       sourceRef: `runtime-start-failed:${jobRunId}:${attempt.attemptedAt}`,
       rolledBackAt: new Date().toISOString(),
       metadata: { reason: "runtime_start_failed" },
@@ -389,12 +389,14 @@ export async function startAutomationJobRun(
       }
     }
 
+    let rollbackJobStatus: string | null = null;
     if (!cancelErrorMessage) {
-      await resetClaimedJobToPending(jobRunId, adminClient, {
+      const rollback = await rollbackClaimedJobStart(jobRunId, adminClient, {
         sourceRef: `runtime-handle-rollback:${jobRunId}:${attempt.attemptedAt}`,
         rolledBackAt: new Date().toISOString(),
         metadata: { reason: RUNTIME_HANDLE_PERSIST_FAILED },
       });
+      rollbackJobStatus = rollback.jobStatus;
     }
 
     const startError = cancelErrorMessage
@@ -425,7 +427,7 @@ export async function startAutomationJobRun(
 
     return {
       started: false,
-      status: cancelErrorMessage ? "running" : "pending",
+      status: cancelErrorMessage ? "running" : (rollbackJobStatus ?? "pending"),
       reason: RUNTIME_HANDLE_PERSIST_FAILED,
     };
   }

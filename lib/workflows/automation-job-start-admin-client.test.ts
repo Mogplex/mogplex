@@ -18,8 +18,18 @@ type FakeQuery = {
 function buildAdminClient(
   operations: string[],
   claim?: { claimed: boolean; reason: string | null },
-  capacityAdmitted = true
+  capacityAdmitted = true,
+  rollback: {
+    reset: boolean;
+    lease_released: boolean;
+    job_status: string | null;
+  } | null = null
 ): SupabaseClient {
+  const resolvedRollback = rollback ?? {
+    reset: true,
+    lease_released: capacityAdmitted,
+    job_status: "pending",
+  };
   const resolvedClaim = claim ?? {
     claimed: false,
     reason: "INSTALLATION_CONCURRENCY_LIMIT",
@@ -53,9 +63,9 @@ function buildAdminClient(
           error: null,
         };
       }
-      if (name === "rollback_billing_automation_job_start") {
+      if (name === "rollback_billing_automation_job_start_v2") {
         return {
-          data: [{ reset: true, lease_released: capacityAdmitted }],
+          data: [resolvedRollback],
           error: null,
         };
       }
@@ -217,7 +227,7 @@ test("startAutomationJobRun keeps rollback queries on the scoped client", async 
 
   assert.equal(operations.includes("update:job_runs:status"), false);
   assert.equal(
-    operations.includes("rpc:rollback_billing_automation_job_start"),
+    operations.includes("rpc:rollback_billing_automation_job_start_v2"),
     true
   );
   assert.equal(operations.includes("update:job_runs:last_start_error"), true);
@@ -245,8 +255,31 @@ test("startAutomationJobRun defers an enforced account when Concurrency is full"
     true
   );
   assert.equal(
-    operations.includes("rpc:rollback_billing_automation_job_start"),
+    operations.includes("rpc:rollback_billing_automation_job_start_v2"),
     true
   );
   assert.equal(operations.includes("from:automation_dispatch_events"), true);
+});
+
+test("startAutomationJobRun preserves cancellation that wins the rollback race", async () => {
+  const operations: string[] = [];
+  const adminClient = buildAdminClient(
+    operations,
+    { claimed: true, reason: null },
+    false,
+    {
+      reset: false,
+      lease_released: false,
+      job_status: "cancelled",
+    }
+  );
+
+  const result = await startAutomationJobRun("job-1", "repair", adminClient);
+
+  assert.deepEqual(result, {
+    started: false,
+    deferred: true,
+    status: "cancelled",
+    reason: "ACCOUNT_CONCURRENCY_LIMIT",
+  });
 });

@@ -176,9 +176,13 @@ export async function rollbackAutomationJobCapacityStart(
     metadata?: Record<string, unknown>;
   },
   client: SupabaseClient = supabaseAdmin
-): Promise<{ reset: boolean; leaseReleased: boolean }> {
+): Promise<{
+  reset: boolean;
+  leaseReleased: boolean;
+  jobStatus: string | null;
+}> {
   const { data, error } = await client.rpc(
-    "rollback_billing_automation_job_start",
+    "rollback_billing_automation_job_start_v2",
     {
       p_job_run_id: input.jobRunId,
       p_source_ref: input.sourceRef,
@@ -193,9 +197,15 @@ export async function rollbackAutomationJobCapacityStart(
   const row = (Array.isArray(data) ? data[0] : data) as {
     reset?: unknown;
     lease_released?: unknown;
+    job_status?: unknown;
   } | null;
   if (!row || typeof row !== "object") {
     throw new Error("Workflow capacity rollback returned no result");
+  }
+  if (row.job_status !== null && typeof row.job_status !== "string") {
+    throw new TypeError(
+      "workflow capacity rollback returned an invalid status"
+    );
   }
   return {
     reset: requiredBoolean(row.reset, "workflow capacity rollback"),
@@ -203,5 +213,6 @@ export async function rollbackAutomationJobCapacityStart(
       row.lease_released,
       "workflow capacity rollback"
     ),
+    jobStatus: row.job_status,
   };
 }
