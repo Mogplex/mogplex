@@ -58,6 +58,18 @@ test("pins nemotron-3-ultra to baseten via exact model match", () => {
   );
 });
 
+test("pins glm-5.2 to blackbox via exact model match", () => {
+  assert.deepEqual(
+    gatewayProviderOptions("zai/glm-5.2", baseContext).gateway.order,
+    ["blackbox"]
+  );
+  // The fast variant is a different serving tier — leave it on default routing.
+  assert.deepEqual(
+    gatewayProviderOptions("zai/glm-5.2-fast", baseContext).gateway.order,
+    undefined
+  );
+});
+
 test("matches lab prefixes case-insensitively and ignores substring matches", () => {
   assert.deepEqual(
     gatewayProviderOptions("  MoonshotAI/Kimi-K2.6  ", baseContext).gateway
