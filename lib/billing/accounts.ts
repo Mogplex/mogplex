@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ProductResourceScope } from "@/lib/team-resource-scope";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CapacityPlanCode } from "@/lib/billing/capacity-catalog";
 
 export type BillingAccount = {
   id: string;
@@ -13,6 +14,10 @@ export type BillingAccount = {
   period_anchor: string | null;
   subscription_checkout_generation: number;
   status: "active" | "past_due" | "frozen_topups";
+  plan_code?: CapacityPlanCode | null;
+  included_hosted_usage_cents?: number | string;
+  entitlement_projection_effective_at?: string | null;
+  entitlement_projection_event_id?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -20,7 +25,7 @@ export type BillingAccount = {
 const UNIQUE_VIOLATION = "23505";
 
 const ACCOUNT_COLUMNS =
-  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, subscription_checkout_generation, status, created_at, updated_at";
+  "id, owner_type, owner_user_id, product_team_id, stripe_customer_id, stripe_subscription_id, tier, period_anchor, subscription_checkout_generation, status, plan_code, included_hosted_usage_cents, entitlement_projection_effective_at, entitlement_projection_event_id, created_at, updated_at";
 
 export async function findBillingAccountForScope(
   scope: ProductResourceScope,

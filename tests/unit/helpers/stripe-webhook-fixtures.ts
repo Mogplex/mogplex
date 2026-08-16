@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 
 import type { BillingAccount } from "../../../lib/billing/accounts";
+import type { CapacityEntitlementSnapshot } from "../../../lib/billing/capacity-entitlement-webhooks";
 import type {
   BillingBalance,
   BillingPeriodGrant,
@@ -33,6 +34,12 @@ export function accountFixture(
 export type Recorded = {
   ledger: LedgerEntry[];
   updates: Array<{ id: string; updates: Record<string, unknown> }>;
+  capacitySnapshots: Array<{
+    accountId: string;
+    sourceEventId: string;
+    effectiveAt: Date;
+    snapshot: CapacityEntitlementSnapshot;
+  }>;
 };
 
 export function makeDeps(overrides: {
@@ -42,9 +49,10 @@ export function makeDeps(overrides: {
   paymentIntent?: Partial<Stripe.PaymentIntent>;
   refunds?: Array<Partial<Stripe.Refund>>;
   postedRefs?: Set<string>;
+  capacityBillingOperationsEnabled?: boolean;
 }) {
   const account = overrides.account ?? accountFixture();
-  const recorded: Recorded = { ledger: [], updates: [] };
+  const recorded: Recorded = { ledger: [], updates: [], capacitySnapshots: [] };
   const postedRefs = overrides.postedRefs ?? new Set<string>();
   const deps = {
     findAccountByCustomer: async (customerId: string) =>
@@ -107,6 +115,22 @@ export function makeDeps(overrides: {
     listRefunds: async () => (overrides.refunds ?? []) as Stripe.Refund[],
     retrieveCharge: async () =>
       ({ id: "ch_1", customer: "cus_123" }) as Stripe.Charge,
+    capacityBillingOperationsEnabled: () =>
+      overrides.capacityBillingOperationsEnabled ?? false,
+    applyCapacityEntitlementSnapshot: async (input: {
+      accountId: string;
+      sourceEventId: string;
+      effectiveAt: Date;
+      snapshot: CapacityEntitlementSnapshot;
+    }) => {
+      recorded.capacitySnapshots.push(input);
+      return {
+        applied: true,
+        duplicate: false,
+        stale: false,
+        entitlementVersion: 1,
+      };
+    },
   };
   return { deps, recorded, postedRefs };
 }
