@@ -24,6 +24,7 @@ import {
   resolveAutomationAiCallModel,
 } from "@/lib/workflows/automation-job-metadata";
 import { normalizeAutomationAssignmentType } from "@/lib/workflows/automation-job-utils";
+import { rollbackAutomationJobCapacityStart } from "@/lib/billing/workflow-capacity";
 
 export async function getDurationMs(startedAt: string) {
   "use step";
@@ -201,27 +202,25 @@ export async function claimPendingJob(input: {
 
 export async function resetClaimedJobToPending(
   jobRunId: string,
-  adminClient: SupabaseClient = supabaseAdmin
-) {
-  const { error } = await adminClient
-    .from("job_runs")
-    .update({
-      status: "pending",
-      started_at: null,
-      completed_at: null,
-      duration_ms: null,
-      input_tokens: null,
-      output_tokens: null,
-      error: null,
-      runtime_provider: null,
-      runtime_run_id: null,
-      workflow_run_id: null,
-    })
-    .eq("id", jobRunId);
-
-  if (error) {
-    throw new Error(`Failed to reset claimed job: ${error.message}`);
+  adminClient: SupabaseClient = supabaseAdmin,
+  rollback?: {
+    sourceRef: string;
+    rolledBackAt: string;
+    metadata?: Record<string, unknown>;
   }
+) {
+  const rolledBackAt = rollback?.rolledBackAt ?? new Date().toISOString();
+  return rollbackAutomationJobCapacityStart(
+    {
+      jobRunId,
+      sourceRef:
+        rollback?.sourceRef ??
+        `automation-job-start-rollback:${jobRunId}:${rolledBackAt}`,
+      rolledBackAt,
+      metadata: rollback?.metadata,
+    },
+    adminClient
+  );
 }
 
 export async function releaseQueuedJobs(

@@ -11,12 +11,14 @@ type FakeQuery = {
   in: (column: string, values: unknown[]) => FakeQuery;
   update: (values: Record<string, unknown>) => FakeQuery;
   insert: (values: Record<string, unknown>) => FakeQuery;
+  limit: (value: number) => FakeQuery;
   maybeSingle: () => Promise<{ data: unknown; error: null }>;
 };
 
 function buildAdminClient(
   operations: string[],
-  claim?: { claimed: boolean; reason: string | null }
+  claim?: { claimed: boolean; reason: string | null },
+  capacityAdmitted = true
 ): SupabaseClient {
   const resolvedClaim = claim ?? {
     claimed: false,
@@ -33,6 +35,27 @@ function buildAdminClient(
               attempted_at: "2026-08-15T12:00:00.000Z",
             },
           ],
+          error: null,
+        };
+      }
+      if (name === "admit_billing_workflow_capacity") {
+        return {
+          data: [
+            {
+              posted: true,
+              admitted: capacityAdmitted,
+              would_admit: capacityAdmitted,
+              active_before: capacityAdmitted ? 0 : 1,
+              concurrency_limit: 1,
+              accounting_mode: capacityAdmitted ? "shadow" : "enforced",
+            },
+          ],
+          error: null,
+        };
+      }
+      if (name === "rollback_billing_automation_job_start") {
+        return {
+          data: [{ reset: true, lease_released: capacityAdmitted }],
           error: null,
         };
       }
@@ -81,7 +104,28 @@ function buildAdminClient(
           return query;
         },
         insert: () => query,
+        limit: () => query,
         maybeSingle: async () => {
+          if (table === "repos") {
+            return {
+              data: {
+                user_id: "user-1",
+                product_team_id: null,
+              },
+              error: null,
+            };
+          }
+          if (table === "billing_accounts") {
+            return {
+              data: {
+                id: "account-1",
+                owner_type: "user",
+                owner_user_id: "user-1",
+                product_team_id: null,
+              },
+              error: null,
+            };
+          }
           if (table === "triggers") {
             return {
               data: {
@@ -171,7 +215,38 @@ test("startAutomationJobRun keeps rollback queries on the scoped client", async 
     /Trigger.dev runtime is not configured/
   );
 
-  assert.equal(operations.includes("update:job_runs:status"), true);
+  assert.equal(operations.includes("update:job_runs:status"), false);
+  assert.equal(
+    operations.includes("rpc:rollback_billing_automation_job_start"),
+    true
+  );
   assert.equal(operations.includes("update:job_runs:last_start_error"), true);
+  assert.equal(operations.includes("from:automation_dispatch_events"), true);
+});
+
+test("startAutomationJobRun defers an enforced account when Concurrency is full", async () => {
+  const operations: string[] = [];
+  const adminClient = buildAdminClient(
+    operations,
+    { claimed: true, reason: null },
+    false
+  );
+
+  const result = await startAutomationJobRun("job-1", "repair", adminClient);
+
+  assert.deepEqual(result, {
+    started: false,
+    deferred: true,
+    status: "pending",
+    reason: "ACCOUNT_CONCURRENCY_LIMIT",
+  });
+  assert.equal(
+    operations.includes("rpc:admit_billing_workflow_capacity"),
+    true
+  );
+  assert.equal(
+    operations.includes("rpc:rollback_billing_automation_job_start"),
+    true
+  );
   assert.equal(operations.includes("from:automation_dispatch_events"), true);
 });

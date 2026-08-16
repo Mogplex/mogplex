@@ -103,6 +103,7 @@ const REASON_LABELS: Record<string, string> = {
   IDEMPOTENT_DUPLICATE: "Duplicate request",
   REPO_CONCURRENCY_LIMIT: "Repo concurrency limit",
   INSTALLATION_CONCURRENCY_LIMIT: "Installation concurrency limit",
+  ACCOUNT_CONCURRENCY_LIMIT: "Concurrency full",
   REPO_PENDING_LIMIT: "Repo pending limit",
   INSTALLATION_PENDING_LIMIT: "Installation pending limit",
   ENQUEUE_FAILED: "Enqueue failed",

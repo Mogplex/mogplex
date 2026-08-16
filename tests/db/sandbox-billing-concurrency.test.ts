@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { SANDBOX_BILLING_SANDBOX_STUB_SQL } from "./harness";
+import {
+  BILLING_JOB_RUN_STUB_SQL,
+  SANDBOX_BILLING_SANDBOX_STUB_SQL,
+} from "./harness";
 
 const databaseUrl = process.env.SANDBOX_BILLING_TEST_DATABASE_URL;
 const describeWithPostgres = databaseUrl ? describe : describe.skip;
@@ -14,6 +17,8 @@ const SANDBOX_TWO_ID = "10000000-0000-4000-8000-000000000004";
 const OPEN_RACE_SANDBOX_ID = "10000000-0000-4000-8000-000000000005";
 const SHADOW_ACCOUNT_ID = "10000000-0000-4000-8000-000000000006";
 const SHADOW_USER_ID = "10000000-0000-4000-8000-000000000007";
+const ENFORCED_ACCOUNT_ID = "10000000-0000-4000-8000-000000000008";
+const ENFORCED_USER_ID = "10000000-0000-4000-8000-000000000009";
 
 function requireLocalTestDatabase(value: string) {
   const parsed = new URL(value);
@@ -35,7 +40,7 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
     pool = new Pool({
       connectionString: requireLocalTestDatabase(databaseUrl!),
       options: "-c statement_timeout=5000",
-      max: 4,
+      max: 12,
     });
     await pool.query("drop schema public cascade; create schema public");
     await pool.query(`
@@ -53,6 +58,7 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       end $$;
     `);
     await pool.query(SANDBOX_BILLING_SANDBOX_STUB_SQL);
+    await pool.query(BILLING_JOB_RUN_STUB_SQL);
     for (const migrationName of [
       "20260804200000_billing_foundation.sql",
       "20260804210000_atomic_billing_cancellation_expiry.sql",
@@ -62,6 +68,7 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
       "20260805190000_harden_sandbox_billing_close_contract.sql",
       "20260816120000_capacity_billing_shadow_foundation.sql",
       "20260816140000_capacity_billing_shadow_state.sql",
+      "20260816150000_capacity_billing_workflow_admission.sql",
     ]) {
       const migration = await readFile(
         path.resolve(
@@ -74,14 +81,28 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
     }
     await pool.query(
       `insert into billing_accounts (id, owner_type, owner_user_id)
-       values ($1, 'user', $2), ($3, 'user', $4)`,
-      [ACCOUNT_ID, USER_ID, SHADOW_ACCOUNT_ID, SHADOW_USER_ID]
+       values ($1, 'user', $2), ($3, 'user', $4), ($5, 'user', $6)`,
+      [
+        ACCOUNT_ID,
+        USER_ID,
+        SHADOW_ACCOUNT_ID,
+        SHADOW_USER_ID,
+        ENFORCED_ACCOUNT_ID,
+        ENFORCED_USER_ID,
+      ]
     );
     await pool.query(
       `update billing_accounts
        set included_concurrency = 2, included_retained_bytes = 100
        where id = $1`,
       [SHADOW_ACCOUNT_ID]
+    );
+    await pool.query(
+      `update billing_accounts
+       set included_concurrency = 2,
+           entitlement_enforcement_mode = 'enforced'
+       where id = $1`,
+      [ENFORCED_ACCOUNT_ID]
     );
     await pool.query(
       `select post_credit_ledger_entry(
@@ -357,5 +378,119 @@ describeWithPostgres("sandbox billing PostgreSQL concurrency", () => {
     expect(facts.rows).toEqual([
       { leases: "1", reservations: "1", retained: "1" },
     ]);
+  });
+
+  it("admits exactly the enforced Concurrency limit under parallel starts", async () => {
+    const jobRunIds = Array.from(
+      { length: 12 },
+      (_, index) =>
+        `10000000-0000-4000-9000-${String(index + 1).padStart(12, "0")}`
+    );
+    await pool.query(
+      `insert into job_runs (id, status, started_at)
+       select id, 'running', '2026-08-16T15:00:00.000Z'
+       from unnest($1::uuid[]) as jobs(id)`,
+      [jobRunIds]
+    );
+
+    const attempts = await Promise.all(
+      jobRunIds.map((jobRunId, index) =>
+        pool.query<{
+          posted: boolean;
+          admitted: boolean;
+          would_admit: boolean;
+        }>(
+          `select posted, admitted, would_admit
+           from admit_billing_workflow_capacity(
+             $1, $2, $3, $4, $5,
+             '2026-08-16T15:00:00.000Z', '{}'
+           )`,
+          [
+            ENFORCED_ACCOUNT_ID,
+            `parallel-admission-${index}`,
+            `parallel-admission-source-${index}`,
+            `parallel-admission-lease-${index}`,
+            jobRunId,
+          ]
+        )
+      )
+    );
+    const admittedJobRunIds = attempts.flatMap((attempt, index) =>
+      attempt.rows[0]?.admitted ? [jobRunIds[index]!] : []
+    );
+    expect(admittedJobRunIds).toHaveLength(2);
+    expect(
+      attempts.filter((attempt) => attempt.rows[0]?.would_admit)
+    ).toHaveLength(2);
+
+    const recorded = await pool.query<{
+      admissions: string;
+      active_leases: string;
+    }>(
+      `select
+         (select count(*) from billing_workflow_capacity_admission_events
+          where account_id = $1) as admissions,
+         (select count(*) from billing_active_workflow_capacity_leases
+          where account_id = $1) as active_leases`,
+      [ENFORCED_ACCOUNT_ID]
+    );
+    expect(recorded.rows).toEqual([{ admissions: "12", active_leases: "2" }]);
+
+    await pool.query(
+      `update job_runs
+       set status = 'success', completed_at = '2026-08-16T15:10:00.000Z'
+       where id = any($1::uuid[])`,
+      [admittedJobRunIds]
+    );
+    const released = await pool.query<{
+      active_leases: string;
+      releases: string;
+    }>(
+      `select
+         (select count(*) from billing_active_workflow_capacity_leases
+          where account_id = $1) as active_leases,
+         (select count(*)
+          from billing_workflow_capacity_release_events release
+          join billing_workflow_capacity_leases lease
+            on lease.id = release.lease_id
+          where lease.account_id = $1) as releases`,
+      [ENFORCED_ACCOUNT_ID]
+    );
+    expect(released.rows).toEqual([{ active_leases: "0", releases: "2" }]);
+  });
+
+  it("deduplicates one enforced admission across parallel deliveries", async () => {
+    const deliveries = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        pool.query<{ posted: boolean; admitted: boolean }>(
+          `select posted, admitted
+           from admit_billing_workflow_capacity(
+             $1, 'same-enforced-admission', 'same-enforced-source',
+             'same-enforced-lease',
+             '10000000-0000-4000-a000-000000000001',
+             '2026-08-16T15:20:00.000Z', '{}'
+           )`,
+          [ENFORCED_ACCOUNT_ID]
+        )
+      )
+    );
+    expect(
+      deliveries.filter((delivery) => delivery.rows[0]?.posted)
+    ).toHaveLength(1);
+    expect(deliveries.every((delivery) => delivery.rows[0]?.admitted)).toBe(
+      true
+    );
+
+    const facts = await pool.query<{
+      admissions: string;
+      leases: string;
+    }>(
+      `select
+         (select count(*) from billing_workflow_capacity_admission_events
+          where admission_ref = 'same-enforced-admission') as admissions,
+         (select count(*) from billing_workflow_capacity_leases
+          where lease_ref = 'same-enforced-lease') as leases`
+    );
+    expect(facts.rows).toEqual([{ admissions: "1", leases: "1" }]);
   });
 });

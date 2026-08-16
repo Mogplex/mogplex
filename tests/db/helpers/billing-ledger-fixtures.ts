@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { SANDBOX_BILLING_SANDBOX_STUB_SQL } from "../harness";
+import {
+  BILLING_JOB_RUN_STUB_SQL,
+  SANDBOX_BILLING_SANDBOX_STUB_SQL,
+} from "../harness";
 
 export const ACCOUNT_ID = "00000000-0000-4000-8000-000000000001";
 export const USER_ID = "00000000-0000-4000-8000-000000000002";
@@ -43,6 +46,7 @@ const BILLING_MIGRATIONS = [
   "20260805190000_harden_sandbox_billing_close_contract.sql",
   "20260816120000_capacity_billing_shadow_foundation.sql",
   "20260816140000_capacity_billing_shadow_state.sql",
+  "20260816150000_capacity_billing_workflow_admission.sql",
 ];
 
 export async function createBillingTestDb(): Promise<PGlite> {
@@ -53,6 +57,7 @@ export async function createBillingTestDb(): Promise<PGlite> {
     create role service_role;
   `);
   await db.exec(SANDBOX_BILLING_SANDBOX_STUB_SQL);
+  await db.exec(BILLING_JOB_RUN_STUB_SQL);
   for (const migrationName of BILLING_MIGRATIONS) {
     const migration = await readFile(
       path.resolve(
