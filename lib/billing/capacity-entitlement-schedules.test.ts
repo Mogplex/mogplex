@@ -137,7 +137,10 @@ test("projects the intended future quantity and lifecycle reversals", async () =
   });
   await projectCapacityScheduleEvent({
     account: ACCOUNT,
-    schedule: schedule({ status: "canceled", targetQuantity: 0 }),
+    // Keep the original decrease intent intact. Canceling its Stripe schedule
+    // cancels the attached subscription immediately; it does not rewrite the
+    // scheduled target phase into a removal intent.
+    schedule: schedule({ status: "canceled" }),
     subscription: subscription(),
     sourceEventId: "evt_canceled",
     eventCreated: 1_787_078_600,
@@ -148,14 +151,20 @@ test("projects the intended future quantity and lifecycle reversals", async () =
       const value = call as {
         quantity: number;
         eventPriority: number;
+        effectiveAt: Date;
         state: string;
       };
-      return [value.quantity, value.eventPriority, value.state];
+      return [
+        value.quantity,
+        value.eventPriority,
+        value.state,
+        value.effectiveAt.toISOString(),
+      ];
     }),
     [
-      [1, 0, "target_scheduled"],
-      [3, 50, "schedule_released"],
-      [0, 100, "schedule_canceled"],
+      [1, 0, "target_scheduled", "2026-09-16T00:00:00.000Z"],
+      [3, 50, "schedule_released", "2026-09-16T00:00:00.000Z"],
+      [0, 100, "schedule_canceled", "2026-08-18T18:43:20.000Z"],
     ]
   );
 });

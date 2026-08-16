@@ -263,6 +263,9 @@ async function syncCapacitySchedule(
   const intent = parseCapacityScheduleIntent(schedule);
   if (!intent) return;
   if (!deps.capacityBillingOperationsEnabled()) {
+    // Do not acknowledge a marked capacity event that we did not project.
+    // The durable event claim stays unprocessed so an operator can replay it
+    // after the test-mode operations gate is restored.
     throw new Error("Capacity billing operations are disabled");
   }
   const customerId = customerIdOf(schedule.customer);

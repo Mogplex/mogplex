@@ -174,6 +174,9 @@ function projectedQuantity(input: {
 }): { quantity: number; priority: 0 | 50 | 100; state: string } {
   const { schedule, intent } = input;
   if (schedule.status === "canceled") {
+    // Stripe cancels the schedule and its attached subscription immediately.
+    // This is different from releasing a schedule, which leaves the
+    // subscription running and requires us to project its current quantity.
     return { quantity: 0, priority: 100, state: "schedule_canceled" };
   }
   const intendedPhase = schedule.phases.find(
@@ -307,6 +310,10 @@ export async function projectCapacityScheduleEvent(input: {
     subscription: input.subscription,
     intent,
   });
+  const projectionEffectiveAt =
+    input.schedule.status === "canceled"
+      ? input.eventCreated
+      : intent.effectiveAt;
   await (input.recordProjection ?? recordCapacityScheduleProjection)({
     accountId: intent.accountId,
     subscriptionId: intent.subscriptionId,
@@ -314,7 +321,9 @@ export async function projectCapacityScheduleEvent(input: {
     sourceEventId: input.sourceEventId,
     providerEventCreatedAt: new Date(input.eventCreated * 1_000),
     eventPriority: projection.priority,
-    effectiveAt: new Date(intent.effectiveAt * 1_000),
+    // A canceled schedule cancels its subscription immediately. Other
+    // lifecycle events still describe the original period-end boundary.
+    effectiveAt: new Date(projectionEffectiveAt * 1_000),
     subscriptionItemId: intent.subscriptionItemId,
     lookupKey: intent.lookupKey,
     quantity: projection.quantity,
