@@ -6,6 +6,7 @@ import {
   isBillingEnabled,
 } from "@/lib/billing/stripe";
 import { findPlanPrice } from "@/lib/billing/catalog";
+import { reconcileCapacityAnnualGrantSchedule } from "@/lib/billing/capacity-annual-grants";
 import { applyCapacityEntitlementSnapshot } from "@/lib/billing/capacity-entitlement-webhooks";
 import {
   handleCapacityInvoicePaidIfApplicable,
@@ -52,6 +53,7 @@ export type StripeWebhookDeps = {
   retrieveCharge: (id: string) => Promise<Stripe.Charge>;
   capacityBillingOperationsEnabled: () => boolean;
   applyCapacityEntitlementSnapshot: typeof applyCapacityEntitlementSnapshot;
+  reconcileCapacityAnnualGrantSchedule: typeof reconcileCapacityAnnualGrantSchedule;
 };
 
 function defaultDeps(): StripeWebhookDeps {
@@ -69,6 +71,7 @@ function defaultDeps(): StripeWebhookDeps {
     retrieveCharge: (id) => getStripe().charges.retrieve(id),
     capacityBillingOperationsEnabled: areCapacityBillingOperationsEnabled,
     applyCapacityEntitlementSnapshot,
+    reconcileCapacityAnnualGrantSchedule,
   };
 }
 

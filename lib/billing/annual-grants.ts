@@ -49,6 +49,9 @@ export async function loadAnnualGrantCandidates(): Promise<
       supabaseAdmin
         .from("billing_accounts")
         .select("id, stripe_subscription_id, period_anchor, created_at")
+        // Capacity-v2 annual plans use their webhook-scheduled one-time chain.
+        // Keep the legacy repair task from scanning or calling Stripe for them.
+        .eq("plan_audience", "legacy")
         .not("stripe_subscription_id", "is", null)
         .not("period_anchor", "is", null),
     "created_at",
