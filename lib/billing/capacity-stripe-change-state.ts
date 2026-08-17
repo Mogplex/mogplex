@@ -188,9 +188,10 @@ function planAllowance(plan: IndividualCapacityPlan, addOn: CapacityAddOn) {
 
 export function assertAccountCanChangeCapacity(account: BillingAccount) {
   if (
-    account.plan_code !== "pro" &&
-    account.plan_code !== "plus" &&
-    account.plan_code !== "max"
+    account.owner_type !== "user" ||
+    (account.plan_code !== "pro" &&
+      account.plan_code !== "plus" &&
+      account.plan_code !== "max")
   ) {
     throw new CapacityChangeError(
       "Capacity add-ons are available for Individual plans. Contact sales for a company contract.",
