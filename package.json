@@ -31,6 +31,7 @@
     "quality:pr-review": "tsx scripts/run-pr-review-candidate.ts",
     "git:cleanup": "pnpm exec tsx scripts/post-merge-cleanup.ts",
     "billing:capacity-catalog": "pnpm exec tsx scripts/seed-capacity-stripe-catalog.ts",
+    "billing:capacity-test-clock": "pnpm exec tsx scripts/run-capacity-stripe-test-clock.ts",
     "trigger:dev": "pnpm exec tsx scripts/trigger-cli.ts dev",
     "trigger:deploy": "pnpm exec tsx scripts/trigger-cli.ts deploy",
     "email:dev": "email dev --dir emails --port 3030",
