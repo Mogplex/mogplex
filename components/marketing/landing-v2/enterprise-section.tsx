@@ -50,7 +50,7 @@ export function EnterpriseSection() {
         <div className="mpx-connectors">
           <header>
             <p className="mpx-cap-kicker">START HERE</p>
-            <span>NO SALES CALL</span>
+            <span>INDIVIDUAL SELF-SERVICE</span>
           </header>
           <h3>Wire your first pipeline tonight.</h3>
           <div>

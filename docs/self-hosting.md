@@ -1,6 +1,6 @@
 # Self-Hosting Mogplex
 
-> **The supported way to use Mogplex is the hosted product at [mogplex.com](https://mogplex.com).** Self-hosting is possible — the code is Apache-2.0 and a Dockerfile ships in this repo — but it is **unsupported, has no SLA, and is genuinely hard**. Mogplex is not a single container you run on a VPS; it is a control plane over several managed services, and self-hosting means provisioning, securing, and paying for every one of them yourself.
+> **The supported way to use Mogplex is the hosted product at [mogplex.com](https://mogplex.com).** The Apache-2.0 software has no license fee. You need significant time and skill to self-host Mogplex. Mogplex does not support self-hosted deployments or offer an SLA. You must provision, secure, and pay each infrastructure provider directly.
 
 ## What the Docker image contains
 

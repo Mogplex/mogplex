@@ -19,6 +19,11 @@ test("public landing shows the open-source agent foundry and primary CTA", async
       name: /Autonomy is a dial\. You set it per pipeline\./,
     })
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Give your company shared control\./ })
+  ).toBeVisible();
+  await expect(page.getByText(/no seat fees/i)).toHaveCount(0);
+  await expect(page.getByText(/no sales call/i)).toHaveCount(0);
 
   await expect
     .poll(() => page.evaluate(() => document.fonts.check("44px Inter Tight")))
@@ -122,4 +127,12 @@ test("public marketing pages use the capacity pricing copy", async ({
   await page.goto("/signup?plan=max");
   await expect(page.getByTestId("plan-chip")).toContainText("Max");
   await expect(page.getByTestId("plan-chip")).toContainText("Checkout");
+
+  await page.goto("/terms");
+  await expect(
+    page.getByText(/provider list price with no markup/i)
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(/applies the published retail factor/i)
+  ).toBeVisible();
 });
