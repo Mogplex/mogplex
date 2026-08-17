@@ -22,7 +22,7 @@ type Price = {
   unit_amount: number;
   lookup_key: string;
   product: string;
-  recurring: { interval: string };
+  recurring: { interval: string } | null;
 };
 
 function catalogDeps(input: {
@@ -72,7 +72,9 @@ function catalogDeps(input: {
         unit_amount: params.unit_amount!,
         lookup_key: params.lookup_key!,
         product: params.product!,
-        recurring: { interval: params.recurring!.interval },
+        recurring: params.recurring
+          ? { interval: params.recurring.interval }
+          : null,
       };
       prices.push(price);
       return price as unknown as Pick<Stripe.Price, "id">;
@@ -103,7 +105,7 @@ function materializedCatalog(): { products: Product[]; prices: Price[] } {
         unit_amount: priceSpec.amountCents,
         lookup_key: priceSpec.lookupKey,
         product: id,
-        recurring: { interval: priceSpec.interval },
+        recurring: priceSpec.interval ? { interval: priceSpec.interval } : null,
       });
     }
   }
@@ -165,12 +167,13 @@ test("capacity Stripe catalog uses the approved customer names and unique keys",
       "Retained data +10 GB",
       "Retained data +50 GB",
       "Retained data +100 GB",
+      "Mogplex Hosted Usage",
     ]
   );
   const lookupKeys = CAPACITY_STRIPE_PRODUCTS.flatMap((product) =>
     product.prices.map((price) => price.lookupKey)
   );
-  assert.equal(lookupKeys.length, 12);
+  assert.equal(lookupKeys.length, 18);
   assert.equal(new Set(lookupKeys).size, lookupKeys.length);
 });
 
@@ -184,13 +187,13 @@ test("capacity Stripe catalog seed creates the missing test catalog", async () =
   );
 
   assert.deepEqual(result, {
-    productsCreated: 9,
+    productsCreated: 10,
     productsReused: 0,
-    pricesCreated: 12,
+    pricesCreated: 18,
     pricesReused: 0,
   });
-  assert.equal(products.length, 9);
-  assert.equal(prices.length, 12);
+  assert.equal(products.length, 10);
+  assert.equal(prices.length, 18);
 });
 
 test("capacity Stripe catalog seed is idempotent", async () => {
@@ -203,9 +206,9 @@ test("capacity Stripe catalog seed is idempotent", async () => {
 
   assert.deepEqual(result, {
     productsCreated: 0,
-    productsReused: 9,
+    productsReused: 10,
     pricesCreated: 0,
-    pricesReused: 12,
+    pricesReused: 18,
   });
 });
 

@@ -76,6 +76,57 @@ test("multiple partial refunds should cumulatively reverse the exact credited am
   );
 });
 
+test("capacity hosted-usage refunds reverse the credited amount under the test gate", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    capacityBillingOperationsEnabled: true,
+    paymentIntent: {
+      id: "pi_capacity_refund",
+      livemode: false,
+      status: "succeeded",
+      currency: "usd",
+      amount_received: 1087,
+      metadata: {
+        kind: "hosted_usage",
+        catalog_version: "capacity_v2",
+        billing_account_id: "acct-1",
+        credit_cents: "1000",
+        checkout_attempt_id: "0198f3e8-9c41-4d40-8cb9-4afdfac76f01",
+      },
+    } as unknown as Stripe.PaymentIntent,
+    refunds: [{ id: "re_capacity", amount: 1087, status: "succeeded" }],
+  });
+  const event = {
+    id: "evt_capacity_refund",
+    type: "charge.refunded",
+    data: {
+      object: {
+        id: "ch_capacity",
+        payment_intent: "pi_capacity_refund",
+      },
+    },
+  } as unknown as Stripe.Event;
+
+  await route.handleStripeEvent(event, deps);
+
+  assert.deepEqual(recorded.ledger, [
+    {
+      accountId: "acct-1",
+      deltaCents: -1000,
+      bucket: "purchased",
+      kind: "refund",
+      sourceRef: "refund:re_capacity",
+      metadata: {
+        purchase_kind: "capacity",
+        catalog_version: "capacity_v2",
+        charge: "ch_capacity",
+        refund: "re_capacity",
+        refund_amount: 1087,
+      },
+    },
+  ]);
+});
+
 test("charge.refunded should ignore refunds that did not succeed", async () => {
   const route = await loadWebhookRoute();
   const { deps, recorded } = makeDeps({

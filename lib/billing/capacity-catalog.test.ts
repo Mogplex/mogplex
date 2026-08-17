@@ -1,19 +1,33 @@
-import { describe, expect, it } from "vitest";
+import type Stripe from "stripe";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CAPACITY_ADD_ONS,
   CAPACITY_CATALOG_VERSION,
+  CAPACITY_HOSTED_USAGE_MAX_CENTS,
+  CAPACITY_HOSTED_USAGE_MIN_CENTS,
+  CAPACITY_HOSTED_USAGE_PRESETS,
   CONTRACT_CAPACITY_PLANS,
   INDIVIDUAL_CAPACITY_PLANS,
   LOGICAL_BYTES_PER_GB,
   calculateCapacityEntitlements,
   currentCapacityEntitlementItems,
   findCapacityAddOn,
+  findCapacityHostedUsagePreset,
   findCapacityRecurringPrice,
   findIndividualCapacityPrice,
   type CapacityEntitlementItemVersion,
 } from "./capacity-catalog";
+import {
+  CAPACITY_STRIPE_PRODUCTS,
+  syncCapacityStripeCatalog,
+  type CapacityStripeCatalogDeps,
+} from "./capacity-stripe-catalog";
 
 const NOW = new Date("2026-08-16T12:00:00.000Z");
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("capacity pricing catalog", () => {
   it("pins the approved individual plan allowances and prices", () => {
@@ -66,6 +80,69 @@ describe("capacity pricing catalog", () => {
       ["Retained data +50 GB", 6_000, 0, 50],
       ["Retained data +100 GB", 10_000, 0, 100],
     ]);
+  });
+
+  it("pins face-value hosted-usage purchases and their guardrails", () => {
+    expect(CAPACITY_HOSTED_USAGE_MIN_CENTS).toBe(1_000);
+    expect(CAPACITY_HOSTED_USAGE_MAX_CENTS).toBe(100_000);
+    expect(
+      CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => [
+        preset.lookupKey,
+        preset.creditCents,
+        preset.chargeCents,
+      ])
+    ).toEqual([
+      ["capacity_v2_hosted_usage_credit_10", 1_000, 1_000],
+      ["capacity_v2_hosted_usage_credit_25", 2_500, 2_500],
+      ["capacity_v2_hosted_usage_credit_100", 10_000, 10_000],
+      ["capacity_v2_hosted_usage_credit_250", 25_000, 25_000],
+      ["capacity_v2_hosted_usage_credit_500", 50_000, 50_000],
+      ["capacity_v2_hosted_usage_credit_1000", 100_000, 100_000],
+    ]);
+    expect(
+      findCapacityHostedUsagePreset("capacity_v2_hosted_usage_credit_25")
+    ).toMatchObject({ creditCents: 2_500, chargeCents: 2_500 });
+    expect(findCapacityHostedUsagePreset("topup_25")).toBeNull();
+  });
+
+  it("seeds one-time hosted-usage prices without recurring terms", async () => {
+    vi.stubEnv("CAPACITY_BILLING_OPERATIONS_ENABLED", "true");
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_capacity_catalog");
+    const prices: Stripe.PriceCreateParams[] = [];
+    const deps: CapacityStripeCatalogDeps = {
+      async *listProducts() {},
+      createProduct: async (params) =>
+        ({
+          id: `prod-${String(params.metadata?.mogplex_catalog_key)}`,
+          active: true,
+          name: params.name,
+          description: params.description,
+          metadata: params.metadata,
+        }) as never,
+      listPrices: async () => ({ data: [] }),
+      createPrice: async (params) => {
+        prices.push(params);
+        return { id: `price-${prices.length}` };
+      },
+    };
+
+    await expect(syncCapacityStripeCatalog({ deps })).resolves.toEqual({
+      productsCreated: 10,
+      productsReused: 0,
+      pricesCreated: 18,
+      pricesReused: 0,
+    });
+    const hostedKeys = new Set(
+      CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => preset.lookupKey)
+    );
+    const hostedPrices = prices.filter((price) =>
+      hostedKeys.has(String(price.lookup_key))
+    );
+    expect(hostedPrices).toHaveLength(6);
+    expect(hostedPrices.every((price) => price.recurring === undefined)).toBe(
+      true
+    );
+    expect(CAPACITY_STRIPE_PRODUCTS).toHaveLength(10);
   });
 
   it("uses the latest effective item version and excludes future or zero quantity", () => {

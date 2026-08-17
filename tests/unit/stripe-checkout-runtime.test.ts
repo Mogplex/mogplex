@@ -254,6 +254,28 @@ test("catalog price lookup validates one-time top-up prices", async () => {
   );
 });
 
+test("catalog price lookup validates capacity hosted-usage presets", async () => {
+  const { resolveCatalogPriceId } = await loadCheckoutRuntime();
+
+  assert.equal(
+    await resolveCatalogPriceId(
+      "capacity_v2_hosted_usage_credit_25",
+      async () => ({
+        data: [
+          {
+            id: "price_hosted_usage",
+            active: true,
+            unit_amount: 2_500,
+            currency: "usd",
+            recurring: null,
+          },
+        ],
+      })
+    ),
+    "price_hosted_usage"
+  );
+});
+
 test("catalog price lookup validates capacity plans and add-ons", async () => {
   const { resolveCatalogPriceId } = await loadCheckoutRuntime();
 
