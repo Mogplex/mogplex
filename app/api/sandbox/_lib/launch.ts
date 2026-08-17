@@ -257,7 +257,7 @@ export async function maybeReturnNameCollisionResponse(
     return NextResponse.json(
       {
         error:
-          "The existing sandbox is still stopping. Start it again after shutdown completes.",
+          "Mogplex must finish cleanup for the previous sandbox. Start it again in a moment.",
         code: "sandbox_transition_in_progress",
         sandboxId: collision.record?.id ?? null,
       },
