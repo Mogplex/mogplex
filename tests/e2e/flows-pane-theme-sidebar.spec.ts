@@ -1,16 +1,35 @@
 import { expect, test } from "@playwright/test";
-import { setupWorkflowsPage } from "./helpers/flows-pane-theme-fixtures";
+import {
+  fulfillJson,
+  setupWorkflowsPage,
+} from "./helpers/flows-pane-theme-fixtures";
 
 test("app sidebar owns primary navigation and supports drag and keyboard resize", async ({
   page,
 }) => {
   await setupWorkflowsPage(page, "light");
+  await page.route("**/api/memberships", (route) =>
+    fulfillJson(route, {
+      personal: { slug: "alex", name: "Alex", avatarUrl: null },
+      teams: [],
+    })
+  );
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(route, {
+      version: "capacity_v2",
+      plan: { name: "Plus" },
+      account: { canManageBilling: true },
+      hostedUsage: { spendableCents: 2_500 },
+    })
+  );
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/alex/workflows");
   await page.waitForLoadState("networkidle");
 
   const sidebar = page.getByTestId("app-sidebar");
   await expect(sidebar).toBeVisible();
+  await expect(sidebar.getByText("Plus", { exact: true })).toBeVisible();
+  await expect(sidebar.getByText("$25.00 hosted usage")).toBeVisible();
   for (const destination of [
     "control",
     "workspaces",

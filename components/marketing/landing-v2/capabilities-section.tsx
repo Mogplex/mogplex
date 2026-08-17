@@ -334,16 +334,16 @@ export function GatesSection() {
                 <path d="M3.5 19c.6-3.3 2.7-5 5.5-5s4.9 1.7 5.5 5M16 7h5M18.5 4.5v5" />
               </svg>
             </span>
-            <span className="mpx-cap-stamp">NO SEAT FEES</span>
+            <span className="mpx-cap-stamp">COMPANY CONTROL</span>
           </div>
           <p className="mpx-cap-kicker">ROLES / BILLING</p>
           <h3>
-            Four roles. One pooled balance
+            Give your company shared control
             <AccentPeriod />
           </h3>
           <p className="mpx-cap-description">
-            Owner, admin, developer, viewer. Team usage stays in one
-            prepaid balance, with the cost for each run and member.
+            Owners and admins manage the workspace. They set roles, billing,
+            and capacity. Business and Enterprise use custom terms.
           </p>
           <div className="mpx-models">
             <span>OWNER</span>

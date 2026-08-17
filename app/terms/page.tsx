@@ -67,13 +67,15 @@ export default function TermsPage() {
             Mogplex to act on those accounts within the scopes you approve.
           </p>
 
-          <h2 className="text-lg text-foreground">What about teams?</h2>
+          <h2 className="text-lg text-foreground">
+            What about company workspaces?
+          </h2>
           <p>
-            If you join a team on Mogplex, the team&apos;s owners and admins
-            control the team workspace. They can manage membership and roles,
-            see usage and cost attribution for team members, and review the
-            team&apos;s audit log. Team subscriptions and pooled usage are
-            billed to the team&apos;s billing account.
+            If you join a company workspace, its owners and admins control it.
+            They add members and set each role. They also manage the shared
+            billing account and capacity. They can see usage and cost for each
+            member. They can also review the audit log. Each Business or
+            Enterprise contract defines the billing and service terms.
           </p>
 
           <h2 className="text-lg text-foreground">
@@ -143,16 +145,22 @@ export default function TermsPage() {
             Does the Service cost anything?
           </h2>
           <p>
-            Yes. All usage on the hosted Service is billed — there is no free
-            usage tier. Plans, current rates, and included usage are published
-            on our{" "}
+            Yes. Mogplex Cloud has no free hosted plan. Each subscription gives
+            you Concurrency, retained data, and hosted usage. Current plans and
+            rates are on our{" "}
             <Link href="/pricing" className="text-primary hover:underline">
               pricing page
             </Link>
-            . Model usage is passed through at provider list price with no
-            markup, and sandbox compute is billed per minute at the published
-            rate. Prepaid usage balances do not expire. Self-hosting the
-            open-source software is free.
+            .
+          </p>
+          <p>
+            Mogplex applies the published retail factor when it bills managed
+            AI and other hosted services. Sandbox compute and transfer use the
+            published rates. Purchased hosted usage does not expire.
+          </p>
+          <p>
+            The Apache-2.0 software has no license fee. Self-hosters pay their
+            providers directly.
           </p>
 
           <h2 className="text-lg text-foreground">Billing</h2>

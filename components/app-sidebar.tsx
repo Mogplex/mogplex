@@ -28,6 +28,7 @@ import {
   type AppNavItemId,
 } from "@/lib/app-navigation";
 import { formatUsd } from "@/lib/billing/catalog";
+import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
 import { scopedHref } from "@/lib/scoped-href";
 
 const SIDEBAR_WIDTH_KEY = "mogplex.appSidebar.width";
@@ -47,51 +48,15 @@ const NAV_ICONS = {
   settings: Settings,
 } satisfies Record<AppNavItemId, typeof Rocket>;
 
-type BillingSummary = {
-  enabled: boolean;
-  canManageBilling?: boolean;
-  tier?: "free" | "pro" | "team" | "business";
-  status?: "active" | "past_due" | "frozen_topups";
-  balance?: {
-    includedCents: number;
-    purchasedCents: number;
-    totalCents: number;
-  };
-};
-
 function clampWidth(value: number) {
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value));
 }
 
-function planName(tier: BillingSummary["tier"]): string {
-  if (tier === "pro") return "Pro Plan";
-  if (tier === "team") return "Team Plan";
-  if (tier === "business") return "Mog Mode";
-  return "Pay as you go";
-}
-
-function formatCreditSummary(summary: BillingSummary | undefined): string {
-  if (!summary?.enabled) return "Billing unavailable";
-  const balance = summary.balance;
-  if (!balance) return "Balance loading";
-
-  const total = formatUsd(balance.totalCents);
-  if (balance.includedCents > 0) {
-    return `${total} / ${formatUsd(balance.includedCents)} included`;
-  }
-  return `${total} available`;
-}
-
-function usageMeterWidth(summary: BillingSummary | undefined): string {
-  const balance = summary?.balance;
-  if (!summary?.enabled || !balance || balance.includedCents <= 0) {
-    return "0%";
-  }
-  const percent = Math.max(
-    0,
-    Math.min(100, (balance.totalCents / balance.includedCents) * 100)
-  );
-  return `${percent}%`;
+function formatHostedUsageSummary(
+  summary: CapacityBillingSummaryV2 | undefined
+): string {
+  if (!summary) return "Billing unavailable";
+  return `${formatUsd(summary.hostedUsage.spendableCents)} hosted usage`;
 }
 
 function SidebarNavLink({
@@ -129,12 +94,12 @@ function SidebarNavLink({
 async function loadBillingSummary([
   url,
   activeTeamId,
-]: [string, string | null]): Promise<BillingSummary> {
+]: [string, string | null]): Promise<CapacityBillingSummaryV2> {
   const response = await fetch(url, {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
   });
   if (!response.ok) throw new Error("Failed to load billing summary");
-  return (await response.json()) as BillingSummary;
+  return (await response.json()) as CapacityBillingSummaryV2;
 }
 
 export function AppSidebar() {
@@ -162,8 +127,8 @@ export function AppSidebar() {
   const shouldLoadBilling =
     Boolean(scope) && !membershipsLoading && scopeResolved;
   const { data: billingSummary, error: billingError, isLoading: billingLoading } =
-    useSWR<BillingSummary>(
-      shouldLoadBilling ? ["/api/billing", activeBillingTeamId] : null,
+    useSWR<CapacityBillingSummaryV2>(
+      shouldLoadBilling ? ["/api/billing/capacity", activeBillingTeamId] : null,
       loadBillingSummary
     );
   const showBillingCard =
@@ -290,28 +255,22 @@ export function AppSidebar() {
                     ? "Plan loading"
                     : billingError
                       ? "Billing"
-                      : planName(billingSummary?.tier)}
+                      : (billingSummary?.plan.name ?? "Billing")}
                 </div>
                 <div className="mt-2 text-xs text-secondary-foreground">
                   {billingPending
                     ? "Balance loading"
                     : billingError
                       ? "Summary unavailable"
-                      : formatCreditSummary(billingSummary)}
+                      : formatHostedUsageSummary(billingSummary)}
                 </div>
-              </div>
-              <div className="h-1 overflow-hidden rounded-full bg-accent">
-                <div
-                  className="h-full rounded-full bg-foreground/70"
-                  style={{ width: usageMeterWidth(billingSummary) }}
-                />
               </div>
               <Link
                 href={scopedHref(scope, "/settings/billing")}
                 className="flex items-center gap-1.5 text-xs text-secondary-foreground hover:text-foreground"
               >
                 <ArrowUpCircle className="size-3.5 shrink-0" strokeWidth={1.5} />
-                {billingSummary?.canManageBilling === false
+                {billingSummary?.account.canManageBilling === false
                   ? "View billing"
                   : "Manage billing"}
               </Link>

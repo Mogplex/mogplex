@@ -17,7 +17,7 @@ export function HeroSection() {
       <div className="mpx-hero-copy">
         <div className="mpx-rise" style={{ animationDelay: ".05s" }}>
           <Eyebrow large>
-            APACHE-2.0 · SELF-HOSTABLE · NO SALES CALL
+            APACHE-2.0 · SELF-HOSTABLE · CLEAR PRICING
           </Eyebrow>
         </div>
         <h1 className="mpx-rise" style={{ animationDelay: ".14s" }}>
@@ -64,8 +64,8 @@ export function HeroSection() {
             RUNNING CODE
           </p>
           <p>
-            <span aria-hidden>+</span>&nbsp;&nbsp;NO SEAT FEES. NO SALES
-            CALL.
+            <span aria-hidden>+</span>&nbsp;&nbsp;INDIVIDUAL PLANS. COMPANY
+            OPTIONS.
           </p>
         </div>
       </div>
