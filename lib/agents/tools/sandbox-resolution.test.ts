@@ -150,6 +150,26 @@ describe("sandbox resolution contract", () => {
     });
   });
 
+  it("surfaces the provider transition conflict from sandbox start", async () => {
+    global.fetch = async () =>
+      Response.json(
+        {
+          error:
+            "The existing sandbox is still stopping. Start it again after shutdown completes.",
+          code: "sandbox_transition_in_progress",
+        },
+        { status: 409 }
+      );
+
+    await expect(
+      resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
+    ).resolves.toEqual({
+      error:
+        "The existing sandbox is still stopping. Start it again after shutdown completes.",
+      reason: "sandbox_unavailable",
+    });
+  });
+
   it("resolves an owned full name and consumes sandbox creation SSE", async () => {
     installSandboxRows([], {
       id: "00000000-0000-4000-8000-000000000001",

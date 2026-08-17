@@ -95,6 +95,74 @@ describe("resolveNameCollision", () => {
     expect(result).toEqual({ kind: "resume", record });
   });
 
+  it("restarts a matching stopped persistent record instead of deleting its name", async () => {
+    const record = sandboxRecord({ status: "stopped", persistent: true });
+    const deleteSandbox = vi.fn(async () => undefined);
+
+    const result = await resolveNameCollision(input, {
+      getSandbox: async () =>
+        ({
+          name: input.name,
+          status: "stopped",
+          sandbox: { persistent: true },
+        }) as never,
+      loadMatchingRecord: async () => record,
+      insertAdoptedRecord: async () => {
+        throw new Error("insertAdoptedRecord should not be called");
+      },
+      deleteSandbox,
+    });
+
+    expect(deleteSandbox).not.toHaveBeenCalled();
+    expect(result).toEqual({ kind: "restart", record });
+  });
+
+  it("creates fresh when a stopped persistent record has no provider sandbox", async () => {
+    const record = sandboxRecord({ status: "stopped", persistent: true });
+    const getSandbox = vi.fn(async () => {
+      throw Object.assign(new Error("Sandbox not found"), { status: 404 });
+    });
+
+    const result = await resolveNameCollision(input, {
+      getSandbox,
+      loadMatchingRecord: async () => record,
+      insertAdoptedRecord: async () => {
+        throw new Error("insertAdoptedRecord should not be called");
+      },
+    });
+
+    expect(getSandbox).toHaveBeenCalledTimes(1);
+    expect(getSandbox).toHaveBeenCalledWith(input.name, input.credentials, {
+      resume: false,
+    });
+    expect(result).toEqual({ kind: "create" });
+  });
+
+  it.each(["stopping", "snapshotting"])(
+    "reports %s persistent sandboxes as busy without deleting or creating",
+    async (status) => {
+      const record = sandboxRecord({ status: "stopped", persistent: true });
+      const deleteSandbox = vi.fn(async () => undefined);
+
+      const result = await resolveNameCollision(input, {
+        getSandbox: async () =>
+          ({
+            name: input.name,
+            status,
+            sandbox: { persistent: true },
+          }) as never,
+        loadMatchingRecord: async () => record,
+        insertAdoptedRecord: async () => {
+          throw new Error("insertAdoptedRecord should not be called");
+        },
+        deleteSandbox,
+      });
+
+      expect(deleteSandbox).not.toHaveBeenCalled();
+      expect(result).toEqual({ kind: "busy", record });
+    }
+  );
+
   it("attaches billing admission before a paused platform collision is revived", async () => {
     const record = sandboxRecord({ status: "paused" });
     const admitted: unknown[] = [];
@@ -121,7 +189,7 @@ describe("resolveNameCollision", () => {
     expect(result).toEqual({ kind: "resume", record });
   });
 
-  it("retires a paused record when Vercel reports a stopped non-persistent sandbox", async () => {
+  it("retires a paused record without reusing a non-persistent name in the same request", async () => {
     const record = sandboxRecord({
       status: "paused",
       healthStatus: "paused",
@@ -151,7 +219,7 @@ describe("resolveNameCollision", () => {
     );
     expect(stopMatchingRecord).toHaveBeenCalledWith(record);
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "create" });
+    expect(result).toEqual({ kind: "busy", record });
   });
 
   it("adopts a usable orphaned Vercel sandbox", async () => {
@@ -174,7 +242,7 @@ describe("resolveNameCollision", () => {
     expect(result).toEqual({ kind: "adopt", record: adopted });
   });
 
-  it("recreates a non-persistent orphan when the collision probe had to revive it", async () => {
+  it("deletes a revived non-persistent orphan without reusing its name in the same request", async () => {
     const getSandbox = vi
       .fn()
       .mockRejectedValueOnce(
@@ -213,7 +281,7 @@ describe("resolveNameCollision", () => {
       }
     );
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "create" });
+    expect(result).toEqual({ kind: "busy", record: null });
   });
 
   it("threads rootDirectory through matching and adoption", async () => {
@@ -298,10 +366,10 @@ describe("resolveNameCollision", () => {
     });
 
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "create" });
+    expect(result).toEqual({ kind: "busy", record: null });
   });
 
-  it("deletes a stopped Vercel sandbox and creates fresh", async () => {
+  it("deletes a stopped orphan without reusing its name in the same request", async () => {
     const deleteSandbox = vi.fn(async () => undefined);
     const result = await resolveNameCollision(input, {
       getSandbox: async () =>
@@ -314,7 +382,7 @@ describe("resolveNameCollision", () => {
     });
 
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "create" });
+    expect(result).toEqual({ kind: "busy", record: null });
   });
 });
 

@@ -223,7 +223,8 @@ export async function maybeReturnExistingSandboxResponse(
 export async function maybeReturnNameCollisionResponse(
   deps: SandboxPostDeps,
   launch: SandboxLaunchPreparation,
-  limitClaimId: string | null
+  limitClaimId: string | null,
+  request: Request
 ) {
   const sandboxName = buildSandboxName({
     repoId: launch.repoId,
@@ -251,13 +252,29 @@ export async function maybeReturnNameCollisionResponse(
 
   if (collision.kind === "create") return null;
 
-  // Both resume and adopt short-circuit without booting a new sandbox, so
-  // the freshly minted claim has no boot to amortize. Resume reuses an
-  // existing active record; adopt just inserted a row with status='running'
-  // (which already counts in v_active_sandboxes via the SQL claim helper).
-  // In both cases the in-flight limit_events row should be released so it
-  // does not linger in v_provisional_boots until the TTL expires.
+  if (collision.kind === "busy") {
+    await releaseSandboxBootLimitClaim(launch.creds.userId, limitClaimId);
+    return NextResponse.json(
+      {
+        error:
+          "The existing sandbox is still stopping. Start it again after shutdown completes.",
+        code: "sandbox_transition_in_progress",
+        sandboxId: collision.record?.id ?? null,
+      },
+      { status: 409 }
+    );
+  }
+
+  // Every non-create collision path avoids this request's fresh boot, so the
+  // claim has no work to amortize. Restart performs its own admission against
+  // the canonical record; resume reuses an active record; adopt already counts
+  // via v_active_sandboxes. Release the provisional claim before returning or
+  // delegating so it cannot linger until the TTL expires.
   await releaseSandboxBootLimitClaim(launch.creds.userId, limitClaimId);
+
+  if (collision.kind === "restart") {
+    return deps.restartSandboxRecord(request, collision.record.id);
+  }
 
   return NextResponse.json({ sandbox: collision.record });
 }

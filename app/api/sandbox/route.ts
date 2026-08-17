@@ -100,7 +100,8 @@ export function createSandboxPostHandler(
     const collisionResponse = await maybeReturnNameCollisionResponse(
       deps,
       prepared.launch,
-      limitDecision.limitClaimId
+      limitDecision.limitClaimId,
+      request
     );
     if (collisionResponse) return collisionResponse;
 

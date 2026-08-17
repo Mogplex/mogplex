@@ -43,6 +43,10 @@ export type SandboxPostDeps = {
   requireSandboxBillingSession: typeof requireSandboxBillingSession;
   prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
   resolveNameCollision: typeof resolveNameCollision;
+  restartSandboxRecord: (
+    request: Request,
+    sandboxRecordId: string
+  ) => Promise<Response>;
   enforceSandboxBootLimits: typeof enforceSandboxBootLimits;
   startDeferredRepoSnapshotBuild: typeof startDeferredRepoSnapshotBuild;
   startSandboxReadinessReconciliation: typeof startSandboxReadinessReconciliation;
@@ -122,6 +126,13 @@ export const defaultSandboxPostDeps: SandboxPostDeps = {
   requireSandboxBillingSession,
   prepareSandboxBillingClose,
   resolveNameCollision,
+  async restartSandboxRecord(request, sandboxRecordId) {
+    const { createSandboxRestartHandler } =
+      await import("@/app/api/sandbox/[id]/restart/route");
+    return createSandboxRestartHandler()(request, {
+      params: Promise.resolve({ id: sandboxRecordId }),
+    });
+  },
   enforceSandboxBootLimits,
   startDeferredRepoSnapshotBuild,
   startSandboxReadinessReconciliation,
