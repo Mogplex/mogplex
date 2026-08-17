@@ -94,7 +94,7 @@ function SidebarNavLink({
 async function loadBillingSummary([
   url,
   activeTeamId,
-]: [string, string | null]): Promise<CapacityBillingSummaryV2> {
+]: [string, string | null, "sidebar"]): Promise<CapacityBillingSummaryV2> {
   const response = await fetch(url, {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
   });
@@ -128,7 +128,9 @@ export function AppSidebar() {
     Boolean(scope) && !membershipsLoading && scopeResolved;
   const { data: billingSummary, error: billingError, isLoading: billingLoading } =
     useSWR<CapacityBillingSummaryV2>(
-      shouldLoadBilling ? ["/api/billing/capacity", activeBillingTeamId] : null,
+      shouldLoadBilling
+        ? ["/api/billing/capacity", activeBillingTeamId, "sidebar"]
+        : null,
       loadBillingSummary
     );
   const showBillingCard =
