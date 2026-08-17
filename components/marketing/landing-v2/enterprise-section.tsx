@@ -25,9 +25,8 @@ export function EnterpriseSection() {
             it, file issues, and send patches.
           </p>
           <p>
-            Need the system inside your own network? Self-host it — your
-            air-gapped deployment starts with a git clone, free forever.
-            Want dedicated capacity or custom terms on top? Email{" "}
+            Need the system inside your own network? Self-host it with no
+            license fee. Want shared company control or custom terms? Email{" "}
             <a href="mailto:enterprise@mogplex.com">enterprise@mogplex.com</a>{" "}
             and talk to the people who build it.
           </p>
@@ -57,11 +56,11 @@ export function EnterpriseSection() {
           <div>
             <p>
               <small>PRICE</small>
-              <b>No monthly fee on PAYG</b>
+              <b>Individual plans from $20</b>
             </p>
             <p>
-              <small>METER</small>
-              <b>Published rates only</b>
+              <small>CAPACITY</small>
+              <b>Three visible limits</b>
             </p>
             <p>
               <small>PLATFORM</small>

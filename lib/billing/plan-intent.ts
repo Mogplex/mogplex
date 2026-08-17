@@ -1,54 +1,67 @@
-import { findPlanPrice, formatUsd, type PlanTier } from "@/lib/billing/catalog";
+import {
+  INDIVIDUAL_CAPACITY_PLANS,
+  type IndividualCapacityPlanCode,
+} from "@/lib/billing/capacity-catalog";
 
-// Plan intent carried from a /pricing tier card through signup to /checkout.
-// The value is the internal tier key; display names stay a UI concern
-// ("business" renders as "Mog Mode").
+const PLAN_INTENT_TIERS = new Set<IndividualCapacityPlanCode>([
+  "pro",
+  "plus",
+  "max",
+]);
 
-const PLAN_INTENT_TIERS = new Set<PlanTier>(["pro", "team", "business"]);
+function formatUsd(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
 
 export function parsePlanIntent(
   raw: string | null | undefined
-): PlanTier | null {
+): IndividualCapacityPlanCode | null {
   if (!raw) return null;
-  return PLAN_INTENT_TIERS.has(raw as PlanTier) ? (raw as PlanTier) : null;
+  return PLAN_INTENT_TIERS.has(raw as IndividualCapacityPlanCode)
+    ? (raw as IndividualCapacityPlanCode)
+    : null;
 }
 
-export function planIntentDisplayName(tier: PlanTier): string {
-  if (tier === "business") return "Mog Mode";
-  return tier === "pro" ? "Pro" : "Team";
+export function planIntentDisplayName(
+  tier: IndividualCapacityPlanCode
+): string {
+  return INDIVIDUAL_CAPACITY_PLANS[tier].name;
 }
 
-export function checkoutPath(tier: PlanTier): string {
+export function checkoutPath(tier: IndividualCapacityPlanCode): string {
   return `/checkout?plan=${tier}`;
 }
 
-export function signupPath(tier: PlanTier | null): string {
+export function signupPath(tier: IndividualCapacityPlanCode | null): string {
   return tier ? `/signup?plan=${tier}` : "/signup";
 }
 
 export type PlanIntentSummary = {
-  tier: PlanTier;
+  tier: IndividualCapacityPlanCode;
   name: string;
-  monthlyLookupKey: string;
-  annualLookupKey: string;
   monthlyPrice: string;
   annualPrice: string;
-  includedUsage: string;
+  concurrency: number;
+  retainedDataGb: number;
+  hostedUsage: string;
 };
 
-export function planIntentSummary(tier: PlanTier): PlanIntentSummary {
-  const monthly = findPlanPrice(`${tier}_monthly`);
-  const annual = findPlanPrice(`${tier}_annual`);
-  if (!monthly || !annual) {
-    throw new Error(`Billing catalog is missing prices for tier "${tier}"`);
-  }
+export function planIntentSummary(
+  tier: IndividualCapacityPlanCode
+): PlanIntentSummary {
+  const plan = INDIVIDUAL_CAPACITY_PLANS[tier];
   return {
     tier,
-    name: planIntentDisplayName(tier),
-    monthlyLookupKey: monthly.lookupKey,
-    annualLookupKey: annual.lookupKey,
-    monthlyPrice: formatUsd(monthly.amountCents),
-    annualPrice: formatUsd(annual.amountCents),
-    includedUsage: formatUsd(monthly.includedUsageCents),
+    name: plan.name,
+    monthlyPrice: formatUsd(plan.prices.month.amountCents),
+    annualPrice: formatUsd(plan.prices.year.amountCents),
+    concurrency: plan.concurrency,
+    retainedDataGb: plan.retainedDataBytes / 1_000_000_000,
+    hostedUsage: formatUsd(plan.hostedUsageCents),
   };
 }

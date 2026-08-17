@@ -36,7 +36,7 @@ const STAGES: Stage[] = [
     t: "T+00:04.2",
     num: "02",
     name: "A sandbox boots",
-    desc: "A fresh microVM boots with a clone of your repo. Nothing is shared between runs. You do not need to connect a cloud account before your first run. Sandbox minutes bill on the meter, and a $10 top-up buys 2,000 minutes.",
+    desc: "A fresh microVM boots with a clone of your repo. Nothing is shared between runs. Hosted sandbox time uses your hosted usage balance at the published per-minute rate.",
     fact: "held — per-run isolation. Your code never executes on shared infrastructure you can't see.",
   },
   {
@@ -68,7 +68,7 @@ export default function HowItWorksPage() {
       close={{
         kicker: "SHEET 03 — END",
         lines: ["Watch one run.", "You'll wire five."],
-        note: "no monthly fee on payg. no sales call, no hidden rates.",
+        note: "Individual plans show all three limits. company plans use custom terms.",
       }}
     >
       <header className="sub-hero">

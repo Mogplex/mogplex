@@ -38,7 +38,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "What does it cost?",
-    a: "There is no monthly fee to start. PAYG bills only what you use: tokens at provider list price with no markup and sandbox compute at half a cent a minute. Pro is $20 a month with $20 of usage included. Team is $100 a month with unlimited members. Every run shows its exact cost.",
+    a: "Individual plans start with Pro at $20 a month. Each plan includes Concurrency, retained data, and hosted usage. You can buy more capacity without changing plans. Business and Enterprise plans use custom terms.",
   },
   {
     q: "What can trigger a run?",
@@ -72,7 +72,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "How do I start?",
-    a: "Sign up, connect a repo, and wire a pipeline. Start on PAYG with no monthly fee. You pay only the meter. There is no sales call, demo, or hidden rate. Your first run explains the rest.",
+    a: "Choose an Individual plan, create your account, and connect a repo. Your plan shows the capacity available before you wire a pipeline. You can also self-host the Apache-2.0 application with no license fee.",
   },
 ];
 

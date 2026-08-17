@@ -76,11 +76,13 @@ test("retired access request route redirects to the rate card", async ({
   expect(response.headers().location).toBe("/pricing");
 });
 
-test("public marketing pages use the GA and PAYG copy", async ({ page }) => {
+test("public marketing pages use the capacity pricing copy", async ({
+  page,
+}) => {
   const pages = [
     ["/workflows", "Pipelines worth stealing."],
     ["/how-it-works", "One run, drawn to scale."],
-    ["/pricing", "Tokens at cost. Compute by the minute."],
+    ["/pricing", "Run more work. Know what it costs."],
     ["/faq", "Fair questions."],
     ["/company", "The company behind the system."],
     ["/signup", "Start now."],
@@ -93,39 +95,31 @@ test("public marketing pages use the GA and PAYG copy", async ({ page }) => {
   }
 
   await page.goto("/pricing");
-  await expect(page.getByText("TIER 00 — PAYG")).toBeVisible();
-  await expect(page.getByText(/optional auto top-up/i)).toHaveCount(0);
-  await expect(page.getByText(/custom \(min/i)).toHaveCount(0);
+  await expect(page.getByText("Team", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("PAYG", { exact: true })).toHaveCount(0);
 
-  // Paid tier CTAs carry the plan into signup; PAYG has nothing to buy.
-  await expect(page.getByTestId("pricing-cta-00")).toHaveAttribute(
-    "href",
-    "/signup"
-  );
-  await expect(page.getByTestId("pricing-cta-01")).toHaveAttribute(
+  // Individual plan intent survives through signup and checkout.
+  await expect(page.getByTestId("pricing-cta-pro")).toHaveAttribute(
     "href",
     "/signup?plan=pro"
   );
-  await expect(page.getByTestId("pricing-cta-02")).toHaveAttribute(
+  await expect(page.getByTestId("pricing-cta-plus")).toHaveAttribute(
     "href",
-    "/signup?plan=team"
+    "/signup?plan=plus"
   );
-  await expect(page.getByTestId("pricing-cta-03")).toHaveAttribute(
+  await expect(page.getByTestId("pricing-cta-max")).toHaveAttribute(
     "href",
-    "/signup?plan=business"
+    "/signup?plan=max"
   );
-
-  // The plan survives to the signup form and names checkout as the next step.
-  await page.goto("/signup?plan=business");
-  await expect(page.getByTestId("plan-chip")).toContainText("Mog Mode");
-  await expect(page.getByTestId("plan-chip")).toContainText("checkout");
-
-  await page.goto("/");
+  await page.getByRole("button", { name: "Annual, save 15%" }).click();
   await expect(
-    page.getByRole("link", { name: "Self-hosting docs" })
-  ).toHaveAttribute(
-    "href",
-    "https://github.com/mogplex/mogplex/blob/main/docs/self-hosting.md"
-  );
-  await expect(page.getByText("github.com/Mogplex/cli")).toHaveCount(0);
+    page.locator(".price-value").filter({ hasText: "$1,020" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Contact sales" })
+  ).toHaveAttribute("href", "mailto:enterprise@mogplex.com");
+
+  await page.goto("/signup?plan=max");
+  await expect(page.getByTestId("plan-chip")).toContainText("Max");
+  await expect(page.getByTestId("plan-chip")).toContainText("Checkout");
 });

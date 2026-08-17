@@ -110,7 +110,7 @@ export default function WorkflowsPage() {
       close={{
         kicker: "SHEET 02 — END",
         lines: ["Wire one.", "Steal the rest."],
-        note: "no monthly fee on payg. no sales call, no hidden rates.",
+        note: "Individual plans show all three limits. company plans use custom terms.",
       }}
     >
       <header className="sub-hero">

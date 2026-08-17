@@ -368,7 +368,7 @@
 /* ---------- /pricing — rate card ---------- */
 .mpx-sub .price-cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(16px, 2vw, 28px);
   width: 100%;
   max-width: 1560px;
@@ -459,13 +459,119 @@
 
 .mpx-sub .price-note {
   max-width: 40ch;
-  padding-left: 12px;
-  border-left: 2px solid var(--accent);
+  padding: 18px 0 0;
+  border-top: 1px solid var(--border-soft);
   margin-top: auto;
-  padding-top: 18px;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.7;
+}
+
+.mpx-sub .capacity-plans {
+  border-top: 1px solid var(--border);
+}
+
+.mpx-sub .capacity-plans .price-cards {
+  border-top: 0;
+  padding-top: 28px;
+}
+
+.mpx-sub .capacity-section-head {
+  display: flex;
+  width: 100%;
+  max-width: 1560px;
+  align-items: end;
+  justify-content: space-between;
+  gap: 28px;
+  padding: clamp(44px, 7vh, 72px) 40px 0;
+  margin: 0 auto;
+}
+
+.mpx-sub .capacity-section-lede {
+  max-width: 64ch;
+  margin-top: 14px;
+  color: var(--ink-body);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.mpx-sub .capacity-toggle {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.mpx-sub .capacity-toggle button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: 600 12px/1 var(--font-mono);
+}
+
+.mpx-sub .capacity-toggle button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.mpx-sub .capacity-allowances {
+  margin: 22px 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.mpx-sub .capacity-allowances div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.mpx-sub .capacity-allowances dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.mpx-sub .capacity-allowances dd {
+  color: var(--ink);
+  font: 600 13px/1.2 var(--font-mono);
+}
+
+.mpx-sub .capacity-addon-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(28px, 5vw, 80px);
+  margin-top: 36px;
+}
+
+.mpx-sub .capacity-addon-groups h3 {
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.mpx-sub .capacity-addon-groups li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border-soft);
+  color: var(--ink-body);
+  font-size: 14px;
+}
+
+.mpx-sub .capacity-addon-groups strong {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .mpx-sub .price-cta {
@@ -704,6 +810,17 @@
   .mpx-sub .mpx-sub-close {
     padding-left: 20px;
     padding-right: 20px;
+  }
+
+  .mpx-sub .capacity-section-head {
+    align-items: start;
+    flex-direction: column;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .mpx-sub .capacity-addon-groups {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .mpx-sub .ent-card {

@@ -33,23 +33,20 @@ function SignupContent() {
   return (
     <AuthShell
       eyebrow="Generally available"
-      title={
-        <>
-          Start <em className="grad">now</em>.
-        </>
-      }
+      title="Start now."
       subtitle={
         <>
-          Connect a repo and wire your first pipeline. PAYG has no monthly fee.
-          Tokens pass through at cost, and compute bills by the minute.{" "}
+          Create your account, then confirm the Individual plan you chose.
+          Your plan sets Concurrency, retained data, and hosted usage.{" "}
           <Link href="/pricing">See the full rate card.</Link>
         </>
       }
       notice={
         summary ? (
           <div className="mpx-auth-alert is-success" data-testid="plan-chip">
-            {summary.name} — {summary.monthlyPrice}/mo · checkout comes after
-            this step ·{" "}
+            {summary.name}: {summary.monthlyPrice}/month, Concurrency{" "}
+            {summary.concurrency}, {summary.retainedDataGb} GB retained data.
+            Checkout comes after this step. {" "}
             <Link href="/pricing">change plan</Link>
           </div>
         ) : null

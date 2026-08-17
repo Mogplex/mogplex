@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
+import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
 import {
   buildE2EAuthHeaders,
   enableScopedE2EAuth,
   scopedPath,
 } from "./helpers/auth";
-import type { Page, Route } from "@playwright/test";
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000002";
 const TEAM_SLUG = "acme";
@@ -60,173 +61,159 @@ async function mockSettingsShell(page: Page) {
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, { sandboxes: [] })
   );
+  await page.route("**/api/billing/capacity/events?*", (route) =>
+    route.fulfill({ status: 204 })
+  );
 }
 
-test("billing is a first-class personal Settings tab with live checkout actions", async ({
+function capacitySummary(
+  overrides: Partial<CapacityBillingSummaryV2> = {}
+): CapacityBillingSummaryV2 {
+  return {
+    version: "capacity_v2",
+    asOf: "2026-08-17T12:00:00.000Z",
+    billingOperationsEnabled: true,
+    account: {
+      id: "billing-account-1",
+      eventSequence: "12",
+      scope: "personal",
+      displayName: "Alex",
+      status: "active",
+      canManageBilling: true,
+    },
+    plan: {
+      ref: "plus",
+      name: "Plus",
+      offerKind: "individual",
+      interval: "month",
+      recurringAmountCents: 10_000,
+      renewsAt: "2026-09-17T12:00:00.000Z",
+      cancelsAt: null,
+      namedUserLimit: 1,
+    },
+    concurrency: {
+      active: 7,
+      included: 25,
+      addOn: 10,
+      limit: 35,
+      wouldBlock: false,
+    },
+    retainedData: {
+      logicalBytes: "2300000000",
+      includedBytes: "5000000000",
+      addOnBytes: "0",
+      limitBytes: "5000000000",
+      percentUsed: 46,
+      wouldBlock: false,
+      overLimitAfterPendingChange: false,
+    },
+    hostedUsage: {
+      includedRemainingCents: 1_800,
+      purchasedRemainingCents: 1_000,
+      openReservationsCents: 300,
+      spendableCents: 2_500,
+      grantResetsAt: "2026-09-17T12:00:00.000Z",
+      purchasesFrozen: false,
+    },
+    addOns: [
+      {
+        subscriptionItemId: "si_concurrency",
+        lookupKey: "capacity_v2_concurrency_10_monthly",
+        kind: "concurrency",
+        name: "Concurrency +10",
+        quantity: 1,
+        allowanceDelta: "10",
+        recurringAmountCents: 500,
+        status: "active",
+        effectiveAt: "2026-08-17T12:00:00.000Z",
+      },
+    ],
+    openReservations: [],
+    recentCosts: [
+      {
+        operationId: "operation-1",
+        description: "Run customer report",
+        status: "settled",
+        occurredAt: "2026-08-16T12:00:00.000Z",
+        totalCents: 74,
+        items: [{ category: "trigger", label: "Trigger.dev", amountCents: 74 }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+test("personal Billing shows capacity and reviews an add-on change", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
   await mockSettingsShell(page);
-  await page.route("**/api/billing", (route) =>
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(route, capacitySummary())
+  );
+
+  await page.route("**/api/billing/capacity/preview", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      lookupKey: "capacity_v2_concurrency_10_monthly",
+      quantity: 2,
+      effectiveAction: "increase",
+    });
+    await fulfillJson(route, {
+      resource: "concurrency",
+      lookupKey: "capacity_v2_concurrency_10_monthly",
+      name: "Concurrency +10",
+      action: "increase",
+      currentQuantity: 1,
+      resultingQuantity: 2,
+      currentAllowance: "35",
+      resultingAllowance: "45",
+      currentRecurringAmountCents: 500,
+      resultingRecurringAmountCents: 1_000,
+      recurringChangeCents: 500,
+      amountDueNowCents: 250,
+      currency: "usd",
+      taxStatus: "calculated",
+      effectiveAt: "2026-08-17T12:00:00.000Z",
+      effectiveTiming: "after_payment",
+      previewToken: "preview-token",
+      expiresAt: "2026-08-17T12:10:00.000Z",
+    });
+  });
+  await page.route("**/api/billing/capacity/checkout", (route) =>
     fulfillJson(route, {
-      enabled: true,
-      canManageBilling: true,
-      tier: "free",
-      status: "active",
-      hasSubscription: false,
-      hasStripeCustomer: false,
-      balance: {
-        includedCents: 0,
-        purchasedCents: 2500,
-        totalCents: 2500,
-      },
+      status: "submitted",
+      paymentUrl: null,
+      entitlementStatus: "pending_webhook",
     })
   );
 
-  const checkoutBodies: Array<Record<string, unknown>> = [];
-  await page.route("**/api/stripe/checkout", async (route) => {
-    checkoutBodies.push(
-      JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
-    );
-    await fulfillJson(route, { url: "about:blank" });
-  });
-
   await page.goto(scopedPath("settings?tab=billing"));
 
-  await expect(page.getByRole("tab", { name: "Billing" })).toHaveAttribute(
-    "data-state",
-    "active"
-  );
-  await expect(page.getByText("$25.00", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Pay as you go" }).first()
-  ).toBeVisible();
-  await expect(page.getByText("Current plan", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pro" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Mog Mode" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Enterprise" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Email us" })).toHaveAttribute(
-    "href",
-    "mailto:enterprise@mogplex.com"
-  );
-  await expect(
-    page.getByRole("link", { name: "Self-hosting docs" })
-  ).toHaveAttribute(
-    "href",
-    "https://github.com/mogplex/mogplex/blob/main/docs/self-hosting.md"
-  );
-  const topupHeading = page.getByRole("heading", {
-    name: "Top up PAYG balance",
-  });
-  const plansHeading = page.getByRole("heading", { name: "Plans" });
-  await expect(topupHeading).toBeVisible();
-  await expect(plansHeading).toBeVisible();
-  const sectionHeadings = await page.locator("h2").allTextContents();
-  expect(sectionHeadings.indexOf("Top up PAYG balance")).toBeLessThan(
-    sectionHeadings.indexOf("Plans")
-  );
+  await expect(page.getByRole("heading", { name: "Plus" })).toBeVisible();
+  await expect(page.getByText("7 of 35")).toBeVisible();
+  await expect(page.getByText("2.3 GB of 5 GB")).toBeVisible();
+  await expect(page.getByText("$25.00 available")).toBeVisible();
+  await expect(page.getByText("Run customer report")).toBeVisible();
 
-  const topupButton = page.getByRole("button", { name: "Top up $10.00" });
-  await expect(topupButton).toBeVisible();
-  await expect(topupButton).toHaveClass(/bg-primary/);
+  await page.getByRole("button", { name: "Manage Concurrency +10" }).click();
+  await page.getByRole("button", { name: "Increase quantity" }).click();
+  await page.getByRole("button", { name: "Review change" }).click();
+  await expect(page.getByText("35 to 45")).toBeVisible();
+  await expect(page.getByText("$2.50")).toBeVisible();
 
-  await topupButton.click();
-  await expect.poll(() => checkoutBodies.length).toBe(1);
-  expect(checkoutBodies[0]).toMatchObject({
-    kind: "topup",
-    preset: "topup_10",
-    returnPath: scopedPath("settings?tab=billing"),
-  });
-  expect(checkoutBodies[0]?.attemptId).toMatch(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  const confirmRequest = page.waitForRequest(
+    "**/api/billing/capacity/checkout"
   );
+  await page.getByRole("button", { name: "Confirm change" }).click();
+  expect((await confirmRequest).postDataJSON()).toMatchObject({
+    previewToken: "preview-token",
+  });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("subscription checkout and existing-plan portal preserve the Billing tab return path", async ({
+test("company Billing stays visible and read-only for a member", async ({
   page,
 }) => {
-  await enableScopedE2EAuth(page);
-  await mockSettingsShell(page);
-
-  let billingSummary = {
-    enabled: true,
-    canManageBilling: true,
-    tier: "free",
-    status: "active",
-    hasSubscription: false,
-    hasStripeCustomer: false,
-    balance: {
-      includedCents: 0,
-      purchasedCents: 0,
-      totalCents: 0,
-    },
-  };
-  await page.route("**/api/billing", (route) =>
-    fulfillJson(route, billingSummary)
-  );
-
-  const checkoutBodies: Array<Record<string, unknown>> = [];
-  await page.route("**/api/stripe/checkout", async (route) => {
-    checkoutBodies.push(
-      JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
-    );
-    await fulfillJson(route, { url: "about:blank" });
-  });
-
-  await page.goto(scopedPath("settings?tab=billing"));
-  await expect(
-    page.getByRole("button", { name: "Monthly billing" })
-  ).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Choose Pro" }).click();
-  await expect.poll(() => checkoutBodies.length).toBe(1);
-  await page.waitForURL("about:blank");
-  expect(checkoutBodies[0]).toEqual({
-    kind: "subscribe",
-    plan: "pro_monthly",
-    returnPath: scopedPath("settings?tab=billing"),
-  });
-
-  await page.goto(scopedPath("settings?tab=billing"));
-  await page.getByRole("button", { name: "Annual billing" }).click();
-  await expect(page.getByText("$192.00/year", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Choose Pro" }).click();
-  await expect.poll(() => checkoutBodies.length).toBe(2);
-  await page.waitForURL("about:blank");
-  expect(checkoutBodies[1]).toEqual({
-    kind: "subscribe",
-    plan: "pro_annual",
-    returnPath: scopedPath("settings?tab=billing"),
-  });
-
-  billingSummary = {
-    ...billingSummary,
-    tier: "pro",
-    hasSubscription: true,
-    hasStripeCustomer: true,
-    balance: {
-      includedCents: 2000,
-      purchasedCents: 0,
-      totalCents: 2000,
-    },
-  };
-  const portalBodies: Array<Record<string, unknown>> = [];
-  await page.route("**/api/stripe/portal", async (route) => {
-    portalBodies.push(
-      JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
-    );
-    await fulfillJson(route, { url: "about:blank" });
-  });
-
-  await page.goto(scopedPath("settings?tab=billing"));
-  await page.getByRole("button", { name: "Manage plan" }).click();
-  await expect.poll(() => portalBodies.length).toBe(1);
-  expect(portalBodies[0]).toEqual({
-    returnPath: scopedPath("settings?tab=billing"),
-  });
-});
-
-test("team members get a read-only billing surface", async ({ page }) => {
   await page.context().setExtraHTTPHeaders({
     ...buildE2EAuthHeaders("00000000-0000-4000-8000-000000000001"),
     "x-mogplex-scope-kind": "team",
@@ -254,86 +241,39 @@ test("team members get a read-only billing surface", async ({ page }) => {
       viewer: { role: "developer", canManage: false },
     })
   );
-  await page.route("**/api/billing", (route) =>
-    fulfillJson(route, {
-      enabled: true,
-      canManageBilling: false,
-      tier: "team",
-      status: "active",
-      hasSubscription: true,
-      hasStripeCustomer: true,
-      balance: {
-        includedCents: 8500,
-        purchasedCents: 1000,
-        totalCents: 9500,
-      },
-    })
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(
+      route,
+      capacitySummary({
+        account: {
+          id: "billing-account-2",
+          eventSequence: "4",
+          scope: "team",
+          displayName: "Acme",
+          status: "read_only",
+          canManageBilling: false,
+        },
+        plan: {
+          ref: "business",
+          name: "Business",
+          offerKind: "contract",
+          interval: "contract",
+          recurringAmountCents: null,
+          renewsAt: null,
+          cancelsAt: null,
+          namedUserLimit: null,
+        },
+      })
+    )
   );
 
   await page.goto(`/${TEAM_SLUG}/settings?tab=billing`);
 
-  await expect(page.getByRole("tab", { name: "Billing" })).toHaveAttribute(
-    "data-state",
-    "active"
-  );
+  await expect(page.getByRole("heading", { name: "Business" })).toBeVisible();
   await expect(
-    page.getByText("Only a team owner or admin can change this plan.")
+    page.getByText("Ask a company owner or admin to change billing.")
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Manage plan" })).toHaveCount(
-    0
-  );
-  await expect(page.getByRole("button", { name: /Top up \$/ })).toHaveCount(0);
-});
-
-test("frozen top-ups stay disabled with an actionable message", async ({
-  page,
-}) => {
-  await enableScopedE2EAuth(page);
-  await mockSettingsShell(page);
-  await page.route("**/api/billing", (route) =>
-    fulfillJson(route, {
-      enabled: true,
-      canManageBilling: true,
-      tier: "free",
-      status: "frozen_topups",
-      hasSubscription: false,
-      hasStripeCustomer: true,
-      balance: {
-        includedCents: 0,
-        purchasedCents: 1000,
-        totalCents: 1000,
-      },
-    })
-  );
-
-  await page.goto(scopedPath("settings?tab=billing"));
-
   await expect(
-    page.getByRole("button", { name: "Top up $10.00" })
+    page.getByRole("button", { name: /Add|Manage/ }).first()
   ).toBeDisabled();
-  await expect(
-    page.getByText(
-      "Top-ups are paused for this account. Contact support for help."
-    )
-  ).toBeVisible();
-});
-
-test("billing-disabled deployments show a neutral OSS state", async ({
-  page,
-}) => {
-  await enableScopedE2EAuth(page);
-  await mockSettingsShell(page);
-  await page.route("**/api/billing", (route) =>
-    fulfillJson(route, { error: "Billing is disabled" }, 503)
-  );
-
-  await page.goto(scopedPath("settings?tab=billing"));
-
-  await expect(
-    page.getByText("Billing is not enabled on this deployment.")
-  ).toBeVisible();
-  await expect(page.getByText(/beta/i)).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: /Choose|Top up \$/ })
-  ).toHaveCount(0);
 });
