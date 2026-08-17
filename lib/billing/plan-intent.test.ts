@@ -21,6 +21,7 @@ describe("parsePlanIntent", () => {
     expect(parsePlanIntent("free")).toBeNull();
     expect(parsePlanIntent("")).toBeNull();
     expect(parsePlanIntent(null)).toBeNull();
+    expect(parsePlanIntent(undefined)).toBeNull();
   });
 });
 

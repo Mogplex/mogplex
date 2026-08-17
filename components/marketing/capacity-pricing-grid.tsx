@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   INDIVIDUAL_CAPACITY_PLANS,
+  LOGICAL_BYTES_PER_GB,
   type CapacityPlanInterval,
 } from "@/lib/billing/capacity-catalog";
 import { signupPath } from "@/lib/billing/plan-intent";
@@ -78,7 +79,7 @@ export function CapacityPricingGrid() {
                 </div>
                 <div>
                   <dt>Retained data</dt>
-                  <dd>{plan.retainedDataBytes / 1_000_000_000} GB</dd>
+                  <dd>{plan.retainedDataBytes / LOGICAL_BYTES_PER_GB} GB</dd>
                 </div>
                 <div>
                   <dt>Hosted usage</dt>

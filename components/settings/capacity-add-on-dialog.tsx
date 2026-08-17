@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchWithActiveTeam } from "@/components/active-scope-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,12 +42,20 @@ export function CapacityAddOnDialog({
   const [preview, setPreview] = useState<CapacityChangePreview | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogSessionRef = useRef({ open: false, lookupKey: null as string | null });
+  const attemptIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    const lookupKey = addOn?.lookupKey ?? null;
+    const priorSession = dialogSessionRef.current;
+    const startsNewSession =
+      open && (!priorSession.open || priorSession.lookupKey !== lookupKey);
+    dialogSessionRef.current = { open, lookupKey };
+    if (!startsNewSession) return;
     setQuantity(currentQuantity);
     setPreview(null);
     setError(null);
+    attemptIdRef.current = null;
   }, [currentQuantity, open, addOn?.lookupKey]);
 
   const action = actionFor(currentQuantity, quantity);
@@ -70,6 +78,7 @@ export function CapacityAddOnDialog({
         error?: string;
       };
       if (!response.ok) throw new Error(payload.error ?? "Preview unavailable");
+      attemptIdRef.current = null;
       setPreview(payload);
     } catch (previewError) {
       setError(
@@ -85,6 +94,8 @@ export function CapacityAddOnDialog({
     setPending(true);
     setError(null);
     try {
+      const attemptId = attemptIdRef.current ?? crypto.randomUUID();
+      attemptIdRef.current = attemptId;
       const endpoint =
         preview.action === "increase"
           ? "/api/billing/capacity/checkout"
@@ -94,7 +105,7 @@ export function CapacityAddOnDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           previewToken: preview.previewToken,
-          attemptId: crypto.randomUUID(),
+          attemptId,
         }),
       });
       const payload = (await response.json()) as {
@@ -107,6 +118,7 @@ export function CapacityAddOnDialog({
         return;
       }
       await onChanged();
+      attemptIdRef.current = null;
       onOpenChange(false);
     } catch (confirmError) {
       setError(
@@ -197,7 +209,14 @@ export function CapacityAddOnDialog({
 
         <DialogFooter>
           {preview ? (
-            <Button disabled={pending} onClick={() => setPreview(null)} variant="outline">
+            <Button
+              disabled={pending}
+              onClick={() => {
+                attemptIdRef.current = null;
+                setPreview(null);
+              }}
+              variant="outline"
+            >
               Back
             </Button>
           ) : null}
