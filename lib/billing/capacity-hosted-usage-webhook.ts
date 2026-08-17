@@ -6,9 +6,11 @@ import {
   CAPACITY_HOSTED_USAGE_MIN_CENTS,
 } from "@/lib/billing/capacity-catalog";
 import type { LedgerEntry } from "@/lib/billing/ledger";
+import type { CapacityBillingStripeMode } from "@/lib/billing/stripe";
 
 export type CapacityHostedUsageWebhookDeps = {
   capacityBillingOperationsEnabled: () => boolean;
+  capacityBillingStripeMode: () => CapacityBillingStripeMode | null;
   findAccountById: (id: string) => Promise<BillingAccount | null>;
   postLedgerEntry: (entry: LedgerEntry) => Promise<{ posted: boolean }>;
 };
@@ -30,14 +32,19 @@ export function stampedUsagePurchaseCents(
 
 export function assertCapacityHostedUsagePayment(
   paymentIntent: Stripe.PaymentIntent,
-  deps: Pick<CapacityHostedUsageWebhookDeps, "capacityBillingOperationsEnabled">
+  deps: Pick<
+    CapacityHostedUsageWebhookDeps,
+    "capacityBillingOperationsEnabled" | "capacityBillingStripeMode"
+  >
 ) {
   if (!deps.capacityBillingOperationsEnabled()) {
     throw new Error("Capacity billing operations are disabled");
   }
+  const stripeMode = deps.capacityBillingStripeMode();
   const creditCents = stampedUsagePurchaseCents(paymentIntent);
   const contractViolations = [
-    paymentIntent.livemode,
+    stripeMode === null,
+    paymentIntent.livemode !== (stripeMode === "live"),
     paymentIntent.status !== "succeeded",
     paymentIntent.metadata.catalog_version !== CAPACITY_CATALOG_VERSION,
     !CHECKOUT_ATTEMPT_ID.test(

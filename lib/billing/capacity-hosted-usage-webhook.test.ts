@@ -51,6 +51,7 @@ function deps(
 ): CapacityHostedUsageWebhookDeps {
   return {
     capacityBillingOperationsEnabled: () => true,
+    capacityBillingStripeMode: () => "test",
     findAccountById: async () => account(),
     postLedgerEntry: async () => ({ posted: true }),
     ...overrides,
@@ -88,13 +89,20 @@ describe("capacity hosted-usage webhook", () => {
     });
   });
 
-  it("rejects disabled, live, incomplete, or inconsistent payments", () => {
+  it("matches payments to the enabled Stripe mode and rejects invalid data", () => {
     expect(() =>
       assertCapacityHostedUsagePayment(
         paymentIntent(),
         deps({ capacityBillingOperationsEnabled: () => false })
       )
     ).toThrow(/operations are disabled/);
+
+    expect(() =>
+      assertCapacityHostedUsagePayment(
+        paymentIntent({ livemode: true }),
+        deps({ capacityBillingStripeMode: () => "live" })
+      )
+    ).not.toThrow();
 
     for (const intent of [
       paymentIntent({ livemode: true }),
