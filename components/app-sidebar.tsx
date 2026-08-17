@@ -126,6 +126,7 @@ export function AppSidebar() {
     Boolean(providedActiveTeamId) || routeIsPersonalScope || Boolean(routeTeam);
   const shouldLoadBilling =
     Boolean(scope) && !membershipsLoading && scopeResolved;
+  // "sidebar" isolates this SWR entry from the settings-page billing summary.
   const { data: billingSummary, error: billingError, isLoading: billingLoading } =
     useSWR<CapacityBillingSummaryV2>(
       shouldLoadBilling
