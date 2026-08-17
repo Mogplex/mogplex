@@ -26,6 +26,7 @@ function fakeClient(overrides: Partial<Record<string, QueryResult>> = {}): {
     billing_accounts: {
       data: {
         id: "account-1",
+        billing_event_sequence: "7",
         owner_type: "user",
         tier: "pro",
         status: "active",
@@ -148,7 +149,11 @@ describe("capacity billing summary database loader", () => {
     });
 
     expect(summary).toMatchObject({
-      account: { id: "account-1", canManageBilling: true },
+      account: {
+        id: "account-1",
+        eventSequence: "7",
+        canManageBilling: true,
+      },
       concurrency: { active: 3, included: 5, limit: 5 },
       retainedData: {
         logicalBytes: "250000000",
