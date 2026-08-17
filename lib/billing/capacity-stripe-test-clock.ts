@@ -34,6 +34,11 @@ export type CapacityStripeTestClockDeps = {
     scenario: string
   ) => Promise<void>;
   refundInvoice: (invoiceId: string, scenario: string) => Promise<void>;
+  reportCleanupFailure: (input: {
+    resource: "test_clock";
+    scenario: string;
+    error: unknown;
+  }) => void;
   captureEvents: <T>(
     input: {
       expectations: readonly CapacityStripeTestClockExpectation[];
@@ -161,6 +166,34 @@ async function createPaidSubscription(input: {
   return captured.result;
 }
 
+export async function runCapacityStripeTestResource<T>(input: {
+  run: () => Promise<T>;
+  cleanup: () => Promise<void>;
+  reportCleanupFailure: (error: unknown) => void;
+}): Promise<T> {
+  let result: T | undefined;
+  let runError: unknown;
+  let runFailed = false;
+  try {
+    result = await input.run();
+  } catch (error) {
+    runFailed = true;
+    runError = error;
+  }
+  let cleanupError: unknown;
+  let cleanupFailed = false;
+  try {
+    await input.cleanup();
+  } catch (error) {
+    cleanupFailed = true;
+    cleanupError = error;
+    input.reportCleanupFailure(error);
+  }
+  if (runFailed) throw runError;
+  if (cleanupFailed) throw cleanupError;
+  return result as T;
+}
+
 async function withClock<T>(input: {
   scenario: string;
   frozenAt: number;
@@ -168,12 +201,22 @@ async function withClock<T>(input: {
   run: (clockId: string, customerId: string) => Promise<T>;
 }): Promise<T> {
   const clockId = await input.deps.createClock(input.scenario, input.frozenAt);
-  try {
-    const customerId = await input.deps.createCustomer(clockId, input.scenario);
-    return await input.run(clockId, customerId);
-  } finally {
-    await input.deps.deleteClock(clockId, input.scenario);
-  }
+  return runCapacityStripeTestResource({
+    async run() {
+      const customerId = await input.deps.createCustomer(
+        clockId,
+        input.scenario
+      );
+      return input.run(clockId, customerId);
+    },
+    cleanup: () => input.deps.deleteClock(clockId, input.scenario),
+    reportCleanupFailure: (error) =>
+      input.deps.reportCleanupFailure({
+        resource: "test_clock",
+        scenario: input.scenario,
+        error,
+      }),
+  });
 }
 
 async function runScenario(input: {

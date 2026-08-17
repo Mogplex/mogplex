@@ -43,6 +43,9 @@ function fakeDeps(calls: RecordedCall[]): CapacityStripeTestClockDeps {
     async refundInvoice(_invoiceId, scenario) {
       calls.push({ name: "refund-invoice", scenario });
     },
+    reportCleanupFailure({ resource, scenario }) {
+      calls.push({ name: `cleanup-failed:${resource}`, scenario });
+    },
     async captureEvents(input, action) {
       calls.push({
         name: `capture:${input.expectations.map((item) => item.type).join(",")}`,
@@ -122,6 +125,66 @@ test("test-clock coverage refuses live and malformed keys before provider access
   }
 });
 
+test("test-clock coverage rejects invalid frozen times before provider access", async () => {
+  for (const frozenAt of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const calls: RecordedCall[] = [];
+    await assert.rejects(
+      runCapacityStripeTestClockCoverage({
+        secretKey: "sk_test_capacity_clock",
+        frozenAt,
+        deps: fakeDeps(calls),
+      }),
+      /frozen time is invalid/
+    );
+    assert.deepEqual(calls, []);
+  }
+});
+
+test("test-clock coverage advances month and year plans to their next billing boundaries", async () => {
+  const calls: RecordedCall[] = [];
+  await runCapacityStripeTestClockCoverage({
+    secretKey: "sk_test_capacity_clock",
+    frozenAt: 1_800_000_000,
+    deps: fakeDeps(calls),
+  });
+
+  assert.equal(
+    calls.find(
+      (call) =>
+        call.scenario === "plan-renewal:capacity_v2_pro_monthly" &&
+        call.name.startsWith("advance:")
+    )?.name,
+    "advance:1802678460"
+  );
+  assert.equal(
+    calls.find(
+      (call) =>
+        call.scenario === "plan-renewal:capacity_v2_pro_annual" &&
+        call.name.startsWith("advance:")
+    )?.name,
+    "advance:1831536060"
+  );
+});
+
+test("test-clock coverage rejects missing provider events", async () => {
+  const calls: RecordedCall[] = [];
+  const deps = fakeDeps(calls);
+  deps.captureEvents = async (input, action) => ({
+    result: await action(),
+    eventTypes: [],
+  });
+
+  await assert.rejects(
+    runCapacityStripeTestClockCoverage({
+      secretKey: "sk_test_capacity_clock",
+      frozenAt: 1_800_000_000,
+      deps,
+    }),
+    /did not emit the required events/
+  );
+  assert.equal(calls.at(-1)?.name, "delete-clock");
+});
+
 test("test-clock coverage deletes its clock when a scenario fails", async () => {
   const calls: RecordedCall[] = [];
   const deps = fakeDeps(calls);
@@ -140,6 +203,51 @@ test("test-clock coverage deletes its clock when a scenario fails", async () => 
   );
   assert.deepEqual(calls.at(-1), {
     name: "delete-clock",
+    scenario: "plan-renewal:capacity_v2_pro_monthly",
+  });
+});
+
+test("test-clock coverage preserves a scenario error when clock cleanup also fails", async () => {
+  const calls: RecordedCall[] = [];
+  const deps = fakeDeps(calls);
+  deps.advanceClock = async (input) => {
+    throw new Error(`provider failed:${input.scenario}`);
+  };
+  deps.deleteClock = async (_clockId, scenario) => {
+    throw new Error(`cleanup failed:${scenario}`);
+  };
+
+  await assert.rejects(
+    runCapacityStripeTestClockCoverage({
+      secretKey: "sk_test_capacity_clock",
+      frozenAt: 1_800_000_000,
+      deps,
+    }),
+    /provider failed:plan-renewal:capacity_v2_pro_monthly/
+  );
+  assert.deepEqual(calls.at(-1), {
+    name: "cleanup-failed:test_clock",
+    scenario: "plan-renewal:capacity_v2_pro_monthly",
+  });
+});
+
+test("test-clock coverage fails when cleanup is the only provider error", async () => {
+  const calls: RecordedCall[] = [];
+  const deps = fakeDeps(calls);
+  deps.deleteClock = async (_clockId, scenario) => {
+    throw new Error(`cleanup failed:${scenario}`);
+  };
+
+  await assert.rejects(
+    runCapacityStripeTestClockCoverage({
+      secretKey: "sk_test_capacity_clock",
+      frozenAt: 1_800_000_000,
+      deps,
+    }),
+    /cleanup failed:plan-renewal:capacity_v2_pro_monthly/
+  );
+  assert.deepEqual(calls.at(-1), {
+    name: "cleanup-failed:test_clock",
     scenario: "plan-renewal:capacity_v2_pro_monthly",
   });
 });

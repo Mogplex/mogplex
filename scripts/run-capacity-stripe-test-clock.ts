@@ -11,6 +11,7 @@ import {
   syncCapacityStripeCatalog,
 } from "../lib/billing/capacity-stripe-catalog";
 import {
+  runCapacityStripeTestResource,
   runCapacityStripeTestClockCoverage,
   type CapacityStripeTestClockDeps,
   type CapacityStripeTestClockEventType,
@@ -375,6 +376,13 @@ function stripeTestClockDeps(input: {
         metadata: metadata(scenario),
       });
     },
+    reportCleanupFailure({ resource, scenario, error }) {
+      console.error("[capacity-billing] Stripe test cleanup failed", {
+        resource,
+        scenario,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
     captureEvents: (capture, action) => input.inbox.capture(capture, action),
   };
 }
@@ -399,20 +407,26 @@ async function main() {
     deps: capacityStripeCatalogDeps(stripe),
   });
   const forwarder = await startStripeForwarder(secretKey);
-  try {
-    const report = await runCapacityStripeTestClockCoverage({
-      secretKey,
-      frozenAt: currentFrozenTime(),
-      deps: stripeTestClockDeps({
-        stripe,
-        inbox: forwarder.inbox,
-        runId: randomBytes(12).toString("hex"),
-      }),
-    });
-    console.log(JSON.stringify({ ...report, catalog }, null, 2));
-  } finally {
-    await forwarder.stop();
-  }
+  await runCapacityStripeTestResource({
+    async run() {
+      const report = await runCapacityStripeTestClockCoverage({
+        secretKey,
+        frozenAt: currentFrozenTime(),
+        deps: stripeTestClockDeps({
+          stripe,
+          inbox: forwarder.inbox,
+          runId: randomBytes(12).toString("hex"),
+        }),
+      });
+      console.log(JSON.stringify({ ...report, catalog }, null, 2));
+    },
+    cleanup: forwarder.stop,
+    reportCleanupFailure(error) {
+      console.error("[capacity-billing] Stripe forwarder cleanup failed", {
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+  });
 }
 
 // The repository compiles scripts as CommonJS, where top-level await is not
