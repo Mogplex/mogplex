@@ -119,6 +119,7 @@ export function CapacityAddOnDialog({
       }
       await onChanged();
       attemptIdRef.current = null;
+      setPending(false);
       onOpenChange(false);
     } catch (confirmError) {
       setError(
