@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Client as PgClient, Notification } from "pg";
 import { getResolvedAuth } from "@/lib/auth";
+import { getRuntimeUnpooledDatabaseUrl } from "@/lib/db/connection-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,19 +25,10 @@ export type RealtimeEventsRouteDeps = {
   createListener: () => Promise<ListenerHandle>;
 };
 
-function getUnpooledConnectionString(): string {
-  return (
-    process.env.DATABASE_URL_UNPOOLED ||
-    process.env.mogplex_DATABASE_URL_UNPOOLED ||
-    process.env.DATABASE_URL ||
-    ""
-  );
-}
-
 async function defaultCreateListener(): Promise<ListenerHandle> {
   const { Client } = await import("pg");
   const client: PgClient = new Client({
-    connectionString: getUnpooledConnectionString(),
+    connectionString: getRuntimeUnpooledDatabaseUrl(),
   });
 
   let notificationHandler: ((msg: Notification) => void) | undefined;
