@@ -11,6 +11,8 @@ test("llms.txt content follows the root markdown overview shape", () => {
   assert.match(text, /## Public pages/);
   assert.match(text, /## Documentation and source/);
   assert.match(text, /## Policies/);
+  assert.match(text, /Individual plans by Concurrency, retained data/);
+  assert.match(text, /confirm an Individual plan/);
   assert.match(text, new RegExp(absoluteUrl("/").replace(/\//g, "\\/")));
   assert.match(text, /https:\/\/docs\.mogplex\.com\//);
 });
