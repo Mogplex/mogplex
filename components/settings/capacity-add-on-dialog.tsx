@@ -112,7 +112,6 @@ export function CapacityAddOnDialog({
       setError(
         confirmError instanceof Error ? confirmError.message : "Change not submitted"
       );
-    } finally {
       setPending(false);
     }
   }

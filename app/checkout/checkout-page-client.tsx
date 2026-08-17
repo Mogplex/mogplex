@@ -79,24 +79,24 @@ function CheckoutContent() {
         setError(
           "Purchases are not configured on this deployment. Your current account remains available."
         );
+        setIsPending(false);
         return;
       }
       if (response.status === 409) {
         setError(
           "This account already has a subscription. Manage it from Billing in Settings."
         );
+        setIsPending(false);
         return;
       }
       if (!response.ok || !payload?.url) {
         setError(payload?.error ?? "Checkout failed. Try again.");
+        setIsPending(false);
         return;
       }
       window.location.assign(payload.url);
     } catch {
       setError("Network error. Try again.");
-      setIsPending(false);
-    } finally {
-      // Successful navigation replaces the page; only reset on failure paths.
       setIsPending(false);
     }
   }
