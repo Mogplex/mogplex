@@ -5,7 +5,10 @@ import {
 } from "@/lib/billing/accounts";
 import { getStripe } from "@/lib/billing/stripe";
 import { findPlanPrice, findTopupPreset } from "@/lib/billing/catalog";
-import { findCapacityRecurringPrice } from "@/lib/billing/capacity-catalog";
+import {
+  findCapacityRecurringPrice,
+  findCapacityHostedUsagePreset,
+} from "@/lib/billing/capacity-catalog";
 
 type StripeProductSummary = Pick<Stripe.Product, "id" | "metadata">;
 type StripePriceSummary = Pick<
@@ -52,11 +55,15 @@ function expectedCatalogPrice(lookupKey: string): ExpectedCatalogPrice | null {
   const preset = findTopupPreset(lookupKey);
   if (preset) return { amountCents: preset.amountCents, interval: null };
   const capacityPrice = findCapacityRecurringPrice(lookupKey);
-  return capacityPrice
-    ? {
-        amountCents: capacityPrice.amountCents,
-        interval: capacityPrice.interval,
-      }
+  if (capacityPrice) {
+    return {
+      amountCents: capacityPrice.amountCents,
+      interval: capacityPrice.interval,
+    };
+  }
+  const hostedUsage = findCapacityHostedUsagePreset(lookupKey);
+  return hostedUsage
+    ? { amountCents: hostedUsage.chargeCents, interval: null }
     : null;
 }
 

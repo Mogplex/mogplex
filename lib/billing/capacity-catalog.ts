@@ -9,6 +9,13 @@ export type CapacityPlanCode =
 export type CapacityPlanInterval = "month" | "year";
 export type CapacityAddOnKind = "concurrency" | "retained_data";
 
+export type CapacityHostedUsagePreset = {
+  lookupKey: string;
+  name: string;
+  creditCents: number;
+  chargeCents: number;
+};
+
 export type IndividualCapacityPlan = {
   code: IndividualCapacityPlanCode;
   name: string;
@@ -219,12 +226,34 @@ export const CAPACITY_ADD_ONS: readonly CapacityAddOn[] = [
   },
 ];
 
+export const CAPACITY_HOSTED_USAGE_MIN_CENTS = 1_000;
+export const CAPACITY_HOSTED_USAGE_MAX_CENTS = 100_000;
+
+export const CAPACITY_HOSTED_USAGE_PRESETS: readonly CapacityHostedUsagePreset[] =
+  [1_000, 2_500, 10_000, 25_000, 50_000, 100_000].map((creditCents) => ({
+    lookupKey: `${CAPACITY_CATALOG_VERSION}_hosted_usage_credit_${creditCents / 100}`,
+    name: `$${creditCents / 100} Hosted Usage`,
+    creditCents,
+    // Gate A approved face-value purchases with no checkout service charge.
+    chargeCents: creditCents,
+  }));
+
 const ADD_ON_BY_LOOKUP_KEY = new Map(
   CAPACITY_ADD_ONS.map((addOn) => [addOn.lookupKey, addOn])
 );
 
+const HOSTED_USAGE_BY_LOOKUP_KEY = new Map(
+  CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => [preset.lookupKey, preset])
+);
+
 export function findCapacityAddOn(lookupKey: string): CapacityAddOn | null {
   return ADD_ON_BY_LOOKUP_KEY.get(lookupKey) ?? null;
+}
+
+export function findCapacityHostedUsagePreset(
+  lookupKey: string
+): CapacityHostedUsagePreset | null {
+  return HOSTED_USAGE_BY_LOOKUP_KEY.get(lookupKey) ?? null;
 }
 
 export function findIndividualCapacityPrice(lookupKey: string): {

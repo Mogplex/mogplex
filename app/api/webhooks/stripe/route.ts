@@ -6,6 +6,11 @@ import {
   isBillingEnabled,
 } from "@/lib/billing/stripe";
 import { findPlanPrice } from "@/lib/billing/catalog";
+import {
+  assertCapacityHostedUsagePayment,
+  handleCapacityHostedUsagePaymentIfApplicable,
+  stampedUsagePurchaseCents,
+} from "@/lib/billing/capacity-hosted-usage-webhook";
 import { reconcileCapacityAnnualGrantSchedule } from "@/lib/billing/capacity-annual-grants";
 import { applyCapacityEntitlementSnapshot } from "@/lib/billing/capacity-entitlement-webhooks";
 import {
@@ -165,6 +170,14 @@ async function handlePaymentIntentSucceeded(
   paymentIntent: Stripe.PaymentIntent,
   deps: StripeWebhookDeps
 ) {
+  if (
+    await handleCapacityHostedUsagePaymentIfApplicable({
+      paymentIntent,
+      deps,
+    })
+  ) {
+    return;
+  }
   if (paymentIntent.metadata?.kind !== "topup") return;
   const accountId = paymentIntent.metadata.billing_account_id;
   if (!accountId) return;
@@ -173,7 +186,7 @@ async function handlePaymentIntentSucceeded(
   // credit_cents is the pre-tax top-up amount stamped at session creation;
   // amount_received includes automatic_tax, and collected tax must not
   // become spendable credit. Missing or invalid stamps fail closed.
-  const creditCents = stampedCreditCentsOf(paymentIntent);
+  const creditCents = stampedUsagePurchaseCents(paymentIntent);
   await deps.postLedgerEntry({
     accountId: account.id,
     deltaCents: creditCents,
@@ -185,16 +198,6 @@ async function handlePaymentIntentSucceeded(
       amount_received: paymentIntent.amount_received,
     },
   });
-}
-
-function stampedCreditCentsOf(paymentIntent: Stripe.PaymentIntent): number {
-  const stampedCredit = Number(paymentIntent.metadata.credit_cents);
-  if (!Number.isInteger(stampedCredit) || stampedCredit <= 0) {
-    throw new Error(
-      `top-up PaymentIntent ${paymentIntent.id} is missing a valid credit_cents stamp`
-    );
-  }
-  return stampedCredit;
 }
 
 async function syncSubscription(
@@ -283,12 +286,40 @@ async function syncCapacitySchedule(
   });
 }
 
+function refundedUsagePurchaseKind(
+  paymentIntent: Stripe.PaymentIntent,
+  deps: StripeWebhookDeps
+): "capacity" | "legacy" | null {
+  if (paymentIntent.metadata.kind === "hosted_usage") {
+    assertCapacityHostedUsagePayment(paymentIntent, deps);
+    return "capacity";
+  }
+  return paymentIntent.metadata.kind === "topup" ? "legacy" : null;
+}
+
+function cumulativeRefundCredit(input: {
+  cumulativeGrossCents: number;
+  grossCents: number;
+  creditedCents: number;
+}): number {
+  if (input.grossCents <= 0) return input.cumulativeGrossCents;
+  return Math.round(
+    (Math.min(input.cumulativeGrossCents, input.grossCents) *
+      input.creditedCents) /
+      input.grossCents
+  );
+}
+
+function refundLedgerDelta(reversalCents: number): number {
+  return reversalCents === 0 ? 0 : -reversalCents;
+}
+
 async function handleChargeRefunded(
   charge: Stripe.Charge,
   deps: StripeWebhookDeps
 ) {
-  // v1 only reverses top-up credit; subscription refunds are a support flow
-  // with no automatic ledger impact. The topup metadata lives on the
+  // Only hosted-usage purchases are reversed automatically; subscription
+  // refunds remain a support flow. Purchase metadata lives on the
   // PaymentIntent (set via payment_intent_data at checkout) — Stripe does
   // NOT copy PI metadata onto the Charge, so it must be fetched.
   const paymentIntentId =
@@ -297,7 +328,8 @@ async function handleChargeRefunded(
       : charge.payment_intent?.id;
   if (!paymentIntentId) return;
   const paymentIntent = await deps.retrievePaymentIntent(paymentIntentId);
-  if (paymentIntent.metadata.kind !== "topup") return;
+  const purchaseKind = refundedUsagePurchaseKind(paymentIntent, deps);
+  if (!purchaseKind) return;
   const accountId = paymentIntent.metadata.billing_account_id;
   if (!accountId) return;
   const account = await deps.findAccountById(accountId);
@@ -305,7 +337,7 @@ async function handleChargeRefunded(
   // Reverse the credited (pre-tax) amount, not the gross refund: the ledger
   // was credited credit_cents while the charge total includes tax, so a
   // refund reverses proportionally (full refund ⇒ full credited amount).
-  const creditedCents = stampedCreditCentsOf(paymentIntent);
+  const creditedCents = stampedUsagePurchaseCents(paymentIntent);
   const grossCents = paymentIntent.amount_received;
   const refunds = (await deps.listRefunds(charge.id))
     .filter((refund) => refund.status === "succeeded")
@@ -317,22 +349,23 @@ async function handleChargeRefunded(
   let cumulativeReversalCents = 0;
   for (const refund of refunds) {
     cumulativeGrossCents += refund.amount;
-    const targetReversalCents =
-      grossCents > 0
-        ? Math.round(
-            (Math.min(cumulativeGrossCents, grossCents) * creditedCents) /
-              grossCents
-          )
-        : cumulativeGrossCents;
+    const targetReversalCents = cumulativeRefundCredit({
+      cumulativeGrossCents,
+      grossCents,
+      creditedCents,
+    });
     const reversalCents = targetReversalCents - cumulativeReversalCents;
     cumulativeReversalCents = targetReversalCents;
     await deps.postLedgerEntry({
       accountId: account.id,
-      deltaCents: reversalCents === 0 ? 0 : -reversalCents,
+      deltaCents: refundLedgerDelta(reversalCents),
       bucket: "purchased",
       kind: "refund",
       sourceRef: `refund:${refund.id}`,
       metadata: {
+        purchase_kind: purchaseKind,
+        catalog_version:
+          paymentIntent.metadata.catalog_version ?? "legacy_billing_v1",
         charge: charge.id,
         refund: refund.id,
         refund_amount: refund.amount,

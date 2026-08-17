@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import {
   CAPACITY_ADD_ONS,
   CAPACITY_CATALOG_VERSION,
+  CAPACITY_HOSTED_USAGE_PRESETS,
   INDIVIDUAL_CAPACITY_PLANS,
   type CapacityPlanInterval,
 } from "@/lib/billing/capacity-catalog";
@@ -10,7 +11,7 @@ import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 export type CapacityStripePriceSpec = {
   lookupKey: string;
   amountCents: number;
-  interval: CapacityPlanInterval;
+  interval: CapacityPlanInterval | null;
 };
 
 export type CapacityStripeProductSpec = {
@@ -79,9 +80,28 @@ const addOnProducts = CAPACITY_ADD_ONS.map(
   }
 );
 
+const hostedUsageProduct: CapacityStripeProductSpec = {
+  catalogKey: `${CAPACITY_CATALOG_VERSION}_hosted_usage`,
+  name: "Mogplex Hosted Usage",
+  description:
+    "Buy hosted usage for work that runs. Purchased balance does not expire.",
+  metadata: {
+    catalog_version: CAPACITY_CATALOG_VERSION,
+    kind: "hosted_usage",
+    balance_bucket: "purchased",
+    expires: "never",
+  },
+  prices: CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => ({
+    lookupKey: preset.lookupKey,
+    amountCents: preset.chargeCents,
+    interval: null,
+  })),
+};
+
 export const CAPACITY_STRIPE_PRODUCTS: readonly CapacityStripeProductSpec[] = [
   ...planProducts,
   ...addOnProducts,
+  hostedUsageProduct,
 ];
 
 type ProductSummary = Pick<
@@ -154,7 +174,7 @@ function assertPriceMatches(
     price.lookup_key !== spec.lookupKey ||
     price.currency !== "usd" ||
     price.unit_amount !== spec.amountCents ||
-    price.recurring?.interval !== spec.interval ||
+    (price.recurring?.interval ?? null) !== spec.interval ||
     priceProductId !== productId
   ) {
     throw new Error(
@@ -171,6 +191,20 @@ export function capacityStripeCatalogDeps(
     createProduct: (params, options) => stripe.products.create(params, options),
     listPrices: (params) => stripe.prices.list(params),
     createPrice: (params, options) => stripe.prices.create(params, options),
+  };
+}
+
+function priceCreateParams(
+  spec: CapacityStripePriceSpec,
+  productId: string
+): Stripe.PriceCreateParams {
+  return {
+    product: productId,
+    lookup_key: spec.lookupKey,
+    currency: "usd",
+    unit_amount: spec.amountCents,
+    ...(spec.interval ? { recurring: { interval: spec.interval } } : {}),
+    metadata: { catalog_version: CAPACITY_CATALOG_VERSION },
   };
 }
 
@@ -238,17 +272,9 @@ export async function syncCapacityStripeCatalog(input: {
         result.pricesReused += 1;
         continue;
       }
-      await input.deps.createPrice(
-        {
-          product: productId,
-          lookup_key: priceSpec.lookupKey,
-          currency: "usd",
-          unit_amount: priceSpec.amountCents,
-          recurring: { interval: priceSpec.interval },
-          metadata: { catalog_version: CAPACITY_CATALOG_VERSION },
-        },
-        { idempotencyKey: `capacity-catalog:price:${priceSpec.lookupKey}` }
-      );
+      await input.deps.createPrice(priceCreateParams(priceSpec, productId), {
+        idempotencyKey: `capacity-catalog:price:${priceSpec.lookupKey}`,
+      });
       result.pricesCreated += 1;
     }
   }
