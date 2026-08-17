@@ -75,13 +75,33 @@ const SANDBOX_COLLISION_SELECT =
   "id, sandbox_id, repo_id, user_id, product_team_id, actor_user_id, base_branch, working_branch, snapshot_id, stop_reason, install_log, dev_log, status, preview_url, runtime, terminal_cwd, root_directory, persistent, health_status, last_preview_http_status, last_preview_error, last_boot_error, boot_attempts, last_boot_started_at, last_boot_completed_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, created_at, last_active_at";
 
 const USABLE_RECORD_STATUSES = ["running", "paused"] as const;
+const MATCHABLE_RECORD_STATUSES = [
+  ...USABLE_RECORD_STATUSES,
+  "stopped",
+  "error",
+] as const;
 
 function normalizeVercelSandboxStatus(sandbox: VercelSandboxHandle) {
   const status =
     typeof sandbox.status === "string" ? sandbox.status.toLowerCase() : "";
+  if (
+    status === "stopping" ||
+    status === "snapshotting" ||
+    status.includes("delet")
+  ) {
+    return "busy";
+  }
   if (status.includes("error") || status.includes("fail")) return "error";
-  if (status.includes("stop") || status.includes("delete")) return "stopped";
+  if (status === "stopped" || status === "aborted") return "stopped";
   return "usable";
+}
+
+function isRestartablePersistentRecord(record: SandboxRecord | null) {
+  return (
+    record?.runtime_summary.persistent === true &&
+    (record.runtime_summary.status === "stopped" ||
+      record.runtime_summary.status === "error")
+  );
 }
 
 async function loadMatchingSandboxRecord(input: {
@@ -99,7 +119,7 @@ async function loadMatchingSandboxRecord(input: {
     .eq("repo_id", input.repoId)
     .eq("user_id", input.userId)
     .eq("working_branch", input.workingBranch)
-    .in("status", [...USABLE_RECORD_STATUSES])
+    .in("status", [...MATCHABLE_RECORD_STATUSES])
     .order("created_at", { ascending: false })
     .limit(1);
 
@@ -202,6 +222,12 @@ async function getSandboxForNameCollision(
     if (!isNotFoundError(error)) throw error;
   }
 
+  // A terminal persistent DB record should only be restarted when its named
+  // provider sandbox still exists. Do not let this collision probe wake it;
+  // the restart route owns admission, resume, and bootstrap. If the provider
+  // name is gone, continue through the normal fresh-create path.
+  if (isRestartablePersistentRecord(matchingRecord)) return null;
+
   try {
     return {
       sandbox: (await deps.getSandbox(input.name, input.credentials, {
@@ -232,6 +258,8 @@ export async function resolveNameCollision(
   | { kind: "create" }
   | { kind: "adopt"; record: SandboxRecord }
   | { kind: "resume"; record: SandboxRecord }
+  | { kind: "restart"; record: SandboxRecord }
+  | { kind: "busy"; record: SandboxRecord | null }
 > {
   const deps = { ...defaultResolveNameCollisionDeps, ...overrides };
   // Load the canonical record before a resume probe so provider admission can
@@ -242,16 +270,43 @@ export async function resolveNameCollision(
   const { sandbox, revived } = probe;
 
   const vercelStatus = normalizeVercelSandboxStatus(sandbox);
-  const matchingRecordMatchesRoot =
+  const matchingRecordForRoot =
     matchingRecord &&
-    (matchingRecord.root_directory ?? null) === input.rootDirectory;
+    (matchingRecord.root_directory ?? null) === input.rootDirectory
+      ? matchingRecord
+      : null;
+  const matchingRecordNeedsRestart = isRestartablePersistentRecord(
+    matchingRecordForRoot
+  );
+  const matchingRecordIsPersistent =
+    matchingRecordForRoot?.runtime_summary.persistent === true;
+
+  // Stopping and snapshotting are provider transition states, not terminal
+  // states. Reusing the deterministic name before the transition completes
+  // produces a second DB record whose provider create is rejected. Surface a
+  // conflict instead; a later user action can safely resume or create without
+  // any application-level polling.
+  if (vercelStatus === "busy") {
+    return { kind: "busy", record: matchingRecordForRoot };
+  }
+
+  // A stopped/error persistent record already has the canonical provider
+  // identity and filesystem history. Hand it to the normal restart lifecycle,
+  // which performs admission, resumes the provider session, and bootstraps the
+  // dev server on the same record.
+  if (
+    matchingRecordIsPersistent &&
+    (matchingRecordNeedsRestart || vercelStatus === "stopped")
+  ) {
+    return { kind: "restart", record: matchingRecordForRoot };
+  }
 
   if (vercelStatus === "stopped" && isSandboxExplicitlyNonPersistent(sandbox)) {
-    if (matchingRecordMatchesRoot) {
-      await deps.stopMatchingRecord(matchingRecord);
+    if (matchingRecordForRoot) {
+      await deps.stopMatchingRecord(matchingRecordForRoot);
     }
     await deps.deleteSandbox(sandbox);
-    return { kind: "create" };
+    return { kind: "busy", record: matchingRecordForRoot };
   }
 
   // The resume probe can revive an expired non-persistent session while
@@ -261,20 +316,20 @@ export async function resolveNameCollision(
   // normal launch path so install + dev startup run again.
   if (
     revived &&
-    !matchingRecordMatchesRoot &&
+    !matchingRecordForRoot &&
     isSandboxExplicitlyNonPersistent(sandbox)
   ) {
     await deps.deleteSandbox(sandbox);
-    return { kind: "create" };
+    return { kind: "busy", record: null };
   }
 
-  if (matchingRecordMatchesRoot) {
-    return { kind: "resume", record: matchingRecord };
+  if (matchingRecordForRoot) {
+    return { kind: "resume", record: matchingRecordForRoot };
   }
 
   if (vercelStatus === "stopped" || vercelStatus === "error") {
     await deps.deleteSandbox(sandbox);
-    return { kind: "create" };
+    return { kind: "busy", record: null };
   }
 
   const adopted = await deps.insertAdoptedRecord({

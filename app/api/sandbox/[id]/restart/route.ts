@@ -199,11 +199,17 @@ async function handlePersistentRestart(
   });
 
   const encoder = new TextEncoder();
+  let cancelled = false;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const emit = (event: SandboxEvent | SandboxLifecycleConflictEvent) => {
-        controller.enqueue(encoder.encode(sseEncode(event)));
+        if (cancelled) return;
+        try {
+          controller.enqueue(encoder.encode(sseEncode(event)));
+        } catch {
+          cancelled = true;
+        }
       };
 
       emit({
@@ -384,8 +390,14 @@ async function handlePersistentRestart(
         }
         emit({ type: "error", message, phase: "dev" });
       } finally {
-        controller.close();
+        if (!cancelled) controller.close();
       }
+    },
+    cancel() {
+      // Agent callers return after the first sandbox_created event while the
+      // server continues bootstrap. Keep the lifecycle work running without
+      // writing additional events to a closed response stream.
+      cancelled = true;
     },
   });
 

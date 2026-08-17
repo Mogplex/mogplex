@@ -88,7 +88,14 @@ async function readReusedSandboxResponse(
   response: Response
 ): Promise<SandboxResolution | SandboxResolutionFailure> {
   if (!response.ok) {
-    return { error: "Failed to start sandbox", reason: "sandbox_unavailable" };
+    const data = (await response.json().catch(() => ({}))) as {
+      error?: unknown;
+    };
+    return {
+      error:
+        typeof data.error === "string" ? data.error : "Failed to start sandbox",
+      reason: "sandbox_unavailable",
+    };
   }
   const { sandbox } = await response.json();
   if (!sandbox?.id) {
