@@ -3,7 +3,7 @@ import { BillingSection } from "@/components/settings/billing-section";
 
 export const metadata: Metadata = {
   title: "Billing | Mogplex",
-  description: "Manage your Mogplex plan, balance, and top-ups.",
+  description: "Manage your Mogplex plan, capacity, and hosted usage.",
   robots: {
     index: false,
     follow: false,

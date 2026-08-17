@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -8,13 +9,10 @@ import {
   getActiveTeamRequestHeaders,
   useActiveTeamId,
 } from "@/components/active-scope-provider";
-import {
-  formatUsd,
-  PLAN_PRICES,
-  TOPUP_PRESETS,
-  type PlanInterval,
-  type PlanTier,
-} from "@/lib/billing/catalog";
+import { CapacityAddOnDialog } from "@/components/settings/capacity-add-on-dialog";
+import { CapacityBillingOverview } from "@/components/settings/capacity-billing-overview";
+import { formatDate, formatUsd } from "@/components/settings/capacity-billing-format";
+import { useCapacityBillingEvents } from "@/components/settings/use-capacity-billing-events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,101 +23,71 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  CAPACITY_ADD_ONS,
+  CAPACITY_HOSTED_USAGE_PRESETS,
+  type CapacityAddOn,
+} from "@/lib/billing/capacity-catalog";
+import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
 
-type BillingSummary = {
-  enabled: boolean;
-  billingOperationsEnabled?: boolean;
-  canManageBilling?: boolean;
-  tier?: "free" | "pro" | "team" | "business";
-  status?: "active" | "past_due" | "frozen_topups";
-  hasSubscription?: boolean;
-  hasStripeCustomer?: boolean;
-  balance?: {
-    includedCents: number;
-    purchasedCents: number;
-    totalCents: number;
-  };
-};
-
-const PLAN_DETAILS: ReadonlyArray<{
-  tier: PlanTier;
-  name: string;
-  description: string;
-}> = [
-  {
-    tier: "pro",
-    name: "Pro",
-    description: "For individual developers running agents every day.",
-  },
-  {
-    tier: "team",
-    name: "Team",
-    description: "Shared billing and pooled usage for unlimited members.",
-  },
-  {
-    tier: "business",
-    name: "Mog Mode",
-    description:
-      "Twice the Team usage pool, priority sandbox scheduling, priority support.",
-  },
-];
-
-function planName(tier: BillingSummary["tier"]): string {
-  if (tier === "pro") return "Pro";
-  if (tier === "team") return "Team";
-  if (tier === "business") return "Mog Mode";
-  return "Pay as you go";
-}
+type BillingLoadResult =
+  | { enabled: false }
+  | { enabled: true; summary: CapacityBillingSummaryV2 };
 
 async function loadBillingSummary([
   url,
   activeTeamId,
-]: [string, string | null]): Promise<BillingSummary> {
+]: [string, string | null]): Promise<BillingLoadResult> {
   const response = await fetch(url, {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
   });
-  if (response.status === 503) {
-    return { enabled: false };
-  }
-  if (!response.ok) {
-    throw new Error("Failed to load billing summary");
-  }
-  return (await response.json()) as BillingSummary;
+  if (response.status === 503) return { enabled: false };
+  if (!response.ok) throw new Error("Failed to load billing summary");
+  return {
+    enabled: true,
+    summary: (await response.json()) as CapacityBillingSummaryV2,
+  };
 }
 
 export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTeamId = useActiveTeamId();
-  const { data, error, isLoading, mutate } = useSWR<BillingSummary>(
-    ["/api/billing", activeTeamId],
+  const { data, error, isLoading, mutate } = useSWR<BillingLoadResult>(
+    ["/api/billing/capacity", activeTeamId],
     loadBillingSummary
   );
+  const [selectedAddOn, setSelectedAddOn] = useState<CapacityAddOn | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [planInterval, setPlanInterval] = useState<PlanInterval>("month");
-  const topupAttemptIds = useRef(new Map<string, string>());
+  const hostedUsageAttempts = useRef(new Map<string, string>());
   const checkoutResult = searchParams.get("billing");
   const returnPath = embedded ? `${pathname}?tab=billing` : pathname;
+  const summary = data?.enabled ? data.summary : undefined;
+  const refresh = useCallback(() => mutate(), [mutate]);
+
+  useCapacityBillingEvents({
+    activeTeamId,
+    eventSequence: summary?.account.eventSequence,
+    refresh,
+  });
 
   useEffect(() => {
-    if (checkoutResult === "topup") topupAttemptIds.current.clear();
-    if (checkoutResult === "topup" || checkoutResult === "subscribed") {
+    if (
+      checkoutResult === "hosted-usage-submitted" ||
+      checkoutResult === "plan-submitted"
+    ) {
+      hostedUsageAttempts.current.clear();
       void mutate();
     }
-    const resetBfcacheAttempts = (event: PageTransitionEvent) => {
-      if (event.persisted) topupAttemptIds.current.clear();
-    };
-    window.addEventListener("pageshow", resetBfcacheAttempts);
-    return () => window.removeEventListener("pageshow", resetBfcacheAttempts);
   }, [checkoutResult, mutate]);
 
-  function getTopupAttemptId(action: string) {
-    const existing = topupAttemptIds.current.get(action);
-    if (existing) return existing;
-    const attemptId = crypto.randomUUID();
-    topupAttemptIds.current.set(action, attemptId);
-    return attemptId;
+  function attemptIdFor(lookupKey: string): string {
+    const prior = hostedUsageAttempts.current.get(lookupKey);
+    if (prior) return prior;
+    const created = crypto.randomUUID();
+    hostedUsageAttempts.current.set(lookupKey, created);
+    return created;
   }
 
   async function redirectTo(
@@ -138,28 +106,20 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
       const payload = (await response.json()) as {
         url?: string;
         error?: string;
-        code?: string;
       };
       if (!response.ok || !payload.url) {
-        if (payload.code === "checkout_session_unavailable") {
-          topupAttemptIds.current.delete(action);
-        }
         throw new Error(payload.error ?? "Request failed");
       }
-      window.location.href = payload.url;
+      window.location.assign(payload.url);
     } catch (redirectError) {
       setActionError(
-        redirectError instanceof Error
-          ? redirectError.message
-          : "Request failed"
+        redirectError instanceof Error ? redirectError.message : "Request failed"
       );
       setPendingAction(null);
     }
   }
 
-  if (isLoading) {
-    return <Skeleton className="h-48 w-full" />;
-  }
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (error) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -167,7 +127,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
       </p>
     );
   }
-  if (!data?.enabled) {
+  if (!data?.enabled || !summary) {
     return (
       <Card>
         <CardHeader>
@@ -180,296 +140,196 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
     );
   }
 
-  const balance = data.balance ?? {
-    includedCents: 0,
-    purchasedCents: 0,
-    totalCents: 0,
-  };
-  const paymentSubmitted =
-    checkoutResult === "topup" || checkoutResult === "subscribed";
-  const canManageBilling = data.canManageBilling !== false;
-  const canStartBillingFlow =
-    canManageBilling && data.billingOperationsEnabled !== false;
-  const hasPaidPlan = data.hasSubscription || data.tier !== "free";
-  const currentPlanName = planName(data.tier);
+  const canManage = summary.account.canManageBilling;
+  const operationsEnabled = summary.billingOperationsEnabled;
+  const canBuy =
+    canManage &&
+    operationsEnabled &&
+    summary.plan.offerKind === "individual" &&
+    !summary.hostedUsage.purchasesFrozen;
+  const selectedQuantity = selectedAddOn
+    ? (summary.addOns.find(
+        (item) => item.lookupKey === selectedAddOn.lookupKey
+      )?.quantity ?? 0)
+    : 0;
+  const submitted =
+    checkoutResult === "hosted-usage-submitted" ||
+    checkoutResult === "plan-submitted";
 
   return (
     <div className="flex flex-col gap-6">
-      {paymentSubmitted ? (
-        <div
-          className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/40 p-3 text-sm"
-          role="status"
-        >
-          <span>
-            Payment submitted. Your balance updates after Stripe confirms it.
-          </span>
-          <Button variant="outline" size="sm" onClick={() => void mutate()}>
-            Refresh balance
-          </Button>
+      {submitted ? (
+        <div className="rounded-md border bg-muted/40 p-3 text-sm" role="status">
+          Payment submitted. Capacity updates after Stripe confirms the event.
         </div>
       ) : null}
+
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
               <CardTitle className="flex flex-wrap items-center gap-2">
-                <h2>{currentPlanName}</h2>
+                <h2>{summary.plan.name}</h2>
                 <Badge variant="secondary">Current plan</Badge>
-                {data.status !== "active" ? (
-                  <Badge variant="destructive">{data.status}</Badge>
+                {summary.account.status !== "active" ? (
+                  <Badge variant="destructive">
+                    {summary.account.status.replaceAll("_", " ")}
+                  </Badge>
                 ) : null}
               </CardTitle>
               <CardDescription>
-                {data.tier === "free"
-                  ? "No subscription. Add prepaid usage whenever you need it."
-                  : "Included usage resets monthly. Purchased balance never expires."}
+                {summary.account.displayName} · {summary.plan.namedUserLimit ?? "Custom"}{" "}
+                {summary.plan.namedUserLimit === 1 ? "named user" : "users"}
+                {summary.plan.renewsAt
+                  ? ` · Renews ${formatDate(summary.plan.renewsAt)}`
+                  : ""}
               </CardDescription>
             </div>
-            {canStartBillingFlow && hasPaidPlan ? (
+            {canManage && summary.plan.offerKind === "individual" ? (
               <Button
-                className="self-start"
-                disabled={pendingAction !== null}
+                disabled={!operationsEnabled || pendingAction !== null}
                 onClick={() => redirectTo("portal", "/api/stripe/portal", {})}
               >
                 {pendingAction === "portal" ? "Opening…" : "Manage plan"}
+              </Button>
+            ) : summary.plan.offerKind === "legacy" && canManage ? (
+              <Button asChild variant="outline">
+                <Link href="/pricing">Choose an Individual plan</Link>
               </Button>
             ) : null}
           </div>
         </CardHeader>
         <CardContent>
-          <p className="mb-4 text-sm font-medium">Usage balance</p>
-          <div className="flex flex-wrap gap-x-10 gap-y-4">
-            <div>
-              <p className="text-2xl font-semibold">
-                {formatUsd(balance.includedCents)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Included remaining
-              </p>
-            </div>
-            <div>
-              <p className="text-2xl font-semibold">
-                {formatUsd(balance.purchasedCents)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Purchased balance
-              </p>
-            </div>
-          </div>
+          <CapacityBillingOverview summary={summary} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            <h2>
-              {data.tier === "free" ? "Top up PAYG balance" : "Add balance"}
-            </h2>
-          </CardTitle>
+          <CardTitle><h2>Capacity add-ons</h2></CardTitle>
           <CardDescription>
-            Prepaid usage credits. Purchased balance never expires.
+            Add Concurrency or retained data without changing your plan.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {canStartBillingFlow ? (
-            TOPUP_PRESETS.map((preset) => (
-              <Button
-                key={preset.lookupKey}
-                disabled={
-                  pendingAction !== null || data.status === "frozen_topups"
-                }
-                onClick={() =>
-                  redirectTo(preset.lookupKey, "/api/stripe/checkout", {
-                    kind: "topup",
-                    preset: preset.lookupKey,
-                    attemptId: getTopupAttemptId(preset.lookupKey),
-                  })
-                }
+        <CardContent className="divide-y">
+          {CAPACITY_ADD_ONS.map((addOn) => {
+            const active = summary.addOns.find(
+              (item) => item.lookupKey === addOn.lookupKey
+            );
+            return (
+              <div
+                className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[1fr_auto_auto] sm:items-center"
+                key={addOn.lookupKey}
               >
-                {pendingAction === preset.lookupKey
-                  ? "Redirecting…"
-                  : `Top up ${formatUsd(preset.amountCents)}`}
-              </Button>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {canManageBilling
-                ? "Billing changes are not configured on this deployment."
-                : "Only a team owner or admin can add funds."}
+                <div>
+                  <p className="font-medium">{addOn.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatUsd(addOn.amountCents)}/month per quantity
+                  </p>
+                </div>
+                <p className="text-sm tabular-nums">
+                  {active ? `Quantity ${active.quantity}` : "Not added"}
+                </p>
+                <Button
+                  aria-label={`${active ? "Manage" : "Add"} ${addOn.name}`}
+                  disabled={!canBuy}
+                  onClick={() => setSelectedAddOn(addOn)}
+                  size="sm"
+                  variant="outline"
+                >
+                  {active ? "Manage" : "Add"}
+                </Button>
+              </div>
+            );
+          })}
+          {!canManage ? (
+            <p className="pt-4 text-sm text-muted-foreground">
+              Ask a company owner or admin to change billing.
             </p>
-          )}
-          {data.status === "frozen_topups" ? (
-            <p className="basis-full text-sm text-destructive">
-              Top-ups are paused for this account. Contact support for help.
+          ) : !operationsEnabled ? (
+            <p className="pt-4 text-sm text-muted-foreground">
+              Capacity changes are not configured on this deployment.
+            </p>
+          ) : summary.plan.offerKind !== "individual" ? (
+            <p className="pt-4 text-sm text-muted-foreground">
+              Contact sales to change company capacity.
             </p>
           ) : null}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="border-b">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-2">
-              <CardTitle>
-                <h2>Plans</h2>
-              </CardTitle>
-              <CardDescription>
-                {!canManageBilling
-                  ? "Only a team owner or admin can change this plan."
-                  : data.billingOperationsEnabled === false
-                    ? "Plan and balance are visible here. Billing changes are not configured on this deployment."
-                  : hasPaidPlan
-                    ? "Plan changes and cancellation are managed securely in Stripe."
-                    : "Stay on PAYG, or subscribe for usage included every month."}
-              </CardDescription>
-            </div>
-            <div
-              aria-label="Billing period"
-              className="flex w-fit shrink-0 rounded-md border bg-muted/30 p-1"
-              role="group"
-            >
-              <Button
-                aria-pressed={planInterval === "month"}
-                aria-label="Monthly billing"
-                className="h-7"
-                onClick={() => setPlanInterval("month")}
-                size="sm"
-                type="button"
-                variant={planInterval === "month" ? "secondary" : "ghost"}
-              >
-                Monthly
-              </Button>
-              <Button
-                aria-pressed={planInterval === "year"}
-                aria-label="Annual billing"
-                className="h-7"
-                onClick={() => setPlanInterval("year")}
-                size="sm"
-                type="button"
-                variant={planInterval === "year" ? "secondary" : "ghost"}
-              >
-                Annual · save 20%
-              </Button>
-            </div>
-          </div>
+        <CardHeader>
+          <CardTitle><h2>Add hosted usage</h2></CardTitle>
+          <CardDescription>
+            Purchased hosted usage keeps its face value and never expires.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="divide-y">
-          <div className="grid gap-4 py-5 first:pt-0 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
-            <div>
-              <h3 className="font-semibold">Pay as you go</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                No subscription. Buy prepaid usage only when you need it.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium">$0/month</p>
-              <p className="text-xs text-muted-foreground">No commitment</p>
-            </div>
-            {data.tier === "free" ? (
-              <Badge variant="outline">Current</Badge>
-            ) : null}
-          </div>
-
-          {PLAN_DETAILS.map((details) => {
-            const plan = PLAN_PRICES.find(
-              (candidate) =>
-                candidate.tier === details.tier &&
-                candidate.interval === planInterval
-            );
-            if (!plan) return null;
-
-            return (
-              <div
-                className="grid gap-4 py-5 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center"
-                key={details.tier}
-              >
-                <div>
-                  <h3 className="font-semibold">{details.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {details.description}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {formatUsd(plan.amountCents)}/
-                    {plan.interval === "month" ? "month" : "year"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatUsd(plan.includedUsageCents)} usage included monthly
-                  </p>
-                </div>
-                {canStartBillingFlow && !hasPaidPlan ? (
-                  <Button
-                    disabled={pendingAction !== null}
-                    onClick={() =>
-                      redirectTo(plan.lookupKey, "/api/stripe/checkout", {
-                        kind: "subscribe",
-                        plan: plan.lookupKey,
-                      })
-                    }
-                    variant="outline"
-                  >
-                    {pendingAction === plan.lookupKey
-                      ? "Redirecting…"
-                      : `Choose ${details.name}`}
-                  </Button>
-                ) : data.tier === details.tier ? (
-                  <Badge variant="outline">Current</Badge>
-                ) : null}
-              </div>
-            );
-          })}
-
-          <div className="grid gap-4 py-5 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
-            <div>
-              <h3 className="font-semibold">Enterprise</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Dedicated capacity, custom terms, invoiced billing. You talk
-                to the people who build Mogplex.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium">Contact us</p>
-              <p className="text-xs text-muted-foreground">
-                One email, no sales gauntlet
-              </p>
-            </div>
-            <Button asChild variant="outline">
-              <a href="mailto:enterprise@mogplex.com">Email us</a>
+        <CardContent className="flex flex-wrap gap-2">
+          {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => (
+            <Button
+              disabled={!canBuy || pendingAction !== null}
+              key={preset.lookupKey}
+              onClick={() =>
+                redirectTo(preset.lookupKey, "/api/billing/hosted-usage/checkout", {
+                  preset: preset.lookupKey,
+                  attemptId: attemptIdFor(preset.lookupKey),
+                })
+              }
+              variant="outline"
+            >
+              {pendingAction === preset.lookupKey
+                ? "Opening…"
+                : `Add ${formatUsd(preset.creditCents)}`}
             </Button>
-          </div>
-
-          <div className="grid gap-4 py-5 pb-0 md:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto] md:items-center">
-            <div>
-              <h3 className="font-semibold">Self-hosted</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Run the Apache-2.0 platform inside your network. The docs
-                explain the operational work.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium">Free forever</p>
-              <p className="text-xs text-muted-foreground">No license fee</p>
-            </div>
-            <Button asChild variant="outline">
-              <a href="https://github.com/mogplex/mogplex/blob/main/docs/self-hosting.md">
-                Self-hosting docs
-              </a>
-            </Button>
-          </div>
-
-          {!canManageBilling ? (
-            <p className="pt-5 text-sm text-muted-foreground">
-              Your team&apos;s balance and plan are visible here. Ask a team
-              owner or admin to make billing changes.
+          ))}
+          {summary.hostedUsage.purchasesFrozen ? (
+            <p className="basis-full pt-2 text-sm text-destructive">
+              Hosted usage purchases are paused. Contact support for help.
             </p>
           ) : null}
         </CardContent>
       </Card>
 
-      {actionError ? (
-        <p className="text-sm text-destructive">{actionError}</p>
-      ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle><h2>Recent hosted costs</h2></CardTitle>
+          <CardDescription>
+            See what used your hosted usage balance.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="divide-y">
+          {summary.recentCosts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hosted costs yet.</p>
+          ) : (
+            summary.recentCosts.map((cost) => (
+              <div className="flex items-start justify-between gap-4 py-3 first:pt-0" key={cost.operationId}>
+                <div>
+                  <p className="text-sm font-medium">{cost.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(cost.occurredAt)} · {cost.status.replaceAll("_", " ")}
+                  </p>
+                </div>
+                <p className="text-sm font-medium tabular-nums">
+                  {cost.totalCents === null ? "In progress" : formatUsd(cost.totalCents)}
+                </p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {actionError ? <p className="text-sm text-destructive" role="alert">{actionError}</p> : null}
+
+      <CapacityAddOnDialog
+        addOn={selectedAddOn}
+        currentQuantity={selectedQuantity}
+        onChanged={refresh}
+        onOpenChange={(open) => {
+          if (!open) setSelectedAddOn(null);
+        }}
+        open={selectedAddOn !== null}
+      />
     </div>
   );
 }

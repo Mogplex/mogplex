@@ -9,7 +9,7 @@ import {
   planIntentSummary,
 } from "@/lib/billing/plan-intent";
 
-type BillingInterval = "monthly" | "annual";
+type BillingInterval = "month" | "year";
 
 // The confirm step between signup and Stripe: one screen that names the plan
 // and the price, then hands off to Stripe Checkout. The proxy guarantees a
@@ -18,9 +18,9 @@ type BillingInterval = "monthly" | "annual";
 function CheckoutContent() {
   const params = useSearchParams();
   const plan = parsePlanIntent(params.get("plan"));
-  const subscribed = params.get("billing") === "subscribed";
+  const subscribed = params.get("billing") === "plan-submitted";
   const cancelled = params.get("billing") === "cancelled";
-  const [interval, setInterval] = useState<BillingInterval>("monthly");
+  const [interval, setInterval] = useState<BillingInterval>("month");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -28,16 +28,12 @@ function CheckoutContent() {
     return (
       <AuthShell
         eyebrow="Checkout"
-        title={
-          <>
-            Pick a <em className="grad">plan</em> first.
-          </>
-        }
-        subtitle="This page needs a plan to check out. The rate card lists all of them."
+        title="Pick an Individual plan first."
+        subtitle="This page needs a plan before checkout. Pricing lists each available Individual plan."
       >
         <div className="mpx-auth-card">
           <Link className="mpx-button is-primary" href="/pricing">
-            See pricing →
+            See pricing
           </Link>
         </div>
       </AuthShell>
@@ -50,16 +46,12 @@ function CheckoutContent() {
     return (
       <AuthShell
         eyebrow="Checkout"
-        title={
-          <>
-            You are on <em className="grad">{summary.name}</em>.
-          </>
-        }
-        subtitle="Payment confirmed. Your included usage is ready — connect a repo and wire your first pipeline."
+        title={`You are on ${summary.name}.`}
+        subtitle="Payment is confirmed. Your capacity will update after Stripe confirms the billing event."
       >
         <div className="mpx-auth-card" data-testid="checkout-success">
           <Link className="mpx-button is-primary" href="/">
-            Open your workspace →
+            Open your workspace
           </Link>
         </div>
       </AuthShell>
@@ -70,16 +62,12 @@ function CheckoutContent() {
     setError(null);
     setIsPending(true);
     try {
-      const lookupKey =
-        interval === "monthly"
-          ? summary.monthlyLookupKey
-          : summary.annualLookupKey;
-      const response = await fetch("/api/stripe/checkout", {
+      const response = await fetch("/api/billing/capacity/plan/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: "subscribe",
-          plan: lookupKey,
+          planCode: plan,
+          interval,
           returnPath: `/checkout?plan=${plan}`,
         }),
       });
@@ -89,23 +77,23 @@ function CheckoutContent() {
       } | null;
       if (response.status === 503) {
         setError(
-          "Paid plans are not open yet. Your account is ready — you can use PAYG now and subscribe when plans go live."
+          "Purchases are not configured on this deployment. Your current account remains available."
         );
         return;
       }
       if (response.status === 409) {
         setError(
-          "This account already has a subscription. Manage your plan from Settings → Billing."
+          "This account already has a subscription. Manage it from Billing in Settings."
         );
         return;
       }
       if (!response.ok || !payload?.url) {
-        setError(payload?.error ?? "Checkout failed — try again.");
+        setError(payload?.error ?? "Checkout failed. Try again.");
         return;
       }
       window.location.assign(payload.url);
     } catch {
-      setError("Network error — try again.");
+      setError("Network error. Try again.");
       setIsPending(false);
     } finally {
       // Successful navigation replaces the page; only reset on failure paths.
@@ -116,29 +104,26 @@ function CheckoutContent() {
   return (
     <AuthShell
       eyebrow="Checkout"
-      title={
-        <>
-          Confirm <em className="grad">{summary.name}</em>.
-        </>
-      }
+      title={`Confirm ${summary.name}.`}
       subtitle={
         <>
-          {summary.includedUsage}/mo usage included. Cancel any time from
-          settings — no call needed.{" "}
+          One named user, Concurrency {summary.concurrency},{" "}
+          {summary.retainedDataGb} GB retained data, and {summary.hostedUsage}
+          /month hosted usage. Cancel from Billing in Settings.{" "}
           <Link href="/pricing">Compare plans.</Link>
         </>
       }
       notice={
         cancelled ? (
           <div className="mpx-auth-alert is-warn">
-            checkout cancelled — nothing was charged
+            Checkout was cancelled. Nothing was charged.
           </div>
         ) : null
       }
       footer={
         <div>
-          Not ready to subscribe?{" "}
-          <Link href="/">Continue on PAYG — no monthly fee</Link>
+          Need a different capacity level?{" "}
+          <Link href="/pricing">Compare Individual plans</Link>
         </div>
       }
     >
@@ -152,24 +137,24 @@ function CheckoutContent() {
               <input
                 type="radio"
                 name="interval"
-                checked={interval === "monthly"}
-                onChange={() => setInterval("monthly")}
+                checked={interval === "month"}
+                onChange={() => setInterval("month")}
                 disabled={isPending}
               />
               <span>
-                Monthly — {summary.monthlyPrice}/mo
+                Monthly: {summary.monthlyPrice}/month
               </span>
             </label>
             <label className="flex items-center gap-2">
               <input
                 type="radio"
                 name="interval"
-                checked={interval === "annual"}
-                onChange={() => setInterval("annual")}
+                checked={interval === "year"}
+                onChange={() => setInterval("year")}
                 disabled={isPending}
               />
               <span>
-                Annual — {summary.annualPrice}/yr (20% off)
+                Annual: {summary.annualPrice}/year (save 15%)
               </span>
             </label>
           </fieldset>
@@ -185,7 +170,7 @@ function CheckoutContent() {
             disabled={isPending}
             data-testid="checkout-continue"
           >
-            {isPending ? "Opening secure checkout…" : "Continue to secure checkout →"}
+            {isPending ? "Opening secure checkout…" : "Continue to secure checkout"}
           </button>
           <p className="mono mpx-auth-muted text-[12px]">
             Payments run on Stripe. Mogplex never sees your card.
