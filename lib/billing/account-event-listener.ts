@@ -1,4 +1,5 @@
 import type { Client as PgClient, Notification } from "pg";
+import { getRuntimeUnpooledDatabaseUrl } from "@/lib/db/connection-urls";
 
 export type BillingAccountEventNotification = {
   accountId: string;
@@ -23,20 +24,11 @@ type BillingAccountEventListenerFactoryDeps = {
     | Promise<BillingAccountEventClient>;
 };
 
-function getUnpooledConnectionString(): string {
-  return (
-    process.env.DATABASE_URL_UNPOOLED ||
-    // The managed Neon/Vercel integration uses this exact project-prefixed
-    // alias, preserving the lower-case Mogplex project slug.
-    process.env.mogplex_DATABASE_URL_UNPOOLED ||
-    process.env.DATABASE_URL ||
-    ""
-  );
-}
-
 async function defaultCreateClient(): Promise<BillingAccountEventClient> {
   const { Client } = await import("pg");
-  return new Client({ connectionString: getUnpooledConnectionString() });
+  return new Client({
+    connectionString: getRuntimeUnpooledDatabaseUrl(),
+  });
 }
 
 function parseNotification(

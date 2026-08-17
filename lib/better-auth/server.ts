@@ -20,6 +20,7 @@ import {
 import { Pool } from "pg";
 import { createProfileForBetterAuthUser } from "@/lib/auth/better-auth-profile";
 import { sendAuthActionEmail } from "@/lib/email/send-auth-action-email";
+import { getRuntimeDatabaseUrl } from "@/lib/db/connection-urls";
 
 const baseURL =
   process.env.BETTER_AUTH_URL ||
@@ -122,10 +123,7 @@ export const auth = betterAuth({
     : {}),
   trustedOrigins: getTrustedOrigins,
   database: new Pool({
-    // mogplex_DATABASE_URL is the Neon Vercel-integration var (managed,
-    // auto-rotating); unprefixed DATABASE_URL covers local dev and CI.
-    connectionString:
-      process.env.DATABASE_URL || process.env.mogplex_DATABASE_URL,
+    connectionString: getRuntimeDatabaseUrl(),
     max: 5,
   }),
   advanced: {

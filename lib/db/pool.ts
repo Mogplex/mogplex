@@ -2,6 +2,7 @@
 // without DATABASE_URL (CI builds, Supabase-backend deployments) stays
 // side-effect-free — the pool only connects on first query.
 import { Pool, types } from "pg";
+import { getRuntimeDatabaseUrl } from "@/lib/db/connection-urls";
 
 const toNumber = Number;
 
@@ -70,10 +71,7 @@ let pool: Pool | null = null;
 export function getNeonPool(): Pool {
   if (!pool) {
     pool = new Pool({
-      // mogplex_DATABASE_URL is the Neon Vercel-integration var (managed,
-      // auto-rotating); unprefixed DATABASE_URL covers local dev and CI.
-      connectionString:
-        process.env.DATABASE_URL || process.env.mogplex_DATABASE_URL,
+      connectionString: getRuntimeDatabaseUrl(),
       max: 5,
       types: {
         getTypeParser: (oid: number, format?: string) =>
