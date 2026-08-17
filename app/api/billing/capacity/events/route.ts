@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
-import type { Client as PgClient, Notification } from "pg";
 import { requireUserId } from "@/lib/auth";
 import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
+import {
+  createBillingAccountEventListener,
+  type BillingAccountEventListener,
+} from "@/lib/billing/account-event-listener";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+
+export type {
+  BillingAccountEventListener,
+  BillingAccountEventNotification,
+} from "@/lib/billing/account-event-listener";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,18 +47,6 @@ export type BillingAccountEventRecord = {
   committed_at: string;
 };
 
-type BillingAccountEventNotification = {
-  accountId: string;
-  sequence: string;
-};
-
-export type BillingAccountEventListener = {
-  onNotification: (
-    handler: (payload: BillingAccountEventNotification) => void
-  ) => void;
-  end: () => Promise<void>;
-};
-
 type BillingAccountEventsRouteDeps = {
   requireUserId: typeof requireUserId;
   resolveProductResourceScope: typeof resolveProductResourceScope;
@@ -62,15 +58,6 @@ type BillingAccountEventsRouteDeps = {
   }) => Promise<BillingAccountEventRecord[]>;
   createListener: () => Promise<BillingAccountEventListener>;
 };
-
-function getUnpooledConnectionString(): string {
-  return (
-    process.env.DATABASE_URL_UNPOOLED ||
-    process.env.mogplex_DATABASE_URL_UNPOOLED ||
-    process.env.DATABASE_URL ||
-    ""
-  );
-}
 
 async function defaultLoadEventsAfter(input: {
   accountId: string;
@@ -88,55 +75,6 @@ async function defaultLoadEventsAfter(input: {
     throw new Error(`billing account event lookup failed: ${error.message}`);
   }
   return (data as BillingAccountEventRecord[] | null) ?? [];
-}
-
-async function defaultCreateListener(): Promise<BillingAccountEventListener> {
-  const { Client } = await import("pg");
-  const client: PgClient = new Client({
-    connectionString: getUnpooledConnectionString(),
-  });
-  let notificationHandler: ((message: Notification) => void) | undefined;
-
-  await client.connect();
-  await client.query("LISTEN mogplex_billing_account_events");
-
-  return {
-    onNotification: (handler) => {
-      notificationHandler = (message) => {
-        if (
-          message.channel !== "mogplex_billing_account_events" ||
-          !message.payload
-        ) {
-          return;
-        }
-        try {
-          const parsed = JSON.parse(
-            message.payload
-          ) as Partial<BillingAccountEventNotification>;
-          if (
-            typeof parsed.accountId === "string" &&
-            typeof parsed.sequence === "string" &&
-            /^\d+$/.test(parsed.sequence)
-          ) {
-            handler({
-              accountId: parsed.accountId,
-              sequence: parsed.sequence,
-            });
-          }
-        } catch {
-          // A malformed notification is ignored. Durable rows are replayed
-          // after the next valid account notification or reconnect.
-        }
-      };
-      client.on("notification", notificationHandler);
-    },
-    end: async () => {
-      if (notificationHandler) {
-        client.off("notification", notificationHandler);
-      }
-      await client.end();
-    },
-  };
 }
 
 function parseCursor(request: Request): string | null {
@@ -203,7 +141,7 @@ export function createBillingAccountEventsGetHandler(
     resolveProductResourceScope,
     getOrCreateBillingAccount,
     loadEventsAfter: defaultLoadEventsAfter,
-    createListener: defaultCreateListener,
+    createListener: createBillingAccountEventListener,
     ...overrides,
   };
 
@@ -245,7 +183,8 @@ export function createBillingAccountEventsGetHandler(
     }
 
     // Keep Playwright's network-idle waits finite. Production never sets this
-    // variable, and authorization/account resolution still run first.
+    // variable. Exact account resolution intentionally runs first so this test
+    // path exercises the same account boundary as the production stream.
     if (process.env.PLAYWRIGHT === "1") {
       return new Response(null, { status: 204 });
     }
@@ -276,6 +215,7 @@ export function createBillingAccountEventsGetHandler(
         };
 
         const fail = async (error: unknown) => {
+          if (closed) return;
           console.error("[capacity-billing-events] stream failed", {
             accountId,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -297,6 +237,7 @@ export function createBillingAccountEventsGetHandler(
               afterSequence: latestSequence.toString(),
               limit: EVENT_PAGE_SIZE,
             });
+            if (closed) return;
             for (const row of rows) {
               const event = parseEvent(row, accountId);
               const sequence = BigInt(event.sequence);

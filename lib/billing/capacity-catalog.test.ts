@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type Stripe from "stripe";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -24,6 +25,13 @@ import {
 } from "./capacity-stripe-catalog";
 
 const NOW = new Date("2026-08-16T12:00:00.000Z");
+const BILLING_ACCOUNT_EVENTS_MIGRATION = readFileSync(
+  new URL(
+    "../../neon/migrations/20260817020000_capacity_billing_account_events.sql",
+    import.meta.url
+  ),
+  "utf8"
+);
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -62,6 +70,16 @@ describe("capacity pricing catalog", () => {
     });
     expect(CONTRACT_CAPACITY_PLANS.business.concurrency).toBeNull();
     expect(CONTRACT_CAPACITY_PLANS.enterprise.hostedUsageCents).toBeNull();
+  });
+
+  it("keeps billing failure events aligned with Individual plan codes", () => {
+    const triggerClause = BILLING_ACCOUNT_EVENTS_MIGRATION.match(
+      /new\.plan_code in \(([^)]+)\)/
+    )?.[1];
+    const triggerPlans = triggerClause?.match(/'[^']+'/g);
+    expect(triggerPlans?.map((plan) => plan.slice(1, -1)).sort()).toEqual(
+      Object.keys(INDIVIDUAL_CAPACITY_PLANS).sort()
+    );
   });
 
   it("pins the approved recurring add-on schedule", () => {

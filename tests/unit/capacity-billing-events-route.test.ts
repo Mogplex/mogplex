@@ -239,3 +239,51 @@ test("billing event stream fails closed if a durable row crosses scope", async (
   assert.equal(ended, 1);
   assert.equal(logged.mock.callCount(), 1);
 });
+
+test("billing event stream treats cancellation during replay as a clean close", async (context) => {
+  const { createBillingAccountEventsGetHandler } = await loadRoute();
+  const logged = context.mock.method(console, "error", () => {});
+  let ended = 0;
+  let startLoad!: () => void;
+  let finishLoad!: (rows: BillingAccountEventRecord[]) => void;
+  const loadStarted = new Promise<void>((resolve) => {
+    startLoad = resolve;
+  });
+  const rows = new Promise<BillingAccountEventRecord[]>((resolve) => {
+    finishLoad = resolve;
+  });
+  let rowsVisited = 0;
+  const cancelledRow = eventRow(1);
+  Object.defineProperty(cancelledRow, "account_id", {
+    enumerable: true,
+    get: () => {
+      rowsVisited += 1;
+      return "account-1";
+    },
+  });
+  const handler = createBillingAccountEventsGetHandler({
+    requireUserId: async () => "user-1",
+    resolveProductResourceScope: async () => personalScopeResolution,
+    getOrCreateBillingAccount: async () => account,
+    createListener: async () => createMockListener(() => (ended += 1)),
+    loadEventsAfter: async () => {
+      startLoad();
+      return rows;
+    },
+  });
+
+  const response = await handler(
+    new Request("https://example.com/api/billing/capacity/events?after=0")
+  );
+  const reader = response.body!.getReader();
+  await reader.read();
+  await loadStarted;
+  await reader.cancel();
+  finishLoad([cancelledRow]);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(ended, 1);
+  assert.equal(rowsVisited, 0);
+  assert.equal(logged.mock.callCount(), 0);
+});
