@@ -13,6 +13,7 @@ export type AutomationJobInput = {
   jobRunId: string;
   startedAt: string;
   releasedScope: ReleasedAutomationScope;
+  billingAccountId?: string | null;
 };
 
 export type ReleasedAutomationScope = Pick<
