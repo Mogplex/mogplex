@@ -155,7 +155,7 @@ describe("sandbox resolution contract", () => {
       Response.json(
         {
           error:
-            "The existing sandbox is still stopping. Start it again after shutdown completes.",
+            "Mogplex must finish cleanup for the previous sandbox. Start it again in a moment.",
           code: "sandbox_transition_in_progress",
         },
         { status: 409 }
@@ -165,7 +165,7 @@ describe("sandbox resolution contract", () => {
       resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
     ).resolves.toEqual({
       error:
-        "The existing sandbox is still stopping. Start it again after shutdown completes.",
+        "Mogplex must finish cleanup for the previous sandbox. Start it again in a moment.",
       reason: "sandbox_unavailable",
     });
   });

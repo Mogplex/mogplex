@@ -83,7 +83,7 @@ test("POST /api/sandbox returns a conflict without creating a record while Verce
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), {
     error:
-      "The existing sandbox is still stopping. Start it again after shutdown completes.",
+      "Mogplex must finish cleanup for the previous sandbox. Start it again in a moment.",
     code: "sandbox_transition_in_progress",
     sandboxId: "sandbox-stopping-1",
   });
