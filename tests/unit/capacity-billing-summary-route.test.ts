@@ -39,6 +39,7 @@ const summary: CapacityBillingSummaryV2 = {
   billingOperationsEnabled: false,
   account: {
     id: "account-1",
+    eventSequence: "0",
     scope: "personal",
     displayName: "Personal workspace",
     status: "active",

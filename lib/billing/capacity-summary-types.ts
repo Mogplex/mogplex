@@ -10,6 +10,7 @@ export type CapacityBillingSummaryV2 = {
   billingOperationsEnabled: boolean;
   account: {
     id: string;
+    eventSequence: string;
     scope: "personal" | "team";
     displayName: string;
     status: "active" | "past_due" | "read_only" | "frozen_purchases";
@@ -103,6 +104,7 @@ export type CapacityBillingSummaryCost = {
 
 export type CapacityBillingAccountProjection = {
   id: string;
+  billing_event_sequence: number | string;
   owner_type: "user" | "team";
   tier: "free" | "pro" | "team" | "business";
   status: "active" | "past_due" | "frozen_topups";

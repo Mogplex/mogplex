@@ -301,6 +301,10 @@ export function buildCapacityBillingSummary(input: {
     billingOperationsEnabled: input.billingOperationsEnabled,
     account: {
       id: facts.account.id,
+      eventSequence: nonnegativeBigInt(
+        facts.account.billing_event_sequence,
+        "billing event sequence"
+      ).toString(),
       scope: input.scope,
       displayName: scopeDisplayName(input.scope),
       status: customerStatus(facts.account.status),

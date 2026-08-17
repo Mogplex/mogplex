@@ -10,6 +10,7 @@ function capacityFacts(
   return {
     account: {
       id: "account-1",
+      billing_event_sequence: 12,
       owner_type: "user",
       tier: "pro",
       status: "active",
@@ -114,6 +115,7 @@ describe("capacity billing summary", () => {
       billingOperationsEnabled: false,
       account: {
         id: "account-1",
+        eventSequence: "12",
         scope: "personal",
         displayName: "Personal workspace",
         status: "active",

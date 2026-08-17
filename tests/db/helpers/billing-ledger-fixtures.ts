@@ -52,6 +52,7 @@ const BILLING_MIGRATIONS = [
   "20260816180000_capacity_entitlement_webhook_projection.sql",
   "20260816190000_capacity_annual_grant_schedules.sql",
   "20260816200000_capacity_entitlement_schedule_projection.sql",
+  "20260817020000_capacity_billing_account_events.sql",
 ];
 
 export async function createBillingTestDb(): Promise<PGlite> {
