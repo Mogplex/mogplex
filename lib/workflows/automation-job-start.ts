@@ -72,6 +72,7 @@ async function startTriggerAutomationRun(
       sourceKind: input.releasedScope.sourceKind,
       repoId: input.releasedScope.repoId,
       installationId: input.releasedScope.installationId,
+      billingAccountId: input.billingAccountId,
       startSource,
     },
   });
@@ -314,6 +315,7 @@ export async function startAutomationJobRun(
         jobRunId,
         startedAt: claim.startedAt,
         releasedScope,
+        billingAccountId: capacity.accountId,
       },
       source
     );
