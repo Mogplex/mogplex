@@ -13,8 +13,11 @@ export function useCapacityBillingEvents(input: {
   useEffect(() => {
     if (!eventSequence) return;
     const controller = new AbortController();
+    let listening = false;
 
     async function listen() {
+      if (listening || controller.signal.aborted) return;
+      listening = true;
       try {
         const response = await fetch(
           `/api/billing/capacity/events?after=${encodeURIComponent(eventSequence!)}`,
@@ -38,11 +41,25 @@ export function useCapacityBillingEvents(input: {
           }
         }
       } catch {
-        // Keep the last durable summary. A later navigation opens a new stream.
+        // Keep the last durable summary until an event-driven reconnect.
+      } finally {
+        listening = false;
       }
     }
 
+    const reconnectWhenActive = () => {
+      if (document.visibilityState === "visible") void listen();
+    };
+
     void listen();
-    return () => controller.abort();
+    window.addEventListener("focus", reconnectWhenActive);
+    window.addEventListener("online", reconnectWhenActive);
+    document.addEventListener("visibilitychange", reconnectWhenActive);
+    return () => {
+      controller.abort();
+      window.removeEventListener("focus", reconnectWhenActive);
+      window.removeEventListener("online", reconnectWhenActive);
+      document.removeEventListener("visibilitychange", reconnectWhenActive);
+    };
   }, [activeTeamId, eventSequence, refresh]);
 }

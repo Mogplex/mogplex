@@ -45,7 +45,7 @@ export function CapacityBillingOverview({
   const grossHostedRemaining =
     summary.hostedUsage.includedRemainingCents +
     summary.hostedUsage.purchasedRemainingCents;
-  const hostedPercent = grossHostedRemaining
+  const hostedAvailablePercent = grossHostedRemaining
     ? (summary.hostedUsage.spendableCents / grossHostedRemaining) * 100
     : 0;
 
@@ -69,7 +69,7 @@ export function CapacityBillingOverview({
         blocked={summary.hostedUsage.spendableCents <= 0}
         detail={`${formatUsd(summary.hostedUsage.openReservationsCents)} reserved · resets ${formatDate(summary.hostedUsage.grantResetsAt)}`}
         name="Hosted usage"
-        percent={clampPercent(hostedPercent)}
+        percent={clampPercent(100 - hostedAvailablePercent)}
         value={`${formatUsd(summary.hostedUsage.spendableCents)} available`}
       />
     </div>
