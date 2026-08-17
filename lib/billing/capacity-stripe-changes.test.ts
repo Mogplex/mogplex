@@ -277,6 +277,23 @@ test("preview rejects action mismatches and ineligible accounts", async () => {
     }),
     (error: CapacityChangeError) => error.code === "self_service_unavailable"
   );
+  await assert.rejects(
+    previewCapacityChange({
+      account: accountFixture({
+        owner_type: "team",
+        owner_user_id: null,
+        product_team_id: "team-1",
+      }),
+      request: {
+        lookupKey: "capacity_v2_concurrency_10_monthly",
+        quantity: 1,
+        effectiveAction: "increase",
+      },
+      signingSecret: "secret",
+      deps: depsFixture(),
+    }),
+    (error: CapacityChangeError) => error.code === "self_service_unavailable"
+  );
 });
 
 test("preview and confirmation fail closed before Stripe access", async () => {
