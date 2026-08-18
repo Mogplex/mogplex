@@ -20,11 +20,11 @@ import { useFlowAssistantPanel } from "@/hooks/use-flow-assistant-panel"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { CursorPointer, Github, Settings, SidebarCollapse, SidebarExpand, Xmark } from "iconoir-react"
+import { CursorPointer, Plus, Settings, SidebarCollapse, SidebarExpand, Xmark } from "iconoir-react"
 import {
   type AutomationHarnessesResponse,
   FLOW_FIT_VIEW_OPTIONS, FLOW_CANVAS_BACKGROUND, FLOW_CANVAS_VIGNETTE_BACKGROUND, FLOW_ACTION_OPTIONS, AUTOSAVE_DELAY_MS, PUBLISH_SUCCESS_STATE_MS,
-  ResponsiveMiniMap, NODE_TYPES, WorkflowSelect, installationAccountTypeLabel, installationAccountLabel, RepositoryScopePicker,
+  ResponsiveMiniMap, NODE_TYPES,
   CanvasContextMenu, SaveTemplateDialog, DeleteTemplateDialog, RunsTabContent, ExecutionBar,
   ConditionInspector, ParallelInspector, JoinInspector, DelayInspector, EndInspector,
   EditorToolbarHeader, EditorToolbarWrappedName, EditorToolbarLegacyBanner,
@@ -37,6 +37,14 @@ import {
   useFlowDerivedRuns,
   useFlowDerivedCanvas,
 } from "./flows-pane/index"
+import {
+  AutomationsEmptyState,
+  AutomationsPageHeader,
+  type AutomationCreateState,
+} from "./flows-pane/automations-page-chrome"
+import { FlowTemplatePicker } from "./flows-pane/template-picker-popover"
+import { FlowBrowseFilters } from "./flows-pane/browse-filters"
+import { scopedHref } from "@/lib/scoped-href"
 
 const fetcher = async (url: string) => {
   const response = await fetch(url)
@@ -47,7 +55,7 @@ const fetcher = async (url: string) => {
   return response.json()
 }
 
-export function FlowsPane() {
+export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automations" } = {}) {
   const { scope } = useParams<{ scope: string }>()
   const { resolvedTheme } = useTheme()
   const canvasColorMode: ColorMode = resolvedTheme === "dark" ? "dark" : "light"
@@ -129,6 +137,7 @@ export function FlowsPane() {
   const { agents } = useAgents()
   const { repos } = useRepos()
   const { models, defaultModelId, hiddenModelIds, isLoading: modelsLoading } = useModels()
+  const isAutomationsPage = surface === "automations"
 
   // State hooks
   const {
@@ -328,25 +337,52 @@ export function FlowsPane() {
     pasteCanvasItems, selectAllCanvasAgents, clearCanvasSelection, deleteSelectedCanvasItems,
   })
 
+  const createState: AutomationCreateState = installations === undefined ? "loading"
+    : installations.length > 0 ? "ready" : "needs-connection"
+  const connectionsHref = scope
+    ? scopedHref(scope, "/settings?tab=connections")
+    : "/settings?tab=connections"
+  const openCreateFlow = () => {
+    setSidebarCollapsed(false)
+    setTemplatePickerOpen(true)
+  }
+  const showFirstAutomationState = isAutomationsPage
+    && !isLoading
+    && flows?.length === 0
+
   return (
     <div className="flows-pane relative flex h-full min-h-0 flex-col bg-background">
-      <div data-testid="flow-browser-filters" className="flex h-12 min-h-12 items-center gap-2 border-b border-border bg-card px-3">
-        <div className="mr-1 hidden shrink-0 items-center gap-2 @5xl/flows:flex">
-          <Github className="size-3.5 text-muted-foreground" />
-          <span className="text-[9px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">Viewing</span>
-        </div>
-        <div className="min-w-0 max-w-[220px] flex-1">
-          <WorkflowSelect testId="flow-browser-account" ariaLabel="Filter workflows by GitHub account" value={browseInstallationId}
-            onValueChange={(v) => { setBrowseInstallationId(v); setBrowseRepositories([]) }}
-            className="h-8 w-full min-w-0 rounded-md border border-border bg-input px-2.5 text-[11px] font-medium text-foreground"
-            options={[{ value: "all", label: "All GitHub accounts" }, ...(installations || []).map((i) => ({ value: String(i.installation_id), label: `${installationAccountLabel(i)} · ${installationAccountTypeLabel(i.account_type)}` }))]} />
-        </div>
-        <div className="min-w-0 max-w-[260px] flex-1">
-          <RepositoryScopePicker accountLabel={browseAccountLabel} options={browseRepositoryOptions.map((r) => r.full_name)} selected={browseRepositories} onChange={setBrowseRepositories}
-            ariaLabel="Filter workflows by repository" compact testId="flow-browser-repository" optionTestIdPrefix="flow-browser-repository-option" menuLabel="Repository filter" description="Choose which repositories are visible in the workflow list." />
-        </div>
-        <span className="ml-auto hidden shrink-0 text-[10px] text-muted-foreground @3xl/flows:inline" title="These filters change what is visible, not when a workflow runs.">{visibleFlows.length} of {(flows || []).length} workflows</span>
-      </div>
+      {isAutomationsPage ? (
+        <AutomationsPageHeader totalCount={flows?.length ?? 0} activeCount={(flows ?? []).filter((flow) => flow.status === "active").length}
+          createState={createState} connectionsHref={connectionsHref} onCreate={openCreateFlow} />
+      ) : null}
+      {showFirstAutomationState ? (
+        <AutomationsEmptyState createState={createState} connectionsHref={connectionsHref} onCreate={openCreateFlow} templatePicker={(
+            <FlowTemplatePicker
+              open={templatePickerOpen} onOpenChange={setTemplatePickerOpen} side="bottom" align="start"
+              isCreating={isCreating} installations={installations ?? []} createInstallationId={createInstallationId}
+              onCreateInstallationChange={setCreateInstallationId} createRepository={createRepository}
+              onCreateRepositoryChange={setCreateRepository} createRepositoryOptions={createRepositoryOptions}
+              personalTemplates={personalTemplates} personalTemplatesHaveMore={personalTemplatesHaveMore} personalTemplatesLoadingMore={personalTemplatesLoadingMore}
+              onLoadMorePersonalTemplates={() => void setPersonalTemplatePageCount(personalTemplatePageCount + 1)}
+              teamTemplates={teamTemplates} teamTemplatesHaveMore={teamTemplatesHaveMore} teamTemplatesLoadingMore={teamTemplatesLoadingMore}
+              onLoadMoreTeamTemplates={() => void setTeamTemplatePageCount(teamTemplatePageCount + 1)}
+              teamTemplatesCanWrite={teamTemplatesCanWrite} savingTemplate={savingTemplate} selectedFlow={selectedFlow ?? null} activeTeamId={activeTeamId}
+              onCreateFlow={(templateId, savedTemplate, savedTemplateScope) => void createFlow(templateId, savedTemplate, savedTemplateScope)}
+              onDeleteTemplate={(template, templateScope) => {
+                setTemplatePickerOpen(false); setTemplateDeleteTarget({ template, scope: templateScope })
+              }} onSaveAsTemplate={() => undefined} trigger={(
+                <Button type="button" data-testid="automations-empty-new">
+                  <Plus className="mr-2 size-3.5" />New automation
+                </Button>
+              )}
+            />
+          )} />
+      ) : (
+      <>
+      <FlowBrowseFilters browseInstallationId={browseInstallationId} onInstallationChange={(value) => { setBrowseInstallationId(value); setBrowseRepositories([]) }} browseAccountLabel={browseAccountLabel}
+        repositoryOptions={browseRepositoryOptions.map((repository) => repository.full_name)} repositories={browseRepositories} onRepositoriesChange={setBrowseRepositories}
+        installations={installations ?? []} visibleCount={visibleFlows.length} totalCount={(flows ?? []).length} />
       {sidebarCollapsed && <button type="button" onClick={() => setSidebarCollapsed(false)} aria-label="Expand sidebar" title="Expand sidebar" className="absolute left-3 top-[60px] z-30 grid size-8 place-items-center rounded-md border border-border bg-card/95 text-muted-foreground shadow-sm transition-colors hover:border-foreground/25 hover:text-foreground"><SidebarExpand className="size-4" /></button>}
       {inspectorDockCollapsed && <button type="button" onClick={() => setInspectorCollapsed(false)} aria-label="Expand inspector" title="Expand inspector" className="flows-inspector-dock-toggle absolute right-3 top-[60px] z-30 size-8 place-items-center rounded-md border border-border bg-card/95 text-muted-foreground shadow-sm transition-colors hover:border-foreground/25 hover:text-foreground"><SidebarExpand className="size-4 rotate-180" /></button>}
       <div ref={paneGridRef} style={{ "--flows-panel-width": `${panelWidth}px` } as CSSProperties}
@@ -369,7 +405,8 @@ export function FlowsPane() {
                   <EditorToolbarHeader draft={draft} selectedFlow={selectedFlow} flowRuns={flowRuns} flowSuccessRateLabel={flowSuccessRateLabel} dirty={dirty} saveStatus={saveStatus} saveStatusLabel={saveStatusLabel} saveStatusTitle={saveStatusTitle}
                     quietSaveStatus={quietSaveStatus} saveStatusTone={saveStatusTone} saveStatusAnnouncement={saveStatusAnnouncement} saving={saving} publishing={publishing} primaryModifierLabel={primaryModifierLabel} primaryActionLabel={primaryActionLabel}
                     primaryActionClassName={primaryActionClassName} shouldPublishLatestDraft={shouldPublishLatestDraft} canUndo={canUndo} canRedo={canRedo} onFlowNameChange={handleFlowNameChange} onAddAgent={() => addNode("agent")} onUndo={undoDraft}
-                    onRedo={redoDraft} onDuplicateFlow={() => void duplicateSelectedFlow()} onDeleteFlow={() => void deleteSelectedFlow()} onPersist={() => void persistFlow({ reason: "manual" })} onPublish={() => void publishFlow()} onToggleStatus={() => void toggleFlowStatus()} />
+                    onRedo={redoDraft} onDuplicateFlow={() => void duplicateSelectedFlow()} onDeleteFlow={() => void deleteSelectedFlow()} onPersist={() => void persistFlow({ reason: "manual" })} onPublish={() => void publishFlow()} onToggleStatus={() => void toggleFlowStatus()}
+                    onConfigureTrigger={() => { if (currentTriggerNode) selectCanvasNode(currentTriggerNode.id) }} />
                   <TabsList data-testid="flow-view-tabs" className="col-span-2 row-start-2 h-8 shrink-0 justify-self-start gap-1 border border-border bg-card/80 p-1 shadow-sm @lg/flows-editor:col-auto @lg/flows-editor:row-auto @lg/flows-editor:justify-self-auto">
                     <TabsTrigger value="editor" className="h-6 rounded-sm px-2.5 py-1 text-[11px]">Canvas</TabsTrigger>
                     <TabsTrigger value="runs" data-testid="flows-runs-tab" className="h-6 rounded-sm px-2.5 py-1 text-[11px]">Runs{flowRuns.length > 0 && <span className="ml-1.5 text-muted-foreground">({flowRuns.length})</span>}</TabsTrigger>
@@ -456,6 +493,8 @@ export function FlowsPane() {
       </div>
       <SaveTemplateDialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen} saveTemplateName={saveTemplateName} onNameChange={setSaveTemplateName} saveTemplateScope={saveTemplateScope} onScopeChange={setSaveTemplateScope} savingTemplate={savingTemplate} onSave={() => void saveSelectedFlowAsTemplate()} activeTeamId={activeTeamId} teamTemplatesCanWrite={teamTemplatesCanWrite} />
       <DeleteTemplateDialog templateDeleteTarget={templateDeleteTarget} onOpenChange={setTemplateDeleteTarget} deletingTemplate={deletingTemplate} onDelete={() => void deleteSavedTemplate()} />
+      </>
+      )}
     </div>
   )
 }

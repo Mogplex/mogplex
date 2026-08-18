@@ -2,11 +2,6 @@
 
 import { useMemo } from "react"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
   Github,
   Plus,
   Search,
@@ -23,11 +18,8 @@ import type { Installation } from "./types"
 import { WorkflowSelect } from "./inspector-shared"
 import { FlowLibraryNodeButton } from "./node-shells"
 import {
-  TemplatePickerHeader,
-  TemplateSection,
-  StarterTemplatesList,
-  SaveTemplateButton,
-} from "./template-picker"
+  FlowTemplatePicker,
+} from "./template-picker-popover"
 
 export interface NodeLibrarySidebarProps {
   sidebarCollapsed: boolean
@@ -210,7 +202,7 @@ export function NodeLibrarySidebar({
                     }))
               }
             />
-            <TemplatePickerPopover
+            <FlowTemplatePicker
               open={templatePickerOpen}
               onOpenChange={onTemplatePickerOpenChange}
               isCreating={isCreating}
@@ -235,6 +227,17 @@ export function NodeLibrarySidebar({
               onCreateFlow={onCreateFlow}
               onDeleteTemplate={onDeleteTemplate}
               onSaveAsTemplate={onSaveAsTemplate}
+              trigger={(
+                <button
+                  type="button"
+                  disabled={!createInstallationId || isCreating}
+                  className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-input text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground disabled:opacity-40"
+                  aria-label={isCreating ? "Creating workflow" : "New workflow"}
+                  title={isCreating ? "Creating..." : "New workflow"}
+                >
+                  <Plus className="size-3.5" />
+                </button>
+              )}
             />
           </div>
         </div>
@@ -349,138 +352,3 @@ export function NodeLibrarySidebar({
     </aside>
   )
 }
-
-interface TemplatePickerPopoverProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  isCreating: boolean
-  installations: Installation[]
-  createInstallationId: string
-  onCreateInstallationChange: (value: string) => void
-  createRepository: string
-  onCreateRepositoryChange: (value: string) => void
-  createRepositoryOptions: Array<{ full_name: string }>
-  personalTemplates: PersonalFlowTemplate[]
-  personalTemplatesHaveMore: boolean
-  personalTemplatesLoadingMore: boolean
-  onLoadMorePersonalTemplates: () => void
-  teamTemplates: PersonalFlowTemplate[]
-  teamTemplatesHaveMore: boolean
-  teamTemplatesLoadingMore: boolean
-  onLoadMoreTeamTemplates: () => void
-  teamTemplatesCanWrite: boolean
-  savingTemplate: boolean
-  selectedFlow: { id: string; name: string } | null
-  activeTeamId: string | null
-  onCreateFlow: (
-    templateId: FlowStarterTemplateId | null,
-    savedTemplate?: PersonalFlowTemplate,
-    savedTemplateScope?: "personal" | "team",
-  ) => void
-  onDeleteTemplate: (template: PersonalFlowTemplate, scope: "personal" | "team") => void
-  onSaveAsTemplate: () => void
-}
-
-function TemplatePickerPopover({
-  open,
-  onOpenChange,
-  isCreating,
-  installations,
-  createInstallationId,
-  onCreateInstallationChange,
-  createRepository,
-  onCreateRepositoryChange,
-  createRepositoryOptions,
-  personalTemplates,
-  personalTemplatesHaveMore,
-  personalTemplatesLoadingMore,
-  onLoadMorePersonalTemplates,
-  teamTemplates,
-  teamTemplatesHaveMore,
-  teamTemplatesLoadingMore,
-  onLoadMoreTeamTemplates,
-  teamTemplatesCanWrite,
-  savingTemplate,
-  selectedFlow,
-  activeTeamId,
-  onCreateFlow,
-  onDeleteTemplate,
-  onSaveAsTemplate,
-}: TemplatePickerPopoverProps) {
-  return (
-    <Popover open={open} onOpenChange={(nextOpen) => {
-      if (isCreating) return
-      onOpenChange(nextOpen)
-    }}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={!createInstallationId || isCreating}
-          className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-input text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground disabled:opacity-40"
-          aria-label={isCreating ? "Creating workflow" : "New workflow"}
-          title={isCreating ? "Creating..." : "New workflow"}
-        >
-          <Plus className="size-3.5" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        side="right"
-        align="start"
-        sideOffset={10}
-        data-testid="flow-template-picker"
-        className="flex max-h-[min(720px,calc(100vh-32px))] w-[min(360px,calc(100vw-32px))] flex-col overflow-hidden border-border bg-popover p-0 shadow-2xl"
-      >
-        <TemplatePickerHeader
-          installations={installations}
-          createInstallationId={createInstallationId}
-          onCreateInstallationChange={onCreateInstallationChange}
-          createRepositoryOptions={createRepositoryOptions}
-          createRepository={createRepository}
-          onCreateRepositoryChange={onCreateRepositoryChange}
-        />
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {teamTemplates.length ? (
-            <TemplateSection
-              scope="team"
-              templates={teamTemplates}
-              hasMore={teamTemplatesHaveMore}
-              loadingMore={teamTemplatesLoadingMore}
-              onLoadMore={onLoadMoreTeamTemplates}
-              isCreating={isCreating}
-              createRepository={createRepository}
-              canDelete={teamTemplatesCanWrite}
-              onCreateFlow={(template) => onCreateFlow(null, template, "team")}
-              onDeleteTemplate={(template) => onDeleteTemplate(template, "team")}
-            />
-          ) : null}
-          {personalTemplates.length ? (
-            <TemplateSection
-              scope="personal"
-              templates={personalTemplates}
-              hasMore={personalTemplatesHaveMore}
-              loadingMore={personalTemplatesLoadingMore}
-              onLoadMore={onLoadMorePersonalTemplates}
-              isCreating={isCreating}
-              createRepository={createRepository}
-              canDelete
-              onCreateFlow={(template) => onCreateFlow(null, template, "personal")}
-              onDeleteTemplate={(template) => onDeleteTemplate(template, "personal")}
-            />
-          ) : null}
-          <StarterTemplatesList
-            isCreating={isCreating}
-            onCreateFlow={(templateId) => onCreateFlow(templateId)}
-          />
-        </div>
-        <SaveTemplateButton
-          selectedFlow={selectedFlow}
-          savingTemplate={savingTemplate}
-          activeTeamId={activeTeamId}
-          teamTemplatesCanWrite={teamTemplatesCanWrite}
-          onSaveAsTemplate={onSaveAsTemplate}
-        />
-      </PopoverContent>
-    </Popover>
-  )
-}
-

@@ -159,7 +159,11 @@ export const flowRunDetail = {
   review_findings: [],
 };
 
-export async function setupWorkflowsPage(page: Page, theme: "light" | "dark") {
+export async function setupWorkflowsPage(
+  page: Page,
+  theme: "light" | "dark",
+  { flows = [flowPayload] }: { flows?: Array<typeof flowPayload> } = {}
+) {
   await page.context().setExtraHTTPHeaders({
     ...buildE2EAuthHeaders(connectedUser.id),
     "x-mogplex-scope-kind": "personal",
@@ -248,9 +252,7 @@ export async function setupWorkflowsPage(page: Page, theme: "light" | "dark") {
   await page.route("**/api/integrations/slack/installations", (route) =>
     fulfillJson(route, { installations: [] })
   );
-  await page.route("**/api/flows", (route) =>
-    fulfillJson(route, [flowPayload])
-  );
+  await page.route("**/api/flows", (route) => fulfillJson(route, flows));
   await page.route("**/api/flows/flow-1", (route) =>
     fulfillJson(route, flowPayload)
   );
