@@ -10,6 +10,8 @@ import {
   findCapacityHostedUsagePreset,
 } from "@/lib/billing/capacity-catalog";
 
+export const TOPUP_INVOICE_CREATION = { enabled: true } as const;
+
 type StripeProductSummary = Pick<Stripe.Product, "id" | "metadata">;
 type StripePriceSummary = Pick<
   Stripe.Price,

@@ -17,6 +17,7 @@ function Meter(props: {
   percent: number;
   blocked?: boolean;
   trackingOnly?: boolean;
+  note?: string;
 }) {
   return (
     <div className="min-w-0 space-y-3 rounded-md border p-4">
@@ -31,6 +32,9 @@ function Meter(props: {
       <p className="text-2xl font-semibold tabular-nums">{props.value}</p>
       <Progress aria-label={`${props.name} capacity`} value={props.percent} />
       <p className="text-xs text-muted-foreground">{props.detail}</p>
+      {props.note ? (
+        <p className="text-xs text-muted-foreground">{props.note}</p>
+      ) : null}
     </div>
   );
 }
@@ -73,8 +77,9 @@ export function CapacityBillingOverview({
       />
       <Meter
         blocked={summary.hostedUsage.spendableCents <= 0}
-        detail={`${formatUsd(summary.hostedUsage.openReservationsCents)} reserved · resets ${formatDate(summary.hostedUsage.grantResetsAt)}`}
+        detail={`${formatUsd(summary.hostedUsage.purchasedRemainingCents)} purchased + ${formatUsd(summary.hostedUsage.includedRemainingCents)} included - ${formatUsd(summary.hostedUsage.openReservationsCents)} reserved`}
         name="Inference"
+        note={`Included credit resets ${formatDate(summary.hostedUsage.grantResetsAt)}`}
         percent={clampPercent(100 - hostedAvailablePercent)}
         value={`${formatUsd(summary.hostedUsage.spendableCents)} available`}
       />

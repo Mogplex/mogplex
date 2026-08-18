@@ -17,6 +17,7 @@ export type CapacityBillingSummaryV2 = {
     status: "active" | "past_due" | "read_only" | "frozen_purchases";
     canManageBilling: boolean;
     hasSubscription: boolean;
+    hasBillingHistory: boolean;
   };
   plan: {
     ref: CapacityPlanCode | "legacy";
@@ -111,6 +112,7 @@ export type CapacityBillingAccountProjection = {
   tier: "free" | "pro" | "team" | "business";
   status: "active" | "past_due" | "frozen_topups";
   stripe_subscription_id: string | null;
+  stripe_customer_id: string | null;
   period_anchor: string | null;
   plan_code: CapacityPlanCode | null;
   plan_audience: "legacy" | "individual" | "business" | "enterprise";

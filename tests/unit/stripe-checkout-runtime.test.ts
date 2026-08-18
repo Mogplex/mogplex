@@ -196,7 +196,10 @@ test("subscription checkout idempotency advances only with cancellation generati
 });
 
 test("top-up checkout retries reuse an attempt-scoped idempotency key", async () => {
-  const { topupCheckoutIdempotencyKey } = await loadCheckoutRuntime();
+  const { TOPUP_INVOICE_CREATION, topupCheckoutIdempotencyKey } =
+    await loadCheckoutRuntime();
+
+  assert.deepEqual(TOPUP_INVOICE_CREATION, { enabled: true });
 
   assert.equal(
     topupCheckoutIdempotencyKey(

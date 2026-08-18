@@ -242,10 +242,15 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         </CardHeader>
         <CardContent>
           {canBuyInference ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div
+              aria-label="Choose credit amount"
+              className="grid max-w-5xl grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
+              role="group"
+            >
               {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => (
                 <Button
-                  className="h-11 w-full tabular-nums"
+                  aria-label={`Add ${formatCreditAmount(preset.creditCents)} inference credit`}
+                  className="group h-14 w-full flex-col gap-0.5 border-border bg-muted/20 px-3 shadow-xs hover:border-foreground/25 hover:bg-accent dark:border-border dark:bg-muted/25 dark:hover:bg-accent"
                   disabled={pendingAction !== null}
                   key={preset.lookupKey}
                   onClick={() =>
@@ -268,9 +273,17 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
                   }
                   variant="outline"
                 >
-                  {pendingAction === preset.lookupKey
-                    ? "Opening…"
-                    : formatCreditAmount(preset.creditCents)}
+                  <span className="text-base font-semibold tabular-nums">
+                    {pendingAction === preset.lookupKey
+                      ? "Opening…"
+                      : formatCreditAmount(preset.creditCents)}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="text-[11px] font-normal text-muted-foreground transition-colors group-hover:text-accent-foreground"
+                  >
+                    Add credit
+                  </span>
                 </Button>
               ))}
             </div>
@@ -298,13 +311,17 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
               <CardDescription>{planDetails}</CardDescription>
             </div>
             {canManage &&
-            summary.account.hasSubscription &&
+            summary.account.hasBillingHistory &&
             summary.plan.offerKind !== "contract" ? (
               <Button
                 disabled={pendingAction !== null}
                 onClick={() => redirectTo("portal", "/api/stripe/portal", {})}
               >
-                {pendingAction === "portal" ? "Opening…" : "Manage plan"}
+                {pendingAction === "portal"
+                  ? "Opening…"
+                  : summary.account.hasSubscription
+                    ? "Manage plan"
+                    : "Billing history"}
               </Button>
             ) : summary.plan.offerKind === "legacy" && canManage ? (
               <Button asChild variant="outline">

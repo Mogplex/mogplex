@@ -7,6 +7,7 @@ import { findTopupPreset } from "@/lib/billing/catalog";
 import { validateCheckoutRequest } from "@/lib/billing/checkout";
 import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
 import {
+  TOPUP_INVOICE_CREATION,
   ensureStripeCustomer,
   resolveCatalogPriceId,
   resolveTopupProductId,
@@ -161,6 +162,7 @@ export async function POST(request: Request) {
       client_reference_id: account.id,
       line_items: [lineItem],
       managed_payments: { enabled: true },
+      invoice_creation: TOPUP_INVOICE_CREATION,
       payment_intent_data: {
         // credit_cents = the pre-tax amount the webhook credits to the ledger
         // (amount_received includes the tax Managed Payments withholds, which

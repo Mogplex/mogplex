@@ -322,6 +322,7 @@ export function buildCapacityBillingSummary(input: {
       status: customerStatus(facts.account.status),
       canManageBilling: input.canManageBilling,
       hasSubscription: Boolean(facts.account.stripe_subscription_id),
+      hasBillingHistory: Boolean(facts.account.stripe_customer_id),
     },
     plan: planPresentation(facts, asOf),
     concurrency: {
