@@ -3,6 +3,7 @@ import { requireUserId } from "@/lib/auth";
 import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
 import { loadCapacityBillingSummary } from "@/lib/billing/capacity-summary-db";
 import { getBillingBalance } from "@/lib/billing/ledger";
+import { isCapacityBillingPilotAccount } from "@/lib/billing/capacity-purchase-policy";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { hasCapability } from "@/lib/team-capabilities";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
@@ -14,6 +15,7 @@ type CapacityBillingSummaryDeps = {
   getBillingBalance: typeof getBillingBalance;
   loadCapacityBillingSummary: typeof loadCapacityBillingSummary;
   areCapacityBillingOperationsEnabled: typeof areCapacityBillingOperationsEnabled;
+  isCapacityBillingPilotAccount: typeof isCapacityBillingPilotAccount;
 };
 
 const defaultDeps: CapacityBillingSummaryDeps = {
@@ -23,7 +25,10 @@ const defaultDeps: CapacityBillingSummaryDeps = {
   getBillingBalance,
   loadCapacityBillingSummary,
   areCapacityBillingOperationsEnabled,
+  isCapacityBillingPilotAccount,
 };
+
+const INDIVIDUAL_CAPACITY_PLAN_CODES = new Set(["pro", "plus", "max"]);
 
 export function createCapacityBillingSummaryGetHandler(
   overrides: Partial<CapacityBillingSummaryDeps> = {}
@@ -50,12 +55,21 @@ export function createCapacityBillingSummaryGetHandler(
     try {
       const account = await deps.getOrCreateBillingAccount(resolution.scope);
       const balance = await deps.getBillingBalance(account.id);
+      const billingOperationsEnabled =
+        deps.areCapacityBillingOperationsEnabled();
+      const hasIndividualCapacityPlan = INDIVIDUAL_CAPACITY_PLAN_CODES.has(
+        account.plan_code ?? ""
+      );
       const summary = await deps.loadCapacityBillingSummary({
         accountId: account.id,
         balance,
         scope: resolution.scope.kind,
         canManageBilling,
-        billingOperationsEnabled: deps.areCapacityBillingOperationsEnabled(),
+        billingOperationsEnabled,
+        concurrencyPurchasesEnabled:
+          billingOperationsEnabled &&
+          hasIndividualCapacityPlan &&
+          deps.isCapacityBillingPilotAccount(account.id),
       });
       return NextResponse.json(summary);
     } catch (error) {

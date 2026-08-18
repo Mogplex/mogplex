@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import type { BillingAccount } from "@/lib/billing/accounts";
+import type { CapacityAddOn } from "@/lib/billing/capacity-catalog";
 import {
   CAPACITY_PREVIEW_TTL_SECONDS,
   signCapacityChangePreview,
@@ -19,11 +20,16 @@ import {
   resolveCapacitySubscription,
   type ResolvedSubscription,
 } from "@/lib/billing/capacity-stripe-change-state";
+import {
+  canIncreaseCapacityAddOn,
+  isCapacityBillingPilotAccount,
+} from "@/lib/billing/capacity-purchase-policy";
 
 export { CapacityChangeError } from "@/lib/billing/capacity-stripe-change-state";
 
 export type CapacityStripeChangeDeps = {
   capacityBillingOperationsEnabled: () => boolean;
+  capacityBillingPilotAccount: (accountId: string) => boolean;
   now: () => Date;
   retrieveSubscription: (id: string) => Promise<Stripe.Subscription>;
   resolvePriceId: (lookupKey: string) => Promise<string>;
@@ -36,6 +42,28 @@ export type CapacityStripeChangeDeps = {
     options: Stripe.RequestOptions
   ) => Promise<Stripe.Subscription>;
 };
+
+function assertCapacityIncreaseAllowed(input: {
+  accountId: string;
+  action: CapacityChangeAction;
+  addOn: CapacityAddOn;
+  pilotAccount: boolean;
+}) {
+  if (
+    input.action === "increase" &&
+    !canIncreaseCapacityAddOn({
+      accountId: input.accountId,
+      addOn: input.addOn,
+      pilotAccount: input.pilotAccount,
+    })
+  ) {
+    throw new CapacityChangeError(
+      "Reserved concurrency purchases are available only to billing pilot accounts",
+      403,
+      "pilot_required"
+    );
+  }
+}
 
 export type CapacityChangePreview = {
   resource: "concurrency" | "retained_data";
@@ -65,6 +93,7 @@ export function defaultCapacityStripeChangeDeps(): CapacityStripeChangeDeps {
   const stripe = getStripe();
   return {
     capacityBillingOperationsEnabled: areCapacityBillingOperationsEnabled,
+    capacityBillingPilotAccount: isCapacityBillingPilotAccount,
     now: () => new Date(),
     retrieveSubscription: (id) =>
       stripe.subscriptions.retrieve(id, {
@@ -202,6 +231,12 @@ export async function previewCapacityChange(input: {
       "action_mismatch"
     );
   }
+  assertCapacityIncreaseAllowed({
+    accountId: input.account.id,
+    action,
+    addOn: resolved.targetAddOn,
+    pilotAccount: deps.capacityBillingPilotAccount(input.account.id),
+  });
 
   // Reject unsafe quantities before making a provider request.
   const currentRecurringAmountCents = safeMoney(
@@ -306,6 +341,7 @@ export function createCapacityStripeChangeDeps(
 ): CapacityStripeChangeDeps {
   return {
     capacityBillingOperationsEnabled: areCapacityBillingOperationsEnabled,
+    capacityBillingPilotAccount: isCapacityBillingPilotAccount,
     now: () => new Date(),
     retrieveSubscription: (id) =>
       stripe.subscriptions.retrieve(id, {

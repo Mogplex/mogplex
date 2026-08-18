@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import type { BillingAccount } from "@/lib/billing/accounts";
+import { findCapacityAddOn } from "@/lib/billing/capacity-catalog";
 import {
   capacityChangeIdempotencyKey,
   verifyCapacityChangePreview,
@@ -17,6 +18,7 @@ import {
   defaultCapacityStripeChangeDeps,
   type CapacityStripeChangeDeps,
 } from "@/lib/billing/capacity-stripe-changes";
+import { canIncreaseCapacityAddOn } from "@/lib/billing/capacity-purchase-policy";
 
 function verifiedPayload(input: {
   account: BillingAccount;
@@ -146,6 +148,20 @@ export async function confirmCapacityIncrease(input: {
     secret: input.signingSecret,
     nowSeconds: Math.floor(deps.now().getTime() / 1_000),
   });
+  const targetAddOn = findCapacityAddOn(payload.lookupKey)!;
+  if (
+    !canIncreaseCapacityAddOn({
+      accountId: input.account.id,
+      addOn: targetAddOn,
+      pilotAccount: deps.capacityBillingPilotAccount(input.account.id),
+    })
+  ) {
+    throw new CapacityChangeError(
+      "Reserved concurrency purchases are available only to billing pilot accounts",
+      403,
+      "pilot_required"
+    );
+  }
   const subscription = await deps.retrieveSubscription(payload.subscriptionId);
   const resolved = resolveCapacitySubscription({
     account: input.account,

@@ -42,6 +42,7 @@ export async function loadCapacityBillingSummary(input: {
   scope: "personal" | "team";
   canManageBilling: boolean;
   billingOperationsEnabled: boolean;
+  concurrencyPurchasesEnabled?: boolean;
   asOf?: Date;
   client?: SupabaseClient;
 }): Promise<CapacityBillingSummaryV2> {
@@ -150,6 +151,7 @@ export async function loadCapacityBillingSummary(input: {
     scope: input.scope,
     canManageBilling: input.canManageBilling,
     billingOperationsEnabled: input.billingOperationsEnabled,
+    concurrencyPurchasesEnabled: input.concurrencyPurchasesEnabled,
     asOf: input.asOf,
   });
 }

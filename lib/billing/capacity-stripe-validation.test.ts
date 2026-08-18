@@ -99,12 +99,14 @@ function depsFixture(
     invoice?: Stripe.Invoice;
     calls?: Array<{ kind: string; value: unknown }>;
     now?: Date;
+    pilotAccount?: boolean;
   } = {}
 ): CapacityStripeChangeDeps {
   const calls = input.calls ?? [];
   const subscription = input.subscription ?? subscriptionFixture();
   return {
     capacityBillingOperationsEnabled: () => true,
+    capacityBillingPilotAccount: () => input.pilotAccount ?? true,
     now: () => input.now ?? NOW,
     retrieveSubscription: async (id) => {
       calls.push({ kind: "retrieve", value: id });
@@ -130,6 +132,66 @@ const INCREASE_REQUEST = {
   quantity: 1,
   effectiveAction: "increase" as const,
 };
+
+test("reserved concurrency increases require a billing pilot account", async () => {
+  const calls: Array<{ kind: string; value: unknown }> = [];
+
+  await assert.rejects(
+    previewCapacityChange({
+      account: accountFixture(),
+      request: INCREASE_REQUEST,
+      signingSecret: "secret",
+      deps: depsFixture({ calls, pilotAccount: false }),
+    }),
+    (error: CapacityChangeError) => error.code === "pilot_required"
+  );
+  assert.equal(
+    calls.some((call) => call.kind === "preview"),
+    false
+  );
+});
+
+test("confirmation rechecks billing pilot access before updating Stripe", async () => {
+  const preview = await previewCapacityChange({
+    account: accountFixture(),
+    request: INCREASE_REQUEST,
+    signingSecret: "secret",
+    deps: depsFixture(),
+  });
+  const calls: Array<{ kind: string; value: unknown }> = [];
+
+  await assert.rejects(
+    confirmCapacityIncrease({
+      account: accountFixture(),
+      previewToken: preview.previewToken,
+      attemptId: ATTEMPT_ID,
+      signingSecret: "secret",
+      deps: depsFixture({ calls, pilotAccount: false }),
+    }),
+    (error: CapacityChangeError) => error.code === "pilot_required"
+  );
+  assert.equal(
+    calls.some((call) => call.kind === "update"),
+    false
+  );
+});
+
+test("non-pilot accounts can remove existing reserved concurrency", async () => {
+  const subscription = subscriptionFixture({ addOnQuantity: 1 });
+  const preview = await previewCapacityChange({
+    account: accountFixture(),
+    request: {
+      ...INCREASE_REQUEST,
+      quantity: 0,
+      effectiveAction: "cancel",
+    },
+    signingSecret: "secret",
+    deps: depsFixture({ subscription, pilotAccount: false }),
+  });
+
+  assert.equal(preview.action, "cancel");
+  assert.equal(preview.resultingQuantity, 0);
+});
 
 test("default Stripe dependencies fail before Stripe initialization", () => {
   const originalFlag = process.env.CAPACITY_BILLING_OPERATIONS_ENABLED;

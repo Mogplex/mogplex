@@ -123,6 +123,7 @@ function depsFixture(
   const subscription = input.subscription ?? subscriptionFixture();
   return {
     capacityBillingOperationsEnabled: () => true,
+    capacityBillingPilotAccount: () => true,
     now: () => NOW,
     retrieveSubscription: async (id) => {
       calls.push({ kind: "retrieve", value: id });

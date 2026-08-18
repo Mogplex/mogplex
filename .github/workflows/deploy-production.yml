@@ -232,11 +232,16 @@ jobs:
 
           echo "PRODUCTION_BASE_URL=$PRODUCTION_BASE_URL" >> "$GITHUB_ENV"
 
-      - name: Run production smoke check
+      - name: Reconcile Stripe catalog and run production smoke check
         env:
           CRON_SECRET: ${{ env.CRON_SECRET }}
           PRODUCTION_BASE_URL: ${{ env.PRODUCTION_BASE_URL }}
         run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$PRODUCTION_BASE_URL/api/cron/capacity-stripe-catalog"
+
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $CRON_SECRET" \
             "$PRODUCTION_BASE_URL/api/cron/production-smoke"

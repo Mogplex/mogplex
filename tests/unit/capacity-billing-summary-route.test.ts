@@ -31,12 +31,14 @@ const account: BillingAccount = {
   period_anchor: "2026-08-16",
   subscription_checkout_generation: 0,
   status: "active",
+  plan_code: "pro",
 };
 
 const summary: CapacityBillingSummaryV2 = {
   version: "capacity_v2",
   asOf: "2026-08-16T12:00:00.000Z",
   billingOperationsEnabled: false,
+  concurrencyPurchasesEnabled: false,
   account: {
     id: "account-1",
     eventSequence: "0",
@@ -123,7 +125,11 @@ test("GET /api/billing/capacity returns the canonical personal summary", async (
       assert.equal(accountId, account.id);
       return { includedCents: 500, purchasedCents: 0, totalCents: 500 };
     },
-    areCapacityBillingOperationsEnabled: () => false,
+    areCapacityBillingOperationsEnabled: () => true,
+    isCapacityBillingPilotAccount: (accountId) => {
+      assert.equal(accountId, account.id);
+      return true;
+    },
     loadCapacityBillingSummary: async (input) => {
       loadedInput = input;
       return summary;
@@ -141,7 +147,8 @@ test("GET /api/billing/capacity returns the canonical personal summary", async (
     balance: { includedCents: 500, purchasedCents: 0, totalCents: 500 },
     scope: "personal",
     canManageBilling: true,
-    billingOperationsEnabled: false,
+    billingOperationsEnabled: true,
+    concurrencyPurchasesEnabled: true,
   });
 });
 
@@ -192,6 +199,40 @@ test("GET /api/billing/capacity lets team viewers read but not manage", async ()
   assert.equal(response.status, 200);
   assert.equal(canManageBilling, false);
   assert.equal((await response.json()).account.canManageBilling, false);
+});
+
+test("GET /api/billing/capacity keeps legacy accounts out of the concurrency pilot", async () => {
+  const { createCapacityBillingSummaryGetHandler } =
+    await loadCapacityBillingSummaryRoute();
+  let concurrencyPurchasesEnabled: boolean | undefined;
+  const handler = createCapacityBillingSummaryGetHandler({
+    requireUserId: async () => "user-1",
+    resolveProductResourceScope: async () => personalScopeResolution,
+    getOrCreateBillingAccount: async () => ({
+      ...account,
+      plan_code: null,
+      tier: "business",
+      stripe_subscription_id: "sub_legacy",
+    }),
+    getBillingBalance: async () => ({
+      includedCents: 0,
+      purchasedCents: 0,
+      totalCents: 0,
+    }),
+    areCapacityBillingOperationsEnabled: () => true,
+    isCapacityBillingPilotAccount: () => true,
+    loadCapacityBillingSummary: async (input) => {
+      concurrencyPurchasesEnabled = input.concurrencyPurchasesEnabled;
+      return summary;
+    },
+  });
+
+  const response = await handler(
+    new Request("https://example.com/api/billing/capacity")
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(concurrencyPurchasesEnabled, false);
 });
 
 test("GET /api/billing/capacity returns a generic failure", async (context) => {

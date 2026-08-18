@@ -273,6 +273,7 @@ export function buildCapacityBillingSummary(input: {
   scope: "personal" | "team";
   canManageBilling: boolean;
   billingOperationsEnabled: boolean;
+  concurrencyPurchasesEnabled?: boolean;
   asOf?: Date;
 }): CapacityBillingSummaryV2 {
   const asOf = input.asOf ?? new Date();
@@ -308,6 +309,9 @@ export function buildCapacityBillingSummary(input: {
     version: "capacity_v2",
     asOf: asOf.toISOString(),
     billingOperationsEnabled: input.billingOperationsEnabled,
+    concurrencyPurchasesEnabled:
+      input.billingOperationsEnabled &&
+      (input.concurrencyPurchasesEnabled ?? false),
     account: {
       id: facts.account.id,
       eventSequence: nonnegativeBigInt(
