@@ -1,6 +1,7 @@
 const DEFAULT_MAX_STRING_LENGTH = 40_000;
 const DEFAULT_MAX_ITEMS = 50;
 const DEFAULT_MAX_DEPTH = 4;
+const MAX_REDACTION_DEPTH = 20;
 const REDACTED_VALUE = "[redacted]";
 
 const SENSITIVE_KEY_PATTERN =
@@ -52,19 +53,30 @@ function redactStringSecrets(
   return truncateTelemetryString(redacted, options.maxStringLength);
 }
 
-/** Redact secrets without truncating a value that must remain displayable. */
+/** Redact secrets while preserving ordinary display strings. */
 export function redactSecretsInValue(value: unknown): unknown {
+  return redactSecretsInValueInternal(value, 0);
+}
+
+function redactSecretsInValueInternal(value: unknown, depth: number): unknown {
   if (typeof value === "string") return redactSecretsInText(value);
   if (value === null || typeof value === "number" || typeof value === "boolean")
     return value;
-  if (Array.isArray(value)) return value.map(redactSecretsInValue);
+  if (depth >= MAX_REDACTION_DEPTH && typeof value === "object") {
+    return "[truncated]";
+  }
+  if (Array.isArray(value)) {
+    return value.map((nested) =>
+      redactSecretsInValueInternal(nested, depth + 1)
+    );
+  }
   if (typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, nested]) => [
         key,
         SENSITIVE_KEY_PATTERN.test(key)
           ? REDACTED_VALUE
-          : redactSecretsInValue(nested),
+          : redactSecretsInValueInternal(nested, depth + 1),
       ])
     );
   }

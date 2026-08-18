@@ -15,7 +15,8 @@ const EXEC_STDERR_LIMIT = 5000;
 const CREDENTIAL_FILE_PATTERN =
   /(?:\.git-credentials|\.mogplex\/github-token|\.netrc|\.config\/gh\/hosts\.yml|\.gitconfig)/i;
 const CREDENTIAL_COMMAND_PATTERN =
-  /\b(?:(?:GH|GITHUB)_TOKEN|git\s+credential|gh\s+auth\s+token|(?:\/proc\/\S+\/environ)|env|printenv)\b/i;
+  /\b(?:(?:GH|GITHUB)_TOKEN|git\s+credential|gh\s+auth\s+token|env|printenv)\b/i;
+const PROCESS_ENV_PATTERN = /\/proc\/\S+\/environ/i;
 const HTTP_CLIENT_PATTERN =
   /\b(?:curl|wget|http|python(?:3)?|node|deno|ruby)\b/i;
 const GITHUB_API_PATTERN = /api\.github\.com/i;
@@ -61,7 +62,8 @@ export function getBlockedAgentShellCommand(command: string):
   | undefined {
   if (
     CREDENTIAL_FILE_PATTERN.test(command) ||
-    CREDENTIAL_COMMAND_PATTERN.test(command)
+    CREDENTIAL_COMMAND_PATTERN.test(command) ||
+    PROCESS_ENV_PATTERN.test(command)
   ) {
     return {
       error:

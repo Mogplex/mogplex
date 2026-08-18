@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import {
   loadToolsModule,
   withEnv,
@@ -308,6 +307,15 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
           reason: "credential_access_blocked",
           command: "env | grep TOKEN",
         });
+        assert.deepEqual(
+          await tool.execute({ command: "cat /proc/self/environ" }),
+          {
+            error:
+              "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "credential_access_blocked",
+            command: "cat /proc/self/environ",
+          }
+        );
         assert.deepEqual(
           await tool.execute({
             command:
