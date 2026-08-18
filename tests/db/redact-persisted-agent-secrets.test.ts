@@ -8,6 +8,8 @@ const MIGRATION =
   "supabase/migrations/20260818194500_redact_persisted_agent_secrets.sql";
 const NEON_MIGRATION =
   "neon/migrations/20260818213000_redact_persisted_agent_secrets.sql";
+const REMEDIATION_MIGRATION =
+  "neon/migrations/20260818220000_redact_remaining_agent_secrets.sql";
 
 async function createSeededDb() {
   const db = new PGlite();
@@ -69,5 +71,9 @@ describe("persisted agent secret redaction migration", () => {
 
   it("redacts Neon persisted credentials independently", async () => {
     await expectMigrationToRedact(NEON_MIGRATION);
+  });
+
+  it("redacts remaining Neon credentials independently", async () => {
+    await expectMigrationToRedact(REMEDIATION_MIGRATION);
   });
 });
