@@ -264,7 +264,7 @@ export function Composer({
 
   const handleSend = useCallback(async () => {
     if ((value.trim() || files.length > 0) && !pending) {
-      const draft = { text: value, files };
+      const draft = { text: value, files: [...files] };
       onChange("");
       setFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -277,7 +277,8 @@ export function Composer({
           mode: "run",
           files,
         });
-      } catch {
+      } catch (error) {
+        console.error("[control] send rejected, restoring composer draft", error);
         // A caller that rejects instead of returning false still preserves the
         // user's draft, matching the request-failure recovery path below.
       }
