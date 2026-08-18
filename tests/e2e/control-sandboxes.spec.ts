@@ -313,9 +313,14 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
 
   // A paused sandbox can be resumed without creating a replacement, so its
   // persisted worktree binding remains valid.
+  const pausedSandbox = page.getByRole("region", {
+    name: "Sandbox sbx_paused",
+  });
   await page.getByRole("button", { name: "Resume" }).click();
   await expect.poll(() => resumePosted).toBe(true);
-  await expect(page.getByText("Running")).toHaveCount(2);
+  await expect(
+    pausedSandbox.getByLabel("Runtime status: Running")
+  ).toBeVisible();
 
   // The top-bar preview follows the selected sandbox, not the first running
   // sandbox returned by the collection endpoint.
@@ -357,7 +362,7 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   // creating unrelated compute that would strand the worktree binding.
   await liveSandbox.getByRole("button", { name: "Restart" }).click();
   await expect.poll(() => restartPosted).toBe(true);
-  await expect(page.getByText("Running")).toHaveCount(2);
+  await expect(liveSandbox.getByLabel("Runtime status: Running")).toBeVisible();
 
   // Delete is a separate, destructive lifecycle with explicit consequences.
   const failedSandbox = page.getByRole("region", {
