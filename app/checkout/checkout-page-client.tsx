@@ -108,8 +108,8 @@ function CheckoutContent() {
       subtitle={
         <>
           One named user, Concurrency {summary.concurrency},{" "}
-          {summary.retainedDataGb} GB retained data, and {summary.hostedUsage}
-          /month hosted usage. Cancel from Billing in Settings.{" "}
+          {summary.retainedDataGb} GB Storage, and {summary.hostedUsage}
+          /month Inference. Cancel from Billing in Settings.{" "}
           <Link href="/pricing">Compare plans.</Link>
         </>
       }

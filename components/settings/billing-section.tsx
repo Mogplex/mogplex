@@ -166,6 +166,40 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
 
       <Card>
         <CardHeader>
+          <CardTitle><h2>Add inference</h2></CardTitle>
+          <CardDescription>
+            Purchased inference credit keeps its full value and never expires.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => (
+            <Button
+              disabled={!canBuy || pendingAction !== null}
+              key={preset.lookupKey}
+              onClick={() =>
+                redirectTo(preset.lookupKey, "/api/billing/hosted-usage/checkout", {
+                  preset: preset.lookupKey,
+                  attemptId: attemptIdFor(preset.lookupKey),
+                })
+              }
+              variant="outline"
+            >
+              {pendingAction === preset.lookupKey
+                ? "Opening…"
+                : `Add ${formatUsd(preset.creditCents)}`}
+            </Button>
+          ))}
+          {summary.hostedUsage.purchasesFrozen ? (
+            <p className="basis-full pt-2 text-sm text-destructive">
+              Mogplex paused inference purchases for this account. Contact
+              support for help.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
               <CardTitle className="flex flex-wrap items-center gap-2">
@@ -208,7 +242,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         <CardHeader>
           <CardTitle><h2>Capacity add-ons</h2></CardTitle>
           <CardDescription>
-            Add Concurrency or retained data without changing your plan.
+            Add Concurrency or Storage. Keep your current plan.
           </CardDescription>
         </CardHeader>
         <CardContent className="divide-y">
@@ -260,47 +294,14 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
 
       <Card>
         <CardHeader>
-          <CardTitle><h2>Add hosted usage</h2></CardTitle>
+          <CardTitle><h2>Recent usage costs</h2></CardTitle>
           <CardDescription>
-            Purchased hosted usage keeps its face value and never expires.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => (
-            <Button
-              disabled={!canBuy || pendingAction !== null}
-              key={preset.lookupKey}
-              onClick={() =>
-                redirectTo(preset.lookupKey, "/api/billing/hosted-usage/checkout", {
-                  preset: preset.lookupKey,
-                  attemptId: attemptIdFor(preset.lookupKey),
-                })
-              }
-              variant="outline"
-            >
-              {pendingAction === preset.lookupKey
-                ? "Opening…"
-                : `Add ${formatUsd(preset.creditCents)}`}
-            </Button>
-          ))}
-          {summary.hostedUsage.purchasesFrozen ? (
-            <p className="basis-full pt-2 text-sm text-destructive">
-              Hosted usage purchases are paused. Contact support for help.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle><h2>Recent hosted costs</h2></CardTitle>
-          <CardDescription>
-            See what used your hosted usage balance.
+            See what used your inference balance.
           </CardDescription>
         </CardHeader>
         <CardContent className="divide-y">
           {summary.recentCosts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hosted costs yet.</p>
+            <p className="text-sm text-muted-foreground">No usage costs yet.</p>
           ) : (
             summary.recentCosts.map((cost) => (
               <div className="flex items-start justify-between gap-4 py-3 first:pt-0" key={cost.operationId}>

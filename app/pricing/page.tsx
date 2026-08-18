@@ -7,7 +7,7 @@ import { buildMarketingMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pricing for predictable agent capacity",
   description:
-    "Choose an Individual plan by Concurrency, retained data, and hosted usage. Add capacity as your work grows.",
+    "Choose an Individual plan by Concurrency, Storage, and Inference. Add capacity as your work grows.",
   path: "/pricing",
 });
 
@@ -35,7 +35,7 @@ const HOSTED_RATES = [
   {
     meter: "Sandbox transfer",
     rate: "$0.19 per GB",
-    detail: "Snapshots also count toward retained data.",
+    detail: "Snapshots also count toward Storage.",
   },
 ];
 
@@ -56,8 +56,8 @@ export default function PricingPage() {
         </div>
         <h1 className="sub-title">Run more work. Know what it costs.</h1>
         <p className="sub-lede">
-          Choose an Individual plan by Concurrency, retained data, and hosted
-          usage. Add more capacity when you need it. You keep clear limits and
+          Choose an Individual plan by Concurrency, Storage, and Inference.
+          Add more capacity when you need it. You keep clear limits and
           avoid a surprise usage bill.
         </p>
         <p className="mono micro">
@@ -79,7 +79,7 @@ export default function PricingPage() {
         <div className="capacity-addon-groups">
           {(["concurrency", "retained_data"] as const).map((kind) => (
             <div key={kind}>
-              <h3>{kind === "concurrency" ? "Concurrency" : "Retained data"}</h3>
+              <h3>{kind === "concurrency" ? "Concurrency" : "Storage"}</h3>
               <ul>
                 {CAPACITY_ADD_ONS.filter((addOn) => addOn.kind === kind).map(
                   (addOn) => (
@@ -114,7 +114,7 @@ export default function PricingPage() {
       </section>
 
       <section className="meter-card" aria-labelledby="hosted-usage-rates">
-        <p className="meter-kicker mono">HOSTED USAGE</p>
+        <p className="meter-kicker mono">INFERENCE AND HOSTING</p>
         <h2 className="meter-title" id="hosted-usage-rates">
           Pay for the managed work you use.
         </h2>
@@ -129,7 +129,7 @@ export default function PricingPage() {
         </div>
         <p className="meter-foot mono">
           Bring your own AI key and your AI provider bills those model calls.
-          Other hosted costs still use your hosted usage balance.
+          Other hosted costs also use your inference balance.
         </p>
       </section>
 
@@ -145,8 +145,8 @@ export default function PricingPage() {
           <div className="term">
             <p className="term-k mono">PURCHASED USAGE</p>
             <p className="term-v">
-              Purchased hosted usage keeps its face value and never expires.
-              Included hosted usage resets each month.
+              Purchased inference credit keeps its full value and never
+              expires. Included inference credit resets each month.
             </p>
           </div>
           <div className="term">

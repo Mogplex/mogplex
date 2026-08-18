@@ -163,11 +163,11 @@ test("capacity Stripe catalog uses the approved customer names and unique keys",
     [
       "Concurrency +10",
       "Concurrency +50",
-      "Retained data +1 GB",
-      "Retained data +10 GB",
-      "Retained data +50 GB",
-      "Retained data +100 GB",
-      "Mogplex Hosted Usage",
+      "Storage +1 GB",
+      "Storage +10 GB",
+      "Storage +50 GB",
+      "Storage +100 GB",
+      "Mogplex Inference",
     ]
   );
   const lookupKeys = CAPACITY_STRIPE_PRODUCTS.flatMap((product) =>

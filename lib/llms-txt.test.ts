@@ -5,7 +5,7 @@ describe("buildLlmsTxt", () => {
   it("publishes the capacity plan paths", () => {
     const text = buildLlmsTxt();
     expect(text).toContain(
-      "Individual plans by Concurrency, retained data, and hosted usage"
+      "Individual plans by Concurrency, Storage, and Inference"
     );
     expect(text).toContain("confirm an Individual plan");
   });

@@ -234,14 +234,14 @@ function assertAccountCanBuyHostedUsage(account: BillingAccount) {
       account.plan_code !== "max")
   ) {
     throw new HostedUsagePurchaseError(
-      "Hosted-usage checkout is available for Individual plans. Contact sales for a company contract.",
+      "Inference checkout is available for Individual plans. Contact sales for a company contract.",
       409,
       "self_service_unavailable"
     );
   }
   if (account.status === "frozen_topups") {
     throw new HostedUsagePurchaseError(
-      "This account cannot buy hosted usage now. Contact support for help.",
+      "This account cannot buy inference now. Contact support for help.",
       403,
       "purchases_frozen"
     );

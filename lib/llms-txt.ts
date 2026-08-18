@@ -17,7 +17,7 @@ Authenticated workspace, team, invite, API, and callback URLs are private or ope
 - [Workflow patterns](${absoluteUrl("/workflows")}): Eight pipeline patterns with triggers, gates, and wire commands.
 - [How it works](${absoluteUrl("/how-it-works")}): Anatomy of a run — trigger, sandbox, agent loop, gates, and reconciliation.
 - [FAQ](${absoluteUrl("/faq")}): Common questions on agents, cost, code execution, gates, and setup.
-- [Pricing](${absoluteUrl("/pricing")}): Individual plans by Concurrency, retained data, and hosted usage, plus custom company plans.
+- [Pricing](${absoluteUrl("/pricing")}): Individual plans by Concurrency, Storage, and Inference, plus custom company plans.
 - [Company](${absoluteUrl("/company")}): Mogplex Inc. — operating principles, open-source stance, and contact.
 - [Sign up](${absoluteUrl("/signup")}): Create an account and confirm an Individual plan.
 

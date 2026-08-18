@@ -37,7 +37,7 @@ function SignupContent() {
       subtitle={
         <>
           Create your account, then confirm the Individual plan you chose.
-          Your plan sets Concurrency, retained data, and hosted usage.{" "}
+          Your plan sets Concurrency, Storage, and Inference.{" "}
           <Link href="/pricing">See the full rate card.</Link>
         </>
       }
@@ -45,7 +45,7 @@ function SignupContent() {
         summary ? (
           <div className="mpx-auth-alert is-success" data-testid="plan-chip">
             {summary.name}: {summary.monthlyPrice}/month, Concurrency{" "}
-            {summary.concurrency}, {summary.retainedDataGb} GB retained data.
+            {summary.concurrency}, {summary.retainedDataGb} GB Storage.
             Checkout comes after this step. {" "}
             <Link href="/pricing">change plan</Link>
           </div>

@@ -11,6 +11,7 @@ export type CapacityBillingSummaryV2 = {
   account: {
     id: string;
     eventSequence: string;
+    enforcementMode: "shadow" | "meter_only" | "enforced";
     scope: "personal" | "team";
     displayName: string;
     status: "active" | "past_due" | "read_only" | "frozen_purchases";
@@ -114,6 +115,7 @@ export type CapacityBillingAccountProjection = {
   max_named_users: number | string | null;
   included_concurrency: number | string;
   included_retained_bytes: number | string;
+  entitlement_enforcement_mode: "shadow" | "meter_only" | "enforced";
 };
 
 export type CapacityBillingEntitlementRow = {

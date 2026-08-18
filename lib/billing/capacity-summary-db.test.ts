@@ -36,6 +36,7 @@ function fakeClient(overrides: Partial<Record<string, QueryResult>> = {}): {
         max_named_users: 1,
         included_concurrency: 5,
         included_retained_bytes: "1000000000",
+        entitlement_enforcement_mode: "shadow",
       },
       error: null,
     },
@@ -152,6 +153,7 @@ describe("capacity billing summary database loader", () => {
       account: {
         id: "account-1",
         eventSequence: "7",
+        enforcementMode: "shadow",
         canManageBilling: true,
       },
       concurrency: { active: 3, included: 5, limit: 5 },
