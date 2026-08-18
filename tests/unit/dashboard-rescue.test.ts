@@ -75,3 +75,8 @@ test("public static root files are reserved slugs", () => {
     assert.equal(isReservedSlug(slug), true, `expected ${slug} to be reserved`);
   }
 });
+
+test("checkout cannot be claimed as a workspace slug", () => {
+  assert.equal(isReservedSlug("checkout"), true);
+  assert.equal(isReservedSlug("CHECKOUT"), true);
+});

@@ -7,7 +7,8 @@ import {
   LOGICAL_BYTES_PER_GB,
   type CapacityPlanInterval,
 } from "@/lib/billing/capacity-catalog";
-import { signupPath } from "@/lib/billing/plan-intent";
+import { useSession } from "@/lib/better-auth/client";
+import { checkoutPath, signupPath } from "@/lib/billing/plan-intent";
 
 const PLANS = Object.values(INDIVIDUAL_CAPACITY_PLANS);
 
@@ -22,6 +23,7 @@ function formatUsd(cents: number): string {
 
 export function CapacityPricingGrid() {
   const [interval, setInterval] = useState<CapacityPlanInterval>("month");
+  const { data: session } = useSession();
 
   return (
     <section className="capacity-plans" aria-labelledby="individual-plans">
@@ -32,8 +34,8 @@ export function CapacityPricingGrid() {
             Choose the room you need now.
           </h2>
           <p className="capacity-section-lede">
-            Every Individual plan is for one named user. Upgrade capacity
-            without moving into a company contract.
+            Every plan combines hosted execution capacity with inference
+            credit. Upgrade without moving into a company contract.
           </p>
         </div>
         <div className="capacity-toggle" role="group" aria-label="Billing period">
@@ -71,7 +73,6 @@ export function CapacityPricingGrid() {
                   ? `${formatUsd(Math.round(price.amountCents / 12))} average per month`
                   : `${formatUsd(plan.prices.year.amountCents)} billed annually`}
               </p>
-              <p className="price-included mono">1 named user</p>
               <dl className="capacity-allowances">
                 <div>
                   <dt>Concurrency</dt>
@@ -92,7 +93,11 @@ export function CapacityPricingGrid() {
               </p>
               <Link
                 className="mpx-button is-primary price-cta"
-                href={signupPath(plan.code)}
+                href={
+                  session?.user
+                    ? checkoutPath(plan.code)
+                    : signupPath(plan.code)
+                }
                 data-testid={`pricing-cta-${plan.code}`}
               >
                 Choose {plan.name}

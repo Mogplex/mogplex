@@ -55,6 +55,19 @@ function catalogDeps(input: {
       products.push(product);
       return product;
     },
+    async updateProduct(id, params) {
+      calls.push(`update-product:${id}`);
+      const product = products.find((candidate) => candidate.id === id)!;
+      product.active = params.active ?? product.active;
+      product.name = params.name ?? product.name;
+      product.description = params.description ?? product.description;
+      product.metadata = Object.fromEntries(
+        Object.entries(params.metadata ?? product.metadata).map(
+          ([key, value]) => [key, String(value)]
+        )
+      );
+      return product;
+    },
     async listPrices(params) {
       calls.push(`list-price:${params.lookup_keys?.[0]}`);
       return {
@@ -188,6 +201,7 @@ test("capacity Stripe catalog seed creates the missing test catalog", async () =
 
   assert.deepEqual(result, {
     productsCreated: 10,
+    productsUpdated: 0,
     productsReused: 0,
     pricesCreated: 18,
     pricesReused: 0,
@@ -206,6 +220,7 @@ test("capacity Stripe catalog seed is idempotent", async () => {
 
   assert.deepEqual(result, {
     productsCreated: 0,
+    productsUpdated: 0,
     productsReused: 10,
     pricesCreated: 0,
     pricesReused: 18,
@@ -225,15 +240,14 @@ test("capacity Stripe catalog seed refuses disabled writes before Stripe access"
   assert.deepEqual(calls, []);
 });
 
-test("capacity Stripe catalog seed fails closed on catalog drift", async () => {
+test("capacity Stripe catalog seed reconciles mutable product details", async () => {
   const catalog = materializedCatalog();
   catalog.products[0]!.name = "Wrong plan";
-  await withTestMode(() =>
-    assert.rejects(
-      syncCapacityStripeCatalog({
-        deps: catalogDeps(catalog),
-      }),
-      /does not match the local catalog/
-    )
+  const result = await withTestMode(() =>
+    syncCapacityStripeCatalog({
+      deps: catalogDeps(catalog),
+    })
   );
+  assert.equal(result.productsUpdated, 1);
+  assert.equal(catalog.products[0]!.name, "Mogplex Pro");
 });

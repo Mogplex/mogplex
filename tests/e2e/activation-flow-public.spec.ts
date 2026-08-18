@@ -102,6 +102,8 @@ test("public marketing pages use the capacity pricing copy", async ({
   await page.goto("/pricing");
   await expect(page.getByText("Team", { exact: true })).toHaveCount(0);
   await expect(page.getByText("PAYG", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/named user/i)).toHaveCount(0);
+  await expect(page.getByText("$200/month", { exact: true })).toBeVisible();
 
   // Individual plan intent survives through signup and checkout.
   await expect(page.getByTestId("pricing-cta-pro")).toHaveAttribute(
@@ -135,4 +137,32 @@ test("public marketing pages use the capacity pricing copy", async ({
   await expect(
     page.getByText(/applies the published retail factor/i)
   ).toBeVisible();
+});
+
+test("signed-in pricing choices go directly to checkout", async ({ page }) => {
+  await page.route("**/api/auth/get-session", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        session: {
+          id: "session-1",
+          userId: "user-1",
+          expiresAt: "2026-08-19T12:00:00.000Z",
+        },
+        user: {
+          id: "user-1",
+          email: "alex@example.com",
+          name: "Alex",
+        },
+      }),
+    })
+  );
+
+  await page.goto("/pricing");
+
+  await expect(page.getByTestId("pricing-cta-max")).toHaveAttribute(
+    "href",
+    "/checkout?plan=max"
+  );
 });

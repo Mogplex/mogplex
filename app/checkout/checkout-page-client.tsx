@@ -107,8 +107,8 @@ function CheckoutContent() {
       title={`Confirm ${summary.name}.`}
       subtitle={
         <>
-          One named user, Concurrency {summary.concurrency},{" "}
-          {summary.retainedDataGb} GB Storage, and {summary.hostedUsage}
+          Concurrency {summary.concurrency}, {summary.retainedDataGb} GB
+          Storage, and {summary.hostedUsage}
           /month Inference. Cancel from Billing in Settings.{" "}
           <Link href="/pricing">Compare plans.</Link>
         </>

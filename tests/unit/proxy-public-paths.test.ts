@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPublicRoutePath } from "../../lib/auth-route-policy";
+import {
+  isPublicRoutePath,
+  isUnscopedAuthedRoutePath,
+} from "../../lib/auth-route-policy";
+
+test("checkout is authenticated but never interpreted as a workspace slug", () => {
+  assert.equal(isPublicRoutePath("/checkout"), false);
+  assert.equal(isUnscopedAuthedRoutePath("/checkout"), true);
+  assert.equal(isUnscopedAuthedRoutePath("/checkout/complete"), true);
+  assert.equal(isUnscopedAuthedRoutePath("/checkout-old"), false);
+});
 
 test("isPublicRoutePath exact-matches script endpoints", () => {
   assert.equal(isPublicRoutePath("/install.sh"), true);

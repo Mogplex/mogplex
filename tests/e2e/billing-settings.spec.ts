@@ -81,6 +81,7 @@ function capacitySummary(
       displayName: "Alex",
       status: "active",
       canManageBilling: true,
+      hasSubscription: true,
     },
     plan: {
       ref: "plus",
@@ -199,20 +200,30 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
       entitlementStatus: "pending_webhook",
     })
   );
+  await page.route("**/api/billing/hosted-usage/checkout", (route) =>
+    fulfillJson(route, {
+      status: "checkout_created",
+      url: scopedPath("settings?tab=billing&billing=hosted-usage-submitted"),
+      creditCents: 1_000,
+      subtotalCents: 1_000,
+      currency: "usd",
+      balanceStatus: "pending_webhook",
+    })
+  );
 
   await page.goto(scopedPath("settings?tab=billing"));
 
   await expect(page.getByRole("heading", { name: "Plus" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Add inference" })
+    page.getByRole("heading", { name: "Add inference credit" })
   ).toBeVisible();
   await expect(page.getByText("Inference", { exact: true })).toBeVisible();
-  await expect(page.getByText("Storage", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Storage" })).toBeVisible();
   await expect(page.getByText("Hosted usage", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Retained data", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Not enforced", { exact: true })).toHaveCount(2);
   const headings = await page.locator("h2").allTextContents();
-  expect(headings.indexOf("Add inference")).toBeLessThan(
+  expect(headings.indexOf("Add inference credit")).toBeLessThan(
     headings.indexOf("Plus")
   );
   await expect(page.getByText("7 of 35")).toBeVisible();
@@ -222,6 +233,19 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await expect(page.getByText("At limit", { exact: true })).toHaveCount(1);
   expect((await inferenceValue.boundingBox())?.height).toBeLessThan(40);
   await expect(page.getByText("Run customer report")).toBeVisible();
+
+  const inferenceCheckout = page.waitForRequest(
+    "**/api/billing/hosted-usage/checkout"
+  );
+  await page.getByRole("button", { name: "$10", exact: true }).click();
+  expect((await inferenceCheckout).postDataJSON()).toMatchObject({
+    preset: "capacity_v2_hosted_usage_credit_10",
+  });
+  await expect(
+    page.getByText(
+      "Payment submitted. Capacity updates after Stripe confirms the event."
+    )
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Concurrency +10" }).click();
   await page.getByRole("button", { name: "Increase quantity" }).click();
@@ -281,6 +305,7 @@ test("company Billing stays visible and read-only for a member", async ({
           displayName: "Acme",
           status: "read_only",
           canManageBilling: false,
+          hasSubscription: true,
         },
         plan: {
           ref: "business",
@@ -302,7 +327,81 @@ test("company Billing stays visible and read-only for a member", async ({
   await expect(
     page.getByText("Ask a company owner or admin to change billing.")
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Add|Manage/ })).toHaveCount(0);
+});
+
+test("Billing explains when purchase operations are unavailable", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsShell(page);
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(
+      route,
+      capacitySummary({
+        billingOperationsEnabled: false,
+      })
+    )
+  );
+
+  await page.goto(scopedPath("settings?tab=billing"));
+
   await expect(
-    page.getByRole("button", { name: /Add|Manage/ }).first()
-  ).toBeDisabled();
+    page.getByText(
+      "Inference purchases are unavailable on this deployment. Ask the deployment administrator to configure billing."
+    )
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Capacity purchases are unavailable on this deployment. Ask the deployment administrator to configure billing."
+    )
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "$10", exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Add Storage +1 GB" })
+  ).toHaveCount(0);
+});
+
+test("legacy subscribers can manage their plan and buy inference credit", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsShell(page);
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(
+      route,
+      capacitySummary({
+        billingOperationsEnabled: false,
+        plan: {
+          ref: "legacy",
+          name: "Mog Mode",
+          offerKind: "legacy",
+          interval: "contract",
+          recurringAmountCents: null,
+          renewsAt: "2026-09-17T12:00:00.000Z",
+          cancelsAt: null,
+          namedUserLimit: null,
+        },
+      })
+    )
+  );
+  await page.route("**/api/stripe/checkout", (route) =>
+    fulfillJson(route, {
+      url: scopedPath("settings?tab=billing&billing=topup"),
+    })
+  );
+
+  await page.goto(scopedPath("settings?tab=billing"));
+
+  await expect(page.getByRole("heading", { name: "Mog Mode" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Manage plan" })).toBeEnabled();
+
+  const topupCheckout = page.waitForRequest("**/api/stripe/checkout");
+  await page.getByRole("button", { name: "$10", exact: true }).click();
+  expect((await topupCheckout).postDataJSON()).toMatchObject({
+    kind: "topup",
+    preset: "topup_10",
+  });
 });

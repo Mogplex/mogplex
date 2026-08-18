@@ -17,6 +17,7 @@ const RESERVED = new Set<string>([
   "api",
   "auth",
   "cli-auth",
+  "checkout",
   "company",
   "conduct",
   "faq",

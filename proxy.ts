@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   allowsDelegatedInternalApiPath,
   isPublicRoutePath,
+  isUnscopedAuthedRoutePath,
 } from "@/lib/auth-route-policy";
 import {
   buildMachineApiAuthFailureResponse,
@@ -18,11 +19,6 @@ import { isDashboardScopedFirstSegment } from "@/lib/dashboard-rescue";
 import { getCanonicalAppUrl } from "@/lib/app-url";
 import { resolveScope, type ScopeLookup } from "@/lib/middleware-scope";
 import type { NextRequest } from "next/server";
-
-// Authed routes that live at the root and must NOT be treated as a scope
-// segment. Entries are also in RESERVED_SLUGS so no team/user can claim them;
-// this set short-circuits scope resolution so the real page can render.
-const UNSCOPED_AUTHED_FIRST_SEGMENT = new Set<string>(["new", "invite"]);
 
 type PendingCookie = { name: string; value: string; options: CookieOptions };
 
@@ -261,7 +257,7 @@ export async function proxy(request: NextRequest) {
 
   const firstSegment = pathname.split("/")[1];
   if (!firstSegment) return supabaseResponse;
-  if (UNSCOPED_AUTHED_FIRST_SEGMENT.has(firstSegment)) return supabaseResponse;
+  if (isUnscopedAuthedRoutePath(pathname)) return supabaseResponse;
 
   const result = await resolveScope(
     firstSegment,
