@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MIGRATION =
@@ -9,10 +9,8 @@ const MIGRATION =
 const NEON_MIGRATION =
   "neon/migrations/20260818213000_redact_persisted_agent_secrets.sql";
 
-let db: PGlite;
-
-beforeAll(async () => {
-  db = new PGlite();
+async function createSeededDb() {
+  const db = new PGlite();
   await db.exec(`
     create table public.control_sessions (messages jsonb not null);
     create table public.conversations (messages jsonb, local_msgs jsonb);
@@ -28,16 +26,13 @@ beforeAll(async () => {
     insert into public.ai_call_events (payload, message)
     values ('{"output":"ghr_testRefreshToken sb_secret_supabaseToken"}', 'github_pat_eventMessageToken');
   `);
-  await db.exec(await readFile(path.join(REPO_ROOT, MIGRATION), "utf8"));
-  await db.exec(await readFile(path.join(REPO_ROOT, NEON_MIGRATION), "utf8"));
-});
+  return db;
+}
 
-afterAll(async () => {
-  await db.close();
-});
-
-describe("persisted agent secret redaction migration", () => {
-  it("redacts credentials from every retained transcript payload", async () => {
+async function expectMigrationToRedact(migration: string) {
+  const db = await createSeededDb();
+  try {
+    await db.exec(await readFile(path.join(REPO_ROOT, migration), "utf8"));
     const { rows } = await db.query<{
       control: string;
       messages: string;
@@ -62,5 +57,17 @@ describe("persisted agent secret redaction migration", () => {
       /testInstallationToken|git-token|bearer-token|openAiSecretToken|testToken|testOauthToken|testRefreshToken|supabaseToken|ai-call-error-token|eventMessageToken/
     );
     expect(persisted).toContain("[redacted]");
+  } finally {
+    await db.close();
+  }
+}
+
+describe("persisted agent secret redaction migration", () => {
+  it("redacts Supabase persisted credentials", async () => {
+    await expectMigrationToRedact(MIGRATION);
+  });
+
+  it("redacts Neon persisted credentials independently", async () => {
+    await expectMigrationToRedact(NEON_MIGRATION);
   });
 });

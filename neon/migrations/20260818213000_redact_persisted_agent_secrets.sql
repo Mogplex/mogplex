@@ -15,19 +15,19 @@ as $$
           regexp_replace(
             regexp_replace(
               value::text,
-              '(?i)https://x-access-token:[^@[:space:]]+@github\\.com',
+              '(?i)https://x-access-token:[^@[:space:]]+@github\.com',
               'https://x-access-token:[redacted]@github.com',
               'g'
             ),
-            '(?i)\\mgh[oprsu]_[A-Za-z0-9_]+\\M', '[redacted]', 'g'
+            '(?i)\mgh[oprsu]_[A-Za-z0-9_]+\M', '[redacted]', 'g'
           ),
-          '(?i)\\mgithub_pat_[A-Za-z0-9_]+\\M', '[redacted]', 'g'
+          '(?i)\mgithub_pat_[A-Za-z0-9_]+\M', '[redacted]', 'g'
         ),
-        '(?i)(bearer[[:space:]]+)[A-Za-z0-9._~+/=-]+', '\\1[redacted]', 'g'
+        '(?i)(bearer[[:space:]]+)[A-Za-z0-9._~+/=-]+', '\1[redacted]', 'g'
       ),
-      '(?i)\\msk-[A-Za-z0-9_-]{8,}\\M', '[redacted]', 'g'
+      '(?i)\msk-[A-Za-z0-9_-]{8,}\M', '[redacted]', 'g'
     ),
-    '(?i)\\msb_secret_[A-Za-z0-9_-]+\\M', '[redacted]', 'g'
+    '(?i)\msb_secret_[A-Za-z0-9_-]+\M', '[redacted]', 'g'
   )::jsonb;
 $$;
 
