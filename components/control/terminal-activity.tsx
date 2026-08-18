@@ -1,6 +1,7 @@
 "use client";
 
 import { Terminal } from "iconoir-react";
+import { useMemo } from "react";
 import type { UIMessage } from "ai";
 import {
   buildTerminalActivityEntries,
@@ -28,19 +29,25 @@ const STATUS: Record<
   },
 };
 
+const SANDBOX_TITLE: Record<TerminalActivityEntry["state"], string> = {
+  running: "Starting sandbox",
+  done: "Sandbox ready",
+  failed: "Sandbox failed",
+};
+
+const SANDBOX_FALLBACK: Record<TerminalActivityEntry["state"], string> = {
+  running: "Waiting for remote compute to start…",
+  done: "Sandbox state updated.",
+  failed: "Sandbox failed to start.",
+};
+
 function TerminalRow({ entry }: { entry: TerminalActivityEntry }) {
   const status = STATUS[entry.state];
   const title =
-    entry.kind === "sandbox"
-      ? entry.state === "running"
-        ? "Starting sandbox"
-        : "Sandbox ready"
-      : entry.command;
+    entry.kind === "sandbox" ? SANDBOX_TITLE[entry.state] : entry.command;
   const fallback =
     entry.kind === "sandbox"
-      ? entry.state === "running"
-        ? "Waiting for remote compute to start…"
-        : "Sandbox state updated."
+      ? SANDBOX_FALLBACK[entry.state]
       : entry.state === "running"
         ? "Command is running…"
         : entry.state === "done"
@@ -82,7 +89,7 @@ function TerminalRow({ entry }: { entry: TerminalActivityEntry }) {
 
 /** Read-only execution feedback, attached to the composer instead of a new tab. */
 export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
-  const entries = buildTerminalActivityEntries(messages);
+  const entries = useMemo(() => buildTerminalActivityEntries(messages), [messages]);
   if (entries.length === 0) return null;
 
   const visibleEntries = entries.slice(-3);

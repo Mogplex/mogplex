@@ -193,6 +193,13 @@ test("buildTerminalActivityEntries keeps sandbox launch and shell output visible
           input: { path: "README.md" },
           output: { content: "not terminal activity" },
         },
+        {
+          type: "tool-sandbox_start",
+          toolCallId: "c4",
+          state: "output-error",
+          input: { repoId: "repo-1" },
+          errorText: "sandbox capacity unavailable",
+        },
       ],
     },
   ] as unknown as UIMessage[];
@@ -215,6 +222,15 @@ test("buildTerminalActivityEntries keeps sandbox launch and shell output visible
       sandboxId: "sandbox-1",
       state: "done",
       lines: ["12 tests passed", "[redacted]"],
+    },
+    {
+      id: "a1-3",
+      kind: "sandbox",
+      toolName: "sandbox_start",
+      command: null,
+      sandboxId: null,
+      state: "failed",
+      lines: ["sandbox capacity unavailable"],
     },
   ]);
 });

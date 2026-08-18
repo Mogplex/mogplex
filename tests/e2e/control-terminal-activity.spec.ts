@@ -20,6 +20,17 @@ test("control shows sandbox launch and command output above the composer", async
     { type: "start" },
     {
       type: "tool-input-available",
+      toolCallId: "failed-sandbox-call",
+      toolName: "sandbox_start",
+      input: { repoId: "repo-1" },
+    },
+    {
+      type: "tool-output-error",
+      toolCallId: "failed-sandbox-call",
+      errorText: "Sandbox capacity unavailable",
+    },
+    {
+      type: "tool-input-available",
       toolCallId: "sandbox-call",
       toolName: "sandbox_start",
       input: { repoId: "repo-1" },
@@ -74,6 +85,8 @@ test("control shows sandbox launch and command output above the composer", async
   await expect(terminal).toContainText("sandbox-demo");
   await expect(terminal).toContainText("pnpm test");
   await expect(terminal).toContainText("12 tests passed");
+  await expect(terminal).toContainText("Sandbox failed");
+  await expect(terminal).toContainText("Sandbox capacity unavailable");
 
   // The terminal and composer use the conversation rail, rather than each
   // introducing a slightly narrower content column.
