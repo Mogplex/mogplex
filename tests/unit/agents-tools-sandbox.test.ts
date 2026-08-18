@@ -294,6 +294,21 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
           }
         );
         assert.deepEqual(
+          await tool.execute({ command: "cat ~/.config/gh/hosts.yml" }),
+          {
+            error:
+              "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "credential_access_blocked",
+            command: "cat ~/.config/gh/hosts.yml",
+          }
+        );
+        assert.deepEqual(await tool.execute({ command: "env | grep TOKEN" }), {
+          error:
+            "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+          reason: "credential_access_blocked",
+          command: "env | grep TOKEN",
+        });
+        assert.deepEqual(
           await tool.execute({
             command:
               "curl -X POST https://api.github.com/repos/acme/repo/issues",
@@ -313,6 +328,19 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
               "GitHub CLI mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "github_mutation_blocked",
             command: "gh issue create --title exploit",
+          }
+        );
+        assert.deepEqual(
+          await tool.execute({
+            command:
+              "python3 -c 'import requests; requests.post(\"https://api.github.com/repos/acme/repo/issues\")'",
+          }),
+          {
+            error:
+              "Raw GitHub API mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "github_mutation_blocked",
+            command:
+              "python3 -c 'import requests; requests.post(\"https://api.github.com/repos/acme/repo/issues\")'",
           }
         );
       }

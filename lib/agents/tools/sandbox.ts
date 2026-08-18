@@ -13,10 +13,11 @@ export { resolveOrCreateSandbox } from "./sandbox-resolution";
 const EXEC_STDOUT_LIMIT = 10_000;
 const EXEC_STDERR_LIMIT = 5000;
 const CREDENTIAL_FILE_PATTERN =
-  /(?:\.git-credentials|\.mogplex\/github-token)/i;
+  /(?:\.git-credentials|\.mogplex\/github-token|\.netrc|\.config\/gh\/hosts\.yml|\.gitconfig)/i;
 const CREDENTIAL_COMMAND_PATTERN =
-  /\b(?:(?:GH|GITHUB)_TOKEN|git\s+credential|gh\s+auth\s+token)\b/i;
-const HTTP_CLIENT_PATTERN = /\b(?:curl|wget|http)\b/i;
+  /\b(?:(?:GH|GITHUB)_TOKEN|git\s+credential|gh\s+auth\s+token|(?:\/proc\/\S+\/environ)|env|printenv)\b/i;
+const HTTP_CLIENT_PATTERN =
+  /\b(?:curl|wget|http|python(?:3)?|node|deno|ruby)\b/i;
 const GITHUB_API_PATTERN = /api\.github\.com/i;
 const HTTP_MUTATION_METHOD_PATTERN = /\b(?:POST|PUT|PATCH|DELETE)\b/i;
 const HTTP_MUTATION_FLAG_PATTERN =
@@ -25,6 +26,13 @@ const GITHUB_CLI_PATTERN = /\bgh\b/i;
 const GITHUB_CLI_MUTATION_PATTERN =
   /\b(?:issue|pr)\s+(?:create|edit|close|reopen|delete)\b/i;
 const GITHUB_CLI_API_PATTERN = /\bgh\s+api\b/i;
+
+/*
+ * This prevents common accidental credential reads and mutation bypasses, but
+ * is not an authorization boundary: shell syntax is too expressive to parse
+ * safely here. Sandbox credential provisioning and native, server-scoped
+ * GitHub tools remain the security boundary.
+ */
 
 function isRawGitHubMutationCommand(command: string) {
   return (

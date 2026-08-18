@@ -20,11 +20,11 @@ beforeAll(async () => {
     insert into public.control_sessions (messages)
     values ('[{"output":"ghs_testInstallationToken https://x-access-token:git-token@github.com"}]');
     insert into public.conversations (messages, local_msgs)
-    values ('[{"output":"Bearer bearer-token"}]', '[{"output":"github_pat_testToken"}]');
+    values ('[{"output":"Bearer bearer-token sk-openAiSecretToken"}]', '[{"output":"github_pat_testToken"}]');
     insert into public.ai_calls (tool_calls, error)
     values ('[{"output":"gho_testOauthToken"}]', 'Bearer ai-call-error-token');
     insert into public.ai_call_events (payload, message)
-    values ('{"output":"ghr_testRefreshToken"}', 'github_pat_eventMessageToken');
+    values ('{"output":"ghr_testRefreshToken sb_secret_supabaseToken"}', 'github_pat_eventMessageToken');
   `);
   await db.exec(await readFile(path.join(REPO_ROOT, MIGRATION), "utf8"));
 });
@@ -56,7 +56,7 @@ describe("persisted agent secret redaction migration", () => {
     const persisted = Object.values(rows[0] ?? {}).join(" ");
 
     expect(persisted).not.toMatch(
-      /testInstallationToken|git-token|bearer-token|testToken|testOauthToken|testRefreshToken|ai-call-error-token|eventMessageToken/
+      /testInstallationToken|git-token|bearer-token|openAiSecretToken|testToken|testOauthToken|testRefreshToken|supabaseToken|ai-call-error-token|eventMessageToken/
     );
     expect(persisted).toContain("[redacted]");
   });
