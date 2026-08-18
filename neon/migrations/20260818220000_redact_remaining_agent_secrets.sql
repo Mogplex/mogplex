@@ -1,5 +1,7 @@
 -- Defense in depth for data retained before the live redaction boundary.
 -- The Neon migration runner owns this file's transaction.
+-- No \\m/\\M anchors: catch credentials embedded in word characters that the
+-- original bounded patterns intentionally left behind.
 
 create or replace function public.redact_remaining_agent_secrets(value jsonb)
 returns jsonb
