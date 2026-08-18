@@ -12,6 +12,7 @@ import {
   createStartSandbox,
   createStopSandbox,
   createGithubPullRequestTool,
+  createScopedGithubIssueTool,
   createGithubApi,
   webFetch,
   createTerminalExec,
@@ -133,6 +134,11 @@ function buildToolForDef(
   if (def.name === "search_repo") {
     return ctx.githubToken
       ? createGithubApi(ctx.githubToken, repoDefaults)
+      : null;
+  }
+  if (def.name === "github_create_issue") {
+    return ctx.repoId && repoDefaults.owner && repoDefaults.repo
+      ? createScopedGithubIssueTool({ userId: ctx.userId, repoDefaults })
       : null;
   }
   if (def.name === "run_command") {

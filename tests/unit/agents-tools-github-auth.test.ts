@@ -331,7 +331,7 @@ test("github_pr_search retries OAuth after GraphQL auth errors with HTTP 200", a
   );
 });
 
-test("github_create_issue uses the linked user's GitHub App installation", async () => {
+test("scoped GitHub issue creation uses the linked user's GitHub App installation", async () => {
   const calls: Array<{
     path: string;
     method: string;
@@ -378,13 +378,12 @@ test("github_create_issue uses the linked user's GitHub App installation", async
               );
             },
             async () => {
-              const { createGithubIssueTool } = await loadToolsModule();
-              const tool = createGithubIssueTool({
+              const { createScopedGithubIssueTool } = await loadToolsModule();
+              const tool = createScopedGithubIssueTool({
                 userId: "user-1",
+                repoDefaults: { owner: "webrenew", repo: "tools" },
               }) as unknown as {
                 execute: (input: {
-                  owner: string;
-                  repo: string;
                   title: string;
                   body: string;
                   labels: string[];
@@ -392,8 +391,6 @@ test("github_create_issue uses the linked user's GitHub App installation", async
               };
 
               const result = await tool.execute({
-                owner: "webrenew",
-                repo: "tools",
                 title: "Ensure Stripe creations have project metadata",
                 body: "Audit every Stripe create call.",
                 labels: ["bug", "billing"],

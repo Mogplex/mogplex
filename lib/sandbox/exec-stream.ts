@@ -1,4 +1,5 @@
 import type { Sandbox } from "@vercel/sandbox";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 
 export type ExecStreamEvent =
   | { type: "run"; cmdId: string }
@@ -67,7 +68,11 @@ export async function startExecStream(
           if (onActivity) await onActivity();
           controller.enqueue(
             encoder.encode(
-              encode({ type: "log", stream: log.stream, data: log.data })
+              encode({
+                type: "log",
+                stream: log.stream,
+                data: redactSecretsInText(log.data),
+              })
             )
           );
         }
@@ -90,7 +95,9 @@ export async function startExecStream(
       } catch (err) {
         const message = err instanceof Error ? err.message : "stream error";
         controller.enqueue(
-          encoder.encode(encode({ type: "error", data: message }))
+          encoder.encode(
+            encode({ type: "error", data: redactSecretsInText(message) })
+          )
         );
       } finally {
         controller.close();

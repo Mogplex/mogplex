@@ -165,4 +165,25 @@ describe("buildOrchestratorTools", () => {
     expect(Object.keys(schema.shape)).toEqual(["path", "content"]);
     expect(tools.write_file.description).toMatch(/server-selected sandbox/i);
   });
+
+  it("uses a server-scoped GitHub issue mutation instead of a sandbox shell", () => {
+    expect(tools.github_create_issue).toBeDefined();
+    expect(tools.github_create_issue.description).toMatch(
+      /current workspace repository/i
+    );
+    const schema = tools.github_create_issue.inputSchema as unknown as {
+      shape: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.shape).sort()).toEqual([
+      "body",
+      "labels",
+      "title",
+    ]);
+
+    const withoutRepository = buildOrchestratorTools({
+      ...FULL_CONTEXT,
+      repoId: null,
+    });
+    expect(withoutRepository.github_create_issue).toBeUndefined();
+  });
 });

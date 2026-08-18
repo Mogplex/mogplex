@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createGithubIssue } from "@/lib/github-issues";
-import { defineTool } from "./shared";
+import { defineTool, type RepoToolDefaults } from "./shared";
 import {
   normalizeLogin,
   normalizeRepoName,
@@ -8,6 +8,9 @@ import {
 } from "./github-shared";
 
 type GithubCreateIssueOptions = { userId?: string | null };
+type ScopedGithubCreateIssueOptions = GithubCreateIssueOptions & {
+  repoDefaults?: RepoToolDefaults;
+};
 
 function normalizeIssueInputs(input: {
   owner?: string;
@@ -43,6 +46,71 @@ const githubCreateIssueParams = z
   })
   .strict();
 
+const scopedGithubCreateIssueParams = githubCreateIssueParams
+  .omit({ owner: true, repo: true })
+  .strict();
+
+async function executeGithubIssueCreate(input: {
+  owner: string;
+  repo: string;
+  title: string;
+  body: string;
+  labels: string[];
+  userId?: string | null;
+}) {
+  const normalized = normalizeIssueInputs(input);
+  if ("error" in normalized) return { error: normalized.error };
+  if (!normalized.owner || !normalized.repo)
+    return { error: "owner and repo are required." };
+  if (!input.userId) {
+    return {
+      error:
+        "GitHub issue creation is unavailable because the current user is not authenticated.",
+    };
+  }
+  let githubToken: string | null;
+  try {
+    githubToken = await findInstallationToken({
+      userId: input.userId,
+      owner: normalized.owner,
+    });
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "GitHub App installation lookup failed.",
+    };
+  }
+  if (!githubToken) {
+    return {
+      error: `GitHub issue creation is unavailable for ${normalized.owner}/${normalized.repo}. Install the Mogplex GitHub App for ${normalized.owner} and include this repository.`,
+    };
+  }
+  try {
+    const created = await createGithubIssue({
+      githubToken,
+      repoFullName: `${normalized.owner}/${normalized.repo}`,
+      title: input.title,
+      body: input.body,
+      labels: input.labels,
+    });
+    return {
+      ok: true,
+      repo: `${normalized.owner}/${normalized.repo}`,
+      ...created,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "GitHub issue creation failed.",
+    };
+  }
+}
+
 export function createGithubIssueTool(options: GithubCreateIssueOptions = {}) {
   return defineTool({
     description:
@@ -54,58 +122,48 @@ export function createGithubIssueTool(options: GithubCreateIssueOptions = {}) {
       title,
       body,
       labels,
-    }: z.infer<typeof githubCreateIssueParams>) => {
-      const normalized = normalizeIssueInputs({ owner, repo });
-      if ("error" in normalized) return { error: normalized.error };
-      if (!normalized.owner || !normalized.repo)
-        return { error: "owner and repo are required." };
-      if (!options.userId) {
+    }: z.infer<typeof githubCreateIssueParams>) =>
+      executeGithubIssueCreate({
+        owner,
+        repo,
+        title,
+        body,
+        labels,
+        userId: options.userId,
+      }),
+  });
+}
+
+/** Create an issue only in the server-selected workspace repository. */
+export function createScopedGithubIssueTool(
+  options: ScopedGithubCreateIssueOptions = {}
+) {
+  const owner = options.repoDefaults?.owner;
+  const repo = options.repoDefaults?.repo;
+
+  return defineTool({
+    description:
+      "Create a GitHub issue in the current workspace repository through the Mogplex GitHub App. Use only when the user explicitly asks to create/file/open an issue or confirms a previously proposed issue. The repository is fixed server-side; returns the created issue URL.",
+    inputSchema: scopedGithubCreateIssueParams,
+    execute: async ({
+      title,
+      body,
+      labels,
+    }: z.infer<typeof scopedGithubCreateIssueParams>) => {
+      if (!owner || !repo) {
         return {
           error:
-            "GitHub issue creation is unavailable because the current user is not authenticated.",
+            "GitHub issue creation requires an active workspace repository.",
         };
       }
-      let githubToken: string | null;
-      try {
-        githubToken = await findInstallationToken({
-          userId: options.userId,
-          owner: normalized.owner,
-        });
-      } catch (error) {
-        return {
-          error:
-            error instanceof Error
-              ? error.message
-              : "GitHub App installation lookup failed.",
-        };
-      }
-      if (!githubToken) {
-        return {
-          error: `GitHub issue creation is unavailable for ${normalized.owner}/${normalized.repo}. Install the Mogplex GitHub App for ${normalized.owner} and include this repository.`,
-        };
-      }
-      try {
-        const created = await createGithubIssue({
-          githubToken,
-          repoFullName: `${normalized.owner}/${normalized.repo}`,
-          title,
-          body,
-          labels,
-        });
-        return {
-          ok: true,
-          repo: `${normalized.owner}/${normalized.repo}`,
-          ...created,
-        };
-      } catch (error) {
-        return {
-          ok: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "GitHub issue creation failed.",
-        };
-      }
+      return executeGithubIssueCreate({
+        owner,
+        repo,
+        title,
+        body,
+        labels,
+        userId: options.userId,
+      });
     },
   });
 }

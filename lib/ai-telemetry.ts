@@ -33,19 +33,42 @@ function maybeRedactJsonString(
   }
 }
 
-function redactStringSecrets(
-  value: string,
-  options: Required<TelemetrySanitizeOptions>
-) {
-  const jsonRedacted = maybeRedactJsonString(value, options);
-  const redacted = (jsonRedacted ?? value)
+export function redactSecretsInText(value: string) {
+  return value
     .replace(/\bbearer\s+[\w+./=~-]+\b/gi, "Bearer [redacted]")
     .replace(/(x-access-token:)[^\s@]+@/gi, "$1[redacted]@")
     .replace(/\b(?:gh[oprsu]_\w+|github_pat_\w+)\b/g, REDACTED_VALUE)
     .replace(/\bsk-[\w-]{8,}\b/g, REDACTED_VALUE)
     .replace(/\bsb_secret_[\w-]+\b/g, REDACTED_VALUE);
+}
+
+function redactStringSecrets(
+  value: string,
+  options: Required<TelemetrySanitizeOptions>
+) {
+  const jsonRedacted = maybeRedactJsonString(value, options);
+  const redacted = redactSecretsInText(jsonRedacted ?? value);
 
   return truncateTelemetryString(redacted, options.maxStringLength);
+}
+
+/** Redact secrets without truncating a value that must remain displayable. */
+export function redactSecretsInValue(value: unknown): unknown {
+  if (typeof value === "string") return redactSecretsInText(value);
+  if (value === null || typeof value === "number" || typeof value === "boolean")
+    return value;
+  if (Array.isArray(value)) return value.map(redactSecretsInValue);
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [
+        key,
+        SENSITIVE_KEY_PATTERN.test(key)
+          ? REDACTED_VALUE
+          : redactSecretsInValue(nested),
+      ])
+    );
+  }
+  return value;
 }
 
 function resolveOptions(

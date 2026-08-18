@@ -186,3 +186,20 @@ test("tool completion telemetry records structured mismatch reasons", () => {
     checkout_path: null,
   });
 });
+
+test("tool completion telemetry redacts credentials from failure details", () => {
+  const finished = createToolCallFinishPayload({
+    success: false,
+    toolCall: {
+      toolCallId: "tool-call-redacted",
+      toolName: "read_file",
+      input: { path: "README.md" },
+    },
+    error: new Error("GitHub token ghs_controlTelemetryToken was rejected"),
+  });
+
+  assert.match(
+    JSON.stringify(finished.payload),
+    /"error":"GitHub token \[redacted\] was rejected"/
+  );
+});

@@ -5,6 +5,7 @@ import { validateControlSessionRepoAccess } from "@/lib/control/session-repo-acc
 import { pickControlSessionUpdateFields } from "@/lib/control/session-update";
 import { createOrchestrationRun } from "@/lib/orchestrations/store";
 import { validateOrchestrationBranchName } from "@/lib/orchestrations/validation";
+import { redactSecretsInValue } from "@/lib/ai-telemetry";
 
 const LIST_COLUMNS =
   "id, title, project, repo_id, orchestration_run_id, pinned, archived, created_at, updated_at";
@@ -211,6 +212,9 @@ export async function PUT(req: Request) {
   }
 
   const fields = pickControlSessionUpdateFields(body);
+  if (Object.hasOwn(fields, "messages")) {
+    fields.messages = redactSecretsInValue(fields.messages);
+  }
 
   const { data, error } = await supabaseAdmin
     .from("control_sessions")

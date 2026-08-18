@@ -49,7 +49,10 @@ export {
   type GithubPrSearchOptions,
 } from "./github-pr-search";
 export { createGithubRepoList } from "./github-repo-list";
-export { createGithubIssueTool } from "./github-issue";
+export {
+  createGithubIssueTool,
+  createScopedGithubIssueTool,
+} from "./github-issue";
 export { createMemoryTools, type MemoryToolContext } from "./memory";
 export { virtualExecTool } from "./virtual-exec";
 export {

@@ -254,6 +254,20 @@ describe("orchestrator resource decision prompt", () => {
     );
   });
 
+  it("directs native GitHub issue mutations to the scoped issue tool", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      availableToolNames: ["github_create_issue", "run_command"],
+    });
+
+    expect(prompt).toContain(
+      "Use github_create_issue for an explicitly requested GitHub issue in the active repository"
+    );
+    expect(prompt).toContain(
+      "Never use run_command to install GitHub tooling, inspect credentials, or call GitHub APIs"
+    );
+  });
+
   it("keeps plan mode non-mutating and handles empty context", () => {
     const planPrompt = buildOrchestratorSystemPrompt({
       controlMode: "plan",
