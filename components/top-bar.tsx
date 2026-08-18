@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { scopedHref } from "@/lib/scoped-href";
@@ -87,6 +87,7 @@ export function MobileSheetNav({
 }
 
 export function TopBar() {
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { user, logout, isLoading } = useUser();
   const pathname = usePathname();
   const router = useRouter();
@@ -172,7 +173,7 @@ export function TopBar() {
         {isLoading ? (
           <div className="bg-accent h-7 w-20 animate-pulse rounded-lg" />
         ) : user ? (
-          <DropdownMenu>
+          <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 aria-label="User menu"
@@ -202,7 +203,7 @@ export function TopBar() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <ScopeMenuItems />
+              <ScopeMenuItems onScopeSelected={() => setUserMenuOpen(false)} />
               <DropdownMenuSeparator />
               {slackMenuDisabled ? (
                 <DropdownMenuItem disabled>
