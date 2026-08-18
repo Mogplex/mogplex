@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import {
   CheckCircle,
   Copy,
-  Play,
   Plus,
   Redo,
+  Settings,
   Trash,
   Undo,
 } from "iconoir-react"
@@ -53,6 +53,7 @@ export interface EditorToolbarProps {
   onPersist: () => void
   onPublish: () => void
   onToggleStatus: () => void
+  onConfigureTrigger: () => void
 }
 
 export function EditorToolbarHeader({
@@ -84,6 +85,7 @@ export function EditorToolbarHeader({
   onPersist,
   onPublish,
   onToggleStatus,
+  onConfigureTrigger,
 }: Omit<EditorToolbarProps, "activeFlowTab" | "onTabChange" | "sidebarCollapsed" | "effectiveLegacyAgentNodes">) {
   if (!selectedFlow || !draft) return null
 
@@ -243,11 +245,12 @@ export function EditorToolbarHeader({
           type="button"
           variant="outline"
           size="sm"
-          disabled
-          className="hidden h-8 gap-1.5 border-border bg-foreground/[0.035] px-3 text-xs text-muted-foreground @3xl/flows-editor:inline-flex"
+          data-testid="flow-trigger-setup-button"
+          onClick={onConfigureTrigger}
+          className="size-8 gap-1.5 border-border bg-foreground/[0.035] px-0 text-xs text-muted-foreground @3xl/flows-editor:w-auto @3xl/flows-editor:px-3"
         >
-          <Play className="size-3.5" />
-          Test run
+          <Settings className="size-3.5" />
+          <span className="sr-only @3xl/flows-editor:not-sr-only">Trigger setup</span>
         </Button>
         <Button
           type="button"
