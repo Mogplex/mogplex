@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MIGRATION =
   "supabase/migrations/20260818194500_redact_persisted_agent_secrets.sql";
+const NEON_MIGRATION =
+  "neon/migrations/20260818213000_redact_persisted_agent_secrets.sql";
 
 let db: PGlite;
 
@@ -27,6 +29,7 @@ beforeAll(async () => {
     values ('{"output":"ghr_testRefreshToken sb_secret_supabaseToken"}', 'github_pat_eventMessageToken');
   `);
   await db.exec(await readFile(path.join(REPO_ROOT, MIGRATION), "utf8"));
+  await db.exec(await readFile(path.join(REPO_ROOT, NEON_MIGRATION), "utf8"));
 });
 
 afterAll(async () => {
