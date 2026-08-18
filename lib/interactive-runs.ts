@@ -215,6 +215,16 @@ export async function finalizeAiCallAsCancelledIfActive(
   });
 }
 
+export function sanitizeAiCallEventInput(
+  input: Parameters<typeof appendAiCallEvent>[0]
+) {
+  return {
+    ...input,
+    message: input.message ? redactSecretsInText(input.message) : null,
+    payload: sanitizeTelemetryRecord(input.payload),
+  };
+}
+
 export async function appendAiCallEvent(input: {
   aiCallId: string;
   userId: string;
@@ -226,7 +236,7 @@ export async function appendAiCallEvent(input: {
   payload?: Record<string, unknown>;
 }) {
   const supabaseAdmin = await getSupabaseAdmin();
-  const payload = sanitizeTelemetryRecord(input.payload);
+  const sanitizedInput = sanitizeAiCallEventInput(input);
   const { data, error } = await supabaseAdmin
     .from("ai_call_events")
     .insert({
@@ -236,8 +246,8 @@ export async function appendAiCallEvent(input: {
       repo_id: input.repoId ?? null,
       event_type: input.eventType,
       tool_name: input.toolName ?? null,
-      message: input.message ? redactSecretsInText(input.message) : null,
-      payload,
+      message: sanitizedInput.message,
+      payload: sanitizedInput.payload,
     })
     .select("*")
     .single();
@@ -256,11 +266,7 @@ export async function safeAppendAiCallEvent(
     return await appendAiCallEvent(input);
   } catch (error) {
     console.error("[interactive-runs] failed to append ai_call_event", {
-      input: {
-        ...input,
-        message: input.message ? redactSecretsInText(input.message) : undefined,
-        payload: sanitizeTelemetryRecord(input.payload),
-      },
+      input: sanitizeAiCallEventInput(input),
       error,
     });
     return null;
