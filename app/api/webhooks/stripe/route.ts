@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
   areCapacityBillingOperationsEnabled,
+  capacityBillingStripeMode,
   getStripe,
   isBillingEnabled,
 } from "@/lib/billing/stripe";
@@ -62,6 +63,7 @@ export type StripeWebhookDeps = {
   listRefunds: (chargeId: string) => Promise<Stripe.Refund[]>;
   retrieveCharge: (id: string) => Promise<Stripe.Charge>;
   capacityBillingOperationsEnabled: () => boolean;
+  capacityBillingStripeMode: typeof capacityBillingStripeMode;
   applyCapacityEntitlementSnapshot: typeof applyCapacityEntitlementSnapshot;
   recordCapacityScheduleProjection: typeof recordCapacityScheduleProjection;
   reconcileCapacityAnnualGrantSchedule: typeof reconcileCapacityAnnualGrantSchedule;
@@ -81,6 +83,7 @@ function defaultDeps(): StripeWebhookDeps {
       (await getStripe().refunds.list({ charge: chargeId, limit: 100 })).data,
     retrieveCharge: (id) => getStripe().charges.retrieve(id),
     capacityBillingOperationsEnabled: areCapacityBillingOperationsEnabled,
+    capacityBillingStripeMode,
     applyCapacityEntitlementSnapshot,
     recordCapacityScheduleProjection,
     reconcileCapacityAnnualGrantSchedule,

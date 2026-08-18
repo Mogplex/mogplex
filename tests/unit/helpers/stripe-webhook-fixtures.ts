@@ -61,6 +61,7 @@ export function makeDeps(overrides: {
   refunds?: Array<Partial<Stripe.Refund>>;
   postedRefs?: Set<string>;
   capacityBillingOperationsEnabled?: boolean;
+  capacityBillingStripeMode?: "test" | "live" | null;
   capacityProjectionResult?: CapacityEntitlementProjectionResult;
 }) {
   const account = overrides.account ?? accountFixture();
@@ -135,6 +136,8 @@ export function makeDeps(overrides: {
       ({ id: "ch_1", customer: "cus_123" }) as Stripe.Charge,
     capacityBillingOperationsEnabled: () =>
       overrides.capacityBillingOperationsEnabled ?? false,
+    capacityBillingStripeMode: () =>
+      overrides.capacityBillingStripeMode ?? "test",
     applyCapacityEntitlementSnapshot: async (input: {
       accountId: string;
       sourceEventId: string;

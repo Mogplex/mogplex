@@ -5,6 +5,7 @@ import {
 } from "../lib/billing/capacity-stripe-catalog";
 import {
   areCapacityBillingOperationsEnabled,
+  capacityBillingStripeMode,
   getStripe,
 } from "../lib/billing/stripe";
 
@@ -33,10 +34,12 @@ async function main() {
   if (!operationsEnabled) {
     throw new Error("Capacity billing operations are disabled");
   }
+  const mode = capacityBillingStripeMode();
+  if (!mode) throw new Error("Capacity billing Stripe mode is unavailable");
   const result = await syncCapacityStripeCatalog({
     deps: capacityStripeCatalogDeps(getStripe()),
   });
-  console.log(JSON.stringify({ mode: "test", ...result }, null, 2));
+  console.log(JSON.stringify({ mode, ...result }, null, 2));
 }
 
 // The repository compiles scripts as CommonJS, where top-level await is not

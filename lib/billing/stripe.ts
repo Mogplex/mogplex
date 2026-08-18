@@ -6,13 +6,26 @@ export function isBillingEnabled(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
-// Capacity catalog mutations stay test-mode-only until Gate B is explicitly
-// approved. Enabling the feature flag with a live key still fails closed.
+export type CapacityBillingStripeMode = "test" | "live";
+
+// Live capacity billing requires its own second switch. This keeps test
+// operations easy to exercise while making a production rollback a single env
+// change that does not disable legacy Stripe billing.
+export function capacityBillingStripeMode(): CapacityBillingStripeMode | null {
+  if (process.env.CAPACITY_BILLING_OPERATIONS_ENABLED !== "true") return null;
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (key?.startsWith("sk_test_") === true) return "test";
+  if (
+    key?.startsWith("sk_live_") === true &&
+    process.env.CAPACITY_BILLING_LIVE_WRITES_ENABLED === "true"
+  ) {
+    return "live";
+  }
+  return null;
+}
+
 export function areCapacityBillingOperationsEnabled(): boolean {
-  return (
-    process.env.CAPACITY_BILLING_OPERATIONS_ENABLED === "true" &&
-    process.env.STRIPE_SECRET_KEY?.startsWith("sk_test_") === true
-  );
+  return capacityBillingStripeMode() !== null;
 }
 
 let cached: Stripe | null = null;
