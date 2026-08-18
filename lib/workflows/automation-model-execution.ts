@@ -38,6 +38,13 @@ import {
   buildAutomationGatewayRoutingMetadata,
   captureGatewayModelRouting,
 } from "./automation-model-execution-gateway";
+import {
+  logAutomationGatewayFallback,
+  logAutomationGenerationFailure,
+  logAutomationProviderAttemptFailure,
+  type AutomationModelLogContext,
+  type AutomationModelLogger,
+} from "./automation-model-logging";
 
 // Re-export types from split modules
 export type {
@@ -130,7 +137,9 @@ export function resetAutomationDispatcherCacheForTests() {
 
 function wrapAutomationModelForGenerateRetries(
   model: GenerateTextRequest["model"],
-  retryState: AutomationGenerateRetryState
+  retryState: AutomationGenerateRetryState,
+  logger: AutomationModelLogger,
+  logContext: AutomationModelLogContext
 ): GenerateTextRequest["model"] {
   let wrappedModel = model;
 
@@ -145,10 +154,19 @@ function wrapAutomationModelForGenerateRetries(
           return await doGenerate();
         } catch (error) {
           const failure = classifyAutomationModelError(error);
-          if (
+          const willRetry = !(
             retryState.retryCount >= AUTOMATION_MODEL_MAX_GENERATE_RETRIES ||
             !failure.retryable
-          ) {
+          );
+          logAutomationProviderAttemptFailure({
+            logger,
+            context: logContext,
+            error,
+            failure,
+            attempt: retryState.retryCount + 1,
+            willRetry,
+          });
+          if (!willRetry) {
             throw error;
           }
 
@@ -248,11 +266,19 @@ export async function executeAutomationTextGeneration(input: {
   /** The pinned id, when a deprecated-model upgrade substituted a successor. */
   pinnedModelId?: string | null;
   generateText: typeof generateText;
+  logger?: AutomationModelLogger;
   request: Omit<GenerateTextRequest, "maxRetries" | "timeout">;
   timeoutMs?: number | null;
 }) {
   const effectiveTimeoutMs = getEffectiveAutomationTimeoutMs(input.timeoutMs);
   const generateTimeoutMs = getAutomationGenerateTimeoutMs(input.timeoutMs);
+  const logger = input.logger ?? console;
+  const logContext: AutomationModelLogContext = {
+    phase: input.phase,
+    requestedModelId: input.requestedModelId,
+    pinnedModelId: input.pinnedModelId,
+    providerOptions: input.request.providerOptions,
+  };
   const requestOnStepFinish = input.request.onStepFinish;
   const retryState: AutomationGenerateRetryState = {
     retryCount: 0,
@@ -274,7 +300,9 @@ export async function executeAutomationTextGeneration(input: {
     );
   const model = wrapAutomationModelForGenerateRetries(
     input.request.model,
-    retryState
+    retryState,
+    logger,
+    logContext
   );
   const onStepFinish: NonNullable<GenerateTextRequest["onStepFinish"]> = async (
     event
@@ -333,29 +361,45 @@ export async function executeAutomationTextGeneration(input: {
       },
       observedUsage
     );
+    const metadata = {
+      ...buildAutomationExecutionMetadata({
+        phase: input.phase,
+        effectiveTimeoutMs,
+        retryState,
+        gatewayRoutingState,
+        finalFailure: null,
+      }),
+      ...(hasCapturedUsage(finalUsage)
+        ? {
+            observedInputTokens: finalUsage.inputTokens,
+            observedOutputTokens: finalUsage.outputTokens,
+            observedUsage: finalUsage,
+          }
+        : {}),
+    };
+    logAutomationGatewayFallback({
+      logger,
+      context: logContext,
+      metadata,
+      providerMetadata: result.providerMetadata as ProviderMetadata | undefined,
+    });
     return {
       result,
-      metadata: {
-        ...buildAutomationExecutionMetadata({
-          phase: input.phase,
-          effectiveTimeoutMs,
-          retryState,
-          gatewayRoutingState,
-          finalFailure: null,
-        }),
-        ...(hasCapturedUsage(finalUsage)
-          ? {
-              observedInputTokens: finalUsage.inputTokens,
-              observedOutputTokens: finalUsage.outputTokens,
-              observedUsage: finalUsage,
-            }
-          : {}),
-      },
+      metadata,
     };
   } catch (error) {
     const observedUsage = readObservedUsage();
     const observedInputTokens = observedUsage.inputTokens;
     const observedOutputTokens = observedUsage.outputTokens;
+    const failure = classifyAutomationModelError(error);
+    logAutomationGenerationFailure({
+      logger,
+      context: logContext,
+      error,
+      failure,
+      attempts: retryState.retryCount + 1,
+      retryCount: retryState.retryCount,
+    });
     throw asAutomationModelExecutionError({
       error,
       phase: input.phase,
