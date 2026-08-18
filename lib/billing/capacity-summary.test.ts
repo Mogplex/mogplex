@@ -20,6 +20,7 @@ function capacityFacts(
       max_named_users: 1,
       included_concurrency: 5,
       included_retained_bytes: 1_000_000_000,
+      entitlement_enforcement_mode: "shadow",
     },
     balance: {
       includedCents: 300,
@@ -116,6 +117,7 @@ describe("capacity billing summary", () => {
       account: {
         id: "account-1",
         eventSequence: "12",
+        enforcementMode: "shadow",
         scope: "personal",
         displayName: "Personal workspace",
         status: "active",
@@ -171,7 +173,7 @@ describe("capacity billing summary", () => {
         subscriptionItemId: "retained-item",
         lookupKey: "capacity_v2_retained_data_10gb_monthly",
         kind: "retained_data",
-        name: "Retained data +10 GB",
+        name: "Storage +10 GB",
         quantity: 0,
         allowanceDelta: "0",
         recurringAmountCents: 0,

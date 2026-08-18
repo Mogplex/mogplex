@@ -40,6 +40,7 @@ const summary: CapacityBillingSummaryV2 = {
   account: {
     id: "account-1",
     eventSequence: "0",
+    enforcementMode: "shadow",
     scope: "personal",
     displayName: "Personal workspace",
     status: "active",

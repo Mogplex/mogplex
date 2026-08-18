@@ -167,7 +167,7 @@ test("hosted-usage checkout preserves safe errors and hides internal failures", 
     ...base,
     createHostedUsageCheckout: async () => {
       throw new HostedUsagePurchaseError(
-        "This account cannot buy hosted usage now. Contact support for help.",
+        "This account cannot buy inference now. Contact support for help.",
         403,
         "purchases_frozen"
       );

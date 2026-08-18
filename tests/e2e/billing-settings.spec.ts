@@ -76,6 +76,7 @@ function capacitySummary(
     account: {
       id: "billing-account-1",
       eventSequence: "12",
+      enforcementMode: "shadow",
       scope: "personal",
       displayName: "Alex",
       status: "active",
@@ -149,7 +150,19 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await enableScopedE2EAuth(page);
   await mockSettingsShell(page);
   await page.route("**/api/billing/capacity", (route) =>
-    fulfillJson(route, capacitySummary())
+    fulfillJson(
+      route,
+      capacitySummary({
+        hostedUsage: {
+          includedRemainingCents: 0,
+          purchasedRemainingCents: 0,
+          openReservationsCents: 0,
+          spendableCents: 0,
+          grantResetsAt: "2026-09-17T12:00:00.000Z",
+          purchasesFrozen: false,
+        },
+      })
+    )
   );
 
   await page.route("**/api/billing/capacity/preview", async (route) => {
@@ -190,9 +203,24 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await page.goto(scopedPath("settings?tab=billing"));
 
   await expect(page.getByRole("heading", { name: "Plus" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Add inference" })
+  ).toBeVisible();
+  await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+  await expect(page.getByText("Storage", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hosted usage", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Retained data", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Not enforced", { exact: true })).toHaveCount(2);
+  const headings = await page.locator("h2").allTextContents();
+  expect(headings.indexOf("Add inference")).toBeLessThan(
+    headings.indexOf("Plus")
+  );
   await expect(page.getByText("7 of 35")).toBeVisible();
   await expect(page.getByText("2.3 GB of 5 GB")).toBeVisible();
-  await expect(page.getByText("$25.00 available")).toBeVisible();
+  const inferenceValue = page.getByText("$0.00 available");
+  await expect(inferenceValue).toBeVisible();
+  await expect(page.getByText("At limit", { exact: true })).toHaveCount(1);
+  expect((await inferenceValue.boundingBox())?.height).toBeLessThan(40);
   await expect(page.getByText("Run customer report")).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Concurrency +10" }).click();
@@ -248,6 +276,7 @@ test("company Billing stays visible and read-only for a member", async ({
         account: {
           id: "billing-account-2",
           eventSequence: "4",
+          enforcementMode: "shadow",
           scope: "team",
           displayName: "Acme",
           status: "read_only",

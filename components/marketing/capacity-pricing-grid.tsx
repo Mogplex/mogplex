@@ -78,16 +78,16 @@ export function CapacityPricingGrid() {
                   <dd>{plan.concurrency}</dd>
                 </div>
                 <div>
-                  <dt>Retained data</dt>
+                  <dt>Storage</dt>
                   <dd>{plan.retainedDataBytes / LOGICAL_BYTES_PER_GB} GB</dd>
                 </div>
                 <div>
-                  <dt>Hosted usage</dt>
+                  <dt>Inference</dt>
                   <dd>{formatUsd(plan.hostedUsageCents)}/month</dd>
                 </div>
               </dl>
               <p className="price-note mono">
-                Included hosted usage resets monthly. Purchased hosted usage
+                Included inference resets monthly. Purchased inference credit
                 never expires.
               </p>
               <Link

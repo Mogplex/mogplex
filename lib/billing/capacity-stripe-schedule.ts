@@ -555,7 +555,7 @@ async function assertRetainedDecreaseIsSafe(input: {
     addOnAllowance(input.resolved.targetAddOn, input.targetQuantity);
   if (used > resulting) {
     throw new CapacityChangeError(
-      "Delete retained data before reducing this storage allowance",
+      "Delete stored data before reducing this Storage allowance",
       409,
       "retained_data_in_use"
     );

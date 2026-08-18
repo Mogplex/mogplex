@@ -146,7 +146,7 @@ export default function TermsPage() {
           </h2>
           <p>
             Yes. Mogplex Cloud has no free hosted plan. Each subscription gives
-            you Concurrency, retained data, and hosted usage. Current plans and
+            you Concurrency, Storage, and Inference. Current plans and
             rates are on our{" "}
             <Link href="/pricing" className="text-primary hover:underline">
               pricing page
@@ -156,7 +156,7 @@ export default function TermsPage() {
           <p>
             Mogplex applies the published retail factor when it bills managed
             AI and other hosted services. Sandbox compute and transfer use the
-            published rates. Purchased hosted usage does not expire.
+            published rates. Purchased inference credit does not expire.
           </p>
           <p>
             The Apache-2.0 software has no license fee. Self-hosters pay their

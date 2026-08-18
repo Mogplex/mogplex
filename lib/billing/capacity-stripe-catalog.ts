@@ -23,9 +23,9 @@ export type CapacityStripeProductSpec = {
 };
 
 const PLAN_DESCRIPTIONS = {
-  pro: "For one person. Includes 5 Concurrency, 1 GB retained data, and $5 monthly hosted usage.",
-  plus: "For one person running more work. Includes 25 Concurrency, 5 GB retained data, and $25 monthly hosted usage.",
-  max: "For one person running at high volume. Includes 50 Concurrency, 10 GB retained data, and $50 monthly hosted usage.",
+  pro: "For one person. Includes 5 Concurrency, 1 GB Storage, and $5 monthly Inference.",
+  plus: "For one person running more work. Includes 25 Concurrency, 5 GB Storage, and $25 monthly Inference.",
+  max: "For one person running at high volume. Includes 50 Concurrency, 10 GB Storage, and $50 monthly Inference.",
 } as const;
 
 const planProducts = Object.values(INDIVIDUAL_CAPACITY_PLANS).map(
@@ -82,9 +82,9 @@ const addOnProducts = CAPACITY_ADD_ONS.map(
 
 const hostedUsageProduct: CapacityStripeProductSpec = {
   catalogKey: `${CAPACITY_CATALOG_VERSION}_hosted_usage`,
-  name: "Mogplex Hosted Usage",
+  name: "Mogplex Inference",
   description:
-    "Buy hosted usage for work that runs. Purchased balance does not expire.",
+    "Buy inference credit for work that runs. Purchased credit does not expire.",
   metadata: {
     catalog_version: CAPACITY_CATALOG_VERSION,
     kind: "hosted_usage",

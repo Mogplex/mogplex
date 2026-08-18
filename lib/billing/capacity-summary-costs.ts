@@ -21,7 +21,7 @@ const COST_PRESENTATION: Readonly<
   sandbox_transfer: { category: "sandbox", label: "Sandbox transfer" },
   vercel_function: { category: "vercel", label: "Hosted function" },
   email: { category: "email", label: "Email" },
-  retained_data: { category: "storage_operation", label: "Retained data" },
+  retained_data: { category: "storage_operation", label: "Storage" },
   database: { category: "storage_operation", label: "Database operation" },
   object_storage: { category: "storage_operation", label: "Storage operation" },
   transfer: { category: "transfer", label: "Data transfer" },

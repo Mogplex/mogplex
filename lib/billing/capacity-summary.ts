@@ -206,6 +206,15 @@ function customerStatus(
   return status;
 }
 
+function enforcementMode(
+  mode: CapacityBillingFacts["account"]["entitlement_enforcement_mode"]
+): CapacityBillingSummaryV2["account"]["enforcementMode"] {
+  if (mode === "shadow" || mode === "meter_only" || mode === "enforced") {
+    return mode;
+  }
+  throw new TypeError("entitlement enforcement mode is invalid");
+}
+
 function resolvedBaseConcurrency(facts: CapacityBillingFacts): number | null {
   const { account } = facts;
   if (account.plan_audience === "legacy") return null;
@@ -305,6 +314,9 @@ export function buildCapacityBillingSummary(input: {
         facts.account.billing_event_sequence,
         "billing event sequence"
       ).toString(),
+      enforcementMode: enforcementMode(
+        facts.account.entitlement_enforcement_mode
+      ),
       scope: input.scope,
       displayName: scopeDisplayName(input.scope),
       status: customerStatus(facts.account.status),

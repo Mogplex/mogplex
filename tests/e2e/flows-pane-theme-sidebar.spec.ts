@@ -29,7 +29,7 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
   const sidebar = page.getByTestId("app-sidebar");
   await expect(sidebar).toBeVisible();
   await expect(sidebar.getByText("Plus", { exact: true })).toBeVisible();
-  await expect(sidebar.getByText("$25.00 hosted usage")).toBeVisible();
+  await expect(sidebar.getByText("$25.00 inference")).toBeVisible();
   await expect(
     sidebar.getByRole("link", { name: "Manage billing" })
   ).toBeVisible();

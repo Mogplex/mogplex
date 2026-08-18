@@ -38,7 +38,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "What does it cost?",
-    a: "Individual plans start with Pro at $20 a month. Each plan includes Concurrency, retained data, and hosted usage. You can buy more capacity without changing plans. Business and Enterprise plans use custom terms.",
+    a: "Individual plans start with Pro at $20 a month. Each plan includes Concurrency, Storage, and Inference. You can buy more capacity without changing plans. Business and Enterprise plans use custom terms.",
   },
   {
     q: "What can trigger a run?",

@@ -36,7 +36,7 @@ const STAGES: Stage[] = [
     t: "T+00:04.2",
     num: "02",
     name: "A sandbox boots",
-    desc: "A fresh microVM boots with a clone of your repo. Nothing is shared between runs. Hosted sandbox time uses your hosted usage balance at the published per-minute rate.",
+    desc: "A fresh microVM boots with a clone of your repo. Nothing is shared between runs. Hosted sandbox time uses your usage balance at the published per-minute rate.",
     fact: "held — per-run isolation. Your code never executes on shared infrastructure you can't see.",
   },
   {
