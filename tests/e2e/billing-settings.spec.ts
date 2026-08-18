@@ -157,8 +157,8 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
       capacitySummary({
         hostedUsage: {
           includedRemainingCents: 0,
-          purchasedRemainingCents: 0,
-          openReservationsCents: 0,
+          purchasedRemainingCents: 1_000,
+          openReservationsCents: 1_000,
           spendableCents: 0,
           grantResetsAt: "2026-09-17T12:00:00.000Z",
           purchasesFrozen: false,
@@ -228,28 +228,31 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await expect(page.getByText("Retained data", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Not enforced", { exact: true })).toHaveCount(2);
   const headings = await page.locator("h2").allTextContents();
-  expect(headings.indexOf("Add inference credit")).toBeLessThan(
+  expect(headings.indexOf("Add inference credit")).toBeGreaterThan(
     headings.indexOf("Plus")
   );
   await expect(page.getByText("7 of 35")).toBeVisible();
   await expect(page.getByText("2.3 GB of 5 GB")).toBeVisible();
-  const inferenceValue = page.getByText("$0.00 available");
+  const inferenceValue = page.getByText("$10.00 credit");
   await expect(inferenceValue).toBeVisible();
-  await expect(page.getByText("At limit", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("$0.00 available for new work")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Active work holds $10.00. Unused credit returns automatically."
+    )
+  ).toBeVisible();
   expect((await inferenceValue.boundingBox())?.height).toBeLessThan(40);
   await expect(page.getByText("Run customer report")).toBeVisible();
 
   const inferenceCheckout = page.waitForRequest(
     "**/api/billing/hosted-usage/checkout"
   );
-  await page.getByRole("button", { name: "Add $10 inference credit" }).click();
+  await page.getByRole("button", { name: "Pay $10, get $10 credit" }).click();
   expect((await inferenceCheckout).postDataJSON()).toMatchObject({
     preset: "capacity_v2_hosted_usage_credit_10",
   });
   await expect(
-    page.getByText(
-      "Payment submitted. Capacity updates after Stripe confirms the event."
-    )
+    page.getByText("Payment submitted. Stripe will add the full credit amount.")
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Concurrency +10" }).click();
@@ -407,7 +410,7 @@ test("legacy subscribers can manage their plan and buy inference credit", async 
   ).toBeEnabled();
 
   const topupCheckout = page.waitForRequest("**/api/stripe/checkout");
-  await page.getByRole("button", { name: "Add $10 inference credit" }).click();
+  await page.getByRole("button", { name: "Pay $10, get $10 credit" }).click();
   expect((await topupCheckout).postDataJSON()).toMatchObject({
     kind: "topup",
     preset: "topup_10",

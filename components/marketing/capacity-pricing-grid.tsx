@@ -34,11 +34,15 @@ export function CapacityPricingGrid() {
             Choose the room you need now.
           </h2>
           <p className="capacity-section-lede">
-            Every plan combines hosted execution capacity with inference
-            credit. Upgrade without moving into a company contract.
+            Every plan combines hosted execution capacity with inference credit.
+            $1 of inference credit pays for $1 of model usage.
           </p>
         </div>
-        <div className="capacity-toggle" role="group" aria-label="Billing period">
+        <div
+          className="capacity-toggle"
+          role="group"
+          aria-label="Billing period"
+        >
           <button
             aria-pressed={interval === "month"}
             onClick={() => setInterval("month")}
@@ -62,7 +66,8 @@ export function CapacityPricingGrid() {
           return (
             <article className="price-card" key={plan.code}>
               <p className="price-num mono">
-                PLAN {String(index + 1).padStart(2, "0")} · {plan.name.toUpperCase()}
+                PLAN {String(index + 1).padStart(2, "0")} ·{" "}
+                {plan.name.toUpperCase()}
               </p>
               <p className="price-value">
                 {formatUsd(price.amountCents)}
@@ -88,8 +93,8 @@ export function CapacityPricingGrid() {
                 </div>
               </dl>
               <p className="price-note mono">
-                Included inference resets monthly. Purchased inference credit
-                never expires.
+                Included inference resets monthly. Purchased credit never
+                expires.
               </p>
               <Link
                 className="mpx-button is-primary price-cta"

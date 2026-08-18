@@ -7,7 +7,7 @@ import { buildMarketingMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pricing for predictable agent capacity",
   description:
-    "Choose an Individual plan by Concurrency, Storage, and Inference. Add capacity as your work grows.",
+    "Choose an Individual plan with dollar-for-dollar inference credit. Add capacity as your work grows.",
   path: "/pricing",
 });
 
@@ -22,10 +22,15 @@ function formatUsd(cents: number): string {
 
 const HOSTED_RATES = [
   {
+    meter: "Model inference",
+    rate: "1:1 provider price",
+    detail: "$1 of inference credit pays for $1 at the model provider price.",
+  },
+  {
     meter: "Managed services",
     rate: "1.25× provider cost",
     detail:
-      "Covers managed AI, Trigger.dev, functions, email, storage operations, and transfer.",
+      "Covers Trigger.dev, functions, email, storage operations, and transfer.",
   },
   {
     meter: "Sandbox runtime",
@@ -56,12 +61,13 @@ export default function PricingPage() {
         </div>
         <h1 className="sub-title">Run more work. Know what it costs.</h1>
         <p className="sub-lede">
-          Choose an Individual plan by Concurrency, Storage, and Inference.
-          Add more capacity when you need it. You keep clear limits and
-          avoid a surprise usage bill.
+          Choose an Individual plan by Concurrency, Storage, and Inference. Add
+          more capacity when you need it. You keep clear limits and avoid a
+          surprise usage bill.
         </p>
         <p className="mono micro">
-          visible limits · add capacity at any time · purchased credit never expires
+          dollar-for-dollar inference · visible limits · purchased credit never
+          expires
         </p>
       </header>
 
@@ -109,7 +115,9 @@ export default function PricingPage() {
           <a className="ent-cta mono" href="mailto:enterprise@mogplex.com">
             Contact sales
           </a>
-          <p className="ent-note mono">business and enterprise are separate from Individual plans</p>
+          <p className="ent-note mono">
+            business and enterprise are separate from Individual plans
+          </p>
         </div>
       </section>
 
@@ -121,15 +129,21 @@ export default function PricingPage() {
         <div className="meter-table mono" role="table">
           {HOSTED_RATES.map((row) => (
             <div className="meter-row" role="row" key={row.meter}>
-              <span role="cell" className="meter-name">{row.meter}</span>
-              <span role="cell" className="meter-rate">{row.rate}</span>
-              <span role="cell" className="meter-detail">{row.detail}</span>
+              <span role="cell" className="meter-name">
+                {row.meter}
+              </span>
+              <span role="cell" className="meter-rate">
+                {row.rate}
+              </span>
+              <span role="cell" className="meter-detail">
+                {row.detail}
+              </span>
             </div>
           ))}
         </div>
         <p className="meter-foot mono">
           Bring your own AI key and your AI provider bills those model calls.
-          Other hosted costs also use your inference balance.
+          Mogplex lists non-AI hosting costs separately.
         </p>
       </section>
 
@@ -145,8 +159,8 @@ export default function PricingPage() {
           <div className="term">
             <p className="term-k mono">PURCHASED USAGE</p>
             <p className="term-v">
-              Purchased inference credit keeps its full value and never
-              expires. Included inference credit resets each month.
+              Pay $1. Get $1 of inference credit. Purchased credit never
+              expires. Included credit resets each month.
             </p>
           </div>
           <div className="term">

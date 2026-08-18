@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/prefer-bigint-literals -- The ES6 TypeScript target rejects BigInt literal syntax. */
 
 import {
-  factorRetailDebitMicros,
+  factorManagedServiceDebitMicros,
   PROVIDER_COST_PRICING_VERSION,
 } from "@/lib/billing/provider-costs";
 import {
@@ -49,7 +49,7 @@ export function buildTriggerProviderCostEvent(
     providerCostMicros,
     normalizedCostMicros: providerCostMicros,
     retailDebitMicros: ownedAccountId
-      ? factorRetailDebitMicros(providerCostMicros)
+      ? factorManagedServiceDebitMicros(providerCostMicros)
       : BigInt(0),
     billingTreatment: ownedAccountId ? "hosted_usage" : "shared_overhead",
     pricingRuleVersion: PROVIDER_COST_PRICING_VERSION,

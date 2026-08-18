@@ -31,9 +31,9 @@ function Meter(props: {
       </div>
       <p className="text-2xl font-semibold tabular-nums">{props.value}</p>
       <Progress aria-label={`${props.name} capacity`} value={props.percent} />
-      <p className="text-xs text-muted-foreground">{props.detail}</p>
+      <p className="text-muted-foreground text-xs">{props.detail}</p>
       {props.note ? (
-        <p className="text-xs text-muted-foreground">{props.note}</p>
+        <p className="text-muted-foreground text-xs">{props.note}</p>
       ) : null}
     </div>
   );
@@ -53,9 +53,7 @@ export function CapacityBillingOverview({
   const grossHostedRemaining =
     summary.hostedUsage.includedRemainingCents +
     summary.hostedUsage.purchasedRemainingCents;
-  const hostedAvailablePercent = grossHostedRemaining
-    ? (summary.hostedUsage.spendableCents / grossHostedRemaining) * 100
-    : 0;
+  const hasActiveReservation = summary.hostedUsage.openReservationsCents > 0;
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
@@ -75,14 +73,37 @@ export function CapacityBillingOverview({
         trackingOnly={trackingOnly}
         value={`${formatBytes(summary.retainedData.logicalBytes)} of ${retainedLimit ? formatBytes(retainedLimit) : "custom"}`}
       />
-      <Meter
-        blocked={summary.hostedUsage.spendableCents <= 0}
-        detail={`${formatUsd(summary.hostedUsage.purchasedRemainingCents)} purchased + ${formatUsd(summary.hostedUsage.includedRemainingCents)} included - ${formatUsd(summary.hostedUsage.openReservationsCents)} reserved`}
-        name="Inference"
-        note={`Included credit resets ${formatDate(summary.hostedUsage.grantResetsAt)}`}
-        percent={clampPercent(100 - hostedAvailablePercent)}
-        value={`${formatUsd(summary.hostedUsage.spendableCents)} available`}
-      />
+      <div className="min-w-0 space-y-3 rounded-md border p-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm font-medium">Inference</p>
+          {hasActiveReservation ? (
+            <Badge variant="secondary">Active work</Badge>
+          ) : null}
+        </div>
+        <p className="text-2xl font-semibold tabular-nums">
+          {formatUsd(grossHostedRemaining)} credit
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {formatUsd(summary.hostedUsage.spendableCents)} available for new work
+        </p>
+        {hasActiveReservation ? (
+          <p className="text-muted-foreground text-xs">
+            Active work holds{" "}
+            {formatUsd(summary.hostedUsage.openReservationsCents)}. Unused
+            credit returns automatically.
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            $1 of credit pays for $1 of model usage.
+          </p>
+        )}
+        {summary.hostedUsage.includedRemainingCents > 0 ? (
+          <p className="text-muted-foreground text-xs">
+            Included credit resets{" "}
+            {formatDate(summary.hostedUsage.grantResetsAt)}.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

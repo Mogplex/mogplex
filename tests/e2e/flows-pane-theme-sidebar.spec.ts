@@ -19,7 +19,11 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
       version: "capacity_v2",
       plan: { name: "Plus" },
       account: { canManageBilling: true },
-      hostedUsage: { spendableCents: 2_500 },
+      hostedUsage: {
+        includedRemainingCents: 0,
+        purchasedRemainingCents: 2_500,
+        spendableCents: 1_250,
+      },
     })
   );
   await page.setViewportSize({ width: 1600, height: 900 });

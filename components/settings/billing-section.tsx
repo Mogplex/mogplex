@@ -215,6 +215,10 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
     checkoutResult === "hosted-usage-submitted" ||
     checkoutResult === "plan-submitted" ||
     checkoutResult === "topup";
+  const submittedMessage =
+    checkoutResult === "plan-submitted"
+      ? "Payment submitted. Capacity updates after Stripe confirms the event."
+      : "Payment submitted. Stripe will add the full credit amount.";
   const planDetails = [
     summary.account.displayName,
     summary.plan.renewsAt
@@ -229,71 +233,9 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
     <div className="flex flex-col gap-6">
       {submitted ? (
         <div className="rounded-md border bg-muted/40 p-3 text-sm" role="status">
-          Payment submitted. Capacity updates after Stripe confirms the event.
+          {submittedMessage}
         </div>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle><h2>Add inference credit</h2></CardTitle>
-          <CardDescription>
-            Prepaid credit for hosted model usage. It never expires.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {canBuyInference ? (
-            <div
-              aria-label="Choose credit amount"
-              className="grid max-w-5xl grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
-              role="group"
-            >
-              {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => (
-                <Button
-                  aria-label={`Add ${formatCreditAmount(preset.creditCents)} inference credit`}
-                  className="group h-14 w-full flex-col gap-0.5 border-border bg-muted/20 px-3 shadow-xs hover:border-foreground/25 hover:bg-accent dark:border-border dark:bg-muted/25 dark:hover:bg-accent"
-                  disabled={pendingAction !== null}
-                  key={preset.lookupKey}
-                  onClick={() =>
-                    redirectTo(
-                      preset.lookupKey,
-                      legacyInference
-                        ? "/api/stripe/checkout"
-                        : "/api/billing/hosted-usage/checkout",
-                      legacyInference
-                        ? {
-                            kind: "topup",
-                            preset: `topup_${preset.creditCents / 100}`,
-                            attemptId: attemptIdFor(preset.lookupKey),
-                          }
-                        : {
-                            preset: preset.lookupKey,
-                            attemptId: attemptIdFor(preset.lookupKey),
-                          }
-                    )
-                  }
-                  variant="outline"
-                >
-                  <span className="text-base font-semibold tabular-nums">
-                    {pendingAction === preset.lookupKey
-                      ? "Opening…"
-                      : formatCreditAmount(preset.creditCents)}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="text-[11px] font-normal text-muted-foreground transition-colors group-hover:text-accent-foreground"
-                  >
-                    Add credit
-                  </span>
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-              {inferenceUnavailable}
-            </p>
-          )}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -422,6 +364,71 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
                 </p>
               </div>
             ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle><h2>Add inference credit</h2></CardTitle>
+          <CardDescription>
+            Pay $1. Get $1 of inference credit. Purchased credit never expires.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {canBuyInference ? (
+            <div
+              aria-label="Choose credit amount"
+              className="grid max-w-5xl grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
+              role="group"
+            >
+              {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => {
+                const amount = formatCreditAmount(preset.creditCents);
+                return (
+                  <Button
+                    aria-label={`Pay ${amount}, get ${amount} credit`}
+                    className="group h-14 w-full flex-col gap-0.5 border-border bg-muted/20 px-3 shadow-xs hover:border-foreground/25 hover:bg-accent dark:border-border dark:bg-muted/25 dark:hover:bg-accent"
+                    disabled={pendingAction !== null}
+                    key={preset.lookupKey}
+                    onClick={() =>
+                      redirectTo(
+                        preset.lookupKey,
+                        legacyInference
+                          ? "/api/stripe/checkout"
+                          : "/api/billing/hosted-usage/checkout",
+                        legacyInference
+                          ? {
+                              kind: "topup",
+                              preset: `topup_${preset.creditCents / 100}`,
+                              attemptId: attemptIdFor(preset.lookupKey),
+                            }
+                          : {
+                              preset: preset.lookupKey,
+                              attemptId: attemptIdFor(preset.lookupKey),
+                            }
+                      )
+                    }
+                    variant="outline"
+                  >
+                    <span className="text-sm font-semibold tabular-nums">
+                      {pendingAction === preset.lookupKey
+                        ? "Opening…"
+                        : `Pay ${amount}`}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="text-[11px] font-normal text-muted-foreground transition-colors group-hover:text-accent-foreground"
+                    >
+                      Get {amount} credit
+                    </span>
+                  </Button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+              {inferenceUnavailable}
+            </p>
           )}
         </CardContent>
       </Card>

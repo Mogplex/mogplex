@@ -43,7 +43,7 @@ const STAGES: Stage[] = [
     t: "T+00:06.5",
     num: "03",
     name: "The agent loop",
-    desc: "The agent writes code, runs your tests, and calls your MCP tools. It iterates until the tests pass or its budget stops it. Mogplex gives you model access. The system meters and logs every model call and tool call.",
+    desc: "The agent writes code, runs your tests, and calls your MCP tools. It iterates until the tests pass or its budget stops it. Mogplex gives you model access at the provider price. Each $1 of inference credit pays for $1 of model usage.",
     fact: "held — open any live run call-by-call. Approve the next tool call, redirect the plan, or kill it.",
   },
   {

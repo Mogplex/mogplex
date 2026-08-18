@@ -38,11 +38,35 @@ function input(overrides: Record<string, unknown> = {}) {
 
 test("token costs preserve Gateway's eight-decimal USD precision", async () => {
   const { tokenCostUsdToCostUnits } = await loadTokenUsage();
+  assert.equal(tokenCostUsdToCostUnits(25), 2_500_000_000);
   assert.equal(tokenCostUsdToCostUnits(0.0834), 8_340_000);
   assert.equal(tokenCostUsdToCostUnits(0.005), 500_000);
   assert.equal(tokenCostUsdToCostUnits(0.004), 400_000);
   assert.equal(tokenCostUsdToCostUnits(0.00000001), 1);
   assert.equal(tokenCostUsdToCostUnits(Number.NaN), 0);
+});
+
+test("$25 of Gateway inference costs exactly $25 of inference credit", async () => {
+  const { meterReconciledTokenUsage } = await loadTokenUsage();
+  let postedCostUnits = 0;
+  const result = await meterReconciledTokenUsage(input({ costUsd: 25 }), {
+    loadExplicitPlatformAccess: async () => ({
+      allowPlatformAi: false,
+      allowPlatformSandbox: false,
+    }),
+    findBillingAccountForScope: async () => account,
+    accrueTokenUsage: async (accrual) => {
+      postedCostUnits = accrual.costUnits;
+      return {
+        posted: true,
+        debitedCents: 2_500,
+        remainderCostUnits: 0,
+      };
+    },
+  });
+
+  assert.equal(postedCostUnits, 2_500_000_000);
+  assert.equal(result.amountCents, 2_500);
 });
 
 test("zero-cost calls never read or write billing data", async () => {

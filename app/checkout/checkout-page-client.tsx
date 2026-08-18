@@ -109,7 +109,8 @@ function CheckoutContent() {
         <>
           Concurrency {summary.concurrency}, {summary.retainedDataGb} GB
           Storage, and {summary.hostedUsage}
-          /month Inference. Cancel from Billing in Settings.{" "}
+          /month Inference. Each $1 of inference credit pays for $1 of model
+          usage. Cancel from Billing in Settings.{" "}
           <Link href="/pricing">Compare plans.</Link>
         </>
       }

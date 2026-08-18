@@ -1,6 +1,8 @@
 /* eslint-disable unicorn/prefer-bigint-literals -- The ES6 TypeScript target rejects BigInt literal syntax. */
 
-export const HOSTED_USAGE_FACTOR_MILLIONTHS = BigInt(1_250_000);
+// Model inference is billed separately at the provider's published cost.
+// This factor applies only to non-AI managed services such as Trigger.dev.
+export const MANAGED_SERVICE_FACTOR_MILLIONTHS = BigInt(1_250_000);
 export const SANDBOX_RETAIL_MICROS_PER_MINUTE = BigInt(7_500);
 export const SANDBOX_TRANSFER_RETAIL_MICROS_PER_GB = BigInt(190_000);
 export const PROVIDER_COST_PRICING_VERSION = "capacity_v2_2026_08_16";
@@ -19,13 +21,13 @@ function divideRoundUp(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator - BigInt(1)) / denominator;
 }
 
-export function factorRetailDebitMicros(
+export function factorManagedServiceDebitMicros(
   normalizedProviderCostMicros: bigint,
-  factorMillionths: bigint = HOSTED_USAGE_FACTOR_MILLIONTHS
+  factorMillionths: bigint = MANAGED_SERVICE_FACTOR_MILLIONTHS
 ): bigint {
   requireNonnegative(normalizedProviderCostMicros, "provider cost");
   if (factorMillionths <= BigInt(0)) {
-    throw new RangeError("retail factor must be positive");
+    throw new RangeError("managed service factor must be positive");
   }
   return divideRoundUp(
     normalizedProviderCostMicros * factorMillionths,
