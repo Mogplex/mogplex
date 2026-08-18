@@ -60,6 +60,7 @@ const summary: CapacityBillingSummaryV2 = {
     cancelsAt: null,
     namedUserLimit: 1,
   },
+  billingDetails: null,
   concurrency: {
     active: 1,
     included: 5,
@@ -199,6 +200,55 @@ test("GET /api/billing/capacity lets team viewers read but not manage", async ()
   assert.equal(response.status, 200);
   assert.equal(canManageBilling, false);
   assert.equal((await response.json()).account.canManageBilling, false);
+});
+
+test("GET /api/billing/capacity returns protected Stripe details only to billing managers", async () => {
+  const { createCapacityBillingSummaryGetHandler } =
+    await loadCapacityBillingSummaryRoute();
+  const loadStripeBillingDetails = test.mock.fn(
+    async (_customerId: string) => ({
+      paymentMethod: {
+        brand: "visa",
+        last4: "4242",
+        expMonth: 12,
+        expYear: 2028,
+      },
+      invoices: [],
+    })
+  );
+  const handler = createCapacityBillingSummaryGetHandler({
+    requireUserId: async () => "user-1",
+    resolveProductResourceScope: async () => personalScopeResolution,
+    getOrCreateBillingAccount: async () => ({
+      ...account,
+      stripe_customer_id: "cus_1",
+    }),
+    getBillingBalance: async () => ({
+      includedCents: 0,
+      purchasedCents: 0,
+      totalCents: 0,
+    }),
+    isBillingEnabled: () => true,
+    loadStripeBillingDetails,
+    loadCapacityBillingSummary: async () => summary,
+  });
+
+  const response = await handler(
+    new Request("https://example.com/api/billing/capacity")
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(loadStripeBillingDetails.mock.callCount(), 1);
+  assert.equal(loadStripeBillingDetails.mock.calls[0]!.arguments[0], "cus_1");
+  assert.deepEqual((await response.json()).billingDetails, {
+    paymentMethod: {
+      brand: "visa",
+      last4: "4242",
+      expMonth: 12,
+      expYear: 2028,
+    },
+    invoices: [],
+  });
 });
 
 test("GET /api/billing/capacity keeps legacy accounts out of the concurrency pilot", async () => {

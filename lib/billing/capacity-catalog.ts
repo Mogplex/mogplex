@@ -226,11 +226,11 @@ export const CAPACITY_ADD_ONS: readonly CapacityAddOn[] = [
   },
 ];
 
-export const CAPACITY_HOSTED_USAGE_MIN_CENTS = 1_000;
+export const CAPACITY_HOSTED_USAGE_MIN_CENTS = 100;
 export const CAPACITY_HOSTED_USAGE_MAX_CENTS = 100_000;
 
 export const CAPACITY_HOSTED_USAGE_PRESETS: readonly CapacityHostedUsagePreset[] =
-  [1_000, 2_500, 10_000, 25_000, 50_000, 100_000].map((creditCents) => ({
+  [100, 1_000, 2_500, 10_000, 25_000, 50_000, 100_000].map((creditCents) => ({
     lookupKey: `${CAPACITY_CATALOG_VERSION}_hosted_usage_credit_${creditCents / 100}`,
     name: `$${creditCents / 100} Inference`,
     creditCents,

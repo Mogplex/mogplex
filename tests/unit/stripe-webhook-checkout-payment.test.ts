@@ -202,7 +202,7 @@ test("capacity hosted-usage payment fails closed when disabled or inconsistent",
     { ...base, currency: "cad" },
     { ...base, amount_received: 999 },
     { ...base, metadata: { ...base.metadata, catalog_version: "capacity_v3" } },
-    { ...base, metadata: { ...base.metadata, credit_cents: "999" } },
+    { ...base, metadata: { ...base.metadata, credit_cents: "99" } },
     { ...base, metadata: { ...base.metadata, credit_cents: "100001" } },
     {
       ...base,

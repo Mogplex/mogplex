@@ -101,7 +101,7 @@ describe("capacity pricing catalog", () => {
   });
 
   it("pins face-value hosted-usage purchases and their guardrails", () => {
-    expect(CAPACITY_HOSTED_USAGE_MIN_CENTS).toBe(1_000);
+    expect(CAPACITY_HOSTED_USAGE_MIN_CENTS).toBe(100);
     expect(CAPACITY_HOSTED_USAGE_MAX_CENTS).toBe(100_000);
     expect(
       CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => [
@@ -110,6 +110,7 @@ describe("capacity pricing catalog", () => {
         preset.chargeCents,
       ])
     ).toEqual([
+      ["capacity_v2_hosted_usage_credit_1", 100, 100],
       ["capacity_v2_hosted_usage_credit_10", 1_000, 1_000],
       ["capacity_v2_hosted_usage_credit_25", 2_500, 2_500],
       ["capacity_v2_hosted_usage_credit_100", 10_000, 10_000],
@@ -149,7 +150,7 @@ describe("capacity pricing catalog", () => {
       productsCreated: 10,
       productsUpdated: 0,
       productsReused: 0,
-      pricesCreated: 18,
+      pricesCreated: 19,
       pricesReused: 0,
     });
     const hostedKeys = new Set(
@@ -158,7 +159,7 @@ describe("capacity pricing catalog", () => {
     const hostedPrices = prices.filter((price) =>
       hostedKeys.has(String(price.lookup_key))
     );
-    expect(hostedPrices).toHaveLength(6);
+    expect(hostedPrices).toHaveLength(7);
     expect(hostedPrices.every((price) => price.recurring === undefined)).toBe(
       true
     );

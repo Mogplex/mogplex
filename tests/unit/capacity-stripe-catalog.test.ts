@@ -186,7 +186,7 @@ test("capacity Stripe catalog uses the approved customer names and unique keys",
   const lookupKeys = CAPACITY_STRIPE_PRODUCTS.flatMap((product) =>
     product.prices.map((price) => price.lookupKey)
   );
-  assert.equal(lookupKeys.length, 18);
+  assert.equal(lookupKeys.length, 19);
   assert.equal(new Set(lookupKeys).size, lookupKeys.length);
 });
 
@@ -203,11 +203,11 @@ test("capacity Stripe catalog seed creates the missing test catalog", async () =
     productsCreated: 10,
     productsUpdated: 0,
     productsReused: 0,
-    pricesCreated: 18,
+    pricesCreated: 19,
     pricesReused: 0,
   });
   assert.equal(products.length, 10);
-  assert.equal(prices.length, 18);
+  assert.equal(prices.length, 19);
 });
 
 test("capacity Stripe catalog seed is idempotent", async () => {
@@ -223,7 +223,7 @@ test("capacity Stripe catalog seed is idempotent", async () => {
     productsUpdated: 0,
     productsReused: 10,
     pricesCreated: 0,
-    pricesReused: 18,
+    pricesReused: 19,
   });
 });
 

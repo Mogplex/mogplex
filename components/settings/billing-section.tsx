@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -10,10 +9,12 @@ import {
   useActiveTeamId,
 } from "@/components/active-scope-provider";
 import { CapacityAddOnDialog } from "@/components/settings/capacity-add-on-dialog";
-import { CapacityBillingOverview } from "@/components/settings/capacity-billing-overview";
-import { formatDate, formatUsd } from "@/components/settings/capacity-billing-format";
+import { BillingSubscriptionDetails } from "@/components/settings/billing-subscription-details";
+import {
+  formatDate,
+  formatUsd,
+} from "@/components/settings/capacity-billing-format";
 import { useCapacityBillingEvents } from "@/components/settings/use-capacity-billing-events";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -94,10 +95,10 @@ function purchaseUnavailableMessage(
   return null;
 }
 
-async function loadBillingSummary([
-  url,
-  activeTeamId,
-]: [string, string | null]): Promise<BillingLoadResult> {
+async function loadBillingSummary([url, activeTeamId]: [
+  string,
+  string | null,
+]): Promise<BillingLoadResult> {
   const response = await fetch(url, {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
   });
@@ -117,7 +118,9 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
     ["/api/billing/capacity", activeTeamId],
     loadBillingSummary
   );
-  const [selectedAddOn, setSelectedAddOn] = useState<CapacityAddOn | null>(null);
+  const [selectedAddOn, setSelectedAddOn] = useState<CapacityAddOn | null>(
+    null
+  );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const hostedUsageAttempts = useRef(new Map<string, string>());
@@ -174,7 +177,9 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
       window.location.assign(payload.url);
     } catch (redirectError) {
       setActionError(
-        redirectError instanceof Error ? redirectError.message : "Request failed"
+        redirectError instanceof Error
+          ? redirectError.message
+          : "Request failed"
       );
       setPendingAction(null);
     }
@@ -183,7 +188,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (error) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Billing summary is unavailable right now.
       </p>
     );
@@ -201,7 +206,6 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
     );
   }
 
-  const canManage = summary.account.canManageBilling;
   const inferenceUnavailable = purchaseUnavailableMessage(summary, "inference");
   const capacityUnavailable = purchaseUnavailableMessage(summary, "capacity");
   const canBuyInference = inferenceUnavailable === null;
@@ -221,11 +225,11 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         : group.items,
   })).filter((group) => group.items.length > 0);
   const hasGrandfatheredConcurrency =
-    !summary.concurrencyPurchasesEnabled && activeConcurrencyLookupKeys.size > 0;
+    !summary.concurrencyPurchasesEnabled &&
+    activeConcurrencyLookupKeys.size > 0;
   const selectedQuantity = selectedAddOn
-    ? (summary.addOns.find(
-        (item) => item.lookupKey === selectedAddOn.lookupKey
-      )?.quantity ?? 0)
+    ? (summary.addOns.find((item) => item.lookupKey === selectedAddOn.lookupKey)
+        ?.quantity ?? 0)
     : 0;
   const submitted =
     checkoutResult === "hosted-usage-submitted" ||
@@ -235,61 +239,114 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
     checkoutResult === "plan-submitted"
       ? "Payment submitted. Capacity updates after Stripe confirms the event."
       : "Payment submitted. Stripe will add the full credit amount.";
-  const planDetails = [
-    summary.account.displayName,
-    summary.plan.renewsAt
-      ? `Renews ${formatDate(summary.plan.renewsAt)}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
   const legacyInference = summary.plan.offerKind === "legacy";
+  const grossHostedRemaining =
+    summary.hostedUsage.includedRemainingCents +
+    summary.hostedUsage.purchasedRemainingCents;
 
   return (
     <div className="flex flex-col gap-6">
       {submitted ? (
-        <div className="rounded-md border bg-muted/40 p-3 text-sm" role="status">
+        <div
+          className="bg-muted/40 rounded-md border p-3 text-sm"
+          role="status"
+        >
           {submittedMessage}
         </div>
       ) : null}
 
+      <BillingSubscriptionDetails
+        onOpenPortal={(action) => redirectTo(action, "/api/stripe/portal", {})}
+        pendingAction={pendingAction}
+        summary={summary}
+      />
+
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-2">
-              <CardTitle className="flex flex-wrap items-center gap-2">
-                <h2>{summary.plan.name}</h2>
-                <Badge variant="secondary">Current plan</Badge>
-                {summary.account.status !== "active" ? (
-                  <Badge variant="destructive">
-                    {summary.account.status.replaceAll("_", " ")}
-                  </Badge>
-                ) : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle>
+                <h2>Add inference credit</h2>
               </CardTitle>
-              <CardDescription>{planDetails}</CardDescription>
+              <CardDescription>
+                Pay $1. Get $1 of inference credit. Purchased credit never
+                expires.
+              </CardDescription>
             </div>
-            {canManage &&
-            summary.account.hasBillingHistory &&
-            summary.plan.offerKind !== "contract" ? (
-              <Button
-                disabled={pendingAction !== null}
-                onClick={() => redirectTo("portal", "/api/stripe/portal", {})}
-              >
-                {pendingAction === "portal"
-                  ? "Opening…"
-                  : summary.account.hasSubscription
-                    ? "Plan and invoices"
-                    : "Billing history"}
-              </Button>
-            ) : summary.plan.offerKind === "legacy" && canManage ? (
-              <Button asChild variant="outline">
-                <Link href="/pricing">Choose an Individual plan</Link>
-              </Button>
-            ) : null}
+            <div className="sm:text-right">
+              <p className="text-muted-foreground text-xs font-medium">
+                Available now
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums">
+                {formatUsd(summary.hostedUsage.spendableCents)}
+              </p>
+              {grossHostedRemaining !== summary.hostedUsage.spendableCents ? (
+                <p className="text-muted-foreground text-xs">
+                  {formatUsd(grossHostedRemaining)} total credit
+                </p>
+              ) : null}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <CapacityBillingOverview summary={summary} />
+          {canBuyInference ? (
+            <div
+              aria-label="Choose credit amount"
+              className="grid max-w-6xl grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7"
+              role="group"
+            >
+              {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => {
+                const amount = formatCreditAmount(preset.creditCents);
+                return (
+                  <Button
+                    aria-label={`Pay ${amount}, get ${amount} credit`}
+                    className="group border-border bg-muted/20 hover:border-foreground/25 hover:bg-accent dark:border-border dark:bg-muted/25 dark:hover:bg-accent h-14 w-full flex-col gap-0.5 px-3 shadow-xs"
+                    disabled={pendingAction !== null}
+                    key={preset.lookupKey}
+                    onClick={() =>
+                      redirectTo(
+                        preset.lookupKey,
+                        legacyInference
+                          ? "/api/stripe/checkout"
+                          : "/api/billing/hosted-usage/checkout",
+                        legacyInference
+                          ? {
+                              kind: "topup",
+                              ...(preset.creditCents === 100
+                                ? { amountCents: preset.creditCents }
+                                : {
+                                    preset: `topup_${preset.creditCents / 100}`,
+                                  }),
+                              attemptId: attemptIdFor(preset.lookupKey),
+                            }
+                          : {
+                              preset: preset.lookupKey,
+                              attemptId: attemptIdFor(preset.lookupKey),
+                            }
+                      )
+                    }
+                    variant="outline"
+                  >
+                    <span className="text-sm font-semibold tabular-nums">
+                      {pendingAction === preset.lookupKey
+                        ? "Opening…"
+                        : `Pay ${amount}`}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="text-muted-foreground group-hover:text-accent-foreground text-[11px] font-normal transition-colors"
+                    >
+                      Get {amount} credit
+                    </span>
+                  </Button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="bg-muted/30 text-muted-foreground rounded-md border px-4 py-3 text-sm">
+              {inferenceUnavailable}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -314,14 +371,16 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         </CardHeader>
         <CardContent className="space-y-6">
           {capacityUnavailable ? (
-            <p className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            <p className="bg-muted/30 text-muted-foreground rounded-md border px-4 py-3 text-sm">
               {capacityUnavailable}
             </p>
           ) : null}
           {visibleCapacityGroups.map((group, groupIndex) => (
             <section
               aria-labelledby={`capacity-group-${group.id}`}
-              className={groupIndex === 0 ? "space-y-2" : "space-y-2 border-t pt-6"}
+              className={
+                groupIndex === 0 ? "space-y-2" : "space-y-2 border-t pt-6"
+              }
               key={group.id}
             >
               <h3
@@ -342,7 +401,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
                     >
                       <div className="min-w-0 flex-1">
                         <p className="font-medium">{addOn.name}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-muted-foreground text-xs">
                           {formatUsd(addOn.amountCents)} per month, per quantity
                         </p>
                       </div>
@@ -370,25 +429,33 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
 
       <Card>
         <CardHeader>
-          <CardTitle><h2>Recent usage costs</h2></CardTitle>
+          <CardTitle>
+            <h2>Recent usage costs</h2>
+          </CardTitle>
           <CardDescription>
             See what used your inference balance.
           </CardDescription>
         </CardHeader>
         <CardContent className="divide-y">
           {summary.recentCosts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No usage costs yet.</p>
+            <p className="text-muted-foreground text-sm">No usage costs yet.</p>
           ) : (
             summary.recentCosts.map((cost) => (
-              <div className="flex items-start justify-between gap-4 py-3 first:pt-0" key={cost.operationId}>
+              <div
+                className="flex items-start justify-between gap-4 py-3 first:pt-0"
+                key={cost.operationId}
+              >
                 <div>
                   <p className="text-sm font-medium">{cost.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(cost.occurredAt)} · {cost.status.replaceAll("_", " ")}
+                  <p className="text-muted-foreground text-xs">
+                    {formatDate(cost.occurredAt)} ·{" "}
+                    {cost.status.replaceAll("_", " ")}
                   </p>
                 </div>
                 <p className="text-sm font-medium tabular-nums">
-                  {cost.totalCents === null ? "In progress" : formatUsd(cost.totalCents)}
+                  {cost.totalCents === null
+                    ? "In progress"
+                    : formatUsd(cost.totalCents)}
                 </p>
               </div>
             ))
@@ -396,72 +463,11 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle><h2>Add inference credit</h2></CardTitle>
-          <CardDescription>
-            Pay $1. Get $1 of inference credit. Purchased credit never expires.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {canBuyInference ? (
-            <div
-              aria-label="Choose credit amount"
-              className="grid max-w-5xl grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
-              role="group"
-            >
-              {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => {
-                const amount = formatCreditAmount(preset.creditCents);
-                return (
-                  <Button
-                    aria-label={`Pay ${amount}, get ${amount} credit`}
-                    className="group h-14 w-full flex-col gap-0.5 border-border bg-muted/20 px-3 shadow-xs hover:border-foreground/25 hover:bg-accent dark:border-border dark:bg-muted/25 dark:hover:bg-accent"
-                    disabled={pendingAction !== null}
-                    key={preset.lookupKey}
-                    onClick={() =>
-                      redirectTo(
-                        preset.lookupKey,
-                        legacyInference
-                          ? "/api/stripe/checkout"
-                          : "/api/billing/hosted-usage/checkout",
-                        legacyInference
-                          ? {
-                              kind: "topup",
-                              preset: `topup_${preset.creditCents / 100}`,
-                              attemptId: attemptIdFor(preset.lookupKey),
-                            }
-                          : {
-                              preset: preset.lookupKey,
-                              attemptId: attemptIdFor(preset.lookupKey),
-                            }
-                      )
-                    }
-                    variant="outline"
-                  >
-                    <span className="text-sm font-semibold tabular-nums">
-                      {pendingAction === preset.lookupKey
-                        ? "Opening…"
-                        : `Pay ${amount}`}
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className="text-[11px] font-normal text-muted-foreground transition-colors group-hover:text-accent-foreground"
-                    >
-                      Get {amount} credit
-                    </span>
-                  </Button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-              {inferenceUnavailable}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {actionError ? <p className="text-sm text-destructive" role="alert">{actionError}</p> : null}
+      {actionError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {actionError}
+        </p>
+      ) : null}
 
       <CapacityAddOnDialog
         addOn={selectedAddOn}

@@ -327,6 +327,7 @@ export function buildCapacityBillingSummary(input: {
       hasBillingHistory: Boolean(facts.account.stripe_customer_id),
     },
     plan: planPresentation(facts, asOf),
+    billingDetails: null,
     concurrency: {
       active: activeConcurrency,
       included: includedConcurrency,

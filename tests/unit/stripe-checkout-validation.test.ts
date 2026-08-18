@@ -25,11 +25,11 @@ test("subscribe should accept every catalog plan and reject unknown plans", asyn
   assert.equal(route.validateCheckoutRequest({ kind: "subscribe" }).ok, false);
 });
 
-test("topup should reject custom amounts below the $10 minimum", async () => {
+test("topup should reject custom amounts below the $1 minimum", async () => {
   const route = await loadCheckoutRoute();
   const result = route.validateCheckoutRequest({
     kind: "topup",
-    amountCents: 999,
+    amountCents: 99,
     attemptId: ATTEMPT_ID,
   });
   assert.equal(result.ok, false);
@@ -79,7 +79,7 @@ test("topup should accept presets and valid custom amounts", async () => {
   assert.equal(
     route.validateCheckoutRequest({
       kind: "topup",
-      amountCents: 1000,
+      amountCents: 100,
       attemptId: ATTEMPT_ID,
     }).ok,
     true

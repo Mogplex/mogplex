@@ -29,6 +29,7 @@ export function capacitySummary(
       cancelsAt: null,
       namedUserLimit: 1,
     },
+    billingDetails: null,
     concurrency: {
       active: 7,
       included: 25,

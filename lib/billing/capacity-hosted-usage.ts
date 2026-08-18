@@ -109,7 +109,7 @@ function validateHostedUsageChoice(input: {
   }
   const amountCents = input.amountCents as number;
   if (amountCents < CAPACITY_HOSTED_USAGE_MIN_CENTS) {
-    return { ok: false, error: "The minimum hosted-usage purchase is $10" };
+    return { ok: false, error: "The minimum inference purchase is $1" };
   }
   if (amountCents > CAPACITY_HOSTED_USAGE_MAX_CENTS) {
     return {

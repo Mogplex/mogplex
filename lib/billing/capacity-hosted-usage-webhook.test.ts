@@ -123,7 +123,7 @@ describe("capacity hosted-usage webhook", () => {
         },
       }),
       paymentIntent({
-        metadata: { ...paymentIntent().metadata, credit_cents: "999" },
+        metadata: { ...paymentIntent().metadata, credit_cents: "99" },
       }),
       paymentIntent({
         metadata: { ...paymentIntent().metadata, credit_cents: "100001" },
