@@ -104,7 +104,7 @@ function classifySubscriptionItems(subscription: Stripe.Subscription): {
   return { plans, addOns };
 }
 
-function targetCapacityAddOn(lookupKey: string): CapacityAddOn {
+export function targetCapacityAddOn(lookupKey: string): CapacityAddOn {
   const addOn = findCapacityAddOn(lookupKey);
   if (addOn) return addOn;
   throw new CapacityChangeError(

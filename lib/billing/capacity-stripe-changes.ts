@@ -43,7 +43,7 @@ export type CapacityStripeChangeDeps = {
   ) => Promise<Stripe.Subscription>;
 };
 
-function assertCapacityIncreaseAllowed(input: {
+export function assertCapacityIncreaseAllowed(input: {
   accountId: string;
   action: CapacityChangeAction;
   addOn: CapacityAddOn;
