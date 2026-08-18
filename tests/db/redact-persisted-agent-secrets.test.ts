@@ -8,6 +8,8 @@ const MIGRATION =
   "supabase/migrations/20260818194500_redact_persisted_agent_secrets.sql";
 const NEON_MIGRATION =
   "neon/migrations/20260818213000_redact_persisted_agent_secrets.sql";
+const REMEDIATION_MIGRATION =
+  "neon/migrations/20260818220000_redact_remaining_agent_secrets.sql";
 
 async function createSeededDb() {
   const db = new PGlite();
@@ -62,6 +64,28 @@ async function expectMigrationToRedact(migration: string) {
   }
 }
 
+async function expectRemediationToRedactEmbeddedCredential() {
+  const db = await createSeededDb();
+  try {
+    await db.exec(`
+      insert into public.ai_calls (tool_calls, error)
+      values ('[{"output":"prefixghs_embeddedTokenSuffix"}]', null);
+    `);
+    await db.exec(
+      await readFile(path.join(REPO_ROOT, REMEDIATION_MIGRATION), "utf8")
+    );
+    const { rows } = await db.query<{ calls: string }>(`
+      select tool_calls::text as calls
+      from public.ai_calls
+      where tool_calls::text like '%embeddedToken%'
+    `);
+
+    expect(rows).toHaveLength(0);
+  } finally {
+    await db.close();
+  }
+}
+
 describe("persisted agent secret redaction migration", () => {
   it("redacts Supabase persisted credentials", async () => {
     await expectMigrationToRedact(MIGRATION);
@@ -69,5 +93,13 @@ describe("persisted agent secret redaction migration", () => {
 
   it("redacts Neon persisted credentials independently", async () => {
     await expectMigrationToRedact(NEON_MIGRATION);
+  });
+
+  it("redacts remaining Neon credentials independently", async () => {
+    await expectMigrationToRedact(REMEDIATION_MIGRATION);
+  });
+
+  it("redacts credentials embedded in word characters", async () => {
+    await expectRemediationToRedactEmbeddedCredential();
   });
 });
