@@ -43,7 +43,7 @@ import { downloadTextFile } from "./download-text-file";
 import { useControlChats } from "./use-control-chats";
 import { useControlChatError } from "./use-control-chat-error";
 import { useControlChatComposer } from "./use-control-chat-composer";
-
+import { TerminalActivity } from "./terminal-activity";
 export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
@@ -55,7 +55,6 @@ function ControlShellInner({
   const searchParams = useSearchParams();
   const router = useRouter();
   const { scope } = useParams<{ scope: string }>();
-
   const [missions, setMissions] = useState<Mission[]>(initialData.missions);
   const workspaces = initialData.workspaces;
 
@@ -466,12 +465,13 @@ function ControlShellInner({
                   }
                 />
                 {chatError && (
-                  <div className="mx-auto w-full max-w-5xl px-4 py-2 sm:px-6">
+                  <div className="mx-auto w-full max-w-[67rem] px-4 py-2 sm:px-6">
                     <div className="border-accent-amber/30 bg-accent-amber/5 text-accent-amber rounded border px-3 py-2 text-xs">
                       {chatError}
                     </div>
                   </div>
                 )}
+                <TerminalActivity messages={messages} />
                 <Composer
                   value={composerInput}
                   onChange={setComposerInput}
