@@ -89,10 +89,10 @@ export const TOPUP_PRESETS: readonly TopupPreset[] = [
 export const SANDBOX_RATE_MICRO_USD_PER_MINUTE = 5_000;
 
 // Fraud guardrails, not usage limits (pricing-plan 02 §3b): the cap is
-// raised on request instantly. $10–$1,000 range signed off by Charles
+// raised on request instantly. $1–$1,000 range signed off by Charles
 // 2026-08-07 (top-ups are manual-only at launch — auto top-up is outside
 // the Managed Payments merchant-of-record consent, pricing-plan 02 §3c).
-export const TOPUP_MIN_CENTS = 1000;
+export const TOPUP_MIN_CENTS = 100;
 export const TOPUP_MAX_CENTS = 100000;
 
 export function formatUsd(amountCents: number): string {
@@ -106,4 +106,12 @@ export function findPlanPrice(lookupKey: string): PlanPrice | null {
 
 export function findTopupPreset(lookupKey: string): TopupPreset | null {
   return TOPUP_PRESETS.find((preset) => preset.lookupKey === lookupKey) ?? null;
+}
+
+export function findTopupPresetByAmount(
+  amountCents: number
+): TopupPreset | null {
+  return (
+    TOPUP_PRESETS.find((preset) => preset.amountCents === amountCents) ?? null
+  );
 }

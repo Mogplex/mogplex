@@ -24,3 +24,11 @@ describe("superseded PR review reason", () => {
     ).toBe("Superseded — PR closed or branch deleted");
   });
 });
+
+describe("capacity reason labels", () => {
+  it("uses plain language for a full account run limit", () => {
+    expect(formatAutomationReasonLabel("ACCOUNT_CONCURRENCY_LIMIT")).toBe(
+      "Parallel agent runs full"
+    );
+  });
+});

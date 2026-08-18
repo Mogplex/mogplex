@@ -146,7 +146,7 @@ export default function TermsPage() {
           </h2>
           <p>
             Yes. Mogplex Cloud has no free hosted plan. Each subscription gives
-            you Concurrency, Storage, and Inference. Current plans and
+            you parallel agent runs, Storage, and Inference. Current plans and
             rates are on our{" "}
             <Link href="/pricing" className="text-primary hover:underline">
               pricing page

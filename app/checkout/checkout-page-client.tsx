@@ -107,7 +107,7 @@ function CheckoutContent() {
       title={`Confirm ${summary.name}.`}
       subtitle={
         <>
-          Concurrency {summary.concurrency}, {summary.retainedDataGb} GB
+          {summary.concurrency} parallel agent runs, {summary.retainedDataGb} GB
           Storage, and {summary.hostedUsage}
           /month Inference. Each $1 of inference credit pays for $1 of model
           usage. Cancel from Billing in Settings.{" "}
@@ -181,7 +181,6 @@ function CheckoutContent() {
     </AuthShell>
   );
 }
-
 export function CheckoutPageClient() {
   return (
     <Suspense fallback={<div className="mpx-landing min-h-dvh" />}>

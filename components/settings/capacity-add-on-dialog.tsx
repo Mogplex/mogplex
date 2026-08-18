@@ -31,7 +31,6 @@ function actionFor(current: number, target: number): CapacityChangeAction | null
   if (target < current) return "decrease";
   return null;
 }
-
 export function CapacityAddOnDialog({
   addOn,
   currentQuantity,
@@ -178,7 +177,7 @@ export function CapacityAddOnDialog({
               <p className="text-sm text-muted-foreground">
                 {allowIncrease
                   ? `${formatUsd(addOn.amountCents)} per quantity each month.`
-                  : "Reserved concurrency is no longer sold outside the billing pilot. You can keep or reduce your current quantity."}
+                  : "Extra parallel agent runs are not available for this account. You can keep or reduce your current quantity."}
               </p>
             ) : null}
           </div>

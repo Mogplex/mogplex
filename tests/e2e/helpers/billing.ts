@@ -29,6 +29,7 @@ export function capacitySummary(
       cancelsAt: null,
       namedUserLimit: 1,
     },
+    billingDetails: null,
     concurrency: {
       active: 7,
       included: 25,
@@ -58,7 +59,7 @@ export function capacitySummary(
         subscriptionItemId: "si_concurrency",
         lookupKey: "capacity_v2_concurrency_10_monthly",
         kind: "concurrency",
-        name: "Concurrency +10",
+        name: "Parallel agent runs +10",
         quantity: 1,
         allowanceDelta: "10",
         recurringAmountCents: 500,

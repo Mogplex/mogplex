@@ -30,6 +30,7 @@ export type CapacityBillingSummaryV2 = {
     cancelsAt: string | null;
     namedUserLimit: number | null;
   };
+  billingDetails: CapacityBillingDetails | null;
   concurrency: {
     active: number;
     included: number | null;
@@ -57,6 +58,27 @@ export type CapacityBillingSummaryV2 = {
   addOns: CapacityBillingSummaryAddOn[];
   openReservations: CapacityBillingSummaryReservation[];
   recentCosts: CapacityBillingSummaryCost[];
+};
+
+export type CapacityBillingDetails = {
+  hasMoreInvoices: boolean;
+  paymentMethod: {
+    brand: string;
+    last4: string;
+    expMonth: number;
+    expYear: number;
+  } | null;
+  invoices: Array<{
+    id: string;
+    number: string | null;
+    description: string;
+    status: string | null;
+    amountCents: number;
+    currency: string;
+    createdAt: string;
+    hostedInvoiceUrl: string | null;
+    invoicePdfUrl: string | null;
+  }>;
 };
 
 export type CapacityBillingSummaryAddOn = {

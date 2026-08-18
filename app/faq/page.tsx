@@ -38,7 +38,11 @@ const FAQS: Faq[] = [
   },
   {
     q: "What does it cost?",
-    a: "Individual plans start with Pro at $20 a month. Each plan includes Concurrency, Storage, and Inference. Each $1 of inference credit pays for $1 of model usage at the provider price. Business and Enterprise plans use custom terms.",
+    a: "Individual plans start with Pro at $20 a month. Each plan includes parallel agent runs, Storage, and Inference. Each $1 of inference credit pays for $1 of model usage at the provider price. Business and Enterprise plans use custom terms.",
+  },
+  {
+    q: "What are parallel agent runs?",
+    a: "Parallel agent runs are active runs that work at the same time for one billing account. Pending work does not use a run slot. When all slots are in use, new work waits until a run finishes or you stop one.",
   },
   {
     q: "What can trigger a run?",

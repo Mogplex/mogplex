@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   findPlanPrice,
   findTopupPreset,
+  findTopupPresetByAmount,
   formatUsd,
   PLAN_PRICES,
   SANDBOX_RATE_MICRO_USD_PER_MINUTE,
@@ -64,9 +65,9 @@ test("lookup keys are unique across plans and top-up presets", () => {
 });
 
 test("top-up guardrails bracket the presets", () => {
-  // $10–$1,000 manual-only range (Charles, Aug 7 2026 — auto top-up is
+  // $1–$1,000 manual-only range (Charles, Aug 18 2026 — auto top-up is
   // outside the Managed Payments MoR consent).
-  assert.equal(TOPUP_MIN_CENTS, 1000);
+  assert.equal(TOPUP_MIN_CENTS, 100);
   assert.equal(TOPUP_MAX_CENTS, 100000);
   assert.deepEqual(
     TOPUP_PRESETS.map((preset) => preset.amountCents),
@@ -91,4 +92,6 @@ test("finders return null for unknown keys", () => {
   assert.equal(findTopupPreset("topup_5"), null);
   assert.equal(findPlanPrice("pro_monthly")?.tier, "pro");
   assert.equal(findTopupPreset("topup_25")?.amountCents, 2500);
+  assert.equal(findTopupPresetByAmount(100), null);
+  assert.equal(findTopupPresetByAmount(1000)?.lookupKey, "topup_10");
 });

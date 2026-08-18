@@ -391,7 +391,9 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Requeue" })).toBeVisible();
-  await expect(page.getByText("Repo concurrency limit").first()).toBeVisible();
+  await expect(
+    page.getByText("Repository run limit reached").first()
+  ).toBeVisible();
   await expect(page.getByText("No findings").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Cancel" }).click();

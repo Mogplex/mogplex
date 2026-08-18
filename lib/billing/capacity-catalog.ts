@@ -172,7 +172,7 @@ export const CONTRACT_CAPACITY_PLANS: Readonly<
 export const CAPACITY_ADD_ONS: readonly CapacityAddOn[] = [
   {
     lookupKey: "capacity_v2_concurrency_10_monthly",
-    name: "Concurrency +10",
+    name: "Parallel agent runs +10",
     kind: "concurrency",
     amountCents: 500,
     interval: "month",
@@ -181,7 +181,7 @@ export const CAPACITY_ADD_ONS: readonly CapacityAddOn[] = [
   },
   {
     lookupKey: "capacity_v2_concurrency_50_monthly",
-    name: "Concurrency +50",
+    name: "Parallel agent runs +50",
     kind: "concurrency",
     amountCents: 1_500,
     interval: "month",
@@ -226,11 +226,11 @@ export const CAPACITY_ADD_ONS: readonly CapacityAddOn[] = [
   },
 ];
 
-export const CAPACITY_HOSTED_USAGE_MIN_CENTS = 1_000;
+export const CAPACITY_HOSTED_USAGE_MIN_CENTS = 100;
 export const CAPACITY_HOSTED_USAGE_MAX_CENTS = 100_000;
 
 export const CAPACITY_HOSTED_USAGE_PRESETS: readonly CapacityHostedUsagePreset[] =
-  [1_000, 2_500, 10_000, 25_000, 50_000, 100_000].map((creditCents) => ({
+  [100, 1_000, 2_500, 10_000, 25_000, 50_000, 100_000].map((creditCents) => ({
     lookupKey: `${CAPACITY_CATALOG_VERSION}_hosted_usage_credit_${creditCents / 100}`,
     name: `$${creditCents / 100} Inference`,
     creditCents,

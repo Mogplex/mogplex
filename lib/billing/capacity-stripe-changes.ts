@@ -58,7 +58,7 @@ export function assertCapacityIncreaseAllowed(input: {
     })
   ) {
     throw new CapacityChangeError(
-      "Reserved concurrency purchases are available only to billing pilot accounts",
+      "Extra parallel agent runs are not available for this account",
       403,
       "pilot_required"
     );

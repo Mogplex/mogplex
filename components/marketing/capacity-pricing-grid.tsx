@@ -80,7 +80,7 @@ export function CapacityPricingGrid() {
               </p>
               <dl className="capacity-allowances">
                 <div>
-                  <dt>Concurrency</dt>
+                  <dt>Parallel agent runs</dt>
                   <dd>{plan.concurrency}</dd>
                 </div>
                 <div>

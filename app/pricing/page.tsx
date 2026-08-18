@@ -61,9 +61,9 @@ export default function PricingPage() {
         </div>
         <h1 className="sub-title">Run more work. Know what it costs.</h1>
         <p className="sub-lede">
-          Choose an Individual plan by Concurrency, Storage, and Inference. Add
-          more capacity when you need it. You keep clear limits and avoid a
-          surprise usage bill.
+          Choose an Individual plan by parallel agent runs, Storage, and
+          Inference. Add more capacity when you need it. You keep clear limits
+          and avoid a surprise usage bill.
         </p>
         <p className="mono micro">
           dollar-for-dollar inference · visible limits · purchased credit never
@@ -85,7 +85,9 @@ export default function PricingPage() {
         <div className="capacity-addon-groups">
           {(["concurrency", "retained_data"] as const).map((kind) => (
             <div key={kind}>
-              <h3>{kind === "concurrency" ? "Concurrency" : "Storage"}</h3>
+              <h3>
+                {kind === "concurrency" ? "Parallel agent runs" : "Storage"}
+              </h3>
               <ul>
                 {CAPACITY_ADD_ONS.filter((addOn) => addOn.kind === kind).map(
                   (addOn) => (
@@ -152,8 +154,8 @@ export default function PricingPage() {
           <div className="term">
             <p className="term-k mono">CLEAR LIMITS</p>
             <p className="term-v">
-              Mogplex shows all three capacity limits together. Work pauses
-              safely before it exceeds the capacity you bought.
+              Each plan sets how many agent runs can work at the same time. Work
+              waits safely when all run slots are in use.
             </p>
           </div>
           <div className="term">

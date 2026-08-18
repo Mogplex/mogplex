@@ -5,7 +5,11 @@ import { INDIVIDUAL_CAPACITY_PLANS } from "@/lib/billing/capacity-catalog";
 import { loadCapacityBillingSummary } from "@/lib/billing/capacity-summary-db";
 import { getBillingBalance } from "@/lib/billing/ledger";
 import { isCapacityBillingPilotAccount } from "@/lib/billing/capacity-purchase-policy";
-import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
+import {
+  areCapacityBillingOperationsEnabled,
+  isBillingEnabled,
+} from "@/lib/billing/stripe";
+import { loadStripeBillingDetails } from "@/lib/billing/stripe-billing-details";
 import { hasCapability } from "@/lib/team-capabilities";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 
@@ -17,6 +21,8 @@ type CapacityBillingSummaryDeps = {
   loadCapacityBillingSummary: typeof loadCapacityBillingSummary;
   areCapacityBillingOperationsEnabled: typeof areCapacityBillingOperationsEnabled;
   isCapacityBillingPilotAccount: typeof isCapacityBillingPilotAccount;
+  isBillingEnabled: typeof isBillingEnabled;
+  loadStripeBillingDetails: typeof loadStripeBillingDetails;
 };
 
 const defaultDeps: CapacityBillingSummaryDeps = {
@@ -27,6 +33,8 @@ const defaultDeps: CapacityBillingSummaryDeps = {
   loadCapacityBillingSummary,
   areCapacityBillingOperationsEnabled,
   isCapacityBillingPilotAccount,
+  isBillingEnabled,
+  loadStripeBillingDetails,
 };
 
 const INDIVIDUAL_CAPACITY_PLAN_CODES = new Set(
@@ -74,7 +82,24 @@ export function createCapacityBillingSummaryGetHandler(
           hasIndividualCapacityPlan &&
           deps.isCapacityBillingPilotAccount(account.id),
       });
-      return NextResponse.json(summary);
+      let billingDetails = null;
+      if (
+        canManageBilling &&
+        account.stripe_customer_id &&
+        deps.isBillingEnabled()
+      ) {
+        try {
+          billingDetails = await deps.loadStripeBillingDetails(
+            account.stripe_customer_id
+          );
+        } catch (error) {
+          console.warn("[capacity-billing] Stripe details unavailable", {
+            accountId: account.id,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }
+      return NextResponse.json({ ...summary, billingDetails });
     } catch (error) {
       console.error("[capacity-billing] summary failed", {
         scope: resolution.scope.kind,

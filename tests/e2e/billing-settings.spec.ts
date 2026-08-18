@@ -72,9 +72,8 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await enableScopedE2EAuth(page);
   await mockSettingsShell(page);
   await page.route("**/api/billing/capacity", (route) =>
-    fulfillJson(
-      route,
-      capacitySummary({
+    fulfillJson(route, {
+      ...capacitySummary({
         concurrencyPurchasesEnabled: true,
         hostedUsage: {
           includedRemainingCents: 0,
@@ -84,8 +83,41 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
           grantResetsAt: "2026-09-17T12:00:00.000Z",
           purchasesFrozen: false,
         },
-      })
-    )
+      }),
+      billingDetails: {
+        hasMoreInvoices: true,
+        paymentMethod: {
+          brand: "visa",
+          last4: "4242",
+          expMonth: 12,
+          expYear: 2028,
+        },
+        invoices: [
+          {
+            id: "in_credit",
+            number: "MPX-002",
+            description: "$25 inference credit",
+            status: "paid",
+            amountCents: 2_500,
+            currency: "usd",
+            createdAt: "2026-08-17T12:00:00.000Z",
+            hostedInvoiceUrl: "https://invoice.stripe.test/in_credit",
+            invoicePdfUrl: "https://invoice.stripe.test/in_credit.pdf",
+          },
+          {
+            id: "in_plan",
+            number: "MPX-001",
+            description: "Mogplex Plus",
+            status: "paid",
+            amountCents: 10_000,
+            currency: "usd",
+            createdAt: "2026-07-17T12:00:00.000Z",
+            hostedInvoiceUrl: "https://invoice.stripe.test/in_plan",
+            invoicePdfUrl: "https://invoice.stripe.test/in_plan.pdf",
+          },
+        ],
+      },
+    })
   );
 
   await page.route("**/api/billing/capacity/preview", async (route) => {
@@ -97,7 +129,7 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
     await fulfillJson(route, {
       resource: "concurrency",
       lookupKey: "capacity_v2_concurrency_10_monthly",
-      name: "Concurrency +10",
+      name: "Parallel agent runs +10",
       action: "increase",
       currentQuantity: 1,
       resultingQuantity: 2,
@@ -132,6 +164,9 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
       balanceStatus: "pending_webhook",
     })
   );
+  await page.route("**/api/stripe/portal", (route) =>
+    fulfillJson(route, { url: scopedPath("settings?tab=billing") })
+  );
 
   await page.goto(scopedPath("settings?tab=billing"));
 
@@ -142,30 +177,48 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   const creditChoices = page.getByRole("group", {
     name: "Choose credit amount",
   });
-  await expect(creditChoices.getByRole("button")).toHaveCount(6);
-  await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+  await expect(creditChoices.getByRole("button")).toHaveCount(7);
+  await expect(
+    creditChoices.getByRole("button", {
+      name: "Pay $1, get $1 credit",
+    })
+  ).toBeVisible();
+  await expect(page.getByText("Monthly plan cost")).toBeVisible();
+  await expect(page.getByText("$100.00 / month")).toBeVisible();
+  await expect(page.getByText("35 parallel agent runs")).toBeVisible();
+  await expect(page.getByText("25 with plan, 10 add-on")).toBeVisible();
+  await expect(page.getByText("Next due date")).toBeVisible();
+  await expect(page.getByText("Sep 17, 2026")).toBeVisible();
+  await expect(page.getByText("Visa ending in 4242")).toBeVisible();
+  await expect(page.getByText("Expires 12/2028")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Update payment method" })
+  ).toBeVisible();
+  await expect(page.getByText("$25 inference credit")).toBeVisible();
+  await expect(page.getByText("Mogplex Plus")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Invoice MPX-002" })
+  ).toHaveAttribute("href", "https://invoice.stripe.test/in_credit");
+  await expect(
+    page.getByRole("button", { name: "View all invoices" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "support@mogplex.com" })
+  ).toHaveAttribute("href", "mailto:support@mogplex.com");
+  await expect(
+    page.getByRole("heading", { name: "Parallel agent runs" })
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Storage" })).toBeVisible();
   await expect(page.getByText("Hosted usage", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Retained data", { exact: true })).toHaveCount(0);
-  await expect(
-    page.getByText("Automatic burst", { exact: true })
-  ).toBeVisible();
-  await expect(page.getByText("Not enforced", { exact: true })).toHaveCount(1);
-  const headings = await page.locator("h2").allTextContents();
-  expect(headings.indexOf("Add inference credit")).toBeGreaterThan(
-    headings.indexOf("Plus")
+  await expect(page.getByText("Automatic burst", { exact: true })).toHaveCount(
+    0
   );
-  await expect(page.getByText("7 of 35")).toBeVisible();
-  await expect(page.getByText("2.3 GB of 5 GB")).toBeVisible();
-  const inferenceValue = page.getByText("$10.00 credit");
-  await expect(inferenceValue).toBeVisible();
-  await expect(page.getByText("$0.00 available for new work")).toBeVisible();
-  await expect(
-    page.getByText(
-      "Active work holds $10.00. Unused credit returns automatically."
-    )
-  ).toBeVisible();
-  expect((await inferenceValue.boundingBox())?.height).toBeLessThan(40);
+  await expect(page.getByText("Not enforced", { exact: true })).toHaveCount(0);
+  const headings = await page.locator("h2").allTextContents();
+  expect(headings.slice(0, 2)).toEqual(["Plus", "Add inference credit"]);
+  await expect(page.getByText("7 of 35")).toHaveCount(0);
+  await expect(page.getByText("2.3 GB of 5 GB")).toHaveCount(0);
   await expect(page.getByText("Run customer report")).toBeVisible();
 
   const inferenceCheckout = page.waitForRequest(
@@ -179,7 +232,9 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
     page.getByText("Payment submitted. Stripe will add the full credit amount.")
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Manage Concurrency +10" }).click();
+  await page
+    .getByRole("button", { name: "Manage Parallel agent runs +10" })
+    .click();
   await page.getByRole("button", { name: "Increase quantity" }).click();
   await page.getByRole("button", { name: "Review change" }).click();
   await expect(page.getByText("35 to 45")).toBeVisible();
@@ -193,9 +248,13 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
     previewToken: "preview-token",
   });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  const portalRequest = page.waitForRequest("**/api/stripe/portal");
+  await page.getByRole("button", { name: "Update payment method" }).click();
+  await portalRequest;
 });
 
-test("ordinary Billing includes automatic concurrency burst without an upsell", async ({
+test("ordinary Billing hides plan-included capacity meters without an upsell", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
@@ -219,19 +278,16 @@ test("ordinary Billing includes automatic concurrency burst without an upsell", 
 
   await page.goto(scopedPath("settings?tab=billing"));
 
-  await expect(
-    page.getByText("Automatic burst", { exact: true })
-  ).toBeVisible();
-  await expect(
-    page.getByText(
-      "25 included. Extra work can burst past this limit during early access."
-    )
-  ).toBeVisible();
+  await expect(page.getByText("Automatic burst", { exact: true })).toHaveCount(
+    0
+  );
+  await expect(page.getByText("7 of 25")).toHaveCount(0);
+  await expect(page.getByText("25 parallel agent runs")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Storage add-ons" })
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Concurrency \+/ })
+    page.getByRole("button", { name: /Parallel agent runs \+/ })
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Add Storage +1 GB" })
@@ -248,11 +304,13 @@ test("existing concurrency customers can reduce but not increase outside the pil
   );
 
   await page.goto(scopedPath("settings?tab=billing"));
-  await page.getByRole("button", { name: "Manage Concurrency +10" }).click();
+  await page
+    .getByRole("button", { name: "Manage Parallel agent runs +10" })
+    .click();
 
   await expect(
     page.getByText(
-      "Reserved concurrency is no longer sold outside the billing pilot. You can keep or reduce your current quantity."
+      "Extra parallel agent runs are not available for this account. You can keep or reduce your current quantity."
     )
   ).toBeVisible();
   await expect(
@@ -375,6 +433,13 @@ test("legacy subscribers can manage their plan and buy inference credit", async 
       route,
       capacitySummary({
         billingOperationsEnabled: false,
+        concurrency: {
+          active: 0,
+          included: 0,
+          addOn: 0,
+          limit: 0,
+          wouldBlock: false,
+        },
         plan: {
           ref: "legacy",
           name: "Mog Mode",
@@ -397,9 +462,8 @@ test("legacy subscribers can manage their plan and buy inference credit", async 
   await page.goto(scopedPath("settings?tab=billing"));
 
   await expect(page.getByRole("heading", { name: "Mog Mode" })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Plan and invoices" })
-  ).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Manage plan" })).toBeEnabled();
+  await expect(page.getByText("0 parallel agent runs")).toHaveCount(0);
 
   const topupCheckout = page.waitForRequest("**/api/stripe/checkout");
   await page.getByRole("button", { name: "Pay $10, get $10 credit" }).click();
@@ -429,10 +493,8 @@ test("top-up customers can open billing history without a subscription", async (
   await page.route("**/api/stripe/portal", (route) =>
     fulfillJson(route, { url: scopedPath("settings?tab=billing") })
   );
-
   await page.goto(scopedPath("settings?tab=billing"));
-
   const portalRequest = page.waitForRequest("**/api/stripe/portal");
-  await page.getByRole("button", { name: "Billing history" }).click();
+  await page.getByRole("button", { name: "Manage billing" }).click();
   await portalRequest;
 });

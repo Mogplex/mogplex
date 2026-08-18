@@ -89,7 +89,7 @@ describe("hosted-usage checkout request", () => {
         attemptId: ATTEMPT_ID,
       },
       { preset: "topup_25", attemptId: ATTEMPT_ID },
-      { amountCents: 999, attemptId: ATTEMPT_ID },
+      { amountCents: 99, attemptId: ATTEMPT_ID },
       { amountCents: 100_001, attemptId: ATTEMPT_ID },
       { amountCents: 1_000.5, attemptId: ATTEMPT_ID },
       { amountCents: 1_000, attemptId: "not-a-uuid" },

@@ -94,7 +94,7 @@ test("hosted-usage checkout validates before loading an account", async () => {
   const response = await handler(
     new Request("https://example.com/api/billing/hosted-usage/checkout", {
       method: "POST",
-      body: JSON.stringify({ amountCents: 999, attemptId: ATTEMPT_ID }),
+      body: JSON.stringify({ amountCents: 99, attemptId: ATTEMPT_ID }),
     })
   );
   assert.equal(response.status, 400);
