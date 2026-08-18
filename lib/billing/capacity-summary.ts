@@ -309,9 +309,7 @@ export function buildCapacityBillingSummary(input: {
     version: "capacity_v2",
     asOf: asOf.toISOString(),
     billingOperationsEnabled: input.billingOperationsEnabled,
-    concurrencyPurchasesEnabled:
-      input.billingOperationsEnabled &&
-      (input.concurrencyPurchasesEnabled ?? false),
+    concurrencyPurchasesEnabled: input.concurrencyPurchasesEnabled ?? false,
     account: {
       id: facts.account.id,
       eventSequence: nonnegativeBigInt(

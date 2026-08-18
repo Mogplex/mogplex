@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
+import { INDIVIDUAL_CAPACITY_PLANS } from "@/lib/billing/capacity-catalog";
 import { loadCapacityBillingSummary } from "@/lib/billing/capacity-summary-db";
 import { getBillingBalance } from "@/lib/billing/ledger";
 import { isCapacityBillingPilotAccount } from "@/lib/billing/capacity-purchase-policy";
@@ -28,7 +29,9 @@ const defaultDeps: CapacityBillingSummaryDeps = {
   isCapacityBillingPilotAccount,
 };
 
-const INDIVIDUAL_CAPACITY_PLAN_CODES = new Set(["pro", "plus", "max"]);
+const INDIVIDUAL_CAPACITY_PLAN_CODES = new Set(
+  Object.keys(INDIVIDUAL_CAPACITY_PLANS)
+);
 
 export function createCapacityBillingSummaryGetHandler(
   overrides: Partial<CapacityBillingSummaryDeps> = {}
