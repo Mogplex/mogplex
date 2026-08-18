@@ -70,12 +70,12 @@ export function capacitySummary(
     openReservations: [],
     recentCosts: [
       {
-        operationId: "operation-1",
-        description: "Run customer report",
+        operationId: "review-operation-1",
+        description: "Code review · mogplex/mogplex #285",
         status: "settled",
         occurredAt: "2026-08-16T12:00:00.000Z",
-        totalCents: 74,
-        items: [{ category: "trigger", label: "Trigger.dev", amountCents: 74 }],
+        totalCents: 3,
+        items: [{ category: "ai", label: "AI inference", amountCents: 3 }],
       },
     ],
     ...overrides,
