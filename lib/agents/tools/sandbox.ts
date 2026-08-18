@@ -13,16 +13,19 @@ export { resolveOrCreateSandbox } from "./sandbox-resolution";
 const EXEC_STDOUT_LIMIT = 10_000;
 const EXEC_STDERR_LIMIT = 5000;
 const CREDENTIAL_FILE_PATTERN =
-  /(?:\.git-credentials|\.mogplex\/github-token|\.netrc|\.config\/gh\/hosts\.yml|\.gitconfig)/i;
+  /(?:\.git-credentials|\.mogplex\/github-token|\.netrc|\.config\/gh\/hosts\.yml|\.gitconfig|\.ssh\/(?:id_[^/\s]+|config)|\.aws\/credentials|\.npmrc|\.pypirc)/i;
 const CREDENTIAL_COMMAND_PATTERN =
-  /\b(?:(?:GH|GITHUB)_TOKEN|git\s+credential|gh\s+auth\s+token|env|printenv)\b/i;
+  /\b(?:(?:GH|GITHUB)_TOKEN|git\s+credential|gh\s+auth\s+token)\b/i;
 const PROCESS_ENV_PATTERN = /\/proc\/\S+\/environ/i;
+const ENV_COMMAND_PATTERN = /(?:^|[;&|]\s*)env\b/i;
+const PRINTENV_COMMAND_PATTERN = /(?:^|[;&|]\s*)printenv\b/i;
 const HTTP_CLIENT_PATTERN =
   /\b(?:curl|wget|http|python(?:3)?|node|deno|ruby)\b/i;
 const GITHUB_API_PATTERN = /api\.github\.com/i;
 const HTTP_MUTATION_METHOD_PATTERN = /\b(?:POST|PUT|PATCH|DELETE)\b/i;
 const HTTP_MUTATION_FLAG_PATTERN =
   /(?:-X|--request)\s+(?:POST|PUT|PATCH|DELETE)\b/i;
+const HTTP_DATA_FLAG_PATTERN = /(?:-d|--data(?:-[\w-]+)?)\b/i;
 const GITHUB_CLI_PATTERN = /\bgh\b/i;
 const GITHUB_CLI_MUTATION_PATTERN =
   /\b(?:issue|pr)\s+(?:create|edit|close|reopen|delete)\b/i;
@@ -40,7 +43,8 @@ function isRawGitHubMutationCommand(command: string) {
     HTTP_CLIENT_PATTERN.test(command) &&
     GITHUB_API_PATTERN.test(command) &&
     (HTTP_MUTATION_METHOD_PATTERN.test(command) ||
-      HTTP_MUTATION_FLAG_PATTERN.test(command))
+      HTTP_MUTATION_FLAG_PATTERN.test(command) ||
+      HTTP_DATA_FLAG_PATTERN.test(command))
   );
 }
 
@@ -63,7 +67,9 @@ export function getBlockedAgentShellCommand(command: string):
   if (
     CREDENTIAL_FILE_PATTERN.test(command) ||
     CREDENTIAL_COMMAND_PATTERN.test(command) ||
-    PROCESS_ENV_PATTERN.test(command)
+    PROCESS_ENV_PATTERN.test(command) ||
+    ENV_COMMAND_PATTERN.test(command) ||
+    PRINTENV_COMMAND_PATTERN.test(command)
   ) {
     return {
       error:

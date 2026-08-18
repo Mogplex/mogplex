@@ -1,5 +1,7 @@
 -- Agent tool output is retained for user-visible transcripts and observability.
 -- Remove credentials from existing JSON payloads before they can be replayed.
+begin;
+
 create or replace function public.redact_persisted_agent_secrets(value jsonb)
 returns jsonb
 language sql
@@ -68,3 +70,5 @@ set message = public.redact_persisted_agent_secrets(to_jsonb(message)) #>> '{}'
 where message ~ '(gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{8,}|sb_secret_[A-Za-z0-9_-]+|x-access-token:|[Bb]earer[[:space:]])';
 
 drop function public.redact_persisted_agent_secrets(jsonb);
+
+commit;
