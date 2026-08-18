@@ -17,6 +17,7 @@ function Meter(props: {
   percent: number;
   blocked?: boolean;
   trackingOnly?: boolean;
+  trackingLabel?: string;
   note?: string;
 }) {
   return (
@@ -24,7 +25,9 @@ function Meter(props: {
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium">{props.name}</p>
         {props.trackingOnly ? (
-          <Badge variant="secondary">Not enforced</Badge>
+          <Badge variant="secondary">
+            {props.trackingLabel ?? "Not enforced"}
+          </Badge>
         ) : props.blocked ? (
           <Badge variant="destructive">At limit</Badge>
         ) : null}
@@ -54,15 +57,23 @@ export function CapacityBillingOverview({
     summary.hostedUsage.includedRemainingCents +
     summary.hostedUsage.purchasedRemainingCents;
   const hasActiveReservation = summary.hostedUsage.openReservationsCents > 0;
+  const concurrencyIncluded =
+    summary.concurrency.included === null
+      ? "Custom capacity"
+      : `${summary.concurrency.included} included`;
+  const concurrencyDetail = trackingOnly
+    ? `${concurrencyIncluded}. Extra work can burst past this limit during early access.`
+    : `${concurrencyIncluded} + ${summary.concurrency.addOn} reserved`;
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
       <Meter
         blocked={summary.concurrency.wouldBlock}
-        detail={`${summary.concurrency.included ?? 0} included + ${summary.concurrency.addOn} add-on`}
+        detail={concurrencyDetail}
         name="Concurrency"
         percent={clampPercent(concurrencyPercent)}
         trackingOnly={trackingOnly}
+        trackingLabel="Automatic burst"
         value={`${summary.concurrency.active} of ${concurrencyLimit ?? "custom"}`}
       />
       <Meter

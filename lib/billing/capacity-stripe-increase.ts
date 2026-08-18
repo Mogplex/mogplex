@@ -10,10 +10,12 @@ import {
   assertAccountCanChangeCapacity,
   assertCanonicalTargetPrice,
   resolveCapacitySubscription,
+  targetCapacityAddOn,
   type ResolvedSubscription,
 } from "@/lib/billing/capacity-stripe-change-state";
 import {
   assertCapacityBillingOperationsEnabled,
+  assertCapacityIncreaseAllowed,
   defaultCapacityStripeChangeDeps,
   type CapacityStripeChangeDeps,
 } from "@/lib/billing/capacity-stripe-changes";
@@ -145,6 +147,12 @@ export async function confirmCapacityIncrease(input: {
     token: input.previewToken,
     secret: input.signingSecret,
     nowSeconds: Math.floor(deps.now().getTime() / 1_000),
+  });
+  assertCapacityIncreaseAllowed({
+    accountId: input.account.id,
+    action: payload.action,
+    addOn: targetCapacityAddOn(payload.lookupKey),
+    pilotAccount: deps.capacityBillingPilotAccount(input.account.id),
   });
   const subscription = await deps.retrieveSubscription(payload.subscriptionId);
   const resolved = resolveCapacitySubscription({

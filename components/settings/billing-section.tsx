@@ -206,6 +206,22 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const capacityUnavailable = purchaseUnavailableMessage(summary, "capacity");
   const canBuyInference = inferenceUnavailable === null;
   const canChangeCapacity = capacityUnavailable === null;
+  const activeConcurrencyLookupKeys = new Set(
+    summary.addOns
+      .filter((item) => item.kind === "concurrency")
+      .map((item) => item.lookupKey)
+  );
+  const visibleCapacityGroups = CAPACITY_ADD_ON_GROUPS.map((group) => ({
+    ...group,
+    items:
+      group.id === "concurrency" && !summary.concurrencyPurchasesEnabled
+        ? group.items.filter((item) =>
+            activeConcurrencyLookupKeys.has(item.lookupKey)
+          )
+        : group.items,
+  })).filter((group) => group.items.length > 0);
+  const hasGrandfatheredConcurrency =
+    !summary.concurrencyPurchasesEnabled && activeConcurrencyLookupKeys.size > 0;
   const selectedQuantity = selectedAddOn
     ? (summary.addOns.find(
         (item) => item.lookupKey === selectedAddOn.lookupKey
@@ -279,9 +295,21 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
 
       <Card>
         <CardHeader>
-          <CardTitle><h2>Capacity add-ons</h2></CardTitle>
+          <CardTitle>
+            <h2>
+              {summary.concurrencyPurchasesEnabled
+                ? "Capacity pilot"
+                : hasGrandfatheredConcurrency
+                  ? "Capacity add-ons"
+                  : "Storage add-ons"}
+            </h2>
+          </CardTitle>
           <CardDescription>
-            Keep your plan. Add more concurrency or storage.
+            {summary.concurrencyPurchasesEnabled
+              ? "Test reserved concurrency and storage without changing your plan."
+              : hasGrandfatheredConcurrency
+                ? "Manage existing reserved concurrency or add retained storage."
+                : "Add retained storage without changing your plan."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -290,7 +318,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
               {capacityUnavailable}
             </p>
           ) : null}
-          {CAPACITY_ADD_ON_GROUPS.map((group, groupIndex) => (
+          {visibleCapacityGroups.map((group, groupIndex) => (
             <section
               aria-labelledby={`capacity-group-${group.id}`}
               className={groupIndex === 0 ? "space-y-2" : "space-y-2 border-t pt-6"}
@@ -437,6 +465,10 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
 
       <CapacityAddOnDialog
         addOn={selectedAddOn}
+        allowIncrease={
+          selectedAddOn?.kind !== "concurrency" ||
+          summary.concurrencyPurchasesEnabled
+        }
         currentQuantity={selectedQuantity}
         onChanged={refresh}
         onOpenChange={(open) => {

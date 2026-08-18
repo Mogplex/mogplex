@@ -20,6 +20,7 @@ type CapacityAddOnDialogProps = {
   addOn: CapacityAddOn | null;
   currentQuantity: number;
   open: boolean;
+  allowIncrease?: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => Promise<unknown>;
 };
@@ -35,6 +36,7 @@ export function CapacityAddOnDialog({
   addOn,
   currentQuantity,
   open,
+  allowIncrease = true,
   onOpenChange,
   onChanged,
 }: CapacityAddOnDialogProps) {
@@ -162,7 +164,7 @@ export function CapacityAddOnDialog({
                 <output className="w-8 text-center font-mono text-sm">{quantity}</output>
                 <Button
                   aria-label="Increase quantity"
-                  disabled={pending}
+                  disabled={pending || (!allowIncrease && quantity >= currentQuantity)}
                   onClick={() => setQuantity((value) => value + 1)}
                   size="sm"
                   type="button"
@@ -174,7 +176,9 @@ export function CapacityAddOnDialog({
             </div>
             {addOn ? (
               <p className="text-sm text-muted-foreground">
-                {formatUsd(addOn.amountCents)} per quantity each month.
+                {allowIncrease
+                  ? `${formatUsd(addOn.amountCents)} per quantity each month.`
+                  : "Reserved concurrency is no longer sold outside the billing pilot. You can keep or reduce your current quantity."}
               </p>
             ) : null}
           </div>

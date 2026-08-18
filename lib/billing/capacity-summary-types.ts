@@ -8,6 +8,7 @@ export type CapacityBillingSummaryV2 = {
   version: "capacity_v2";
   asOf: string;
   billingOperationsEnabled: boolean;
+  concurrencyPurchasesEnabled: boolean;
   account: {
     id: string;
     eventSequence: string;

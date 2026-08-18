@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
-import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
 import {
   buildE2EAuthHeaders,
   enableScopedE2EAuth,
   scopedPath,
 } from "./helpers/auth";
+import { capacitySummary } from "./helpers/billing";
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000002";
 const TEAM_SLUG = "acme";
@@ -66,86 +66,6 @@ async function mockSettingsShell(page: Page) {
   );
 }
 
-function capacitySummary(
-  overrides: Partial<CapacityBillingSummaryV2> = {}
-): CapacityBillingSummaryV2 {
-  return {
-    version: "capacity_v2",
-    asOf: "2026-08-17T12:00:00.000Z",
-    billingOperationsEnabled: true,
-    account: {
-      id: "billing-account-1",
-      eventSequence: "12",
-      enforcementMode: "shadow",
-      scope: "personal",
-      displayName: "Alex",
-      status: "active",
-      canManageBilling: true,
-      hasSubscription: true,
-      hasBillingHistory: true,
-    },
-    plan: {
-      ref: "plus",
-      name: "Plus",
-      offerKind: "individual",
-      interval: "month",
-      recurringAmountCents: 10_000,
-      renewsAt: "2026-09-17T12:00:00.000Z",
-      cancelsAt: null,
-      namedUserLimit: 1,
-    },
-    concurrency: {
-      active: 7,
-      included: 25,
-      addOn: 10,
-      limit: 35,
-      wouldBlock: false,
-    },
-    retainedData: {
-      logicalBytes: "2300000000",
-      includedBytes: "5000000000",
-      addOnBytes: "0",
-      limitBytes: "5000000000",
-      percentUsed: 46,
-      wouldBlock: false,
-      overLimitAfterPendingChange: false,
-    },
-    hostedUsage: {
-      includedRemainingCents: 1_800,
-      purchasedRemainingCents: 1_000,
-      openReservationsCents: 300,
-      spendableCents: 2_500,
-      grantResetsAt: "2026-09-17T12:00:00.000Z",
-      purchasesFrozen: false,
-    },
-    addOns: [
-      {
-        subscriptionItemId: "si_concurrency",
-        lookupKey: "capacity_v2_concurrency_10_monthly",
-        kind: "concurrency",
-        name: "Concurrency +10",
-        quantity: 1,
-        allowanceDelta: "10",
-        recurringAmountCents: 500,
-        status: "active",
-        effectiveAt: "2026-08-17T12:00:00.000Z",
-      },
-    ],
-    openReservations: [],
-    recentCosts: [
-      {
-        operationId: "operation-1",
-        description: "Run customer report",
-        status: "settled",
-        occurredAt: "2026-08-16T12:00:00.000Z",
-        totalCents: 74,
-        items: [{ category: "trigger", label: "Trigger.dev", amountCents: 74 }],
-      },
-    ],
-    ...overrides,
-  };
-}
-
 test("personal Billing shows capacity and reviews an add-on change", async ({
   page,
 }) => {
@@ -155,6 +75,7 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
     fulfillJson(
       route,
       capacitySummary({
+        concurrencyPurchasesEnabled: true,
         hostedUsage: {
           includedRemainingCents: 0,
           purchasedRemainingCents: 1_000,
@@ -226,7 +147,10 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await expect(page.getByRole("heading", { name: "Storage" })).toBeVisible();
   await expect(page.getByText("Hosted usage", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Retained data", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Not enforced", { exact: true })).toHaveCount(2);
+  await expect(
+    page.getByText("Automatic burst", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText("Not enforced", { exact: true })).toHaveCount(1);
   const headings = await page.locator("h2").allTextContents();
   expect(headings.indexOf("Add inference credit")).toBeGreaterThan(
     headings.indexOf("Plus")
@@ -269,6 +193,74 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
     previewToken: "preview-token",
   });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("ordinary Billing includes automatic concurrency burst without an upsell", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsShell(page);
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(
+      route,
+      capacitySummary({
+        concurrencyPurchasesEnabled: false,
+        concurrency: {
+          active: 7,
+          included: 25,
+          addOn: 0,
+          limit: 25,
+          wouldBlock: false,
+        },
+        addOns: [],
+      })
+    )
+  );
+
+  await page.goto(scopedPath("settings?tab=billing"));
+
+  await expect(
+    page.getByText("Automatic burst", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "25 included. Extra work can burst past this limit during early access."
+    )
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Storage add-ons" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Concurrency \+/ })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Add Storage +1 GB" })
+  ).toBeVisible();
+});
+
+test("existing concurrency customers can reduce but not increase outside the pilot", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsShell(page);
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(route, capacitySummary({ concurrencyPurchasesEnabled: false }))
+  );
+
+  await page.goto(scopedPath("settings?tab=billing"));
+  await page.getByRole("button", { name: "Manage Concurrency +10" }).click();
+
+  await expect(
+    page.getByText(
+      "Reserved concurrency is no longer sold outside the billing pilot. You can keep or reduce your current quantity."
+    )
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Increase quantity" })
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Decrease quantity" })
+  ).toBeEnabled();
 });
 
 test("company Billing stays visible and read-only for a member", async ({
