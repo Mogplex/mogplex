@@ -154,9 +154,9 @@ export default function TermsPage() {
             .
           </p>
           <p>
-            Mogplex applies the published retail factor when it bills managed
-            AI and other hosted services. Sandbox compute and transfer use the
-            published rates. Purchased inference credit does not expire.
+            Mogplex bills managed AI at the model provider&apos;s published price
+            with no markup. Other hosted services use separate published rates.
+            Purchased inference credit does not expire.
           </p>
           <p>
             The Apache-2.0 software has no license fee. Self-hosters pay their

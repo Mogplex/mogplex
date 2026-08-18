@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { enableScopedE2EAuth } from "./helpers/auth";
 
 test("public landing shows the open-source agent foundry and primary CTA", async ({
   page,
@@ -104,6 +105,10 @@ test("public marketing pages use the capacity pricing copy", async ({
   await expect(page.getByText("PAYG", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/named user/i)).toHaveCount(0);
   await expect(page.getByText("$200/month", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("$1 of inference credit pays for $1 of model usage.")
+  ).toBeVisible();
+  await expect(page.getByText(/managed AI.*1\.25/i)).toHaveCount(0);
 
   // Individual plan intent survives through signup and checkout.
   await expect(page.getByTestId("pricing-cta-pro")).toHaveAttribute(
@@ -132,14 +137,12 @@ test("public marketing pages use the capacity pricing copy", async ({
 
   await page.goto("/terms");
   await expect(
-    page.getByText(/provider list price with no markup/i)
-  ).toHaveCount(0);
-  await expect(
-    page.getByText(/applies the published retail factor/i)
+    page.getByText(/model provider's published price with no markup/i)
   ).toBeVisible();
 });
 
 test("signed-in pricing choices go directly to checkout", async ({ page }) => {
+  await enableScopedE2EAuth(page);
   await page.route("**/api/auth/get-session", (route) =>
     route.fulfill({
       status: 200,
@@ -165,4 +168,9 @@ test("signed-in pricing choices go directly to checkout", async ({ page }) => {
     "href",
     "/checkout?plan=max"
   );
+
+  await page.goto("/checkout?plan=max");
+  await expect(
+    page.getByText("Each $1 of inference credit pays for $1 of model usage.")
+  ).toBeVisible();
 });

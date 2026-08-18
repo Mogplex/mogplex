@@ -56,7 +56,10 @@ function formatHostedUsageSummary(
   summary: CapacityBillingSummaryV2 | undefined
 ): string {
   if (!summary) return "Billing unavailable";
-  return `${formatUsd(summary.hostedUsage.spendableCents)} inference`;
+  const balanceCents =
+    summary.hostedUsage.includedRemainingCents +
+    summary.hostedUsage.purchasedRemainingCents;
+  return `${formatUsd(balanceCents)} inference`;
 }
 
 function SidebarNavLink({

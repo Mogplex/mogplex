@@ -2,10 +2,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  HOSTED_USAGE_FACTOR_MILLIONTHS,
+  MANAGED_SERVICE_FACTOR_MILLIONTHS,
   SANDBOX_RETAIL_MICROS_PER_MINUTE,
   SANDBOX_TRANSFER_RETAIL_MICROS_PER_GB,
-  factorRetailDebitMicros,
+  factorManagedServiceDebitMicros,
   fixedRetailDebitMicros,
   sandboxComputeRetailDebitMicros,
   sandboxTransferRetailDebitMicros,
@@ -13,11 +13,11 @@ import {
 
 describe("provider cost retail pricing", () => {
   it("applies the approved 1.25 factor and rounds once to a microdollar", () => {
-    expect(HOSTED_USAGE_FACTOR_MILLIONTHS).toBe(BigInt(1_250_000));
-    expect(factorRetailDebitMicros(BigInt(8))).toBe(BigInt(10));
-    expect(factorRetailDebitMicros(BigInt(1))).toBe(BigInt(2));
-    expect(factorRetailDebitMicros(BigInt(0))).toBe(BigInt(0));
-    expect(factorRetailDebitMicros(BigInt(3), BigInt(1_000_000))).toBe(
+    expect(MANAGED_SERVICE_FACTOR_MILLIONTHS).toBe(BigInt(1_250_000));
+    expect(factorManagedServiceDebitMicros(BigInt(8))).toBe(BigInt(10));
+    expect(factorManagedServiceDebitMicros(BigInt(1))).toBe(BigInt(2));
+    expect(factorManagedServiceDebitMicros(BigInt(0))).toBe(BigInt(0));
+    expect(factorManagedServiceDebitMicros(BigInt(3), BigInt(1_000_000))).toBe(
       BigInt(3)
     );
   });
@@ -49,10 +49,10 @@ describe("provider cost retail pricing", () => {
   });
 
   it("rejects negative amounts and nonpositive factors", () => {
-    expect(() => factorRetailDebitMicros(-BigInt(1))).toThrow(
+    expect(() => factorManagedServiceDebitMicros(-BigInt(1))).toThrow(
       /must not be negative/
     );
-    expect(() => factorRetailDebitMicros(BigInt(1), BigInt(0))).toThrow(
+    expect(() => factorManagedServiceDebitMicros(BigInt(1), BigInt(0))).toThrow(
       /must be positive/
     );
     expect(() => fixedRetailDebitMicros(-BigInt(1), BigInt(1))).toThrow(
