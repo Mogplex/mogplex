@@ -42,7 +42,7 @@ function assertPlusSnapshot(snapshot: CapacityEntitlementSnapshot | null) {
   assert.equal(snapshot.plan.code, "plus");
   assert.equal(snapshot.plan.concurrency, 25);
   assert.equal(snapshot.plan.retainedDataBytes, 5_000_000_000);
-  assert.equal(snapshot.plan.hostedUsageCents, 2_500);
+  assert.equal(snapshot.plan.hostedUsageCents, 10_000);
   assert.equal(snapshot.plan.periodAnchor, "2026-08-01");
   assert.deepEqual(
     snapshot.items.map((item) => [

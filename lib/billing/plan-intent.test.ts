@@ -41,7 +41,7 @@ describe("plan intent", () => {
       annualPrice: "$1,020",
       concurrency: 25,
       retainedDataGb: 5,
-      hostedUsage: "$25",
+      hostedUsage: "$100",
     });
   });
 });

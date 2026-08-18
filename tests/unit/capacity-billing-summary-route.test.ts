@@ -45,6 +45,7 @@ const summary: CapacityBillingSummaryV2 = {
     displayName: "Personal workspace",
     status: "active",
     canManageBilling: true,
+    hasSubscription: false,
   },
   plan: {
     ref: "pro",

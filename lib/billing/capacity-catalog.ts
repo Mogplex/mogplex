@@ -88,7 +88,7 @@ export const INDIVIDUAL_CAPACITY_PLANS: Readonly<
     maxNamedUsers: 1,
     concurrency: 5,
     retainedDataBytes: LOGICAL_BYTES_PER_GB,
-    hostedUsageCents: 500,
+    hostedUsageCents: 2_000,
     prices: {
       month: {
         lookupKey: "capacity_v2_pro_monthly",
@@ -109,7 +109,7 @@ export const INDIVIDUAL_CAPACITY_PLANS: Readonly<
     maxNamedUsers: 1,
     concurrency: 25,
     retainedDataBytes: 5 * LOGICAL_BYTES_PER_GB,
-    hostedUsageCents: 2_500,
+    hostedUsageCents: 10_000,
     prices: {
       month: {
         lookupKey: "capacity_v2_plus_monthly",
@@ -130,7 +130,7 @@ export const INDIVIDUAL_CAPACITY_PLANS: Readonly<
     maxNamedUsers: 1,
     concurrency: 50,
     retainedDataBytes: 10 * LOGICAL_BYTES_PER_GB,
-    hostedUsageCents: 5_000,
+    hostedUsageCents: 20_000,
     prices: {
       month: {
         lookupKey: "capacity_v2_max_monthly",

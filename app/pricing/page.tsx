@@ -45,7 +45,7 @@ export default function PricingPage() {
       close={{
         kicker: "CAPACITY THAT STAYS CLEAR",
         lines: ["Start with the room you need.", "Add more when work grows."],
-        note: "one named user on Individual. shared company control is custom.",
+        note: "Self-host with Apache-2.0, or choose a hosted plan.",
       }}
     >
       <header className="sub-hero">
@@ -61,7 +61,7 @@ export default function PricingPage() {
           avoid a surprise usage bill.
         </p>
         <p className="mono micro">
-          one named user · visible limits · add capacity at any time
+          visible limits · add capacity at any time · purchased credit never expires
         </p>
       </header>
 
@@ -157,10 +157,10 @@ export default function PricingPage() {
             </p>
           </div>
           <div className="term">
-            <p className="term-k mono">ONE USER</p>
+            <p className="term-k mono">COMPANY CONTROL</p>
             <p className="term-v">
-              Individual plans support one named user. Businesses use a
-              company plan for shared ownership and access.
+              Company plans give teams shared ownership, access controls,
+              invoices, and custom capacity.
             </p>
           </div>
         </div>

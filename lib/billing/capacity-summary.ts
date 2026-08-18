@@ -89,9 +89,9 @@ function planPrice(planCode: CapacityPlanCode, lookupKey: string | null) {
 
 function legacyPlanName(facts: CapacityBillingFacts): string {
   const { tier } = facts.account;
-  if (tier === "free") return "Legacy Cloud";
-  if (tier === "business") return "Legacy Mog Mode";
-  return `Legacy ${tier[0]!.toUpperCase()}${tier.slice(1)}`;
+  if (tier === "free") return "Cloud";
+  if (tier === "business") return "Mog Mode";
+  return tier[0]!.toUpperCase() + tier.slice(1);
 }
 
 function legacyPlanPresentation(
@@ -321,6 +321,7 @@ export function buildCapacityBillingSummary(input: {
       displayName: scopeDisplayName(input.scope),
       status: customerStatus(facts.account.status),
       canManageBilling: input.canManageBilling,
+      hasSubscription: Boolean(facts.account.stripe_subscription_id),
     },
     plan: planPresentation(facts, asOf),
     concurrency: {

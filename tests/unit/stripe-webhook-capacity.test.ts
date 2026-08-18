@@ -128,7 +128,7 @@ test("invoice.paid projects capacity and grants hosted usage only after payment"
   assert.equal(recorded.capacitySnapshots[0]?.snapshot.items.length, 2);
   assert.deepEqual(
     recorded.ledger.map((entry) => [entry.kind, entry.deltaCents]),
-    [["grant", 500]]
+    [["grant", 2_000]]
   );
   assert.deepEqual(recorded.updates, [
     { id: "acct-1", updates: { status: "active" } },
@@ -162,7 +162,7 @@ test("annual capacity invoice schedules the next monthly included-usage grant", 
       subscriptionId: "sub_1",
       entitlementVersion: 1,
       priceLookupKey: "capacity_v2_pro_annual",
-      includedUsageCents: 500,
+      includedUsageCents: 2_000,
       cycleStartedAt: new Date("2026-08-01T00:00:00.000Z"),
       occurrence: {
         offset: 1,
@@ -242,7 +242,7 @@ test("duplicate projection resumes idempotent grant recovery", async () => {
 
   assert.deepEqual(
     recorded.ledger.map((entry) => [entry.kind, entry.deltaCents]),
-    [["grant", 500]]
+    [["grant", 2_000]]
   );
 });
 
@@ -579,7 +579,7 @@ test("a paid same-period capacity upgrade grants only the hosted-usage delta", a
   const { deps, recorded } = makeDeps({
     account: accountFixture({
       plan_code: "pro",
-      included_hosted_usage_cents: 500,
+      included_hosted_usage_cents: 2_000,
     }),
     subscription: capacitySubscription({ plan: "plus" }),
     postedRefs: new Set(["grant:acct-1:2026-08:sub_1"]),
@@ -592,6 +592,6 @@ test("a paid same-period capacity upgrade grants only the hosted-usage delta", a
 
   assert.deepEqual(
     recorded.ledger.map((entry) => [entry.kind, entry.deltaCents]),
-    [["grant_adjustment", 2_000]]
+    [["grant_adjustment", 8_000]]
   );
 });

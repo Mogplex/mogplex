@@ -43,7 +43,7 @@ describe("capacity pricing catalog", () => {
       pro: {
         concurrency: 5,
         retainedDataBytes: LOGICAL_BYTES_PER_GB,
-        hostedUsageCents: 500,
+        hostedUsageCents: 2_000,
         prices: {
           month: { amountCents: 2_000 },
           year: { amountCents: 20_400 },
@@ -52,7 +52,7 @@ describe("capacity pricing catalog", () => {
       plus: {
         concurrency: 25,
         retainedDataBytes: 5 * LOGICAL_BYTES_PER_GB,
-        hostedUsageCents: 2_500,
+        hostedUsageCents: 10_000,
         prices: {
           month: { amountCents: 10_000 },
           year: { amountCents: 102_000 },
@@ -61,7 +61,7 @@ describe("capacity pricing catalog", () => {
       max: {
         concurrency: 50,
         retainedDataBytes: 10 * LOGICAL_BYTES_PER_GB,
-        hostedUsageCents: 5_000,
+        hostedUsageCents: 20_000,
         prices: {
           month: { amountCents: 20_000 },
           year: { amountCents: 204_000 },
@@ -137,6 +137,7 @@ describe("capacity pricing catalog", () => {
           description: params.description,
           metadata: params.metadata,
         }) as never,
+      updateProduct: async () => ({ id: "unused" }),
       listPrices: async () => ({ data: [] }),
       createPrice: async (params) => {
         prices.push(params);
@@ -146,6 +147,7 @@ describe("capacity pricing catalog", () => {
 
     await expect(syncCapacityStripeCatalog({ deps })).resolves.toEqual({
       productsCreated: 10,
+      productsUpdated: 0,
       productsReused: 0,
       pricesCreated: 18,
       pricesReused: 0,
@@ -200,7 +202,7 @@ describe("capacity pricing catalog", () => {
       maxNamedUsers: 1,
       concurrency: 105,
       retainedDataBytes: LOGICAL_BYTES_PER_GB,
-      hostedUsageCents: 500,
+      hostedUsageCents: 2_000,
       recurringAddOnCents: 3_000,
       activeAddOns: [
         {

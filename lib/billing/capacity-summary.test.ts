@@ -15,6 +15,7 @@ function capacityFacts(
       tier: "pro",
       status: "active",
       period_anchor: "2026-08-16",
+      stripe_subscription_id: null,
       plan_code: "pro",
       plan_audience: "individual",
       max_named_users: 1,
@@ -122,6 +123,7 @@ describe("capacity billing summary", () => {
         displayName: "Personal workspace",
         status: "active",
         canManageBilling: true,
+        hasSubscription: false,
       },
       plan: {
         ref: "pro",
@@ -250,7 +252,7 @@ describe("capacity billing summary", () => {
     });
     expect(summary.plan).toMatchObject({
       ref: "legacy",
-      name: "Legacy Mog Mode",
+      name: "Mog Mode",
       offerKind: "legacy",
     });
     expect(summary.concurrency).toMatchObject({

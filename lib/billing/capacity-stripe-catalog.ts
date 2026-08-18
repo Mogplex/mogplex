@@ -23,9 +23,9 @@ export type CapacityStripeProductSpec = {
 };
 
 const PLAN_DESCRIPTIONS = {
-  pro: "For one person. Includes 5 Concurrency, 1 GB Storage, and $5 monthly Inference.",
-  plus: "For one person running more work. Includes 25 Concurrency, 5 GB Storage, and $25 monthly Inference.",
-  max: "For one person running at high volume. Includes 50 Concurrency, 10 GB Storage, and $50 monthly Inference.",
+  pro: "Includes 5 Concurrency, 1 GB Storage, and $20 monthly Inference.",
+  plus: "Includes 25 Concurrency, 5 GB Storage, and $100 monthly Inference.",
+  max: "Includes 50 Concurrency, 10 GB Storage, and $200 monthly Inference.",
 } as const;
 
 const planProducts = Object.values(INDIVIDUAL_CAPACITY_PLANS).map(
@@ -121,6 +121,10 @@ export type CapacityStripeCatalogDeps = {
     params: Stripe.ProductCreateParams,
     options: Stripe.RequestOptions
   ) => Promise<Pick<Stripe.Product, "id">>;
+  updateProduct: (
+    id: string,
+    params: Stripe.ProductUpdateParams
+  ) => Promise<Pick<Stripe.Product, "id">>;
   listPrices: (
     params: Stripe.PriceListParams
   ) => Promise<{ data: PriceSummary[] }>;
@@ -132,6 +136,7 @@ export type CapacityStripeCatalogDeps = {
 
 export type CapacityStripeCatalogSync = {
   productsCreated: number;
+  productsUpdated: number;
   productsReused: number;
   pricesCreated: number;
   pricesReused: number;
@@ -146,20 +151,16 @@ function metadataMatches(
   );
 }
 
-function assertProductMatches(
+function productMatches(
   product: ProductSummary,
   spec: CapacityStripeProductSpec
-) {
-  if (
-    !product.active ||
-    product.name !== spec.name ||
-    product.description !== spec.description ||
-    !metadataMatches(product.metadata, spec.metadata)
-  ) {
-    throw new Error(
-      `Stripe product ${spec.catalogKey} does not match the local catalog`
-    );
-  }
+): boolean {
+  return (
+    product.active &&
+    product.name === spec.name &&
+    product.description === spec.description &&
+    metadataMatches(product.metadata, spec.metadata)
+  );
 }
 
 function assertPriceMatches(
@@ -189,6 +190,7 @@ export function capacityStripeCatalogDeps(
   return {
     listProducts: (params) => stripe.products.list(params),
     createProduct: (params, options) => stripe.products.create(params, options),
+    updateProduct: (id, params) => stripe.products.update(id, params),
     listPrices: (params) => stripe.prices.list(params),
     createPrice: (params, options) => stripe.prices.create(params, options),
   };
@@ -229,6 +231,7 @@ export async function syncCapacityStripeCatalog(input: {
 
   const result: CapacityStripeCatalogSync = {
     productsCreated: 0,
+    productsUpdated: 0,
     productsReused: 0,
     pricesCreated: 0,
     pricesReused: 0,
@@ -237,9 +240,21 @@ export async function syncCapacityStripeCatalog(input: {
     const existingProduct = productsByKey.get(productSpec.catalogKey);
     let productId: string;
     if (existingProduct) {
-      assertProductMatches(existingProduct, productSpec);
       productId = existingProduct.id;
-      result.productsReused += 1;
+      if (productMatches(existingProduct, productSpec)) {
+        result.productsReused += 1;
+      } else {
+        await input.deps.updateProduct(productId, {
+          active: true,
+          name: productSpec.name,
+          description: productSpec.description,
+          metadata: {
+            ...productSpec.metadata,
+            mogplex_catalog_key: productSpec.catalogKey,
+          },
+        });
+        result.productsUpdated += 1;
+      }
     } else {
       const product = await input.deps.createProduct(
         {
