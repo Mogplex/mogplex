@@ -82,6 +82,7 @@ function capacitySummary(
       status: "active",
       canManageBilling: true,
       hasSubscription: true,
+      hasBillingHistory: true,
     },
     plan: {
       ref: "plus",
@@ -217,6 +218,10 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await expect(
     page.getByRole("heading", { name: "Add inference credit" })
   ).toBeVisible();
+  const creditChoices = page.getByRole("group", {
+    name: "Choose credit amount",
+  });
+  await expect(creditChoices.getByRole("button")).toHaveCount(6);
   await expect(page.getByText("Inference", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Storage" })).toBeVisible();
   await expect(page.getByText("Hosted usage", { exact: true })).toHaveCount(0);
@@ -237,7 +242,7 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   const inferenceCheckout = page.waitForRequest(
     "**/api/billing/hosted-usage/checkout"
   );
-  await page.getByRole("button", { name: "$10", exact: true }).click();
+  await page.getByRole("button", { name: "Add $10 inference credit" }).click();
   expect((await inferenceCheckout).postDataJSON()).toMatchObject({
     preset: "capacity_v2_hosted_usage_credit_10",
   });
@@ -306,6 +311,7 @@ test("company Billing stays visible and read-only for a member", async ({
           status: "read_only",
           canManageBilling: false,
           hasSubscription: true,
+          hasBillingHistory: true,
         },
         plan: {
           ref: "business",
@@ -396,12 +402,42 @@ test("legacy subscribers can manage their plan and buy inference credit", async 
   await page.goto(scopedPath("settings?tab=billing"));
 
   await expect(page.getByRole("heading", { name: "Mog Mode" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Manage plan" })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Plan and invoices" })
+  ).toBeEnabled();
 
   const topupCheckout = page.waitForRequest("**/api/stripe/checkout");
-  await page.getByRole("button", { name: "$10", exact: true }).click();
+  await page.getByRole("button", { name: "Add $10 inference credit" }).click();
   expect((await topupCheckout).postDataJSON()).toMatchObject({
     kind: "topup",
     preset: "topup_10",
   });
+});
+
+test("top-up customers can open billing history without a subscription", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsShell(page);
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(
+      route,
+      capacitySummary({
+        account: {
+          ...capacitySummary().account,
+          hasSubscription: false,
+          hasBillingHistory: true,
+        },
+      })
+    )
+  );
+  await page.route("**/api/stripe/portal", (route) =>
+    fulfillJson(route, { url: scopedPath("settings?tab=billing") })
+  );
+
+  await page.goto(scopedPath("settings?tab=billing"));
+
+  const portalRequest = page.waitForRequest("**/api/stripe/portal");
+  await page.getByRole("button", { name: "Billing history" }).click();
+  await portalRequest;
 });

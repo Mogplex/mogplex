@@ -11,6 +11,7 @@ import {
   getStripe,
 } from "@/lib/billing/stripe";
 import {
+  TOPUP_INVOICE_CREATION,
   ensureStripeCustomer,
   resolveCatalogPriceId,
 } from "@/lib/billing/stripe-checkout";
@@ -359,6 +360,7 @@ export async function createHostedUsageCheckout(input: {
       client_reference_id: input.account.id,
       line_items: [lineItem],
       managed_payments: { enabled: true },
+      invoice_creation: TOPUP_INVOICE_CREATION,
       billing_address_collection: "auto",
       payment_intent_data: { metadata },
       metadata,

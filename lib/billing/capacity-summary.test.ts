@@ -15,6 +15,7 @@ function capacityFacts(
       tier: "pro",
       status: "active",
       period_anchor: "2026-08-16",
+      stripe_customer_id: null,
       stripe_subscription_id: null,
       plan_code: "pro",
       plan_audience: "individual",
@@ -102,6 +103,29 @@ function capacityFacts(
 }
 
 describe("capacity billing summary", () => {
+  it("exposes billing history for a Stripe customer without a subscription", () => {
+    const baseFacts = capacityFacts();
+    const summary = buildCapacityBillingSummary({
+      facts: {
+        ...baseFacts,
+        account: {
+          ...baseFacts.account,
+          stripe_customer_id: "cus_history",
+          stripe_subscription_id: null,
+        },
+      },
+      scope: "personal",
+      canManageBilling: true,
+      billingOperationsEnabled: false,
+      asOf: AS_OF,
+    });
+
+    expect(summary.account).toMatchObject({
+      hasBillingHistory: true,
+      hasSubscription: false,
+    });
+  });
+
   it("returns customer capacity, spendable usage, pending add-ons, and retail costs", () => {
     const summary = buildCapacityBillingSummary({
       facts: capacityFacts(),
@@ -124,6 +148,7 @@ describe("capacity billing summary", () => {
         status: "active",
         canManageBilling: true,
         hasSubscription: false,
+        hasBillingHistory: false,
       },
       plan: {
         ref: "pro",

@@ -51,7 +51,7 @@ export async function loadCapacityBillingSummary(input: {
       client
         .from("billing_accounts")
         .select(
-          "id, billing_event_sequence, owner_type, tier, status, period_anchor, stripe_subscription_id, plan_code, plan_audience, max_named_users, included_concurrency, included_retained_bytes, entitlement_enforcement_mode"
+          "id, billing_event_sequence, owner_type, tier, status, period_anchor, stripe_customer_id, stripe_subscription_id, plan_code, plan_audience, max_named_users, included_concurrency, included_retained_bytes, entitlement_enforcement_mode"
         )
         .eq("id", input.accountId)
         .maybeSingle(),

@@ -217,6 +217,7 @@ describe("hosted-usage Checkout creation", () => {
       client_reference_id: "account-1",
       line_items: [{ price: "price-hosted-usage", quantity: 1 }],
       managed_payments: { enabled: true },
+      invoice_creation: { enabled: true },
       payment_intent_data: {
         metadata: {
           kind: "hosted_usage",

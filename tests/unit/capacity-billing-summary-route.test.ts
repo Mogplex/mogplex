@@ -46,6 +46,7 @@ const summary: CapacityBillingSummaryV2 = {
     status: "active",
     canManageBilling: true,
     hasSubscription: false,
+    hasBillingHistory: false,
   },
   plan: {
     ref: "pro",
