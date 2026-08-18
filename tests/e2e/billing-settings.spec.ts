@@ -402,7 +402,9 @@ test("legacy subscribers can manage their plan and buy inference credit", async 
   await page.goto(scopedPath("settings?tab=billing"));
 
   await expect(page.getByRole("heading", { name: "Mog Mode" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Manage plan" })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Plan and invoices" })
+  ).toBeEnabled();
 
   const topupCheckout = page.waitForRequest("**/api/stripe/checkout");
   await page.getByRole("button", { name: "Add $10 inference credit" }).click();

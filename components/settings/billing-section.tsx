@@ -320,7 +320,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
                 {pendingAction === "portal"
                   ? "Opening…"
                   : summary.account.hasSubscription
-                    ? "Manage plan"
+                    ? "Plan and invoices"
                     : "Billing history"}
               </Button>
             ) : summary.plan.offerKind === "legacy" && canManage ? (
