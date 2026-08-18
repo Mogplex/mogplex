@@ -53,9 +53,26 @@ const BILLING_MIGRATIONS = [
   "20260816190000_capacity_annual_grant_schedules.sql",
   "20260816200000_capacity_entitlement_schedule_projection.sql",
   "20260817020000_capacity_billing_account_events.sql",
+  "20260818193000_token_usage_customer_cost_events.sql",
 ];
 
-export async function createBillingTestDb(): Promise<PGlite> {
+export async function applyBillingMigration(
+  db: PGlite,
+  migrationName: string
+): Promise<void> {
+  const migration = await readFile(
+    path.resolve(
+      import.meta.dirname,
+      `../../../neon/migrations/${migrationName}`
+    ),
+    "utf8"
+  );
+  await db.exec(migration);
+}
+
+export async function createBillingTestDb(options?: {
+  includeTokenCostEvents?: boolean;
+}): Promise<PGlite> {
   const db = new PGlite();
   await db.exec(`
     create role anon;
@@ -65,14 +82,13 @@ export async function createBillingTestDb(): Promise<PGlite> {
   await db.exec(SANDBOX_BILLING_SANDBOX_STUB_SQL);
   await db.exec(BILLING_JOB_RUN_STUB_SQL);
   for (const migrationName of BILLING_MIGRATIONS) {
-    const migration = await readFile(
-      path.resolve(
-        import.meta.dirname,
-        `../../../neon/migrations/${migrationName}`
-      ),
-      "utf8"
-    );
-    await db.exec(migration);
+    if (
+      options?.includeTokenCostEvents === false &&
+      migrationName === "20260818193000_token_usage_customer_cost_events.sql"
+    ) {
+      continue;
+    }
+    await applyBillingMigration(db, migrationName);
   }
   return db;
 }

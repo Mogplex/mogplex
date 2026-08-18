@@ -61,7 +61,7 @@ export function createOpenAiChatCompletionStream(input: {
   responseId: string;
   created: number;
   modelId: string;
-  onOutcome?: (outcome: CliCallOutcome) => void;
+  onOutcome?: (outcome: CliCallOutcome) => void | Promise<void>;
 }) {
   const encoder = new TextEncoder();
 
@@ -89,10 +89,12 @@ export function createOpenAiChatCompletionStream(input: {
       const observedToolCalls: Array<{ name: string; input?: unknown }> = [];
       let observedUsage = EMPTY_CAPTURED_USAGE;
       let recorded = false;
-      const recordOnce = (outcome: CliCallOutcome) => {
+      let observedAssistantContent = false;
+      let finishPayload: unknown = null;
+      const recordOnce = async (outcome: CliCallOutcome) => {
         if (recorded) return;
         recorded = true;
-        input.onOutcome?.(outcome);
+        await input.onOutcome?.(outcome);
       };
 
       try {
@@ -113,6 +115,7 @@ export function createOpenAiChatCompletionStream(input: {
                   ? chunkLike.text
                   : "";
             if (text.length > 0) {
+              observedAssistantContent = true;
               write(
                 buildOpenAiChunk({
                   id: input.responseId,
@@ -126,6 +129,7 @@ export function createOpenAiChatCompletionStream(input: {
           }
 
           if (chunkLike.type === "tool-input-start") {
+            observedAssistantContent = true;
             const toolId =
               readStreamToolCallId(chunkLike) ?? crypto.randomUUID();
             const toolName =
@@ -196,6 +200,7 @@ export function createOpenAiChatCompletionStream(input: {
           }
 
           if (chunkLike.type === "tool-call") {
+            observedAssistantContent = true;
             const toolId =
               readStreamToolCallId(chunkLike) ?? crypto.randomUUID();
             const toolName =
@@ -308,22 +313,34 @@ export function createOpenAiChatCompletionStream(input: {
                 undefined
               )
             );
-            write(
-              buildOpenAiChunk({
-                id: input.responseId,
-                created: input.created,
-                model: input.modelId,
-                finishReason: toOpenAiFinishReason(
-                  typeof chunkLike.finishReason === "string"
-                    ? chunkLike.finishReason
-                    : undefined
-                ),
-                usage: toOpenAiUsage({ inputTokens, outputTokens }),
-              })
-            );
+            finishPayload = buildOpenAiChunk({
+              id: input.responseId,
+              created: input.created,
+              model: input.modelId,
+              finishReason: toOpenAiFinishReason(
+                typeof chunkLike.finishReason === "string"
+                  ? chunkLike.finishReason
+                  : undefined
+              ),
+              usage: toOpenAiUsage({ inputTokens, outputTokens }),
+            });
           }
         }
-        recordOnce({
+
+        if (!observedAssistantContent) {
+          const message =
+            "The model returned no output. Open /model. Choose another model, then retry.";
+          await recordOnce({
+            status: "failed",
+            error: message,
+            usage: observedUsage,
+          });
+          write({ error: { message } });
+          close();
+          return;
+        }
+        if (finishPayload) write(finishPayload);
+        await recordOnce({
           status: "success",
           usage: observedUsage,
           toolCalls: observedToolCalls,
@@ -335,7 +352,11 @@ export function createOpenAiChatCompletionStream(input: {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Stream error";
-        recordOnce({ status: "failed", error: message, usage: observedUsage });
+        await recordOnce({
+          status: "failed",
+          error: message,
+          usage: observedUsage,
+        });
         try {
           write({ error: { message } });
         } catch {

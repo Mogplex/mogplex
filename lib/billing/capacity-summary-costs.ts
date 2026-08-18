@@ -45,8 +45,18 @@ function asTime(value: string, label: string): number {
   return parsed;
 }
 
-function microsToDisplayCents(micros: bigint): number {
+function microsToReservedCents(micros: bigint): number {
   const parsed = Number((micros + MICROS_PER_CENT - ONE) / MICROS_PER_CENT);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new RangeError("billing amount exceeds the safe integer range");
+  }
+  return parsed;
+}
+
+function microsToDisplayCents(micros: bigint): number {
+  const parsed = Number(
+    (micros + MICROS_PER_CENT / BigInt(2)) / MICROS_PER_CENT
+  );
   if (!Number.isSafeInteger(parsed)) {
     throw new RangeError("billing amount exceeds the safe integer range");
   }
@@ -102,12 +112,11 @@ function settledCosts(
     asTime(operation.occurred_at, "retail operation occurred_at");
     return {
       operationId: operation.operation_ref,
-      description: "Hosted work",
+      description: operation.description || "Hosted work",
       status: "settled" as const,
       occurredAt: operation.occurred_at,
-      totalCents: items.reduce(
-        (sum, item) => addSafeInteger(sum, item.amountCents, "recent cost"),
-        0
+      totalCents: microsToDisplayCents(
+        nonnegativeBigInt(operation.retail_debit_micros, "retail operation")
       ),
       items,
     };
@@ -127,7 +136,7 @@ export function summarizeCapacityCosts(input: {
     id: reservation.reservation_ref,
     operationKind: "hosted_work",
     description: "Hosted work in progress",
-    reservedCents: microsToDisplayCents(
+    reservedCents: microsToReservedCents(
       nonnegativeBigInt(reservation.reserved_micros, "reserved microdollars")
     ),
     createdAt: reservation.created_at,

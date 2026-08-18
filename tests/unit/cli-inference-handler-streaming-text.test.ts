@@ -119,6 +119,7 @@ test("createOpenAiChatCompletionStream captures finish-step usage and gateway me
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
       fullStream: (async function* streamChunks() {
+        yield { type: "text-delta", textDelta: "Done" };
         yield {
           type: "finish-step",
           usage: {
@@ -191,4 +192,85 @@ test("createOpenAiChatCompletionStream coerces non-Error error chunks to a strin
   assert.deepEqual(jsonPayloads.at(-1), {
     error: { message: "rate_limit_exceeded" },
   });
+});
+
+test("createOpenAiChatCompletionStream rejects an empty successful model response", async () => {
+  const { createOpenAiChatCompletionStream } = await loadHandler();
+  const outcomes: unknown[] = [];
+
+  const response = createOpenAiChatCompletionStream({
+    createResult: () => ({
+      fullStream: (async function* streamChunks() {
+        yield {
+          type: "finish",
+          finishReason: "stop",
+          totalUsage: { inputTokens: 10, outputTokens: 0 },
+        };
+      })(),
+    }),
+    responseId: "chatcmpl_empty",
+    created: 800,
+    modelId: "deepseek/deepseek-v4-pro",
+    onOutcome(outcome) {
+      outcomes.push(outcome);
+    },
+  });
+
+  const payloads = parseSsePayloads(await response.text());
+  const jsonPayloads = payloads
+    .slice(0, -1)
+    .map((payload) => JSON.parse(payload) as Record<string, unknown>);
+  assert.deepEqual(jsonPayloads.at(-1), {
+    error: {
+      message:
+        "The model returned no output. Open /model. Choose another model, then retry.",
+    },
+  });
+  assert.deepEqual(outcomes, [
+    {
+      status: "failed",
+      error:
+        "The model returned no output. Open /model. Choose another model, then retry.",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 0,
+        cacheReadInputTokens: null,
+        cacheCreationInputTokens: null,
+        reasoningTokens: null,
+        generationId: null,
+        generationIds: [],
+      },
+    },
+  ]);
+});
+
+test("createOpenAiChatCompletionStream waits for outcome persistence before closing", async () => {
+  const { createOpenAiChatCompletionStream } = await loadHandler();
+  let outcomeAwaited = false;
+
+  const response = createOpenAiChatCompletionStream({
+    createResult: () => ({
+      fullStream: (async function* streamChunks() {
+        yield { type: "text-delta", textDelta: "Done" };
+        yield {
+          type: "finish",
+          finishReason: "stop",
+          totalUsage: { inputTokens: 1, outputTokens: 1 },
+        };
+      })(),
+    }),
+    responseId: "chatcmpl_durable",
+    created: 900,
+    modelId: "openai/gpt-5.4",
+    onOutcome: (() => ({
+      then(resolve: () => void) {
+        outcomeAwaited = true;
+        resolve();
+      },
+    })) as never,
+  });
+
+  const body = await response.text();
+  assert.equal(outcomeAwaited, true);
+  assert.match(body, /data: \[DONE\]/);
 });

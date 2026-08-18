@@ -145,7 +145,7 @@ export async function postChatCompletions(request: Request) {
         sharedOptions as Parameters<typeof generateText>[0]
       );
       const usage = captureUsage(result.usage, result.providerMetadata);
-      recordCliInferenceCall({
+      await recordCliInferenceCall({
         userId,
         model: modelId,
         startedAt,
@@ -190,7 +190,7 @@ export async function postChatCompletions(request: Request) {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Generation failed";
-      recordCliInferenceCall({
+      await recordCliInferenceCall({
         userId,
         model: modelId,
         startedAt,
@@ -210,8 +210,8 @@ export async function postChatCompletions(request: Request) {
     responseId,
     created,
     modelId,
-    onOutcome: (outcome) => {
-      recordCliInferenceCall({
+    onOutcome: async (outcome) => {
+      await recordCliInferenceCall({
         userId,
         model: modelId,
         startedAt,

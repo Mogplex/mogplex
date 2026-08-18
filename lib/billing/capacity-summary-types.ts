@@ -166,6 +166,7 @@ export type CapacityBillingCostOperationRow = {
   operation_ref: string;
   retail_debit_micros: number | string;
   occurred_at: string;
+  description: string;
 };
 
 export type CapacityBillingCostItemRow = {

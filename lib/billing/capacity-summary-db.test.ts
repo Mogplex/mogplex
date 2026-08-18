@@ -71,6 +71,7 @@ function fakeClient(overrides: Partial<Record<string, QueryResult>> = {}): {
           operation_ref: "operation-1",
           retail_debit_micros: "17500",
           occurred_at: "2026-08-16T11:59:00.000Z",
+          description: "Code review · Mogplex/mogplex #285",
         },
       ],
       error: null,
@@ -167,7 +168,8 @@ describe("capacity billing summary database loader", () => {
       expect.objectContaining({
         operationId: "operation-1",
         status: "settled",
-        totalCents: 3,
+        description: "Code review · Mogplex/mogplex #285",
+        totalCents: 2,
       }),
     ]);
     expect(calls).toHaveLength(7);
@@ -184,6 +186,7 @@ describe("capacity billing summary database loader", () => {
     ).toMatchObject({
       filters: [["account_id", "account-1"]],
       limit: 20,
+      selected: "operation_ref, retail_debit_micros, occurred_at, description",
     });
     expect(
       calls.find((call) => call.table === "billing_customer_retail_cost_items")

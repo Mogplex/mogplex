@@ -219,7 +219,7 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   expect(headings.slice(0, 2)).toEqual(["Plus", "Add inference credit"]);
   await expect(page.getByText("7 of 35")).toHaveCount(0);
   await expect(page.getByText("2.3 GB of 5 GB")).toHaveCount(0);
-  await expect(page.getByText("Run customer report")).toBeVisible();
+  await expect(page.getByText(/Code review .*#285/)).toBeVisible();
 
   const inferenceCheckout = page.waitForRequest(
     "**/api/billing/hosted-usage/checkout"
