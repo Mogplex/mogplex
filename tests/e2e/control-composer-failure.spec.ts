@@ -46,9 +46,19 @@ test("control composer keeps text and attachments when a follow-up send fails", 
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, { sandboxes: [] })
   );
-  await page.route("**/api/control/chat", (route) =>
-    route.fulfill({ status: 500, body: "orchestrator unavailable" })
-  );
+  let releaseRequest: () => void;
+  const responseAllowed = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  let requestStarted: () => void;
+  const requestReceived = new Promise<void>((resolve) => {
+    requestStarted = resolve;
+  });
+  await page.route("**/api/control/chat", async (route) => {
+    requestStarted!();
+    await responseAllowed;
+    await route.fulfill({ status: 500, body: "orchestrator unavailable" });
+  });
 
   await page.goto(`${scopedPath("control")}?mission=session-retry`);
   const composer = page.getByPlaceholder(
@@ -66,6 +76,12 @@ test("control composer keeps text and attachments when a follow-up send fails", 
     });
   await expect(page.getByText("retry-context.txt")).toBeVisible();
   await page.getByRole("button", { name: "Send" }).click();
+  await requestReceived;
+
+  // A submitted draft should leave the composer immediately, rather than
+  // waiting for the server to finish accepting or rejecting the request.
+  await expect(composer).toHaveValue("");
+  releaseRequest!();
 
   await expect(
     page.locator(".text-accent-amber").filter({ hasText: /./ }).first()

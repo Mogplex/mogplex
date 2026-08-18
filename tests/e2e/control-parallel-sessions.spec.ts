@@ -219,10 +219,10 @@ test("control chats keep independent streams, status, and cancellation across sw
 
   await sidebar.getByRole("button", { name: /Parallel task A/ }).click();
   await expect(page).toHaveURL(/mission=session-a/);
-  await expect(composer).toHaveValue("Start A");
+  await expect(composer).toHaveValue("");
   await expect(conversation.getByText("session-a progress")).toHaveCount(1);
   await sidebar.getByRole("button", { name: /Parallel task B/ }).click();
-  await expect(composer).toHaveValue("Start B");
+  await expect(composer).toHaveValue("");
   await expect(conversation.getByText("session-b progress")).toHaveCount(1);
 
   await page.getByRole("button", { name: "Stop" }).click();
