@@ -25,7 +25,7 @@ function invoice(overrides: Partial<Stripe.Invoice> = {}): Stripe.Invoice {
 }
 
 describe("loadStripeBillingDetails", () => {
-  it("returns only protected card metadata and every customer invoice", async () => {
+  it("returns only protected card metadata and the latest customer invoices", async () => {
     const findPaymentMethod = vi.fn(async () => ({
       type: "card" as const,
       card: {
@@ -35,16 +35,19 @@ describe("loadStripeBillingDetails", () => {
         exp_year: 2028,
       } as Stripe.PaymentMethod.Card,
     }));
-    const listInvoices = vi.fn(async function* listInvoicesFixture() {
-      yield invoice();
-      yield invoice({
-        id: "in_2",
-        number: "MPX-002",
-        description: "Mogplex Plus",
-        amount_due: 10_000,
-        amount_paid: 0,
-      });
-    });
+    const listInvoices = vi.fn(async () => ({
+      data: [
+        invoice(),
+        invoice({
+          id: "in_2",
+          number: "MPX-002",
+          description: "Mogplex Plus",
+          amount_due: 10_000,
+          amount_paid: 0,
+        }),
+      ],
+      hasMore: true,
+    }));
 
     const details = await loadStripeBillingDetails("cus_1", {
       findPaymentMethod,
@@ -59,6 +62,7 @@ describe("loadStripeBillingDetails", () => {
       expMonth: 12,
       expYear: 2028,
     });
+    expect(details.hasMoreInvoices).toBe(true);
     expect(details.invoices).toEqual([
       {
         id: "in_1",
@@ -79,18 +83,31 @@ describe("loadStripeBillingDetails", () => {
     ]);
   });
 
+  it("requests one bounded invoice page", async () => {
+    const listInvoices = vi.fn(async () => ({ data: [], hasMore: false }));
+
+    await loadStripeBillingDetails("cus_1", {
+      findPaymentMethod: async () => null,
+      listInvoices,
+    });
+
+    expect(listInvoices).toHaveBeenCalledOnce();
+    expect(listInvoices).toHaveBeenCalledWith("cus_1");
+  });
+
   it("does not expose non-card payment method fields", async () => {
     const deps: StripeBillingDetailsDeps = {
       findPaymentMethod: async () => ({
         type: "us_bank_account",
         card: undefined,
       }),
-      async *listInvoices() {},
+      listInvoices: async () => ({ data: [], hasMore: false }),
     };
 
     await expect(loadStripeBillingDetails("cus_1", deps)).resolves.toEqual({
       paymentMethod: null,
       invoices: [],
+      hasMoreInvoices: false,
     });
   });
 });

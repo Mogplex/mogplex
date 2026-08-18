@@ -61,6 +61,7 @@ export type CapacityBillingSummaryV2 = {
 };
 
 export type CapacityBillingDetails = {
+  hasMoreInvoices: boolean;
   paymentMethod: {
     brand: string;
     last4: string;

@@ -23,7 +23,10 @@ export type StripeBillingDetailsDeps = {
   findPaymentMethod: (
     customerId: string
   ) => Promise<PaymentMethodSummary | null>;
-  listInvoices: (customerId: string) => AsyncIterable<InvoiceSummary>;
+  listInvoices: (customerId: string) => Promise<{
+    data: InvoiceSummary[];
+    hasMore: boolean;
+  }>;
 };
 
 async function findPaymentMethod(
@@ -53,8 +56,13 @@ async function findPaymentMethod(
 function defaultDeps(): StripeBillingDetailsDeps {
   return {
     findPaymentMethod,
-    listInvoices: (customerId) =>
-      getStripe().invoices.list({ customer: customerId, limit: 100 }),
+    listInvoices: async (customerId) => {
+      const page = await getStripe().invoices.list({
+        customer: customerId,
+        limit: 20,
+      });
+      return { data: page.data, hasMore: page.has_more };
+    },
   };
 }
 
@@ -94,19 +102,14 @@ export async function loadStripeBillingDetails(
   customerId: string,
   deps: StripeBillingDetailsDeps = defaultDeps()
 ): Promise<CapacityBillingDetails> {
-  const [paymentMethod, invoices] = await Promise.all([
+  const [paymentMethod, invoicePage] = await Promise.all([
     deps.findPaymentMethod(customerId),
-    (async () => {
-      const results: InvoiceSummary[] = [];
-      for await (const invoice of deps.listInvoices(customerId)) {
-        results.push(invoice);
-      }
-      return results;
-    })(),
+    deps.listInvoices(customerId),
   ]);
 
   return {
     paymentMethod: summarizePaymentMethod(paymentMethod),
-    invoices: invoices.map(summarizeInvoice),
+    invoices: invoicePage.data.map(summarizeInvoice),
+    hasMoreInvoices: invoicePage.hasMore,
   };
 }

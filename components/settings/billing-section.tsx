@@ -30,6 +30,7 @@ import {
   type CapacityAddOn,
 } from "@/lib/billing/capacity-catalog";
 import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
+import { findTopupPresetByAmount } from "@/lib/billing/catalog";
 
 type BillingLoadResult =
   | { enabled: false }
@@ -40,7 +41,7 @@ type PurchaseSurface = "inference" | "capacity";
 const CAPACITY_ADD_ON_GROUPS = [
   {
     id: "concurrency",
-    label: "Concurrency",
+    label: "Parallel agent runs",
     items: CAPACITY_ADD_ONS.filter((addOn) => addOn.kind === "concurrency"),
   },
   {
@@ -297,6 +298,9 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
             >
               {CAPACITY_HOSTED_USAGE_PRESETS.map((preset) => {
                 const amount = formatCreditAmount(preset.creditCents);
+                const legacyPreset = findTopupPresetByAmount(
+                  preset.creditCents
+                );
                 return (
                   <Button
                     aria-label={`Pay ${amount}, get ${amount} credit`}
@@ -312,11 +316,9 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
                         legacyInference
                           ? {
                               kind: "topup",
-                              ...(preset.creditCents === 100
-                                ? { amountCents: preset.creditCents }
-                                : {
-                                    preset: `topup_${preset.creditCents / 100}`,
-                                  }),
+                              ...(legacyPreset
+                                ? { preset: legacyPreset.lookupKey }
+                                : { amountCents: preset.creditCents }),
                               attemptId: attemptIdFor(preset.lookupKey),
                             }
                           : {
@@ -355,7 +357,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
           <CardTitle>
             <h2>
               {summary.concurrencyPurchasesEnabled
-                ? "Capacity pilot"
+                ? "Capacity add-ons"
                 : hasGrandfatheredConcurrency
                   ? "Capacity add-ons"
                   : "Storage add-ons"}
@@ -363,9 +365,9 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
           </CardTitle>
           <CardDescription>
             {summary.concurrencyPurchasesEnabled
-              ? "Test reserved concurrency and storage without changing your plan."
+              ? "Add parallel agent runs or storage without changing your plan."
               : hasGrandfatheredConcurrency
-                ? "Manage existing reserved concurrency or add retained storage."
+                ? "Manage existing parallel agent runs or add retained storage."
                 : "Add retained storage without changing your plan."}
           </CardDescription>
         </CardHeader>

@@ -189,7 +189,7 @@ describe("capacity billing summary", () => {
         subscriptionItemId: "concurrency-item",
         lookupKey: "capacity_v2_concurrency_10_monthly",
         kind: "concurrency",
-        name: "Concurrency +10",
+        name: "Parallel agent runs +10",
         quantity: 1,
         allowanceDelta: "10",
         recurringAmountCents: 500,

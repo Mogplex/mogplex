@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   findPlanPrice,
   findTopupPreset,
+  findTopupPresetByAmount,
   formatUsd,
   PLAN_PRICES,
   SANDBOX_RATE_MICRO_USD_PER_MINUTE,
@@ -91,4 +92,6 @@ test("finders return null for unknown keys", () => {
   assert.equal(findTopupPreset("topup_5"), null);
   assert.equal(findPlanPrice("pro_monthly")?.tier, "pro");
   assert.equal(findTopupPreset("topup_25")?.amountCents, 2500);
+  assert.equal(findTopupPresetByAmount(100), null);
+  assert.equal(findTopupPresetByAmount(1000)?.lookupKey, "topup_10");
 });

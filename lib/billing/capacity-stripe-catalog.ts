@@ -23,9 +23,9 @@ export type CapacityStripeProductSpec = {
 };
 
 const PLAN_DESCRIPTIONS = {
-  pro: "Includes 5 Concurrency, 1 GB Storage, and $20 monthly Inference at dollar-for-dollar value.",
-  plus: "Includes 25 Concurrency, 5 GB Storage, and $100 monthly Inference at dollar-for-dollar value.",
-  max: "Includes 50 Concurrency, 10 GB Storage, and $200 monthly Inference at dollar-for-dollar value.",
+  pro: "Includes 5 parallel agent runs, 1 GB Storage, and $20 monthly Inference at dollar-for-dollar value.",
+  plus: "Includes 25 parallel agent runs, 5 GB Storage, and $100 monthly Inference at dollar-for-dollar value.",
+  max: "Includes 50 parallel agent runs, 10 GB Storage, and $200 monthly Inference at dollar-for-dollar value.",
 } as const;
 
 const planProducts = Object.values(INDIVIDUAL_CAPACITY_PLANS).map(
@@ -61,7 +61,7 @@ const addOnProducts = CAPACITY_ADD_ONS.map(
       name: addOn.name,
       description:
         addOn.kind === "concurrency"
-          ? "Add more Concurrency without changing your plan."
+          ? "Add more parallel agent runs without changing your plan."
           : "Keep more optional run history, logs, snapshots, artifacts, and uploads.",
       metadata: {
         catalog_version: CAPACITY_CATALOG_VERSION,

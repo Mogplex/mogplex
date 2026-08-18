@@ -107,3 +107,11 @@ export function findPlanPrice(lookupKey: string): PlanPrice | null {
 export function findTopupPreset(lookupKey: string): TopupPreset | null {
   return TOPUP_PRESETS.find((preset) => preset.lookupKey === lookupKey) ?? null;
 }
+
+export function findTopupPresetByAmount(
+  amountCents: number
+): TopupPreset | null {
+  return (
+    TOPUP_PRESETS.find((preset) => preset.amountCents === amountCents) ?? null
+  );
+}

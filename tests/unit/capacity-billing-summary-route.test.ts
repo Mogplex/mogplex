@@ -207,6 +207,7 @@ test("GET /api/billing/capacity returns protected Stripe details only to billing
     await loadCapacityBillingSummaryRoute();
   const loadStripeBillingDetails = test.mock.fn(
     async (_customerId: string) => ({
+      hasMoreInvoices: false,
       paymentMethod: {
         brand: "visa",
         last4: "4242",
@@ -241,6 +242,7 @@ test("GET /api/billing/capacity returns protected Stripe details only to billing
   assert.equal(loadStripeBillingDetails.mock.callCount(), 1);
   assert.equal(loadStripeBillingDetails.mock.calls[0]!.arguments[0], "cus_1");
   assert.deepEqual((await response.json()).billingDetails, {
+    hasMoreInvoices: false,
     paymentMethod: {
       brand: "visa",
       last4: "4242",

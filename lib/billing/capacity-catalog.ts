@@ -172,7 +172,7 @@ export const CONTRACT_CAPACITY_PLANS: Readonly<
 export const CAPACITY_ADD_ONS: readonly CapacityAddOn[] = [
   {
     lookupKey: "capacity_v2_concurrency_10_monthly",
-    name: "Concurrency +10",
+    name: "Parallel agent runs +10",
     kind: "concurrency",
     amountCents: 500,
     interval: "month",
@@ -181,7 +181,7 @@ export const CAPACITY_ADD_ONS: readonly CapacityAddOn[] = [
   },
   {
     lookupKey: "capacity_v2_concurrency_50_monthly",
-    name: "Concurrency +50",
+    name: "Parallel agent runs +50",
     kind: "concurrency",
     amountCents: 1_500,
     interval: "month",

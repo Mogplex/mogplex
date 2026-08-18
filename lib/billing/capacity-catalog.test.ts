@@ -91,8 +91,8 @@ describe("capacity pricing catalog", () => {
         addOn.retainedDataBytesDelta / LOGICAL_BYTES_PER_GB,
       ])
     ).toEqual([
-      ["Concurrency +10", 500, 10, 0],
-      ["Concurrency +50", 1_500, 50, 0],
+      ["Parallel agent runs +10", 500, 10, 0],
+      ["Parallel agent runs +50", 1_500, 50, 0],
       ["Storage +1 GB", 200, 0, 1],
       ["Storage +10 GB", 1_500, 0, 10],
       ["Storage +50 GB", 6_000, 0, 50],
@@ -209,7 +209,7 @@ describe("capacity pricing catalog", () => {
         {
           itemRef: "concurrency",
           lookupKey: "capacity_v2_concurrency_50_monthly",
-          name: "Concurrency +50",
+          name: "Parallel agent runs +50",
           quantity: 2,
           amountCents: 3_000,
         },
@@ -263,7 +263,7 @@ describe("capacity pricing catalog", () => {
 
   it("finds add-ons by their stable lookup key", () => {
     expect(findCapacityAddOn("capacity_v2_concurrency_10_monthly")?.name).toBe(
-      "Concurrency +10"
+      "Parallel agent runs +10"
     );
     expect(findCapacityAddOn("missing")).toBeNull();
   });

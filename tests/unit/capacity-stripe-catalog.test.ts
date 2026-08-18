@@ -174,8 +174,8 @@ test("capacity Stripe catalog uses the approved customer names and unique keys",
   assert.deepEqual(
     CAPACITY_STRIPE_PRODUCTS.slice(3).map((product) => product.name),
     [
-      "Concurrency +10",
-      "Concurrency +50",
+      "Parallel agent runs +10",
+      "Parallel agent runs +50",
       "Storage +1 GB",
       "Storage +10 GB",
       "Storage +50 GB",

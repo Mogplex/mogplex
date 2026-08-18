@@ -126,10 +126,10 @@ export type QueueGuardReason =
 
 export function describeStartGuardReason(reason: StartGuardReason) {
   if (reason === "ACCOUNT_CONCURRENCY_LIMIT") {
-    return "Account Concurrency limit reached";
+    return "All parallel agent run slots are in use. Stop a run or wait for one to finish.";
   }
   if (reason === "INSTALLATION_CONCURRENCY_LIMIT") {
-    return "Installation concurrency limit reached";
+    return "This installation has reached its parallel run limit.";
   }
   return reason;
 }

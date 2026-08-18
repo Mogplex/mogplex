@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  formatCurrency,
   formatDate,
   formatUsd,
 } from "@/components/settings/capacity-billing-format";
@@ -35,15 +36,6 @@ function formatCardBrand(brand: string): string {
   return brand.length === 0 ? "Card" : brand[0]!.toUpperCase() + brand.slice(1);
 }
 
-function formatInvoiceAmount(cents: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cents / 100);
-}
-
 export function BillingSubscriptionDetails({
   summary,
   pendingAction,
@@ -54,6 +46,10 @@ export function BillingSubscriptionDetails({
   const paymentMethod = billingDetails?.paymentMethod ?? null;
   const protectedMessage =
     "Only company owners and admins can view billing details.";
+  const parallelRunLimit = summary.concurrency.limit;
+  const showParallelRunLimit =
+    summary.plan.offerKind === "contract" ||
+    (parallelRunLimit !== null && parallelRunLimit > 0);
 
   return (
     <Card>
@@ -119,6 +115,28 @@ export function BillingSubscriptionDetails({
             </dd>
           </div>
         </dl>
+
+        {showParallelRunLimit ? (
+          <dl>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+              <dt className="text-muted-foreground text-xs font-medium">
+                Plan capacity
+              </dt>
+              <dd className="text-sm font-medium tabular-nums">
+                {parallelRunLimit === null
+                  ? "Parallel agent runs set by agreement"
+                  : `${parallelRunLimit} parallel agent runs`}
+                {summary.concurrency.included !== null &&
+                summary.concurrency.addOn > 0 ? (
+                  <span className="text-muted-foreground ml-2 text-xs font-normal">
+                    {summary.concurrency.included} with plan,{" "}
+                    {summary.concurrency.addOn} add-on
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
 
         <section
           aria-labelledby="payment-method-heading"
@@ -190,10 +208,7 @@ export function BillingSubscriptionDetails({
                     </div>
                     <div className="flex items-center justify-between gap-4 sm:justify-end">
                       <p className="text-sm font-medium tabular-nums">
-                        {formatInvoiceAmount(
-                          invoice.amountCents,
-                          invoice.currency
-                        )}
+                        {formatCurrency(invoice.amountCents, invoice.currency)}
                       </p>
                       {invoiceUrl ? (
                         <a
@@ -216,6 +231,18 @@ export function BillingSubscriptionDetails({
               {canManage ? "No invoices yet." : protectedMessage}
             </p>
           )}
+          {canManage && billingDetails?.hasMoreInvoices ? (
+            <Button
+              className="mt-3"
+              disabled={pendingAction !== null}
+              onClick={() => onOpenPortal("invoice-history")}
+              variant="outline"
+            >
+              {pendingAction === "invoice-history"
+                ? "Opening…"
+                : "View all invoices"}
+            </Button>
+          ) : null}
         </section>
 
         <p className="text-muted-foreground border-t pt-5 text-sm">

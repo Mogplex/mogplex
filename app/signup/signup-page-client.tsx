@@ -37,7 +37,7 @@ function SignupContent() {
       subtitle={
         <>
           Create your account, then confirm the Individual plan you chose.
-          Your plan sets Concurrency, Storage, and Inference. Each $1 of
+          Your plan sets parallel agent runs, Storage, and Inference. Each $1 of
           inference credit pays for $1 of model usage.{" "}
           <Link href="/pricing">See the full rate card.</Link>
         </>
@@ -45,8 +45,8 @@ function SignupContent() {
       notice={
         summary ? (
           <div className="mpx-auth-alert is-success" data-testid="plan-chip">
-            {summary.name}: {summary.monthlyPrice}/month, Concurrency{" "}
-            {summary.concurrency}, {summary.retainedDataGb} GB Storage.
+            {summary.name}: {summary.monthlyPrice}/month, {summary.concurrency}{" "}
+            parallel agent runs, {summary.retainedDataGb} GB Storage.
             Checkout comes after this step. {" "}
             <Link href="/pricing">change plan</Link>
           </div>
@@ -88,7 +88,6 @@ function SignupContent() {
     </AuthShell>
   );
 }
-
 export function SignupPageClient() {
   return (
     <Suspense fallback={<div className="mpx-landing min-h-dvh" />}>
