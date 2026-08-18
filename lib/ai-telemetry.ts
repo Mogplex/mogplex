@@ -1,6 +1,7 @@
 const DEFAULT_MAX_STRING_LENGTH = 40_000;
 const DEFAULT_MAX_ITEMS = 50;
 const DEFAULT_MAX_DEPTH = 4;
+const MAX_REDACTION_DEPTH = 20;
 const REDACTED_VALUE = "[redacted]";
 
 const SENSITIVE_KEY_PATTERN =
@@ -33,19 +34,53 @@ function maybeRedactJsonString(
   }
 }
 
-function redactStringSecrets(
-  value: string,
-  options: Required<TelemetrySanitizeOptions>
-) {
-  const jsonRedacted = maybeRedactJsonString(value, options);
-  const redacted = (jsonRedacted ?? value)
+export function redactSecretsInText(value: string) {
+  return value
     .replace(/\bbearer\s+[\w+./=~-]+\b/gi, "Bearer [redacted]")
     .replace(/(x-access-token:)[^\s@]+@/gi, "$1[redacted]@")
     .replace(/\b(?:gh[oprsu]_\w+|github_pat_\w+)\b/g, REDACTED_VALUE)
     .replace(/\bsk-[\w-]{8,}\b/g, REDACTED_VALUE)
     .replace(/\bsb_secret_[\w-]+\b/g, REDACTED_VALUE);
+}
+
+function redactStringSecrets(
+  value: string,
+  options: Required<TelemetrySanitizeOptions>
+) {
+  const jsonRedacted = maybeRedactJsonString(value, options);
+  const redacted = redactSecretsInText(jsonRedacted ?? value);
 
   return truncateTelemetryString(redacted, options.maxStringLength);
+}
+
+/** Redact secrets while preserving ordinary display strings. */
+export function redactSecretsInValue(value: unknown): unknown {
+  return redactSecretsInValueInternal(value, 0);
+}
+
+function redactSecretsInValueInternal(value: unknown, depth: number): unknown {
+  if (typeof value === "string") return redactSecretsInText(value);
+  if (value === null || typeof value === "number" || typeof value === "boolean")
+    return value;
+  if (depth >= MAX_REDACTION_DEPTH && typeof value === "object") {
+    return "[truncated]";
+  }
+  if (Array.isArray(value)) {
+    return value.map((nested) =>
+      redactSecretsInValueInternal(nested, depth + 1)
+    );
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [
+        key,
+        SENSITIVE_KEY_PATTERN.test(key)
+          ? REDACTED_VALUE
+          : redactSecretsInValueInternal(nested, depth + 1),
+      ])
+    );
+  }
+  return value;
 }
 
 function resolveOptions(

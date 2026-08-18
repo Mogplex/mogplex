@@ -3,6 +3,7 @@ import {
   TERMINAL_EXEC_MODE_HEADER,
   TERMINAL_EXEC_MODE_IMMEDIATE,
 } from "@/lib/sandbox/terminal-exec-response";
+import { redactSecretsInValue } from "@/lib/ai-telemetry";
 
 /**
  * Escapes a string value for safe inclusion in single-quoted shell arguments.
@@ -27,7 +28,7 @@ export function immediateExecJson(
   body: Record<string, unknown>,
   init?: ResponseInit
 ) {
-  return NextResponse.json(body, {
+  return NextResponse.json(redactSecretsInValue(body), {
     ...init,
     headers: buildImmediateExecHeaders(init?.headers),
   });

@@ -1,5 +1,6 @@
 import {
   previewTelemetryValue,
+  redactSecretsInText,
   sanitizeTelemetryValue as sanitizeToolPayload,
 } from "@/lib/ai-telemetry";
 import {
@@ -89,9 +90,9 @@ export function createToolCallFinishPayload(
   const output = event.success ? sanitizeToolPayload(event.output) : undefined;
   const error = event.success
     ? null
-    : event.error instanceof Error
-      ? event.error.message
-      : String(event.error);
+    : redactSecretsInText(
+        event.error instanceof Error ? event.error.message : String(event.error)
+      );
 
   return {
     message,

@@ -39,7 +39,10 @@ test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", a
           if (input.detached) {
             detachedRequested = true;
             const logs = async function* logs() {
-              yield { stream: "stdout" as const, data: "hello\n" };
+              yield {
+                stream: "stdout" as const,
+                data: "ghs_streamOutputToken\n",
+              };
               yield { stream: "stdout" as const, data: "world\n" };
             };
             return {
@@ -89,7 +92,8 @@ test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", a
   assert.match(body, /"type":"run"/);
   assert.match(body, /"cmdId":"cmd-xyz"/);
   assert.match(body, /"type":"log"/);
-  assert.match(body, /hello/);
+  assert.doesNotMatch(body, /streamOutputToken/);
+  assert.match(body, /\[redacted\]/);
   assert.match(body, /"type":"done"/);
   assert.match(body, /"exitCode":0/);
 });

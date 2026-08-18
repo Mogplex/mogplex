@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  redactSecretsInText,
+  redactSecretsInValue,
   sanitizeTelemetryRecord,
   sanitizeTelemetryValue,
 } from "../../lib/ai-telemetry";
@@ -44,4 +46,26 @@ test("sanitizeTelemetryValue redacts bearer and common token formats inside raw 
   );
   assert.match(String(sanitized), /Bearer \[redacted]/);
   assert.match(String(sanitized), /\[redacted]/);
+});
+
+test("redactSecretsInText removes installation tokens and git credential URLs", () => {
+  const sanitized = redactSecretsInText(
+    "ghs_installationToken123 https://x-access-token:token-value@github.com"
+  );
+
+  assert.doesNotMatch(sanitized, /installationToken123|token-value/);
+  assert.match(sanitized, /redacted/);
+});
+
+test("redactSecretsInValue bounds deeply nested untrusted objects", () => {
+  let value: unknown = "ghs_deepSecretToken";
+  for (let index = 0; index < 24; index += 1) {
+    value = { value };
+  }
+
+  const redacted = redactSecretsInValue(value);
+  const serialized = JSON.stringify(redacted);
+
+  assert.doesNotMatch(serialized, /deepSecretToken/);
+  assert.match(serialized, /\[truncated\]/);
 });

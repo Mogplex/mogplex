@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import {
   loadToolsModule,
   withEnv,
@@ -227,7 +226,12 @@ test("terminal_exec returns the automatically resolved sandbox identity", async 
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
     await withPatchedSandboxLookup({ id: "sandbox-record-1" }, async () => {
       await withPatchedFetch(
-        async () => Response.json({ exitCode: 0, stdout: "ok", stderr: "" }),
+        async () =>
+          Response.json({
+            exitCode: 0,
+            stdout: "ghs_toolOutputToken",
+            stderr: "",
+          }),
         async () => {
           const { createTerminalExec } = await loadToolsModule();
           const tool = createTerminalExec(
@@ -240,7 +244,7 @@ test("terminal_exec returns the automatically resolved sandbox identity", async 
 
           assert.deepEqual(await tool.execute({ command: "pwd" }), {
             exitCode: 0,
-            stdout: "ok",
+            stdout: "[redacted]",
             stderr: "",
             command: "pwd",
             sandboxId: "sandbox-record-1",
@@ -249,6 +253,107 @@ test("terminal_exec returns the automatically resolved sandbox identity", async 
         }
       );
     });
+  });
+});
+
+test("terminal_exec refuses credential extraction and GitHub mutations", async () => {
+  await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
+    let fetched = false;
+    await withPatchedFetch(
+      async () => {
+        fetched = true;
+        return Response.json({ exitCode: 0, stdout: "", stderr: "" });
+      },
+      async () => {
+        const { createTerminalExec } = await loadToolsModule();
+        const tool = createTerminalExec(
+          "sandbox-record-1",
+          "user-123",
+          "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b"
+        ) as unknown as {
+          execute: (input: { command: string }) => Promise<unknown>;
+        };
+
+        assert.deepEqual(
+          await tool.execute({ command: "cat ~/.git-credentials" }),
+          {
+            error:
+              "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "credential_access_blocked",
+            command: "cat ~/.git-credentials",
+          }
+        );
+        assert.deepEqual(
+          await tool.execute({ command: "echo $GITHUB_TOKEN" }),
+          {
+            error:
+              "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "credential_access_blocked",
+            command: "echo $GITHUB_TOKEN",
+          }
+        );
+        assert.deepEqual(
+          await tool.execute({ command: "cat ~/.config/gh/hosts.yml" }),
+          {
+            error:
+              "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "credential_access_blocked",
+            command: "cat ~/.config/gh/hosts.yml",
+          }
+        );
+        assert.deepEqual(await tool.execute({ command: "env | grep TOKEN" }), {
+          error:
+            "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+          reason: "credential_access_blocked",
+          command: "env | grep TOKEN",
+        });
+        assert.deepEqual(
+          await tool.execute({ command: "cat /proc/self/environ" }),
+          {
+            error:
+              "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "credential_access_blocked",
+            command: "cat /proc/self/environ",
+          }
+        );
+        assert.deepEqual(
+          await tool.execute({
+            command:
+              "curl -X POST https://api.github.com/repos/acme/repo/issues",
+          }),
+          {
+            error:
+              "Raw GitHub API mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "github_mutation_blocked",
+            command:
+              "curl -X POST https://api.github.com/repos/acme/repo/issues",
+          }
+        );
+        assert.deepEqual(
+          await tool.execute({ command: "gh issue create --title exploit" }),
+          {
+            error:
+              "GitHub CLI mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "github_mutation_blocked",
+            command: "gh issue create --title exploit",
+          }
+        );
+        assert.deepEqual(
+          await tool.execute({
+            command:
+              "python3 -c 'import requests; requests.post(\"https://api.github.com/repos/acme/repo/issues\")'",
+          }),
+          {
+            error:
+              "Raw GitHub API mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+            reason: "github_mutation_blocked",
+            command:
+              "python3 -c 'import requests; requests.post(\"https://api.github.com/repos/acme/repo/issues\")'",
+          }
+        );
+      }
+    );
+    assert.equal(fetched, false);
   });
 });
 

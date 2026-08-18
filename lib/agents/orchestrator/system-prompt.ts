@@ -160,6 +160,11 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   const runCommandGuidance = ctx.sandboxSelectionRequired
     ? "- run_command and sandbox lifecycle tools are unavailable until the operator selects a sandbox. Do not attempt them or substitute another tool.\n"
     : "- Use run_command for a shell command in the selected sandbox. When no sandbox is listed, it may fall back to exactly one repo-scoped running sandbox or start one for the active repository. That fallback never applies while multiple sandboxes are listed: run_command and sandbox lifecycle tools are withheld until the operator selects one. The result returns the resolved sandbox identity and never implies or creates a worktree.\n";
+  const githubIssueGuidance = ctx.availableToolNames?.includes(
+    "github_create_issue"
+  )
+    ? "- Use github_create_issue for an explicitly requested GitHub issue in the active repository. Never use run_command to install GitHub tooling, inspect credentials, or call GitHub APIs for that action.\n"
+    : "";
   const sandboxStartGuidance =
     ctx.sandboxSelectionRequired || !sandboxStartAvailable
       ? ""
@@ -170,7 +175,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
 
   return `
 <resource-decision-contract>
-${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
+${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}${githubIssueGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
 - Use plan_mission to create task identities before isolated coding work.
 - A clear request to fix or implement code in an isolated task checkout and launch its worker is already a complete coding launch request. The first emitted tool call MUST be plan_mission. Do not call summarize_history, list_files, read_file, search_repo, memory_search, run_command, or sandbox_start first.
 - Call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string. Then call spawn_worktree once for each returned task and spawn_subagent for each resulting worktree. Stop after the requested workers start. Discovery may precede planning only when the operator explicitly requests discovery or has not supplied enough scope to define task boundaries.

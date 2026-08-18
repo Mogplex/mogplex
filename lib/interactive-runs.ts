@@ -1,4 +1,7 @@
-import { sanitizeTelemetryRecord } from "@/lib/ai-telemetry";
+import {
+  redactSecretsInText,
+  sanitizeTelemetryRecord,
+} from "@/lib/ai-telemetry";
 import type { AiCall, AiCallEvent, AiToolCall } from "@/lib/types";
 import type { AiCallType } from "@/lib/ai-call-types";
 
@@ -233,7 +236,7 @@ export async function appendAiCallEvent(input: {
       repo_id: input.repoId ?? null,
       event_type: input.eventType,
       tool_name: input.toolName ?? null,
-      message: input.message ?? null,
+      message: input.message ? redactSecretsInText(input.message) : null,
       payload,
     })
     .select("*")
@@ -253,7 +256,11 @@ export async function safeAppendAiCallEvent(
     return await appendAiCallEvent(input);
   } catch (error) {
     console.error("[interactive-runs] failed to append ai_call_event", {
-      input,
+      input: {
+        ...input,
+        message: input.message ? redactSecretsInText(input.message) : undefined,
+        payload: sanitizeTelemetryRecord(input.payload),
+      },
       error,
     });
     return null;

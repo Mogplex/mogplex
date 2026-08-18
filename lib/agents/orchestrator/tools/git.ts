@@ -94,6 +94,13 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
     implemented: true,
   },
   {
+    name: "github_create_issue",
+    category: "git",
+    description: "Create an issue in the current workspace repository",
+    access: "mutation",
+    implemented: true,
+  },
+  {
     name: "comment_inline",
     category: "git",
     description: "Add an inline comment to a PR or commit",

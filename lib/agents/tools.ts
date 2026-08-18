@@ -33,6 +33,7 @@ export {
   createGithubPrSearch,
   createGithubRepoList,
   createGithubIssueTool,
+  createScopedGithubIssueTool,
   // Memory tools
   createMemoryTools,
   // Virtual exec
