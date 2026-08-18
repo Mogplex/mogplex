@@ -3,6 +3,7 @@ import test from "node:test";
 import type { UIMessage } from "ai";
 import {
   buildActivityEntries,
+  buildTerminalActivityEntries,
   collectFileMutations,
 } from "../../lib/control/activity-stream";
 
@@ -159,5 +160,77 @@ test("collectFileMutations lists file-mutating tool calls with paths", () => {
   assert.deepEqual(mutations, [
     { id: "a1-0", tool: "write_file", path: "lib/new.ts", state: "done" },
     { id: "a1-2", tool: "apply_patch", path: "lib/old.ts", state: "failed" },
+  ]);
+});
+
+test("buildTerminalActivityEntries keeps sandbox launch and shell output visible", () => {
+  const messages = [
+    {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-sandbox_start",
+          toolCallId: "c1",
+          state: "input-available",
+          input: { repoId: "repo-1" },
+        },
+        {
+          type: "tool-run_command",
+          toolCallId: "c2",
+          state: "output-available",
+          input: { command: "pnpm test" },
+          output: {
+            sandboxId: "sandbox-1",
+            stdout: "12 tests passed\nghs_terminalOutputToken",
+            stderr: "",
+          },
+        },
+        {
+          type: "tool-read_file",
+          toolCallId: "c3",
+          state: "output-available",
+          input: { path: "README.md" },
+          output: { content: "not terminal activity" },
+        },
+        {
+          type: "tool-sandbox_start",
+          toolCallId: "c4",
+          state: "output-error",
+          input: { repoId: "repo-1" },
+          errorText: "sandbox capacity unavailable",
+        },
+      ],
+    },
+  ] as unknown as UIMessage[];
+
+  assert.deepEqual(buildTerminalActivityEntries(messages), [
+    {
+      id: "a1-0",
+      kind: "sandbox",
+      toolName: "sandbox_start",
+      command: null,
+      sandboxId: null,
+      state: "running",
+      lines: [],
+    },
+    {
+      id: "a1-1",
+      kind: "command",
+      toolName: "run_command",
+      command: "pnpm test",
+      sandboxId: "sandbox-1",
+      state: "done",
+      lines: ["12 tests passed", "[redacted]"],
+    },
+    {
+      id: "a1-3",
+      kind: "sandbox",
+      toolName: "sandbox_start",
+      command: null,
+      sandboxId: null,
+      state: "failed",
+      lines: ["sandbox capacity unavailable"],
+    },
   ]);
 });

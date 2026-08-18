@@ -292,7 +292,7 @@ export function Composer({
     MISSION_PERMISSION_OPTIONS[permissionsIdx] === "Skip Permissions";
 
   return (
-    <div className="mx-auto w-full max-w-5xl shrink-0 px-4 pb-5 sm:px-6">
+    <div className="mx-auto w-full max-w-[67rem] shrink-0 px-4 pb-5 sm:px-6">
       <div
         data-testid="control-composer-dropzone"
         {...dropZoneProps}

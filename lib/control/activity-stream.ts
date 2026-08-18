@@ -1,5 +1,6 @@
 import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
 import type { UIMessage } from "ai";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 
 /**
  * CLI-style activity entries derived from the control chat's UI messages.
@@ -26,6 +27,8 @@ export type ActivityEntry =
     };
 
 const MAX_INLINE = 140;
+const MAX_TERMINAL_LINES = 8;
+const MAX_TERMINAL_LINE_LENGTH = 240;
 
 function summarize(value: unknown): string {
   if (value === undefined) return "…";
@@ -121,6 +124,113 @@ export function buildActivityEntries(messages: UIMessage[]): ActivityEntry[] {
         const streaming = "state" in part && part.state === "streaming";
         entries.push({ kind: "text", id, text, streaming });
       }
+    }
+  }
+
+  return entries;
+}
+
+/** A bounded, read-only rendering of the sandbox work currently visible to a user. */
+export type TerminalActivityEntry = {
+  id: string;
+  kind: "command" | "sandbox";
+  toolName: string;
+  command: string | null;
+  sandboxId: string | null;
+  state: "running" | "done" | "failed";
+  lines: string[];
+};
+
+function terminalState(rawState: string): TerminalActivityEntry["state"] {
+  if (rawState === "output-error") return "failed";
+  if (rawState === "output-available") return "done";
+  return "running";
+}
+
+function terminalText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const safe = redactSecretsInText(value).trim();
+  return safe || null;
+}
+
+function boundedTerminalLines(values: unknown[]): string[] {
+  return values
+    .flatMap((value) => terminalText(value)?.split(/\r?\n/) ?? [])
+    .map((line) =>
+      line.length > MAX_TERMINAL_LINE_LENGTH
+        ? `${line.slice(0, MAX_TERMINAL_LINE_LENGTH)}…`
+        : line
+    )
+    .filter(Boolean)
+    .slice(-MAX_TERMINAL_LINES);
+}
+
+function isTerminalExecutionTool(name: string) {
+  return /(?:^|_)(?:bash|terminal_exec|run_command)(?:$|_)/.test(name);
+}
+
+function isSandboxLaunchTool(name: string) {
+  return /^sandbox_(?:start|provision|create|launch)$/.test(name);
+}
+
+function terminalEntryFromPart(
+  part: Parameters<typeof getToolOrDynamicToolName>[0],
+  id: string
+): TerminalActivityEntry | null {
+  const toolName = getToolOrDynamicToolName(part);
+  const commandTool = isTerminalExecutionTool(toolName);
+  const sandboxTool = isSandboxLaunchTool(toolName);
+  if (!commandTool && !sandboxTool) return null;
+
+  const input =
+    "input" in part && typeof part.input === "object" && part.input !== null
+      ? (part.input as Record<string, unknown>)
+      : {};
+  const output =
+    "output" in part && typeof part.output === "object" && part.output !== null
+      ? (part.output as Record<string, unknown>)
+      : {};
+  const rawState = "state" in part ? String(part.state) : "";
+  const state = terminalState(rawState);
+  const command = terminalText(input.command) ?? null;
+  const sandboxId =
+    terminalText(output.sandboxId) ?? terminalText(input.sandboxId) ?? null;
+  const lines = boundedTerminalLines([
+    output.stdout,
+    output.stderr,
+    output.error,
+    "errorText" in part ? part.errorText : undefined,
+  ]);
+
+  return {
+    id,
+    kind: commandTool ? "command" : "sandbox",
+    toolName,
+    command,
+    sandboxId,
+    state,
+    lines,
+  };
+}
+
+/**
+ * Keeps shell execution visible where the user is already writing follow-up
+ * work. This deliberately excludes generic tool activity so it reads like a
+ * terminal transcript rather than a second copy of the conversation.
+ */
+export function buildTerminalActivityEntries(
+  messages: UIMessage[]
+): TerminalActivityEntry[] {
+  const entries: TerminalActivityEntry[] = [];
+
+  for (const message of messages) {
+    if (message.role !== "assistant" || !Array.isArray(message.parts)) {
+      continue;
+    }
+    for (const [index, part] of message.parts.entries()) {
+      if (!isToolOrDynamicToolUIPart(part)) continue;
+      const entry = terminalEntryFromPart(part, `${message.id}-${index}`);
+      if (entry) entries.push(entry);
     }
   }
 
