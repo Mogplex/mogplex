@@ -130,6 +130,7 @@ test("personal usage posts an idempotent token debit", async () => {
       period: "2026-08",
       metadata: {
         ai_call_id: "call-1",
+        customer_description: "AI inference",
         gateway_generation_ids: ["gen-1", "gen-2"],
         model: "anthropic/claude-sonnet-4",
         cost_usd: 0.0834,
@@ -247,4 +248,17 @@ test("explicitly allowlisted users are not debited from funded accounts", async 
     costUnits: 8_340_000,
   });
   assert.equal(billingCalls, 0);
+});
+
+test("usage descriptions identify code reviews and CLI tasks", async () => {
+  const { tokenUsageCustomerDescription } = await loadTokenUsage();
+
+  assert.equal(
+    tokenUsageCustomerDescription({
+      repo_full_name: "Mogplex/mogplex",
+      pr_number: 285,
+    }),
+    "Code review · Mogplex/mogplex #285"
+  );
+  assert.equal(tokenUsageCustomerDescription({ source: "cli" }), "CLI task");
 });

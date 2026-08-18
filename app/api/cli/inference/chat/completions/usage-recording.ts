@@ -9,17 +9,18 @@ import type { CliCallOutcome } from "./types";
 
 /**
  * Record a single CLI inference call in `ai_calls` so it surfaces in the
- * observability dashboard alongside automation and flow runs. Fire-and-forget:
- * telemetry failures are logged but never block the response.
+ * observability dashboard alongside automation and flow runs. The caller waits
+ * for this write before closing the response so a serverless shutdown cannot
+ * discard the usage record. Telemetry failures remain non-fatal.
  */
-export function recordCliInferenceCall(input: {
+export async function recordCliInferenceCall(input: {
   userId: string;
   model: string;
   startedAt: string;
   startedAtMs: number;
   streaming: boolean;
   outcome: CliCallOutcome;
-}): void {
+}): Promise<void> {
   const toolCalls =
     input.outcome.status === "success" ? input.outcome.toolCalls : [];
   const usage =
@@ -47,12 +48,8 @@ export function recordCliInferenceCall(input: {
       ...(partialFailure ? { failed_with_partial_usage: true } : {}),
     },
   };
-  void supabaseAdmin
-    .from("ai_calls")
-    .insert(payload)
-    .then(({ error }) => {
-      if (error) {
-        console.error("[cli-inference] failed to record ai_call", error);
-      }
-    });
+  const { error } = await supabaseAdmin.from("ai_calls").insert(payload);
+  if (error) {
+    console.error("[cli-inference] failed to record ai_call", error);
+  }
 }

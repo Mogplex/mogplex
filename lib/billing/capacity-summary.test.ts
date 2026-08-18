@@ -82,6 +82,7 @@ function capacityFacts(
         operation_ref: "operation-settled",
         retail_debit_micros: "17500",
         occurred_at: "2026-08-16T12:01:00.000Z",
+        description: "Hosted work",
       },
     ],
     costItems: [
@@ -231,9 +232,9 @@ describe("capacity billing summary", () => {
         description: "Hosted work",
         status: "settled",
         occurredAt: "2026-08-16T12:01:00.000Z",
-        totalCents: 3,
+        totalCents: 2,
         items: [
-          { category: "ai", label: "AI", amountCents: 2 },
+          { category: "ai", label: "AI", amountCents: 1 },
           {
             category: "trigger",
             label: "Workflow compute",
@@ -419,6 +420,7 @@ describe("capacity billing summary", () => {
               operation_ref: "operation-settled",
               retail_debit_micros: "18000",
               occurred_at: "2026-08-16T12:01:00.000Z",
+              description: "Hosted work",
             },
           ],
         }),

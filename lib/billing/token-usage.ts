@@ -58,6 +58,25 @@ function billingPeriod(completedAt: string) {
   return parsed.toISOString().slice(0, 7);
 }
 
+export function tokenUsageCustomerDescription(
+  metadata: Record<string, unknown> | null
+): string {
+  const repo = metadataText(metadata, "repo_full_name");
+  const pullRequest = metadataText(metadata, "pr_number");
+  if (repo && pullRequest) return `Code review · ${repo} #${pullRequest}`;
+  if (metadata?.source === "cli") return "CLI task";
+  return metadataText(metadata, "flow_node_label") ?? "AI inference";
+}
+
+function metadataText(
+  metadata: Record<string, unknown> | null,
+  key: string
+): string | null {
+  const value = metadata?.[key];
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  return String(value).trim() || null;
+}
+
 export async function meterReconciledTokenUsage(
   input: TokenUsageMeteringInput,
   overrides: Partial<TokenUsageMeteringDeps> = {}
@@ -121,6 +140,7 @@ export async function meterReconciledTokenUsage(
     period: billingPeriod(input.completedAt),
     metadata: {
       ai_call_id: input.aiCallId,
+      customer_description: tokenUsageCustomerDescription(input.metadata),
       gateway_generation_ids: input.generationIds,
       model: input.model,
       cost_usd: input.costUsd,

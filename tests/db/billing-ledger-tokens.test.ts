@@ -2,6 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   TOKEN_ACCRUAL_ACCOUNT_ID,
+  applyBillingMigration,
   createBillingTestDb,
   seedBillingAccounts,
   seedSandboxes,
@@ -118,6 +119,22 @@ describe("billing ledger token accrual", () => {
         accrued_cost_units: 9_340_000,
       },
     ]);
+
+    const customerCosts = await db.query<{
+      operation_ref: string;
+      retail_debit_micros: number;
+    }>(
+      `select operation_ref, retail_debit_micros
+       from billing_customer_retail_cost_operations
+       where account_id = $1
+       order by operation_ref`,
+      [TOKEN_ACCRUAL_ACCOUNT_ID]
+    );
+    expect(customerCosts.rows).toEqual([
+      { operation_ref: "exact-1", retail_debit_micros: 5_000 },
+      { operation_ref: "exact-2", retail_debit_micros: 5_001 },
+      { operation_ref: "exact-3", retail_debit_micros: 83_400 },
+    ]);
   });
 
   it("restricts exact token accruals to the service role", async () => {
@@ -147,5 +164,66 @@ describe("billing ledger token accrual", () => {
     expect(privileges.rows).toEqual([
       { anon: false, authenticated: false, service_role: true },
     ]);
+  });
+
+  it("backfills existing token accruals without posting another debit", async () => {
+    const historicalDb = await createBillingTestDb({
+      includeTokenCostEvents: false,
+    });
+    try {
+      await seedBillingAccounts(historicalDb);
+      const aiCallId = "00000000-0000-4000-8000-000000000099";
+      await historicalDb.query(
+        `insert into ai_calls (id, type, metadata)
+         values ($1, 'pr_review', $2)`,
+        [
+          aiCallId,
+          JSON.stringify({
+            repo_full_name: "Mogplex/mogplex",
+            pr_number: 285,
+          }),
+        ]
+      );
+      await historicalDb.query(
+        `select post_credit_ledger_entry(
+           $1, 100, 'purchased', 'topup', 'topup:historical', null, '{}'
+         )`,
+        [TOKEN_ACCRUAL_ACCOUNT_ID]
+      );
+      await historicalDb.query(
+        `select * from accrue_token_usage(
+           $1, 3380846, 'tok:historical', '2026-08', $2
+         )`,
+        [TOKEN_ACCRUAL_ACCOUNT_ID, JSON.stringify({ ai_call_id: aiCallId })]
+      );
+
+      await applyBillingMigration(
+        historicalDb,
+        "20260818193000_token_usage_customer_cost_events.sql"
+      );
+
+      const result = await historicalDb.query<{
+        description: string;
+        retail_debit_micros: number;
+        remaining_cents: number;
+      }>(
+        `select operation.description,
+                operation.retail_debit_micros,
+                balance.purchased_cents as remaining_cents
+         from billing_customer_retail_cost_operations operation
+         cross join billing_balance($1) balance
+         where operation.account_id = $1`,
+        [TOKEN_ACCRUAL_ACCOUNT_ID]
+      );
+      expect(result.rows).toEqual([
+        {
+          description: "Code review · Mogplex/mogplex #285",
+          retail_debit_micros: 33_809,
+          remaining_cents: 97,
+        },
+      ]);
+    } finally {
+      await historicalDb.close();
+    }
   });
 });

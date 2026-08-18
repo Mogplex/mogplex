@@ -85,7 +85,7 @@ export async function loadCapacityBillingSummary(input: {
         .limit(OPEN_RESERVATION_LIMIT),
       client
         .from("billing_customer_retail_cost_operations")
-        .select("operation_ref, retail_debit_micros, occurred_at")
+        .select("operation_ref, retail_debit_micros, occurred_at, description")
         .eq("account_id", input.accountId)
         .order("occurred_at", { ascending: false })
         .limit(RECENT_OPERATION_LIMIT),

@@ -33,7 +33,13 @@ export const BILLING_JOB_RUN_STUB_SQL = /* sql */ `
     workflow_run_id text,
     cancel_reason text,
     cancelled_at timestamptz
-  )
+  );
+
+  create table if not exists public.ai_calls (
+    id uuid primary key,
+    type text not null default 'agent',
+    metadata jsonb not null default '{}'
+  );
 `;
 
 // Minimal schema for the tables the cost trigger battery exercises.
