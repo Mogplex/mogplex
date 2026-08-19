@@ -8,13 +8,6 @@ import {
   ShieldXmark,
 } from "iconoir-react";
 import { MogplexFace } from "@/components/brand/mogplex-face";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useModels } from "@/hooks/use-models";
 import { fetchWithActiveTeam } from "@/components/active-scope-provider";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
@@ -32,6 +25,7 @@ import {
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
 import { NewProjectFields, NewProjectStatus } from "./new-project-fields";
+import { ProjectCombobox } from "./project-combobox";
 import {
   LAST_GITHUB_OWNER_KEY,
   useNewProjectTarget,
@@ -226,28 +220,12 @@ export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
             >
               Project
             </label>
-            <Select value={selectedRepoId} onValueChange={setChoice}>
-              {/* size="sm" is load-bearing: SelectTrigger's own
-                  data-[size=default]:h-9 outranks a plain h-8 utility, so
-                  without it the selects render 36px next to the 32px name
-                  input and the row reads ragged. */}
-              <SelectTrigger
-                size="sm"
-                id="control-project"
-                aria-label="Project"
-                className="border-border bg-secondary text-secondary-foreground h-8 w-64 max-w-full min-w-0 flex-1 px-2 text-xs font-medium shadow-none"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-border bg-popover max-h-72 shadow-2xl">
-                {repos.map((repo) => (
-                  <SelectItem key={repo.id} value={repo.id}>
-                    {repo.full_name}
-                  </SelectItem>
-                ))}
-                <SelectItem value={NEW_PROJECT}>New project…</SelectItem>
-              </SelectContent>
-            </Select>
+            <ProjectCombobox
+              repos={repos}
+              value={selectedRepoId}
+              newProjectValue={NEW_PROJECT}
+              onValueChange={setChoice}
+            />
             {selectedRepoId === NEW_PROJECT ? (
               <NewProjectFields
                 ownerTargets={ownerTargets}

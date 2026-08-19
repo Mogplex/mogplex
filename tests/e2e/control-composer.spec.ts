@@ -45,6 +45,13 @@ test("control composers expose permissions, model, and MCP controls without a sp
         name: "widgets",
         default_branch: "main",
       },
+      {
+        id: "repo-2",
+        full_name: "acme/roadmap",
+        owner: "acme",
+        name: "roadmap",
+        default_branch: "main",
+      },
     ])
   );
   const sessionCreates: Array<{
@@ -142,16 +149,28 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // The session's project defaults to the connected repo.
   const projectPicker = page.getByLabel("Project", { exact: true });
   await expect(projectPicker).toBeVisible();
-  await expect(projectPicker).toHaveAttribute("data-slot", "select-trigger");
+  await expect(projectPicker).toHaveAttribute("role", "combobox");
   await expect(projectPicker).toContainText("acme/widgets");
   await projectPicker.click();
+  const projectSearch = page.getByLabel("Search projects", { exact: true });
+  await expect(projectSearch).toBeFocused();
+  await projectSearch.pressSequentially("roadmap");
+  await expect(projectSearch).toHaveValue("roadmap");
   await expect(
-    page.getByRole("option", { name: "acme/widgets" })
+    page.getByRole("option", { name: "acme/roadmap" })
   ).toBeVisible();
-  await expect(
-    page.getByRole("option", { name: "New project…" })
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
+  await expect(page.getByRole("option", { name: "acme/widgets" })).toBeHidden();
+  await projectSearch.press("Enter");
+  await expect(projectPicker).toContainText("acme/roadmap");
+  await projectPicker.click();
+  await projectSearch.press("ArrowDown");
+  const widgetsOption = page.getByRole("option", { name: "acme/widgets" });
+  await expect(widgetsOption).toBeFocused();
+  await widgetsOption.press("ArrowDown");
+  const roadmapOption = page.getByRole("option", { name: "acme/roadmap" });
+  await expect(roadmapOption).toBeFocused();
+  await roadmapOption.press("Space");
+  await expect(projectPicker).toContainText("acme/roadmap");
   const permissionsChip = page.getByRole("button", {
     name: "Skip Permissions",
   });
@@ -200,10 +219,10 @@ test("control composers expose permissions, model, and MCP controls without a sp
     scope: "IMPLEMENT",
     target: "mission",
     conversationId: "sess-e2e-1",
-    repoId: "repo-1",
-    repoFullName: "acme/widgets",
+    repoId: "repo-2",
+    repoFullName: "acme/roadmap",
     repoOwner: "acme",
-    repoName: "widgets",
+    repoName: "roadmap",
     repoBranch: "main",
     repoBaseBranch: "main",
   });
@@ -214,8 +233,8 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // The new session is tied to the repo's project.
   expect(sessionCreates).toHaveLength(1);
   expect(sessionCreates[0]).toMatchObject({
-    project: "acme/widgets",
-    repo_id: "repo-1",
+    project: "acme/roadmap",
+    repo_id: "repo-2",
   });
   expect(chatRequests[0]?.messages?.at(-1)?.parts).toEqual(
     expect.arrayContaining([
