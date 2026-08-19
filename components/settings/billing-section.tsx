@@ -244,7 +244,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const grossHostedRemaining =
     summary.hostedUsage.includedRemainingCents +
     summary.hostedUsage.purchasedRemainingCents;
-  const showCapacityAddOns = summary.plan.offerKind !== "contract";
+  const showCapacityAddOns = summary.plan.offerKind === "individual";
 
   return (
     <div className="flex flex-col gap-6">
