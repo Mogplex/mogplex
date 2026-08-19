@@ -15,10 +15,8 @@ const FIREWORKS_PINNED_LAB_PREFIXES = [
 // a soft preference (`order`) — the gateway falls back to other providers if
 // the pinned one is unavailable for the model. Keys must be lowercase.
 const MODEL_PROVIDER_PINS: Record<string, string[]> = {
-  // Baseten serves nemotron-3-ultra (alongside together-ai/deepinfra/blackbox).
+  // Keep the Nemotron Ultra preference scoped to the exact model ID.
   "nvidia/nemotron-3-ultra-550b-a55b": ["baseten"],
-  // Blackbox serves glm-5.2 free as of 2026-08; soft pin while that lasts.
-  "zai/glm-5.2": ["blackbox"],
 };
 
 export type GatewayCallContext = {

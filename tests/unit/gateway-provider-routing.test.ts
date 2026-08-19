@@ -50,7 +50,7 @@ test("pins nemotron-3-ultra to baseten via exact model match", () => {
       .gateway.order,
     ["baseten"]
   );
-  // Exact-match pin must not leak to the sibling super model blackbox can't serve.
+  // Exact-match pin must not leak to the sibling super model.
   assert.deepEqual(
     gatewayProviderOptions("nvidia/nemotron-3-super-120b-a12b", baseContext)
       .gateway.order,
@@ -58,12 +58,11 @@ test("pins nemotron-3-ultra to baseten via exact model match", () => {
   );
 });
 
-test("pins glm-5.2 to blackbox via exact model match", () => {
+test("leaves glm-5.2 on gateway default routing", () => {
   assert.deepEqual(
     gatewayProviderOptions("zai/glm-5.2", baseContext).gateway.order,
-    ["blackbox"]
+    undefined
   );
-  // The fast variant is a different serving tier — leave it on default routing.
   assert.deepEqual(
     gatewayProviderOptions("zai/glm-5.2-fast", baseContext).gateway.order,
     undefined
