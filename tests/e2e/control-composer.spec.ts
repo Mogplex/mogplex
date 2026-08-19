@@ -394,19 +394,7 @@ test("control timeline renders agent markdown as formatted HTML", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("complementary", { name: "Artifacts" })
-  ).toBeVisible();
-  await expect(
-    page
-      .getByRole("complementary", { name: "Artifacts" })
-      .getByRole("heading", {
-        name: "Artifacts",
-      })
-  ).toBeVisible();
-  await expect(
-    page
-      .getByRole("complementary", { name: "Artifacts" })
-      .getByRole("heading", { name: "Tool overview" })
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(
     page.getByRole("log", { name: "Conversation" }).getByText("| --- |")
   ).toHaveCount(0);
