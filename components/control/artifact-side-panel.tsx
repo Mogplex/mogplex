@@ -10,7 +10,6 @@ import {
   ArtifactHeader,
   ArtifactTitle,
 } from "@/components/ai-elements/artifact";
-import { MessageResponse } from "@/components/ai-elements/message";
 import { usePanelWidth } from "@/hooks/use-panel-width";
 import { collectControlArtifacts } from "./artifact-side-panel-model";
 
@@ -95,12 +94,8 @@ export function ArtifactSidePanel({ messages }: { messages: UIMessage[] }) {
                 </div>
               </ArtifactHeader>
               <ArtifactContent className="max-h-[440px] p-3">
-                {artifact.kind === "document" ? (
-                  <MessageResponse className="text-sm leading-6">
-                    {artifact.body ?? ""}
-                  </MessageResponse>
-                ) : artifact.file?.mediaType.startsWith("image/") &&
-                  safeFileUrl ? (
+                {artifact.file?.mediaType.startsWith("image/") &&
+                safeFileUrl ? (
                   <img
                     src={safeFileUrl}
                     alt={artifact.file.filename ?? artifact.file.mediaType}

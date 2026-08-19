@@ -3,7 +3,7 @@ import test from "node:test";
 import type { UIMessage } from "ai";
 import { collectControlArtifacts } from "../../components/control/artifact-side-panel-model";
 
-test("control artifacts collect substantial assistant markdown", () => {
+test("control artifacts do not promote assistant text into artifacts", () => {
   const artifacts = collectControlArtifacts([
     {
       id: "assistant-1",
@@ -17,12 +17,10 @@ test("control artifacts collect substantial assistant markdown", () => {
     } as UIMessage,
   ]);
 
-  assert.equal(artifacts.length, 1);
-  assert.equal(artifacts[0]?.kind, "document");
-  assert.equal(artifacts[0]?.title, "Release plan");
+  assert.equal(artifacts.length, 0);
 });
 
-test("control artifacts ignore short assistant chat and collect assistant files", () => {
+test("control artifacts ignore all assistant chat and collect assistant files", () => {
   const artifacts = collectControlArtifacts([
     {
       id: "assistant-1",
