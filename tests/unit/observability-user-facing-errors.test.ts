@@ -170,6 +170,25 @@ test("known actionable failures use specific safe guidance", () => {
   );
 });
 
+test("Mogplex credit failures stay actionable without exposing Gateway billing failures", () => {
+  const incident = buildObservabilityIncidentId("JOB", "job-1");
+  const mogplexCreditFailure = presentObservabilityFailure(
+    "Automation model configuration failed: Hosted AI requires a positive billing balance. Add funds or choose a plan in Settings > Billing, or add your own AI Gateway or provider key in Settings > API Keys.",
+    incident
+  );
+  const gatewayCreditFailure = presentObservabilityFailure(
+    "Automation model request failed: Insufficient funds. Please add credits to your account to continue using AI services.",
+    incident
+  );
+
+  assert.equal(
+    mogplexCreditFailure,
+    "This Mogplex account cannot use hosted AI because it has no credit. Add funds or choose a plan in Settings > Billing. Or add an AI Gateway or provider key in Settings > API Keys."
+  );
+  assert.match(gatewayCreditFailure, /internal service error/);
+  assert.doesNotMatch(gatewayCreditFailure, /Settings > Billing/);
+});
+
 test("failed events and tool diagnostics are sanitized at the API boundary", () => {
   const event = sanitizeObservabilityEvent({
     id: "event-1",
