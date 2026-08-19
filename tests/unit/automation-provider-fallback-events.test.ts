@@ -62,6 +62,30 @@ const EVENT_INPUT = {
   execution: EXECUTION,
 };
 
+const AI_CALL_INPUT = {
+  context: {
+    metadata: {},
+    assignmentType: "pr_review",
+    skillId: null,
+    agent: {
+      model: "zai/glm-5.2",
+      system_prompt: null,
+    },
+    repo: {
+      id: EVENT_INPUT.repoId,
+      user_id: EVENT_INPUT.affectedUserId,
+      full_name: "acme/widgets",
+    },
+  },
+  jobRunId: EVENT_INPUT.jobRunId,
+  status: "success" as const,
+  startedAt: EVENT_INPUT.modelCallStartedAt,
+  durationMs: 100,
+  inputTokens: 10,
+  outputTokens: 20,
+  execution: EXECUTION,
+};
+
 test("builds a private Blackbox fallback event from safe routing details", () => {
   assert.deepEqual(buildOperatorBlackboxFallbackEvent(EVENT_INPUT), {
     affected_user_id: EVENT_INPUT.affectedUserId,
@@ -206,32 +230,7 @@ test("tryLogAiCall stores the private event but redacts provider details from ai
   });
 
   try {
-    assert.equal(
-      await tryLogAiCall({
-        context: {
-          metadata: {},
-          assignmentType: "pr_review",
-          skillId: null,
-          agent: {
-            model: "zai/glm-5.2",
-            system_prompt: null,
-          },
-          repo: {
-            id: EVENT_INPUT.repoId,
-            user_id: EVENT_INPUT.affectedUserId,
-            full_name: "acme/widgets",
-          },
-        },
-        jobRunId: EVENT_INPUT.jobRunId,
-        status: "success",
-        startedAt: EVENT_INPUT.modelCallStartedAt,
-        durationMs: 100,
-        inputTokens: 10,
-        outputTokens: 20,
-        execution: EXECUTION,
-      }),
-      null
-    );
+    assert.equal(await tryLogAiCall(AI_CALL_INPUT), null);
 
     assert.deepEqual(
       operatorEvent,
@@ -255,6 +254,60 @@ test("tryLogAiCall stores the private event but redacts provider details from ai
       },
     ]);
   } finally {
+    Object.defineProperty(supabaseAdmin, "from", {
+      configurable: true,
+      writable: true,
+      value: originalFrom,
+    });
+  }
+});
+
+test("operator event failures do not masquerade as ai_calls failures", async () => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
+
+  const { supabaseAdmin } = await import("../../lib/supabase/admin");
+  const { tryLogAiCall } =
+    await import("../../lib/workflows/automation-job-persistence");
+  const originalFrom = supabaseAdmin.from.bind(supabaseAdmin);
+  const originalConsoleError = console.error;
+  const operatorErrors: unknown[][] = [];
+
+  Object.defineProperty(supabaseAdmin, "from", {
+    configurable: true,
+    writable: true,
+    value: (table: string) => {
+      if (table === "operator_ai_provider_fallback_events") {
+        return {
+          upsert: async () => {
+            throw new Error("operator log unavailable");
+          },
+        };
+      }
+      if (table === "ai_calls") {
+        return {
+          insert: async () => ({ error: null }),
+        };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  });
+  console.error = (...args: unknown[]) => operatorErrors.push(args);
+
+  try {
+    assert.equal(await tryLogAiCall(AI_CALL_INPUT), null);
+    assert.deepEqual(operatorErrors, [
+      [
+        "[automation-job] failed to persist operator Blackbox fallback event",
+        {
+          event: "operator_ai_provider_fallback_event_persist_failed",
+          jobRunId: EVENT_INPUT.jobRunId,
+          error: "operator log unavailable",
+        },
+      ],
+    ]);
+  } finally {
+    console.error = originalConsoleError;
     Object.defineProperty(supabaseAdmin, "from", {
       configurable: true,
       writable: true,

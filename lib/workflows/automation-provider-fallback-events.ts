@@ -1,9 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type {
-  AutomationGatewayProviderAttempt,
-  AutomationModelExecutionMetadata,
-} from "./automation-model-execution-types";
+import type { AutomationModelExecutionMetadata } from "./automation-model-execution-types";
+import { readBlackboxFallbackDetails } from "./automation-model-execution-gateway";
 
 type OperatorBlackboxFallbackEventInput = {
   affectedUserId: string;
@@ -30,33 +28,8 @@ type OperatorBlackboxFallbackEventRow = {
   generation_ids: string[];
 };
 
-function isProvider(
-  attempt: AutomationGatewayProviderAttempt,
-  provider: string
-) {
-  return attempt.provider.toLowerCase() === provider;
-}
-
 function uniqueStrings(values: string[]) {
   return [...new Set(values)];
-}
-
-function readBlackboxFailures(execution: AutomationModelExecutionMetadata) {
-  return (execution.gatewayModelAttempts ?? [])
-    .flatMap((modelAttempt) => modelAttempt.providerAttempts ?? [])
-    .filter((attempt) => isProvider(attempt, "blackbox") && !attempt.success);
-}
-
-function readFallbackProviders(execution: AutomationModelExecutionMetadata) {
-  return uniqueStrings(
-    (execution.gatewayModelAttempts ?? []).flatMap((modelAttempt) =>
-      (modelAttempt.providerAttempts ?? []).flatMap((attempt) =>
-        attempt.success && !isProvider(attempt, "blackbox")
-          ? [attempt.provider]
-          : []
-      )
-    )
-  );
 }
 
 function readGenerationIds(execution: AutomationModelExecutionMetadata) {
@@ -83,8 +56,9 @@ export function buildOperatorBlackboxFallbackEvent(
   const execution = input.execution;
   if (!execution) return null;
 
-  const blackboxFailures = readBlackboxFailures(execution);
-  const fallbackProviders = readFallbackProviders(execution);
+  const { blackboxFailures, fallbackProviders } = readBlackboxFallbackDetails(
+    execution.gatewayModelAttempts ?? []
+  );
   if (blackboxFailures.length === 0 || fallbackProviders.length === 0) {
     return null;
   }

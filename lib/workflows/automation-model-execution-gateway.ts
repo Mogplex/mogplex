@@ -90,6 +90,42 @@ export function readGatewayModelAttempts(
   });
 }
 
+export function readBlackboxFallbackDetails(
+  modelAttempts: AutomationGatewayModelAttempt[]
+) {
+  const blackboxFailures = modelAttempts.flatMap((modelAttempt) =>
+    (modelAttempt.providerAttempts ?? []).flatMap((providerAttempt) => {
+      if (
+        providerAttempt.provider.toLowerCase() !== "blackbox" ||
+        providerAttempt.success
+      ) {
+        return [];
+      }
+      return [
+        {
+          canonicalSlug: modelAttempt.canonicalSlug,
+          statusCode: providerAttempt.statusCode,
+          providerTimeout: providerAttempt.providerTimeout,
+        },
+      ];
+    })
+  );
+  const fallbackProviders = [
+    ...new Set(
+      modelAttempts.flatMap((modelAttempt) =>
+        (modelAttempt.providerAttempts ?? []).flatMap((providerAttempt) =>
+          providerAttempt.success &&
+          providerAttempt.provider.toLowerCase() !== "blackbox"
+            ? [providerAttempt.provider]
+            : []
+        )
+      )
+    ),
+  ];
+
+  return { blackboxFailures, fallbackProviders };
+}
+
 export function captureGatewayModelRouting(
   state: AutomationGatewayRoutingState,
   providerMetadata: ProviderMetadata | undefined

@@ -309,6 +309,33 @@ export async function releaseQueuedJobs(
   }
 }
 
+function logOperatorFallbackPersistenceError(input: {
+  jobRunId: string;
+  error: string | null;
+}) {
+  if (!input.error) return;
+  console.error(
+    "[automation-job] failed to persist operator Blackbox fallback event",
+    {
+      event: "operator_ai_provider_fallback_event_persist_failed",
+      jobRunId: input.jobRunId,
+      error: input.error,
+    }
+  );
+}
+
+async function tryPersistOperatorBlackboxFallbackEvent(
+  input: Parameters<typeof persistOperatorBlackboxFallbackEvent>[0]
+) {
+  try {
+    return await persistOperatorBlackboxFallbackEvent(input);
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : "Unknown operator fallback persistence error";
+  }
+}
+
 export async function tryLogAiCall(input: {
   context: JobContext;
   jobRunId: string;
@@ -342,12 +369,16 @@ export async function tryLogAiCall(input: {
     input.context.agent.model,
     input.execution
   );
-  const operatorFallbackError = await persistOperatorBlackboxFallbackEvent({
+  const operatorFallbackError = await tryPersistOperatorBlackboxFallbackEvent({
     affectedUserId: input.context.repo.user_id,
     jobRunId: input.jobRunId,
     repoId: input.context.repo.id || null,
     modelCallStartedAt: input.startedAt,
     execution: input.execution,
+  });
+  logOperatorFallbackPersistenceError({
+    jobRunId: input.jobRunId,
+    error: operatorFallbackError,
   });
   const userFacingExecution = stripOperatorOnlyProviderDetails(input.execution);
   const { error } = await supabaseAdmin.from("ai_calls").insert({
@@ -373,7 +404,7 @@ export async function tryLogAiCall(input: {
     },
   });
 
-  return error?.message ?? operatorFallbackError;
+  return error?.message ?? null;
 }
 
 export async function persistAutomationOutcomeMemory(input: {
