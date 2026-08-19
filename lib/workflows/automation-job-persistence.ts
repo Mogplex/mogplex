@@ -25,6 +25,10 @@ import {
 } from "@/lib/workflows/automation-job-metadata";
 import { normalizeAutomationAssignmentType } from "@/lib/workflows/automation-job-utils";
 import { rollbackAutomationJobCapacityStart } from "@/lib/billing/workflow-capacity";
+import {
+  persistOperatorBlackboxFallbackEvent,
+  stripOperatorOnlyProviderDetails,
+} from "@/lib/workflows/automation-provider-fallback-events";
 
 export async function getDurationMs(startedAt: string) {
   "use step";
@@ -338,6 +342,14 @@ export async function tryLogAiCall(input: {
     input.context.agent.model,
     input.execution
   );
+  const operatorFallbackError = await persistOperatorBlackboxFallbackEvent({
+    affectedUserId: input.context.repo.user_id,
+    jobRunId: input.jobRunId,
+    repoId: input.context.repo.id || null,
+    modelCallStartedAt: input.startedAt,
+    execution: input.execution,
+  });
+  const userFacingExecution = stripOperatorOnlyProviderDetails(input.execution);
   const { error } = await supabaseAdmin.from("ai_calls").insert({
     user_id: input.context.repo.user_id,
     type: normalizeAutomationAssignmentType(input.context.assignmentType),
@@ -354,12 +366,14 @@ export async function tryLogAiCall(input: {
     tool_calls: toolCalls,
     metadata: {
       ...input.context.metadata,
-      ...(input.execution ? { automation_execution: input.execution } : {}),
+      ...(userFacingExecution
+        ? { automation_execution: userFacingExecution }
+        : {}),
       ...(partialFailure ? { failed_with_partial_usage: true } : {}),
     },
   });
 
-  return error?.message ?? null;
+  return error?.message ?? operatorFallbackError;
 }
 
 export async function persistAutomationOutcomeMemory(input: {

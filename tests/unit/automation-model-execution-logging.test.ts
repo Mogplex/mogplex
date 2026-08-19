@@ -242,3 +242,89 @@ test("logs a dedicated event when Blackbox fails and Gateway uses another provid
     ],
   ]);
 });
+
+test("keeps generic provider fallback logging for non-Blackbox providers", async () => {
+  const captured = captureLogger();
+  const testModel = createTestAutomationModel({
+    onGenerate() {
+      return createSuccessfulModelResult("fallback response", {
+        gateway: {
+          generationId: "gen-generic-fallback",
+          provider: "legacy-provider-field",
+          routing: {
+            modelAttempts: [
+              {
+                canonicalSlug: "openai/gpt-5.4",
+                success: true,
+                providerAttemptCount: 2,
+                providerAttempts: [
+                  {
+                    provider: "fireworks",
+                    success: false,
+                    statusCode: 503,
+                  },
+                  {
+                    provider: "nebius",
+                    success: true,
+                    statusCode: 200,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+    },
+  });
+
+  await executeAutomationTextGeneration({
+    phase: "issue_comment",
+    requestedModelId: "openai/gpt-5.4",
+    generateText: aiGenerateText,
+    logger: captured.logger,
+    request: {
+      model: testModel.model,
+      providerOptions: { gateway: { order: ["fireworks"] } },
+      prompt: "Handle this issue",
+    },
+  });
+
+  assert.equal(captured.warnings.length, 1);
+  assert.deepEqual(captured.warnings[0], [
+    "[automation-model] gateway fallback used",
+    {
+      event: "automation_model_gateway_fallback_used",
+      phase: "issue_comment",
+      requestedModelId: "openai/gpt-5.4",
+      pinnedModelId: null,
+      providerOnly: [],
+      providerOrder: ["fireworks"],
+      generationId: "gen-generic-fallback",
+      servedProvider: "nebius",
+      planningReasoning: null,
+      gatewayModelAttemptCount: 1,
+      gatewayModelAttempts: [
+        {
+          canonicalSlug: "openai/gpt-5.4",
+          modelId: null,
+          success: true,
+          providerAttemptCount: 2,
+          providerAttempts: [
+            {
+              provider: "fireworks",
+              success: false,
+              statusCode: 503,
+              providerTimeout: false,
+            },
+            {
+              provider: "nebius",
+              success: true,
+              statusCode: 200,
+              providerTimeout: false,
+            },
+          ],
+        },
+      ],
+    },
+  ]);
+});

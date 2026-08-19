@@ -7,7 +7,10 @@ import type {
   GenerateTextRequest,
 } from "./automation-model-execution-types";
 import { isRecord } from "./automation-model-execution-types";
-import { readGatewayModelAttempts } from "./automation-model-execution-gateway";
+import {
+  readGatewayModelAttempts,
+  readOptionalString,
+} from "./automation-model-execution-gateway";
 
 const MAX_ERROR_MESSAGE_LENGTH = 2_000;
 
@@ -40,10 +43,6 @@ function readGatewayProviderSelection(
     providerOnly: readStringArray(providerOptions.gateway.only),
     providerOrder: readStringArray(providerOptions.gateway.order),
   };
-}
-
-function readOptionalString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function readFirstOptionalString(...values: unknown[]) {

@@ -9,7 +9,7 @@ import { isRecord } from "./automation-model-execution-types";
 
 const MAX_CAPTURED_GATEWAY_MODEL_ATTEMPTS = 50;
 
-function readOptionalString(value: unknown) {
+export function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
