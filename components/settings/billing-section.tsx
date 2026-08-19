@@ -244,6 +244,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const grossHostedRemaining =
     summary.hostedUsage.includedRemainingCents +
     summary.hostedUsage.purchasedRemainingCents;
+  const showCapacityAddOns = summary.plan.offerKind !== "contract";
 
   return (
     <div className="flex flex-col gap-6">
@@ -352,82 +353,86 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>
-              {summary.concurrencyPurchasesEnabled
-                ? "Capacity add-ons"
-                : hasGrandfatheredConcurrency
+      {showCapacityAddOns ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>
+                {summary.concurrencyPurchasesEnabled
                   ? "Capacity add-ons"
-                  : "Storage add-ons"}
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            {summary.concurrencyPurchasesEnabled
-              ? "Add parallel agent runs or storage without changing your plan."
-              : hasGrandfatheredConcurrency
-                ? "Manage existing parallel agent runs or add retained storage."
-                : "Add retained storage without changing your plan."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {capacityUnavailable ? (
-            <p className="bg-muted/30 text-muted-foreground rounded-md border px-4 py-3 text-sm">
-              {capacityUnavailable}
-            </p>
-          ) : null}
-          {visibleCapacityGroups.map((group, groupIndex) => (
-            <section
-              aria-labelledby={`capacity-group-${group.id}`}
-              className={
-                groupIndex === 0 ? "space-y-2" : "space-y-2 border-t pt-6"
-              }
-              key={group.id}
-            >
-              <h3
-                className="text-sm font-semibold"
-                id={`capacity-group-${group.id}`}
+                  : hasGrandfatheredConcurrency
+                    ? "Capacity add-ons"
+                    : "Storage add-ons"}
+              </h2>
+            </CardTitle>
+            <CardDescription>
+              {summary.concurrencyPurchasesEnabled
+                ? "Add parallel agent runs or storage without changing your plan."
+                : hasGrandfatheredConcurrency
+                  ? "Manage existing parallel agent runs or add retained storage."
+                  : "Add retained storage without changing your plan."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {capacityUnavailable ? (
+              <p className="bg-muted/30 text-muted-foreground rounded-md border px-4 py-3 text-sm">
+                {capacityUnavailable}
+              </p>
+            ) : null}
+            {visibleCapacityGroups.map((group, groupIndex) => (
+              <section
+                aria-labelledby={`capacity-group-${group.id}`}
+                className={
+                  groupIndex === 0
+                    ? "space-y-2"
+                    : "space-y-2 border-t pt-6"
+                }
+                key={group.id}
               >
-                {group.label}
-              </h3>
-              <div className="divide-y">
-                {group.items.map((addOn) => {
-                  const active = summary.addOns.find(
-                    (item) => item.lookupKey === addOn.lookupKey
-                  );
-                  return (
-                    <div
-                      className="flex flex-col gap-3 py-3 first:pt-2 last:pb-0 sm:flex-row sm:items-center"
-                      key={addOn.lookupKey}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium">{addOn.name}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {formatUsd(addOn.amountCents)} per month, per quantity
+                <h3
+                  className="text-sm font-semibold"
+                  id={`capacity-group-${group.id}`}
+                >
+                  {group.label}
+                </h3>
+                <div className="divide-y">
+                  {group.items.map((addOn) => {
+                    const active = summary.addOns.find(
+                      (item) => item.lookupKey === addOn.lookupKey
+                    );
+                    return (
+                      <div
+                        className="flex flex-col gap-3 py-3 first:pt-2 last:pb-0 sm:flex-row sm:items-center"
+                        key={addOn.lookupKey}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium">{addOn.name}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {formatUsd(addOn.amountCents)} per month, per quantity
+                          </p>
+                        </div>
+                        <p className="text-sm tabular-nums sm:min-w-20 sm:text-right">
+                          {active ? `${active.quantity} active` : "Not added"}
                         </p>
+                        {canChangeCapacity ? (
+                          <Button
+                            aria-label={`${active ? "Manage" : "Add"} ${addOn.name}`}
+                            className="h-11 w-full sm:w-auto"
+                            onClick={() => setSelectedAddOn(addOn)}
+                            variant="outline"
+                          >
+                            {active ? "Manage" : "Add"}
+                          </Button>
+                        ) : null}
                       </div>
-                      <p className="text-sm tabular-nums sm:min-w-20 sm:text-right">
-                        {active ? `${active.quantity} active` : "Not added"}
-                      </p>
-                      {canChangeCapacity ? (
-                        <Button
-                          aria-label={`${active ? "Manage" : "Add"} ${addOn.name}`}
-                          className="h-11 w-full sm:w-auto"
-                          onClick={() => setSelectedAddOn(addOn)}
-                          variant="outline"
-                        >
-                          {active ? "Manage" : "Add"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </CardContent>
-      </Card>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

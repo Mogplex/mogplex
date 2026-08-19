@@ -321,7 +321,7 @@ test("existing concurrency customers can reduce but not increase outside the pil
   ).toBeEnabled();
 });
 
-test("company Billing stays visible and read-only for a member", async ({
+test("company Billing omits capacity add-ons for a member", async ({
   page,
 }) => {
   await page.context().setExtraHTTPHeaders({
@@ -384,8 +384,8 @@ test("company Billing stays visible and read-only for a member", async ({
 
   await expect(page.getByRole("heading", { name: "Business" })).toBeVisible();
   await expect(
-    page.getByText("Ask a company owner or admin to change billing.")
-  ).toBeVisible();
+    page.getByRole("heading", { name: /Capacity add-ons|Storage add-ons/ })
+  ).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Add|Manage/ })).toHaveCount(0);
 });
 
