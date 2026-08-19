@@ -1,5 +1,7 @@
 # AGENTS.md
 
+**PUBLIC REPOSITORY: Commit only the generic source, schema, tests, fixtures, and documentation required to build, inspect, self-host, secure, or verify Mogplex. Never commit credentials, personal or account-specific data or configuration, production-only state, private operational notes, or proprietary evaluation material.**
+
 This is the single orientation guide for all coding agents working in `mogplex`. `CLAUDE.md` redirects here.
 
 ## Baseline Coding Agent Behavior
