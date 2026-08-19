@@ -1,10 +1,6 @@
 import type { AIModel } from "@/lib/types";
 
-// TEMPORARY (2026-08): glm-5.2 while Blackbox serves it free — the gateway
-// soft-pins it there (see lib/models/gateway-provider-routing.ts). Revert to
-// a standing default when the free window closes. Users' stored defaults
-// always win over this platform fallback.
-export const DEFAULT_NEW_AGENT_MODEL_ID = "zai/glm-5.2";
+export const DEFAULT_NEW_AGENT_MODEL_ID = "minimax/minimax-m2.7";
 
 export type AgentModelOption = {
   id: string;
