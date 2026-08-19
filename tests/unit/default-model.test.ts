@@ -11,11 +11,13 @@ async function loadDefaultModelModule() {
 test("resolveUsableDefaultModelId prefers the configured MiniMax default when preferences are still empty", async () => {
   const { resolveUsableDefaultModelId } = await loadDefaultModelModule();
 
+  // Anthropic sorts before MiniMax, so this proves the static default wins
+  // over first-usable ordering rather than passing because of its position.
   const resolved = resolveUsableDefaultModelId(
     null,
     [
       { id: "minimax/minimax-m2.7", is_available: true },
-      { id: "openai/gpt-5.4", is_available: true },
+      { id: "anthropic/claude-sonnet-4.6", is_available: true },
     ],
     []
   );
@@ -74,7 +76,7 @@ test("pickUsableDefaultModelId only chooses the static default when it survived 
     "openai/gpt-5.4"
   );
   assert.equal(
-    pickUsableDefaultModelId(null, ["minimax/minimax-m2.7", "openai/gpt-5.4"]),
+    pickUsableDefaultModelId(null, ["openai/gpt-5.4", "minimax/minimax-m2.7"]),
     "minimax/minimax-m2.7"
   );
 });
