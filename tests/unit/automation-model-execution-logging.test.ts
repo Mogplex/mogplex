@@ -143,25 +143,38 @@ test("logs the terminal provider failure after the bounded retry", async () => {
   ]);
 });
 
-test("logs recovered Gateway fallback routing with its generation id", async () => {
+test("logs a dedicated event when Blackbox fails and Gateway uses another provider", async () => {
   const captured = captureLogger();
   const testModel = createTestAutomationModel({
     onGenerate() {
       return createSuccessfulModelResult("fallback response", {
         gateway: {
           generationId: "gen-fallback",
-          provider: "nebius",
           routing: {
+            resolvedProvider: "nebius",
             planningReasoning: "blackbox failed; routed to nebius",
+            modelAttempts: [
+              {
+                canonicalSlug: "zai/glm-5.2",
+                success: true,
+                providerAttemptCount: 2,
+                providerAttempts: [
+                  {
+                    provider: "blackbox",
+                    credentialType: "system",
+                    success: false,
+                    statusCode: 503,
+                  },
+                  {
+                    provider: "nebius",
+                    credentialType: "system",
+                    success: true,
+                    statusCode: 200,
+                  },
+                ],
+              },
+            ],
           },
-          modelAttempts: [
-            {
-              canonicalSlug: "zai/glm-5.2",
-              modelId: "nebius:glm-5p2",
-              success: true,
-              providerAttemptCount: 2,
-            },
-          ],
         },
       });
     },
@@ -181,24 +194,48 @@ test("logs recovered Gateway fallback routing with its generation id", async () 
 
   assert.deepEqual(captured.warnings, [
     [
-      "[automation-model] gateway fallback used",
+      "[automation-model] Blackbox failed. AI Gateway used a fallback provider",
       {
-        event: "automation_model_gateway_fallback_used",
+        event: "automation_model_blackbox_fallback_used",
         phase: "pr_review",
         requestedModelId: "zai/glm-5.2",
         pinnedModelId: null,
         providerOnly: [],
         providerOrder: ["blackbox"],
+        preferredProvider: "blackbox",
         generationId: "gen-fallback",
         servedProvider: "nebius",
         planningReasoning: "blackbox failed; routed to nebius",
+        fallbackProviders: ["nebius"],
+        blackboxFailureCount: 1,
+        blackboxFailures: [
+          {
+            canonicalSlug: "zai/glm-5.2",
+            statusCode: 503,
+            providerTimeout: false,
+          },
+        ],
         gatewayModelAttemptCount: 1,
         gatewayModelAttempts: [
           {
             canonicalSlug: "zai/glm-5.2",
-            modelId: "nebius:glm-5p2",
+            modelId: null,
             success: true,
             providerAttemptCount: 2,
+            providerAttempts: [
+              {
+                provider: "blackbox",
+                success: false,
+                statusCode: 503,
+                providerTimeout: false,
+              },
+              {
+                provider: "nebius",
+                success: true,
+                statusCode: 200,
+                providerTimeout: false,
+              },
+            ],
           },
         ],
       },

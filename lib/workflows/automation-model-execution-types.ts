@@ -50,6 +50,14 @@ export type AutomationGatewayModelAttempt = {
   modelId: string | null;
   success: boolean;
   providerAttemptCount: number | null;
+  providerAttempts?: AutomationGatewayProviderAttempt[];
+};
+
+export type AutomationGatewayProviderAttempt = {
+  provider: string;
+  success: boolean;
+  statusCode: number | null;
+  providerTimeout: boolean;
 };
 
 export type AutomationModelExecutionMetadata = {

@@ -28,6 +28,12 @@ function isAutomationGatewayModelAttempt(value: unknown): value is {
   modelId: string | null;
   success: boolean;
   providerAttemptCount: number | null;
+  providerAttempts?: Array<{
+    provider: string;
+    success: boolean;
+    statusCode: number | null;
+    providerTimeout: boolean;
+  }>;
 } {
   return (
     isRecord(value) &&
@@ -35,7 +41,22 @@ function isAutomationGatewayModelAttempt(value: unknown): value is {
     (value.modelId === null || typeof value.modelId === "string") &&
     typeof value.success === "boolean" &&
     (value.providerAttemptCount === null ||
-      typeof value.providerAttemptCount === "number")
+      typeof value.providerAttemptCount === "number") &&
+    hasOptionalField(
+      value,
+      "providerAttempts",
+      (field) =>
+        Array.isArray(field) &&
+        field.every(
+          (attempt) =>
+            isRecord(attempt) &&
+            typeof attempt.provider === "string" &&
+            typeof attempt.success === "boolean" &&
+            (attempt.statusCode === null ||
+              typeof attempt.statusCode === "number") &&
+            typeof attempt.providerTimeout === "boolean"
+        )
+    )
   );
 }
 
