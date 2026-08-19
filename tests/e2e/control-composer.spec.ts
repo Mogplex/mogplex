@@ -160,7 +160,16 @@ test("control composers expose permissions, model, and MCP controls without a sp
     page.getByRole("option", { name: "acme/roadmap" })
   ).toBeVisible();
   await expect(page.getByRole("option", { name: "acme/widgets" })).toBeHidden();
-  await page.getByRole("option", { name: "acme/roadmap" }).click();
+  await projectSearch.press("Enter");
+  await expect(projectPicker).toContainText("acme/roadmap");
+  await projectPicker.click();
+  await projectSearch.press("ArrowDown");
+  const widgetsOption = page.getByRole("option", { name: "acme/widgets" });
+  await expect(widgetsOption).toBeFocused();
+  await widgetsOption.press("ArrowDown");
+  const roadmapOption = page.getByRole("option", { name: "acme/roadmap" });
+  await expect(roadmapOption).toBeFocused();
+  await roadmapOption.press("Space");
   await expect(projectPicker).toContainText("acme/roadmap");
   const permissionsChip = page.getByRole("button", {
     name: "Skip Permissions",
