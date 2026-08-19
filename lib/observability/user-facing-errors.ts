@@ -8,6 +8,11 @@ const INTERNAL_URL_PATTERN =
   /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|[^\s/]+\.(?:internal|local))(?:[/:\s]|$)/i;
 const INTERNAL_PROVIDER_PATTERN =
   /\b(?:postgres|postgrest|database|supabase|neon|stripe|vercel|trigger\.dev)\b.{0,100}\b(?:error|failed|failure|unavailable|denied|timeout)\b/i;
+// This exact prefix is authored by Mogplex after it checks the user's billing
+// account, before any provider request. Keep the match narrow: an upstream AI
+// Gateway balance error is a platform diagnostic and must remain internal.
+const MOGPLEX_AI_CREDIT_REQUIRED_PATTERN =
+  /^(?:Automation model configuration failed:\s*)?Hosted AI requires a positive billing balance\./i;
 const FAILURE_SIGNAL_PATTERN =
   /\b(?:error|failed|failure|exception|invalid|unavailable|denied|timeout|timed out|429|rate limit|cancelled|canceled|aborted)\b/i;
 const FAILURE_STATE_PATTERN =
@@ -72,6 +77,7 @@ const FAILURE_CONTEXT_RESET_KEYS = new Set([
 ]);
 
 type FailureKind =
+  | "billing"
   | "cancelled"
   | "timeout"
   | "rate_limit"
@@ -92,6 +98,9 @@ export function buildObservabilityIncidentId(
 }
 
 function classifyFailure(raw: string): FailureKind {
+  if (MOGPLEX_AI_CREDIT_REQUIRED_PATTERN.test(raw)) {
+    return "billing";
+  }
   if (/\b(?:cancelled|canceled|cancel requested|aborted)\b/i.test(raw)) {
     return "cancelled";
   }
@@ -122,6 +131,8 @@ function classifyFailure(raw: string): FailureKind {
 export function presentObservabilityFailure(raw: unknown, incidentId: string) {
   const text = typeof raw === "string" ? raw : "";
   switch (classifyFailure(text)) {
+    case "billing":
+      return "This Mogplex account cannot use hosted AI because it has no credit. Add funds or choose a plan in Settings > Billing. Or add an AI Gateway or provider key in Settings > API Keys.";
     case "cancelled":
       return `The run was cancelled before it completed. Incident ${incidentId}.`;
     case "timeout":

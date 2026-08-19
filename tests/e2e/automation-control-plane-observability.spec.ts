@@ -76,7 +76,8 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
           input_tokens: 100,
           output_tokens: 200,
           duration_ms: 50000,
-          error: "lint failed",
+          error:
+            "This Mogplex account cannot use hosted AI because it has no credit. Add funds or choose a plan in Settings > Billing. Or add an AI Gateway or provider key in Settings > API Keys.",
           start_attempts: 1,
           last_start_attempt_at: "2026-03-21T19:00:00.000Z",
           last_start_error: null,
@@ -391,6 +392,12 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Requeue" })).toBeVisible();
+  await page.getByText("Refactor Bot").click();
+  await expect(
+    page.getByText(
+      "This Mogplex account cannot use hosted AI because it has no credit. Add funds or choose a plan in Settings > Billing. Or add an AI Gateway or provider key in Settings > API Keys."
+    )
+  ).toBeVisible();
   await expect(
     page.getByText("Repository run limit reached").first()
   ).toBeVisible();
