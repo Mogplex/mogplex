@@ -21,4 +21,13 @@ export const SENTRY_DENY_URLS: ReadonlyArray<RegExp> = [
   // a domain that merely contains "gadstat.com" as a substring (e.g.
   // `notgadstat.com` or `gadstat.com.attacker.tld`).
   /:\/\/(?:[^/]+\.)?gadstat\.com\//i,
+
+  // MetaMask extension — the extension's inpage.js content script throws
+  // `Error: MetaMask extension not found` for users with a broken or partial
+  // MetaMask install. We don't ship or support MetaMask as an auth provider,
+  // so this is unfixable third-party noise (Sentry issue 7674230253).
+  //
+  // The captured frame URL is `app:///scripts/inpage.js`; anchor on the full
+  // scheme + path so the filter can't match unrelated scripts.
+  /^app:\/\/\/scripts\/inpage\.js$/i, // `$`-anchored so inpage.js.map and siblings don't match
 ];
