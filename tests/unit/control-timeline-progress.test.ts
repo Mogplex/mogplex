@@ -81,7 +81,7 @@ test("control timeline surfaces structured tool failures as failures", () => {
       kind: "fail",
       label: "STEP 1",
       time: "now",
-      body: "Sandbox stopped before becoming ready",
+      body: "Sandbox startup failed.",
       log: "Provider stopped the sandbox",
     },
   ]);

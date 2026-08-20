@@ -71,7 +71,7 @@ function toolProgressBody(
 
 function toolFailureBody(toolName: string) {
   if (toolName === "sandbox_start") {
-    return "Sandbox stopped before becoming ready";
+    return "Sandbox startup failed.";
   }
   if (toolName === "spawn_worktree") return "Worktree creation failed";
   if (toolName === "spawn_subagent") return "Worker start failed";

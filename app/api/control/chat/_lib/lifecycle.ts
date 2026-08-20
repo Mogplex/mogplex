@@ -75,10 +75,9 @@ export function getControlRunFinishState(
 export function getSandboxStartTerminalFailure(event: {
   success: boolean;
   output?: unknown;
-  error?: unknown;
   toolCall: { toolName: string };
 }) {
-  if (event.toolCall.toolName !== "sandbox_start") return null;
+  if (event.toolCall.toolName !== "sandbox_start") return undefined;
   if (!event.success) return "Sandbox startup failed.";
   if (
     event.output === null ||
@@ -91,6 +90,15 @@ export function getSandboxStartTerminalFailure(event: {
   return typeof output.error === "string" || output.status === "error"
     ? "Sandbox startup failed."
     : null;
+}
+
+/** Keep the terminal state aligned with the most recent sandbox launch. */
+export function updateSandboxStartTerminalFailure(
+  currentFailure: string | null,
+  event: Parameters<typeof getSandboxStartTerminalFailure>[0]
+) {
+  const nextFailure = getSandboxStartTerminalFailure(event);
+  return nextFailure === undefined ? currentFailure : nextFailure;
 }
 
 /**

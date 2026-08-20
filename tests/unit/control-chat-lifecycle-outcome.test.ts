@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getControlRunFinishState,
   getSandboxStartTerminalFailure,
+  updateSandboxStartTerminalFailure,
 } from "../../app/api/control/chat/_lib/lifecycle";
 
 test("Control marks a structured sandbox launch failure as failed", () => {
@@ -40,4 +41,24 @@ test("Control keeps a ready sandbox launch eligible for success", () => {
     getControlRunFinishState("stop", terminalFailure).status,
     "success"
   );
+});
+
+test("Control clears a failed launch when a sandbox retry succeeds", () => {
+  const failed = updateSandboxStartTerminalFailure(null, {
+    success: false,
+    toolCall: { toolName: "sandbox_start" },
+  });
+  const recovered = updateSandboxStartTerminalFailure(failed, {
+    success: true,
+    output: { sandboxId: "sandbox-new", status: "running" },
+    toolCall: { toolName: "sandbox_start" },
+  });
+  const afterOtherTool = updateSandboxStartTerminalFailure(recovered, {
+    success: false,
+    toolCall: { toolName: "spawn_worktree" },
+  });
+
+  assert.equal(failed, "Sandbox startup failed.");
+  assert.equal(recovered, null);
+  assert.equal(afterOtherTool, null);
 });

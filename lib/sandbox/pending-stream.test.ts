@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildPendingSandboxWaitStreamResponse } from "@/app/api/sandbox/_lib/pending-stream";
 import { maybeReturnExistingSandboxResponse } from "@/app/api/sandbox/_lib/launch";
 import type { SandboxRecordRow } from "@/lib/types";
@@ -20,6 +20,10 @@ const record = {
 } satisfies SandboxRecordRow;
 
 describe("pending sandbox readiness stream", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("uses the readiness stream for an internal pending reuse", async () => {
     const response = await maybeReturnExistingSandboxResponse(
       {
@@ -88,5 +92,25 @@ describe("pending sandbox readiness stream", () => {
     const body = await response.text();
     expect(body).toContain('"type":"error"');
     expect(body).not.toContain('"type":"ready"');
+  });
+
+  it("keeps readiness exceptions private while returning a safe error", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = buildPendingSandboxWaitStreamResponse({
+      record,
+      userId: "user-1",
+      requestSignal: new AbortController().signal,
+      waitForReadiness: async () => {
+        throw new Error("private database detail");
+      },
+    });
+
+    const body = await response.text();
+    expect(body).toContain("Failed to wait for sandbox readiness.");
+    expect(body).not.toContain("private database detail");
+    expect(log).toHaveBeenCalledWith(
+      "[sandbox] readiness wait failed",
+      expect.any(Error)
+    );
   });
 });

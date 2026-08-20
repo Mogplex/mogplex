@@ -75,12 +75,10 @@ export function buildPendingSandboxWaitStreamResponse(input: {
         }
       } catch (error) {
         if (!waitAbort.signal.aborted) {
+          console.error("[sandbox] readiness wait failed", error);
           emit({
             type: "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to wait for sandbox readiness",
+            message: "Failed to wait for sandbox readiness.",
             phase: "create",
           });
         }

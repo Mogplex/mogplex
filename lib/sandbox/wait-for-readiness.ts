@@ -19,6 +19,8 @@ export type SandboxReadinessWaitResult =
   | { kind: "ready"; snapshot: SandboxReadinessSnapshot }
   | { kind: "failed"; message: string };
 
+export const SANDBOX_READINESS_TIMEOUT_MS = 10 * 60 * 1000;
+
 type SandboxReadinessWaitDeps = {
   createListener: () => Promise<TableEventListener>;
   loadSnapshot: (
@@ -90,6 +92,7 @@ export async function waitForSandboxReadiness(
     sandboxRecordId: string;
     userId: string;
     signal?: AbortSignal;
+    timeoutMs?: number;
   },
   overrides: Partial<SandboxReadinessWaitDeps> = {}
 ): Promise<SandboxReadinessWaitResult> {
@@ -102,18 +105,19 @@ export async function waitForSandboxReadiness(
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
 
     const finish = (
       result: SandboxReadinessWaitResult | null,
-      error?: unknown
+      finishError?: unknown
     ) => {
-      if (settled || (!result && !error)) return;
+      if (settled || (!result && !finishError)) return;
       settled = true;
+      if (timeout) clearTimeout(timeout);
       input.signal?.removeEventListener("abort", abort);
-      void listener.end().finally(() => {
-        if (error) reject(error);
-        else resolve(result!);
-      });
+      void listener.end().catch(() => undefined);
+      if (finishError) reject(finishError);
+      else resolve(result!);
     };
 
     const check = async () => {
@@ -137,6 +141,14 @@ export async function waitForSandboxReadiness(
         void check();
       }
     });
+    timeout = setTimeout(
+      () =>
+        finish({
+          kind: "failed",
+          message: "Sandbox did not become ready before the wait timed out.",
+        }),
+      input.timeoutMs ?? SANDBOX_READINESS_TIMEOUT_MS
+    );
     if (input.signal?.aborted) abort();
     else {
       input.signal?.addEventListener("abort", abort, { once: true });

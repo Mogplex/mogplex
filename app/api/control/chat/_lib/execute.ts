@@ -30,7 +30,7 @@ import {
   markControlRunStreaming,
   finalizeCancelledControlRun,
   finalizeFinishedControlRun,
-  getSandboxStartTerminalFailure,
+  updateSandboxStartTerminalFailure,
 } from "./lifecycle";
 import { normalizeControlChatMessages } from "./messages";
 import { wrapControlResponseLifecycle } from "./stream-lifecycle";
@@ -63,7 +63,7 @@ export async function executeControlChatRequest(input: {
   try {
     aiCall = await createAiCall({
       userId: input.userId,
-      type: "chat",
+      type: "agent",
       model: input.resolvedModel,
       conversationId: scope.conversationId,
       repoId: scope.repoId,
@@ -245,8 +245,10 @@ export async function executeControlChatRequest(input: {
         scope
       ),
       experimental_onToolCallFinish(event) {
-        terminalFailure =
-          getSandboxStartTerminalFailure(event) ?? terminalFailure;
+        terminalFailure = updateSandboxStartTerminalFailure(
+          terminalFailure,
+          event
+        );
         finishToolTelemetry(event);
       },
       onStepFinish(step) {

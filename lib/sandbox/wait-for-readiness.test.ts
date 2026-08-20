@@ -136,4 +136,51 @@ describe("waitForSandboxReadiness", () => {
     await expect(result).rejects.toThrow("client left");
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
+
+  it("ends an event-driven wait after its one-shot safety timeout", async () => {
+    const listener = createListener();
+    const result = waitForSandboxReadiness(
+      {
+        sandboxRecordId: "sandbox-1",
+        userId: "user-1",
+        timeoutMs: 5,
+      },
+      {
+        createListener: async () => listener,
+        loadSnapshot: async () => ({
+          id: "sandbox-1",
+          user_id: "user-1",
+          status: "installing",
+        }),
+      }
+    );
+
+    await expect(result).resolves.toEqual({
+      kind: "failed",
+      message: "Sandbox did not become ready before the wait timed out.",
+    });
+    expect(listener.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let listener cleanup failures replace the readiness result", async () => {
+    const listener = createListener();
+    listener.end = vi.fn(async () => {
+      throw new Error("listener cleanup failed");
+    });
+
+    await expect(
+      waitForSandboxReadiness(
+        { sandboxRecordId: "sandbox-1", userId: "user-1" },
+        {
+          createListener: async () => listener,
+          loadSnapshot: async () => ({
+            id: "sandbox-1",
+            user_id: "user-1",
+            status: "running",
+          }),
+        }
+      )
+    ).resolves.toMatchObject({ kind: "ready" });
+    expect(listener.end).toHaveBeenCalledTimes(1);
+  });
 });
