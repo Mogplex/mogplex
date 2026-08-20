@@ -127,6 +127,8 @@ function buildToolForDef(
     return createListFiles(ctx.githubToken, repoDefaults);
   }
   if (def.name === "write_file") {
+    // Direct execution tools are fixed to the sandbox selected when the run
+    // starts. A mid-run launch only unlocks tools that read sandboxBinding.
     return ctx.sandboxId && !ctx.sandboxSelectionRequired
       ? createWriteFile(ctx.userId, ctx.sandboxId)
       : null;
