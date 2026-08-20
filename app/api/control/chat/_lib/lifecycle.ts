@@ -71,12 +71,16 @@ export function getControlRunFinishState(
   };
 }
 
-/** Translate a structured sandbox launch failure into the run's terminal state. */
+/**
+ * Translate a sandbox launch result into a terminal-state update.
+ * `undefined` preserves the current state for another tool, `null` clears an
+ * earlier sandbox failure, and a string records the latest launch failure.
+ */
 export function getSandboxStartTerminalFailure(event: {
   success: boolean;
   output?: unknown;
   toolCall: { toolName: string };
-}) {
+}): string | null | undefined {
   if (event.toolCall.toolName !== "sandbox_start") return undefined;
   if (!event.success) return "Sandbox startup failed.";
   if (

@@ -101,11 +101,13 @@ export async function waitForSandboxReadiness(
     loadSnapshot: loadSandboxReadinessSnapshot,
     ...overrides,
   };
-  const listener = await deps.createListener();
+  const initialListener = await deps.createListener();
 
   return new Promise((resolve, reject) => {
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
+    let activeListener: TableEventListener | null = initialListener;
+    let reconnectUsed = false;
 
     const finish = (
       result: SandboxReadinessWaitResult | null,
@@ -115,7 +117,9 @@ export async function waitForSandboxReadiness(
       settled = true;
       if (timeout) clearTimeout(timeout);
       input.signal?.removeEventListener("abort", abort);
-      void listener.end().catch(() => undefined);
+      const listener = activeListener;
+      activeListener = null;
+      void listener?.end().catch(() => undefined);
       if (finishError) reject(finishError);
       else resolve(result!);
     };
@@ -134,13 +138,46 @@ export async function waitForSandboxReadiness(
       finish(null, input.signal?.reason ?? new Error("Sandbox wait aborted"));
     };
 
-    listener.onNotification((payload) => {
-      if (
-        isMatchingSandboxEvent(payload, input.sandboxRecordId, input.userId)
-      ) {
-        void check();
+    const reconnect = async (
+      failedListener: TableEventListener,
+      error: Error
+    ) => {
+      if (settled || activeListener !== failedListener) return;
+      if (reconnectUsed) {
+        finish(null, error);
+        return;
       }
-    });
+      reconnectUsed = true;
+      activeListener = null;
+      void failedListener.end().catch(() => undefined);
+
+      try {
+        const replacement = await deps.createListener();
+        if (settled) {
+          void replacement.end().catch(() => undefined);
+          return;
+        }
+        activeListener = replacement;
+        subscribe(replacement);
+        // Subscribe first, then read once to close the reconnect race.
+        void check();
+      } catch (reconnectError) {
+        finish(null, reconnectError);
+      }
+    };
+
+    const subscribe = (listener: TableEventListener) => {
+      listener.onNotification((payload) => {
+        if (
+          activeListener === listener &&
+          isMatchingSandboxEvent(payload, input.sandboxRecordId, input.userId)
+        ) {
+          void check();
+        }
+      });
+      listener.onError((error) => void reconnect(listener, error));
+    };
+
     timeout = setTimeout(
       () =>
         finish({
@@ -149,10 +186,10 @@ export async function waitForSandboxReadiness(
         }),
       input.timeoutMs ?? SANDBOX_READINESS_TIMEOUT_MS
     );
-    listener.onError((error) => finish(null, error));
     if (input.signal?.aborted) abort();
     else {
       input.signal?.addEventListener("abort", abort, { once: true });
+      subscribe(initialListener);
       // Subscribe first, then read once to close the read/subscribe race.
       void check();
     }

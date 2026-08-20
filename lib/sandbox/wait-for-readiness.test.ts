@@ -145,32 +145,88 @@ describe("waitForSandboxReadiness", () => {
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
 
-  it("fails immediately when the Neon listener disconnects", async () => {
-    const listener = createListener();
+  it("reconnects once after the Neon listener disconnects", async () => {
+    const firstListener = createListener();
+    const secondListener = createListener();
     let firstRead!: () => void;
     const firstReadStarted = new Promise<void>((resolve) => {
       firstRead = resolve;
     });
+    const loadSnapshot = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        firstRead();
+        return {
+          id: "sandbox-1",
+          user_id: "user-1",
+          status: "installing",
+        };
+      })
+      .mockResolvedValueOnce({
+        id: "sandbox-1",
+        user_id: "user-1",
+        status: "running",
+      });
+    const createListenerForWait = vi
+      .fn()
+      .mockResolvedValueOnce(firstListener)
+      .mockResolvedValueOnce(secondListener);
     const result = waitForSandboxReadiness(
       { sandboxRecordId: "sandbox-1", userId: "user-1" },
       {
-        createListener: async () => listener,
-        loadSnapshot: async () => {
-          firstRead();
-          return {
-            id: "sandbox-1",
-            user_id: "user-1",
-            status: "installing",
-          };
-        },
+        createListener: createListenerForWait,
+        loadSnapshot,
       }
     );
 
     await firstReadStarted;
-    listener.emitError(new Error("connection lost"));
+    firstListener.emitError(new Error("connection lost"));
 
-    await expect(result).rejects.toThrow("connection lost");
-    expect(listener.end).toHaveBeenCalledTimes(1);
+    await expect(result).resolves.toMatchObject({ kind: "ready" });
+    expect(createListenerForWait).toHaveBeenCalledTimes(2);
+    expect(firstListener.end).toHaveBeenCalledTimes(1);
+    expect(secondListener.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails after a second Neon listener disconnect", async () => {
+    const firstListener = createListener();
+    const secondListener = createListener();
+    let secondRead!: () => void;
+    const secondReadStarted = new Promise<void>((resolve) => {
+      secondRead = resolve;
+    });
+    const createListenerForWait = vi
+      .fn()
+      .mockResolvedValueOnce(firstListener)
+      .mockResolvedValueOnce(secondListener);
+    const loadSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: "sandbox-1",
+        user_id: "user-1",
+        status: "installing",
+      })
+      .mockImplementationOnce(async () => {
+        secondRead();
+        return {
+          id: "sandbox-1",
+          user_id: "user-1",
+          status: "installing",
+        };
+      });
+    const result = waitForSandboxReadiness(
+      { sandboxRecordId: "sandbox-1", userId: "user-1" },
+      { createListener: createListenerForWait, loadSnapshot }
+    );
+
+    await vi.waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(1));
+    firstListener.emitError(new Error("first connection lost"));
+    await secondReadStarted;
+    secondListener.emitError(new Error("second connection lost"));
+
+    await expect(result).rejects.toThrow("second connection lost");
+    expect(firstListener.end).toHaveBeenCalledTimes(1);
+    expect(secondListener.end).toHaveBeenCalledTimes(1);
   });
 
   it("ends an event-driven wait after its one-shot safety timeout", async () => {

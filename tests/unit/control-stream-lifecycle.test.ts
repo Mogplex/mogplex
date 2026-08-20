@@ -103,3 +103,36 @@ test("control stream lifecycle records cancellation before upstream teardown", a
   finishCancel();
   await cancellation;
 });
+
+test("control stream lifecycle ignores a pending read rejection after cancellation", async () => {
+  const closures: string[] = [];
+  let rejectRead!: (error: Error) => void;
+  let reportReadStarted!: () => void;
+  const readStarted = new Promise<void>((resolve) => {
+    reportReadStarted = resolve;
+  });
+  const upstreamReader = {
+    read: () =>
+      new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
+        rejectRead = reject;
+        reportReadStarted();
+      }),
+    cancel: async () => rejectRead(new Error("read cancelled")),
+  };
+  const input = {
+    body: { getReader: () => upstreamReader },
+    headers: new Headers(),
+    status: 200,
+    statusText: "OK",
+  } as unknown as Response;
+  const response = wrapControlResponseLifecycle(input, async (closure) => {
+    closures.push(closure);
+  });
+  const reader = response.body!.getReader();
+  void reader.read();
+  await readStarted;
+
+  await reader.cancel("client left");
+
+  assert.deepEqual(closures, ["cancelled"]);
+});

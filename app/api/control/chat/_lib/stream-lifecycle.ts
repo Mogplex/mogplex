@@ -38,8 +38,8 @@ export function wrapControlResponseLifecycle(
           controller.enqueue(next.value);
         }
       } catch (error) {
-        controller.error(error);
-        await closeOnce("error", error);
+        if (!cancelStarted) controller.error(error);
+        await closeOnce(cancelStarted ? "cancelled" : "error", error);
       }
     },
     async cancel(reason) {

@@ -84,6 +84,10 @@ export function createTableEventListenerFactory(
     await connection.client.end();
   };
 
+  const closeFailedConnection = (connection: SharedTableEventConnection) => {
+    void closeConnection(connection).catch(() => undefined);
+  };
+
   const connect = async () => {
     const client = await deps.createClient();
     const notificationHandlers = new Set<
@@ -98,6 +102,9 @@ export function createTableEventListenerFactory(
       connection.failure = error;
       if (sharedConnection === connection) sharedConnection = null;
       for (const handler of errorHandlers) handler(error);
+      // A pg error is not guaranteed to be followed by an `end` event.
+      // Close explicitly so a failed shared client cannot outlive its leases.
+      closeFailedConnection(connection);
     };
     const notificationListener = (message: Notification) => {
       const payload = parseTableEvent(message);

@@ -68,8 +68,10 @@ describe("table event listener", () => {
 
     expect(firstErrors[0]?.message).toBe("connection lost");
     expect(secondErrors[0]?.message).toBe("connection lost");
+    expect(client.end).toHaveBeenCalledTimes(1);
     await first.end();
     await second.end();
+    expect(client.end).toHaveBeenCalledTimes(1);
   });
 
   it("reports a connection failure registered after the event", async () => {
