@@ -1,4 +1,4 @@
-export type ControlStreamClosure = "complete" | "incomplete";
+export type ControlStreamClosure = "complete" | "cancelled" | "error";
 
 /** Run stream cleanup when the response closes, errors, or the client leaves. */
 export function wrapControlResponseLifecycle(
@@ -25,11 +25,30 @@ export function wrapControlResponseLifecycle(
     return response;
   }
 
-  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  void response.body
-    .pipeTo(writable)
-    .then(() => closeOnce("complete"))
-    .catch((error) => closeOnce("incomplete", error));
+  const upstream = response.body.getReader();
+  const readable = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await upstream.read();
+        if (next.done) {
+          controller.close();
+          await closeOnce("complete");
+        } else {
+          controller.enqueue(next.value);
+        }
+      } catch (error) {
+        controller.error(error);
+        await closeOnce("error", error);
+      }
+    },
+    async cancel(reason) {
+      try {
+        await upstream.cancel(reason);
+      } finally {
+        await closeOnce("cancelled", reason);
+      }
+    },
+  });
 
   return new Response(readable, {
     status: response.status,

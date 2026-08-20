@@ -201,6 +201,25 @@ export async function executeControlChatRequest(input: {
       });
     };
 
+    const finalizeStreamFailure = async () => {
+      if (finalized) return;
+      finalized = true;
+      activeCall.metadata = {
+        ...activeCall.metadata,
+        sandbox_id: sandboxBinding.sandboxId,
+      };
+      await finalizeFinishedControlRun({
+        activeCall,
+        userId: input.userId,
+        scope,
+        limitClaimId: input.limitClaimId,
+        callStartedAt: input.callStartedAt,
+        finishReason: "error",
+        terminalFailure: "Control response stream failed.",
+        steps: completedSteps,
+      });
+    };
+
     // Convert messages to model format. Clients send AI SDK UIMessages
     // (`parts`); a plain `content` string/array is also accepted.
     const uiMessages = normalizeControlChatMessages(input.body.messages);
@@ -301,7 +320,8 @@ export async function executeControlChatRequest(input: {
     return {
       aiCall: activeCall,
       response: wrapControlResponseLifecycle(response, async (closure) => {
-        if (closure === "incomplete") await finalizeCancelled();
+        if (closure === "cancelled") await finalizeCancelled();
+        if (closure === "error") await finalizeStreamFailure();
       }),
     };
   } catch (error) {
