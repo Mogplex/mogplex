@@ -16,6 +16,15 @@ const startSandboxParams = z.object({
 });
 const startServerSelectedSandboxParams = z.object({});
 
+export function getSandboxStartMessage(sandbox: SandboxResolution) {
+  if (sandbox.status === "pending") {
+    return "Sandbox is starting and not yet ready.";
+  }
+  return sandbox.source === "reused_running"
+    ? "Sandbox is already running and ready to use."
+    : "Sandbox is ready to use.";
+}
+
 async function startSandbox(
   userId: string | undefined,
   repoId: string,
@@ -51,10 +60,7 @@ async function startSandbox(
     sandboxId: sandbox.sandboxId,
     status: sandbox.status,
     sandboxResolution: sandbox.source,
-    message:
-      sandbox.source === "reused_running"
-        ? "Sandbox is already running and ready to use."
-        : "Sandbox is ready to use.",
+    message: getSandboxStartMessage(sandbox),
   };
 }
 

@@ -20,6 +20,7 @@ export type SandboxReadinessWaitResult =
   | { kind: "failed"; message: string };
 
 export const SANDBOX_READINESS_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_LISTENER_RECONNECTS = 3;
 
 type SandboxReadinessWaitDeps = {
   createListener: () => Promise<TableEventListener>;
@@ -107,7 +108,7 @@ export async function waitForSandboxReadiness(
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
     let activeListener: TableEventListener | null = initialListener;
-    let reconnectUsed = false;
+    let reconnectAttempts = 0;
 
     const finish = (
       result: SandboxReadinessWaitResult | null,
@@ -148,16 +149,29 @@ export async function waitForSandboxReadiness(
       finish(null, input.signal?.reason ?? new Error("Sandbox wait aborted"));
     };
 
+    const finishAfterListenerFailure = async (listenerError: Error) => {
+      try {
+        const snapshot = await loadSnapshotWithRetry();
+        const terminalResult = resolveSnapshot(snapshot);
+        if (terminalResult) finish(terminalResult);
+        else finish(null, listenerError);
+      } catch (snapshotError) {
+        finish(null, snapshotError);
+      }
+    };
+
     const reconnect = async (
       failedListener: TableEventListener,
       error: Error
     ) => {
       if (settled || activeListener !== failedListener) return;
-      if (reconnectUsed) {
-        finish(null, error);
+      if (reconnectAttempts >= MAX_LISTENER_RECONNECTS) {
+        activeListener = null;
+        void failedListener.end().catch(() => undefined);
+        void finishAfterListenerFailure(error);
         return;
       }
-      reconnectUsed = true;
+      reconnectAttempts += 1;
       activeListener = null;
       void failedListener.end().catch(() => undefined);
 
@@ -172,7 +186,11 @@ export async function waitForSandboxReadiness(
         // Subscribe first, then read once to close the reconnect race.
         void check();
       } catch (reconnectError) {
-        finish(null, reconnectError);
+        void finishAfterListenerFailure(
+          reconnectError instanceof Error
+            ? reconnectError
+            : new Error("Failed to reconnect sandbox readiness listener")
+        );
       }
     };
 

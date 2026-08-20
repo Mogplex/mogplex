@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getControlRunFinishState,
+  getControlStreamTerminalFailure,
   getSandboxStartTerminalFailure,
   updateSandboxStartTerminalFailure,
 } from "../../app/api/control/chat/_lib/lifecycle";
@@ -71,4 +72,15 @@ test("Control preserves a failed launch while a retry remains pending", () => {
   });
 
   assert.equal(failure, "Sandbox startup failed.");
+});
+
+test("Control preserves a sandbox root cause when its response stream also fails", () => {
+  assert.equal(
+    getControlStreamTerminalFailure("Sandbox startup failed."),
+    "Sandbox startup failed."
+  );
+  assert.equal(
+    getControlStreamTerminalFailure(null),
+    "Control response stream failed."
+  );
 });

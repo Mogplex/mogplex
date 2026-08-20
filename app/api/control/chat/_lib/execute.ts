@@ -30,6 +30,7 @@ import {
   markControlRunStreaming,
   finalizeCancelledControlRun,
   finalizeFinishedControlRun,
+  getControlStreamTerminalFailure,
   updateSandboxStartTerminalFailure,
 } from "./lifecycle";
 import { normalizeControlChatMessages } from "./messages";
@@ -217,7 +218,7 @@ export async function executeControlChatRequest(input: {
         limitClaimId: input.limitClaimId,
         callStartedAt: input.callStartedAt,
         finishReason: "error",
-        terminalFailure: "Control response stream failed.",
+        terminalFailure: getControlStreamTerminalFailure(terminalFailure),
         steps: completedSteps,
       });
     };

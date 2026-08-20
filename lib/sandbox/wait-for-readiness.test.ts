@@ -145,7 +145,7 @@ describe("waitForSandboxReadiness", () => {
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
 
-  it("reconnects once after the Neon listener disconnects", async () => {
+  it("reconnects after the Neon listener disconnects", async () => {
     const firstListener = createListener();
     const secondListener = createListener();
     let firstRead!: () => void;
@@ -209,9 +209,10 @@ describe("waitForSandboxReadiness", () => {
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
 
-  it("fails after a second Neon listener disconnect", async () => {
+  it("reconnects again after a second Neon listener disconnect", async () => {
     const firstListener = createListener();
     const secondListener = createListener();
+    const thirdListener = createListener();
     let secondRead!: () => void;
     const secondReadStarted = new Promise<void>((resolve) => {
       secondRead = resolve;
@@ -219,7 +220,8 @@ describe("waitForSandboxReadiness", () => {
     const createListenerForWait = vi
       .fn()
       .mockResolvedValueOnce(firstListener)
-      .mockResolvedValueOnce(secondListener);
+      .mockResolvedValueOnce(secondListener)
+      .mockResolvedValueOnce(thirdListener);
     const loadSnapshot = vi
       .fn()
       .mockResolvedValueOnce({
@@ -234,6 +236,11 @@ describe("waitForSandboxReadiness", () => {
           user_id: "user-1",
           status: "installing",
         };
+      })
+      .mockResolvedValueOnce({
+        id: "sandbox-1",
+        user_id: "user-1",
+        status: "running",
       });
     const result = waitForSandboxReadiness(
       { sandboxRecordId: "sandbox-1", userId: "user-1" },
@@ -245,9 +252,41 @@ describe("waitForSandboxReadiness", () => {
     await secondReadStarted;
     secondListener.emitError(new Error("second connection lost"));
 
-    await expect(result).rejects.toThrow("second connection lost");
+    await expect(result).resolves.toMatchObject({ kind: "ready" });
+    expect(createListenerForWait).toHaveBeenCalledTimes(3);
     expect(firstListener.end).toHaveBeenCalledTimes(1);
     expect(secondListener.end).toHaveBeenCalledTimes(1);
+    expect(thirdListener.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads an authoritative snapshot after exhausting listener reconnects", async () => {
+    const listeners = Array.from({ length: 4 }, createListener);
+    const createListenerForWait = vi.fn();
+    for (const listener of listeners) {
+      createListenerForWait.mockResolvedValueOnce(listener);
+    }
+    const loadSnapshot = vi.fn(async () => ({
+      id: "sandbox-1",
+      user_id: "user-1",
+      status: "installing",
+    }));
+    const result = waitForSandboxReadiness(
+      { sandboxRecordId: "sandbox-1", userId: "user-1" },
+      { createListener: createListenerForWait, loadSnapshot }
+    );
+
+    for (const [index, listener] of listeners.entries()) {
+      await vi.waitFor(() =>
+        expect(createListenerForWait).toHaveBeenCalledTimes(index + 1)
+      );
+      listener.emitError(new Error(`connection lost ${index + 1}`));
+    }
+
+    await expect(result).rejects.toThrow("connection lost 4");
+    expect(loadSnapshot).toHaveBeenCalledTimes(5);
+    for (const listener of listeners) {
+      expect(listener.end).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("ends an event-driven wait after its one-shot safety timeout", async () => {

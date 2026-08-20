@@ -108,6 +108,13 @@ export function updateSandboxStartTerminalFailure(
   return nextFailure === undefined ? currentFailure : nextFailure;
 }
 
+/** Preserve an earlier tool root cause when the response stream also fails. */
+export function getControlStreamTerminalFailure(
+  terminalFailure: string | null
+) {
+  return terminalFailure ?? "Control response stream failed.";
+}
+
 /**
  * Finalize a Control run that was cancelled (aborted).
  */
