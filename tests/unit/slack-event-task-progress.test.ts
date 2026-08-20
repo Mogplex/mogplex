@@ -104,4 +104,11 @@ test("defers partial-text formatting until the updater accepts it", async () => 
 
   assert.equal(typeof pendingText, "function");
   assert.equal((pendingText as () => string | null)(), "*done*");
+
+  await handleProgress({
+    type: "text_delta",
+    textDelta: " ",
+    accumulatedText: " ",
+  });
+  assert.equal((pendingText as () => string | null)(), null);
 });
