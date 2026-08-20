@@ -5,6 +5,8 @@ import type { SlackEventTaskDeps, SlackPostedMessageRef } from "./types";
 /** Slack rate-limits chat.update at roughly 1/sec/channel. */
 const SLACK_UPDATE_MIN_INTERVAL_MS = 1_000;
 
+export type SlackUpdateText = string | (() => string | null);
+
 export function readSlackMessageRef(key: string): SlackPostedMessageRef | null {
   let stored: unknown;
   try {
@@ -144,7 +146,6 @@ export function createDebouncedSlackUpdater(input: {
       new Promise<void>((resolve) => {
         setTimeout(resolve, milliseconds);
       }));
-  let latestText = "";
   let lastSettledText = "";
   let lastSentAt = 0;
   let inFlight: Promise<void> | null = null;
@@ -174,25 +175,17 @@ export function createDebouncedSlackUpdater(input: {
     return request;
   };
 
-  const pushUpdate = async function pushUpdate(text: string) {
-    latestText = text;
-    if (latestText === lastSettledText) return;
-    if (inFlight) return; // keep only the latest update while one is in flight
+  const pushUpdate = async function pushUpdate(nextText: SlackUpdateText) {
+    if (inFlight) return; // coalesce while another Slack edit is in flight
     const elapsed = now() - lastSentAt;
     if (elapsed < minIntervalMs) return;
-    void sendBestEffort(latestText);
+    const text = typeof nextText === "function" ? nextText() : nextText;
+    if (!text || text === lastSettledText) return;
+    void sendBestEffort(text);
   };
 
   return Object.assign(pushUpdate, {
-    async flush() {
-      if (inFlight) await inFlight;
-      if (latestText && latestText !== lastSettledText) {
-        await waitForUpdateWindow();
-        await sendBestEffort(latestText);
-      }
-    },
     async finalize(text: string) {
-      latestText = text;
       if (inFlight) await inFlight;
       await waitForUpdateWindow();
       await input.updateMessage(input.botToken, {
