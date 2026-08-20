@@ -69,6 +69,7 @@ export type {
 // Re-export tested functions
 export { buildSlackToolExecutionIdempotencyKey } from "./slack-event-lib/modes";
 export { createDebouncedSlackUpdater } from "./slack-event-lib/messaging";
+export { formatSlackAgentProgress } from "./slack-event-lib/progress";
 export { SlackConversationPersistConflictError } from "./slack-event-lib/conversation";
 export { formatSlackConversationalReply } from "./slack-event-lib/system";
 

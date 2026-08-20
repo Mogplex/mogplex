@@ -330,3 +330,79 @@ export function createGithubPullRequestTool(
     },
   });
 }
+
+const githubUpdatePullRequestParams = z
+  .object({
+    number: z.number().int().positive(),
+    title: z.string().trim().min(1).max(256).optional(),
+    body: z.string().max(20_000).optional(),
+  })
+  .strict()
+  .refine((input) => input.title !== undefined || input.body !== undefined, {
+    message: "Provide a title or body to update.",
+  });
+
+export function createGithubPullRequestUpdateTool(
+  githubToken?: string | null,
+  repoDefaults?: RepoToolDefaults
+) {
+  return defineTool({
+    description:
+      "Update the title or body of an existing pull request in the current workspace repository. Read the current pull request first when preserving existing body content, then provide the complete replacement value.",
+    inputSchema: githubUpdatePullRequestParams,
+    execute: async ({
+      number,
+      title,
+      body,
+    }: z.infer<typeof githubUpdatePullRequestParams>) => {
+      const context = resolveGithubApiContext(githubToken, repoDefaults);
+      if ("error" in context) return { error: context.error };
+
+      const updates = {
+        ...(title === undefined ? {} : { title }),
+        ...(body === undefined ? {} : { body }),
+      };
+      if (Object.keys(updates).length === 0) {
+        return { error: "Provide a title or body to update." };
+      }
+
+      const url = new URL(
+        `/repos/${encodeURIComponent(context.owner)}/${encodeURIComponent(context.repo)}/pulls/${number}`,
+        GITHUB_API_ORIGIN
+      );
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${githubToken}`,
+          "Content-Type": "application/json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "mogplex-agent",
+        },
+        body: JSON.stringify(updates),
+      });
+      const updated = (await response.json().catch(() => ({}))) as {
+        number?: number;
+        html_url?: string;
+        title?: string;
+        body?: string | null;
+        message?: string;
+      };
+      if (!response.ok || !updated.html_url) {
+        return {
+          error:
+            updated.message ||
+            `GitHub could not update the pull request (${response.status}).`,
+        };
+      }
+
+      return {
+        ok: true,
+        pullRequestNumber: updated.number ?? number,
+        pullRequestUrl: updated.html_url,
+        title: updated.title ?? null,
+        body: updated.body ?? "",
+      };
+    },
+  });
+}

@@ -24,11 +24,17 @@ import {
   buildSlackUserMessage,
 } from "./attachments";
 import {
+  createDebouncedSlackUpdater,
+  finalizeSlackUpdaterBestEffort,
   postOrReuseSlackMessage,
   updateMessageBestEffort,
   postMessageBestEffort,
   saveSlackTerminalState,
 } from "./messaging";
+import {
+  createSlackAgentProgressHandler,
+  SLACK_INITIAL_PROGRESS_TEXT,
+} from "./progress";
 import {
   getSlackReplyThreadTs,
   resolveSlackConversationLinkState,
@@ -42,9 +48,6 @@ import {
 import { evaluateSlackRepoAgentPolicy } from "./policy";
 import { releaseSlackRepoAgentQuotaReservationBestEffort } from "./quota";
 import { buildSlackThreadContext } from "./thread-context";
-
-/** A blank/empty Slack message is rejected - always send something. */
-const PLACEHOLDER_TEXT = "_Thinking..._";
 
 // Trigger hard-stops this task at 15 minutes. Abort the model first so the
 // normal catch path still has time to replace the Slack placeholder.
@@ -153,7 +156,14 @@ export async function runConversationalMode(input: {
     postThreadTs,
     eventId: payload.eventId,
     metadataKey: "slackConversationalPlaceholder",
-    text: PLACEHOLDER_TEXT,
+    text: SLACK_INITIAL_PROGRESS_TEXT,
+  });
+  const progressUpdater = createDebouncedSlackUpdater({
+    botToken,
+    channel: payload.channelId,
+    ts: placeholder.ts,
+    updateMessage: deps.updateMessage,
+    now: () => deps.now().getTime(),
   });
 
   let completed: {
@@ -208,6 +218,7 @@ export async function runConversationalMode(input: {
         attribution,
       }),
       abortSignal: AbortSignal.timeout(SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS),
+      onProgress: createSlackAgentProgressHandler(progressUpdater),
     });
     completed = { agentResult, attachments, userMessage };
   } catch (error) {
@@ -216,14 +227,9 @@ export async function runConversationalMode(input: {
       eventId: payload.eventId,
       error,
     });
-    const terminalFailureDelivered = await updateMessageBestEffort(
-      deps,
-      botToken,
-      {
-        channel: payload.channelId,
-        ts: placeholder.ts,
-        text: ":warning: Mogplex hit an error while responding. Try again from Slack or open Mogplex for details.",
-      },
+    const terminalFailureDelivered = await finalizeSlackUpdaterBestEffort(
+      progressUpdater,
+      ":warning: Mogplex hit an error while responding. Try again from Slack or open Mogplex for details.",
       "agent error placeholder update"
     );
     if (terminalFailureDelivered) {
@@ -237,11 +243,7 @@ export async function runConversationalMode(input: {
   const finalText = formatFinalSlackText(agentResult.finalText);
   const slackFinalText = fitSlackMessageText(finalText);
 
-  await deps.updateMessage(botToken, {
-    channel: payload.channelId,
-    ts: placeholder.ts,
-    text: slackFinalText,
-  });
+  await progressUpdater.finalize(slackFinalText);
   await saveSlackTerminalState("delivered");
 
   await persistConversationTurn({

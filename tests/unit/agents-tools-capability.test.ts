@@ -37,6 +37,10 @@ test("buildStaticTools defaults to ALL_CAPABILITIES — solo callers see every t
     (tools as Record<string, unknown>).github_create_issue,
     "github_create_issue present for authenticated users"
   );
+  assert.ok(
+    (tools as Record<string, unknown>).github_update_pull_request,
+    "github_update_pull_request present when token + cap"
+  );
 });
 
 test("buildStaticTools filters bash/write_file/github_api out of viewer scope", async () => {
@@ -62,6 +66,10 @@ test("buildStaticTools filters bash/write_file/github_api out of viewer scope", 
   assert.equal((tools as Record<string, unknown>).github_pr_search, undefined);
   assert.equal(
     (tools as Record<string, unknown>).github_create_issue,
+    undefined
+  );
+  assert.equal(
+    (tools as Record<string, unknown>).github_update_pull_request,
     undefined
   );
   assert.equal((tools as Record<string, unknown>).read_file, undefined);
@@ -102,6 +110,7 @@ test("buildStaticTools keeps developer-level tools but excludes admin-only ones"
   assert.ok((tools as Record<string, unknown>).github_api);
   assert.ok((tools as Record<string, unknown>).github_pr_search);
   assert.ok((tools as Record<string, unknown>).github_create_issue);
+  assert.ok((tools as Record<string, unknown>).github_update_pull_request);
   assert.ok((tools as Record<string, unknown>).read_file);
   assert.ok((tools as Record<string, unknown>).list_files);
 });

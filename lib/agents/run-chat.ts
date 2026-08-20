@@ -73,6 +73,7 @@ export type ChatModelStreamHooks = Partial<
     | "experimental_onToolCallStart"
     | "experimental_onToolCallFinish"
     | "onAbort"
+    | "onChunk"
     | "onFinish"
     | "onStepFinish"
   >

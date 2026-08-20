@@ -133,40 +133,89 @@ export function createDebouncedSlackUpdater(input: {
   updateMessage: typeof updateSlackMessage;
   minIntervalMs?: number;
   now?: () => number;
+  wait?: (milliseconds: number) => Promise<void>;
 }) {
   const minIntervalMs = input.minIntervalMs ?? SLACK_UPDATE_MIN_INTERVAL_MS;
   const now = input.now ?? Date.now;
-  let lastSentText = "";
+  // This one-shot wait spaces Slack edits. It does not check status or repeat.
+  const wait =
+    input.wait ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, milliseconds);
+      }));
+  let latestText = "";
+  let lastSettledText = "";
   let lastSentAt = 0;
   let inFlight: Promise<void> | null = null;
 
-  const pushUpdate = async function pushUpdate(latestText: string) {
-    if (latestText === lastSentText) return;
-    if (inFlight) return; // collapse concurrent attempts
-    const elapsed = now() - lastSentAt;
-    if (elapsed < minIntervalMs) return;
+  const waitForUpdateWindow = async () => {
+    const remaining = minIntervalMs - (now() - lastSentAt);
+    if (lastSentAt > 0 && remaining > 0) await wait(remaining);
+  };
 
-    lastSentText = latestText;
+  const sendBestEffort = (text: string) => {
     lastSentAt = now();
-
-    inFlight = input
+    const request = input
       .updateMessage(input.botToken, {
         channel: input.channel,
         ts: input.ts,
-        text: latestText,
+        text,
       })
       .then(() => undefined)
       .catch((error) => {
         console.warn("[slack-event] streaming chat.update failed", error);
       })
       .finally(() => {
-        inFlight = null;
+        lastSettledText = text;
+        if (inFlight === request) inFlight = null;
       });
+    inFlight = request;
+    return request;
+  };
+
+  const pushUpdate = async function pushUpdate(text: string) {
+    latestText = text;
+    if (latestText === lastSettledText) return;
+    if (inFlight) return; // keep only the latest update while one is in flight
+    const elapsed = now() - lastSentAt;
+    if (elapsed < minIntervalMs) return;
+    void sendBestEffort(latestText);
   };
 
   return Object.assign(pushUpdate, {
     async flush() {
       if (inFlight) await inFlight;
+      if (latestText && latestText !== lastSettledText) {
+        await waitForUpdateWindow();
+        await sendBestEffort(latestText);
+      }
+    },
+    async finalize(text: string) {
+      latestText = text;
+      if (inFlight) await inFlight;
+      await waitForUpdateWindow();
+      await input.updateMessage(input.botToken, {
+        channel: input.channel,
+        ts: input.ts,
+        text,
+      });
+      lastSettledText = text;
+      lastSentAt = now();
     },
   });
+}
+
+export async function finalizeSlackUpdaterBestEffort(
+  updater: Pick<ReturnType<typeof createDebouncedSlackUpdater>, "finalize">,
+  text: string,
+  context: string
+) {
+  try {
+    await updater.finalize(text);
+    return true;
+  } catch (error) {
+    console.warn(`[slack-event] ${context} failed`, error);
+    return false;
+  }
 }

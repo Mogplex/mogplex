@@ -77,7 +77,7 @@ Prefer sandbox tools (bash, write_file) over GitHub API tools (read_file, list_f
 
 When editing files, read the current content first with bash (e.g. \`cat src/app/page.tsx\`), then use write_file to apply changes. For multi-file changes, batch them and verify with bash.
 
-${gitSyncInstruction} If you make code changes, run the relevant tests, commit and push ${branch}, then call github_create_pull_request with head ${branch} and base ${baseBranch}. Include the pull request URL in your final response. Never leave completed work only inside the sandbox.
+${gitSyncInstruction} If you make code changes, run the relevant tests, commit and push ${branch}, then call github_create_pull_request with head ${branch} and base ${baseBranch}. If an existing pull request needs a title or body correction, inspect its current metadata and use github_update_pull_request instead of asking the user to edit it. Include the pull request URL in your final response. Never leave completed work only inside the sandbox.
 
 You can stop the sandbox with stop_sandbox when the user is done.
 </sandbox>

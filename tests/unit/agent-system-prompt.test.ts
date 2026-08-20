@@ -24,6 +24,10 @@ test("sandbox agents receive the fetch, checkout, push, and PR delivery contract
     prompt,
     /github_create_pull_request with head mogplex\/fix-checkout and base main/
   );
+  assert.match(
+    prompt,
+    /use github_update_pull_request instead of asking the user to edit it/
+  );
   assert.match(prompt, /Never leave completed work only inside the sandbox/);
 });
 
