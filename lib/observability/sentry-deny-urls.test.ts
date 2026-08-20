@@ -12,8 +12,12 @@ describe("SENTRY_DENY_URLS", () => {
     });
 
     it("does not match same-path scripts on http(s) origins", () => {
-      expect(matchesAnyDenyUrl("https://app.mogplex.com/scripts/inpage.js")).toBe(false);
-      expect(matchesAnyDenyUrl("http://localhost:3000/scripts/inpage.js")).toBe(false);
+      expect(
+        matchesAnyDenyUrl("https://app.mogplex.com/scripts/inpage.js")
+      ).toBe(false);
+      expect(matchesAnyDenyUrl("http://localhost:3000/scripts/inpage.js")).toBe(
+        false
+      );
     });
 
     it("does not match other app-scheme scripts", () => {
@@ -30,7 +34,9 @@ describe("SENTRY_DENY_URLS", () => {
 
     it("does not match lookalike domains", () => {
       expect(matchesAnyDenyUrl("https://notgadstat.com/x.js")).toBe(false);
-      expect(matchesAnyDenyUrl("https://gadstat.com.attacker.tld/x.js")).toBe(false);
+      expect(matchesAnyDenyUrl("https://gadstat.com.attacker.tld/x.js")).toBe(
+        false
+      );
     });
   });
 });
