@@ -99,12 +99,19 @@ export function useFlowCrudHandlers(
         if (!response.ok) {
           throw new Error(payload.error || "Failed to create flow");
         }
-        await mutateFlows();
+        // Insert the server-returned flow without revalidating: a refetch
+        // fired in this window can commit an in-flight pre-create response
+        // (SWR dedupes concurrent requests per key), dropping the new flow
+        // from the list and bouncing the selection away from it.
+        const created = payload as Flow;
+        await mutateFlows((current) => [...(current ?? []), created], {
+          revalidate: false,
+        });
         setBrowseInstallationId(createInstallationId);
         setBrowseRepositories(
           createRepository === "all" ? [] : [createRepository]
         );
-        setSelectedFlowId(payload.id);
+        setSelectedFlowId(created.id);
         setTemplatePickerOpen(false);
         const template =
           savedTemplate ??
@@ -148,8 +155,13 @@ export function useFlowCrudHandlers(
       if (!response.ok) {
         throw new Error(payload.error || "Failed to duplicate flow");
       }
-      await mutateFlows();
-      setSelectedFlowId(payload.id);
+      // Same stale-revalidation race as create: insert the copy without
+      // refetching so the selection cannot bounce off a stale list.
+      const duplicate = payload as Flow;
+      await mutateFlows((current) => [...(current ?? []), duplicate], {
+        revalidate: false,
+      });
+      setSelectedFlowId(duplicate.id);
       toast({ title: "Flow duplicated" });
     } catch (error) {
       toast({
