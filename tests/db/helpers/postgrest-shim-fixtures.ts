@@ -97,6 +97,25 @@ export const SCHEMA = /* sql */ `
     where id = p_repo returning metadata
   $$;
 
+  create function echo_json(p_payload json) returns json
+  language sql as $$ select p_payload $$;
+
+  create function jsonb_is_sql_null(p_payload jsonb) returns boolean
+  language sql as $$ select p_payload is null $$;
+
+  create domain jsonb_payload as jsonb;
+
+  create function echo_domain_payload(p_payload jsonb_payload) returns jsonb
+  language sql as $$ select p_payload::jsonb $$;
+
+  create function echo_jsonb_after_out(
+    p_prefix text,
+    out p_ignored text,
+    p_payload jsonb,
+    out p_value jsonb
+  )
+  language sql as $$ select p_prefix, p_payload $$;
+
   create function echo_claimed_at(p_claimed_at timestamptz) returns timestamptz
   language sql as $$ select p_claimed_at $$;
 
@@ -203,6 +222,7 @@ export async function createPostgrestTestDb(): Promise<{
   pglite: PGlite;
   db: PostgrestShim;
   ids: TestIds;
+  queryable: Queryable;
 }> {
   const pglite = new PGlite({
     parsers: Object.fromEntries(
@@ -221,5 +241,5 @@ export async function createPostgrestTestDb(): Promise<{
   };
   const ids = await seed(queryable);
   const db = createPostgrestShim(queryable);
-  return { pglite, db, ids };
+  return { pglite, db, ids, queryable };
 }
