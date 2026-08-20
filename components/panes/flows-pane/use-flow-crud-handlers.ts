@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import type { KeyedMutator } from "swr";
 import { toast } from "@/hooks/use-toast";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import {
@@ -20,7 +21,7 @@ export type FlowCrudHandlersDeps = {
   selectedFlow: Flow | undefined;
   activeTeamId: string | null;
   // Mutators
-  mutateFlows: () => Promise<Flow[] | undefined>;
+  mutateFlows: KeyedMutator<Flow[]>;
 };
 
 export type FlowCrudHandlers = {
@@ -173,9 +174,17 @@ export function useFlowCrudHandlers(
       if (!response.ok) {
         throw new Error(payload.error || "Failed to delete flow");
       }
-      await mutateFlows();
+      // Clear the selection and drop the flow from the list cache up front.
+      // Awaiting a plain revalidation here can commit a stale in-flight
+      // response that still contains the deleted flow (SWR dedupes concurrent
+      // requests for the same key), which would reselect it.
+      const deletedFlowId = selectedFlow.id;
       setSelectedFlowId((current) =>
-        current === selectedFlow.id ? null : current
+        current === deletedFlowId ? null : current
+      );
+      await mutateFlows(
+        (current) => current?.filter((flow) => flow.id !== deletedFlowId),
+        { revalidate: true }
       );
       toast({
         title: "Workflow deleted",
