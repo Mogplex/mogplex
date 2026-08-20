@@ -7,7 +7,7 @@ import {
   withPatchedSandboxLookup,
 } from "./helpers/agents-tools-fixtures";
 
-test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async () => {
+test("start_sandbox rejects a pending JSON response without readiness events", async () => {
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
     await withPatchedSandboxLookup(null, async () => {
       await withPatchedFetch(
@@ -35,12 +35,8 @@ test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async ()
           });
 
           assert.deepEqual(result, {
-            ok: true,
-            sandboxId: "sandbox-record-1",
-            status: "pending",
-            sandboxResolution: "reused_pending",
-            message:
-              "Sandbox startup is already in progress. The preview pane will update automatically when it's ready.",
+            error: "Sandbox startup did not provide a readiness stream.",
+            reason: "sandbox_unavailable",
           });
         }
       );
@@ -48,7 +44,7 @@ test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async ()
   });
 });
 
-test("start_sandbox returns as soon as sandbox creation is acknowledged over SSE", async () => {
+test("start_sandbox waits for the sandbox readiness event over SSE", async () => {
   const encoder = new TextEncoder();
 
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
@@ -91,28 +87,16 @@ test("start_sandbox returns as soon as sandbox creation is acknowledged over SSE
             execute: (input: { repoId: string }) => Promise<unknown>;
           };
 
-          const result = await Promise.race([
-            tool.execute({
-              repoId: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
-            }),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () =>
-                  reject(
-                    new Error("Timed out waiting for sandbox_created result")
-                  ),
-                100
-              )
-            ),
-          ]);
+          const result = await tool.execute({
+            repoId: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+          });
 
           assert.deepEqual(result, {
             ok: true,
             sandboxId: "sandbox-record-2",
-            status: "pending",
+            status: "running",
             sandboxResolution: "created",
-            message:
-              "Sandbox is launching. The preview pane will update automatically when it's ready.",
+            message: "Sandbox is ready to use.",
           });
         }
       );

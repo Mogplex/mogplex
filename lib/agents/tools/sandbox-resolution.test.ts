@@ -170,31 +170,6 @@ describe("sandbox resolution contract", () => {
     });
   });
 
-  it("resolves an owned full name and consumes sandbox creation SSE", async () => {
-    installSandboxRows([], {
-      id: "00000000-0000-4000-8000-000000000001",
-    });
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(
-          new TextEncoder().encode(
-            'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n'
-          )
-        );
-      },
-    });
-    global.fetch = async () =>
-      new Response(stream, {
-        headers: { "Content-Type": "text/event-stream" },
-      });
-
-    expect(await resolveOrCreateSandbox("user-1", "acme/demo")).toEqual({
-      sandboxId: "sandbox-sse",
-      status: "pending",
-      source: "created",
-    });
-  });
-
   it("rejects missing or unowned repository context", async () => {
     await expect(resolveOrCreateSandbox()).resolves.toBeNull();
     await expect(resolveOrCreateSandbox("user-1")).resolves.toBeNull();

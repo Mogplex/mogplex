@@ -80,9 +80,9 @@ test("control shows sandbox launch and command output above the composer", async
 
   const terminal = page.getByTestId("control-terminal-activity");
   await expect(terminal).toBeVisible();
-  await expect(terminal).toContainText("Live terminal");
-  await expect(terminal).toContainText("Read only");
-  await expect(terminal).toContainText("sandbox-demo");
+  await expect(terminal).toContainText("Agent Terminal");
+  await expect(terminal).toContainText("READ ONLY");
+  await expect(terminal).not.toContainText("sandbox-demo");
   await expect(terminal).toContainText("pnpm test");
   await expect(terminal).toContainText("12 tests passed");
   await expect(terminal).toContainText("Sandbox failed");

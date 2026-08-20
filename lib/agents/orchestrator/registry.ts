@@ -151,7 +151,15 @@ function buildToolForDef(
   }
   if (def.name === "sandbox_start") {
     if (ctx.sandboxSelectionRequired) return null;
-    return ctx.repoId ? createStartSandbox(ctx.userId, ctx.repoId) : null;
+    return ctx.repoId
+      ? createStartSandbox(ctx.userId, ctx.repoId, (resolution) => {
+          ctx.sandboxId = resolution.sandboxId;
+          if (ctx.sandboxBinding) {
+            ctx.sandboxBinding.sandboxId = resolution.sandboxId;
+            ctx.sandboxBinding.status = resolution.status;
+          }
+        })
+      : null;
   }
   if (def.name === "sandbox_stop") {
     return ctx.sandboxId && !ctx.sandboxSelectionRequired
@@ -220,6 +228,10 @@ function buildToolForDef(
 export function buildOrchestratorTools(
   ctx: OrchestratorToolContext
 ): Record<string, Tool> {
+  ctx.sandboxBinding ??= {
+    sandboxId: ctx.sandboxId ?? null,
+    status: ctx.sandboxId ? "running" : "unavailable",
+  };
   const repoDefaults = buildRepoDefaults(ctx);
   const tools: Record<string, Tool> = {};
 

@@ -30,8 +30,10 @@ import {
   markControlRunStreaming,
   finalizeCancelledControlRun,
   finalizeFinishedControlRun,
+  getSandboxStartTerminalFailure,
 } from "./lifecycle";
 import { normalizeControlChatMessages } from "./messages";
+import { wrapControlResponseLifecycle } from "./stream-lifecycle";
 import type {
   ControlChatRequestBody,
   ActiveControlCall,
@@ -61,7 +63,7 @@ export async function executeControlChatRequest(input: {
   try {
     aiCall = await createAiCall({
       userId: input.userId,
-      type: "agent",
+      type: "chat",
       model: input.resolvedModel,
       conversationId: scope.conversationId,
       repoId: scope.repoId,
@@ -86,6 +88,12 @@ export async function executeControlChatRequest(input: {
     };
     const activeSandboxes = sandboxContext.sandboxes;
     const selectedSandboxId = resolveControlToolSandboxId(sandboxContext);
+    const sandboxBinding: NonNullable<
+      OrchestratorToolContext["sandboxBinding"]
+    > = {
+      sandboxId: selectedSandboxId,
+      status: selectedSandboxId ? "running" : "unavailable",
+    };
 
     // Both writes are fail-open, but awaiting them preserves ordering so
     // qualification never observes a decision without its owning context.
@@ -100,6 +108,7 @@ export async function executeControlChatRequest(input: {
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
       sandboxId: selectedSandboxId,
+      sandboxBinding,
       sandboxSelectionRequired: sandboxContext.selectionRequired,
       repoId: input.body.repoId,
       repoOwner: input.body.repoOwner,
@@ -167,6 +176,30 @@ export async function executeControlChatRequest(input: {
     );
 
     let finalized = false;
+    let terminalFailure: string | null = null;
+    const completedSteps: Array<{
+      toolCalls?: Array<{ toolName: string; input?: unknown }>;
+      toolResults?: unknown[];
+    }> = [];
+
+    const finalizeCancelled = async (
+      steps: typeof completedSteps = completedSteps
+    ) => {
+      if (finalized) return;
+      finalized = true;
+      activeCall.metadata = {
+        ...activeCall.metadata,
+        sandbox_id: sandboxBinding.sandboxId,
+      };
+      await finalizeCancelledControlRun({
+        activeCall,
+        userId: input.userId,
+        scope,
+        limitClaimId: input.limitClaimId,
+        callStartedAt: input.callStartedAt,
+        steps,
+      });
+    };
 
     // Convert messages to model format. Clients send AI SDK UIMessages
     // (`parts`); a plain `content` string/array is also accepted.
@@ -186,6 +219,18 @@ export async function executeControlChatRequest(input: {
       abortSignal: input.req.signal,
     });
 
+    const finishToolTelemetry = createToolCallFinishHandler(
+      activeCall,
+      input.userId,
+      scope,
+      () => ({
+        repoId: scope.repoId,
+        missionId: scope.missionId,
+        orchestrationRunId: worktreeContext.orchestrationRunId,
+        selectedSandboxId: sandboxBinding.sandboxId,
+      })
+    );
+
     const result = streamText({
       model,
       providerOptions,
@@ -199,32 +244,24 @@ export async function executeControlChatRequest(input: {
         input.userId,
         scope
       ),
-      experimental_onToolCallFinish: createToolCallFinishHandler(
-        activeCall,
-        input.userId,
-        scope,
-        {
-          repoId: scope.repoId,
-          missionId: scope.missionId,
-          orchestrationRunId: worktreeContext.orchestrationRunId,
-          selectedSandboxId,
-        }
-      ),
+      experimental_onToolCallFinish(event) {
+        terminalFailure =
+          getSandboxStartTerminalFailure(event) ?? terminalFailure;
+        finishToolTelemetry(event);
+      },
+      onStepFinish(step) {
+        completedSteps.push(step);
+      },
       async onAbort({ steps }) {
-        if (finalized) return;
-        finalized = true;
-        await finalizeCancelledControlRun({
-          activeCall,
-          userId: input.userId,
-          scope,
-          limitClaimId: input.limitClaimId,
-          callStartedAt: input.callStartedAt,
-          steps,
-        });
+        await finalizeCancelled(steps);
       },
       async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
         if (finalized) return;
         finalized = true;
+        activeCall.metadata = {
+          ...activeCall.metadata,
+          sandbox_id: sandboxBinding.sandboxId,
+        };
         await finalizeFinishedControlRun({
           activeCall,
           userId: input.userId,
@@ -232,6 +269,7 @@ export async function executeControlChatRequest(input: {
           limitClaimId: input.limitClaimId,
           callStartedAt: input.callStartedAt,
           finishReason,
+          terminalFailure,
           totalUsage,
           providerMetadata,
           steps,
@@ -254,10 +292,14 @@ export async function executeControlChatRequest(input: {
       },
     });
 
+    const response = result.toUIMessageStreamResponse({
+      messageMetadata: () => ({ ai_call_id: activeCall.id }),
+    });
+
     return {
       aiCall: activeCall,
-      response: result.toUIMessageStreamResponse({
-        messageMetadata: () => ({ ai_call_id: activeCall.id }),
+      response: wrapControlResponseLifecycle(response, async (closure) => {
+        if (closure === "incomplete") await finalizeCancelled();
       }),
     };
   } catch (error) {

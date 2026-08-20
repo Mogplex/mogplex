@@ -23,7 +23,7 @@ test("buildCombinedTimeline renders user messages as YOU events", () => {
     events.map((event) => [event.kind, event.body]),
     [
       ["user", "Investigate the auth bug"],
-      ["tool", "Found it."],
+      ["assistant", "Found it."],
     ]
   );
   assert.equal(events[0]?.kind === "user" && events[0].label, "YOU");

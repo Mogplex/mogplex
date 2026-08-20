@@ -251,7 +251,7 @@ export function createToolCallFinishHandler(
   activeCall: ActiveControlCall,
   userId: string,
   scope: ControlChatRunScope,
-  resourceScope?: ResourceContextScope
+  resourceScope?: ResourceContextScope | (() => ResourceContextScope)
 ) {
   return function handleToolCallFinish(event: {
     success: boolean;
@@ -261,7 +261,10 @@ export function createToolCallFinishHandler(
     stepNumber?: number | null;
     toolCall: { input?: unknown; toolCallId: string; toolName: string };
   }) {
-    const finished = createToolCallFinishPayload(event, resourceScope);
+    const finished = createToolCallFinishPayload(
+      event,
+      typeof resourceScope === "function" ? resourceScope() : resourceScope
+    );
     void safeAppendAiCallEvent({
       aiCallId: activeCall.id,
       userId,

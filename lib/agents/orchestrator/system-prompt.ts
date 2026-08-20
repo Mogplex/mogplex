@@ -76,6 +76,7 @@ ${buildToolCategoriesBlock(ctx.availableToolNames)}
 
 <communication>
 - Be direct and concise. Lead with actions, not explanations.
+- Before each major tool action, write one short progress sentence that states the next action and why. Keep private chain-of-thought hidden.
 - Use markdown formatting. Use backticks for file paths, functions, and branch names.
 - Never lie or fabricate information. If you don't know, say so.
 - When showing code changes from worker agents, show unified diffs when practical.
@@ -171,14 +172,14 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
       : "- An explicit request to provision, start, or prepare runtime or preview compute is already authorization to act. Use sandbox_start immediately as the first tool; when compute provisioning is the whole requested outcome, it MUST be the only tool. If the operator also names an unavailable tool with the same effect, ignore that spelling: do not describe the mismatch, ask whether to proceed, or wait for reconfirmation. Starting a sandbox never creates a worktree.\n";
   const spawnWorktreeGuidance = ctx.sandboxSelectionRequired
     ? "- spawn_worktree is unavailable until the operator selects a sandbox.\n"
-    : "- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a selected sandbox and never starts or stops sandbox compute.\n";
+    : "- Use spawn_worktree only for a planned task that needs an isolated Git checkout. It requires a running sandbox and never starts or stops sandbox compute. If sandbox_start returns pending, stop this turn. Do not call sandbox_start or spawn_worktree again while startup is pending.\n";
 
   return `
 <resource-decision-contract>
 ${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}${githubIssueGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
 - Use plan_mission to create task identities before isolated coding work.
 - A clear request to fix or implement code in an isolated task checkout and launch its worker is already a complete coding launch request. The first emitted tool call MUST be plan_mission. Do not call summarize_history, list_files, read_file, search_repo, memory_search, run_command, or sandbox_start first.
-- Call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string. Then call spawn_worktree once for each returned task and spawn_subagent for each resulting worktree. Stop after the requested workers start. Discovery may precede planning only when the operator explicitly requests discovery or has not supplied enough scope to define task boundaries.
+- Call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string. If no running sandbox is selected after planning, call sandbox_start exactly once and wait for its event-driven result. Only after it returns running, call spawn_worktree once for each returned task and spawn_subagent for each resulting worktree. Stop after the requested workers start. Discovery may precede planning only when the operator explicitly requests discovery or has not supplied enough scope to define task boundaries.
 ${spawnWorktreeGuidance}- Use spawn_subagent only after an active persisted worktree exists. The worker must use that worktree's exact sandbox and checkout path.
 - Preview-only, inspection-only, and command-only work must not create a worktree.
 - Sandbox lifecycle operations never mutate worktree lifecycle state. Worktree archive or prune operations never stop or delete sandbox compute.

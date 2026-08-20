@@ -27,7 +27,12 @@ export type SandboxResolutionFailure = {
 
 export function getSandboxRequestHeaders(userId?: string) {
   try {
-    return { headers: buildInternalApiHeaders(userId) };
+    return {
+      headers: {
+        ...buildInternalApiHeaders(userId),
+        Accept: "text/event-stream, application/json",
+      },
+    };
   } catch (error) {
     return {
       error:
@@ -101,21 +106,49 @@ async function readReusedSandboxResponse(
   if (!sandbox?.id) {
     return { error: "Failed to start sandbox", reason: "sandbox_unavailable" };
   }
-  const running = sandbox.runtime_summary?.status === "running";
+  const status = sandbox.runtime_summary?.status ?? sandbox.status;
+  if (
+    status !== "running" &&
+    status !== "creating" &&
+    status !== "installing"
+  ) {
+    const stateMessage =
+      status === "stopped"
+        ? "Sandbox stopped before it became ready."
+        : status === "error"
+          ? "Sandbox failed before it became ready."
+          : status === "paused"
+            ? "Sandbox is paused and not ready for execution."
+            : "Sandbox is not ready for execution.";
+    return { error: stateMessage, reason: "sandbox_unavailable" };
+  }
+  if (status !== "running") {
+    return {
+      error: "Sandbox startup did not provide a readiness stream.",
+      reason: "sandbox_unavailable",
+    };
+  }
   return {
     sandboxId: sandbox.id as string,
-    status: running ? "running" : "pending",
-    source: running ? "reused_running" : "reused_pending",
+    status: "running",
+    source: "reused_running",
   };
 }
 
+type SandboxCreationStreamEvent =
+  | { kind: "ready"; resolution: SandboxResolution }
+  | { kind: "pending"; resolution: SandboxResolution }
+  | { kind: "failed"; failure: SandboxResolutionFailure };
+
 function readSandboxCreationEvent(
   line: string
-): { resolution: SandboxResolution | null } | null {
+): SandboxCreationStreamEvent | null {
   if (!line.startsWith("data: ")) return null;
   let event: {
     type?: string;
-    sandbox?: { id: string };
+    status?: string;
+    message?: string;
+    sandbox?: { id: string; runtime_summary?: { status?: string } };
     recordId?: string;
   };
   try {
@@ -126,6 +159,7 @@ function readSandboxCreationEvent(
 
   if (event.type === "ready" && event.sandbox) {
     return {
+      kind: "ready",
       resolution: {
         sandboxId: event.sandbox.id,
         status: "running",
@@ -135,6 +169,7 @@ function readSandboxCreationEvent(
   }
   if (event.type === "sandbox_created" && event.recordId) {
     return {
+      kind: "pending",
       resolution: {
         sandboxId: event.recordId,
         status: "pending",
@@ -142,7 +177,26 @@ function readSandboxCreationEvent(
       },
     };
   }
-  return event.type === "error" ? { resolution: null } : null;
+  const lifecycleStatus =
+    event.sandbox?.runtime_summary?.status ?? event.status;
+  if (
+    event.type === "error" ||
+    lifecycleStatus === "stopped" ||
+    lifecycleStatus === "error"
+  ) {
+    return {
+      kind: "failed",
+      failure: {
+        error:
+          event.message ||
+          (lifecycleStatus === "stopped"
+            ? "Sandbox stopped before it became ready."
+            : "Sandbox failed before it became ready."),
+        reason: "sandbox_unavailable",
+      },
+    };
+  }
+  return null;
 }
 
 async function consumeSandboxCreationStream(
@@ -156,28 +210,41 @@ async function consumeSandboxCreationStream(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let pending: SandboxResolution | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) return failed;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split(/\r?\n/);
+    buffer = done ? "" : (lines.pop() ?? "");
 
     for (const line of lines) {
       const settled = readSandboxCreationEvent(line);
       if (!settled) continue;
+      if (settled.kind === "pending") {
+        pending = settled.resolution;
+        continue;
+      }
       await reader.cancel().catch(() => {});
-      return settled.resolution ?? failed;
+      return settled.kind === "ready" ? settled.resolution : settled.failure;
     }
+    if (done) break;
   }
+
+  return pending
+    ? {
+        error: "Sandbox stopped before it became ready.",
+        reason: "sandbox_unavailable",
+      }
+    : failed;
 }
 
 /** Resolve selected or unique repo compute, starting it only when absent. */
 export async function resolveOrCreateSandbox(
   userId?: string,
   repoId?: string,
-  selectedSandboxId?: string
+  selectedSandboxId?: string,
+  signal?: AbortSignal
 ): Promise<SandboxResolution | SandboxResolutionFailure | null> {
   if (selectedSandboxId) {
     return {
@@ -225,6 +292,7 @@ export async function resolveOrCreateSandbox(
     method: "POST",
     headers: requestHeaders.headers,
     body: JSON.stringify({ repoId: resolved.repoId }),
+    signal,
   });
 
   return (response.headers.get("Content-Type") || "").includes(

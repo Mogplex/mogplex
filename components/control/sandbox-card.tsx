@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { OpenNewWindow, Refresh, Server, Trash, Xmark } from "iconoir-react";
 import { buildSandboxStateKey, useSandboxStore } from "@/hooks/use-sandbox";
 import type { SandboxRecord } from "@/lib/types";
+import { getSandboxPreviewPresentation } from "@/lib/control/sandbox-presentation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -208,6 +209,7 @@ function SandboxActions({
   sandbox,
   runtimeId,
   previewUrl,
+  previewState,
   lifecycleAction,
   onRunAction,
   onSelect,
@@ -218,6 +220,7 @@ function SandboxActions({
   sandbox: SandboxRecord;
   runtimeId: string;
   previewUrl: string | null;
+  previewState: "ready" | "starting" | "error" | "unavailable";
   lifecycleAction: LifecycleAction | null;
   onRunAction: (action: LifecycleAction) => Promise<void>;
   onSelect: (id: string) => void;
@@ -227,6 +230,14 @@ function SandboxActions({
 }) {
   const status = sandbox.runtime_summary.status;
   const busy = lifecycleAction !== null;
+  const previewDot =
+    previewState === "ready"
+      ? "bg-emerald-400"
+      : previewState === "starting"
+        ? "bg-sky-400"
+        : previewState === "error"
+          ? "bg-delr"
+          : "bg-ink-600";
   return (
     <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
       <button
@@ -246,7 +257,7 @@ function SandboxActions({
       >
         <span
           aria-hidden="true"
-          className={`size-1.5 rounded-full ${previewUrl ? "bg-emerald-400" : "bg-ink-600"}`}
+          className={`size-1.5 rounded-full ${previewDot}`}
         />
         Preview
       </button>
@@ -321,7 +332,14 @@ export function SandboxCard({
   const descriptionId = useId();
   const status = sandbox.runtime_summary.status;
   const badge = BADGE[status] ?? BADGE.stopped;
-  const previewUrl = sandbox.runtime_summary.preview_url;
+  const preview = getSandboxPreviewPresentation({
+    status,
+    healthStatus: sandbox.runtime_summary.health_status,
+    previewUrl: sandbox.runtime_summary.preview_url,
+  });
+  const previewUrl = preview.canOpen
+    ? sandbox.runtime_summary.preview_url
+    : null;
   const runtimeId = sandbox.runtime_summary.sandbox_id || sandbox.id;
   const lines = sandboxLogLines(sandbox, launchLogs);
   const displayError = sandbox.error_summary.display_error || actionError;
@@ -397,8 +415,18 @@ export function SandboxCard({
       </div>
       <dl className="border-ink-800 grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-b px-4 py-3 text-[11.5px]">
         <dt className="text-ink-500">Preview</dt>
-        <dd className={previewUrl ? "text-emerald-300" : "text-ink-400"}>
-          {previewUrl ? "Ready" : "Unavailable"}
+        <dd
+          className={
+            preview.state === "ready"
+              ? "text-emerald-300"
+              : preview.state === "starting"
+                ? "text-sky-300"
+                : preview.state === "error"
+                  ? "text-delr"
+                  : "text-ink-400"
+          }
+        >
+          {preview.label}
         </dd>
         <dt className="text-ink-500">Sandbox record</dt>
         <dd className="text-ink-300 truncate font-mono" title={sandbox.id}>
@@ -416,6 +444,7 @@ export function SandboxCard({
           sandbox={sandbox}
           runtimeId={runtimeId}
           previewUrl={previewUrl}
+          previewState={preview.state}
           lifecycleAction={lifecycleAction}
           onRunAction={runAction}
           onSelect={onSelect}

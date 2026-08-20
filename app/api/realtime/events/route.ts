@@ -1,69 +1,28 @@
 import { NextResponse } from "next/server";
-import type { Client as PgClient, Notification } from "pg";
 import { getResolvedAuth } from "@/lib/auth";
-import { getRuntimeUnpooledDatabaseUrl } from "@/lib/db/connection-urls";
+import {
+  createTableEventListener,
+  type TableEventListener,
+} from "@/lib/db/table-event-listener";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TABLE_NAME_PATTERN = /^[a-z_]+$/;
 
-type TableEventPayload = {
-  table: string;
-  op: string;
-  user_id?: string | null;
-  id?: string | null;
-};
-
-export type ListenerHandle = {
-  onNotification: (handler: (payload: TableEventPayload) => void) => void;
-  end: () => Promise<void>;
-};
+export type ListenerHandle = TableEventListener;
 
 export type RealtimeEventsRouteDeps = {
   getResolvedAuth: typeof getResolvedAuth;
   createListener: () => Promise<ListenerHandle>;
 };
 
-async function defaultCreateListener(): Promise<ListenerHandle> {
-  const { Client } = await import("pg");
-  const client: PgClient = new Client({
-    connectionString: getRuntimeUnpooledDatabaseUrl(),
-  });
-
-  let notificationHandler: ((msg: Notification) => void) | undefined;
-
-  await client.connect();
-  await client.query("LISTEN mogplex_table_events");
-
-  return {
-    onNotification: (handler) => {
-      notificationHandler = (msg: Notification) => {
-        if (msg.channel !== "mogplex_table_events" || !msg.payload) return;
-        try {
-          const payload = JSON.parse(msg.payload) as TableEventPayload;
-          handler(payload);
-        } catch {
-          // Malformed payload, skip
-        }
-      };
-      client.on("notification", notificationHandler);
-    },
-    end: async () => {
-      if (notificationHandler) {
-        client.off("notification", notificationHandler);
-      }
-      await client.end();
-    },
-  };
-}
-
 export function createRealtimeEventsGetHandler(
   overrides: Partial<RealtimeEventsRouteDeps> = {}
 ) {
   const deps: RealtimeEventsRouteDeps = {
     getResolvedAuth,
-    createListener: defaultCreateListener,
+    createListener: createTableEventListener,
     ...overrides,
   };
 

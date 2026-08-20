@@ -50,21 +50,47 @@ export async function markControlRunStreaming(
  * Determine the finish state based on finish reason.
  */
 export function getControlRunFinishState(
-  finishReason: string | null | undefined
+  finishReason: string | null | undefined,
+  terminalFailure?: string | null
 ): {
   status: "success" | "failed";
   error: string | null;
   eventType: "finished" | "failed";
   message: string;
 } {
-  const status = finishReason === "error" ? "failed" : "success";
+  const status =
+    finishReason === "error" || terminalFailure ? "failed" : "success";
   return {
     status,
-    error: finishReason === "error" ? "Stream finished with error" : null,
+    error:
+      terminalFailure ??
+      (finishReason === "error" ? "Stream finished with error" : null),
     eventType: status === "failed" ? "failed" : ("finished" as const),
     message:
       status === "failed" ? "Control run failed" : "Control run finished",
   };
+}
+
+/** Translate a structured sandbox launch failure into the run's terminal state. */
+export function getSandboxStartTerminalFailure(event: {
+  success: boolean;
+  output?: unknown;
+  error?: unknown;
+  toolCall: { toolName: string };
+}) {
+  if (event.toolCall.toolName !== "sandbox_start") return null;
+  if (!event.success) return "Sandbox startup failed.";
+  if (
+    event.output === null ||
+    typeof event.output !== "object" ||
+    Array.isArray(event.output)
+  ) {
+    return null;
+  }
+  const output = event.output as Record<string, unknown>;
+  return typeof output.error === "string" || output.status === "error"
+    ? "Sandbox startup failed."
+    : null;
 }
 
 /**
@@ -117,6 +143,7 @@ export async function finalizeFinishedControlRun(input: {
   limitClaimId: string | null;
   callStartedAt: string;
   finishReason: string | null | undefined;
+  terminalFailure?: string | null;
   totalUsage?: {
     inputTokens?: number | null;
     outputTokens?: number | null;
@@ -130,7 +157,10 @@ export async function finalizeFinishedControlRun(input: {
   await releaseLimitClaimIfNeeded(input.userId, input.limitClaimId);
 
   const toolCalls = summarizeToolCalls(input.steps);
-  const completion = getControlRunFinishState(input.finishReason);
+  const completion = getControlRunFinishState(
+    input.finishReason,
+    input.terminalFailure
+  );
   const usage = captureUsage(
     input.totalUsage as LanguageModelUsage | undefined,
     input.providerMetadata

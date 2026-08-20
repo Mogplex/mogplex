@@ -87,7 +87,8 @@ export function createSandboxPostHandler(
 
     const existingResponse = await maybeReturnExistingSandboxResponse(
       deps,
-      prepared.launch
+      prepared.launch,
+      request
     );
     if (existingResponse) return existingResponse;
 

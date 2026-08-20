@@ -27,13 +27,31 @@ export function Timeline({
   trailing,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const followingRef = useRef(true)
 
-  // Scroll to bottom when new events arrive
+  // Follow streamed content until the user scrolls away from the bottom.
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    const scroll = scrollRef.current
+    const content = contentRef.current
+    if (!scroll || !content) return
+
+    const updateFollowing = () => {
+      const distance = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight
+      followingRef.current = distance < 48
     }
-  }, [events.length])
+    const followContent = () => {
+      if (followingRef.current) scroll.scrollTop = scroll.scrollHeight
+    }
+    scroll.addEventListener("scroll", updateFollowing, { passive: true })
+    const observer = new ResizeObserver(followContent)
+    observer.observe(content)
+    followContent()
+    return () => {
+      scroll.removeEventListener("scroll", updateFollowing)
+      observer.disconnect()
+    }
+  }, [])
 
   return (
     <div
@@ -42,7 +60,7 @@ export function Timeline({
       aria-label="Conversation"
       className="flex-1 overflow-y-auto px-4 py-6 sm:px-6"
     >
-      <div className="mx-auto w-full max-w-5xl space-y-5">
+      <div ref={contentRef} className="mx-auto w-full max-w-5xl space-y-5">
         {events.map((event, idx) => (
           <TimelineCard
             key={`${event.kind}-${idx}`}

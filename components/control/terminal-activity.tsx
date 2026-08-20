@@ -93,13 +93,11 @@ export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
   if (entries.length === 0) return null;
 
   const visibleEntries = entries.slice(-3);
-  const current = visibleEntries.at(-1);
-  const sandboxId = current?.sandboxId;
 
   return (
     <section
       data-testid="control-terminal-activity"
-      aria-label="Live sandbox terminal"
+      aria-label="Agent terminal, read only"
       aria-live="polite"
       aria-atomic="false"
       className="mx-auto mb-3 w-full max-w-[67rem] shrink-0 px-4 sm:px-6"
@@ -114,15 +112,10 @@ export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
             aria-hidden="true"
           />
           <span className="text-ink-300 text-[11px] font-semibold tracking-[0.12em] uppercase">
-            Live terminal
+            Agent Terminal
           </span>
-          {sandboxId ? (
-            <span className="text-ink-500 min-w-0 truncate font-mono text-[10.5px]">
-              {sandboxId}
-            </span>
-          ) : null}
-          <span className="text-ink-500 ml-auto shrink-0 text-[10px] font-medium tracking-wide uppercase">
-            Read only
+          <span className="text-accent-blue ml-auto shrink-0 text-[10px] font-medium tracking-wide uppercase">
+            READ ONLY
           </span>
         </div>
         <div className="divide-ink-900 divide-y px-4 py-3">

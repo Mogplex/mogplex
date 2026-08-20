@@ -43,6 +43,11 @@ export type OrchestratorToolDef = {
 export type OrchestratorToolContext = {
   userId: string;
   sandboxId?: string | null;
+  /** Request-local, server-owned sandbox selected by lifecycle tools. */
+  sandboxBinding?: {
+    sandboxId: string | null;
+    status: "running" | "pending" | "unavailable";
+  };
   /** True only until the operator's sandbox choice is validated server-side. */
   sandboxSelectionRequired?: boolean;
   repoId?: string | null;
