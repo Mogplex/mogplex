@@ -1,6 +1,11 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { parseSelect, type PostgrestShim } from "@/lib/db/postgrest-shim";
+import {
+  parseSelect,
+  type PostgrestShim,
+  type Queryable,
+} from "@/lib/db/postgrest-shim";
+import { getFunctionShape } from "@/lib/db/postgrest-shim/rpc";
 import {
   createPostgrestTestDb,
   type TestIds,
@@ -10,12 +15,14 @@ import {
 let pglite: PGlite;
 let db: PostgrestShim;
 let ids: TestIds;
+let queryable: Queryable;
 
 beforeAll(async () => {
   const setup = await createPostgrestTestDb();
   pglite = setup.pglite;
   db = setup.db;
   ids = setup.ids;
+  queryable = setup.queryable;
 });
 
 afterAll(async () => {
@@ -56,6 +63,52 @@ describe("rpc", () => {
     });
     expect(merged.error).toBeNull();
     expect(merged.data).toMatchObject({ tier: "gold", merged: true });
+  });
+
+  it("maps JSON inputs correctly when OUT parameters precede them", async () => {
+    const payload = [{ slug: "update-default-model" }];
+
+    const shape = await getFunctionShape(
+      queryable,
+      new Map(),
+      "echo_jsonb_after_out"
+    );
+    expect(shape.argumentTypes).toEqual({
+      p_prefix: "text",
+      p_payload: "jsonb",
+    });
+
+    const echoed = await db.rpc("echo_jsonb_after_out", {
+      p_prefix: "accepted",
+      p_payload: payload,
+    });
+
+    expect(echoed.error).toBeNull();
+    expect(echoed.data).toEqual({
+      p_ignored: "accepted",
+      p_value: payload,
+    });
+  });
+
+  it("serializes arrays for json parameters and jsonb domains", async () => {
+    const payload = [{ slug: "update-default-model" }];
+
+    const json = await db.rpc("echo_json", { p_payload: payload });
+    expect(json.error).toBeNull();
+    expect(json.data).toEqual(payload);
+
+    const domain = await db.rpc("echo_domain_payload", {
+      p_payload: payload,
+    });
+    expect(domain.error).toBeNull();
+    expect(domain.data).toEqual(payload);
+  });
+
+  it("preserves SQL null for jsonb parameters", async () => {
+    const result = await db.rpc("jsonb_is_sql_null", { p_payload: null });
+
+    expect(result.error).toBeNull();
+    expect(result.data).toBe(true);
   });
 
   it("passes Date args as scalars, not jsonb, so timestamptz params resolve", async () => {

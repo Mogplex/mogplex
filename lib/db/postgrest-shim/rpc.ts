@@ -37,6 +37,8 @@ function addRpcArgument(
   ) {
     return `${sql.add(JSON.stringify(value))}::${argumentType}`;
   }
+  // Dates must stay scalar: a JSON cast prevents Postgres from resolving
+  // functions with timestamptz parameters.
   return sql.add(value instanceof Date ? value.toISOString() : value);
 }
 
@@ -61,15 +63,32 @@ export async function getFunctionShape(
     `select p.proretset as returns_set,
             t.typname as type_name,
             t.typtype as type_type,
-            p.proargnames as argument_names,
-            array(
-              select pg_catalog.format_type(argument.type_oid, null)
-              from pg_catalog.unnest(p.proargtypes::oid[])
-                as argument(type_oid)
-            ) as argument_types
+            arguments.argument_names,
+            arguments.argument_types
      from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
      join pg_type t on t.oid = p.prorettype
+     left join lateral (
+       select
+         array_agg(argument.name order by argument.ordinality)
+           filter (where argument.mode in ('i', 'b', 'v')) as argument_names,
+         array_agg(
+           pg_catalog.format_type(
+             coalesce(nullif(argument_type.typbasetype, 0), argument_type.oid),
+             null
+           )
+           order by argument.ordinality
+         ) filter (where argument.mode in ('i', 'b', 'v')) as argument_types
+       from unnest(
+         coalesce(p.proallargtypes, p.proargtypes::oid[]),
+         coalesce(
+           p.proargmodes,
+           pg_catalog.array_fill('i'::"char", array[p.pronargs::integer])
+         ),
+         p.proargnames
+       ) with ordinality as argument(type_oid, mode, name, ordinality)
+       join pg_catalog.pg_type argument_type on argument_type.oid = argument.type_oid
+     ) arguments on true
      where n.nspname = 'public' and p.proname = $1
      limit 1`,
     [name]
