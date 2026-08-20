@@ -91,9 +91,12 @@ export function getSandboxStartTerminalFailure(event: {
     return null;
   }
   const output = event.output as Record<string, unknown>;
-  return typeof output.error === "string" || output.status === "error"
-    ? "Sandbox startup failed."
-    : null;
+  if (typeof output.error === "string" || output.status === "error") {
+    return "Sandbox startup failed.";
+  }
+  // A pending result is not a successful retry, so it cannot clear an earlier
+  // terminal launch failure.
+  return output.status === "pending" ? undefined : null;
 }
 
 /** Keep the terminal state aligned with the most recent sandbox launch. */

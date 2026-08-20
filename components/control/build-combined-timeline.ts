@@ -81,15 +81,17 @@ function toolFailureBody(toolName: string) {
 }
 
 function toolDetails(toolName: string, input: unknown) {
-  const serialized = input === undefined ? "" : JSON.stringify(input);
-  return serialized ? `${toolName}(${serialized.slice(0, 500)})` : toolName;
+  const argumentNames = Object.keys(asRecord(input) ?? {}).sort();
+  return argumentNames.length > 0
+    ? `${toolName}(${argumentNames.join(", ")})`
+    : toolName;
 }
 
 /**
  * Builds a combined timeline by merging mission timeline events with chat
  * messages. User messages become YOU events; assistant text becomes MOGPLEX
- * events; tool invocations become TOOL events with their input (and the
- * error, when the call failed). Tool approvals become APPROVAL events.
+ * events; tool invocations become TOOL events with argument names only (and
+ * the error, when the call failed). Tool approvals become APPROVAL events.
  * Tool inputs or outputs carrying a unified patch become DIFF events so
  * changes render inline in the chat.
  */

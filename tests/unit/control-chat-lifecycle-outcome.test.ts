@@ -62,3 +62,13 @@ test("Control clears a failed launch when a sandbox retry succeeds", () => {
   assert.equal(recovered, null);
   assert.equal(afterOtherTool, null);
 });
+
+test("Control preserves a failed launch while a retry remains pending", () => {
+  const failure = updateSandboxStartTerminalFailure("Sandbox startup failed.", {
+    success: true,
+    output: { sandboxId: "sandbox-new", status: "pending" },
+    toolCall: { toolName: "sandbox_start" },
+  });
+
+  assert.equal(failure, "Sandbox startup failed.");
+});

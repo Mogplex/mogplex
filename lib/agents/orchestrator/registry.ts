@@ -145,6 +145,8 @@ function buildToolForDef(
   }
   if (def.name === "run_command") {
     if (ctx.sandboxSelectionRequired) return null;
+    // Unlike write_file, run_command is always registered when selection is
+    // unambiguous. With no initial sandbox it resolves or starts one lazily.
     return createTerminalExec(
       ctx.sandboxId ?? undefined,
       ctx.userId,

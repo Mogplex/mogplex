@@ -28,6 +28,10 @@ import {
   reconcileStaleListedSandboxes,
 } from "./_lib/list";
 
+// Sandbox creation can await a Neon-notified readiness transition for up to
+// ten minutes. Leave enough function budget for request setup and teardown.
+export const maxDuration = 800;
+
 // Re-export functions that tests depend on
 export {
   shouldQueueSnapshotWarmupOnSandboxLaunch,

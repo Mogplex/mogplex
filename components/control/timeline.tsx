@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from "react"
 import type { TimelineEvent, Worktree } from "@/lib/control/types"
+import { setupTimelineAutoFollow } from "@/lib/control/timeline-auto-follow"
 import { TimelineCard } from "./timeline-card"
 import type { ToolApprovalResponse } from "./timeline-card"
 
@@ -28,29 +29,15 @@ export function Timeline({
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const followingRef = useRef(true)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
   // Follow streamed content until the user scrolls away from the bottom.
   useEffect(() => {
     const scroll = scrollRef.current
     const content = contentRef.current
-    if (!scroll || !content) return
-
-    const updateFollowing = () => {
-      const distance = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight
-      followingRef.current = distance < 48
-    }
-    const followContent = () => {
-      if (followingRef.current) scroll.scrollTop = scroll.scrollHeight
-    }
-    scroll.addEventListener("scroll", updateFollowing, { passive: true })
-    const observer = new ResizeObserver(followContent)
-    observer.observe(content)
-    followContent()
-    return () => {
-      scroll.removeEventListener("scroll", updateFollowing)
-      observer.disconnect()
-    }
+    const bottom = bottomRef.current
+    if (!scroll || !content || !bottom) return
+    return setupTimelineAutoFollow(scroll, content, bottom)
   }, [])
 
   return (
@@ -78,6 +65,7 @@ export function Timeline({
           </div>
         )}
         {trailing}
+        <div ref={bottomRef} aria-hidden="true" className="h-px" />
       </div>
     </div>
   )

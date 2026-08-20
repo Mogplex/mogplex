@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildPendingSandboxWaitStreamResponse } from "@/app/api/sandbox/_lib/pending-stream";
 import { maybeReturnExistingSandboxResponse } from "@/app/api/sandbox/_lib/launch";
+import { maxDuration } from "@/app/api/sandbox/route";
+import { SANDBOX_READINESS_TIMEOUT_MS } from "@/lib/sandbox/wait-for-readiness";
 import type { SandboxRecordRow } from "@/lib/types";
 
 const record = {
@@ -23,6 +25,10 @@ describe("pending sandbox readiness stream", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("keeps the route budget above the readiness wait ceiling", () => {
+    expect(maxDuration * 1000).toBeGreaterThan(SANDBOX_READINESS_TIMEOUT_MS);
   });
 
   it("uses the readiness stream for an internal pending reuse", async () => {
@@ -73,6 +79,7 @@ describe("pending sandbox readiness stream", () => {
     });
 
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(response.headers.get("Connection")).toBeNull();
     const body = await response.text();
     expect(body).toContain('"type":"sandbox_created"');
     expect(body).toContain('"type":"ready"');

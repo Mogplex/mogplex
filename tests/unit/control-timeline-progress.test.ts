@@ -101,3 +101,30 @@ test("assistant text is primary conversation content, not a tool event", () => {
     },
   ]);
 });
+
+test("tool details expose argument names without raw values", () => {
+  const events = buildCombinedTimeline(undefined, [
+    assistant([
+      {
+        type: "tool-write_file",
+        toolCallId: "write-1",
+        state: "input-available",
+        input: {
+          path: "private/path.ts",
+          content: "private file contents",
+        },
+      },
+    ]),
+  ]);
+
+  assert.deepEqual(events, [
+    {
+      kind: "tool",
+      label: "TOOL",
+      time: "now",
+      body: "Using write_file",
+      details: "write_file(content, path)",
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(events), /private/);
+});
