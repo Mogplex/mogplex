@@ -83,6 +83,8 @@ export function createTableEventListenerFactory(
     connection.client.off("notification", connection.notificationListener);
     connection.client.off("error", connection.errorListener);
     connection.client.off("end", connection.endListener);
+    connection.notificationHandlers.clear();
+    connection.errorHandlers.clear();
     await connection.client.end();
   };
 

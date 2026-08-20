@@ -94,6 +94,8 @@ export async function executeControlChatRequest(input: {
       sandboxId: selectedSandboxId,
       status: selectedSandboxId ? "running" : "unavailable",
     };
+    // The sandbox_start resolution callback in the tool registry mutates this
+    // same object so every closure below observes the mid-run selection.
 
     // Both writes are fail-open, but awaiting them preserves ordering so
     // qualification never observes a decision without its owning context.

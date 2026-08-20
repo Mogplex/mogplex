@@ -17,7 +17,7 @@ import {
   HelpCircle,
   Check,
 } from "iconoir-react"
-import type { TimelineEvent, Worktree, PlanEvent, DelegateEvent, ToolEvent, DiffEvent, FailEvent, CompareEvent, ApprovalEvent } from "@/lib/control/types"
+import type { TimelineEvent, Worktree, PlanEvent, DelegateEvent, DiffEvent, FailEvent, CompareEvent, ApprovalEvent } from "@/lib/control/types"
 
 export type ToolApprovalResponse = {
   approvalId: string
@@ -213,13 +213,13 @@ export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onTool
           </MessageResponse>
         )}
 
-        {event.kind === "tool" && (event as ToolEvent).details ? (
+        {event.kind === "tool" && event.details ? (
           <details className="mt-2 text-[11px] text-ink-400">
             <summary className="hover:text-ink-200 cursor-pointer">
               Tool details
             </summary>
             <pre className="border-ink-800 bg-ink-950 mt-2 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-5">
-              {(event as ToolEvent).details}
+              {event.details}
             </pre>
           </details>
         ) : null}

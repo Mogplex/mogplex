@@ -188,6 +188,27 @@ describe("waitForSandboxReadiness", () => {
     expect(secondListener.end).toHaveBeenCalledTimes(1);
   });
 
+  it("retries one transient snapshot read without polling", async () => {
+    const listener = createListener();
+    const loadSnapshot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporary Neon read failure"))
+      .mockResolvedValueOnce({
+        id: "sandbox-1",
+        user_id: "user-1",
+        status: "running",
+      });
+
+    await expect(
+      waitForSandboxReadiness(
+        { sandboxRecordId: "sandbox-1", userId: "user-1" },
+        { createListener: async () => listener, loadSnapshot }
+      )
+    ).resolves.toMatchObject({ kind: "ready" });
+    expect(loadSnapshot).toHaveBeenCalledTimes(2);
+    expect(listener.end).toHaveBeenCalledTimes(1);
+  });
+
   it("fails after a second Neon listener disconnect", async () => {
     const firstListener = createListener();
     const secondListener = createListener();

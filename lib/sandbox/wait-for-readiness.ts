@@ -124,10 +124,20 @@ export async function waitForSandboxReadiness(
       else resolve(result!);
     };
 
+    const loadSnapshotWithRetry = async () => {
+      try {
+        return await deps.loadSnapshot(input.sandboxRecordId);
+      } catch {
+        // One immediate retry absorbs a transient Neon-backed read failure
+        // without turning readiness into a status-polling loop.
+        return deps.loadSnapshot(input.sandboxRecordId);
+      }
+    };
+
     const check = async () => {
       if (settled) return;
       try {
-        const snapshot = await deps.loadSnapshot(input.sandboxRecordId);
+        const snapshot = await loadSnapshotWithRetry();
         finish(resolveSnapshot(snapshot));
       } catch (error) {
         finish(null, error);
