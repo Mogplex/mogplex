@@ -233,7 +233,7 @@ async function consumeSandboxCreationStream(
 
   return pending
     ? {
-        error: "Sandbox stopped before it became ready.",
+        error: "Sandbox readiness stream ended before it became ready.",
         reason: "sandbox_unavailable",
       }
     : failed;

@@ -22,11 +22,12 @@ async function startSandbox(
   onResolution?: (resolution: SandboxResolution) => void,
   signal?: AbortSignal
 ) {
-  const requestHeaders = getSandboxRequestHeaders(userId);
-  if ("error" in requestHeaders) {
+  // Fail before repository lookups when the internal sandbox auth is absent.
+  const authCheck = getSandboxRequestHeaders(userId);
+  if ("error" in authCheck) {
     return {
-      error: requestHeaders.error,
-      reason: requestHeaders.reason,
+      error: authCheck.error,
+      reason: authCheck.reason,
     };
   }
 

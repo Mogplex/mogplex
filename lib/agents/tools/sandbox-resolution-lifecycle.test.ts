@@ -140,4 +140,21 @@ describe("sandbox resolution lifecycle", () => {
       reason: "sandbox_unavailable",
     });
   });
+
+  it("reports a transport failure when readiness SSE ends early", async () => {
+    global.fetch = async () =>
+      new Response(
+        'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n',
+        {
+          headers: { "Content-Type": "text/event-stream" },
+        }
+      );
+
+    await expect(
+      resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
+    ).resolves.toEqual({
+      error: "Sandbox readiness stream ended before it became ready.",
+      reason: "sandbox_unavailable",
+    });
+  });
 });

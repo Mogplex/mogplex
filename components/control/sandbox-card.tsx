@@ -230,6 +230,7 @@ function SandboxActions({
 }) {
   const status = sandbox.runtime_summary.status;
   const busy = lifecycleAction !== null;
+  // `delr` is the project error color declared in app/globals.css.
   const previewDot =
     previewState === "ready"
       ? "bg-emerald-400"
