@@ -9,7 +9,46 @@ export type FunctionShape = {
   returnsVoid: boolean;
   returnsComposite: boolean;
   name: string;
+  argumentTypes: Record<string, string>;
 };
+
+function mapArgumentTypes(row: Record<string, unknown>) {
+  const names = Array.isArray(row.argument_names) ? row.argument_names : [];
+  const types = Array.isArray(row.argument_types) ? row.argument_types : [];
+  const argumentTypes: Record<string, string> = {};
+  for (const [index, name] of names.entries()) {
+    const type = types[index];
+    if (typeof name === "string" && typeof type === "string") {
+      argumentTypes[name] = type;
+    }
+  }
+  return argumentTypes;
+}
+
+function addRpcArgument(
+  sql: SqlBuilder,
+  value: unknown,
+  argumentType: string | undefined
+) {
+  if (
+    value !== null &&
+    value !== undefined &&
+    (argumentType === "json" || argumentType === "jsonb")
+  ) {
+    return `${sql.add(JSON.stringify(value))}::${argumentType}`;
+  }
+  return sql.add(value instanceof Date ? value.toISOString() : value);
+}
+
+function rpcData(
+  shape: FunctionShape,
+  rows: Record<string, unknown>[],
+  name: string
+): unknown {
+  if (!shape.returnsSet) return rows[0] ?? null;
+  if (shape.returnsComposite) return rows;
+  return rows.map((row) => row[name] ?? Object.values(row)[0]);
+}
 
 export async function getFunctionShape(
   db: Queryable,
@@ -21,7 +60,13 @@ export async function getFunctionShape(
   const { rows } = await db.query(
     `select p.proretset as returns_set,
             t.typname as type_name,
-            t.typtype as type_type
+            t.typtype as type_type,
+            p.proargnames as argument_names,
+            array(
+              select pg_catalog.format_type(argument.type_oid, null)
+              from pg_catalog.unnest(p.proargtypes::oid[])
+                as argument(type_oid)
+            ) as argument_types
      from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
      join pg_type t on t.oid = p.prorettype
@@ -38,6 +83,7 @@ export async function getFunctionShape(
     returnsVoid: rows[0].type_name === "void",
     returnsComposite:
       rows[0].type_type === "c" || rows[0].type_name === "record",
+    argumentTypes: mapArgumentTypes(rows[0]),
   };
   cache.set(name, shape);
   return shape;
@@ -54,17 +100,7 @@ export async function executeRpc(
     const sql = new SqlBuilder();
     const argList = Object.entries(args)
       .map(([key, value]) => {
-        // Dates must stay scalar: a `::jsonb` cast makes Postgres unable
-        // to resolve functions with timestamptz parameters (jsonb has no
-        // implicit cast), failing the whole call.
-        const param =
-          value instanceof Date
-            ? sql.add(value.toISOString())
-            : value !== null &&
-                typeof value === "object" &&
-                !Array.isArray(value)
-              ? `${sql.add(JSON.stringify(value))}::jsonb`
-              : sql.add(value);
+        const param = addRpcArgument(sql, value, shape.argumentTypes[key]);
         return `${quoteIdent(key)} => ${param}`;
       })
       .join(", ");
@@ -82,15 +118,10 @@ export async function executeRpc(
     }
     if (shape.returnsSet || shape.returnsComposite) {
       const { rows } = await db.query(`select * from ${call}`, sql.params);
-      // PostgREST returns a setof-scalar function as a bare value array,
-      // not an array of single-key row objects.
-      const data = shape.returnsSet
-        ? shape.returnsComposite
-          ? rows
-          : rows.map((row) => row[name] ?? Object.values(row)[0])
-        : (rows[0] ?? null);
       return {
-        data,
+        // PostgREST returns a setof-scalar function as a bare value array,
+        // not an array of single-key row objects.
+        data: rpcData(shape, rows, name),
         error: null,
         count: null,
         status: 200,
