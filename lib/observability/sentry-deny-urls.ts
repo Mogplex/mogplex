@@ -29,5 +29,5 @@ export const SENTRY_DENY_URLS: ReadonlyArray<RegExp> = [
   //
   // The captured frame URL is `app:///scripts/inpage.js`; anchor on the full
   // scheme + path so the filter can't match unrelated scripts.
-  /^app:\/\/\/scripts\/inpage\.js/i,
+  /^app:\/\/\/scripts\/inpage\.js$/i, // `$`-anchored so inpage.js.map and siblings don't match
 ];
