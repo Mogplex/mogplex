@@ -123,7 +123,7 @@ test("tool details expose argument names without raw values", () => {
       label: "TOOL",
       time: "now",
       body: "Using write_file",
-      details: "write_file(content, path)",
+      details: "write_file(path, content)",
     },
   ]);
   assert.doesNotMatch(JSON.stringify(events), /private/);

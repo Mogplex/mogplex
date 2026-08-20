@@ -61,7 +61,7 @@ export function createSpawnWorktreeToolWithDeps(
     inputSchema: spawnWorktreeSchema,
     execute: async ({ taskId }: z.infer<typeof spawnWorktreeSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
-      const sandboxId = ctx.sandboxBinding?.sandboxId ?? ctx.sandboxId;
+      const sandboxId = ctx.sandboxBinding?.sandboxId ?? null;
       // Production launch waits for readiness; this also guards injected or
       // future resolvers that may expose the intermediate binding state.
       if (ctx.sandboxBinding?.status === "pending") {

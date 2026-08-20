@@ -7,6 +7,7 @@ import {
   expect,
   it,
 } from "vitest";
+import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
 import { resolveOrCreateSandbox } from "./sandbox-resolution";
 
 let supabaseAdmin: typeof import("@/lib/supabase/admin").supabaseAdmin;
@@ -82,8 +83,11 @@ describe("sandbox resolution lifecycle", () => {
 
   it("waits for sandbox readiness over SSE", async () => {
     let acceptHeader: string | undefined;
+    let waitHeader: string | undefined;
     global.fetch = async (_url, init) => {
-      acceptHeader = (init?.headers as Record<string, string>)?.Accept;
+      const headers = init?.headers as Record<string, string>;
+      acceptHeader = headers?.Accept;
+      waitHeader = headers?.[SANDBOX_READINESS_WAIT_HEADER];
       return new Response(
         new ReadableStream({
           start(controller) {
@@ -111,6 +115,7 @@ describe("sandbox resolution lifecycle", () => {
       source: "created",
     });
     expect(acceptHeader).toBe("text/event-stream, application/json");
+    expect(waitHeader).toBe("1");
   });
 
   it("returns the streamed launch failure after sandbox creation", async () => {

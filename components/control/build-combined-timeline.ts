@@ -81,7 +81,7 @@ function toolFailureBody(toolName: string) {
 }
 
 function toolDetails(toolName: string, input: unknown) {
-  const argumentNames = Object.keys(asRecord(input) ?? {}).sort();
+  const argumentNames = Object.keys(asRecord(input) ?? {});
   return argumentNames.length > 0
     ? `${toolName}(${argumentNames.join(", ")})`
     : toolName;

@@ -16,6 +16,20 @@ const startSandboxParams = z.object({
 });
 const startServerSelectedSandboxParams = z.object({});
 
+export type SandboxStartLifecycle = {
+  onPending?: () => void;
+  onResolution?: (resolution: SandboxResolution) => void;
+  onFailure?: () => void;
+};
+
+function normalizeLifecycle(
+  lifecycle?: ((resolution: SandboxResolution) => void) | SandboxStartLifecycle
+): SandboxStartLifecycle {
+  return typeof lifecycle === "function"
+    ? { onResolution: lifecycle }
+    : (lifecycle ?? {});
+}
+
 export function getSandboxStartMessage(sandbox: SandboxResolution) {
   if (sandbox.status === "pending") {
     return "Sandbox is starting and not yet ready.";
@@ -28,7 +42,7 @@ export function getSandboxStartMessage(sandbox: SandboxResolution) {
 async function startSandbox(
   userId: string | undefined,
   repoId: string,
-  onResolution?: (resolution: SandboxResolution) => void,
+  lifecycle: SandboxStartLifecycle,
   signal?: AbortSignal
 ) {
   // Fail before repository lookups when the internal sandbox auth is absent.
@@ -40,20 +54,26 @@ async function startSandbox(
     };
   }
 
-  const sandbox = await resolveOrCreateSandbox(
-    userId,
-    repoId,
-    undefined,
-    signal
-  );
+  lifecycle.onPending?.();
+  let sandbox;
+  try {
+    sandbox = await resolveOrCreateSandbox(userId, repoId, undefined, signal);
+  } catch (error) {
+    lifecycle.onFailure?.();
+    throw error;
+  }
   if (!sandbox) {
+    lifecycle.onFailure?.();
     return {
       error: "Failed to start sandbox",
       reason: "sandbox_unavailable" as const,
     };
   }
-  if ("error" in sandbox) return sandbox;
-  onResolution?.(sandbox);
+  if ("error" in sandbox) {
+    lifecycle.onFailure?.();
+    return sandbox;
+  }
+  lifecycle.onResolution?.(sandbox);
 
   return {
     ok: true,
@@ -67,8 +87,11 @@ async function startSandbox(
 export function createStartSandbox(
   userId?: string,
   serverRepoId?: string,
-  onResolution?: (resolution: SandboxResolution) => void
+  lifecycleInput?:
+    | ((resolution: SandboxResolution) => void)
+    | SandboxStartLifecycle
 ) {
+  const lifecycle = normalizeLifecycle(lifecycleInput);
   if (serverRepoId) {
     return defineTool({
       description:
@@ -77,8 +100,7 @@ export function createStartSandbox(
       execute: async (
         _input: z.infer<typeof startServerSelectedSandboxParams>,
         options?: ToolExecutionOptions
-      ) =>
-        startSandbox(userId, serverRepoId, onResolution, options?.abortSignal),
+      ) => startSandbox(userId, serverRepoId, lifecycle, options?.abortSignal),
     });
   }
 
@@ -89,6 +111,6 @@ export function createStartSandbox(
     execute: async (
       { repoId }: z.infer<typeof startSandboxParams>,
       options?: ToolExecutionOptions
-    ) => startSandbox(userId, repoId, onResolution, options?.abortSignal),
+    ) => startSandbox(userId, repoId, lifecycle, options?.abortSignal),
   });
 }

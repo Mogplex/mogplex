@@ -6,6 +6,7 @@ import {
   resolveBillingLinkedProjectSelection,
 } from "@/lib/vercel/target-resolution";
 import { buildLimitResponse, releaseLimitClaim } from "@/lib/request-limits";
+import { requestsSandboxReadinessWait } from "@/lib/sandbox/readiness-contract";
 import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { SANDBOX_STREAM_SELECT } from "./constants";
@@ -184,7 +185,7 @@ export async function maybeReturnExistingSandboxResponse(
   }
 
   if (existingState.kind === "pending") {
-    return request.headers.get("Accept")?.includes("text/event-stream")
+    return requestsSandboxReadinessWait(request.headers)
       ? buildPendingSandboxWaitStreamResponse({
           record: existing,
           userId: launch.creds.userId,

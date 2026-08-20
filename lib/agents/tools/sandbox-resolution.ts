@@ -1,5 +1,6 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { isRepoId } from "@/lib/repos";
+import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
 import { resolveAppBaseUrl } from "./shared";
 
 type SandboxResolutionStatus = "running" | "pending";
@@ -28,10 +29,7 @@ export type SandboxResolutionFailure = {
 export function getSandboxRequestHeaders(userId?: string) {
   try {
     return {
-      headers: {
-        ...buildInternalApiHeaders(userId),
-        Accept: "text/event-stream, application/json",
-      },
+      headers: buildInternalApiHeaders(userId),
     };
   } catch (error) {
     return {
@@ -290,7 +288,11 @@ export async function resolveOrCreateSandbox(
   }
   const response = await fetch(`${resolveAppBaseUrl()}/api/sandbox`, {
     method: "POST",
-    headers: requestHeaders.headers,
+    headers: {
+      ...requestHeaders.headers,
+      Accept: "text/event-stream, application/json",
+      [SANDBOX_READINESS_WAIT_HEADER]: "1",
+    },
     body: JSON.stringify({ repoId: resolved.repoId }),
     signal,
   });

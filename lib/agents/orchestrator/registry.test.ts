@@ -74,7 +74,7 @@ describe("buildOrchestratorTools", () => {
     );
   });
 
-  it("omits context-unavailable tools instead of replacing them with callable stubs", () => {
+  it("omits context-unavailable tools while retaining dynamically bound sandbox tools", () => {
     const withoutToken = buildOrchestratorTools({
       ...FULL_CONTEXT,
       githubToken: null,
@@ -87,8 +87,8 @@ describe("buildOrchestratorTools", () => {
       ...FULL_CONTEXT,
       sandboxId: null,
     });
-    expect(withoutSandbox.write_file).toBeUndefined();
-    expect(withoutSandbox.sandbox_stop).toBeUndefined();
+    expect(withoutSandbox.write_file).toBeDefined();
+    expect(withoutSandbox.sandbox_stop).toBeDefined();
 
     const withoutRepository = buildOrchestratorTools({
       ...FULL_CONTEXT,

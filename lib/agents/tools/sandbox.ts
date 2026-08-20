@@ -7,6 +7,12 @@ import {
   type SandboxResolution,
   type SandboxResolutionFailure,
 } from "./sandbox-resolution";
+import {
+  readSelectedSandboxId,
+  updateSandboxBinding,
+  type SandboxRuntimeBinding,
+  type SandboxSelection,
+} from "./sandbox-binding";
 
 export { resolveOrCreateSandbox } from "./sandbox-resolution";
 export { createStartSandbox } from "./sandbox-start";
@@ -214,12 +220,13 @@ const terminalParams = z.object({
 export function createTerminalExec(
   sandboxId?: string,
   userId?: string,
-  repoId?: string
+  repoId?: string,
+  sandboxBinding?: SandboxRuntimeBinding
 ) {
-  let selectedSandboxId = sandboxId;
+  let selectedSandboxId = sandboxBinding?.sandboxId ?? sandboxId;
   // Track the selected/resolved sandbox across calls within this tool instance.
-  let cachedSandbox: SandboxResolution | null = sandboxId
-    ? { sandboxId, status: "running", source: "selected" }
+  let cachedSandbox: SandboxResolution | null = selectedSandboxId
+    ? { sandboxId: selectedSandboxId, status: "running", source: "selected" }
     : null;
 
   return defineTool({
@@ -229,6 +236,24 @@ export function createTerminalExec(
     execute: async ({ command, cwd }: z.infer<typeof terminalParams>) => {
       const blocked = getBlockedAgentShellCommand(command);
       if (blocked) return { ...blocked, command };
+      if (sandboxBinding?.status === "pending") {
+        return {
+          error: "Sandbox startup is still in progress.",
+          reason: "sandbox_pending" as const,
+          command,
+        };
+      }
+      const boundSandboxId = sandboxBinding?.sandboxId ?? undefined;
+      if (sandboxBinding && boundSandboxId !== selectedSandboxId) {
+        selectedSandboxId = boundSandboxId;
+        cachedSandbox = selectedSandboxId
+          ? {
+              sandboxId: selectedSandboxId,
+              status: "running",
+              source: "selected",
+            }
+          : null;
+      }
       const requestHeaders = getSandboxRequestHeaders(userId);
       if ("error" in requestHeaders) {
         return {
@@ -253,6 +278,8 @@ export function createTerminalExec(
           };
         }
         cachedSandbox = resolution;
+        selectedSandboxId = resolution?.sandboxId;
+        updateSandboxBinding(sandboxBinding, resolution);
       }
 
       if (!cachedSandbox) {
@@ -287,8 +314,9 @@ export function createTerminalExec(
         cwd,
       });
       if (retried) {
-        selectedSandboxId = undefined;
         cachedSandbox = retried.sandbox;
+        selectedSandboxId = retried.sandbox?.sandboxId;
+        updateSandboxBinding(sandboxBinding, retried.sandbox);
         if (retried.result) return retried.result;
       }
 
@@ -305,12 +333,25 @@ const writeFileParams = z.object({
   content: z.string().describe("File content to write"),
 });
 
-export function createWriteFile(userId?: string, sandboxId?: string) {
+export function createWriteFile(
+  userId?: string,
+  sandboxSelection?: SandboxSelection
+) {
   return defineTool({
     description:
-      "Write content to a file in the server-selected sandbox. The sandbox identity is fixed by the active session and cannot be supplied by the model.",
+      "Write content to a file in the current server-selected sandbox. The sandbox identity follows the session lifecycle and cannot be supplied by the model.",
     inputSchema: writeFileParams,
     execute: async ({ path, content }: z.infer<typeof writeFileParams>) => {
+      if (
+        typeof sandboxSelection === "object" &&
+        sandboxSelection.status === "pending"
+      ) {
+        return {
+          error: "Sandbox startup is still in progress.",
+          reason: "sandbox_pending" as const,
+        };
+      }
+      const sandboxId = readSelectedSandboxId(sandboxSelection);
       if (!sandboxId) {
         return {
           error: "Select a sandbox first.",
@@ -389,13 +430,22 @@ function formatSandboxStopResult(
 }
 export function createStopSandbox(
   userId?: string,
-  serverSelectedSandboxId?: string
+  serverSelectedSandbox?: SandboxSelection
 ) {
   return defineTool({
     description:
       "Stop sandbox compute while preserving its sandbox record and worktree bindings for restart. Use this when the user asks to stop or shut down the preview. This does not delete the sandbox record.",
     inputSchema: stopSandboxParams,
     execute: async ({ sandboxId }: z.infer<typeof stopSandboxParams>) => {
+      const serverSelectedSandboxId = readSelectedSandboxId(
+        serverSelectedSandbox
+      );
+      if (serverSelectedSandbox !== undefined && !serverSelectedSandboxId) {
+        return {
+          error: "Select a sandbox first.",
+          reason: "sandbox_not_selected" as const,
+        };
+      }
       if (serverSelectedSandboxId && sandboxId !== serverSelectedSandboxId) {
         return {
           error:
@@ -419,6 +469,12 @@ export function createStopSandbox(
         .json()
         .catch(() => ({}))) as SandboxStopApiResponse;
       if (!res.ok) {
+        if (
+          typeof serverSelectedSandbox === "object" &&
+          (res.status === 404 || res.status === 410)
+        ) {
+          updateSandboxBinding(serverSelectedSandbox, null);
+        }
         return {
           error: readStopResponseString(data.error) ?? "Failed to stop sandbox",
           reason:
@@ -427,7 +483,11 @@ export function createStopSandbox(
               : ("sandbox_unavailable" as const),
         };
       }
-      return formatSandboxStopResult(data, sandboxId);
+      const result = formatSandboxStopResult(data, sandboxId);
+      if ("ok" in result && typeof serverSelectedSandbox === "object") {
+        updateSandboxBinding(serverSelectedSandbox, null);
+      }
+      return result;
     },
   });
 }

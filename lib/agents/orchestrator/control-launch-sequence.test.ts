@@ -8,7 +8,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { createStartSandbox } from "@/lib/agents/tools/sandbox";
+import { buildOrchestratorTools } from "./registry";
 import { createSpawnWorktreeToolWithDeps } from "./tools/worktree-impl";
 import { createSpawnSubagentTool } from "./tools/planning-impl";
 import type { OrchestratorToolContext } from "./types";
@@ -98,17 +98,34 @@ function buildWorktree(): OrchestrationWorktreeDTO {
 
 describe("Control launch sequence", () => {
   it("rebinds a stopped selection before one worktree and one worker start", async () => {
-    const fetchSandbox = vi.fn(
-      async () =>
-        new Response(
-          [
-            `data: ${JSON.stringify({ type: "sandbox_created", recordId: NEW_SANDBOX_ID })}`,
-            `data: ${JSON.stringify({ type: "ready", sandbox: { id: NEW_SANDBOX_ID } })}`,
-            "",
-          ].join("\n\n"),
-          { headers: { "Content-Type": "text/event-stream" } }
-        )
-    );
+    let releaseLaunch!: () => void;
+    const launchReleased = new Promise<void>((resolve) => {
+      releaseLaunch = resolve;
+    });
+    const fetchSandbox = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("/files")) return Response.json({ ok: true });
+      if (url.endsWith("/exec")) {
+        return Response.json({ exitCode: 0, stdout: "ok", stderr: "" });
+      }
+      if (url.endsWith("/stop")) {
+        return Response.json({
+          sandbox: {
+            id: NEW_SANDBOX_ID,
+            runtime_summary: { status: "stopped" },
+          },
+        });
+      }
+      await launchReleased;
+      return new Response(
+        [
+          `data: ${JSON.stringify({ type: "sandbox_created", recordId: NEW_SANDBOX_ID })}`,
+          `data: ${JSON.stringify({ type: "ready", sandbox: { id: NEW_SANDBOX_ID } })}`,
+          "",
+        ].join("\n\n"),
+        { headers: { "Content-Type": "text/event-stream" } }
+      );
+    });
     global.fetch = fetchSandbox;
 
     const ctx: OrchestratorToolContext = {
@@ -119,29 +136,58 @@ describe("Control launch sequence", () => {
       sandboxBinding: { sandboxId: null, status: "unavailable" },
       conversationId: "conversation-1",
     };
-    const start = createStartSandbox("user-1", REPO_ID, (resolution) => {
-      ctx.sandboxId = resolution.sandboxId;
-      if (ctx.sandboxBinding) {
-        ctx.sandboxBinding.sandboxId = resolution.sandboxId;
-        ctx.sandboxBinding.status = resolution.status;
-      }
+    const tools = buildOrchestratorTools(ctx);
+    const start = tools.sandbox_start as unknown as ExecutableTool;
+    const spawnWorktree = vi.fn(async () => buildWorktree());
+    const worktreeTool = createSpawnWorktreeToolWithDeps(ctx, {
+      spawnWorktree,
     }) as unknown as ExecutableTool;
 
-    await expect(start.execute({})).resolves.toMatchObject({
+    const starting = start.execute({});
+    await vi.waitFor(() =>
+      expect(ctx.sandboxBinding).toEqual({
+        sandboxId: null,
+        status: "pending",
+      })
+    );
+    await expect(
+      (tools.write_file as unknown as ExecutableTool).execute({
+        path: "src/control.ts",
+        content: "export {};",
+      })
+    ).resolves.toMatchObject({ reason: "sandbox_pending" });
+    await expect(
+      worktreeTool.execute({ taskId: TASK_ID })
+    ).resolves.toMatchObject({ reason: "sandbox_pending" });
+
+    releaseLaunch();
+    await expect(starting).resolves.toMatchObject({
       ok: true,
       sandboxId: NEW_SANDBOX_ID,
       status: "running",
     });
-    expect(fetchSandbox).toHaveBeenCalledTimes(1);
     expect(ctx.sandboxBinding).toEqual({
       sandboxId: NEW_SANDBOX_ID,
       status: "running",
     });
 
-    const spawnWorktree = vi.fn(async () => buildWorktree());
-    const worktreeTool = createSpawnWorktreeToolWithDeps(ctx, {
-      spawnWorktree,
-    }) as unknown as ExecutableTool;
+    const write = tools.write_file as unknown as ExecutableTool;
+    await expect(
+      write.execute({ path: "src/control.ts", content: "export {};" })
+    ).resolves.toEqual({
+      ok: true,
+      path: "src/control.ts",
+      sandboxId: NEW_SANDBOX_ID,
+    });
+    await expect(
+      (tools.run_command as unknown as ExecutableTool).execute({
+        command: "pwd",
+      })
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      sandboxId: NEW_SANDBOX_ID,
+    });
+
     await expect(
       worktreeTool.execute({ taskId: TASK_ID })
     ).resolves.toMatchObject({ status: "ok" });
@@ -176,5 +222,42 @@ describe("Control launch sequence", () => {
         body: expect.objectContaining({ worktreeId: WORKTREE_ID }),
       })
     );
+
+    const stop = tools.sandbox_stop as unknown as ExecutableTool;
+    await expect(
+      stop.execute({ sandboxId: NEW_SANDBOX_ID })
+    ).resolves.toMatchObject({ ok: true, status: "stopped" });
+    expect(ctx.sandboxBinding).toEqual({
+      sandboxId: null,
+      status: "unavailable",
+    });
+    await expect(
+      worktreeTool.execute({ taskId: TASK_ID })
+    ).resolves.toMatchObject({
+      status: "error",
+      reason: "sandbox_not_selected",
+    });
+  });
+
+  it("restores the prior binding when sandbox start fails", async () => {
+    global.fetch = async () =>
+      Response.json({ error: "Sandbox start failed" }, { status: 500 });
+    const binding = {
+      sandboxId: "sandbox-running",
+      status: "running" as const,
+    };
+    const tools = buildOrchestratorTools({
+      userId: "user-1",
+      repoId: REPO_ID,
+      sandboxBinding: binding,
+    });
+
+    await expect(
+      (tools.sandbox_start as unknown as ExecutableTool).execute({})
+    ).resolves.toMatchObject({ reason: "sandbox_unavailable" });
+    expect(binding).toEqual({
+      sandboxId: "sandbox-running",
+      status: "running",
+    });
   });
 });

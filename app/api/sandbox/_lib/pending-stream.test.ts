@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildPendingSandboxWaitStreamResponse } from "@/app/api/sandbox/_lib/pending-stream";
-import { maybeReturnExistingSandboxResponse } from "@/app/api/sandbox/_lib/launch";
-import { maxDuration } from "@/app/api/sandbox/route";
+import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
 import { SANDBOX_READINESS_TIMEOUT_MS } from "@/lib/sandbox/wait-for-readiness";
 import type { SandboxRecordRow } from "@/lib/types";
+import { maxDuration } from "../route";
+import { maybeReturnExistingSandboxResponse } from "./launch";
+import { buildPendingSandboxWaitStreamResponse } from "./pending-stream";
 
 const record = {
   id: "sandbox-record-1",
@@ -21,6 +22,27 @@ const record = {
   last_active_at: "2026-08-20T12:00:00.000Z",
 } satisfies SandboxRecordRow;
 
+const pendingDeps = {
+  getActiveSandboxForRepo: async () => record,
+  resolveActiveSandboxState: async () => ({ kind: "pending" }),
+  waitForSandboxReadiness: async () => ({
+    kind: "ready",
+    snapshot: {
+      id: record.id,
+      user_id: "user-1",
+      status: "running",
+    },
+  }),
+} as never;
+
+const launch = {
+  repoId: "repo-1",
+  creds: { userId: "user-1" },
+  launchRequest: { workingBranch: "main" },
+  effectiveRootDirectory: null,
+  productTeamId: null,
+} as never;
+
 describe("pending sandbox readiness stream", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -31,34 +53,36 @@ describe("pending sandbox readiness stream", () => {
     expect(maxDuration * 1000).toBeGreaterThan(SANDBOX_READINESS_TIMEOUT_MS);
   });
 
-  it("uses the readiness stream for an internal pending reuse", async () => {
+  it("uses the readiness stream only for an explicit internal opt-in", async () => {
     const response = await maybeReturnExistingSandboxResponse(
-      {
-        getActiveSandboxForRepo: async () => record,
-        resolveActiveSandboxState: async () => ({ kind: "pending" }),
-        waitForSandboxReadiness: async () => ({
-          kind: "ready",
-          snapshot: {
-            id: record.id,
-            user_id: "user-1",
-            status: "running",
-          },
-        }),
-      } as never,
-      {
-        repoId: "repo-1",
-        creds: { userId: "user-1" },
-        launchRequest: { workingBranch: "main" },
-        effectiveRootDirectory: null,
-        productTeamId: null,
-      } as never,
+      pendingDeps,
+      launch,
       new Request("http://localhost/api/sandbox", {
-        headers: { Accept: "text/event-stream, application/json" },
+        headers: {
+          Accept: "text/event-stream, application/json",
+          [SANDBOX_READINESS_WAIT_HEADER]: "1",
+        },
       })
     );
 
     expect(response?.headers.get("Content-Type")).toBe("text/event-stream");
     expect(await response?.text()).toContain('"type":"ready"');
+  });
+
+  it("keeps pending reuse JSON-compatible when only Accept requests SSE", async () => {
+    const response = await maybeReturnExistingSandboxResponse(
+      pendingDeps,
+      launch,
+      new Request("http://localhost/api/sandbox", {
+        headers: { Accept: "text/event-stream, application/json" },
+      })
+    );
+
+    expect(response?.headers.get("Content-Type")).toContain("application/json");
+    await expect(response?.json()).resolves.toHaveProperty(
+      "sandbox.runtime_summary.status",
+      "installing"
+    );
   });
 
   it("holds a reused launch open until Neon reports it ready", async () => {

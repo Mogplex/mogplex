@@ -95,8 +95,8 @@ export async function executeControlChatRequest(input: {
       sandboxId: selectedSandboxId,
       status: selectedSandboxId ? "running" : "unavailable",
     };
-    // The sandbox_start resolution callback in the tool registry mutates this
-    // same object so every closure below observes the mid-run selection.
+    // Lifecycle tools mutate this single request-local source of truth so
+    // every sandbox-bound closure below observes the same selection.
 
     // Both writes are fail-open, but awaiting them preserves ordering so
     // qualification never observes a decision without its owning context.
@@ -110,7 +110,6 @@ export async function executeControlChatRequest(input: {
 
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
-      sandboxId: selectedSandboxId,
       sandboxBinding,
       sandboxSelectionRequired: sandboxContext.selectionRequired,
       repoId: input.body.repoId,
@@ -185,15 +184,19 @@ export async function executeControlChatRequest(input: {
       toolResults?: unknown[];
     }> = [];
 
+    const stampSandboxMetadata = () => {
+      activeCall.metadata = {
+        ...activeCall.metadata,
+        sandbox_id: sandboxBinding.sandboxId,
+      };
+    };
+
     const finalizeCancelled = async (
       steps: typeof completedSteps = completedSteps
     ) => {
       if (finalized) return;
       finalized = true;
-      activeCall.metadata = {
-        ...activeCall.metadata,
-        sandbox_id: sandboxBinding.sandboxId,
-      };
+      stampSandboxMetadata();
       await finalizeCancelledControlRun({
         activeCall,
         userId: input.userId,
@@ -207,10 +210,10 @@ export async function executeControlChatRequest(input: {
     const finalizeStreamFailure = async () => {
       if (finalized) return;
       finalized = true;
-      activeCall.metadata = {
-        ...activeCall.metadata,
-        sandbox_id: sandboxBinding.sandboxId,
-      };
+      stampSandboxMetadata();
+      // AI SDK 6 turns provider/model failures into stream parts and invokes
+      // onFinish with usage. This path is only for a rejected response body,
+      // where the SDK exposes no reliable terminal usage payload.
       await finalizeFinishedControlRun({
         activeCall,
         userId: input.userId,
@@ -282,10 +285,7 @@ export async function executeControlChatRequest(input: {
       async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
         if (finalized) return;
         finalized = true;
-        activeCall.metadata = {
-          ...activeCall.metadata,
-          sandbox_id: sandboxBinding.sandboxId,
-        };
+        stampSandboxMetadata();
         await finalizeFinishedControlRun({
           activeCall,
           userId: input.userId,
