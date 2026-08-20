@@ -43,7 +43,10 @@ export type OrchestratorToolDef = {
 export type OrchestratorToolContext = {
   userId: string;
   sandboxId?: string | null;
-  /** Request-local, server-owned sandbox selected by lifecycle tools. */
+  /**
+   * Mutable request-local binding. `sandbox_start` updates it in place after
+   * resolution so later tools, telemetry, and finalization read the new sandbox.
+   */
   sandboxBinding?: {
     sandboxId: string | null;
     status: "running" | "pending" | "unavailable";

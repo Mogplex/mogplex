@@ -223,7 +223,7 @@ function SandboxActions({
   previewState: "ready" | "starting" | "error" | "unavailable";
   lifecycleAction: LifecycleAction | null;
   onRunAction: (action: LifecycleAction) => Promise<void>;
-  onSelect: (id: string) => void;
+  onSelect?: (id: string) => void;
   onPreview: (target: SandboxPreviewTarget) => void;
   onStop: () => void;
   onDelete: () => void;
@@ -247,8 +247,12 @@ function SandboxActions({
         title={previewUrl || "No preview URL for this sandbox"}
         onClick={() => {
           if (!previewUrl) return;
-          onSelect(sandbox.id);
-          onPreview({ url: previewUrl, runtimeId, branch: sandbox.working_branch });
+          onSelect?.(sandbox.id);
+          onPreview({
+            url: previewUrl,
+            runtimeId,
+            branch: sandbox.working_branch,
+          });
         }}
         className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-medium transition-colors ${
           previewUrl
@@ -318,7 +322,7 @@ export function SandboxCard({
   focused: boolean;
   registerRef: (id: string, el: HTMLElement | null) => void;
   launchLogs: Record<string, string>;
-  onSelect: (id: string) => void;
+  onSelect?: (id: string) => void;
   onPreview: (target: SandboxPreviewTarget) => void;
 }) {
   const stop = useSandboxStore((state) => state.stop);
@@ -344,14 +348,13 @@ export function SandboxCard({
   const runtimeId = sandbox.runtime_summary.sandbox_id || sandbox.id;
   const lines = sandboxLogLines(sandbox, launchLogs);
   const displayError = sandbox.error_summary.display_error || actionError;
-
   const runAction = async (action: LifecycleAction) => {
     setLifecycleAction(action);
     setActionError(null);
     try {
       if (action === "stop") {
         await stop(sandbox.id);
-        if (selected) onSelect(sandbox.id);
+        if (selected) onSelect?.(sandbox.id);
       } else if (action === "resume") {
         await resume(sandbox.id);
       } else if (action === "restart") {
@@ -365,7 +368,6 @@ export function SandboxCard({
       setLifecycleAction(null);
     }
   };
-
   return (
     <section
       ref={(element) => registerRef(sandbox.id, element)}

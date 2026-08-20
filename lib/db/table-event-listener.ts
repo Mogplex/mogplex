@@ -71,6 +71,8 @@ export function createTableEventListenerFactory(
     ...overrides,
   };
 
+  // Sharing limits Neon sessions by design. A connection failure fans out to
+  // every lease, whose SSE or readiness consumer then reconnects.
   let sharedConnection: SharedTableEventConnection | null = null;
   let connecting: Promise<SharedTableEventConnection> | null = null;
 

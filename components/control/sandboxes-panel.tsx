@@ -164,7 +164,6 @@ export function SandboxesPanel({
                 focused={ringId === sandbox.id}
                 registerRef={registerRef}
                 launchLogs={launchLogs}
-                onSelect={onSelectSandbox}
                 onPreview={setPreview}
               />
             ))}
