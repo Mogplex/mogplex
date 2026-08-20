@@ -30,6 +30,7 @@ export {
   createListFiles,
   createGithubApi,
   createGithubPullRequestTool,
+  createGithubPullRequestUpdateTool,
   createGithubPrSearch,
   createGithubRepoList,
   createGithubIssueTool,

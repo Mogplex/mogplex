@@ -56,10 +56,16 @@ export {
   updateMessageBestEffort,
   postMessageBestEffort,
   createDebouncedSlackUpdater,
+  finalizeSlackUpdaterBestEffort,
   readSlackMessageRef,
   readSlackTerminalState,
   saveSlackTerminalState,
 } from "./messaging";
+export {
+  createSlackAgentProgressHandler,
+  formatSlackAgentProgress,
+  SLACK_INITIAL_PROGRESS_TEXT,
+} from "./progress";
 
 // Re-export channel-state functions
 export {

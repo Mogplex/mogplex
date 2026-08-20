@@ -16,7 +16,11 @@ import {
   createStopSandbox,
 } from "./sandbox";
 import { createReadFile, createListFiles } from "./github-files";
-import { createGithubApi, createGithubPullRequestTool } from "./github-api";
+import {
+  createGithubApi,
+  createGithubPullRequestTool,
+  createGithubPullRequestUpdateTool,
+} from "./github-api";
 import {
   createGithubPrSearch,
   type GithubPrSearchOptions,
@@ -43,7 +47,11 @@ export {
   createStopSandbox,
 } from "./sandbox";
 export { createReadFile, createListFiles } from "./github-files";
-export { createGithubApi, createGithubPullRequestTool } from "./github-api";
+export {
+  createGithubApi,
+  createGithubPullRequestTool,
+  createGithubPullRequestUpdateTool,
+} from "./github-api";
 export {
   createGithubPrSearch,
   type GithubPrSearchOptions,
@@ -89,6 +97,7 @@ export const TOOL_CAPABILITY: Record<string, Capability> = {
   github_list_repos: "tools.github_api",
   github_create_issue: "tools.github_api",
   github_create_pull_request: "tools.github_api",
+  github_update_pull_request: "tools.github_api",
   write_file: "tools.write_file",
   add_memory: "tools.memories",
   search_memories: "tools.memories",
@@ -176,6 +185,10 @@ export function buildStaticTools(
       ? {
           github_api: createGithubApi(githubToken, repoDefaults),
           github_create_pull_request: createGithubPullRequestTool(
+            githubToken,
+            repoDefaults
+          ),
+          github_update_pull_request: createGithubPullRequestUpdateTool(
             githubToken,
             repoDefaults
           ),

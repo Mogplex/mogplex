@@ -17,6 +17,7 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
   const { runSlackEventTask } = await loadSlackEventTask();
 
   const calls: Array<Record<string, unknown>> = [];
+  let nowMs = Date.parse("2026-05-13T12:00:00.000Z");
 
   const result = await runSlackEventTask(basePayload, {
     getInstallation: async () => baseInstallation,
@@ -41,9 +42,28 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
         userId: input.userId,
         conversationId: input.conversationId,
         messages: input.messages,
-        onTextDelta: input.onTextDelta,
+        onProgress: input.onProgress,
         toolExecutionIdempotencyKey: input.toolExecutionIdempotencyKey,
       });
+      await input.onProgress?.({
+        type: "tool_started",
+        toolCallId: "tool-1",
+        toolName: "start_sandbox",
+      });
+      nowMs += 1_500;
+      await input.onProgress?.({
+        type: "tool_finished",
+        toolCallId: "tool-1",
+        toolName: "start_sandbox",
+        success: true,
+      });
+      nowMs += 1_500;
+      await input.onProgress?.({
+        type: "text_delta",
+        textDelta: "Build is",
+        accumulatedText: "Build is",
+      });
+      nowMs += 1_500;
       return agentSuccess({ finalText: "Build is green" });
     },
     postMessage: async (_token, input) => {
@@ -54,6 +74,7 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
       calls.push({ op: "update", input });
       return { channel: input.channel, ts: input.ts };
     },
+    now: () => new Date(nowMs),
   });
 
   assert.equal(result.outcome, "conversational_reply");
@@ -65,13 +86,13 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
   };
   assert.equal(placeholderPost.input.channel, "C1");
   assert.equal(placeholderPost.input.thread_ts, undefined);
-  assert.ok(placeholderPost.input.text.length > 0);
+  assert.equal(placeholderPost.input.text, "_Preparing your request..._");
 
   const agentCall = calls.find((c) => c.op === "agent") as {
     userId: string;
     conversationId: string;
     messages: Array<{ role: string; content: unknown }>;
-    onTextDelta?: unknown;
+    onProgress?: unknown;
     toolExecutionIdempotencyKey?: string;
   };
   assert.equal(agentCall.userId, "user-mogplex");
@@ -81,10 +102,12 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
     "slack:T1:Ev123",
     "Slack retries must reuse the same tool-execution scope"
   );
-  assert.equal(
-    agentCall.onTextDelta,
-    undefined,
-    "Slack conversational replies should not stream partial model text"
+  assert.equal(typeof agentCall.onProgress, "function");
+  assert.deepEqual(
+    calls
+      .filter((call) => call.op === "update")
+      .map((call) => (call.input as { text: string }).text),
+    ["_Starting the sandbox..._", "Build is", "Build is green"]
   );
   assert.equal(agentCall.messages.length, 3);
   assert.equal(agentCall.messages[2].role, "user");
@@ -95,8 +118,8 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
   };
   assert.equal(
     calls.filter((c) => c.op === "update").length,
-    1,
-    "only the final answer should edit the Slack placeholder"
+    3,
+    "tool progress, partial text, and the final answer should update in order"
   );
   assert.equal(finalUpdate.input.ts, "1700000000.000999");
   assert.equal(finalUpdate.input.text, "Build is green");

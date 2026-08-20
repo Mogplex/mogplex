@@ -70,6 +70,62 @@ test("github_create_pull_request opens a scoped PR from the sandbox branch", asy
   });
 });
 
+test("github_update_pull_request edits metadata on a scoped PR", async () => {
+  const calls: Array<{
+    method: string;
+    path: string;
+    body?: unknown;
+  }> = [];
+
+  await withPatchedFetch(
+    async (url, init) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        method: init?.method ?? "GET",
+        path: parsed.pathname,
+        body: parseJsonRequestBody(init?.body),
+      });
+      return Response.json({
+        number: 42,
+        html_url: "https://github.com/acme/demo/pull/42",
+        title: "Filter injected errors",
+        body: "No-tests: covered by the existing filter suite.",
+      });
+    },
+    async () => {
+      const { createGithubPullRequestUpdateTool } = await loadToolsModule();
+      const tool = createGithubPullRequestUpdateTool("github-token", {
+        owner: "acme",
+        repo: "demo",
+      }) as unknown as {
+        execute: (input: { number: number; body: string }) => Promise<unknown>;
+      };
+
+      assert.deepEqual(
+        await tool.execute({
+          number: 42,
+          body: "No-tests: covered by the existing filter suite.",
+        }),
+        {
+          ok: true,
+          pullRequestNumber: 42,
+          pullRequestUrl: "https://github.com/acme/demo/pull/42",
+          title: "Filter injected errors",
+          body: "No-tests: covered by the existing filter suite.",
+        }
+      );
+    }
+  );
+
+  assert.deepEqual(calls, [
+    {
+      method: "PATCH",
+      path: "/repos/acme/demo/pulls/42",
+      body: { body: "No-tests: covered by the existing filter suite." },
+    },
+  ]);
+});
+
 test("github_pr_search uses one authenticated GraphQL search and returns draft status", async () => {
   const calls: Array<{
     url: string;

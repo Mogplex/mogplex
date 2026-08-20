@@ -21,6 +21,10 @@ import {
   type RunChatAgentMessage,
   type ChatAgentContext,
 } from "@/lib/agents/run-chat";
+import {
+  createRunChatProgressReporter,
+  type RunChatAgentProgressCallback,
+} from "@/lib/agents/run-chat-progress";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 import {
   captureUsage,
@@ -48,12 +52,11 @@ export type RunChatAgentInput = ChatAgentContext & {
   systemSuffix?: string | null;
   abortSignal?: AbortSignal;
   /**
-   * Called whenever the model emits text. Receives the cumulative reply so far
-   * (not just the delta) — convenient for edit-in-place surfaces like Slack
-   * `chat.update`. Errors thrown by the callback are caught and logged so they
-   * cannot abort the run.
+   * Reports safe output and tool lifecycle events to external chat surfaces.
+   * Tool inputs, tool outputs, and model reasoning are never included. Errors
+   * from the callback are caught so a progress surface cannot abort the run.
    */
-  onTextDelta?: (accumulatedText: string) => void | Promise<void>;
+  onProgress?: RunChatAgentProgressCallback;
 };
 
 export type RunChatAgentResult = {
@@ -219,17 +222,10 @@ function recordRunChatAiCall(input: {
 
 async function consumeStreamWithCallback(
   result: ReturnType<typeof streamText>,
-  onTextDelta?: RunChatAgentInput["onTextDelta"]
+  reporter: ReturnType<typeof createRunChatProgressReporter>
 ) {
-  let accumulated = "";
   for await (const delta of result.textStream) {
-    accumulated += delta;
-    if (!onTextDelta) continue;
-    try {
-      await onTextDelta(accumulated);
-    } catch (error) {
-      console.warn("[run-chat-agent] onTextDelta callback threw", error);
-    }
+    await reporter.textDelta(delta);
   }
 }
 
@@ -247,6 +243,7 @@ export async function runChatAgent(
       (usage, stepUsage) => mergeUsage(usage, stepUsage),
       EMPTY_CAPTURED_USAGE
     );
+  const progressReporter = createRunChatProgressReporter(input.onProgress);
 
   const compaction = await compactAgentConversation(input, resolvedModel);
   // Compacted histories are already bounded; otherwise the pre-compaction
@@ -264,6 +261,17 @@ export async function runChatAgent(
     systemSuffix: input.systemSuffix,
     abortSignal: input.abortSignal,
     hooks: {
+      onChunk(event) {
+        if (event.chunk.type === "reasoning-delta") {
+          return progressReporter.modelWorking();
+        }
+      },
+      experimental_onToolCallStart(event) {
+        return progressReporter.toolStarted(event);
+      },
+      experimental_onToolCallFinish(event) {
+        return progressReporter.toolFinished(event);
+      },
       async onStepFinish(event) {
         observedStepUsages.push(
           captureUsage(event.usage, event.providerMetadata)
@@ -273,7 +281,7 @@ export async function runChatAgent(
   });
 
   try {
-    await consumeStreamWithCallback(result, input.onTextDelta);
+    await consumeStreamWithCallback(result, progressReporter);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Stream error";
     recordRunChatAiCall({
