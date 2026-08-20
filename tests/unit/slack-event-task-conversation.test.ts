@@ -103,6 +103,9 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
     "Slack retries must reuse the same tool-execution scope"
   );
   assert.equal(typeof agentCall.onProgress, "function");
+  // The completion milestone arrives while the start milestone is still in
+  // flight, so the updater intentionally coalesces it into the next visible
+  // partial response instead of adding a fourth Slack edit.
   assert.deepEqual(
     calls
       .filter((call) => call.op === "update")

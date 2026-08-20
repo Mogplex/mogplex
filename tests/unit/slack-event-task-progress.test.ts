@@ -87,3 +87,21 @@ test("formats partial model text without exposing reasoning events", async () =>
     "Opened *the change*: <https://example.test/pr|PR>"
   );
 });
+
+test("defers partial-text formatting until the updater accepts it", async () => {
+  const { createSlackAgentProgressHandler } =
+    await import("../../trigger/slack-event-lib/progress");
+  let pendingText: unknown;
+  const handleProgress = createSlackAgentProgressHandler((text) => {
+    pendingText = text;
+  });
+
+  await handleProgress({
+    type: "text_delta",
+    textDelta: "done",
+    accumulatedText: "**done**",
+  });
+
+  assert.equal(typeof pendingText, "function");
+  assert.equal((pendingText as () => string | null)(), "*done*");
+});

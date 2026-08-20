@@ -1,4 +1,5 @@
 import type { RunChatAgentProgressEvent } from "@/lib/agents/run-chat-progress";
+import type { SlackUpdateText } from "./messaging";
 import { fitSlackMessageText, formatSlackConversationalReply } from "./system";
 
 export const SLACK_INITIAL_PROGRESS_TEXT = "_Preparing your request..._";
@@ -50,9 +51,13 @@ export function formatSlackAgentProgress(
 }
 
 export function createSlackAgentProgressHandler(
-  update: (text: string) => void | Promise<void>
+  update: (text: SlackUpdateText) => void | Promise<void>
 ) {
   return async (event: RunChatAgentProgressEvent) => {
+    if (event.type === "text_delta") {
+      await update(() => formatSlackAgentProgress(event));
+      return;
+    }
     const progressText = formatSlackAgentProgress(event);
     if (progressText) await update(progressText);
   };
