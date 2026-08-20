@@ -106,7 +106,9 @@ test("Control counts worktrees separately from sandbox compute", async ({
     page.getByRole("tab", { name: "Worktrees, 1 checkout" })
   ).toBeVisible();
   await expect(
-    page.getByRole("tab", { name: "Sandboxes, 0 compute environments" })
+    page.getByRole("tab", {
+      name: "Sandboxes, 0 current sandboxes, 0 previous attempts",
+    })
   ).toBeVisible();
 
   await page.getByRole("tab", { name: "Worktrees, 1 checkout" }).click();
@@ -151,10 +153,12 @@ test("Control counts worktrees separately from sandbox compute", async ({
   await expect(page.getByText("No worktrees yet")).toBeVisible();
 
   await page
-    .getByRole("tab", { name: "Sandboxes, 0 compute environments" })
+    .getByRole("tab", {
+      name: "Sandboxes, 0 current sandboxes, 0 previous attempts",
+    })
     .click();
   await expect(page.getByRole("heading", { name: "Sandboxes" })).toBeVisible();
-  await expect(page.getByText("No sandbox compute yet")).toBeVisible();
+  await expect(page.getByText("No current sandbox")).toBeVisible();
 });
 
 test("Control ignores a stale worktree response after switching sessions", async ({

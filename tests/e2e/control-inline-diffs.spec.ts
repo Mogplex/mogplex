@@ -80,7 +80,9 @@ test("control chat renders agent diffs inline when tools produce a patch", async
   // The diff renders inline in the conversation: per-file stats plus the
   // highlighted patch content (added line from the hunk).
   const conversation = page.getByRole("log", { name: "Conversation" });
-  await expect(conversation.getByText("lib/auth.ts").first()).toBeVisible();
+  await expect(
+    conversation.getByText("lib/auth.ts", { exact: true }).first()
+  ).toBeVisible();
   // Stats appear in both the event's file row and the diff header.
   await expect(conversation.getByText("+3").first()).toBeVisible();
   await expect(conversation.getByText("-1").first()).toBeVisible();
