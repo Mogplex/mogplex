@@ -38,6 +38,7 @@ export function buildPendingSandboxWaitStreamResponse(input: {
   const encoder = new TextEncoder();
   const waitAbort = new AbortController();
   let cancelled = false;
+  let keepalive: ReturnType<typeof setInterval> | null = null;
 
   const abortWait = () => waitAbort.abort(input.requestSignal.reason);
   if (input.requestSignal.aborted) abortWait();
@@ -56,6 +57,17 @@ export function buildPendingSandboxWaitStreamResponse(input: {
         recordId: input.record.id,
         sandbox: toSandboxClientRecord(input.record),
       });
+
+      // Transport heartbeat only; lifecycle state remains Neon-notification driven.
+      keepalive = setInterval(() => {
+        if (cancelled) return;
+        try {
+          controller.enqueue(encoder.encode(": ping\n\n"));
+        } catch {
+          cancelled = true;
+          waitAbort.abort(new Error("Sandbox readiness stream closed"));
+        }
+      }, 25_000);
 
       try {
         const result = await input.waitForReadiness({
@@ -83,12 +95,14 @@ export function buildPendingSandboxWaitStreamResponse(input: {
           });
         }
       } finally {
+        if (keepalive) clearInterval(keepalive);
         input.requestSignal.removeEventListener("abort", abortWait);
         if (!cancelled) controller.close();
       }
     },
     cancel() {
       cancelled = true;
+      if (keepalive) clearInterval(keepalive);
       waitAbort.abort(new Error("Sandbox readiness stream closed"));
       input.requestSignal.removeEventListener("abort", abortWait);
     },

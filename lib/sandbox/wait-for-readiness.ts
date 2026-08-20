@@ -149,6 +149,7 @@ export async function waitForSandboxReadiness(
         }),
       input.timeoutMs ?? SANDBOX_READINESS_TIMEOUT_MS
     );
+    listener.onError((error) => finish(null, error));
     if (input.signal?.aborted) abort();
     else {
       input.signal?.addEventListener("abort", abort, { once: true });

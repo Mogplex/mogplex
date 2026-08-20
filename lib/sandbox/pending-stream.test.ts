@@ -21,6 +21,7 @@ const record = {
 
 describe("pending sandbox readiness stream", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -112,5 +113,38 @@ describe("pending sandbox readiness stream", () => {
       "[sandbox] readiness wait failed",
       expect.any(Error)
     );
+  });
+
+  it("emits transport keepalives while readiness remains event-driven", async () => {
+    vi.useFakeTimers();
+    let reportReady!: (result: {
+      kind: "ready";
+      snapshot: { id: string; user_id: string; status: string };
+    }) => void;
+    const readiness = new Promise<{
+      kind: "ready";
+      snapshot: { id: string; user_id: string; status: string };
+    }>((resolve) => {
+      reportReady = resolve;
+    });
+    const response = buildPendingSandboxWaitStreamResponse({
+      record,
+      userId: "user-1",
+      requestSignal: new AbortController().signal,
+      waitForReadiness: async () => readiness,
+    });
+    const reader = response.body!.getReader();
+
+    await reader.read();
+    const heartbeat = reader.read();
+    await vi.advanceTimersByTimeAsync(25_000);
+    const chunk = await heartbeat;
+
+    expect(new TextDecoder().decode(chunk.value)).toBe(": ping\n\n");
+    reportReady({
+      kind: "ready",
+      snapshot: { id: record.id, user_id: "user-1", status: "running" },
+    });
+    await reader.cancel();
   });
 });

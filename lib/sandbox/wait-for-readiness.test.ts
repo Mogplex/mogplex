@@ -7,15 +7,23 @@ import type {
 
 function createListener() {
   let handler: ((payload: TableEventPayload) => void) | undefined;
+  let errorHandler: ((error: Error) => void) | undefined;
   const listener: TableEventListener & {
     emit: (payload: TableEventPayload) => void;
+    emitError: (error: Error) => void;
   } = {
     onNotification(next) {
       handler = next;
     },
+    onError(next) {
+      errorHandler = next;
+    },
     end: vi.fn(async () => undefined),
     emit(payload) {
       handler?.(payload);
+    },
+    emitError(error) {
+      errorHandler?.(error);
     },
   };
   return listener;
@@ -134,6 +142,34 @@ describe("waitForSandboxReadiness", () => {
     abort.abort(new Error("client left"));
 
     await expect(result).rejects.toThrow("client left");
+    expect(listener.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails immediately when the Neon listener disconnects", async () => {
+    const listener = createListener();
+    let firstRead!: () => void;
+    const firstReadStarted = new Promise<void>((resolve) => {
+      firstRead = resolve;
+    });
+    const result = waitForSandboxReadiness(
+      { sandboxRecordId: "sandbox-1", userId: "user-1" },
+      {
+        createListener: async () => listener,
+        loadSnapshot: async () => {
+          firstRead();
+          return {
+            id: "sandbox-1",
+            user_id: "user-1",
+            status: "installing",
+          };
+        },
+      }
+    );
+
+    await firstReadStarted;
+    listener.emitError(new Error("connection lost"));
+
+    await expect(result).rejects.toThrow("connection lost");
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
 

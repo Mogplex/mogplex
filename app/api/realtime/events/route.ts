@@ -17,6 +17,21 @@ export type RealtimeEventsRouteDeps = {
   createListener: () => Promise<ListenerHandle>;
 };
 
+function closeAfterListenerError(
+  cleanup: () => Promise<void>,
+  controller: ReadableStreamDefaultController<Uint8Array>
+) {
+  void cleanup()
+    .catch(() => undefined)
+    .then(() => {
+      try {
+        controller.close();
+      } catch {
+        // Already closed by cancel().
+      }
+    });
+}
+
 export function createRealtimeEventsGetHandler(
   overrides: Partial<RealtimeEventsRouteDeps> = {}
 ) {
@@ -97,6 +112,11 @@ export function createRealtimeEventsGetHandler(
           }
         };
 
+        const handleListenerError = (error: Error) => {
+          console.error("[realtime-events] Listener disconnected:", error);
+          closeAfterListenerError(cleanup, controller);
+        };
+
         request.signal.addEventListener("abort", () => {
           void cleanup();
         });
@@ -135,6 +155,7 @@ export function createRealtimeEventsGetHandler(
               void cleanup();
             }
           });
+          listener.onError(handleListenerError);
 
           // Send initial connection confirmation
           controller.enqueue(encoder.encode(": connected\n\n"));
@@ -165,7 +186,7 @@ export function createRealtimeEventsGetHandler(
           clearInterval(pingInterval);
         }
         if (listener) {
-          void listener.end();
+          void listener.end().catch(() => undefined);
         }
       },
     });

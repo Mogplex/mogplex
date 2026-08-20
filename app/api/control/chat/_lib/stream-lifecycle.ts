@@ -26,14 +26,15 @@ export function wrapControlResponseLifecycle(
   }
 
   const upstream = response.body.getReader();
+  let cancelStarted = false;
   const readable = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
         const next = await upstream.read();
-        if (next.done) {
+        if (next.done && !cancelStarted) {
           controller.close();
           await closeOnce("complete");
-        } else {
+        } else if (!next.done) {
           controller.enqueue(next.value);
         }
       } catch (error) {
@@ -42,10 +43,12 @@ export function wrapControlResponseLifecycle(
       }
     },
     async cancel(reason) {
+      cancelStarted = true;
+      const close = closeOnce("cancelled", reason);
       try {
         await upstream.cancel(reason);
       } finally {
-        await closeOnce("cancelled", reason);
+        await close;
       }
     },
   });
