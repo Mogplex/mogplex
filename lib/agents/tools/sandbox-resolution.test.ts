@@ -15,6 +15,7 @@ import {
 import { resolveOrCreateSandbox } from "./sandbox-resolution";
 
 type RunningSandbox = { id: string };
+const OWNED_REPO_ID = "00000000-0000-4000-8000-000000000001";
 
 let supabaseAdmin: typeof import("@/lib/supabase/admin").supabaseAdmin;
 let originalFrom: typeof supabaseAdmin.from;
@@ -25,9 +26,11 @@ const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function installSandboxRows(
   running: RunningSandbox[],
-  repoLookup: { id: string } | null = null,
+  repoLookup?: { id: string } | null,
   repoLookupError: { message: string } | null = null
 ) {
+  const resolvedRepoLookup =
+    repoLookup === undefined ? { id: OWNED_REPO_ID } : repoLookup;
   const sandboxQuery = {
     select: () => sandboxQuery,
     eq: () => sandboxQuery,
@@ -37,7 +40,10 @@ function installSandboxRows(
   const repoQuery = {
     select: () => repoQuery,
     eq: () => repoQuery,
-    maybeSingle: async () => ({ data: repoLookup, error: repoLookupError }),
+    maybeSingle: async () => ({
+      data: resolvedRepoLookup,
+      error: repoLookupError,
+    }),
   };
   Object.defineProperty(supabaseAdmin, "from", {
     configurable: true,
@@ -173,10 +179,17 @@ describe("sandbox resolution contract", () => {
   it("rejects missing or unowned repository context", async () => {
     await expect(resolveOrCreateSandbox()).resolves.toBeNull();
     await expect(resolveOrCreateSandbox("user-1")).resolves.toBeNull();
+    installSandboxRows([], null);
     await expect(
       resolveOrCreateSandbox("user-1", "acme/missing")
     ).resolves.toEqual({
-      error: "Failed to start sandbox",
+      error: "Repository not found for this user.",
+      reason: "repo_mismatch",
+    });
+    await expect(
+      resolveOrCreateSandbox("user-1", OWNED_REPO_ID)
+    ).resolves.toEqual({
+      error: "Repository not found for this user.",
       reason: "repo_mismatch",
     });
   });
@@ -186,7 +199,7 @@ describe("sandbox resolution contract", () => {
     await expect(
       resolveOrCreateSandbox("user-1", "acme/unavailable")
     ).resolves.toEqual({
-      error: "Failed to start sandbox",
+      error: "Repository lookup failed. Try again.",
       reason: "repo_lookup_failed",
     });
   });

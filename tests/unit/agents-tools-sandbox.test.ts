@@ -118,7 +118,7 @@ test("start_sandbox fails closed when a full_name does not resolve even if anoth
           repoId: "webrenew/missing-repo",
         })) as { error?: string; sandboxId?: string };
 
-        assert.equal(result.error, "Failed to start sandbox");
+        assert.equal(result.error, "Repository not found for this user.");
         assert.equal(result.sandboxId, undefined);
       },
       { repoLookupData: null }
@@ -138,7 +138,7 @@ test("start_sandbox rejects invalid non-UUID repoIds instead of reusing another 
         repoId: "repo-123",
       })) as { error?: string; sandboxId?: string };
 
-      assert.equal(result.error, "Failed to start sandbox");
+      assert.equal(result.error, "Repository not found for this user.");
       assert.equal(result.sandboxId, undefined);
     });
   });
@@ -191,18 +191,22 @@ test("start_sandbox resolves a GitHub full_name to the repo UUID before posting"
 
 test("start_sandbox returns an error when a full_name does not map to an owned repo", async () => {
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
-    await withPatchedSandboxLookup(null, async () => {
-      const { createStartSandbox } = await loadToolsModule();
-      const tool = createStartSandbox("user-123") as unknown as {
-        execute: (input: { repoId: string }) => Promise<unknown>;
-      };
+    await withPatchedSandboxLookup(
+      null,
+      async () => {
+        const { createStartSandbox } = await loadToolsModule();
+        const tool = createStartSandbox("user-123") as unknown as {
+          execute: (input: { repoId: string }) => Promise<unknown>;
+        };
 
-      const result = (await tool.execute({
-        repoId: "webrenew/unknown-repo",
-      })) as { error?: string };
+        const result = (await tool.execute({
+          repoId: "webrenew/unknown-repo",
+        })) as { error?: string };
 
-      assert.equal(result.error, "Failed to start sandbox");
-    });
+        assert.equal(result.error, "Repository not found for this user.");
+      },
+      { repoLookupData: null }
+    );
   });
 });
 

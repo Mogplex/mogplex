@@ -54,6 +54,7 @@ beforeEach(() => {
     eq: () => query,
     order: () => query,
     limit: async () => ({ data: [], error: null }),
+    maybeSingle: async () => ({ data: { id: REPO_ID }, error: null }),
   };
   Object.defineProperty(supabaseAdmin, "from", {
     configurable: true,

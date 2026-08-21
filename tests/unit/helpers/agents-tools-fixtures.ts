@@ -50,6 +50,11 @@ export async function withPatchedSandboxLookup<T>(
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
   const { supabaseAdmin } = await import("../../../lib/supabase/admin");
   const originalFrom = supabaseAdmin.from.bind(supabaseAdmin);
+  const defaultOwnedRepo = { id: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b" };
+  const repoLookupData =
+    options && Object.hasOwn(options, "repoLookupData")
+      ? options.repoLookupData
+      : defaultOwnedRepo;
 
   const query = {
     select() {
@@ -74,7 +79,7 @@ export async function withPatchedSandboxLookup<T>(
       };
     },
     async maybeSingle() {
-      return { data: options?.repoLookupData ?? null, error: null };
+      return { data: repoLookupData, error: null };
     },
   };
 

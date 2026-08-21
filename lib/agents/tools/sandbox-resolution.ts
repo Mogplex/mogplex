@@ -3,12 +3,8 @@ import { isRepoId } from "@/lib/repos";
 import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
 import { resolveAppBaseUrl } from "./shared";
 
-type SandboxResolutionStatus = "running" | "pending";
-type SandboxResolutionSource =
-  | "selected"
-  | "reused_running"
-  | "reused_pending"
-  | "created";
+type SandboxResolutionStatus = "running";
+type SandboxResolutionSource = "selected" | "reused_running" | "created";
 
 export type SandboxResolution = {
   sandboxId: string;
@@ -50,22 +46,34 @@ async function resolveRepoUuid(
   | { ok: false; reason: "repo_lookup_failed" | "repo_mismatch" }
 > {
   if (!repoId) return { ok: true, repoId: undefined };
-  if (repoId.includes("/")) {
-    const { supabaseAdmin } = await import("@/lib/supabase/admin");
-    const { data: lookup, error } = await supabaseAdmin
-      .from("repos")
-      .select("id")
-      .eq("full_name", repoId)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (error) return { ok: false, reason: "repo_lookup_failed" };
-    return lookup?.id
-      ? { ok: true, repoId: lookup.id }
-      : { ok: false, reason: "repo_mismatch" };
+  const lookupColumn = repoId.includes("/") ? "full_name" : "id";
+  if (lookupColumn === "id" && !isRepoId(repoId)) {
+    return { ok: false, reason: "repo_mismatch" };
   }
-  return isRepoId(repoId)
-    ? { ok: true, repoId }
+
+  const { supabaseAdmin } = await import("@/lib/supabase/admin");
+  const { data: lookup, error } = await supabaseAdmin
+    .from("repos")
+    .select("id")
+    .eq(lookupColumn, repoId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) return { ok: false, reason: "repo_lookup_failed" };
+  return lookup?.id
+    ? { ok: true, repoId: lookup.id }
     : { ok: false, reason: "repo_mismatch" };
+}
+
+function repoResolutionFailure(
+  reason: "repo_lookup_failed" | "repo_mismatch"
+): SandboxResolutionFailure {
+  return {
+    error:
+      reason === "repo_mismatch"
+        ? "Repository not found for this user."
+        : "Repository lookup failed. Try again.",
+    reason,
+  };
 }
 
 async function findRunningSandboxIds(
@@ -135,8 +143,13 @@ async function readReusedSandboxResponse(
 
 type SandboxCreationStreamEvent =
   | { kind: "ready"; resolution: SandboxResolution }
-  | { kind: "pending"; resolution: SandboxResolution }
+  | { kind: "pending"; sandboxRecordId: string }
   | { kind: "failed"; failure: SandboxResolutionFailure };
+
+type SandboxCreationStreamResult =
+  | SandboxResolution
+  | SandboxResolutionFailure
+  | { streamEndedAfterSandboxCreated: true };
 
 function readSandboxCreationEvent(
   line: string
@@ -168,11 +181,7 @@ function readSandboxCreationEvent(
   if (event.type === "sandbox_created" && event.recordId) {
     return {
       kind: "pending",
-      resolution: {
-        sandboxId: event.recordId,
-        status: "pending",
-        source: "created",
-      },
+      sandboxRecordId: event.recordId,
     };
   }
   const lifecycleStatus =
@@ -199,7 +208,7 @@ function readSandboxCreationEvent(
 
 async function consumeSandboxCreationStream(
   response: Response
-): Promise<SandboxResolution | SandboxResolutionFailure> {
+): Promise<SandboxCreationStreamResult> {
   const failed = {
     error: "Failed to start sandbox",
     reason: "sandbox_unavailable" as const,
@@ -208,7 +217,7 @@ async function consumeSandboxCreationStream(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let pending: SandboxResolution | null = null;
+  let pendingSandboxRecordId: string | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -220,7 +229,7 @@ async function consumeSandboxCreationStream(
       const settled = readSandboxCreationEvent(line);
       if (!settled) continue;
       if (settled.kind === "pending") {
-        pending = settled.resolution;
+        pendingSandboxRecordId = settled.sandboxRecordId;
         continue;
       }
       await reader.cancel().catch(() => {});
@@ -229,12 +238,33 @@ async function consumeSandboxCreationStream(
     if (done) break;
   }
 
-  return pending
-    ? {
-        error: "Sandbox readiness stream ended before it became ready.",
-        reason: "sandbox_unavailable",
-      }
+  return pendingSandboxRecordId
+    ? { streamEndedAfterSandboxCreated: true }
     : failed;
+}
+
+async function requestSandboxStart(
+  userId: string,
+  repoId: string,
+  headers: Record<string, string>,
+  signal?: AbortSignal
+): Promise<SandboxCreationStreamResult> {
+  const response = await fetch(`${resolveAppBaseUrl()}/api/sandbox`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      Accept: "text/event-stream, application/json",
+      [SANDBOX_READINESS_WAIT_HEADER]: "1",
+    },
+    body: JSON.stringify({ repoId }),
+    signal,
+  });
+
+  return (response.headers.get("Content-Type") || "").includes(
+    "application/json"
+  )
+    ? readReusedSandboxResponse(response)
+    : consumeSandboxCreationStream(response);
 }
 
 /** Resolve selected or unique repo compute, starting it only when absent. */
@@ -255,7 +285,7 @@ export async function resolveOrCreateSandbox(
 
   const resolved = await resolveRepoUuid(userId, repoId);
   if (!resolved.ok) {
-    return { error: "Failed to start sandbox", reason: resolved.reason };
+    return repoResolutionFailure(resolved.reason);
   }
   if (!resolved.repoId) return null;
 
@@ -286,20 +316,27 @@ export async function resolveOrCreateSandbox(
       reason: "auth_unavailable",
     };
   }
-  const response = await fetch(`${resolveAppBaseUrl()}/api/sandbox`, {
-    method: "POST",
-    headers: {
-      ...requestHeaders.headers,
-      Accept: "text/event-stream, application/json",
-      [SANDBOX_READINESS_WAIT_HEADER]: "1",
-    },
-    body: JSON.stringify({ repoId: resolved.repoId }),
-    signal,
-  });
+  const first = await requestSandboxStart(
+    userId,
+    resolved.repoId,
+    requestHeaders.headers,
+    signal
+  );
+  if (!("streamEndedAfterSandboxCreated" in first)) return first;
 
-  return (response.headers.get("Content-Type") || "").includes(
-    "application/json"
-  )
-    ? readReusedSandboxResponse(response)
-    : consumeSandboxCreationStream(response);
+  // The sandbox_created event is emitted only after persistence. Reattach once
+  // through the same route so it adopts that pending record and resumes the
+  // Neon-notified wait without provisioning duplicate compute or polling.
+  const reattached = await requestSandboxStart(
+    userId,
+    resolved.repoId,
+    requestHeaders.headers,
+    signal
+  );
+  return "streamEndedAfterSandboxCreated" in reattached
+    ? {
+        error: "Sandbox readiness stream ended before it became ready.",
+        reason: "sandbox_unavailable",
+      }
+    : reattached;
 }

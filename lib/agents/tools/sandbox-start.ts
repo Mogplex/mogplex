@@ -31,9 +31,6 @@ function normalizeLifecycle(
 }
 
 export function getSandboxStartMessage(sandbox: SandboxResolution) {
-  if (sandbox.status === "pending") {
-    return "Sandbox is starting and not yet ready.";
-  }
   return sandbox.source === "reused_running"
     ? "Sandbox is already running and ready to use."
     : "Sandbox is ready to use.";

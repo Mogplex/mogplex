@@ -15,6 +15,11 @@ export type SandboxReadinessSnapshot = {
   last_boot_error?: string | null;
 };
 
+/**
+ * Known sandbox outcomes and the safety timeout resolve through this union.
+ * Caller cancellation and Neon listener/read failures reject, so callers must
+ * catch them separately from a definitive sandbox lifecycle failure.
+ */
 export type SandboxReadinessWaitResult =
   | { kind: "ready"; snapshot: SandboxReadinessSnapshot }
   | { kind: "failed"; message: string };
@@ -25,17 +30,22 @@ const MAX_LISTENER_RECONNECTS = 3;
 type SandboxReadinessWaitDeps = {
   createListener: () => Promise<TableEventListener>;
   loadSnapshot: (
-    sandboxRecordId: string
+    sandboxRecordId: string,
+    userId: string
   ) => Promise<SandboxReadinessSnapshot | null>;
 };
 
-async function loadSandboxReadinessSnapshot(sandboxRecordId: string) {
+async function loadSandboxReadinessSnapshot(
+  sandboxRecordId: string,
+  userId: string
+) {
   const { data, error } = await supabaseAdmin
     .from("sandboxes")
     .select(
       "id, user_id, status, health_status, preview_url, error, last_boot_error"
     )
     .eq("id", sandboxRecordId)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) {
@@ -83,7 +93,7 @@ function isMatchingSandboxEvent(
   return (
     payload.table === "sandboxes" &&
     payload.id === sandboxRecordId &&
-    (!payload.user_id || payload.user_id === userId)
+    payload.user_id === userId
   );
 }
 
@@ -127,11 +137,11 @@ export async function waitForSandboxReadiness(
 
     const loadSnapshotWithRetry = async () => {
       try {
-        return await deps.loadSnapshot(input.sandboxRecordId);
+        return await deps.loadSnapshot(input.sandboxRecordId, input.userId);
       } catch {
         // One immediate retry absorbs a transient Neon-backed read failure
         // without turning readiness into a status-polling loop.
-        return deps.loadSnapshot(input.sandboxRecordId);
+        return deps.loadSnapshot(input.sandboxRecordId, input.userId);
       }
     };
 

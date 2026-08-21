@@ -40,6 +40,10 @@ beforeEach(() => {
     eq: () => query,
     order: () => query,
     limit: async () => ({ data: [], error: null }),
+    maybeSingle: async () => ({
+      data: { id: "00000000-0000-4000-8000-000000000001" },
+      error: null,
+    }),
   };
   Object.defineProperty(supabaseAdmin, "from", {
     configurable: true,
@@ -146,14 +150,41 @@ describe("sandbox resolution lifecycle", () => {
     });
   });
 
-  it("reports a transport failure when readiness SSE ends early", async () => {
-    global.fetch = async () =>
-      new Response(
-        'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n',
-        {
-          headers: { "Content-Type": "text/event-stream" },
-        }
+  it("reattaches once when readiness SSE ends after persistence", async () => {
+    let requestCount = 0;
+    global.fetch = async () => {
+      requestCount += 1;
+      return new Response(
+        requestCount === 1
+          ? 'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n'
+          : [
+              'data: {"type":"sandbox_created","recordId":"sandbox-sse"}',
+              'data: {"type":"ready","sandbox":{"id":"sandbox-sse"}}',
+              "",
+            ].join("\n\n"),
+        { headers: { "Content-Type": "text/event-stream" } }
       );
+    };
+
+    await expect(
+      resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
+    ).resolves.toEqual({
+      sandboxId: "sandbox-sse",
+      status: "running",
+      source: "created",
+    });
+    expect(requestCount).toBe(2);
+  });
+
+  it("reports a transport failure after one unsuccessful reattach", async () => {
+    let requestCount = 0;
+    global.fetch = async () => {
+      requestCount += 1;
+      return new Response(
+        'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n',
+        { headers: { "Content-Type": "text/event-stream" } }
+      );
+    };
 
     await expect(
       resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
@@ -161,5 +192,6 @@ describe("sandbox resolution lifecycle", () => {
       error: "Sandbox readiness stream ended before it became ready.",
       reason: "sandbox_unavailable",
     });
+    expect(requestCount).toBe(2);
   });
 });

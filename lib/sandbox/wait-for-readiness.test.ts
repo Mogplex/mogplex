@@ -69,6 +69,7 @@ describe("waitForSandboxReadiness", () => {
       kind: "ready",
       snapshot: { id: "sandbox-1", status: "running" },
     });
+    expect(loadSnapshot).toHaveBeenNthCalledWith(1, "sandbox-1", "user-1");
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
 
@@ -106,6 +107,11 @@ describe("waitForSandboxReadiness", () => {
       op: "UPDATE",
       id: "sandbox-other",
       user_id: "user-1",
+    });
+    listener.emit({
+      table: "sandboxes",
+      op: "UPDATE",
+      id: "sandbox-1",
     });
     expect(loadSnapshot).toHaveBeenCalledTimes(1);
     listener.emit({
@@ -205,6 +211,22 @@ describe("waitForSandboxReadiness", () => {
         { createListener: async () => listener, loadSnapshot }
       )
     ).resolves.toMatchObject({ kind: "ready" });
+    expect(loadSnapshot).toHaveBeenCalledTimes(2);
+    expect(listener.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects after the bounded snapshot retry cannot reach Neon", async () => {
+    const listener = createListener();
+    const loadSnapshot = vi
+      .fn()
+      .mockRejectedValue(new Error("Neon snapshot unavailable"));
+
+    await expect(
+      waitForSandboxReadiness(
+        { sandboxRecordId: "sandbox-1", userId: "user-1" },
+        { createListener: async () => listener, loadSnapshot }
+      )
+    ).rejects.toThrow("Neon snapshot unavailable");
     expect(loadSnapshot).toHaveBeenCalledTimes(2);
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
