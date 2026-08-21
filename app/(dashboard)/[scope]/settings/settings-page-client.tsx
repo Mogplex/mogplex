@@ -13,6 +13,16 @@ import { CliApiKeysSection } from "@/components/settings/cli-api-keys-section"
 import { SlackInstallToast } from "@/components/connections/slack-install-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { trackActivation } from "@/lib/activation-tracking"
 import type { ScopeContext } from "@/lib/scope-context"
 
@@ -82,6 +92,9 @@ function PersonalSettingsClient() {
   const { user, isLoading } = useUser()
   const [defaultModel, setDefaultModel] = useState("")
   const [saving, setSaving] = useState(false)
+  const [pendingDefaultModel, setPendingDefaultModel] = useState<string | null>(null)
+  const [cascadeAutomations, setCascadeAutomations] = useState(true)
+  const [defaultModelNotice, setDefaultModelNotice] = useState<string | null>(null)
   const {
     data: settingsData,
     error: settingsError,
@@ -173,33 +186,58 @@ function PersonalSettingsClient() {
     }
   }, [settingsData])
 
-  const savePreference = useCallback(async (key: "default_model", value: string) => {
+  const savePreference = useCallback(async (
+    key: "default_model",
+    value: string,
+    options?: { updateAutomationModels?: boolean },
+  ) => {
     setSaving(true)
     const response = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [key]: value }),
+      body: JSON.stringify({
+        [key]: value,
+        ...(options?.updateAutomationModels ? { update_automation_models: true } : {}),
+      }),
     })
     if (!response.ok) {
       setSaving(false)
       throw new Error(`Failed to save ${key}`)
+    }
+    const payload = (await response.json()) as {
+      automations?: { drafts_updated: number; versions_published: number; failed: number }
+      automation_update_error?: string
     }
     await mutateSettings((current) => ({
       ...(current ?? {}),
       [key]: value,
     }), false)
     setSaving(false)
+    return payload
   }, [mutateSettings])
 
-  const saveDefaultModel = useCallback(async (modelId: string) => {
+  const saveDefaultModel = useCallback(async (modelId: string, updateAutomationModels: boolean) => {
     const previousModel = defaultModel
     setDefaultModel(modelId)
+    setDefaultModelNotice(null)
     try {
-      await savePreference("default_model", modelId)
+      const payload = await savePreference("default_model", modelId, { updateAutomationModels })
+      if (payload?.automation_update_error) {
+        setDefaultModelNotice(payload.automation_update_error)
+      } else if (updateAutomationModels && payload?.automations && payload.automations.failed > 0) {
+        setDefaultModelNotice(
+          `Default model saved, but ${payload.automations.failed} automation${payload.automations.failed === 1 ? "" : "s"} couldn't be updated.`,
+        )
+      }
     } catch {
       setDefaultModel(previousModel)
     }
   }, [defaultModel, savePreference])
+
+  const requestDefaultModel = useCallback(async (modelId: string) => {
+    setCascadeAutomations(true)
+    setPendingDefaultModel(modelId)
+  }, [])
 
   return (
     <div className="min-h-full p-3 space-y-4 md:p-6 md:space-y-6">
@@ -266,9 +304,12 @@ function PersonalSettingsClient() {
         </TabsContent>
 
         <TabsContent value="models" className="mt-0">
+          {defaultModelNotice && (
+            <div data-testid="models-default-notice" className="mb-3 text-sm text-destructive">{defaultModelNotice}</div>
+          )}
           <ModelsSection
             defaultModel={defaultModel}
-            onSetDefault={saveDefaultModel}
+            onSetDefault={requestDefaultModel}
             savingDefault={saving}
           />
         </TabsContent>
@@ -281,6 +322,59 @@ function PersonalSettingsClient() {
           <BillingSection embedded />
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={pendingDefaultModel !== null}
+        onOpenChange={(open) => {
+          if (!open && !saving) setPendingDefaultModel(null)
+        }}
+      >
+        <DialogContent data-testid="models-default-dialog">
+          <DialogHeader>
+            <DialogTitle>Change default model?</DialogTitle>
+            <DialogDescription>
+              New chats and automations will use{" "}
+              <span className="font-mono text-foreground">{pendingDefaultModel}</span>{" "}
+              by default.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex items-start gap-2.5 text-sm leading-5 text-foreground">
+            <Checkbox
+              data-testid="models-default-update-automations"
+              checked={cascadeAutomations}
+              onCheckedChange={(checked) => setCascadeAutomations(checked === true)}
+              className="mt-0.5"
+            />
+            <span>
+              Also switch automations that use the current default
+              (<span className="font-mono">{defaultModel}</span>) to the new model.
+              Automations where you picked a different model stay as they are.
+            </span>
+          </label>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              data-testid="models-default-cancel"
+              disabled={saving}
+              onClick={() => setPendingDefaultModel(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-testid="models-default-confirm"
+              disabled={saving}
+              onClick={() => {
+                if (!pendingDefaultModel) return
+                const modelId = pendingDefaultModel
+                setPendingDefaultModel(null)
+                void saveDefaultModel(modelId, cascadeAutomations)
+              }}
+            >
+              Set default
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
