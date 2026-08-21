@@ -36,10 +36,13 @@ type SharedTableEventConnection = {
   closing: boolean;
 };
 
+export const TABLE_EVENT_CONNECTION_TIMEOUT_MS = 5_000;
+
 async function defaultCreateClient(): Promise<TableEventClient> {
   const { Client } = await import("pg");
   return new Client({
     connectionString: getRuntimeUnpooledDatabaseUrl(),
+    connectionTimeoutMillis: TABLE_EVENT_CONNECTION_TIMEOUT_MS,
   });
 }
 
@@ -105,10 +108,22 @@ export function createTableEventListenerFactory(
       connection.failed = true;
       connection.failure = error;
       if (sharedConnection === connection) sharedConnection = null;
-      for (const handler of errorHandlers) handler(error);
-      // A pg error is not guaranteed to be followed by an `end` event.
-      // Close explicitly so a failed shared client cannot outlive its leases.
-      closeFailedConnection(connection);
+      try {
+        for (const handler of errorHandlers) {
+          try {
+            handler(error);
+          } catch (handlerError) {
+            console.error(
+              "[db/table-events] listener error handler failed",
+              handlerError
+            );
+          }
+        }
+      } finally {
+        // A pg error is not guaranteed to be followed by an `end` event.
+        // Close explicitly so a failed shared client cannot outlive its leases.
+        closeFailedConnection(connection);
+      }
     };
     const notificationListener = (message: Notification) => {
       const payload = parseTableEvent(message);

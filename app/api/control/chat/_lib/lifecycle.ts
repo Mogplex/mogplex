@@ -92,11 +92,18 @@ export function getSandboxStartTerminalFailure(event: {
   }
   const output = event.output as Record<string, unknown>;
   if (typeof output.error === "string" || output.status === "error") {
+    // Selection and ownership mismatches are expected, recoverable outcomes:
+    // the assistant can ask the user for the intended repository or sandbox.
+    // Runtime, infrastructure, and configuration failures remain terminal.
+    if (
+      output.reason === "multiple_sandboxes" ||
+      output.reason === "repo_mismatch"
+    ) {
+      return null;
+    }
     return "Sandbox startup failed.";
   }
-  // A pending result is not a successful retry, so it cannot clear an earlier
-  // terminal launch failure.
-  return output.status === "pending" ? undefined : null;
+  return null;
 }
 
 /** Keep the terminal state aligned with the most recent sandbox launch. */

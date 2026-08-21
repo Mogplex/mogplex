@@ -64,14 +64,20 @@ test("Control clears a failed launch when a sandbox retry succeeds", () => {
   assert.equal(afterOtherTool, null);
 });
 
-test("Control preserves a failed launch while a retry remains pending", () => {
-  const failure = updateSandboxStartTerminalFailure("Sandbox startup failed.", {
-    success: true,
-    output: { sandboxId: "sandbox-new", status: "pending" },
-    toolCall: { toolName: "sandbox_start" },
-  });
+test("Control keeps recoverable sandbox selection failures eligible for success", () => {
+  for (const reason of ["multiple_sandboxes", "repo_mismatch"]) {
+    const failure = updateSandboxStartTerminalFailure(
+      "Sandbox startup failed.",
+      {
+        success: true,
+        output: { error: "Selection required", reason },
+        toolCall: { toolName: "sandbox_start" },
+      }
+    );
 
-  assert.equal(failure, "Sandbox startup failed.");
+    assert.equal(failure, null);
+    assert.equal(getControlRunFinishState("stop", failure).status, "success");
+  }
 });
 
 test("Control preserves a sandbox root cause when its response stream also fails", () => {

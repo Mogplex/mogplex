@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTableEventListenerFactory } from "./table-event-listener";
+import {
+  createTableEventListenerFactory,
+  TABLE_EVENT_CONNECTION_TIMEOUT_MS,
+} from "./table-event-listener";
 
 function createClient() {
   const handlers = new Map<string, Set<(...args: never[]) => void>>();
@@ -25,6 +28,10 @@ function createClient() {
 }
 
 describe("table event listener", () => {
+  it("bounds Neon connection establishment", () => {
+    expect(TABLE_EVENT_CONNECTION_TIMEOUT_MS).toBe(5_000);
+  });
+
   it("multiplexes leases over one Neon LISTEN connection", async () => {
     const client = createClient();
     const createClientForListener = vi.fn(async () => client);
@@ -87,5 +94,35 @@ describe("table event listener", () => {
 
     expect(errors[0]?.message).toBe("connection lost");
     await listener.end();
+  });
+
+  it("closes and continues fan-out when an error handler throws", async () => {
+    const client = createClient();
+    const createListener = createTableEventListenerFactory({
+      createClient: async () => client as never,
+    });
+    const first = await createListener();
+    const second = await createListener();
+    const secondErrors: Error[] = [];
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    first.onError(() => {
+      throw new Error("consumer failed");
+    });
+    second.onError((error) => secondErrors.push(error));
+
+    expect(() =>
+      client.emit("error", new Error("connection lost") as never)
+    ).not.toThrow();
+    expect(secondErrors[0]?.message).toBe("connection lost");
+    expect(client.end).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(
+      "[db/table-events] listener error handler failed",
+      expect.any(Error)
+    );
+    consoleError.mockRestore();
+    await first.end();
+    await second.end();
   });
 });
