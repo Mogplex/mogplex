@@ -84,3 +84,108 @@ test("PATCH /api/settings saves enabled default models", async () => {
   assert.deepEqual(await response.json(), { ok: true });
   assert.deepEqual(updates, [{ default_model: "minimax/minimax-m2.7" }]);
 });
+
+test("PATCH /api/settings cascades the default-model change to automations when opted in", async () => {
+  const { createSettingsPatchHandler } = await loadSettingsRoute();
+  const cascadeCalls: Array<{
+    userId: string;
+    previousModelIds: string[];
+    nextModelId: string;
+  }> = [];
+
+  const handler = createSettingsPatchHandler({
+    requireUserId: async () => "user-123",
+    canUserSetDefaultModel: async () => true,
+    updateProfile: async () => ({ error: null }),
+    loadStoredDefaultModel: async () => "openai/gpt-5.4",
+    resolveStoredUserDefaultModelId: async () => "openai/gpt-5.4",
+    cascadeAutomationModels: async (input) => {
+      cascadeCalls.push(input);
+      return { draftsUpdated: 3, versionsPublished: 2, failed: 0 };
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        default_model: "minimax/minimax-m2.7",
+        update_automation_models: true,
+      }),
+    })
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    automations: { drafts_updated: 3, versions_published: 2, failed: 0 },
+  });
+  assert.deepEqual(cascadeCalls, [
+    {
+      userId: "user-123",
+      previousModelIds: ["openai/gpt-5.4"],
+      nextModelId: "minimax/minimax-m2.7",
+    },
+  ]);
+});
+
+test("PATCH /api/settings reports a cascade failure without failing the saved default", async () => {
+  const { createSettingsPatchHandler } = await loadSettingsRoute();
+
+  const handler = createSettingsPatchHandler({
+    requireUserId: async () => "user-123",
+    canUserSetDefaultModel: async () => true,
+    updateProfile: async () => ({ error: null }),
+    loadStoredDefaultModel: async () => "openai/gpt-5.4",
+    resolveStoredUserDefaultModelId: async () => "openai/gpt-5.4",
+    cascadeAutomationModels: async () => {
+      throw new Error("db down");
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        default_model: "minimax/minimax-m2.7",
+        update_automation_models: true,
+      }),
+    })
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    automation_update_error:
+      "Default model saved, but updating automations failed",
+  });
+});
+
+test("PATCH /api/settings ignores update_automation_models without a default model", async () => {
+  const { createSettingsPatchHandler } = await loadSettingsRoute();
+  let cascadeCalls = 0;
+
+  const handler = createSettingsPatchHandler({
+    requireUserId: async () => "user-123",
+    canUserSetDefaultModel: async () => true,
+    updateProfile: async () => ({ error: null }),
+    cascadeAutomationModels: async () => {
+      cascadeCalls += 1;
+      return { draftsUpdated: 0, versionsPublished: 0, failed: 0 };
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ update_automation_models: true }),
+    })
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "No valid fields" });
+  assert.equal(cascadeCalls, 0);
+});

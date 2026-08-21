@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import {
+  cascadeDefaultModelToAutomations,
+  type CascadeAutomationModelInput,
+  type CascadeAutomationModelResult,
+} from "@/lib/flows/cascade-default-model";
+import {
   canUserSetDefaultModel,
+  resolveStoredUserDefaultModelId,
   resolveUserDefaultModelId,
 } from "@/lib/models/default-model";
 import { THEME_COOKIE_NAME, isThemePreference } from "@/lib/theme-preferences";
@@ -23,6 +29,11 @@ type SettingsPatchDeps = {
     userId: string,
     updates: Record<string, unknown>
   ) => Promise<{ error: { message: string } | null }>;
+  loadStoredDefaultModel: (userId: string) => Promise<string | null>;
+  resolveStoredUserDefaultModelId: typeof resolveStoredUserDefaultModelId;
+  cascadeAutomationModels: (
+    input: CascadeAutomationModelInput
+  ) => Promise<CascadeAutomationModelResult>;
 };
 
 const defaultSettingsGetDeps: SettingsGetDeps = {
@@ -55,6 +66,17 @@ const defaultSettingsPatchDeps: SettingsPatchDeps = {
       error: error ? { message: error.message } : null,
     };
   },
+  async loadStoredDefaultModel(userId) {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("default_model")
+      .eq("id", userId)
+      .single();
+    if (error) throw new Error(error.message);
+    return data?.default_model ?? null;
+  },
+  resolveStoredUserDefaultModelId,
+  cascadeAutomationModels: cascadeDefaultModelToAutomations,
 };
 
 export function createSettingsGetHandler(
@@ -140,12 +162,64 @@ export function createSettingsPatchHandler(
       return NextResponse.json({ error: "No valid fields" }, { status: 400 });
     }
 
+    // Opt-in cascade: when the default model changes, also move automations
+    // that were pinned to the old default onto the new one. The previous ids
+    // (raw stored value plus its resolved form — drafts were stamped with
+    // either) must be captured before the profile write.
+    const cascadeAutomations =
+      body.update_automation_models === true &&
+      typeof updates.default_model === "string";
+    let previousModelIds: string[] = [];
+    if (cascadeAutomations) {
+      const [storedDefault, resolvedDefault] = await Promise.all([
+        deps.loadStoredDefaultModel(userId),
+        deps.resolveStoredUserDefaultModelId(userId),
+      ]);
+      previousModelIds = [
+        ...new Set(
+          [storedDefault, resolvedDefault].flatMap((id) => (id ? [id] : []))
+        ),
+      ].filter((id) => id !== updates.default_model);
+    }
+
     const { error } = await deps.updateProfile(userId, updates);
 
     if (error)
       return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const response = NextResponse.json({ ok: true });
+    let automations: CascadeAutomationModelResult | null = null;
+    let automationUpdateError: string | null = null;
+    if (cascadeAutomations) {
+      try {
+        automations = await deps.cascadeAutomationModels({
+          userId,
+          previousModelIds,
+          nextModelId: updates.default_model as string,
+        });
+      } catch (cascadeError) {
+        // The default is already saved; report the cascade failure alongside
+        // the success instead of failing the whole request.
+        console.error("Automation model cascade failed", cascadeError);
+        automationUpdateError =
+          "Default model saved, but updating automations failed";
+      }
+    }
+
+    const response = NextResponse.json({
+      ok: true,
+      ...(automations
+        ? {
+            automations: {
+              drafts_updated: automations.draftsUpdated,
+              versions_published: automations.versionsPublished,
+              failed: automations.failed,
+            },
+          }
+        : {}),
+      ...(automationUpdateError
+        ? { automation_update_error: automationUpdateError }
+        : {}),
+    });
     if (isThemePreference(updates.theme)) {
       response.cookies.set(THEME_COOKIE_NAME, updates.theme, {
         path: "/",

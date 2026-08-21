@@ -115,6 +115,10 @@ test("models catalog supports provider, state, pricing filters, and state sortin
 }) => {
   await enableScopedE2EAuth(page);
   let defaultModel = "minimax/minimax-m2.7";
+  const settingsPatches: Array<{
+    default_model?: string;
+    update_automation_models?: boolean;
+  }> = [];
   const catalogState = catalog.map((model) => ({ ...model }));
 
   await page.route("**/api/auth/user", (route) =>
@@ -124,7 +128,9 @@ test("models catalog supports provider, state, pricing filters, and state sortin
     if (route.request().method() === "PATCH") {
       const payload = JSON.parse(route.request().postData() || "{}") as {
         default_model?: string;
+        update_automation_models?: boolean;
       };
+      settingsPatches.push(payload);
       if (payload.default_model) {
         defaultModel = payload.default_model;
       }
@@ -214,7 +220,23 @@ test("models catalog supports provider, state, pricing filters, and state sortin
     page.getByTestId("models-set-default-openai/gpt-oss-120b")
   ).toBeDisabled();
   await page.getByTestId("models-toggle-openai/gpt-oss-120b").click();
+
+  // Changing the default asks first; cancelling saves nothing.
   await page.getByTestId("models-set-default-openai/gpt-oss-120b").click();
+  await expect(page.getByTestId("models-default-dialog")).toBeVisible();
+  await expect(
+    page.getByTestId("models-default-update-automations")
+  ).toHaveAttribute("data-state", "checked");
+  await page.getByTestId("models-default-cancel").click();
+  await expect(page.getByTestId("models-default-dialog")).toHaveCount(0);
+  expect(settingsPatches).toHaveLength(0);
+  await expect(page.getByTestId("models-default-summary")).toContainText(
+    "minimax-m2.7"
+  );
+
+  // Confirming with the cascade option checked opts automations in.
+  await page.getByTestId("models-set-default-openai/gpt-oss-120b").click();
+  await page.getByTestId("models-default-confirm").click();
   await expect(page.getByTestId("models-default-summary")).toContainText(
     "gpt-oss-120b"
   );
@@ -222,6 +244,10 @@ test("models catalog supports provider, state, pricing filters, and state sortin
     page.getByTestId("models-set-default-openai/gpt-oss-120b")
   ).toContainText("Selected");
   expect(defaultModel).toBe("openai/gpt-oss-120b");
+  expect(settingsPatches.at(-1)).toEqual({
+    default_model: "openai/gpt-oss-120b",
+    update_automation_models: true,
+  });
 
   await expect(page.getByText("In $2.50")).toBeVisible();
   await expect(page.getByText("Out $75")).toBeVisible();
@@ -264,4 +290,17 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   await page.getByTestId("models-search").fill("mini");
   visibleNames = await page.getByTestId("models-row-name").allTextContents();
   expect(visibleNames).toEqual(["Minimax M2.7"]);
+
+  // Unchecking the cascade option saves the default without touching
+  // automations.
+  await page.getByTestId("models-set-default-minimax/minimax-m2.7").click();
+  await expect(page.getByTestId("models-default-dialog")).toBeVisible();
+  await page.getByTestId("models-default-update-automations").click();
+  await page.getByTestId("models-default-confirm").click();
+  await expect(page.getByTestId("models-default-summary")).toContainText(
+    "minimax-m2.7"
+  );
+  expect(settingsPatches.at(-1)).toEqual({
+    default_model: "minimax/minimax-m2.7",
+  });
 });
