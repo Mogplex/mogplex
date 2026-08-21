@@ -208,6 +208,41 @@ test.describe("better-auth against real Neon", () => {
       expect(refreshBody.access_token).toBeTruthy();
       expect(refreshBody.access_token).not.toBe(tokenBody.access_token);
 
+      const cliHeaders = {
+        Authorization: `Bearer ${refreshBody.access_token}`,
+      };
+      const settingsRes = await request.get("/api/settings", {
+        headers: cliHeaders,
+        maxRedirects: 0,
+      });
+      expect(settingsRes.status(), await settingsRes.text()).toBe(200);
+
+      const modelsRes = await request.get("/api/models?format=cli", {
+        headers: cliHeaders,
+        maxRedirects: 0,
+      });
+      expect(modelsRes.status(), await modelsRes.text()).toBe(200);
+      expect(await modelsRes.json()).toEqual(expect.any(Array));
+
+      const mcpServersRes = await request.get("/api/mcp-servers", {
+        headers: cliHeaders,
+        maxRedirects: 0,
+      });
+      expect(mcpServersRes.status(), await mcpServersRes.text()).toBe(200);
+
+      const inferenceRes = await request.post(
+        "/api/cli/inference/chat/completions",
+        {
+          data: { messages: [] },
+          headers: cliHeaders,
+          maxRedirects: 0,
+        }
+      );
+      expect(inferenceRes.status(), await inferenceRes.text()).toBe(400);
+      expect(await inferenceRes.json()).toEqual({
+        error: { message: "messages is required" },
+      });
+
       // The cliTokenTtl hook clamps CLI refresh tokens to 30 days even
       // though the provider-wide setting is effectively-never (MCP clients).
       const ttlRows = await pool.query(
@@ -234,7 +269,7 @@ test.describe("better-auth against real Neon", () => {
       maxRedirects: 0,
     });
     expect(cliAuth.status()).toBe(200);
-    expect(await cliAuth.text()).toContain("CLI login has moved");
+    expect(await cliAuth.text()).toContain("Update Mogplex to sign in");
 
     // Sign-out invalidates the session server-side, not just the cookie. The
     // Origin header satisfies better-auth's CSRF check for cookie-backed
@@ -257,6 +292,8 @@ test.describe("better-auth against real Neon", () => {
       maxRedirects: 0,
     });
     expect(loggedOutCliAuth.status()).toBe(200);
-    expect(await loggedOutCliAuth.text()).toContain("CLI login has moved");
+    expect(await loggedOutCliAuth.text()).toContain(
+      "Update Mogplex to sign in"
+    );
   });
 });

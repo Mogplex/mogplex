@@ -1,12 +1,23 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getPlaywrightUserIdFromHeaders } from "@/lib/internal-api-auth";
+import { resolveCliBearerAuth } from "@/lib/auth/cli-bearer";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ResolvedAuth = {
   profileId: string;
   authUserId: string | null;
-  source: "supabase" | "better-auth" | "playwright" | "api-key";
+  source: "supabase" | "better-auth" | "playwright" | "api-key" | "oauth";
+};
+
+type ResolvedAuthDependencies = {
+  getHeaders: () => Promise<{ get: (name: string) => string | null }>;
+  resolveCliBearer: typeof resolveCliBearerAuth;
+};
+
+const defaultResolvedAuthDependencies: ResolvedAuthDependencies = {
+  getHeaders: headers,
+  resolveCliBearer: resolveCliBearerAuth,
 };
 
 async function findProfileIdByAuthUserId(
@@ -46,37 +57,39 @@ async function getBetterAuthLinkedUserId(): Promise<ResolvedAuth | undefined> {
   return { profileId, authUserId, source: "better-auth" };
 }
 
-export async function getProfileId(): Promise<string | undefined> {
-  return (await getResolvedAuth())?.profileId;
+export async function getProfileId(
+  dependencies: ResolvedAuthDependencies = defaultResolvedAuthDependencies
+): Promise<string | undefined> {
+  return (await getResolvedAuth(dependencies))?.profileId;
 }
 
 /**
  * Returns the Mogplex profile id, not `auth.users.id`.
  * Kept for compatibility with existing call sites.
  */
-export async function getUserId(): Promise<string | undefined> {
-  return getProfileId();
+export async function getUserId(
+  dependencies: ResolvedAuthDependencies = defaultResolvedAuthDependencies
+): Promise<string | undefined> {
+  return getProfileId(dependencies);
 }
 
-export async function getResolvedAuth(): Promise<ResolvedAuth | undefined> {
-  const headerStore = await headers();
+export async function getResolvedAuth(
+  dependencies: ResolvedAuthDependencies = defaultResolvedAuthDependencies
+): Promise<ResolvedAuth | undefined> {
+  const headerStore = await dependencies.getHeaders();
 
-  // 1. Check for PAT (Personal Access Token) - highest priority for CLI
+  // 1. Check CLI bearer credentials before browser sessions.
   const authHeader = headerStore.get("authorization");
-  if (authHeader?.startsWith("Bearer mog_")) {
-    const { resolveApiKey } = await import("@/lib/auth/api-key");
-    const apiKeyResult = await resolveApiKey(authHeader);
-    if (apiKeyResult.ok) {
-      return {
-        profileId: apiKeyResult.auth.userId,
-        authUserId: null,
-        source: "api-key",
-      };
-    }
-    // Rate-limited and invalid both fall through to other auth strategies
-    // here; the public v1 API surface maps rate_limited → 429 separately
-    // via resolveMogplexApiUser.
+  const cliBearerAuth = await dependencies.resolveCliBearer(authHeader);
+  if (cliBearerAuth) {
+    return {
+      profileId: cliBearerAuth.profileId,
+      authUserId: null,
+      source: cliBearerAuth.source,
+    };
   }
+  // Rate-limited and invalid credentials fall through to browser auth. The
+  // public v1 API maps rate-limited PATs to 429 via resolveMogplexApiUser.
 
   // 2. Playwright internal auth (for E2E tests)
   const playwrightUserId = getPlaywrightUserIdFromHeaders(headerStore);

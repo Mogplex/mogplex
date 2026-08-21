@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  allowsCliBearerApiPath as allowsCliBearerApiAuth,
   allowsCliPatApiPath as allowsCliPatApiAuth,
   allowsMachineApiPath as allowsMachineApiAuth,
 } from "@/lib/auth-route-policy";
@@ -140,13 +141,11 @@ export function isCliPatApiRequest(request: Request, pathname: string) {
 }
 
 /**
- * Let the dedicated Mogplex v1 routes validate PAT and OAuth bearer tokens.
- * This delegation is path-bounded; no other API accepts arbitrary bearers.
+ * Let hosted CLI routes validate PAT and OAuth bearer tokens. This delegation
+ * is path-bounded; no other API accepts arbitrary bearers.
  */
 export function isMogplexBearerApiRequest(request: Request, pathname: string) {
-  const isMogplexApiPath =
-    pathname === "/api/v1/mogplex" || pathname.startsWith("/api/v1/mogplex/");
-  if (!isMogplexApiPath) return false;
+  if (!allowsCliBearerApiAuth(pathname)) return false;
   return Boolean(getBearerToken(request));
 }
 
