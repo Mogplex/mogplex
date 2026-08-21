@@ -28,8 +28,9 @@ import {
   reconcileStaleListedSandboxes,
 } from "./_lib/list";
 
-// Sandbox creation can await a Neon-notified readiness transition for up to
-// ten minutes. Leave enough function budget for request setup and teardown.
+// The deployment target supports this ceiling. Ordinary POSTs still return as
+// soon as their work completes; only an opted-in Neon-notified readiness wait
+// can approach ten minutes. Leave room for request setup and teardown.
 export const maxDuration = 800;
 
 // Re-export functions that tests depend on

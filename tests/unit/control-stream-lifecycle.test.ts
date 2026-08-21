@@ -74,7 +74,7 @@ test("control stream lifecycle distinguishes an upstream error", async () => {
   assert.deepEqual(closures, ["error"]);
 });
 
-test("control stream lifecycle records cancellation before upstream teardown", async () => {
+test("control stream lifecycle records cancellation after upstream teardown", async () => {
   const closures: string[] = [];
   const order: string[] = [];
   let finishCancel!: () => void;
@@ -85,7 +85,10 @@ test("control stream lifecycle records cancellation before upstream teardown", a
     cancel() {
       order.push("upstream-cancel");
       return new Promise<void>((resolve) => {
-        finishCancel = resolve;
+        finishCancel = () => {
+          order.push("upstream-cancelled");
+          resolve();
+        };
       });
     },
   });
@@ -102,10 +105,54 @@ test("control stream lifecycle records cancellation before upstream teardown", a
   const cancellation = reader.cancel("client left");
   await Promise.resolve();
 
-  assert.deepEqual(closures, ["cancelled"]);
-  assert.deepEqual(order, ["upstream-cancel", "lifecycle-close"]);
+  assert.deepEqual(closures, []);
+  assert.deepEqual(order, ["upstream-cancel"]);
   finishCancel();
   await cancellation;
+  assert.deepEqual(closures, ["cancelled"]);
+  assert.deepEqual(order, [
+    "upstream-cancel",
+    "upstream-cancelled",
+    "lifecycle-close",
+  ]);
+});
+
+test("control stream lifecycle finalizes when upstream cancellation rejects", async () => {
+  const closures: string[] = [];
+  const upstream = new ReadableStream<Uint8Array>({
+    cancel() {
+      return Promise.reject(new Error("teardown failed"));
+    },
+  });
+  const response = wrapControlResponseLifecycle(
+    new Response(upstream),
+    async (closure) => {
+      closures.push(closure);
+    }
+  );
+
+  await response.body!.cancel("client left");
+
+  assert.deepEqual(closures, ["cancelled"]);
+});
+
+test("control stream lifecycle finalizes when upstream cancellation stalls", async () => {
+  const closures: string[] = [];
+  const upstream = new ReadableStream<Uint8Array>({
+    cancel() {
+      return new Promise<void>(() => undefined);
+    },
+  });
+  const response = wrapControlResponseLifecycle(
+    new Response(upstream),
+    async (closure) => {
+      closures.push(closure);
+    }
+  );
+
+  await response.body!.cancel("client left");
+
+  assert.deepEqual(closures, ["cancelled"]);
 });
 
 test("control stream lifecycle ignores a pending read rejection after cancellation", async () => {

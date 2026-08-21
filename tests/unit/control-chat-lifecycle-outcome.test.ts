@@ -64,9 +64,14 @@ test("Control clears a failed launch when a sandbox retry succeeds", () => {
   assert.equal(afterOtherTool, null);
 });
 
-test("Control keeps recoverable sandbox selection failures eligible for success", () => {
+test("Control preserves hard failures across recoverable sandbox selection errors", () => {
   for (const reason of ["multiple_sandboxes", "repo_mismatch"]) {
-    const failure = updateSandboxStartTerminalFailure(
+    const initialSelectionError = updateSandboxStartTerminalFailure(null, {
+      success: true,
+      output: { error: "Selection required", reason },
+      toolCall: { toolName: "sandbox_start" },
+    });
+    const priorHardFailure = updateSandboxStartTerminalFailure(
       "Sandbox startup failed.",
       {
         success: true,
@@ -75,8 +80,16 @@ test("Control keeps recoverable sandbox selection failures eligible for success"
       }
     );
 
-    assert.equal(failure, null);
-    assert.equal(getControlRunFinishState("stop", failure).status, "success");
+    assert.equal(initialSelectionError, null);
+    assert.equal(
+      getControlRunFinishState("stop", initialSelectionError).status,
+      "success"
+    );
+    assert.equal(priorHardFailure, "Sandbox startup failed.");
+    assert.equal(
+      getControlRunFinishState("stop", priorHardFailure).status,
+      "failed"
+    );
   }
 });
 

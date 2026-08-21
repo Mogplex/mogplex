@@ -94,16 +94,16 @@ export function getSandboxStartTerminalFailure(event: {
   if (typeof output.error === "string" || output.status === "error") {
     // Selection and ownership mismatches are expected, recoverable outcomes:
     // the assistant can ask the user for the intended repository or sandbox.
-    // Runtime, infrastructure, and configuration failures remain terminal.
+    // Preserve any earlier hard launch failure until a sandbox actually starts.
     if (
       output.reason === "multiple_sandboxes" ||
       output.reason === "repo_mismatch"
     ) {
-      return null;
+      return undefined;
     }
     // A real launch failure is terminal for this run even if the assistant
-    // later explains it coherently. Only a later successful or recoverable
-    // sandbox_start clears the failure state.
+    // later explains it coherently. Only a later successful sandbox_start
+    // clears the failure state.
     return "Sandbox startup failed.";
   }
   return null;
