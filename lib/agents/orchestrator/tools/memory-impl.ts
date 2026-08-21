@@ -130,7 +130,7 @@ export function createHandoffNoteTool(
           scope: {
             repoId: ctx.repoId ?? null,
             conversationId: ctx.conversationId ?? null,
-            sandboxId: ctx.sandboxId ?? null,
+            sandboxId: ctx.sandboxBinding?.sandboxId ?? ctx.sandboxId ?? null,
           },
         });
         return { ok: true };

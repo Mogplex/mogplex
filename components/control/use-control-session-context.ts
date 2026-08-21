@@ -6,6 +6,7 @@ import type { Repo, SandboxRecord } from "@/lib/types";
 import { resolveControlSessionRepo } from "@/lib/control/session-project";
 import type { ControlChatRequestContext } from "./control-chat-request";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
+import { isCurrentControlSandbox } from "@/lib/control/sandbox-presentation";
 
 type ContextRepo = Pick<
   Repo,
@@ -27,13 +28,14 @@ export function selectControlSessionSandboxes<T extends { repo_id: string }>(
 export function selectControlActiveSandbox<
   T extends { id: string; runtime_summary: { status: string } },
 >(sandboxes: T[], preferredSandboxId: string | null): T | null {
+  const current = sandboxes.filter(isCurrentControlSandbox);
   const preferred = preferredSandboxId
-    ? sandboxes.find((sandbox) => sandbox.id === preferredSandboxId)
+    ? current.find((sandbox) => sandbox.id === preferredSandboxId)
     : null;
   if (preferred) return preferred;
   return (
-    sandboxes.find((sandbox) => sandbox.runtime_summary.status === "running") ??
-    sandboxes[0] ??
+    current.find((sandbox) => sandbox.runtime_summary.status === "running") ??
+    current[0] ??
     null
   );
 }

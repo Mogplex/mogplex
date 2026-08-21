@@ -36,6 +36,8 @@ type Props = {
 
 const KIND_STYLES: Record<string, { icon: typeof User; bg: string; fg: string; labelColor: string }> = {
   user: { icon: User, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
+  assistant: { icon: Cpu, bg: "bg-ink-800", fg: "text-ink-200", labelColor: "text-ink-200" },
+  progress: { icon: CheckCircle, bg: "bg-accent-blue/10", fg: "text-accent-blue", labelColor: "text-accent-blue" },
   plan: { icon: Notes, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
   delegate: { icon: Cpu, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
   tool: { icon: Tools, bg: "bg-ink-800", fg: "text-ink-400", labelColor: "text-ink-400" },
@@ -210,6 +212,17 @@ export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onTool
             {event.body}
           </MessageResponse>
         )}
+
+        {event.kind === "tool" && event.details ? (
+          <details className="mt-2 text-[11px] text-ink-400">
+            <summary className="hover:text-ink-200 cursor-pointer">
+              Tool details
+            </summary>
+            <pre className="border-ink-800 bg-ink-950 mt-2 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-5">
+              {event.details}
+            </pre>
+          </details>
+        ) : null}
 
         {/* Plan steps */}
         {event.kind === "plan" && (

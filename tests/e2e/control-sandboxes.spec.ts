@@ -20,6 +20,7 @@ function sandboxRecord(
     branch = "feat/demo",
     lastActiveAt = NOW,
     previewUrl = "https://preview.example.vercel.app",
+    keepPreviewUrl = false,
     error = null,
   }: {
     id?: string;
@@ -28,10 +29,13 @@ function sandboxRecord(
     branch?: string;
     lastActiveAt?: string;
     previewUrl?: string;
+    keepPreviewUrl?: boolean;
     error?: string | null;
   } = {}
 ) {
-  const resolvedPreviewUrl = runningPreviewUrl(status, previewUrl);
+  const resolvedPreviewUrl = keepPreviewUrl
+    ? previewUrl
+    : runningPreviewUrl(status, previewUrl);
   return {
     id,
     user_id: "00000000-0000-4000-8000-000000000001",
@@ -191,6 +195,13 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
           error: "Runtime failed to start",
           lastActiveAt: new Date(Date.now() - 120_000).toISOString(),
         }),
+        sandboxRecord("stopped", {
+          id: "rec-stopped",
+          sandboxId: "sbx_stopped",
+          branch: "feat/stopped",
+          keepPreviewUrl: true,
+          lastActiveAt: new Date(Date.now() - 180_000).toISOString(),
+        }),
       ],
     })
   );
@@ -238,7 +249,9 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   ).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("ArrowRight");
   await expect(
-    page.getByRole("tab", { name: "Sandboxes, 3 compute environments" })
+    page.getByRole("tab", {
+      name: "Sandboxes, 2 current sandboxes, 2 previous attempts",
+    })
   ).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Home");
   await expect(chatTab).toHaveAttribute("aria-selected", "true");
@@ -258,7 +271,9 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
     0
   );
   await expect(
-    page.getByRole("tab", { name: "Sandboxes, 3 compute environments" })
+    page.getByRole("tab", {
+      name: "Sandboxes, 2 current sandboxes, 2 previous attempts",
+    })
   ).toBeVisible();
   expect(chatRequests[0]?.sandboxId).toBe("rec-1");
 
@@ -282,7 +297,9 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
 
   // The Sandboxes tab shows remote compute with real status and actions.
   await page
-    .getByRole("tab", { name: "Sandboxes, 3 compute environments" })
+    .getByRole("tab", {
+      name: "Sandboxes, 2 current sandboxes, 2 previous attempts",
+    })
     .click();
   await expect(page.getByRole("heading", { name: "Sandboxes" })).toBeVisible();
   await expect(
@@ -306,7 +323,21 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
     liveSandbox.getByRole("button", { name: "Stop compute" })
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+  const historySummary = page.getByText("Previous attempts (2)", {
+    exact: true,
+  });
+  await expect(historySummary).toBeVisible();
+  await historySummary.click();
   await expect(page.getByText("Runtime failed to start")).toBeVisible();
+  const stoppedSandbox = page.getByRole("region", {
+    name: "Sandbox sbx_stopped",
+  });
+  await expect(
+    stoppedSandbox.getByText("Unavailable", { exact: true })
+  ).toBeVisible();
+  await expect(
+    stoppedSandbox.getByRole("button", { name: "Preview" })
+  ).toBeDisabled();
   await expect(page.getByRole("button", { name: "Merge to main" })).toHaveCount(
     0
   );

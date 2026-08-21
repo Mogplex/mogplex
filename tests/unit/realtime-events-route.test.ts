@@ -19,6 +19,9 @@ function createMockListener(): MockListenerHandle {
     onNotification: (h) => {
       handler = h;
     },
+    onError: () => {
+      // noop
+    },
     end: async () => {
       // noop
     },

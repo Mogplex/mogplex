@@ -42,7 +42,16 @@ export type OrchestratorToolDef = {
  */
 export type OrchestratorToolContext = {
   userId: string;
+  /** Initial sandbox hint retained for non-Control callers. */
   sandboxId?: string | null;
+  /**
+   * Mutable request-local source of truth for runtime tools. Lifecycle tools
+   * update it in place so later tools, telemetry, and finalization stay synced.
+   */
+  sandboxBinding?: {
+    sandboxId: string | null;
+    status: "running" | "pending" | "unavailable";
+  };
   /** True only until the operator's sandbox choice is validated server-side. */
   sandboxSelectionRequired?: boolean;
   repoId?: string | null;

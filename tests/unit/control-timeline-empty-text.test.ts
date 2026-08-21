@@ -29,7 +29,7 @@ test("buildCombinedTimeline skips empty assistant text parts between tool calls"
     events.map((event) => [event.kind, event.label]),
     [
       ["tool", "TOOL"],
-      ["tool", "MOGPLEX"],
+      ["assistant", "MOGPLEX"],
     ]
   );
   assert.equal(events.at(-1)?.body, "Here are the results.");

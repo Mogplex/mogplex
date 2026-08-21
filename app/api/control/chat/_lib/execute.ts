@@ -30,8 +30,12 @@ import {
   markControlRunStreaming,
   finalizeCancelledControlRun,
   finalizeFinishedControlRun,
+  getControlStreamTerminalFailure,
+  updateSandboxStartTerminalFailure,
 } from "./lifecycle";
 import { normalizeControlChatMessages } from "./messages";
+import { wrapControlResponseLifecycle } from "./stream-lifecycle";
+import { createControlFinalizationGuard } from "./finalization-guard";
 import type {
   ControlChatRequestBody,
   ActiveControlCall,
@@ -86,6 +90,14 @@ export async function executeControlChatRequest(input: {
     };
     const activeSandboxes = sandboxContext.sandboxes;
     const selectedSandboxId = resolveControlToolSandboxId(sandboxContext);
+    const sandboxBinding: NonNullable<
+      OrchestratorToolContext["sandboxBinding"]
+    > = {
+      sandboxId: selectedSandboxId,
+      status: selectedSandboxId ? "running" : "unavailable",
+    };
+    // Lifecycle tools mutate this single request-local source of truth so
+    // every sandbox-bound closure below observes the same selection.
 
     // Both writes are fail-open, but awaiting them preserves ordering so
     // qualification never observes a decision without its owning context.
@@ -99,7 +111,7 @@ export async function executeControlChatRequest(input: {
 
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
-      sandboxId: selectedSandboxId,
+      sandboxBinding,
       sandboxSelectionRequired: sandboxContext.selectionRequired,
       repoId: input.body.repoId,
       repoOwner: input.body.repoOwner,
@@ -166,7 +178,56 @@ export async function executeControlChatRequest(input: {
       input.body.enableTools ?? true
     );
 
-    let finalized = false;
+    const finalization = createControlFinalizationGuard();
+    let terminalFailure: string | null = null;
+    const latestSteps: Array<{
+      toolCalls?: Array<{ toolName: string; input?: unknown }>;
+      toolResults?: unknown[];
+    }> = [];
+
+    const stampSandboxMetadata = () => {
+      activeCall.metadata = {
+        ...activeCall.metadata,
+        sandbox_id: sandboxBinding.sandboxId,
+      };
+    };
+
+    const replaceLatestSteps = (steps: typeof latestSteps) => {
+      latestSteps.splice(0, latestSteps.length, ...steps);
+    };
+
+    const finalizeCancelled = async () => {
+      await finalization.run(async () => {
+        stampSandboxMetadata();
+        await finalizeCancelledControlRun({
+          activeCall,
+          userId: input.userId,
+          scope,
+          limitClaimId: input.limitClaimId,
+          callStartedAt: input.callStartedAt,
+          steps: latestSteps,
+        });
+      });
+    };
+
+    const finalizeStreamFailure = async () => {
+      await finalization.run(async () => {
+        stampSandboxMetadata();
+        // AI SDK 6 turns provider/model failures into stream parts and invokes
+        // onFinish with usage. This path is only for a rejected response body,
+        // where the SDK exposes no reliable terminal usage payload.
+        await finalizeFinishedControlRun({
+          activeCall,
+          userId: input.userId,
+          scope,
+          limitClaimId: input.limitClaimId,
+          callStartedAt: input.callStartedAt,
+          finishReason: "error",
+          terminalFailure: getControlStreamTerminalFailure(terminalFailure),
+          steps: latestSteps,
+        });
+      });
+    };
 
     // Convert messages to model format. Clients send AI SDK UIMessages
     // (`parts`); a plain `content` string/array is also accepted.
@@ -186,6 +247,18 @@ export async function executeControlChatRequest(input: {
       abortSignal: input.req.signal,
     });
 
+    const finishToolTelemetry = createToolCallFinishHandler(
+      activeCall,
+      input.userId,
+      scope,
+      () => ({
+        repoId: scope.repoId,
+        missionId: scope.missionId,
+        orchestrationRunId: worktreeContext.orchestrationRunId,
+        selectedSandboxId: sandboxBinding.sandboxId,
+      })
+    );
+
     const result = streamText({
       model,
       providerOptions,
@@ -199,43 +272,53 @@ export async function executeControlChatRequest(input: {
         input.userId,
         scope
       ),
-      experimental_onToolCallFinish: createToolCallFinishHandler(
-        activeCall,
-        input.userId,
-        scope,
-        {
-          repoId: scope.repoId,
-          missionId: scope.missionId,
-          orchestrationRunId: worktreeContext.orchestrationRunId,
-          selectedSandboxId,
-        }
-      ),
+      experimental_onToolCallFinish(event) {
+        terminalFailure = updateSandboxStartTerminalFailure(
+          terminalFailure,
+          event
+        );
+        finishToolTelemetry(event);
+      },
+      onStepFinish(step) {
+        latestSteps.push(step);
+      },
       async onAbort({ steps }) {
-        if (finalized) return;
-        finalized = true;
-        await finalizeCancelledControlRun({
-          activeCall,
-          userId: input.userId,
-          scope,
-          limitClaimId: input.limitClaimId,
-          callStartedAt: input.callStartedAt,
-          steps,
-        });
+        replaceLatestSteps(steps);
+        try {
+          await finalizeCancelled();
+        } catch (error) {
+          // The AI SDK does not await onAbort. Keep a failed persistence attempt
+          // handled here; the stream-close path can make the serialized retry.
+          console.error("[control/chat] abort finalization failed", { error });
+        }
       },
       async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
-        if (finalized) return;
-        finalized = true;
-        await finalizeFinishedControlRun({
-          activeCall,
-          userId: input.userId,
-          scope,
-          limitClaimId: input.limitClaimId,
-          callStartedAt: input.callStartedAt,
-          finishReason,
-          totalUsage,
-          providerMetadata,
-          steps,
-        });
+        replaceLatestSteps(steps);
+        // AI SDK provider/model errors arrive as UI error parts and finish with
+        // reason `error`; finalizeFinishedControlRun maps that reason to failed.
+        let finalizedNow = false;
+        try {
+          finalizedNow = await finalization.run(async () => {
+            stampSandboxMetadata();
+            await finalizeFinishedControlRun({
+              activeCall,
+              userId: input.userId,
+              scope,
+              limitClaimId: input.limitClaimId,
+              callStartedAt: input.callStartedAt,
+              finishReason,
+              terminalFailure,
+              totalUsage,
+              providerMetadata,
+              steps: latestSteps,
+            });
+          });
+        } catch (error) {
+          // Do not turn a fully delivered response into a stream failure when
+          // terminal persistence is unavailable after its bounded retries.
+          console.error("[control/chat] finish finalization failed", { error });
+        }
+        if (!finalizedNow) return;
         // Memory promotion (compaction plan Phase 4): distill durable facts
         // from this conversation's checkpoint, if one exists. Best-effort by
         // contract — never lets a promotion failure touch the finished run.
@@ -254,10 +337,15 @@ export async function executeControlChatRequest(input: {
       },
     });
 
+    const response = result.toUIMessageStreamResponse({
+      messageMetadata: () => ({ ai_call_id: activeCall.id }),
+    });
+
     return {
       aiCall: activeCall,
-      response: result.toUIMessageStreamResponse({
-        messageMetadata: () => ({ ai_call_id: activeCall.id }),
+      response: wrapControlResponseLifecycle(response, async (closure) => {
+        if (closure === "cancelled") await finalizeCancelled();
+        if (closure === "error") await finalizeStreamFailure();
       }),
     };
   } catch (error) {

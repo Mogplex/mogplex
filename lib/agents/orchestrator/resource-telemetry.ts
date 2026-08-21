@@ -30,6 +30,7 @@ const RESOURCE_REJECTION_REASONS = [
   "sandbox_mismatch",
   "sandbox_not_found",
   "sandbox_not_selected",
+  "sandbox_pending",
   "sandbox_unavailable",
   "session_not_found",
   "stale_resource",

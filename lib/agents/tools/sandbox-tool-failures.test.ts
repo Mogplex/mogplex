@@ -82,6 +82,28 @@ describe("sandbox tool failure telemetry", () => {
     expect(fetched).toBe(false);
   });
 
+  it("clears a mutable session binding after a confirmed stop", async () => {
+    const binding = {
+      sandboxId: "sandbox-selected",
+      status: "running" as const,
+    };
+    global.fetch = async () =>
+      Response.json({
+        sandbox: {
+          id: "sandbox-selected",
+          runtime_summary: { status: "stopped" },
+        },
+      });
+    const tool = createStopSandbox("user-1", binding) as unknown as {
+      execute: (input: { sandboxId: string }) => Promise<unknown>;
+    };
+
+    await expect(
+      tool.execute({ sandboxId: "sandbox-selected" })
+    ).resolves.toMatchObject({ ok: true, status: "stopped" });
+    expect(binding).toEqual({ sandboxId: null, status: "unavailable" });
+  });
+
   it("classifies delegated-auth and write failures", async () => {
     delete process.env.INTERNAL_API_SECRET;
     const unauthorized = createWriteFile(

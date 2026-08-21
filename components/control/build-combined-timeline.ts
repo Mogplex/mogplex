@@ -40,11 +40,67 @@ function getApprovalInfo(part: UIMessagePart<UIDataTypes, UITools>): {
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function toolProgressBody(
+  toolName: string,
+  state: string,
+  output: Record<string, unknown> | null
+) {
+  const complete = state === "output-available";
+  if (toolName === "plan_mission")
+    return complete ? "Plan saved" : "Saving plan";
+  if (toolName === "sandbox_start") {
+    if (!complete) return "Starting sandbox";
+    // Defensive display for a future resolver that surfaces pending output.
+    return output?.status === "pending"
+      ? "Waiting for sandbox"
+      : "Sandbox ready";
+  }
+  if (toolName === "spawn_worktree") {
+    return complete ? "Worktree created" : "Creating worktree";
+  }
+  if (toolName === "spawn_subagent") {
+    return complete ? "Worker started" : "Starting worker";
+  }
+  return null;
+}
+
+function toolFailureBody(
+  toolName: string,
+  output: Record<string, unknown> | null = null
+) {
+  if (toolName === "sandbox_start") {
+    if (
+      output?.reason === "multiple_sandboxes" ||
+      output?.reason === "repo_mismatch"
+    ) {
+      return "Sandbox selection needed";
+    }
+    return "Sandbox startup failed.";
+  }
+  if (toolName === "spawn_worktree") return "Worktree creation failed";
+  if (toolName === "spawn_subagent") return "Worker start failed";
+  if (toolName === "plan_mission") return "Plan could not be saved";
+  return `${toolName} failed`;
+}
+
+function toolDetails(toolName: string, input: unknown) {
+  const argumentNames = Object.keys(asRecord(input) ?? {});
+  return argumentNames.length > 0
+    ? `${toolName}(${argumentNames.join(", ")})`
+    : toolName;
+}
+
 /**
  * Builds a combined timeline by merging mission timeline events with chat
  * messages. User messages become YOU events; assistant text becomes MOGPLEX
- * events; tool invocations become TOOL events with their input (and the
- * error, when the call failed). Tool approvals become APPROVAL events.
+ * events; tool invocations become TOOL events with argument names only (and
+ * the error, when the call failed). Tool approvals become APPROVAL events.
  * Tool inputs or outputs carrying a unified patch become DIFF events so
  * changes render inline in the chat.
  */
@@ -81,14 +137,22 @@ export function buildCombinedTimeline(
 
     if (msg.role !== "assistant") continue;
 
+    let stepNumber = 0;
     for (const part of msg.parts) {
       if (typeof part !== "object" || part == null || !("type" in part)) {
+        continue;
+      }
+
+      if (part.type === "step-start") {
+        stepNumber += 1;
         continue;
       }
 
       if (isToolOrDynamicToolUIPart(part)) {
         const toolName = getToolOrDynamicToolName(part);
         const state = "state" in part ? String(part.state) : "";
+        const output = asRecord("output" in part ? part.output : undefined);
+        const label = stepNumber > 0 ? `STEP ${stepNumber}` : "PROGRESS";
 
         // Handle approval states
         if (isApprovalState(state)) {
@@ -132,23 +196,43 @@ export function buildCombinedTimeline(
         if (state === "output-error") {
           result.push({
             kind: "fail",
-            label: "TOOL",
+            label,
             time: "now",
-            body: `${toolName} failed`,
+            body: toolFailureBody(toolName),
             log: "errorText" in part ? String(part.errorText) : "unknown error",
           });
         } else {
           const toolInput = "input" in part ? part.input : undefined;
-          const input =
-            toolInput === undefined
-              ? "…"
-              : JSON.stringify(toolInput).slice(0, 100);
-          result.push({
-            kind: "tool",
-            label: "TOOL",
-            time: "now",
-            body: `${toolName}(${input})`,
-          });
+          const structuredError =
+            typeof output?.error === "string" ? output.error : null;
+          if (output?.status === "error" || structuredError) {
+            result.push({
+              kind: "fail",
+              label,
+              time: "now",
+              body: toolFailureBody(toolName, output),
+              log: structuredError ?? "The tool returned an error.",
+            });
+            continue;
+          }
+
+          const progressBody = toolProgressBody(toolName, state, output);
+          result.push(
+            progressBody
+              ? {
+                  kind: "progress",
+                  label,
+                  time: "now",
+                  body: progressBody,
+                }
+              : {
+                  kind: "tool",
+                  label: "TOOL",
+                  time: "now",
+                  body: `Using ${toolName}`,
+                  details: toolDetails(toolName, toolInput),
+                }
+          );
 
           const patch =
             extractPatchFromValue("output" in part ? part.output : undefined) ??
@@ -173,7 +257,7 @@ export function buildCombinedTimeline(
         const text = String(part.text).trim();
         if (!text) continue;
         result.push({
-          kind: "tool",
+          kind: "assistant",
           label: "MOGPLEX",
           time: "now",
           body: text,

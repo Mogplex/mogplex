@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus } from "iconoir-react";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import type { SandboxRecord } from "@/lib/types";
+import { partitionControlSandboxes } from "@/lib/control/sandbox-presentation";
 import {
   SandboxCard,
   SandboxPreviewModal,
@@ -33,6 +34,7 @@ export function SandboxesPanel({
   const [preview, setPreview] = useState<SandboxPreviewTarget | null>(null);
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const [ringId, setRingId] = useState<string | null>(null);
+  const { current, history } = partitionControlSandboxes(sandboxes);
 
   const registerRef = (id: string, element: HTMLElement | null) => {
     if (element) {
@@ -66,12 +68,12 @@ export function SandboxesPanel({
             Sandboxes
           </h2>
           <span
-            aria-label={`${sandboxes.length} sandbox compute ${sandboxes.length === 1 ? "environment" : "environments"}`}
+            aria-label={`${current.length} current ${current.length === 1 ? "sandbox" : "sandboxes"}, ${history.length} previous ${history.length === 1 ? "attempt" : "attempts"}`}
             className="text-ink-400 text-[12.5px]"
           >
             {loading
               ? "Loading compute"
-              : `${sandboxes.length} compute ${sandboxes.length === 1 ? "environment" : "environments"}`}
+              : `${current.length} current ${current.length === 1 ? "sandbox" : "sandboxes"} · ${history.length} previous ${history.length === 1 ? "attempt" : "attempts"}`}
           </span>
           <button
             type="button"
@@ -106,9 +108,9 @@ export function SandboxesPanel({
           <div className="bg-ink-800 h-3 w-40 animate-pulse rounded" />
           <div className="bg-ink-900 mt-3 h-32 w-full animate-pulse rounded-xl" />
         </div>
-      ) : sandboxes.length === 0 ? (
+      ) : current.length === 0 ? (
         <div className="text-ink-400 py-10 text-sm">
-          <p className="text-ink-200 font-medium">No sandbox compute yet</p>
+          <p className="text-ink-200 font-medium">No current sandbox</p>
           <p className="text-ink-500 mt-1 max-w-xl text-xs leading-5">
             Start a sandbox for commands and previews. Worktrees are created
             separately when a mission delegates coding tasks. Starting compute
@@ -118,7 +120,7 @@ export function SandboxesPanel({
       ) : null}
       {!loading ? (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {sandboxes.map((sandbox) => (
+          {current.map((sandbox) => (
             <SandboxCard
               key={sandbox.id}
               sandbox={sandbox}
@@ -144,6 +146,29 @@ export function SandboxesPanel({
             </span>
           </button>
         </div>
+      ) : null}
+      {!loading && history.length > 0 ? (
+        <details className="border-ink-800 mt-6 border-t pt-4">
+          <summary className="text-ink-300 hover:text-ink-100 cursor-pointer text-[12.5px] font-medium">
+            Previous attempts ({history.length})
+          </summary>
+          <p className="text-ink-500 mt-1 text-xs leading-5">
+            Stopped and failed attempts stay here for logs, restart, or removal.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {history.map((sandbox) => (
+              <SandboxCard
+                key={sandbox.id}
+                sandbox={sandbox}
+                selected={false}
+                focused={ringId === sandbox.id}
+                registerRef={registerRef}
+                launchLogs={launchLogs}
+                onPreview={setPreview}
+              />
+            ))}
+          </div>
+        </details>
       ) : null}
       <SandboxPreviewModal target={preview} onClose={() => setPreview(null)} />
     </div>

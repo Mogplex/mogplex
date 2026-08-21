@@ -4,6 +4,7 @@ import { ChatBubble, GitBranch, Server } from "iconoir-react";
 import type { KeyboardEvent } from "react";
 import type { SandboxRecord } from "@/lib/types";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
+import { partitionControlSandboxes } from "@/lib/control/sandbox-presentation";
 
 export type ControlView = "chat" | "worktrees" | "sandboxes";
 
@@ -73,6 +74,7 @@ export function WorkspaceTabs({
   selectedSandboxId: string | null;
   onFocusSandbox: (sandboxId: string) => void;
 }) {
+  const { current, history } = partitionControlSandboxes(sandboxes);
   return (
     <div className="border-ink-800 flex items-center gap-1 overflow-x-auto border-b px-4 py-2 sm:px-6">
       <div
@@ -118,7 +120,7 @@ export function WorkspaceTabs({
           id="control-sandboxes-tab"
           aria-controls="control-sandboxes-panel"
           aria-selected={view === "sandboxes"}
-          aria-label={`Sandboxes, ${countLabel(sandboxes.length, "compute environment")}`}
+          aria-label={`Sandboxes, ${countLabel(current.length, "current sandbox", "current sandboxes")}, ${countLabel(history.length, "previous attempt")}`}
           tabIndex={view === "sandboxes" ? 0 : -1}
           onClick={() => onViewChange("sandboxes")}
           className={`${TAB_BASE} ${view === "sandboxes" ? TAB_ON : TAB_OFF}`}
@@ -126,11 +128,11 @@ export function WorkspaceTabs({
           <Server className="size-3.5 shrink-0" strokeWidth={1.8} />
           Sandboxes
           <span className="bg-ink-700 text-ink-200 rounded px-1.5 text-[10.5px] leading-4">
-            {sandboxes.length}
+            {current.length}
           </span>
         </button>
       </div>
-      {sandboxes.length > 0 ? (
+      {current.length > 0 ? (
         <div className="bg-ink-800 mx-1 h-4 w-px shrink-0" />
       ) : null}
       <div
@@ -138,7 +140,7 @@ export function WorkspaceTabs({
         aria-label="Sandbox used by chat and preview"
         className="flex items-center gap-1"
       >
-        {sandboxes.map((sandbox) => {
+        {current.map((sandbox) => {
           const selected = sandbox.id === selectedSandboxId;
           const runtimeId = sandbox.runtime_summary.sandbox_id || sandbox.id;
           const runtimeStatus = statusLabel(sandbox.runtime_summary.status);

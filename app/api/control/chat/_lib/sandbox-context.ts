@@ -99,9 +99,18 @@ export function resolveControlToolSandboxId(
   context: ControlPromptSandboxContext
 ): string | null {
   if (context.selectionRequired) return null;
-  return (
-    context.selected?.recordId ??
-    resolveSelectedControlSandboxId(context.sandboxes)
+  const selectedId = context.selected?.recordId;
+  if (selectedId) {
+    // Defense in depth: only the running record shown in prompt context may
+    // cross into the tool binding, even if a future resolver branch drifts.
+    return context.sandboxes.some(
+      (sandbox) => sandbox.id === selectedId && sandbox.status === "running"
+    )
+      ? selectedId
+      : null;
+  }
+  return resolveSelectedControlSandboxId(
+    context.sandboxes.filter((sandbox) => sandbox.status === "running")
   );
 }
 
@@ -223,6 +232,16 @@ export async function resolveControlPromptSandboxContext(
       selectionRequired: true,
       rejectionReason: "repo_mismatch",
       sandboxes: repoSandboxes.map(presentPromptSandbox),
+    };
+  }
+
+  if (loaded.record.status !== "running") {
+    return {
+      decisionSource: "server_validated_request",
+      rejectionReason: "sandbox_inactive",
+      selectionRequired: false,
+      selected: null,
+      sandboxes: [presentPromptSandbox(loaded.record)],
     };
   }
 

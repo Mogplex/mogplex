@@ -137,3 +137,43 @@ test("control prompt server-selects exactly one running repo sandbox", async () 
   });
   assert.equal(resolveControlToolSandboxId(context), "sandbox-record-1");
 });
+
+test("control prompt validates but does not bind a stopped sandbox for execution", async () => {
+  const stopped = {
+    id: "sandbox-record-stopped",
+    sandbox_id: "sbx-runtime-stopped",
+    repo_id: "repo-1",
+    working_branch: "main",
+    status: "stopped",
+  };
+  const context = await resolveControlPromptSandboxContext(
+    request,
+    "user-1",
+    {
+      messages: [],
+      repoId: "repo-1",
+      sandboxId: stopped.id,
+    },
+    {
+      listRepoSandboxes: async () => [],
+      loadSandboxRecord: async () => ({
+        ok: true,
+        auth: {} as never,
+        record: stopped,
+        repo: null,
+        rootDirectory: null,
+      }),
+    }
+  );
+
+  assert.deepEqual(context, {
+    decisionSource: "server_validated_request",
+    rejectionReason: "sandbox_inactive",
+    selectionRequired: false,
+    selected: null,
+    sandboxes: [
+      { id: "sandbox-record-stopped", branch: "main", status: "stopped" },
+    ],
+  });
+  assert.equal(resolveControlToolSandboxId(context), null);
+});

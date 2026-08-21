@@ -7,7 +7,7 @@ import {
   withPatchedSandboxLookup,
 } from "./helpers/agents-tools-fixtures";
 
-test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async () => {
+test("start_sandbox rejects a pending JSON response without readiness events", async () => {
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
     await withPatchedSandboxLookup(null, async () => {
       await withPatchedFetch(
@@ -35,12 +35,9 @@ test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async ()
           });
 
           assert.deepEqual(result, {
-            ok: true,
-            sandboxId: "sandbox-record-1",
-            status: "pending",
-            sandboxResolution: "reused_pending",
-            message:
-              "Sandbox startup is already in progress. The preview pane will update automatically when it's ready.",
+            error:
+              "Sandbox is still starting, but no readiness stream was available.",
+            reason: "sandbox_unavailable",
           });
         }
       );
@@ -48,7 +45,7 @@ test("start_sandbox normalizes JSON reuse responses from /api/sandbox", async ()
   });
 });
 
-test("start_sandbox returns as soon as sandbox creation is acknowledged over SSE", async () => {
+test("start_sandbox waits for the sandbox readiness event over SSE", async () => {
   const encoder = new TextEncoder();
 
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
@@ -91,28 +88,16 @@ test("start_sandbox returns as soon as sandbox creation is acknowledged over SSE
             execute: (input: { repoId: string }) => Promise<unknown>;
           };
 
-          const result = await Promise.race([
-            tool.execute({
-              repoId: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
-            }),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () =>
-                  reject(
-                    new Error("Timed out waiting for sandbox_created result")
-                  ),
-                100
-              )
-            ),
-          ]);
+          const result = await tool.execute({
+            repoId: "1b4f0e2a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+          });
 
           assert.deepEqual(result, {
             ok: true,
             sandboxId: "sandbox-record-2",
-            status: "pending",
+            status: "running",
             sandboxResolution: "created",
-            message:
-              "Sandbox is launching. The preview pane will update automatically when it's ready.",
+            message: "Sandbox is ready to use.",
           });
         }
       );
@@ -134,7 +119,7 @@ test("start_sandbox fails closed when a full_name does not resolve even if anoth
           repoId: "webrenew/missing-repo",
         })) as { error?: string; sandboxId?: string };
 
-        assert.equal(result.error, "Failed to start sandbox");
+        assert.equal(result.error, "Repository not found for this user.");
         assert.equal(result.sandboxId, undefined);
       },
       { repoLookupData: null }
@@ -154,7 +139,7 @@ test("start_sandbox rejects invalid non-UUID repoIds instead of reusing another 
         repoId: "repo-123",
       })) as { error?: string; sandboxId?: string };
 
-      assert.equal(result.error, "Failed to start sandbox");
+      assert.equal(result.error, "Repository not found for this user.");
       assert.equal(result.sandboxId, undefined);
     });
   });
@@ -207,18 +192,22 @@ test("start_sandbox resolves a GitHub full_name to the repo UUID before posting"
 
 test("start_sandbox returns an error when a full_name does not map to an owned repo", async () => {
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
-    await withPatchedSandboxLookup(null, async () => {
-      const { createStartSandbox } = await loadToolsModule();
-      const tool = createStartSandbox("user-123") as unknown as {
-        execute: (input: { repoId: string }) => Promise<unknown>;
-      };
+    await withPatchedSandboxLookup(
+      null,
+      async () => {
+        const { createStartSandbox } = await loadToolsModule();
+        const tool = createStartSandbox("user-123") as unknown as {
+          execute: (input: { repoId: string }) => Promise<unknown>;
+        };
 
-      const result = (await tool.execute({
-        repoId: "webrenew/unknown-repo",
-      })) as { error?: string };
+        const result = (await tool.execute({
+          repoId: "webrenew/unknown-repo",
+        })) as { error?: string };
 
-      assert.equal(result.error, "Failed to start sandbox");
-    });
+        assert.equal(result.error, "Repository not found for this user.");
+      },
+      { repoLookupData: null }
+    );
   });
 });
 

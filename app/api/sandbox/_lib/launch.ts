@@ -6,6 +6,7 @@ import {
   resolveBillingLinkedProjectSelection,
 } from "@/lib/vercel/target-resolution";
 import { buildLimitResponse, releaseLimitClaim } from "@/lib/request-limits";
+import { requestsSandboxReadinessWait } from "@/lib/sandbox/readiness-contract";
 import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { SANDBOX_STREAM_SELECT } from "./constants";
@@ -18,6 +19,7 @@ import {
 } from "./validation";
 import { resolveSandboxLaunchRuntimePreparation } from "./provisioning";
 import { resolvePendingSandboxPersistenceFlag } from "./bootstrap";
+import { buildPendingSandboxWaitStreamResponse } from "./pending-stream";
 import type { SandboxServiceCredentials } from "@/lib/sandbox/get-user-credentials";
 import type { SandboxRecordRow } from "@/lib/types";
 import type {
@@ -143,7 +145,8 @@ export async function prepareSandboxLaunch(input: {
 
 export async function maybeReturnExistingSandboxResponse(
   deps: SandboxPostDeps,
-  launch: SandboxLaunchPreparation
+  launch: SandboxLaunchPreparation,
+  request: Request
 ) {
   const existing = await deps.getActiveSandboxForRepo(
     launch.repoId,
@@ -177,8 +180,19 @@ export async function maybeReturnExistingSandboxResponse(
     }
   }
 
-  if (existingState.kind === "running" || existingState.kind === "pending") {
+  if (existingState.kind === "running") {
     return NextResponse.json({ sandbox: toSandboxClientRecord(existing) });
+  }
+
+  if (existingState.kind === "pending") {
+    return requestsSandboxReadinessWait(request.headers)
+      ? buildPendingSandboxWaitStreamResponse({
+          record: existing,
+          userId: launch.creds.userId,
+          requestSignal: request.signal,
+          waitForReadiness: deps.waitForSandboxReadiness,
+        })
+      : NextResponse.json({ sandbox: toSandboxClientRecord(existing) });
   }
 
   if (existingState.kind === "stopped") {

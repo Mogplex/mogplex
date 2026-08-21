@@ -46,7 +46,7 @@ test("Control resource tabs expose distinct counts and selected compute context"
   assert.match(html, /role="tablist"/);
   assert.match(html, /aria-label="Control views"/);
   assert.match(html, /Worktrees, 1 checkout/);
-  assert.match(html, /Sandboxes, 1 compute environment/);
+  assert.match(html, /Sandboxes, 1 current sandbox, 0 previous attempts/);
   assert.match(
     html,
     /Select sandbox sbx_runtime123, Running, repository branch feat\/compute-context, for chat and preview/
@@ -132,6 +132,6 @@ test("Sandbox panel keeps the compute model visible while loading and empty", ()
       onStartSandbox: () => undefined,
     })
   );
-  assert.match(emptyHtml, /No sandbox compute yet/);
+  assert.match(emptyHtml, /No current sandbox/);
   assert.match(emptyHtml, /Starting compute alone does not create a worktree/);
 });

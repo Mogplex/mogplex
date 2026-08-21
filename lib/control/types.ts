@@ -110,6 +110,8 @@ export type Deployment = {
 // Timeline event kinds
 export type TimelineEventKind =
   | "user"
+  | "assistant"
+  | "progress"
   | "plan"
   | "delegate"
   | "tool"
@@ -154,6 +156,14 @@ export type UserEvent = BaseTimelineEvent & {
   kind: "user";
 };
 
+export type AssistantEvent = BaseTimelineEvent & {
+  kind: "assistant";
+};
+
+export type ProgressEvent = BaseTimelineEvent & {
+  kind: "progress";
+};
+
 export type PlanEvent = BaseTimelineEvent & {
   kind: "plan";
   steps: PlanStep[];
@@ -167,6 +177,7 @@ export type DelegateEvent = BaseTimelineEvent & {
 
 export type ToolEvent = BaseTimelineEvent & {
   kind: "tool";
+  details?: string;
 };
 
 export type DiffEvent = BaseTimelineEvent & {
@@ -218,6 +229,8 @@ export type DoneEvent = BaseTimelineEvent & {
 
 export type TimelineEvent =
   | UserEvent
+  | AssistantEvent
+  | ProgressEvent
   | PlanEvent
   | DelegateEvent
   | ToolEvent

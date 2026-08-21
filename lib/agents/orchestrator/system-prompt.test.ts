@@ -39,6 +39,15 @@ describe("orchestrator resource decision prompt", () => {
     );
   });
 
+  it("asks for safe progress updates without exposing private reasoning", () => {
+    const prompt = buildOrchestratorSystemPrompt({});
+
+    expect(prompt).toContain(
+      "write one short progress sentence that states the next action and why"
+    );
+    expect(prompt).toContain("Keep private chain-of-thought hidden");
+  });
+
   it("does not recommend sandbox startup when it is not callable", () => {
     const prompt = buildOrchestratorSystemPrompt({
       availableToolNames: ["run_command", "plan_mission"],
@@ -101,7 +110,10 @@ describe("orchestrator resource decision prompt", () => {
       "Call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string."
     );
     expect(prompt).toContain(
-      "Then call spawn_worktree once for each returned task and spawn_subagent for each resulting worktree. Stop after the requested workers start."
+      "If no running sandbox is selected after planning, call sandbox_start exactly once and wait for its event-driven result."
+    );
+    expect(prompt).toContain(
+      "Only after it returns running, call spawn_worktree once for each returned task"
     );
 
     const stoppedPrompt = buildOrchestratorSystemPrompt({

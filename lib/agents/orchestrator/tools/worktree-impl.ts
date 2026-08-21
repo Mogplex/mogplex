@@ -44,13 +44,34 @@ function toolError(error: unknown) {
 }
 
 export function createSpawnWorktreeTool(ctx: OrchestratorToolContext): Tool {
+  return createSpawnWorktreeToolWithDeps(ctx, { spawnWorktree });
+}
+
+type SpawnWorktreeDeps = {
+  spawnWorktree: typeof spawnWorktree;
+};
+
+export function createSpawnWorktreeToolWithDeps(
+  ctx: OrchestratorToolContext,
+  deps: SpawnWorktreeDeps
+): Tool {
   return defineTool({
     description:
       "Create or reuse the real Git worktree for a planned task in the active mission inside the selected sandbox. This creates an isolated checkout and branch; it does not start, stop, or otherwise change sandbox compute.",
     inputSchema: spawnWorktreeSchema,
     execute: async ({ taskId }: z.infer<typeof spawnWorktreeSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
-      if (!ctx.sandboxId) {
+      const sandboxId = ctx.sandboxBinding?.sandboxId ?? null;
+      // Production launch waits for readiness; this also guards injected or
+      // future resolvers that may expose the intermediate binding state.
+      if (ctx.sandboxBinding?.status === "pending") {
+        return {
+          status: "waiting" as const,
+          message: "Sandbox startup is still in progress.",
+          reason: "sandbox_pending" as const,
+        };
+      }
+      if (!sandboxId || ctx.sandboxBinding?.status === "unavailable") {
         return {
           status: "error" as const,
           error: "Select a sandbox first.",
@@ -58,11 +79,11 @@ export function createSpawnWorktreeTool(ctx: OrchestratorToolContext): Tool {
         };
       }
       try {
-        const worktree = await spawnWorktree({
+        const worktree = await deps.spawnWorktree({
           userId: ctx.userId,
           runId: ctx.orchestrationRunId,
           taskId,
-          sandboxId: ctx.sandboxId,
+          sandboxId,
         });
         return { status: "ok" as const, worktree };
       } catch (error) {

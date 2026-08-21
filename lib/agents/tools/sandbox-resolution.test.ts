@@ -15,6 +15,7 @@ import {
 import { resolveOrCreateSandbox } from "./sandbox-resolution";
 
 type RunningSandbox = { id: string };
+const OWNED_REPO_ID = "00000000-0000-4000-8000-000000000001";
 
 let supabaseAdmin: typeof import("@/lib/supabase/admin").supabaseAdmin;
 let originalFrom: typeof supabaseAdmin.from;
@@ -25,19 +26,25 @@ const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function installSandboxRows(
   running: RunningSandbox[],
-  repoLookup: { id: string } | null = null,
+  repoLookup?: { id: string } | null,
   repoLookupError: { message: string } | null = null
 ) {
+  const resolvedRepoLookup =
+    repoLookup === undefined ? { id: OWNED_REPO_ID } : repoLookup;
   const sandboxQuery = {
     select: () => sandboxQuery,
     eq: () => sandboxQuery,
     order: () => sandboxQuery,
     limit: async () => ({ data: running, error: null }),
+    maybeSingle: async () => ({ data: running[0] ?? null, error: null }),
   };
   const repoQuery = {
     select: () => repoQuery,
     eq: () => repoQuery,
-    maybeSingle: async () => ({ data: repoLookup, error: repoLookupError }),
+    maybeSingle: async () => ({
+      data: resolvedRepoLookup,
+      error: repoLookupError,
+    }),
   };
   Object.defineProperty(supabaseAdmin, "from", {
     configurable: true,
@@ -84,7 +91,8 @@ afterEach(() => {
 });
 
 describe("sandbox resolution contract", () => {
-  it("uses an explicit selected sandbox without account lookup", async () => {
+  it("uses an owned running selected sandbox", async () => {
+    installSandboxRows([{ id: "sandbox-selected" }]);
     expect(
       await resolveOrCreateSandbox(
         "user-1",
@@ -95,6 +103,19 @@ describe("sandbox resolution contract", () => {
       sandboxId: "sandbox-selected",
       status: "running",
       source: "selected",
+    });
+  });
+
+  it("rejects a selected sandbox outside the owned running inventory", async () => {
+    await expect(
+      resolveOrCreateSandbox(
+        "user-1",
+        "00000000-0000-4000-8000-000000000001",
+        "sandbox-unavailable"
+      )
+    ).resolves.toEqual({
+      error: "The selected sandbox is unavailable.",
+      reason: "sandbox_unavailable",
     });
   });
 
@@ -170,38 +191,20 @@ describe("sandbox resolution contract", () => {
     });
   });
 
-  it("resolves an owned full name and consumes sandbox creation SSE", async () => {
-    installSandboxRows([], {
-      id: "00000000-0000-4000-8000-000000000001",
-    });
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(
-          new TextEncoder().encode(
-            'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n'
-          )
-        );
-      },
-    });
-    global.fetch = async () =>
-      new Response(stream, {
-        headers: { "Content-Type": "text/event-stream" },
-      });
-
-    expect(await resolveOrCreateSandbox("user-1", "acme/demo")).toEqual({
-      sandboxId: "sandbox-sse",
-      status: "pending",
-      source: "created",
-    });
-  });
-
   it("rejects missing or unowned repository context", async () => {
     await expect(resolveOrCreateSandbox()).resolves.toBeNull();
     await expect(resolveOrCreateSandbox("user-1")).resolves.toBeNull();
+    installSandboxRows([], null);
     await expect(
       resolveOrCreateSandbox("user-1", "acme/missing")
     ).resolves.toEqual({
-      error: "Failed to start sandbox",
+      error: "Repository not found for this user.",
+      reason: "repo_mismatch",
+    });
+    await expect(
+      resolveOrCreateSandbox("user-1", OWNED_REPO_ID)
+    ).resolves.toEqual({
+      error: "Repository not found for this user.",
       reason: "repo_mismatch",
     });
   });
@@ -211,7 +214,7 @@ describe("sandbox resolution contract", () => {
     await expect(
       resolveOrCreateSandbox("user-1", "acme/unavailable")
     ).resolves.toEqual({
-      error: "Failed to start sandbox",
+      error: "Repository lookup failed. Try again.",
       reason: "repo_lookup_failed",
     });
   });

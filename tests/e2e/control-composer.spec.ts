@@ -210,6 +210,8 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await expect(
     conversation.getByText("I can plan, delegate, and ship.")
   ).toBeVisible();
+  await expect(conversation.getByText("Using list_worktrees")).toBeVisible();
+  await conversation.getByText("Tool details").click();
   await expect(conversation.getByText(/list_worktrees\(/)).toBeVisible();
   await expect(page.getByText(/Mogplex is planning/)).toHaveCount(0);
   await expect(page.getByText(/Budget: \$/)).toHaveCount(0);

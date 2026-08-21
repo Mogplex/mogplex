@@ -1,61 +1,35 @@
 import { NextResponse } from "next/server";
-import type { Client as PgClient, Notification } from "pg";
 import { getResolvedAuth } from "@/lib/auth";
-import { getRuntimeUnpooledDatabaseUrl } from "@/lib/db/connection-urls";
+import {
+  createTableEventListener,
+  type TableEventListener,
+} from "@/lib/db/table-event-listener";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TABLE_NAME_PATTERN = /^[a-z_]+$/;
 
-type TableEventPayload = {
-  table: string;
-  op: string;
-  user_id?: string | null;
-  id?: string | null;
-};
-
-export type ListenerHandle = {
-  onNotification: (handler: (payload: TableEventPayload) => void) => void;
-  end: () => Promise<void>;
-};
+export type ListenerHandle = TableEventListener;
 
 export type RealtimeEventsRouteDeps = {
   getResolvedAuth: typeof getResolvedAuth;
   createListener: () => Promise<ListenerHandle>;
 };
 
-async function defaultCreateListener(): Promise<ListenerHandle> {
-  const { Client } = await import("pg");
-  const client: PgClient = new Client({
-    connectionString: getRuntimeUnpooledDatabaseUrl(),
-  });
-
-  let notificationHandler: ((msg: Notification) => void) | undefined;
-
-  await client.connect();
-  await client.query("LISTEN mogplex_table_events");
-
-  return {
-    onNotification: (handler) => {
-      notificationHandler = (msg: Notification) => {
-        if (msg.channel !== "mogplex_table_events" || !msg.payload) return;
-        try {
-          const payload = JSON.parse(msg.payload) as TableEventPayload;
-          handler(payload);
-        } catch {
-          // Malformed payload, skip
-        }
-      };
-      client.on("notification", notificationHandler);
-    },
-    end: async () => {
-      if (notificationHandler) {
-        client.off("notification", notificationHandler);
+function closeAfterListenerError(
+  cleanup: () => Promise<void>,
+  controller: ReadableStreamDefaultController<Uint8Array>
+) {
+  void cleanup()
+    .catch(() => undefined)
+    .then(() => {
+      try {
+        controller.close();
+      } catch {
+        // Already closed by cancel().
       }
-      await client.end();
-    },
-  };
+    });
 }
 
 export function createRealtimeEventsGetHandler(
@@ -63,7 +37,7 @@ export function createRealtimeEventsGetHandler(
 ) {
   const deps: RealtimeEventsRouteDeps = {
     getResolvedAuth,
-    createListener: defaultCreateListener,
+    createListener: createTableEventListener,
     ...overrides,
   };
 
@@ -138,6 +112,11 @@ export function createRealtimeEventsGetHandler(
           }
         };
 
+        const handleListenerError = (error: Error) => {
+          console.error("[realtime-events] Listener disconnected:", error);
+          closeAfterListenerError(cleanup, controller);
+        };
+
         request.signal.addEventListener("abort", () => {
           void cleanup();
         });
@@ -176,6 +155,7 @@ export function createRealtimeEventsGetHandler(
               void cleanup();
             }
           });
+          listener.onError(handleListenerError);
 
           // Send initial connection confirmation
           controller.enqueue(encoder.encode(": connected\n\n"));
@@ -206,7 +186,7 @@ export function createRealtimeEventsGetHandler(
           clearInterval(pingInterval);
         }
         if (listener) {
-          void listener.end();
+          void listener.end().catch(() => undefined);
         }
       },
     });

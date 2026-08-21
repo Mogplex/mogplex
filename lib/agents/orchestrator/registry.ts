@@ -127,9 +127,9 @@ function buildToolForDef(
     return createListFiles(ctx.githubToken, repoDefaults);
   }
   if (def.name === "write_file") {
-    return ctx.sandboxId && !ctx.sandboxSelectionRequired
-      ? createWriteFile(ctx.userId, ctx.sandboxId)
-      : null;
+    return ctx.sandboxSelectionRequired
+      ? null
+      : createWriteFile(ctx.userId, ctx.sandboxBinding);
   }
   if (def.name === "search_repo") {
     return ctx.githubToken
@@ -144,19 +144,44 @@ function buildToolForDef(
   if (def.name === "run_command") {
     if (ctx.sandboxSelectionRequired) return null;
     return createTerminalExec(
-      ctx.sandboxId ?? undefined,
+      ctx.sandboxBinding?.sandboxId ?? undefined,
       ctx.userId,
-      ctx.repoId ?? undefined
+      ctx.repoId ?? undefined,
+      ctx.sandboxBinding
     );
   }
   if (def.name === "sandbox_start") {
     if (ctx.sandboxSelectionRequired) return null;
-    return ctx.repoId ? createStartSandbox(ctx.userId, ctx.repoId) : null;
+    if (!ctx.repoId) return null;
+    let previousBinding: NonNullable<
+      OrchestratorToolContext["sandboxBinding"]
+    > | null = null;
+    return createStartSandbox(ctx.userId, ctx.repoId, {
+      onPending: () => {
+        if (!ctx.sandboxBinding) return;
+        previousBinding = { ...ctx.sandboxBinding };
+        ctx.sandboxBinding.sandboxId = null;
+        ctx.sandboxBinding.status = "pending";
+      },
+      onResolution: (resolution) => {
+        if (ctx.sandboxBinding) {
+          ctx.sandboxBinding.sandboxId = resolution.sandboxId;
+          ctx.sandboxBinding.status = resolution.status;
+        }
+        previousBinding = null;
+      },
+      onFailure: () => {
+        if (ctx.sandboxBinding && previousBinding) {
+          Object.assign(ctx.sandboxBinding, previousBinding);
+        }
+        previousBinding = null;
+      },
+    });
   }
   if (def.name === "sandbox_stop") {
-    return ctx.sandboxId && !ctx.sandboxSelectionRequired
-      ? createStopSandbox(ctx.userId, ctx.sandboxId)
-      : null;
+    return ctx.sandboxSelectionRequired
+      ? null
+      : createStopSandbox(ctx.userId, ctx.sandboxBinding);
   }
   if (def.name === "open_pr") {
     return ctx.githubToken
@@ -170,7 +195,7 @@ function buildToolForDef(
     const memoryTools = createMemoryTools(ctx.userId, ctx.repoId ?? undefined, {
       workspaceSessionId: ctx.workspaceSessionId ?? null,
       conversationId: ctx.conversationId ?? null,
-      sandboxId: ctx.sandboxId ?? null,
+      sandboxId: ctx.sandboxBinding?.sandboxId ?? ctx.sandboxId ?? null,
     });
     return def.name === "memory_write"
       ? memoryTools.add_memory
@@ -220,11 +245,20 @@ function buildToolForDef(
 export function buildOrchestratorTools(
   ctx: OrchestratorToolContext
 ): Record<string, Tool> {
-  const repoDefaults = buildRepoDefaults(ctx);
+  const toolContext: OrchestratorToolContext = ctx.sandboxBinding
+    ? ctx
+    : {
+        ...ctx,
+        sandboxBinding: {
+          sandboxId: ctx.sandboxId ?? null,
+          status: ctx.sandboxId ? "running" : "unavailable",
+        },
+      };
+  const repoDefaults = buildRepoDefaults(toolContext);
   const tools: Record<string, Tool> = {};
 
   for (const def of ORCHESTRATOR_TOOLS) {
-    const built = buildToolForDef(def, ctx, repoDefaults);
+    const built = buildToolForDef(def, toolContext, repoDefaults);
     if (built) tools[def.name] = built;
   }
 

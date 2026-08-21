@@ -28,6 +28,11 @@ import {
   reconcileStaleListedSandboxes,
 } from "./_lib/list";
 
+// The deployment target supports this ceiling. Ordinary POSTs still return as
+// soon as their work completes; only an opted-in Neon-notified readiness wait
+// can approach ten minutes. Leave room for request setup and teardown.
+export const maxDuration = 800;
+
 // Re-export functions that tests depend on
 export {
   shouldQueueSnapshotWarmupOnSandboxLaunch,
@@ -87,7 +92,8 @@ export function createSandboxPostHandler(
 
     const existingResponse = await maybeReturnExistingSandboxResponse(
       deps,
-      prepared.launch
+      prepared.launch,
+      request
     );
     if (existingResponse) return existingResponse;
 
