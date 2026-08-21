@@ -96,7 +96,8 @@ async function findRunningSandboxIds(
 }
 
 async function readReusedSandboxResponse(
-  response: Response
+  response: Response,
+  runningSource: Extract<SandboxResolutionSource, "reused_running" | "created">
 ): Promise<SandboxResolution | SandboxResolutionFailure> {
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))) as {
@@ -130,14 +131,15 @@ async function readReusedSandboxResponse(
   }
   if (status !== "running") {
     return {
-      error: "Sandbox startup did not provide a readiness stream.",
+      error:
+        "Sandbox is still starting, but no readiness stream was available.",
       reason: "sandbox_unavailable",
     };
   }
   return {
     sandboxId: sandbox.id as string,
     status: "running",
-    source: "reused_running",
+    source: runningSource,
   };
 }
 
@@ -253,7 +255,11 @@ async function requestSandboxStart(
   userId: string,
   repoId: string,
   headers: Record<string, string>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  runningSource: Extract<
+    SandboxResolutionSource,
+    "reused_running" | "created"
+  > = "reused_running"
 ): Promise<SandboxCreationStreamResult> {
   const response = await fetch(`${resolveAppBaseUrl()}/api/sandbox`, {
     method: "POST",
@@ -269,7 +275,7 @@ async function requestSandboxStart(
   return (response.headers.get("Content-Type") || "").includes(
     "application/json"
   )
-    ? readReusedSandboxResponse(response)
+    ? readReusedSandboxResponse(response, runningSource)
     : consumeSandboxCreationStream(response, signal);
 }
 
@@ -337,7 +343,8 @@ export async function resolveOrCreateSandbox(
     userId,
     resolved.repoId,
     requestHeaders.headers,
-    signal
+    signal,
+    "created"
   );
   return "streamEndedAfterSandboxCreated" in reattached
     ? {

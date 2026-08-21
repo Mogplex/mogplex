@@ -38,6 +38,17 @@ type SharedTableEventConnection = {
 
 export const TABLE_EVENT_CONNECTION_TIMEOUT_MS = 5_000;
 
+function invokeErrorHandler(handler: (error: Error) => void, error: Error) {
+  try {
+    handler(error);
+  } catch (handlerError) {
+    console.error(
+      "[db/table-events] listener error handler failed",
+      handlerError
+    );
+  }
+}
+
 async function defaultCreateClient(): Promise<TableEventClient> {
   const { Client } = await import("pg");
   return new Client({
@@ -110,14 +121,7 @@ export function createTableEventListenerFactory(
       if (sharedConnection === connection) sharedConnection = null;
       try {
         for (const handler of errorHandlers) {
-          try {
-            handler(error);
-          } catch (handlerError) {
-            console.error(
-              "[db/table-events] listener error handler failed",
-              handlerError
-            );
-          }
+          invokeErrorHandler(handler, error);
         }
       } finally {
         // A pg error is not guaranteed to be followed by an `end` event.
@@ -216,7 +220,7 @@ export function createTableEventListenerFactory(
         if (errorHandler) connection.errorHandlers.delete(errorHandler);
         errorHandler = handler;
         if (connection.failure) {
-          handler(connection.failure);
+          invokeErrorHandler(handler, connection.failure);
           return;
         }
         connection.errorHandlers.add(handler);

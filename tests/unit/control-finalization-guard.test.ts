@@ -57,3 +57,28 @@ test("a sole Control finalizer retries one transient persistence failure", async
   assert.equal(writes, 2);
   assert.equal(guard.isFinalized(), true);
 });
+
+test("a concurrent Control finalizer retries after the joined attempt fails", async () => {
+  const guard = createControlFinalizationGuard();
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let firstAttempts = 0;
+  let secondAttempts = 0;
+  const first = guard.run(async () => {
+    firstAttempts += 1;
+    if (firstAttempts === 1) await blocked;
+    throw new Error("database unavailable");
+  });
+  const second = guard.run(async () => {
+    secondAttempts += 1;
+  });
+
+  release();
+  await assert.rejects(first, /database unavailable/);
+  assert.equal(await second, true);
+  assert.equal(firstAttempts, 2);
+  assert.equal(secondAttempts, 1);
+  assert.equal(guard.isFinalized(), true);
+});

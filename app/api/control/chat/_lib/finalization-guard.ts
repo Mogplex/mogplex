@@ -20,15 +20,9 @@ export function createControlFinalizationGuard() {
     }
   };
 
-  const run = async (
+  const startAttempt = async (
     persistIdempotently: () => Promise<void>
   ): Promise<boolean> => {
-    if (finalized) return false;
-    if (pending) {
-      await pending;
-      return false;
-    }
-
     const attempt = persistWithOneRetry(persistIdempotently);
     const tracked = attempt
       .then(() => {
@@ -40,6 +34,29 @@ export function createControlFinalizationGuard() {
     pending = tracked;
     await tracked;
     return true;
+  };
+
+  const run = async (
+    persistIdempotently: () => Promise<void>
+  ): Promise<boolean> => {
+    if (finalized) return false;
+    if (pending) {
+      try {
+        await pending;
+        return false;
+      } catch {
+        // A lifecycle path that joined two failed persistence attempts gets
+        // one serialized chance to persist its own terminal state.
+        if (finalized) return false;
+        if (pending) {
+          await pending;
+          return false;
+        }
+        return startAttempt(persistIdempotently);
+      }
+    }
+
+    return startAttempt(persistIdempotently);
   };
 
   return {

@@ -284,10 +284,18 @@ export async function executeControlChatRequest(input: {
       },
       async onAbort({ steps }) {
         replaceLatestSteps(steps);
-        await finalizeCancelled();
+        try {
+          await finalizeCancelled();
+        } catch (error) {
+          // The AI SDK does not await onAbort. Keep a failed persistence attempt
+          // handled here; the stream-close path can make the serialized retry.
+          console.error("[control/chat] abort finalization failed", { error });
+        }
       },
       async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
         replaceLatestSteps(steps);
+        // AI SDK provider/model errors arrive as UI error parts and finish with
+        // reason `error`; finalizeFinishedControlRun maps that reason to failed.
         const finalizedNow = await finalization.run(async () => {
           stampSandboxMetadata();
           await finalizeFinishedControlRun({

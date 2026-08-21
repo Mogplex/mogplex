@@ -26,6 +26,15 @@ test("Control marks a structured sandbox launch failure as failed", () => {
   });
 });
 
+test("Control marks an AI SDK model error finish as failed", () => {
+  assert.deepEqual(getControlRunFinishState("error"), {
+    status: "failed",
+    error: "Stream finished with error",
+    eventType: "failed",
+    message: "Control run failed",
+  });
+});
+
 test("Control keeps a ready sandbox launch eligible for success", () => {
   const terminalFailure = getSandboxStartTerminalFailure({
     success: true,

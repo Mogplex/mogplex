@@ -223,6 +223,33 @@ describe("sandbox resolution lifecycle", () => {
     expect(requestCount).toBe(2);
   });
 
+  it("keeps created provenance when reattach finds the sandbox running", async () => {
+    let requestCount = 0;
+    global.fetch = async () => {
+      requestCount += 1;
+      return requestCount === 1
+        ? new Response(
+            'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n',
+            { headers: { "Content-Type": "text/event-stream" } }
+          )
+        : Response.json({
+            sandbox: {
+              id: "sandbox-sse",
+              runtime_summary: { status: "running" },
+            },
+          });
+    };
+
+    await expect(
+      resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
+    ).resolves.toEqual({
+      sandboxId: "sandbox-sse",
+      status: "running",
+      source: "created",
+    });
+    expect(requestCount).toBe(2);
+  });
+
   it("reports a transport failure after one unsuccessful reattach", async () => {
     let requestCount = 0;
     global.fetch = async () => {

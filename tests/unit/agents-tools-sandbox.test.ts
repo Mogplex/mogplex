@@ -35,7 +35,8 @@ test("start_sandbox rejects a pending JSON response without readiness events", a
           });
 
           assert.deepEqual(result, {
-            error: "Sandbox startup did not provide a readiness stream.",
+            error:
+              "Sandbox is still starting, but no readiness stream was available.",
             reason: "sandbox_unavailable",
           });
         }

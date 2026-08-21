@@ -96,6 +96,31 @@ describe("table event listener", () => {
     await listener.end();
   });
 
+  it("guards a throwing error handler registered after failure", async () => {
+    const client = createClient();
+    const createListener = createTableEventListenerFactory({
+      createClient: async () => client as never,
+    });
+    const listener = await createListener();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    client.emit("error", new Error("connection lost") as never);
+
+    expect(() =>
+      listener.onError(() => {
+        throw new Error("consumer failed");
+      })
+    ).not.toThrow();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[db/table-events] listener error handler failed",
+      expect.any(Error)
+    );
+    consoleError.mockRestore();
+    await listener.end();
+  });
+
   it("closes and continues fan-out when an error handler throws", async () => {
     const client = createClient();
     const createListener = createTableEventListenerFactory({
