@@ -171,6 +171,12 @@ export function createTableEventListenerFactory(
     if (!connecting) {
       connecting = connect()
         .then((connection) => {
+          if (connection.failed || connection.closing) {
+            throw (
+              connection.failure ??
+              new Error("Neon table event connection became unavailable.")
+            );
+          }
           sharedConnection = connection;
           return connection;
         })
@@ -182,9 +188,13 @@ export function createTableEventListenerFactory(
   };
 
   return async () => {
-    let connection = await getConnection();
-    while (connection.failed || connection.closing) {
-      connection = await getConnection();
+    const connection = await getConnection();
+    if (connection.failed || connection.closing) {
+      if (sharedConnection === connection) sharedConnection = null;
+      throw (
+        connection.failure ??
+        new Error("Neon table event connection became unavailable.")
+      );
     }
     connection.leases += 1;
     let notificationHandler: ((payload: TableEventPayload) => void) | null =

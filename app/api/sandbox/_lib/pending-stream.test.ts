@@ -146,6 +146,24 @@ describe("pending sandbox readiness stream", () => {
     );
   });
 
+  it("closes with a safe reconnect warning after a retryable Neon interruption", async () => {
+    const response = buildPendingSandboxWaitStreamResponse({
+      record,
+      userId: "user-1",
+      requestSignal: new AbortController().signal,
+      waitForReadiness: async () => ({
+        kind: "retry",
+        message:
+          "Sandbox readiness connection was interrupted. Reconnect to continue waiting.",
+      }),
+    });
+
+    const body = await response.text();
+    expect(body).toContain('"type":"sandbox_created"');
+    expect(body).toContain('"type":"warning"');
+    expect(body).not.toContain('"type":"error"');
+  });
+
   it("emits transport keepalives while readiness remains event-driven", async () => {
     vi.useFakeTimers();
     let reportReady!: (result: {

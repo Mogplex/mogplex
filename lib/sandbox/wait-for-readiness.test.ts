@@ -215,7 +215,7 @@ describe("waitForSandboxReadiness", () => {
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects after the bounded snapshot retry cannot reach Neon", async () => {
+  it("requests one stream reattach when the bounded snapshot read fails", async () => {
     const listener = createListener();
     const loadSnapshot = vi
       .fn()
@@ -226,7 +226,11 @@ describe("waitForSandboxReadiness", () => {
         { sandboxRecordId: "sandbox-1", userId: "user-1" },
         { createListener: async () => listener, loadSnapshot }
       )
-    ).rejects.toThrow("Neon snapshot unavailable");
+    ).resolves.toEqual({
+      kind: "retry",
+      message:
+        "Sandbox readiness connection was interrupted. Reconnect to continue waiting.",
+    });
     expect(loadSnapshot).toHaveBeenCalledTimes(2);
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
@@ -304,11 +308,40 @@ describe("waitForSandboxReadiness", () => {
       listener.emitError(new Error(`connection lost ${index + 1}`));
     }
 
-    await expect(result).rejects.toThrow("connection lost 4");
+    await expect(result).resolves.toEqual({
+      kind: "retry",
+      message:
+        "Sandbox readiness connection was interrupted. Reconnect to continue waiting.",
+    });
     expect(loadSnapshot).toHaveBeenCalledTimes(5);
     for (const listener of listeners) {
       expect(listener.end).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it("requests one stream reattach when the initial listener is unavailable", async () => {
+    const loadSnapshot = vi.fn(async () => ({
+      id: "sandbox-1",
+      user_id: "user-1",
+      status: "installing",
+    }));
+
+    await expect(
+      waitForSandboxReadiness(
+        { sandboxRecordId: "sandbox-1", userId: "user-1" },
+        {
+          createListener: async () => {
+            throw new Error("Neon listener unavailable");
+          },
+          loadSnapshot,
+        }
+      )
+    ).resolves.toEqual({
+      kind: "retry",
+      message:
+        "Sandbox readiness connection was interrupted. Reconnect to continue waiting.",
+    });
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it("ends an event-driven wait after its one-shot safety timeout", async () => {

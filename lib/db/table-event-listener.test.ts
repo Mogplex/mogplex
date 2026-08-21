@@ -125,4 +125,22 @@ describe("table event listener", () => {
     await first.end();
     await second.end();
   });
+
+  it("fails fast when a connection dies before a lease can attach", async () => {
+    const client = createClient();
+    client.query.mockImplementationOnce(async () => {
+      client.emit("error", new Error("connection lost during LISTEN") as never);
+      return { rows: [] };
+    });
+    const createClientForListener = vi.fn(async () => client);
+    const createListener = createTableEventListenerFactory({
+      createClient: createClientForListener as never,
+    });
+
+    await expect(createListener()).rejects.toThrow(
+      "connection lost during LISTEN"
+    );
+    expect(createClientForListener).toHaveBeenCalledTimes(1);
+    expect(client.end).toHaveBeenCalledTimes(1);
+  });
 });

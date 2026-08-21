@@ -76,12 +76,14 @@ test("control stream lifecycle distinguishes an upstream error", async () => {
 
 test("control stream lifecycle records cancellation before upstream teardown", async () => {
   const closures: string[] = [];
+  const order: string[] = [];
   let finishCancel!: () => void;
   const upstream = new ReadableStream<Uint8Array>({
     pull() {
       return new Promise(() => undefined);
     },
     cancel() {
+      order.push("upstream-cancel");
       return new Promise<void>((resolve) => {
         finishCancel = resolve;
       });
@@ -90,6 +92,7 @@ test("control stream lifecycle records cancellation before upstream teardown", a
   const response = wrapControlResponseLifecycle(
     new Response(upstream),
     async (closure) => {
+      order.push("lifecycle-close");
       closures.push(closure);
     }
   );
@@ -100,6 +103,7 @@ test("control stream lifecycle records cancellation before upstream teardown", a
   await Promise.resolve();
 
   assert.deepEqual(closures, ["cancelled"]);
+  assert.deepEqual(order, ["upstream-cancel", "lifecycle-close"]);
   finishCancel();
   await cancellation;
 });

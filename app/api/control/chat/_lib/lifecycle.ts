@@ -101,6 +101,9 @@ export function getSandboxStartTerminalFailure(event: {
     ) {
       return null;
     }
+    // A real launch failure is terminal for this run even if the assistant
+    // later explains it coherently. Only a later successful or recoverable
+    // sandbox_start clears the failure state.
     return "Sandbox startup failed.";
   }
   return null;

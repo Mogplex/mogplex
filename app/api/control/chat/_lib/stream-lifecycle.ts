@@ -44,9 +44,13 @@ export function wrapControlResponseLifecycle(
     },
     async cancel(reason) {
       cancelStarted = true;
+      // Invoke upstream cancellation first so AI SDK onAbort can publish its
+      // latest in-flight steps before lifecycle finalization reads them. Do not
+      // await teardown before recording cancellation; upstream teardown may hang.
+      const cancellation = upstream.cancel(reason);
       const close = closeOnce("cancelled", reason);
       try {
-        await upstream.cancel(reason);
+        await cancellation;
       } finally {
         await close;
       }

@@ -207,7 +207,8 @@ function readSandboxCreationEvent(
 }
 
 async function consumeSandboxCreationStream(
-  response: Response
+  response: Response,
+  signal?: AbortSignal
 ): Promise<SandboxCreationStreamResult> {
   const failed = {
     error: "Failed to start sandbox",
@@ -219,23 +220,28 @@ async function consumeSandboxCreationStream(
   let buffer = "";
   let pendingSandboxRecordId: string | null = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const lines = buffer.split(/\r?\n/);
-    buffer = done ? "" : (lines.pop() ?? "");
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split(/\r?\n/);
+      buffer = done ? "" : (lines.pop() ?? "");
 
-    for (const line of lines) {
-      const settled = readSandboxCreationEvent(line);
-      if (!settled) continue;
-      if (settled.kind === "pending") {
-        pendingSandboxRecordId = settled.sandboxRecordId;
-        continue;
+      for (const line of lines) {
+        const settled = readSandboxCreationEvent(line);
+        if (!settled) continue;
+        if (settled.kind === "pending") {
+          pendingSandboxRecordId = settled.sandboxRecordId;
+          continue;
+        }
+        await reader.cancel().catch(() => {});
+        return settled.kind === "ready" ? settled.resolution : settled.failure;
       }
-      await reader.cancel().catch(() => {});
-      return settled.kind === "ready" ? settled.resolution : settled.failure;
+      if (done) break;
     }
-    if (done) break;
+  } catch (error) {
+    if (!pendingSandboxRecordId || signal?.aborted) throw error;
+    return { streamEndedAfterSandboxCreated: true };
   }
 
   return pendingSandboxRecordId
@@ -264,7 +270,7 @@ async function requestSandboxStart(
     "application/json"
   )
     ? readReusedSandboxResponse(response)
-    : consumeSandboxCreationStream(response);
+    : consumeSandboxCreationStream(response, signal);
 }
 
 /** Resolve selected or unique repo compute, starting it only when absent. */

@@ -17,15 +17,18 @@ export type SandboxReadinessSnapshot = {
 
 /**
  * Known sandbox outcomes and the safety timeout resolve through this union.
- * Caller cancellation and Neon listener/read failures reject, so callers must
- * catch them separately from a definitive sandbox lifecycle failure.
+ * Neon listener/read failures resolve as `retry` so the internal stream caller
+ * can reattach once without polling. Caller cancellation still rejects.
  */
 export type SandboxReadinessWaitResult =
   | { kind: "ready"; snapshot: SandboxReadinessSnapshot }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string }
+  | { kind: "retry"; message: string };
 
 export const SANDBOX_READINESS_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_LISTENER_RECONNECTS = 3;
+const READINESS_RETRY_MESSAGE =
+  "Sandbox readiness connection was interrupted. Reconnect to continue waiting.";
 
 type SandboxReadinessWaitDeps = {
   createListener: () => Promise<TableEventListener>;
@@ -112,7 +115,31 @@ export async function waitForSandboxReadiness(
     loadSnapshot: loadSandboxReadinessSnapshot,
     ...overrides,
   };
-  const initialListener = await deps.createListener();
+  const retryResult = (): SandboxReadinessWaitResult => ({
+    kind: "retry",
+    message: READINESS_RETRY_MESSAGE,
+  });
+  const loadSnapshotWithRetry = async () => {
+    try {
+      return await deps.loadSnapshot(input.sandboxRecordId, input.userId);
+    } catch {
+      // One immediate retry absorbs a transient Neon-backed read failure
+      // without turning readiness into a status-polling loop.
+      return deps.loadSnapshot(input.sandboxRecordId, input.userId);
+    }
+  };
+
+  let initialListener: TableEventListener;
+  try {
+    initialListener = await deps.createListener();
+  } catch {
+    try {
+      const terminalResult = resolveSnapshot(await loadSnapshotWithRetry());
+      return terminalResult ?? retryResult();
+    } catch {
+      return retryResult();
+    }
+  }
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -135,23 +162,13 @@ export async function waitForSandboxReadiness(
       else resolve(result!);
     };
 
-    const loadSnapshotWithRetry = async () => {
-      try {
-        return await deps.loadSnapshot(input.sandboxRecordId, input.userId);
-      } catch {
-        // One immediate retry absorbs a transient Neon-backed read failure
-        // without turning readiness into a status-polling loop.
-        return deps.loadSnapshot(input.sandboxRecordId, input.userId);
-      }
-    };
-
     const check = async () => {
       if (settled) return;
       try {
         const snapshot = await loadSnapshotWithRetry();
         finish(resolveSnapshot(snapshot));
-      } catch (error) {
-        finish(null, error);
+      } catch {
+        finish(retryResult());
       }
     };
 
@@ -159,26 +176,26 @@ export async function waitForSandboxReadiness(
       finish(null, input.signal?.reason ?? new Error("Sandbox wait aborted"));
     };
 
-    const finishAfterListenerFailure = async (listenerError: Error) => {
+    const finishAfterListenerFailure = async () => {
       try {
         const snapshot = await loadSnapshotWithRetry();
         const terminalResult = resolveSnapshot(snapshot);
         if (terminalResult) finish(terminalResult);
-        else finish(null, listenerError);
-      } catch (snapshotError) {
-        finish(null, snapshotError);
+        else finish(retryResult());
+      } catch {
+        finish(retryResult());
       }
     };
 
     const reconnect = async (
       failedListener: TableEventListener,
-      error: Error
+      _error: Error
     ) => {
       if (settled || activeListener !== failedListener) return;
       if (reconnectAttempts >= MAX_LISTENER_RECONNECTS) {
         activeListener = null;
         void failedListener.end().catch(() => undefined);
-        void finishAfterListenerFailure(error);
+        void finishAfterListenerFailure();
         return;
       }
       reconnectAttempts += 1;
@@ -195,12 +212,8 @@ export async function waitForSandboxReadiness(
         subscribe(replacement);
         // Subscribe first, then read once to close the reconnect race.
         void check();
-      } catch (reconnectError) {
-        void finishAfterListenerFailure(
-          reconnectError instanceof Error
-            ? reconnectError
-            : new Error("Failed to reconnect sandbox readiness listener")
-        );
+      } catch {
+        void finishAfterListenerFailure();
       }
     };
 

@@ -176,6 +176,53 @@ describe("sandbox resolution lifecycle", () => {
     expect(requestCount).toBe(2);
   });
 
+  it("reattaches once when readiness SSE rejects after persistence", async () => {
+    let requestCount = 0;
+    global.fetch = async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        let readCount = 0;
+        const reader = {
+          async read() {
+            readCount += 1;
+            if (readCount === 1) {
+              return {
+                done: false as const,
+                value: new TextEncoder().encode(
+                  'data: {"type":"sandbox_created","recordId":"sandbox-sse"}\n\n'
+                ),
+              };
+            }
+            throw new Error("transport terminated");
+          },
+          async cancel() {},
+        };
+        return {
+          ok: true,
+          body: { getReader: () => reader },
+          headers: new Headers({ "Content-Type": "text/event-stream" }),
+        } as unknown as Response;
+      }
+      return new Response(
+        [
+          'data: {"type":"sandbox_created","recordId":"sandbox-sse"}',
+          'data: {"type":"ready","sandbox":{"id":"sandbox-sse"}}',
+          "",
+        ].join("\n\n"),
+        { headers: { "Content-Type": "text/event-stream" } }
+      );
+    };
+
+    await expect(
+      resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
+    ).resolves.toEqual({
+      sandboxId: "sandbox-sse",
+      status: "running",
+      source: "created",
+    });
+    expect(requestCount).toBe(2);
+  });
+
   it("reports a transport failure after one unsuccessful reattach", async () => {
     let requestCount = 0;
     global.fetch = async () => {

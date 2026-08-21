@@ -35,6 +35,7 @@ import {
 } from "./lifecycle";
 import { normalizeControlChatMessages } from "./messages";
 import { wrapControlResponseLifecycle } from "./stream-lifecycle";
+import { createControlFinalizationGuard } from "./finalization-guard";
 import type {
   ControlChatRequestBody,
   ActiveControlCall,
@@ -177,9 +178,9 @@ export async function executeControlChatRequest(input: {
       input.body.enableTools ?? true
     );
 
-    let finalized = false;
+    const finalization = createControlFinalizationGuard();
     let terminalFailure: string | null = null;
-    const completedSteps: Array<{
+    const latestSteps: Array<{
       toolCalls?: Array<{ toolName: string; input?: unknown }>;
       toolResults?: unknown[];
     }> = [];
@@ -191,38 +192,40 @@ export async function executeControlChatRequest(input: {
       };
     };
 
-    const finalizeCancelled = async (
-      steps: typeof completedSteps = completedSteps
-    ) => {
-      if (finalized) return;
-      finalized = true;
-      stampSandboxMetadata();
-      await finalizeCancelledControlRun({
-        activeCall,
-        userId: input.userId,
-        scope,
-        limitClaimId: input.limitClaimId,
-        callStartedAt: input.callStartedAt,
-        steps,
+    const replaceLatestSteps = (steps: typeof latestSteps) => {
+      latestSteps.splice(0, latestSteps.length, ...steps);
+    };
+
+    const finalizeCancelled = async () => {
+      await finalization.run(async () => {
+        stampSandboxMetadata();
+        await finalizeCancelledControlRun({
+          activeCall,
+          userId: input.userId,
+          scope,
+          limitClaimId: input.limitClaimId,
+          callStartedAt: input.callStartedAt,
+          steps: latestSteps,
+        });
       });
     };
 
     const finalizeStreamFailure = async () => {
-      if (finalized) return;
-      finalized = true;
-      stampSandboxMetadata();
-      // AI SDK 6 turns provider/model failures into stream parts and invokes
-      // onFinish with usage. This path is only for a rejected response body,
-      // where the SDK exposes no reliable terminal usage payload.
-      await finalizeFinishedControlRun({
-        activeCall,
-        userId: input.userId,
-        scope,
-        limitClaimId: input.limitClaimId,
-        callStartedAt: input.callStartedAt,
-        finishReason: "error",
-        terminalFailure: getControlStreamTerminalFailure(terminalFailure),
-        steps: completedSteps,
+      await finalization.run(async () => {
+        stampSandboxMetadata();
+        // AI SDK 6 turns provider/model failures into stream parts and invokes
+        // onFinish with usage. This path is only for a rejected response body,
+        // where the SDK exposes no reliable terminal usage payload.
+        await finalizeFinishedControlRun({
+          activeCall,
+          userId: input.userId,
+          scope,
+          limitClaimId: input.limitClaimId,
+          callStartedAt: input.callStartedAt,
+          finishReason: "error",
+          terminalFailure: getControlStreamTerminalFailure(terminalFailure),
+          steps: latestSteps,
+        });
       });
     };
 
@@ -277,27 +280,30 @@ export async function executeControlChatRequest(input: {
         finishToolTelemetry(event);
       },
       onStepFinish(step) {
-        completedSteps.push(step);
+        latestSteps.push(step);
       },
       async onAbort({ steps }) {
-        await finalizeCancelled(steps);
+        replaceLatestSteps(steps);
+        await finalizeCancelled();
       },
       async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
-        if (finalized) return;
-        finalized = true;
-        stampSandboxMetadata();
-        await finalizeFinishedControlRun({
-          activeCall,
-          userId: input.userId,
-          scope,
-          limitClaimId: input.limitClaimId,
-          callStartedAt: input.callStartedAt,
-          finishReason,
-          terminalFailure,
-          totalUsage,
-          providerMetadata,
-          steps,
+        replaceLatestSteps(steps);
+        const finalizedNow = await finalization.run(async () => {
+          stampSandboxMetadata();
+          await finalizeFinishedControlRun({
+            activeCall,
+            userId: input.userId,
+            scope,
+            limitClaimId: input.limitClaimId,
+            callStartedAt: input.callStartedAt,
+            finishReason,
+            terminalFailure,
+            totalUsage,
+            providerMetadata,
+            steps: latestSteps,
+          });
         });
+        if (!finalizedNow) return;
         // Memory promotion (compaction plan Phase 4): distill durable facts
         // from this conversation's checkpoint, if one exists. Best-effort by
         // contract — never lets a promotion failure touch the finished run.
