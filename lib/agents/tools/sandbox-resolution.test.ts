@@ -36,6 +36,7 @@ function installSandboxRows(
     eq: () => sandboxQuery,
     order: () => sandboxQuery,
     limit: async () => ({ data: running, error: null }),
+    maybeSingle: async () => ({ data: running[0] ?? null, error: null }),
   };
   const repoQuery = {
     select: () => repoQuery,
@@ -90,7 +91,8 @@ afterEach(() => {
 });
 
 describe("sandbox resolution contract", () => {
-  it("uses an explicit selected sandbox without account lookup", async () => {
+  it("uses an owned running selected sandbox", async () => {
+    installSandboxRows([{ id: "sandbox-selected" }]);
     expect(
       await resolveOrCreateSandbox(
         "user-1",
@@ -101,6 +103,19 @@ describe("sandbox resolution contract", () => {
       sandboxId: "sandbox-selected",
       status: "running",
       source: "selected",
+    });
+  });
+
+  it("rejects a selected sandbox outside the owned running inventory", async () => {
+    await expect(
+      resolveOrCreateSandbox(
+        "user-1",
+        "00000000-0000-4000-8000-000000000001",
+        "sandbox-unavailable"
+      )
+    ).resolves.toEqual({
+      error: "The selected sandbox is unavailable.",
+      reason: "sandbox_unavailable",
     });
   });
 

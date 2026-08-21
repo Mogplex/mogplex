@@ -131,6 +131,9 @@ export async function waitForSandboxReadiness(
 
   let initialListener: TableEventListener;
   try {
+    // Each wait leases the module-level shared Neon LISTEN connection. The
+    // listener factory multiplexes notifications and opens a replacement only
+    // after the shared connection fails; waits do not pin one DB session each.
     initialListener = await deps.createListener();
   } catch {
     try {

@@ -95,6 +95,18 @@ async function findRunningSandboxIds(
   );
 }
 
+async function isOwnedRunningSandbox(userId: string, sandboxId: string) {
+  const { supabaseAdmin } = await import("@/lib/supabase/admin");
+  const { data, error } = await supabaseAdmin
+    .from("sandboxes")
+    .select("id")
+    .eq("id", sandboxId)
+    .eq("user_id", userId)
+    .eq("status", "running")
+    .maybeSingle();
+  return !error && data?.id === sandboxId;
+}
+
 async function readReusedSandboxResponse(
   response: Response,
   runningSource: Extract<SandboxResolutionSource, "reused_running" | "created">
@@ -287,6 +299,12 @@ export async function resolveOrCreateSandbox(
   signal?: AbortSignal
 ): Promise<SandboxResolution | SandboxResolutionFailure | null> {
   if (selectedSandboxId) {
+    if (!userId || !(await isOwnedRunningSandbox(userId, selectedSandboxId))) {
+      return {
+        error: "The selected sandbox is unavailable.",
+        reason: "sandbox_unavailable",
+      };
+    }
     return {
       sandboxId: selectedSandboxId,
       status: "running",

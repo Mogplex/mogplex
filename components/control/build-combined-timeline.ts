@@ -70,8 +70,17 @@ function toolProgressBody(
   return null;
 }
 
-function toolFailureBody(toolName: string) {
+function toolFailureBody(
+  toolName: string,
+  output: Record<string, unknown> | null = null
+) {
   if (toolName === "sandbox_start") {
+    if (
+      output?.reason === "multiple_sandboxes" ||
+      output?.reason === "repo_mismatch"
+    ) {
+      return "Sandbox selection needed";
+    }
     return "Sandbox startup failed.";
   }
   if (toolName === "spawn_worktree") return "Worktree creation failed";
@@ -201,7 +210,7 @@ export function buildCombinedTimeline(
               kind: "fail",
               label,
               time: "now",
-              body: toolFailureBody(toolName),
+              body: toolFailureBody(toolName, output),
               log: structuredError ?? "The tool returned an error.",
             });
             continue;

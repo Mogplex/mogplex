@@ -82,3 +82,35 @@ test("a concurrent Control finalizer retries after the joined attempt fails", as
   assert.equal(secondAttempts, 1);
   assert.equal(guard.isFinalized(), true);
 });
+
+test("joined Control finalizers serialize replacement attempts", async () => {
+  const guard = createControlFinalizationGuard();
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let firstAttempts = 0;
+  let secondAttempts = 0;
+  let thirdAttempts = 0;
+  const first = guard.run(async () => {
+    firstAttempts += 1;
+    if (firstAttempts === 1) await blocked;
+    throw new Error("first unavailable");
+  });
+  const second = guard.run(async () => {
+    secondAttempts += 1;
+    throw new Error("second unavailable");
+  });
+  const third = guard.run(async () => {
+    thirdAttempts += 1;
+  });
+
+  release();
+  await assert.rejects(first, /first unavailable/);
+  await assert.rejects(second, /second unavailable/);
+  assert.equal(await third, true);
+  assert.equal(firstAttempts, 2);
+  assert.equal(secondAttempts, 2);
+  assert.equal(thirdAttempts, 1);
+  assert.equal(guard.isFinalized(), true);
+});

@@ -87,6 +87,33 @@ test("control timeline surfaces structured tool failures as failures", () => {
   ]);
 });
 
+test("control timeline presents recoverable sandbox selection outcomes", () => {
+  for (const reason of ["multiple_sandboxes", "repo_mismatch"]) {
+    const events = buildCombinedTimeline(undefined, [
+      assistant([
+        { type: "step-start" },
+        {
+          type: "tool-sandbox_start",
+          toolCallId: `sandbox-${reason}`,
+          state: "output-available",
+          input: {},
+          output: { error: "Selection required", reason },
+        },
+      ]),
+    ]);
+
+    assert.deepEqual(events, [
+      {
+        kind: "fail",
+        label: "STEP 1",
+        time: "now",
+        body: "Sandbox selection needed",
+        log: "Selection required",
+      },
+    ]);
+  }
+});
+
 test("assistant text is primary conversation content, not a tool event", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([{ type: "text", text: "I saved the plan." }]),

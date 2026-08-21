@@ -36,27 +36,27 @@ export function createControlFinalizationGuard() {
     return true;
   };
 
+  const joinPendingOrStart = async (
+    persistIdempotently: () => Promise<void>
+  ): Promise<boolean> => {
+    const activeAttempt = pending;
+    if (!activeAttempt) return startAttempt(persistIdempotently);
+    try {
+      await activeAttempt;
+      return false;
+    } catch {
+      // Re-evaluate after an event-driven attempt settles. If another caller
+      // already started a replacement, join it; otherwise persist this state.
+      if (finalized) return false;
+      return joinPendingOrStart(persistIdempotently);
+    }
+  };
+
   const run = async (
     persistIdempotently: () => Promise<void>
   ): Promise<boolean> => {
     if (finalized) return false;
-    if (pending) {
-      try {
-        await pending;
-        return false;
-      } catch {
-        // A lifecycle path that joined two failed persistence attempts gets
-        // one serialized chance to persist its own terminal state.
-        if (finalized) return false;
-        if (pending) {
-          await pending;
-          return false;
-        }
-        return startAttempt(persistIdempotently);
-      }
-    }
-
-    return startAttempt(persistIdempotently);
+    return joinPendingOrStart(persistIdempotently);
   };
 
   return {

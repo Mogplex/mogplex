@@ -296,21 +296,28 @@ export async function executeControlChatRequest(input: {
         replaceLatestSteps(steps);
         // AI SDK provider/model errors arrive as UI error parts and finish with
         // reason `error`; finalizeFinishedControlRun maps that reason to failed.
-        const finalizedNow = await finalization.run(async () => {
-          stampSandboxMetadata();
-          await finalizeFinishedControlRun({
-            activeCall,
-            userId: input.userId,
-            scope,
-            limitClaimId: input.limitClaimId,
-            callStartedAt: input.callStartedAt,
-            finishReason,
-            terminalFailure,
-            totalUsage,
-            providerMetadata,
-            steps: latestSteps,
+        let finalizedNow = false;
+        try {
+          finalizedNow = await finalization.run(async () => {
+            stampSandboxMetadata();
+            await finalizeFinishedControlRun({
+              activeCall,
+              userId: input.userId,
+              scope,
+              limitClaimId: input.limitClaimId,
+              callStartedAt: input.callStartedAt,
+              finishReason,
+              terminalFailure,
+              totalUsage,
+              providerMetadata,
+              steps: latestSteps,
+            });
           });
-        });
+        } catch (error) {
+          // Do not turn a fully delivered response into a stream failure when
+          // terminal persistence is unavailable after its bounded retries.
+          console.error("[control/chat] finish finalization failed", { error });
+        }
         if (!finalizedNow) return;
         // Memory promotion (compaction plan Phase 4): distill durable facts
         // from this conversation's checkpoint, if one exists. Best-effort by
