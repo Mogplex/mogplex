@@ -10,6 +10,16 @@ type ResolvedAuth = {
   source: "supabase" | "better-auth" | "playwright" | "api-key" | "oauth";
 };
 
+type ResolvedAuthDependencies = {
+  getHeaders: () => Promise<{ get: (name: string) => string | null }>;
+  resolveCliBearer: typeof resolveCliBearerAuth;
+};
+
+const defaultResolvedAuthDependencies: ResolvedAuthDependencies = {
+  getHeaders: headers,
+  resolveCliBearer: resolveCliBearerAuth,
+};
+
 async function findProfileIdByAuthUserId(
   authUserId: string
 ): Promise<string | undefined> {
@@ -47,24 +57,30 @@ async function getBetterAuthLinkedUserId(): Promise<ResolvedAuth | undefined> {
   return { profileId, authUserId, source: "better-auth" };
 }
 
-export async function getProfileId(): Promise<string | undefined> {
-  return (await getResolvedAuth())?.profileId;
+export async function getProfileId(
+  dependencies: ResolvedAuthDependencies = defaultResolvedAuthDependencies
+): Promise<string | undefined> {
+  return (await getResolvedAuth(dependencies))?.profileId;
 }
 
 /**
  * Returns the Mogplex profile id, not `auth.users.id`.
  * Kept for compatibility with existing call sites.
  */
-export async function getUserId(): Promise<string | undefined> {
-  return getProfileId();
+export async function getUserId(
+  dependencies: ResolvedAuthDependencies = defaultResolvedAuthDependencies
+): Promise<string | undefined> {
+  return getProfileId(dependencies);
 }
 
-export async function getResolvedAuth(): Promise<ResolvedAuth | undefined> {
-  const headerStore = await headers();
+export async function getResolvedAuth(
+  dependencies: ResolvedAuthDependencies = defaultResolvedAuthDependencies
+): Promise<ResolvedAuth | undefined> {
+  const headerStore = await dependencies.getHeaders();
 
   // 1. Check CLI bearer credentials before browser sessions.
   const authHeader = headerStore.get("authorization");
-  const cliBearerAuth = await resolveCliBearerAuth(authHeader);
+  const cliBearerAuth = await dependencies.resolveCliBearer(authHeader);
   if (cliBearerAuth) {
     return {
       profileId: cliBearerAuth.profileId,
