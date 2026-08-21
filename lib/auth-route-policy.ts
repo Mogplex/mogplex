@@ -74,7 +74,7 @@ const MACHINE_AUTH_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/api/jobs/process", match: "exact" },
 ] as const;
 
-const CLI_PAT_API_PATHS: readonly RoutePolicyEntry[] = [
+const CLI_BEARER_API_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/api/v1/mogplex", match: "subtree" },
   { path: "/api/settings", match: "exact" },
   { path: "/api/models", match: "exact" },
@@ -121,6 +121,10 @@ export function allowsMachineApiPath(pathname: string) {
   return matchesDeclaredPaths(pathname, MACHINE_AUTH_PATHS);
 }
 
+export function allowsCliBearerApiPath(pathname: string) {
+  return matchesDeclaredPaths(pathname, CLI_BEARER_API_PATHS);
+}
+
 export function allowsCliPatApiPath(pathname: string) {
-  return matchesDeclaredPaths(pathname, CLI_PAT_API_PATHS);
+  return allowsCliBearerApiPath(pathname);
 }

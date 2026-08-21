@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getPlaywrightUserIdFromHeaders } from "@/lib/internal-api-auth";
+import { resolveCliBearerAuth } from "@/lib/auth/cli-bearer";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ResolvedAuth = {
   profileId: string;
   authUserId: string | null;
-  source: "supabase" | "better-auth" | "playwright" | "api-key";
+  source: "supabase" | "better-auth" | "playwright" | "api-key" | "oauth";
 };
 
 async function findProfileIdByAuthUserId(
@@ -61,22 +62,18 @@ export async function getUserId(): Promise<string | undefined> {
 export async function getResolvedAuth(): Promise<ResolvedAuth | undefined> {
   const headerStore = await headers();
 
-  // 1. Check for PAT (Personal Access Token) - highest priority for CLI
+  // 1. Check CLI bearer credentials before browser sessions.
   const authHeader = headerStore.get("authorization");
-  if (authHeader?.startsWith("Bearer mog_")) {
-    const { resolveApiKey } = await import("@/lib/auth/api-key");
-    const apiKeyResult = await resolveApiKey(authHeader);
-    if (apiKeyResult.ok) {
-      return {
-        profileId: apiKeyResult.auth.userId,
-        authUserId: null,
-        source: "api-key",
-      };
-    }
-    // Rate-limited and invalid both fall through to other auth strategies
-    // here; the public v1 API surface maps rate_limited → 429 separately
-    // via resolveMogplexApiUser.
+  const cliBearerAuth = await resolveCliBearerAuth(authHeader);
+  if (cliBearerAuth) {
+    return {
+      profileId: cliBearerAuth.profileId,
+      authUserId: null,
+      source: cliBearerAuth.source,
+    };
   }
+  // Rate-limited and invalid credentials fall through to browser auth. The
+  // public v1 API maps rate-limited PATs to 429 via resolveMogplexApiUser.
 
   // 2. Playwright internal auth (for E2E tests)
   const playwrightUserId = getPlaywrightUserIdFromHeaders(headerStore);

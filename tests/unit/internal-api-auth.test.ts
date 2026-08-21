@@ -8,6 +8,7 @@ import {
   hasPlaywrightAuthBypass,
 } from "../../lib/internal-api-auth";
 import {
+  allowsCliBearerApiPath as allowsCliBearerApiAuth,
   allowsCliPatApiPath as allowsCliPatApiAuth,
   allowsDelegatedInternalApiPath as allowsInternalApiAuth,
   allowsMachineApiPath as allowsMachineApiAuth,
@@ -120,6 +121,18 @@ test("allowsCliPatApiAuth is limited to PAT-aware hosted CLI endpoints", () => {
   // Prefix must not leak to sibling path (/api/sandboxfoo).
   assert.equal(allowsCliPatApiAuth("/api/sandboxfoo"), false);
   assert.equal(allowsCliPatApiAuth("/spaces"), false);
+});
+
+test("allowsCliBearerApiAuth is limited to hosted CLI endpoints", () => {
+  assert.equal(allowsCliBearerApiAuth("/api/settings"), true);
+  assert.equal(allowsCliBearerApiAuth("/api/models"), true);
+  assert.equal(allowsCliBearerApiAuth("/api/mcp-servers"), true);
+  assert.equal(
+    allowsCliBearerApiAuth("/api/cli/inference/chat/completions"),
+    true
+  );
+  assert.equal(allowsCliBearerApiAuth("/api/skills/registry"), false);
+  assert.equal(allowsCliBearerApiAuth("/api/cron/repair-jobs"), false);
 });
 
 test("getMachineApiAuthResult returns not_applicable for non-machine routes", () => {

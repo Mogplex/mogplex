@@ -19,15 +19,23 @@ export default function CliAuthPage() {
     <div className="flex min-h-dvh items-center justify-center bg-background p-6">
       <div className="max-w-md text-center">
         <h1 className="text-lg font-semibold text-foreground">
-          CLI login has moved
+          Update Mogplex to sign in
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This version of the mogplex CLI uses a login flow that is no longer
-          supported. Update the CLI, then run{" "}
-          <code className="font-mono">mogplex login</code> again.
+          Update Mogplex before sign-in. Run:
         </p>
-        <p className="mt-4 font-mono text-[13px] text-muted-foreground">
-          npm install -g @mogplex/cli
+        <pre className="mt-4 overflow-x-auto font-mono text-[13px] text-muted-foreground">
+          <code>mogplex --update</code>
+        </pre>
+        <p className="mt-4 text-sm text-muted-foreground">
+          If this command fails, install the current version:
+        </p>
+        <pre className="mt-4 overflow-x-auto font-mono text-[13px] text-muted-foreground">
+          <code>curl -fsSL https://install.mogplex.com/install.sh | sh</code>
+        </pre>
+        <p className="mt-4 text-sm text-muted-foreground">
+          Start <code className="font-mono">mogplex</code> again. Complete
+          sign-in in the browser.
         </p>
       </div>
     </div>

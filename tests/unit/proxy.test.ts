@@ -154,15 +154,25 @@ test("isCliPatApiRequest ignores non-PAT bearers and missing headers", () => {
   assert.equal(isCliPatApiRequest(makeRequest(), "/api/mcp-servers"), false);
 });
 
-test("isMogplexBearerApiRequest delegates OAuth only inside the Mogplex API", () => {
+test("isMogplexBearerApiRequest delegates OAuth on hosted CLI API paths", () => {
   const request = makeRequest({ authorization: "Bearer oauth.jwt.token" });
   assert.equal(isMogplexBearerApiRequest(request, "/api/v1/mogplex"), true);
   assert.equal(
     isMogplexBearerApiRequest(request, "/api/v1/mogplex/automations"),
     true
   );
+  assert.equal(isMogplexBearerApiRequest(request, "/api/settings"), true);
+  assert.equal(isMogplexBearerApiRequest(request, "/api/models"), true);
+  assert.equal(isMogplexBearerApiRequest(request, "/api/mcp-servers"), true);
+  assert.equal(
+    isMogplexBearerApiRequest(request, "/api/cli/inference/chat/completions"),
+    true
+  );
+  assert.equal(
+    isMogplexBearerApiRequest(request, "/api/skills/registry"),
+    false
+  );
   assert.equal(isMogplexBearerApiRequest(request, "/api/v1/mogplexx"), false);
-  assert.equal(isMogplexBearerApiRequest(request, "/api/settings"), false);
   assert.equal(
     isMogplexBearerApiRequest(makeRequest(), "/api/v1/mogplex"),
     false
@@ -199,6 +209,22 @@ test("proxy lets CLI PAT requests reach hosted inference routes", async () => {
   // asserted via the `x-middleware-next` header it sets — and did not
   // redirect or issue an auth-failure response. Status 200 alone is brittle
   // because it conflates pass-through with any downstream 200.
+  assert.equal(response.headers.get("x-middleware-next"), "1");
+  assert.equal(response.headers.get("location"), null);
+  assert.equal(response.headers.get("www-authenticate"), null);
+});
+
+test("proxy lets CLI OAuth requests reach hosted inference routes", async () => {
+  const request = new NextRequest(
+    "https://example.com/api/cli/inference/chat/completions",
+    {
+      method: "POST",
+      headers: { authorization: "Bearer oauth.jwt.token" },
+    }
+  );
+
+  const response = await proxy(request);
+
   assert.equal(response.headers.get("x-middleware-next"), "1");
   assert.equal(response.headers.get("location"), null);
   assert.equal(response.headers.get("www-authenticate"), null);
