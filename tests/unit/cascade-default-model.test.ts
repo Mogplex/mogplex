@@ -51,6 +51,7 @@ function makeDeps(overrides: Partial<CascadeAutomationModelDeps> = {}) {
       versionNumber: number;
       graph: FlowGraph;
     }>,
+    deletedVersions: [] as Array<string>,
     publishedPointers: [] as Array<{ flowId: string; versionId: string }>,
   };
   const deps: CascadeAutomationModelDeps = {
@@ -64,8 +65,12 @@ function makeDeps(overrides: Partial<CascadeAutomationModelDeps> = {}) {
       calls.insertedVersions.push(input);
       return { id: `version-${input.flowId}-${input.versionNumber}` };
     },
+    deleteFlowVersion: async (versionId) => {
+      calls.deletedVersions.push(versionId);
+    },
     setPublishedVersion: async (flowId, _userId, versionId) => {
       calls.publishedPointers.push({ flowId, versionId });
+      return true;
     },
     ...overrides,
   };
@@ -216,4 +221,44 @@ test("cascade short-circuits when there are no previous model ids", async () => 
     failed: 0,
   });
   assert.equal(loadCalls, 0);
+});
+
+test("cascade never reverts a concurrently published flow version", async () => {
+  // Interleaving under test: loadFlows captured published_version_id "v-old",
+  // then the user publishes new edits (pointer moves to "v-user") before the
+  // cascade's pointer update lands. The compare-and-swap must refuse the
+  // move, the orphaned cascade version must be deleted, and the flow must be
+  // reported rather than counted as published.
+  const { deps, calls } = makeDeps({
+    loadFlows: async () => [
+      {
+        id: "flow-raced",
+        draft_graph: graphWithModels([OLD_MODEL]),
+        published_version_id: "v-old",
+      },
+    ],
+    loadPublishedVersionGraph: async () => ({
+      id: "v-old",
+      graph: graphWithModels([OLD_MODEL]),
+    }),
+    setPublishedVersion: async (
+      _flowId,
+      _userId,
+      _versionId,
+      expectedVersionId
+    ) => expectedVersionId !== "v-old", // pointer already moved to "v-user"
+  });
+
+  const result = await cascadeDefaultModelToAutomations(
+    { userId: "user-1", previousModelIds: [OLD_MODEL], nextModelId: NEW_MODEL },
+    deps
+  );
+
+  assert.deepEqual(result, {
+    draftsUpdated: 1,
+    versionsPublished: 0,
+    failed: 1,
+  });
+  assert.deepEqual(calls.publishedPointers, []);
+  assert.deepEqual(calls.deletedVersions, ["version-flow-raced-2"]);
 });

@@ -39,11 +39,16 @@ export type CascadeAutomationModelDeps = {
     versionNumber: number;
     graph: FlowGraph;
   }) => Promise<{ id: string }>;
+  deleteFlowVersion: (versionId: string) => Promise<void>;
+  // Compare-and-swap: moves the pointer only when it still equals
+  // expectedVersionId — the version the new graph was derived from.
+  // Returns whether the move happened.
   setPublishedVersion: (
     flowId: string,
     userId: string,
-    versionId: string
-  ) => Promise<void>;
+    versionId: string,
+    expectedVersionId: string
+  ) => Promise<boolean>;
 };
 
 // Returns the input graph untouched when nothing matched so callers can skip
@@ -120,13 +125,26 @@ const defaultCascadeDeps: CascadeAutomationModelDeps = {
     if (error) throw new Error(error.message);
     return data;
   },
-  async setPublishedVersion(flowId, userId, versionId) {
+  async deleteFlowVersion(versionId) {
     const { error } = await supabaseAdmin
+      .from("flow_versions")
+      .delete()
+      .eq("id", versionId);
+    if (error) throw new Error(error.message);
+  },
+  async setPublishedVersion(flowId, userId, versionId, expectedVersionId) {
+    // The eq on published_version_id is the compare-and-swap guard: if a user
+    // publish moved the pointer after loadFlows read it, this update matches
+    // zero rows and the newer publication stays active.
+    const { data, error } = await supabaseAdmin
       .from("flows")
       .update({ published_version_id: versionId })
       .eq("id", flowId)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("published_version_id", expectedVersionId)
+      .select("id");
     if (error) throw new Error(error.message);
+    return (data?.length ?? 0) > 0;
   },
 };
 
@@ -137,10 +155,13 @@ const defaultCascadeDeps: CascadeAutomationModelDeps = {
 // dispatch reads at run time. Schedules, status, and unpublished draft edits
 // are untouched.
 //
-// The load-modify-write per flow has the same optimistic-concurrency profile
-// as updateFlow: a concurrent canvas autosave can clobber the pin rewrite.
-// That is accepted here as it is there — a default-model change is a rare,
-// user-initiated action.
+// The draft save is load-modify-write with the same optimistic-concurrency
+// profile as updateFlow: a concurrent canvas autosave can clobber the pin
+// rewrite. That is accepted here as it is there — a default-model change is a
+// rare, user-initiated action. The published pointer is NOT optimistic: the
+// setPublishedVersion compare-and-swap only moves it when it still equals the
+// version the new graph was derived from, so a concurrent user publish can
+// never be silently reverted by the cascade.
 //
 // Per-flow failures are isolated and counted rather than aborting the sweep:
 // the settings save has already succeeded by the time this runs, so a half
@@ -190,7 +211,25 @@ export async function cascadeDefaultModelToAutomations(
         versionNumber: latestVersionNumber + 1,
         graph: published.graph,
       });
-      await deps.setPublishedVersion(flow.id, input.userId, newVersion.id);
+      const moved = await deps.setPublishedVersion(
+        flow.id,
+        input.userId,
+        newVersion.id,
+        flow.published_version_id
+      );
+      if (!moved) {
+        // A user publish landed between loadFlows and now: their newer
+        // version stays active, the just-inserted version would be orphaned
+        // history, and the flow is reported so the user knows it was not
+        // cascaded.
+        await deps.deleteFlowVersion(newVersion.id).catch(() => undefined);
+        result.failed += 1;
+        console.error("Automation model cascade skipped for flow", {
+          flowId: flow.id,
+          reason: "published version changed during cascade",
+        });
+        continue;
+      }
       result.versionsPublished += 1;
     } catch (error) {
       result.failed += 1;
