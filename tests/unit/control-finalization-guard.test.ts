@@ -26,36 +26,34 @@ test("Control finalization joins concurrent callers and persists once", async ()
 
 test("Control finalization remains retryable after a persistence failure", async () => {
   const guard = createControlFinalizationGuard();
+  let attempts = 0;
 
   await assert.rejects(
     guard.run(async () => {
+      attempts += 1;
       throw new Error("database unavailable");
     }),
     /database unavailable/
   );
+  assert.equal(attempts, 2);
   assert.equal(guard.isFinalized(), false);
   assert.equal(await guard.run(async () => undefined), true);
   assert.equal(guard.isFinalized(), true);
 });
 
-test("a concurrent Control finalizer retries after the first write fails", async () => {
+test("a sole Control finalizer retries one transient persistence failure", async () => {
   const guard = createControlFinalizationGuard();
-  let rejectWrite!: (error: Error) => void;
-  const blockedFailure = new Promise<void>((_resolve, reject) => {
-    rejectWrite = reject;
-  });
   let writes = 0;
   const first = guard.run(async () => {
     writes += 1;
-    await blockedFailure;
+    if (writes === 1) throw new Error("database unavailable");
   });
   const second = guard.run(async () => {
     writes += 1;
   });
 
-  rejectWrite(new Error("database unavailable"));
-  await assert.rejects(first, /database unavailable/);
-  assert.equal(await second, true);
+  assert.equal(await first, true);
+  assert.equal(await second, false);
   assert.equal(writes, 2);
   assert.equal(guard.isFinalized(), true);
 });

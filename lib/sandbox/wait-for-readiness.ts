@@ -146,6 +146,8 @@ export async function waitForSandboxReadiness(
     let timeout: ReturnType<typeof setTimeout> | null = null;
     let activeListener: TableEventListener | null = initialListener;
     let reconnectAttempts = 0;
+    let checkInFlight = false;
+    let checkQueued = false;
 
     const finish = (
       result: SandboxReadinessWaitResult | null,
@@ -170,6 +172,22 @@ export async function waitForSandboxReadiness(
       } catch {
         finish(retryResult());
       }
+    };
+
+    const requestCheck = () => {
+      if (settled) return;
+      if (checkInFlight) {
+        checkQueued = true;
+        return;
+      }
+      checkInFlight = true;
+      void check().finally(() => {
+        checkInFlight = false;
+        if (!settled && checkQueued) {
+          checkQueued = false;
+          requestCheck();
+        }
+      });
     };
 
     const abort = () => {
@@ -211,7 +229,7 @@ export async function waitForSandboxReadiness(
         activeListener = replacement;
         subscribe(replacement);
         // Subscribe first, then read once to close the reconnect race.
-        void check();
+        requestCheck();
       } catch {
         void finishAfterListenerFailure();
       }
@@ -223,7 +241,7 @@ export async function waitForSandboxReadiness(
           activeListener === listener &&
           isMatchingSandboxEvent(payload, input.sandboxRecordId, input.userId)
         ) {
-          void check();
+          requestCheck();
         }
       });
       listener.onError((error) => void reconnect(listener, error));
@@ -242,7 +260,7 @@ export async function waitForSandboxReadiness(
       input.signal?.addEventListener("abort", abort, { once: true });
       subscribe(initialListener);
       // Subscribe first, then read once to close the read/subscribe race.
-      void check();
+      requestCheck();
     }
   });
 }

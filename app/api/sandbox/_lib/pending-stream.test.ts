@@ -51,6 +51,7 @@ describe("pending sandbox readiness stream", () => {
 
   it("keeps the route budget above the readiness wait ceiling", () => {
     expect(maxDuration * 1000).toBeGreaterThan(SANDBOX_READINESS_TIMEOUT_MS);
+    expect(maxDuration).toBeLessThanOrEqual(800);
   });
 
   it("uses the readiness stream only for an explicit internal opt-in", async () => {
@@ -108,6 +109,34 @@ describe("pending sandbox readiness stream", () => {
     expect(body).toContain('"type":"sandbox_created"');
     expect(body).toContain('"type":"ready"');
     expect(body).toContain('"status":"running"');
+  });
+
+  it("clears stale health diagnostics from a recovered ready sandbox", async () => {
+    const response = buildPendingSandboxWaitStreamResponse({
+      record: {
+        ...record,
+        health_status: "app_error",
+        last_boot_error: "stale boot failure",
+      },
+      userId: "user-1",
+      requestSignal: new AbortController().signal,
+      waitForReadiness: async () => ({
+        kind: "ready",
+        snapshot: {
+          id: record.id,
+          user_id: "user-1",
+          status: "running",
+        },
+      }),
+    });
+
+    const body = await response.text();
+    const readyEvent = body
+      .split("\n")
+      .find((line) => line.includes('"type":"ready"'));
+    expect(readyEvent).toBeDefined();
+    expect(readyEvent).not.toContain("stale boot failure");
+    expect(readyEvent).not.toContain('"health_status":"app_error"');
   });
 
   it("emits an error instead of readiness when the sandbox stops", async () => {

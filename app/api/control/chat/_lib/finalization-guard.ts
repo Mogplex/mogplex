@@ -3,20 +3,24 @@ export function createControlFinalizationGuard() {
   let finalized = false;
   let pending: Promise<void> | null = null;
 
+  const persistWithOneRetry = async (finalize: () => Promise<void>) => {
+    try {
+      await finalize();
+    } catch {
+      // One immediate persistence retry avoids stranding a sole finalizer.
+      // This is bounded work, not a status-polling or sleep-retry loop.
+      await finalize();
+    }
+  };
+
   const run = async (finalize: () => Promise<void>): Promise<boolean> => {
     if (finalized) return false;
     if (pending) {
-      try {
-        await pending;
-        return false;
-      } catch {
-        // The failed attempt clears `pending` before rejecting. A concurrent
-        // lifecycle path may now retry its own finalization operation.
-        return run(finalize);
-      }
+      await pending;
+      return false;
     }
 
-    const attempt = Promise.resolve().then(finalize);
+    const attempt = persistWithOneRetry(finalize);
     const tracked = attempt
       .then(() => {
         finalized = true;

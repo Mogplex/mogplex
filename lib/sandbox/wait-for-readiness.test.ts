@@ -215,6 +215,64 @@ describe("waitForSandboxReadiness", () => {
     expect(listener.end).toHaveBeenCalledTimes(1);
   });
 
+  it("coalesces burst notifications into one trailing snapshot read", async () => {
+    const listener = createListener();
+    let secondReadStarted!: () => void;
+    let resolveSecondRead!: (snapshot: {
+      id: string;
+      user_id: string;
+      status: string;
+    }) => void;
+    const secondStarted = new Promise<void>((resolve) => {
+      secondReadStarted = resolve;
+    });
+    const loadSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: "sandbox-1",
+        user_id: "user-1",
+        status: "installing",
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecondRead = resolve;
+            secondReadStarted();
+          })
+      )
+      .mockResolvedValueOnce({
+        id: "sandbox-1",
+        user_id: "user-1",
+        status: "running",
+      });
+    const result = waitForSandboxReadiness(
+      { sandboxRecordId: "sandbox-1", userId: "user-1" },
+      { createListener: async () => listener, loadSnapshot }
+    );
+    const update = {
+      table: "sandboxes",
+      op: "UPDATE",
+      id: "sandbox-1",
+      user_id: "user-1",
+    };
+
+    await vi.waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(1));
+    listener.emit(update);
+    await secondStarted;
+    listener.emit(update);
+    listener.emit(update);
+    listener.emit(update);
+    expect(loadSnapshot).toHaveBeenCalledTimes(2);
+    resolveSecondRead({
+      id: "sandbox-1",
+      user_id: "user-1",
+      status: "installing",
+    });
+
+    await expect(result).resolves.toMatchObject({ kind: "ready" });
+    expect(loadSnapshot).toHaveBeenCalledTimes(3);
+  });
+
   it("requests one stream reattach when the bounded snapshot read fails", async () => {
     const listener = createListener();
     const loadSnapshot = vi
@@ -313,7 +371,7 @@ describe("waitForSandboxReadiness", () => {
       message:
         "Sandbox readiness connection was interrupted. Reconnect to continue waiting.",
     });
-    expect(loadSnapshot).toHaveBeenCalledTimes(5);
+    expect(loadSnapshot).toHaveBeenCalledTimes(3);
     for (const listener of listeners) {
       expect(listener.end).toHaveBeenCalledTimes(1);
     }

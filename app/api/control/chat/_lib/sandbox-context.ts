@@ -99,11 +99,18 @@ export function resolveControlToolSandboxId(
   context: ControlPromptSandboxContext
 ): string | null {
   if (context.selectionRequired) return null;
-  return (
-    context.selected?.recordId ??
-    resolveSelectedControlSandboxId(
-      context.sandboxes.filter((sandbox) => sandbox.status === "running")
+  const selectedId = context.selected?.recordId;
+  if (selectedId) {
+    // Defense in depth: only the running record shown in prompt context may
+    // cross into the tool binding, even if a future resolver branch drifts.
+    return context.sandboxes.some(
+      (sandbox) => sandbox.id === selectedId && sandbox.status === "running"
     )
+      ? selectedId
+      : null;
+  }
+  return resolveSelectedControlSandboxId(
+    context.sandboxes.filter((sandbox) => sandbox.status === "running")
   );
 }
 

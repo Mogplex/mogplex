@@ -21,10 +21,10 @@ function mergeReadinessSnapshot(
   return {
     ...record,
     status: "running",
-    health_status: snapshot.health_status ?? record.health_status,
+    health_status: snapshot.health_status ?? null,
     preview_url: snapshot.preview_url ?? record.preview_url,
     error: snapshot.error ?? null,
-    last_boot_error: snapshot.last_boot_error ?? record.last_boot_error,
+    last_boot_error: snapshot.last_boot_error ?? null,
   };
 }
 

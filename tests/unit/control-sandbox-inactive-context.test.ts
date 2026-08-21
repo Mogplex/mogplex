@@ -37,3 +37,18 @@ test("control prompt labels an inactive selected sandbox and withholds tool bind
   });
   assert.equal(resolveControlToolSandboxId(context), null);
 });
+
+test("control tool binding independently rejects an inconsistent inactive selection", () => {
+  assert.equal(
+    resolveControlToolSandboxId({
+      decisionSource: "server_validated_request",
+      rejectionReason: null,
+      selectionRequired: false,
+      selected: { recordId: "sandbox-record-1", runtimeId: "runtime-1" },
+      sandboxes: [
+        { id: "sandbox-record-1", branch: "main", status: "stopped" },
+      ],
+    }),
+    null
+  );
+});
