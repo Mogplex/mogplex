@@ -71,7 +71,8 @@ describe("rpc", () => {
     const shape = await getFunctionShape(
       queryable,
       new Map(),
-      "echo_jsonb_after_out"
+      "echo_jsonb_after_out",
+      ["p_prefix", "p_payload"]
     );
     expect(shape.argumentTypes).toEqual({
       p_prefix: "text",
@@ -117,6 +118,47 @@ describe("rpc", () => {
     expect(echoed.error).toBeNull();
     expect(typeof echoed.data).toBe("string");
     expect(new Date(echoed.data as string).getTime()).toBe(claimedAt.getTime());
+  });
+
+  it("selects and caches overloads by supplied argument names", async () => {
+    const cache = new Map();
+    const slugShape = await getFunctionShape(
+      queryable,
+      cache,
+      "overloaded_payload",
+      ["p_slug"]
+    );
+    expect(slugShape.argumentTypes).toEqual({
+      p_slug: "text",
+      p_limit: "integer",
+    });
+
+    const payloadShape = await getFunctionShape(
+      queryable,
+      cache,
+      "overloaded_payload",
+      ["p_payload"]
+    );
+    expect(payloadShape.argumentTypes).toEqual({ p_payload: "jsonb" });
+
+    const defaulted = await db.rpc("overloaded_payload", { p_slug: "alpha" });
+    expect(defaulted.error).toBeNull();
+    expect(defaulted.data).toBe("alpha:10");
+
+    const json = await db.rpc("overloaded_payload", {
+      p_payload: { ready: true },
+    });
+    expect(json.error).toBeNull();
+    expect(json.data).toBe('json:{"ready": true}');
+  });
+
+  it("rejects overloads with identical argument names and different types", async () => {
+    const result = await db.rpc("ambiguous_payload", { p_value: "hello" });
+
+    expect(result.data).toBeNull();
+    expect(result.error?.message).toContain(
+      'ambiguous function "ambiguous_payload"'
+    );
   });
 
   it("surfaces raised errcodes on error.code", async () => {

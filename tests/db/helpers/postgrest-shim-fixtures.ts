@@ -119,6 +119,18 @@ export const SCHEMA = /* sql */ `
   create function echo_claimed_at(p_claimed_at timestamptz) returns timestamptz
   language sql as $$ select p_claimed_at $$;
 
+  create function overloaded_payload(p_slug text, p_limit integer default 10)
+  returns text language sql as $$ select p_slug || ':' || p_limit::text $$;
+
+  create function overloaded_payload(p_payload jsonb)
+  returns text language sql as $$ select 'json:' || p_payload::text $$;
+
+  create function ambiguous_payload(p_value text)
+  returns text language sql as $$ select 'text:' || p_value $$;
+
+  create function ambiguous_payload(p_value jsonb)
+  returns text language sql as $$ select 'json:' || p_value::text $$;
+
   -- FK cycle mirroring flows/flow_versions: two constraints link the tables,
   -- so embeds must use a constraint-name hint to pick the right one.
   create table pipelines (
