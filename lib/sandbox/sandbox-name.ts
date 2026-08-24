@@ -154,3 +154,19 @@ export function buildSandboxName(input: {
   );
   return fixedSegments.join("-");
 }
+
+/**
+ * Give a replacement sandbox a fresh provider identity while an older,
+ * terminal sandbox releases the stable name. The suffix is deterministic for
+ * an existing DB record so concurrent retries converge on the same identity.
+ */
+export function buildSandboxReplacementName(
+  stableName: string,
+  replacementId: string
+) {
+  const suffix = shortId(replacementId, "next", 8);
+  const base = stableName
+    .slice(0, MAX_NAME_LEN - suffix.length - 1)
+    .replace(/-+$/g, "");
+  return `${base}-${suffix}`;
+}

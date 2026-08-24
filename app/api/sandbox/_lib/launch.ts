@@ -7,7 +7,10 @@ import {
 } from "@/lib/vercel/target-resolution";
 import { buildLimitResponse, releaseLimitClaim } from "@/lib/request-limits";
 import { requestsSandboxReadinessWait } from "@/lib/sandbox/readiness-contract";
-import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
+import {
+  buildSandboxName,
+  buildSandboxReplacementName,
+} from "@/lib/sandbox/sandbox-name";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { SANDBOX_STREAM_SELECT } from "./constants";
 import { resolveLaunchRootDirectory } from "./utils";
@@ -265,6 +268,19 @@ export async function maybeReturnNameCollisionResponse(
   });
 
   if (collision.kind === "create") return null;
+
+  if (collision.kind === "replace") {
+    launch.sandboxNameOverride = buildSandboxReplacementName(
+      sandboxName,
+      collision.record?.id ?? crypto.randomUUID()
+    );
+    console.info("[sandbox/launch] rolling forward past terminal cleanup", {
+      repoId: launch.repoId,
+      previousSandboxRecordId: collision.record?.id ?? null,
+      replacementName: launch.sandboxNameOverride,
+    });
+    return null;
+  }
 
   if (collision.kind === "busy") {
     await releaseSandboxBootLimitClaim(launch.creds.userId, limitClaimId);

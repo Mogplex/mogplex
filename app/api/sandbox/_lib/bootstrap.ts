@@ -401,14 +401,16 @@ async function fallbackFromBaselineToGit(input: {
     networkPolicy: input.environment.networkPolicy,
     // Baseline->git fallback still reuses the record's name so the user
     // sees a stable sandbox identifier across the recovery path.
-    name: buildSandboxName({
-      repoId: input.launch.repoId,
-      workingBranch: input.launch.launchRequest.workingBranch,
-      recordId: input.state.streamSandboxRecord.id,
-      userId: input.launch.creds.userId,
-      productTeamId: input.launch.productTeamId,
-      rootDirectory: input.launch.effectiveRootDirectory,
-    }),
+    name:
+      input.launch.sandboxNameOverride ??
+      buildSandboxName({
+        repoId: input.launch.repoId,
+        workingBranch: input.launch.launchRequest.workingBranch,
+        recordId: input.state.streamSandboxRecord.id,
+        userId: input.launch.creds.userId,
+        productTeamId: input.launch.productTeamId,
+        rootDirectory: input.launch.effectiveRootDirectory,
+      }),
     onResume: createSandboxBillingOnResume(input.state.streamSandboxRecord.id),
   });
   input.state.sandbox = fresh;

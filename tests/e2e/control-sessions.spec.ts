@@ -136,11 +136,11 @@ test("control sessions: history list, restore, persist, and new session", async 
   // History: the sidebar lists the stored session.
   const sidebar = page.getByRole("complementary", { name: "Sessions" });
   await expect(
-    sidebar.getByRole("button", { name: /Earlier investigation/ })
+    sidebar.getByRole("button", { name: /^Earlier investigation/ })
   ).toBeVisible();
 
   // Restore: selecting it brings back the full conversation.
-  await sidebar.getByRole("button", { name: /Earlier investigation/ }).click();
+  await sidebar.getByRole("button", { name: /^Earlier investigation/ }).click();
   await expect(page).toHaveURL(/\/control\?mission=sess-1$/);
   const conversation = page.getByRole("log", { name: "Conversation" });
   await expect(
@@ -174,10 +174,10 @@ test("control sessions: history list, restore, persist, and new session", async 
   await expect.poll(() => posted, { timeout: 10_000 }).toBe(true);
   await expect(page).toHaveURL(/\/control\?mission=sess-2$/);
   await expect(
-    sidebar.getByRole("button", { name: /Fix billing/ })
+    sidebar.getByRole("button", { name: /^Fix billing/ })
   ).toBeVisible();
   await expect(
-    sidebar.getByRole("button", { name: /Earlier investigation/ })
+    sidebar.getByRole("button", { name: /^Earlier investigation/ })
   ).toBeVisible();
 
   // Archiving clears both the selection and its now-dead deep link.
@@ -185,6 +185,6 @@ test("control sessions: history list, restore, persist, and new session", async 
   await page.getByRole("menuitem", { name: "Archive" }).click();
   await expect(page).toHaveURL(/\/control$/);
   await expect(
-    sidebar.getByRole("button", { name: /Fix billing/ })
+    sidebar.getByRole("button", { name: /^Fix billing/ })
   ).toHaveCount(0);
 });

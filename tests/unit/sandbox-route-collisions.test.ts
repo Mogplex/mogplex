@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { SandboxLaunchPreparation } from "../../app/api/sandbox/_lib/types";
 import {
   buildOwnedRepoWithGithubAccess,
   buildSandboxCollectionRequest,
   buildSandboxServiceRouteAuth,
   createSandboxPostTestHandler,
+  loadSandboxRouteModule,
 } from "./helpers/sandbox-route-fixtures";
 
 function buildLaunchRequest() {
@@ -89,4 +91,46 @@ test("POST /api/sandbox returns a conflict without creating a record while Verce
   });
   assert.equal(restartCalls, 0);
   assert.equal(sandboxCreations, 0);
+});
+
+test("terminal cleanup selects a replacement name and continues the same launch", async () => {
+  await loadSandboxRouteModule();
+  const { maybeReturnNameCollisionResponse } =
+    await import("../../app/api/sandbox/_lib/launch");
+  const launch = {
+    repoId: "repo-123",
+    creds: { userId: "user-123" },
+    actorUserId: "user-123",
+    productTeamId: null,
+    effectiveRootDirectory: null,
+    runtime: "node22",
+    launchRequest: {
+      workingBranch: "main",
+      baseBranch: "main",
+    },
+    createContext: {
+      credentials: {
+        vercelProjectId: "project-123",
+        vercelTeamId: null,
+      },
+      ownership: { billingSource: "platform" },
+    },
+  } as unknown as SandboxLaunchPreparation;
+  const response = await maybeReturnNameCollisionResponse(
+    {
+      resolveNameCollision: async () => ({
+        kind: "replace",
+        record: { id: "12345678-aaaa-bbbb-cccc-dddddddddddd" } as never,
+      }),
+    } as never,
+    launch,
+    null,
+    buildLaunchRequest()
+  );
+
+  assert.equal(response, null);
+  const replacementName = launch.sandboxNameOverride;
+  assert.ok(replacementName);
+  assert.match(replacementName, /-12345678$/);
+  assert.ok(replacementName.length <= 60);
 });

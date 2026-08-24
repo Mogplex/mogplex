@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSandboxName } from "../../lib/sandbox/sandbox-name";
+import {
+  buildSandboxName,
+  buildSandboxReplacementName,
+} from "../../lib/sandbox/sandbox-name";
 
 test("buildSandboxName produces the mogplex-{repo}-{branch} shape (no userId)", () => {
   const name = buildSandboxName({
@@ -135,4 +138,27 @@ test("buildSandboxName output matches the regex [a-z0-9-]+", () => {
     userId: "99999999-8888-7777-6666-555555555555",
   });
   assert.match(name, /^[a-z0-9-]+$/);
+});
+
+test("buildSandboxReplacementName is stable, distinct, and bounded", () => {
+  const stableName = buildSandboxName({
+    repoId: "aaaaaaaaaaaa",
+    workingBranch: "feature/super-long-branch-name-that-needs-truncation",
+    rootDirectory: "packages/super-long-root-directory-that-needs-truncation",
+  });
+  const replacement = buildSandboxReplacementName(
+    stableName,
+    "12345678-aaaa-bbbb-cccc-dddddddddddd"
+  );
+
+  assert.equal(
+    replacement,
+    buildSandboxReplacementName(
+      stableName,
+      "12345678-aaaa-bbbb-cccc-dddddddddddd"
+    )
+  );
+  assert.notEqual(replacement, stableName);
+  assert.ok(replacement.length <= 60);
+  assert.match(replacement, /-12345678$/);
 });

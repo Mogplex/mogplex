@@ -19,6 +19,11 @@ import {
 } from "@/lib/control/session-groups";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { usePanelWidth } from "@/hooks/use-panel-width";
+import {
+  ProjectRowActions,
+  SessionRowActions,
+  type NewSessionTarget,
+} from "./session-list-actions";
 
 export type { ControlSessionSummary } from "@/lib/control/session-types";
 
@@ -66,35 +71,39 @@ function SessionRow({
   selected,
   working,
   onSelect,
+  onDelete,
 }: {
   session: ControlSessionSummary;
   selected: boolean;
   /** The selected session's chat is streaming a reply right now. */
   working: boolean;
   onSelect: (id: string) => void;
+  onDelete: (id: string) => Promise<boolean>;
 }) {
   return (
-    <button
-      type="button"
-      aria-current={selected ? "true" : undefined}
-      onClick={() => onSelect(session.id)}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
-        selected
-          ? "bg-ink-750 font-medium text-ink-100"
-          : "text-ink-400 hover:bg-ink-800"
-      }`}
-    >
-      {working ? (
-        <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-sky-400" />
-      ) : null}
-      {working ? (
-        <span className="shrink-0 text-sky-400">Working</span>
-      ) : null}
-      <span className="min-w-0 truncate">{session.title}</span>
-      <span className="ml-auto shrink-0 text-xs text-ink-400">
-        {formatAge(session.updated_at)}
-      </span>
-    </button>
+    <SessionRowActions session={session} onDelete={onDelete}>
+      <button
+        type="button"
+        aria-current={selected ? "true" : undefined}
+        onClick={() => onSelect(session.id)}
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
+          selected
+            ? "bg-ink-750 font-medium text-ink-100"
+            : "text-ink-400 hover:bg-ink-800"
+        }`}
+      >
+        {working ? (
+          <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-sky-400" />
+        ) : null}
+        {working ? (
+          <span className="shrink-0 text-sky-400">Working</span>
+        ) : null}
+        <span className="min-w-0 truncate">{session.title}</span>
+        <span className="ml-auto shrink-0 text-xs text-ink-400">
+          {formatAge(session.updated_at)}
+        </span>
+      </button>
+    </SessionRowActions>
   );
 }
 
@@ -103,11 +112,15 @@ function ProjectGroupSection({
   selectedId,
   workingIds,
   onSelect,
+  onNew,
+  onDelete,
 }: {
   group: SessionGroup<ControlSessionSummary>;
   selectedId: string | null;
   workingIds: ReadonlySet<string>;
   onSelect: (id: string) => void;
+  onNew: (target: NewSessionTarget) => void;
+  onDelete: (id: string) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -115,29 +128,39 @@ function ProjectGroupSection({
   const visible = showAll
     ? group.sessions
     : group.sessions.slice(0, MAX_VISIBLE_SESSIONS);
+  const newSessionTarget = {
+    project: group.project,
+    repoId:
+      group.sessions.find((session) => session.repo_id)?.repo_id ?? null,
+  };
 
   return (
     <div className="mt-1">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-ink-200 transition-colors hover:bg-ink-800"
+      <ProjectRowActions
+        projectName={group.name}
+        onNew={() => onNew(newSessionTarget)}
       >
-        {open ? (
-          <NavArrowDown className="size-3 shrink-0 text-ink-400" />
-        ) : (
-          <NavArrowRight className="size-3 shrink-0 text-ink-400" />
-        )}
-        <span
-          aria-hidden="true"
-          className={`size-3.5 shrink-0 rounded-full ${projectColorClass(group.name)}`}
-        />
-        <span className="min-w-0 truncate font-medium">{group.name}</span>
-        <span className="ml-auto shrink-0 text-xs text-ink-400">
-          {group.sessions.length}
-        </span>
-      </button>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-ink-200 transition-colors hover:bg-ink-800"
+        >
+          {open ? (
+            <NavArrowDown className="size-3 shrink-0 text-ink-400" />
+          ) : (
+            <NavArrowRight className="size-3 shrink-0 text-ink-400" />
+          )}
+          <span
+            aria-hidden="true"
+            className={`size-3.5 shrink-0 rounded-full ${projectColorClass(group.name)}`}
+          />
+          <span className="min-w-0 truncate font-medium">{group.name}</span>
+          <span className="ml-auto shrink-0 text-xs text-ink-400">
+            {group.sessions.length}
+          </span>
+        </button>
+      </ProjectRowActions>
       {open ? (
         <div className="ml-6 space-y-px">
           {visible.map((session) => (
@@ -147,6 +170,7 @@ function ProjectGroupSection({
               selected={session.id === selectedId}
               working={workingIds.has(session.id)}
               onSelect={onSelect}
+              onDelete={onDelete}
             />
           ))}
           {hiddenCount > 0 ? (
@@ -175,13 +199,15 @@ export function SessionList({
   workingIds = EMPTY_WORKING_IDS,
   onSelect,
   onNew,
+  onDelete,
 }: {
   sessions: ControlSessionSummary[];
   selectedId: string | null;
   /** Sessions whose chats are currently streaming (shows Working badges). */
   workingIds?: ReadonlySet<string>;
   onSelect: (id: string) => void;
-  onNew: () => void;
+  onNew: (target?: NewSessionTarget) => void;
+  onDelete: (id: string) => Promise<boolean>;
 }) {
   const { open: openCommandPalette } = useCommandPalette();
   const [collapsed, setCollapsed] = useState(false);
@@ -246,7 +272,7 @@ export function SessionList({
           type="button"
           aria-label="New session"
           title="New session"
-          onClick={onNew}
+          onClick={() => onNew()}
           className="grid size-10 place-items-center text-ink-400 hover:bg-ink-800 hover:text-ink-100"
         >
           <Plus className="size-4" strokeWidth={2} />
@@ -324,7 +350,7 @@ export function SessionList({
             type="button"
             aria-label="New session"
             title="New session"
-            onClick={onNew}
+            onClick={() => onNew()}
             className="grid size-6 place-items-center rounded-md hover:bg-ink-800 hover:text-ink-200"
           >
             <Plus className="size-3.5" strokeWidth={2} />
@@ -353,6 +379,8 @@ export function SessionList({
               selectedId={selectedId}
               workingIds={workingIds}
               onSelect={onSelect}
+              onNew={onNew}
+              onDelete={onDelete}
             />
           ))
         )}

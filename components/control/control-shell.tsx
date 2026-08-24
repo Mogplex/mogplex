@@ -16,11 +16,7 @@ import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
 import { scopedHref } from "@/lib/scoped-href";
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
 import { useRepos } from "@/hooks/use-repos";
-import { toast } from "@/hooks/use-toast";
-import {
-  SandboxLaunchProvider,
-  useSandboxLaunchActions,
-} from "@/components/sandbox-launch-provider";
+import { SandboxLaunchProvider } from "@/components/sandbox-launch-provider";
 import { useToolApprovalHandler } from "./use-tool-approval-handler";
 import { buildCombinedTimeline } from "./build-combined-timeline";
 import { ControlTopBar } from "./control-top-bar";
@@ -44,6 +40,9 @@ import { useControlChats } from "./use-control-chats";
 import { useControlChatError } from "./use-control-chat-error";
 import { useControlChatComposer } from "./use-control-chat-composer";
 import { TerminalActivity } from "./terminal-activity";
+import { useControlSessionActions } from "./use-control-session-actions";
+import { useControlSandboxStart } from "./use-control-sandbox-start";
+
 export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
@@ -57,13 +56,11 @@ function ControlShellInner({
   const { scope } = useParams<{ scope: string }>();
   const [missions, setMissions] = useState<Mission[]>(initialData.missions);
   const workspaces = initialData.workspaces;
-
   const [selectedMissionId, setSelectedMissionId] = useState<string>(
     initialMissionId || searchParams.get("mission") || missions[0]?.id || ""
   );
   const [view, setView] = useState<ControlView>("chat");
   const [focusSandboxId, setFocusSandboxId] = useState<string | null>(null);
-  const [newMission, setNewMission] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const persistRef = useRef<
     (sessionId: string, messages: UIMessage[]) => Promise<void>
@@ -76,7 +73,6 @@ function ControlShellInner({
     (id: string) => workspaces.find((w) => w.id === id),
     [workspaces]
   );
-
   const getWorktree = (id: string) =>
     initialData.worktrees.find((worktree) => worktree.id === id);
   const activeChatId =
@@ -119,7 +115,6 @@ function ControlShellInner({
   const getActiveChatError = useCallback(() => activeChat.error, [activeChat]);
   const chatPending = status === "streaming" || status === "submitted";
   const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
-
   const { loading: sandboxesLoading } = useSandboxSync();
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
   const allSandboxes = useMemo(
@@ -130,13 +125,13 @@ function ControlShellInner({
     [sandboxesById]
   );
   const { repos, mutate: mutateRepos } = useRepos();
-  const { launchRepoSandbox } = useSandboxLaunchActions();
   const {
     sessions,
     sessionsLoaded,
     selectSession,
     createSession,
     updateSession,
+    deleteSession,
     persistSession,
   } = useControlSessions({
     sessionId,
@@ -145,13 +140,23 @@ function ControlShellInner({
     removeSessionMessages: removeSessionState,
     deepLinkTarget: searchParams.get("mission"),
   });
-
   const displaySessions = useMemo(
     () => canonicalizeControlSessionProjects(sessions, repos),
     [repos, sessions]
   );
   const activeSession =
     displaySessions.find((entry) => entry.id === sessionId) ?? null;
+  const {
+    newMission,
+    newSessionTarget,
+    startNewSession,
+    closeNewSession,
+    deleteChat,
+  } = useControlSessionActions({
+    sessionId,
+    sessions: displaySessions,
+    deleteSession,
+  });
 
   const {
     activeRepo,
@@ -167,13 +172,15 @@ function ControlShellInner({
     selectedMissionId,
     missionTitle: activeSession?.title ?? mission?.title ?? null,
   });
+  const handleStartSandbox = useControlSandboxStart(activeRepo);
 
   const handleSelectSession = useCallback(
     (id: string) => {
       setView("chat");
+      closeNewSession();
       void selectSession(id);
     },
-    [selectSession]
+    [closeNewSession, selectSession]
   );
 
   useEffect(() => {
@@ -245,12 +252,19 @@ function ControlShellInner({
       };
       setMissions((prev) => [newMissionObj, ...prev]);
       setSelectedMissionId(id);
-      setNewMission(false);
+      closeNewSession();
       setChatError(null);
       pendingInitialMessageRef.current = { missionId: id, text, options };
       return true;
     },
-    [createSession, mutateRepos, pendingInitialMessageRef, repos, setChatError]
+    [
+      closeNewSession,
+      createSession,
+      mutateRepos,
+      pendingInitialMessageRef,
+      repos,
+      setChatError,
+    ]
   );
 
   const sessionUsage = useSessionUsage(messages, chatPending);
@@ -282,23 +296,6 @@ function ControlShellInner({
     },
     [handleSend]
   );
-
-  const handleStartSandbox = useCallback(() => {
-    const repo = activeRepo;
-    if (!repo) {
-      toast({
-        title: "No repository connected",
-        description: "Connect a repository before starting a sandbox.",
-        variant: "destructive",
-      });
-      return;
-    }
-    void launchRepoSandbox(repo, {
-      source: "control",
-      trigger: "control-start-sandbox",
-      intent: { kind: "start_fresh", interactive: true },
-    });
-  }, [activeRepo, launchRepoSandbox]);
 
   useControlSessionUrl({
     scope,
@@ -340,10 +337,12 @@ function ControlShellInner({
         sessionId={sessionId}
         workingIds={runningSessionIds}
         canCancel={Boolean(mission || sessionId)}
-        onCancel={() => setNewMission(false)}
+        onCancel={closeNewSession}
         onCreate={handleCreateMission}
         onSelectSession={handleSelectSession}
-        onNewSession={() => setNewMission(true)}
+        onNewSession={startNewSession}
+        onDeleteSession={deleteChat}
+        initialRepoId={newSessionTarget?.repoId}
       />
     );
   }
@@ -355,7 +354,8 @@ function ControlShellInner({
         selectedId={sessionId}
         workingIds={runningSessionIds}
         onSelect={handleSelectSession}
-        onNew={() => setNewMission(true)}
+        onNew={startNewSession}
+        onDelete={deleteChat}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <ControlTopBar

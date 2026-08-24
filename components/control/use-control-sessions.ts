@@ -9,6 +9,8 @@ import {
 } from "@/lib/control/session-persistence";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 
+const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
+
 /**
  * DB-backed control chat sessions: list, create, restore, and persist.
  * Messages sync whole-array with optimistic concurrency on updated_at
@@ -37,6 +39,7 @@ export function useControlSessions({
   const mutationRevisionRef = useRef(0);
   const removedSessionIdsRef = useRef(new Set<string>());
   const selectionRevisionRef = useRef(0);
+  const restoredSelectionRef = useRef(false);
 
   const refreshList = useCallback(async () => {
     const revision = mutationRevisionRef.current;
@@ -76,22 +79,31 @@ export function useControlSessions({
       }
       if (revision !== selectionRevisionRef.current) return;
       setSessionId(record.id);
+      window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
     },
     [setSessionId, setSessionMessages]
   );
 
-  // Deep link: ?mission=<session id> restores that session's history.
-  const deepLinkedRef = useRef(false);
+  // Restore the URL target, then the last opened chat, then the most recent
+  // chat. Global navigation returns to bare /control, so relying on the query
+  // string alone would strand persisted follow-up turns behind an empty view.
   useEffect(() => {
-    if (deepLinkedRef.current || sessions.length === 0) return;
-    if (!deepLinkTarget || !sessions.some((s) => s.id === deepLinkTarget)) {
-      return;
-    }
-    deepLinkedRef.current = true;
-    if (deepLinkTarget === sessionId) return;
+    if (restoredSelectionRef.current || !sessionsLoaded) return;
+    const remembered = window.localStorage.getItem(LAST_CONTROL_SESSION_KEY);
+    const target =
+      (deepLinkTarget && sessions.some((entry) => entry.id === deepLinkTarget)
+        ? deepLinkTarget
+        : null) ??
+      (remembered && sessions.some((entry) => entry.id === remembered)
+        ? remembered
+        : null) ??
+      sessions[0]?.id ??
+      null;
+    restoredSelectionRef.current = true;
+    if (!target || target === sessionId) return;
 
-    void selectSession(deepLinkTarget);
-  }, [sessions, deepLinkTarget, selectSession, sessionId]);
+    void selectSession(target);
+  }, [sessions, sessionsLoaded, deepLinkTarget, selectSession, sessionId]);
 
   const createSession = useCallback(
     async (
@@ -129,6 +141,7 @@ export function useControlSessions({
         ...current,
       ]);
       setSessionId(record.id);
+      window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
       return record.id;
     },
     [setSessionId, setSessionMessages]
@@ -205,6 +218,11 @@ export function useControlSessions({
         );
         removeSessionMessages(sessionId);
         setSessionId(null);
+        if (
+          window.localStorage.getItem(LAST_CONTROL_SESSION_KEY) === sessionId
+        ) {
+          window.localStorage.removeItem(LAST_CONTROL_SESSION_KEY);
+        }
         return true;
       }
       if (fields.archived === false) {
@@ -227,12 +245,46 @@ export function useControlSessions({
     [removeSessionMessages, sessionId, setSessionId]
   );
 
+  const deleteSession = useCallback(
+    async (targetSessionId: string): Promise<boolean> => {
+      let res: Response;
+      try {
+        res = await fetch(
+          `/api/control/sessions?id=${encodeURIComponent(targetSessionId)}`,
+          { method: "DELETE" }
+        );
+      } catch {
+        return false;
+      }
+      if (!res.ok) return false;
+
+      mutationRevisionRef.current += 1;
+      selectionRevisionRef.current += 1;
+      removedSessionIdsRef.current.add(targetSessionId);
+      updatedAtBySessionRef.current.delete(targetSessionId);
+      setSessions((current) =>
+        current.filter((entry) => entry.id !== targetSessionId)
+      );
+      removeSessionMessages(targetSessionId);
+      if (targetSessionId === sessionId) setSessionId(null);
+      if (
+        window.localStorage.getItem(LAST_CONTROL_SESSION_KEY) ===
+        targetSessionId
+      ) {
+        window.localStorage.removeItem(LAST_CONTROL_SESSION_KEY);
+      }
+      return true;
+    },
+    [removeSessionMessages, sessionId, setSessionId]
+  );
+
   return {
     sessions,
     sessionsLoaded,
     selectSession,
     createSession,
     updateSession,
+    deleteSession,
     persistSession,
     refreshList,
   };
