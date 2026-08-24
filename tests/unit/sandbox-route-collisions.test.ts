@@ -8,6 +8,7 @@ import {
   createSandboxPostTestHandler,
   loadSandboxRouteModule,
 } from "./helpers/sandbox-route-fixtures";
+import { sandboxRecord } from "@/lib/sandbox/test-fixtures";
 
 function buildLaunchRequest() {
   return buildSandboxCollectionRequest({
@@ -53,18 +54,30 @@ test("POST /api/sandbox delegates a stopped persistent collision to restart", as
   assert.equal(sandboxCreations, 0);
 });
 
-test("POST /api/sandbox returns a conflict without creating a record while Vercel is stopping", async () => {
+test("POST /api/sandbox waits for cleanup and resumes the same launch request", async () => {
   let sandboxCreations = 0;
   let restartCalls = 0;
+  let collisionCalls = 0;
+  const record = sandboxRecord({ status: "running", persistent: true });
   const handler = await createSandboxPostTestHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
       buildOwnedRepoWithGithubAccess(),
     getActiveSandboxForRepo: async () => null,
     enforceSandboxBootLimits: async () => ({ allowed: true }),
-    resolveNameCollision: async () => ({
-      kind: "busy",
-      record: { id: "sandbox-stopping-1" } as never,
+    resolveNameCollision: async () => {
+      collisionCalls += 1;
+      return collisionCalls === 1
+        ? { kind: "busy", record }
+        : { kind: "resume", record };
+    },
+    waitForSandboxCleanup: async () => ({
+      kind: "complete",
+      snapshot: {
+        id: record.id,
+        user_id: record.user_id,
+        status: "stopped",
+      },
     }),
     restartSandboxRecord: async () => {
       restartCalls += 1;
@@ -82,13 +95,13 @@ test("POST /api/sandbox returns a conflict without creating a record while Verce
 
   const response = await handler(buildLaunchRequest());
 
-  assert.equal(response.status, 409);
-  assert.deepEqual(await response.json(), {
-    error:
-      "Mogplex must finish cleanup for the previous sandbox. Start it again in a moment.",
-    code: "sandbox_transition_in_progress",
-    sandboxId: "sandbox-stopping-1",
-  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("Content-Type") ?? "", /event-stream/);
+  const body = await response.text();
+  assert.match(body, /Waiting for previous sandbox cleanup/);
+  assert.match(body, /Previous sandbox cleanup finished/);
+  assert.match(body, /"type":"ready"/);
+  assert.equal(collisionCalls, 2);
   assert.equal(restartCalls, 0);
   assert.equal(sandboxCreations, 0);
 });

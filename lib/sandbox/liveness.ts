@@ -72,11 +72,19 @@ export function isStalePendingSandbox(
 }
 
 export type ActiveSandboxStateResult =
-  | { kind: "running" | "pending" | "stopped" | "stale_pending" }
+  | {
+      kind:
+        | "running"
+        | "pending"
+        | "cleanup_pending"
+        | "stopped"
+        | "stale_pending";
+    }
   | { kind: "unresolvable"; error: string; status: 400 | 403 | 500 };
 
 export type ActiveSandboxLivenessResult =
   | { kind: "running" | "stopped"; credentials: SandboxVmCredentials }
+  | { kind: "cleanup_pending"; credentials: SandboxVmCredentials }
   | { kind: "pending"; credentials?: SandboxVmCredentials }
   | { kind: "stale_pending" }
   | { kind: "unresolvable"; error: string; status: 400 | 403 | 500 };
@@ -85,9 +93,14 @@ type CrossUserActiveSandboxRecordLike = ActiveSandboxRecordLike & {
   user_id: string;
 };
 
-function normalizeVmState(status: string): "running" | "pending" | "stopped" {
+function normalizeVmState(
+  status: string
+): "running" | "pending" | "cleanup_pending" | "stopped" {
   if (status === "running") return "running";
   if (status === "pending") return "pending";
+  if (status === "stopping" || status === "snapshotting") {
+    return "cleanup_pending";
+  }
   return "stopped";
 }
 

@@ -36,7 +36,7 @@ const SANDBOX_TITLE: Record<TerminalActivityEntry["state"], string> = {
 };
 
 const SANDBOX_FALLBACK: Record<TerminalActivityEntry["state"], string> = {
-  running: "Waiting for remote compute to start…",
+  running: "Automatic recovery will continue through any active cleanup…",
   done: "Sandbox state updated.",
   failed: "Sandbox failed to start.",
 };
@@ -89,7 +89,10 @@ function TerminalRow({ entry }: { entry: TerminalActivityEntry }) {
 
 /** Read-only execution feedback, attached to the composer instead of a new tab. */
 export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
-  const entries = useMemo(() => buildTerminalActivityEntries(messages), [messages]);
+  const entries = useMemo(
+    () => buildTerminalActivityEntries(messages),
+    [messages]
+  );
   if (entries.length === 0) return null;
 
   const visibleEntries = entries.slice(-3);

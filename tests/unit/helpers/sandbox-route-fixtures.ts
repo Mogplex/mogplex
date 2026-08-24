@@ -21,6 +21,7 @@ export async function createSandboxPostTestHandler(
       sessionId: "billing-session-1",
     }),
     prepareSandboxBillingClose: async () => null,
+    recordSandboxLifecycleEvent: async () => null,
     ...overrides,
   });
 }

@@ -139,7 +139,7 @@ describe("resolveNameCollision", () => {
   });
 
   it.each(["stopping", "snapshotting"])(
-    "reports %s persistent sandboxes as busy without deleting or creating",
+    "rolls a terminal persistent sandbox forward while the provider is %s",
     async (status) => {
       const record = sandboxRecord({ status: "stopped", persistent: true });
       const deleteSandbox = vi.fn(async () => undefined);
@@ -159,7 +159,7 @@ describe("resolveNameCollision", () => {
       });
 
       expect(deleteSandbox).not.toHaveBeenCalled();
-      expect(result).toEqual({ kind: "busy", record });
+      expect(result).toEqual({ kind: "replace", record });
     }
   );
 

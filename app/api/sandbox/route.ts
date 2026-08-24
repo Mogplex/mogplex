@@ -58,6 +58,10 @@ export function createSandboxPostHandler(
   };
 
   return async function POST(request: Request): Promise<Response> {
+    // Preserve one server-owned replay of the exact launch intent. Cleanup
+    // recovery consumes it only after the previous lifecycle transition emits
+    // a database event; callers do not need to submit a second request.
+    const recoveryRequest = request.clone();
     // Sandbox CREATE provisions a VM, so gate on `tools.bash`. Solo callers
     // pass no team header and resolve to ALL_CAPABILITIES (no change). Team
     // callers with viewer role hit the denial before any external call.
@@ -93,7 +97,8 @@ export function createSandboxPostHandler(
     const existingResponse = await maybeReturnExistingSandboxResponse(
       deps,
       prepared.launch,
-      request
+      request,
+      { resumeLaunch: () => POST(recoveryRequest) }
     );
     if (existingResponse) return existingResponse;
 
@@ -107,7 +112,8 @@ export function createSandboxPostHandler(
       deps,
       prepared.launch,
       limitDecision.limitClaimId,
-      request
+      request,
+      { resumeLaunch: () => POST(recoveryRequest) }
     );
     if (collisionResponse) return collisionResponse;
 
@@ -115,6 +121,7 @@ export function createSandboxPostHandler(
       deps,
       launch: prepared.launch,
       limitClaimId: limitDecision.limitClaimId,
+      request,
     });
     if ("response" in pendingRecord) return pendingRecord.response;
 

@@ -234,3 +234,37 @@ test("buildTerminalActivityEntries keeps sandbox launch and shell output visible
     },
   ]);
 });
+
+test("buildTerminalActivityEntries exposes recovered cleanup timing", () => {
+  const messages = [
+    {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-sandbox_start",
+          toolCallId: "c1",
+          state: "output-available",
+          input: {},
+          output: {
+            sandboxId: "sandbox-1",
+            recoveredFromCleanup: true,
+            cleanupWaitMs: 2_500,
+          },
+        },
+      ],
+    },
+  ] as unknown as UIMessage[];
+
+  assert.deepEqual(buildTerminalActivityEntries(messages), [
+    {
+      id: "a1-0",
+      kind: "sandbox",
+      toolName: "sandbox_start",
+      command: null,
+      sandboxId: "sandbox-1",
+      state: "done",
+      lines: ["Sandbox recovered and ready · cleanup 3s"],
+    },
+  ]);
+});

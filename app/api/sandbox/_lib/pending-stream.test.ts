@@ -3,8 +3,13 @@ import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract"
 import { SANDBOX_READINESS_TIMEOUT_MS } from "@/lib/sandbox/wait-for-readiness";
 import type { SandboxRecordRow } from "@/lib/types";
 import { maxDuration } from "../route";
-import { maybeReturnExistingSandboxResponse } from "./launch";
+import {
+  buildConcurrentSandboxLaunchResponse,
+  maybeReturnExistingSandboxResponse,
+} from "./launch";
 import { buildPendingSandboxWaitStreamResponse } from "./pending-stream";
+import { sandboxRecord } from "@/lib/sandbox/test-fixtures";
+import { buildSandboxCleanupRecoveryStreamResponse } from "./cleanup-stream";
 
 const record = {
   id: "sandbox-record-1",
@@ -86,6 +91,53 @@ describe("pending sandbox readiness stream", () => {
     );
   });
 
+  it("keeps an active cleanup collision pending until the same request resumes", async () => {
+    const cleanupRecord = { ...record, status: "running" };
+    const response = await maybeReturnExistingSandboxResponse(
+      {
+        getActiveSandboxForRepo: async () => cleanupRecord,
+        resolveActiveSandboxState: async () => ({
+          kind: "cleanup_pending",
+        }),
+        waitForSandboxReadiness: async () => ({
+          kind: "ready",
+          snapshot: {
+            id: cleanupRecord.id,
+            user_id: cleanupRecord.user_id,
+            status: "running",
+          },
+        }),
+        waitForSandboxCleanup: async () => ({
+          kind: "complete",
+          snapshot: {
+            id: cleanupRecord.id,
+            user_id: cleanupRecord.user_id,
+            status: "stopped",
+          },
+        }),
+        recordSandboxLifecycleEvent: async () => null,
+      } as never,
+      launch,
+      new Request("http://localhost/api/sandbox"),
+      {
+        resumeLaunch: async () =>
+          Response.json({
+            sandbox: {
+              ...cleanupRecord,
+              status: "running",
+              health_status: "running",
+            },
+          }),
+      }
+    );
+
+    expect(response?.headers.get("Content-Type")).toBe("text/event-stream");
+    const body = await response?.text();
+    expect(body).toContain("Waiting for previous sandbox cleanup");
+    expect(body).toContain("Previous sandbox cleanup finished");
+    expect(body).toContain('"type":"ready"');
+  });
+
   it("holds a reused launch open until Neon reports it ready", async () => {
     const response = buildPendingSandboxWaitStreamResponse({
       record,
@@ -109,6 +161,20 @@ describe("pending sandbox readiness stream", () => {
     expect(body).toContain('"type":"sandbox_created"');
     expect(body).toContain('"type":"ready"');
     expect(body).toContain('"status":"running"');
+  });
+
+  it("joins a concurrent pending insert through the readiness stream", async () => {
+    const response = buildConcurrentSandboxLaunchResponse({
+      deps: pendingDeps,
+      record: record as never,
+      userId: "user-1",
+      request: new Request("http://localhost/api/sandbox"),
+    });
+
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    const body = await response.text();
+    expect(body).toContain('"type":"sandbox_created"');
+    expect(body).toContain('"type":"ready"');
   });
 
   it("clears stale health diagnostics from a recovered ready sandbox", async () => {
@@ -224,5 +290,107 @@ describe("pending sandbox readiness stream", () => {
       snapshot: { id: record.id, user_id: "user-1", status: "running" },
     });
     await reader.cancel();
+  });
+});
+
+describe("sandbox cleanup recovery stream", () => {
+  it("shows the pending phase, records timing, and relays resumed readiness", async () => {
+    const cleanupRecord = sandboxRecord({
+      status: "running",
+      persistent: true,
+    });
+    const lifecycleEvents: Array<Record<string, unknown>> = [];
+    const times = [1_000, 3_500, 3_500, 3_500];
+    const response = buildSandboxCleanupRecoveryStreamResponse({
+      record: cleanupRecord,
+      repoId: cleanupRecord.repo_id,
+      userId: cleanupRecord.user_id,
+      requestSignal: new AbortController().signal,
+      waitForCleanup: async () => ({
+        kind: "complete",
+        snapshot: {
+          id: cleanupRecord.id,
+          user_id: cleanupRecord.user_id,
+          status: "paused",
+        },
+      }),
+      resumeLaunch: async () =>
+        new Response(
+          `data: ${JSON.stringify({ type: "ready", sandbox: cleanupRecord })}\n\n`,
+          { headers: { "Content-Type": "text/event-stream" } }
+        ),
+      recordLifecycleEvent: async (event) => {
+        lifecycleEvents.push(event as unknown as Record<string, unknown>);
+        return "event-1";
+      },
+      nowMs: () => times.shift() ?? 3_500,
+    });
+
+    const body = await response.text();
+
+    expect(response.headers.get("X-Mogplex-Sandbox-Lifecycle-Operation")).toBe(
+      cleanupRecord.id
+    );
+    expect(body).toContain("Waiting for previous sandbox cleanup");
+    expect(body).toContain("Previous sandbox cleanup finished after 3s");
+    expect(body).toContain('"type":"ready"');
+    expect(lifecycleEvents).toEqual([
+      expect.objectContaining({ eventType: "start_waiting_cleanup" }),
+      expect.objectContaining({
+        eventType: "start_cleanup_recovered",
+        payload: expect.objectContaining({ duration_ms: 2_500 }),
+      }),
+    ]);
+  });
+
+  it("surfaces an actionable terminal state only after recovery times out", async () => {
+    const cleanupRecord = sandboxRecord({
+      status: "running",
+      persistent: true,
+    });
+    const resumeLaunch = vi.fn(async () => Response.json({}));
+    const response = buildSandboxCleanupRecoveryStreamResponse({
+      record: cleanupRecord,
+      repoId: cleanupRecord.repo_id,
+      userId: cleanupRecord.user_id,
+      requestSignal: new AbortController().signal,
+      waitForCleanup: async () => ({
+        kind: "failed",
+        message:
+          "Sandbox cleanup did not finish automatically. Stop or delete the previous sandbox, then retry.",
+      }),
+      resumeLaunch,
+      recordLifecycleEvent: async () => "event-1",
+    });
+
+    const body = await response.text();
+    expect(body).toContain('"phase":"cleanup"');
+    expect(body).toContain("Stop or delete the previous sandbox, then retry");
+    expect(resumeLaunch).not.toHaveBeenCalled();
+  });
+
+  it("emits a persisted record marker for one service-restart reattach", async () => {
+    const cleanupRecord = sandboxRecord({
+      status: "running",
+      persistent: true,
+    });
+    const response = buildSandboxCleanupRecoveryStreamResponse({
+      record: cleanupRecord,
+      repoId: cleanupRecord.repo_id,
+      userId: cleanupRecord.user_id,
+      requestSignal: new AbortController().signal,
+      waitForCleanup: async () => ({
+        kind: "retry",
+        message:
+          "Sandbox cleanup connection was interrupted. Reconnect to continue waiting.",
+      }),
+      resumeLaunch: async () => Response.json({}),
+      recordLifecycleEvent: async () => "event-1",
+    });
+
+    const body = await response.text();
+    expect(body).toContain('"type":"sandbox_created"');
+    expect(body).toContain('"type":"warning"');
+    expect(body).not.toContain('"type":"error"');
   });
 });

@@ -22,7 +22,11 @@ import {
 import { validateVercelProjectAccess } from "@/lib/vercel/service";
 import { resolveNameCollision } from "@/lib/sandbox/launch";
 import { applyProductTeamScope } from "@/lib/sandbox/product-team-scope";
-import { waitForSandboxReadiness } from "@/lib/sandbox/wait-for-readiness";
+import {
+  waitForSandboxCleanup,
+  waitForSandboxReadiness,
+} from "@/lib/sandbox/wait-for-readiness";
+import { recordSandboxLifecycleEvent } from "@/lib/sandbox/auto-pause-presence";
 import {
   requireSandboxBillingSession,
   prepareSandboxBillingClose,
@@ -54,6 +58,8 @@ export type SandboxPostDeps = {
   resolveSandboxAiAccess: typeof resolveSandboxAiAccess;
   resolveActiveSandboxState: typeof resolveActiveSandboxState;
   waitForSandboxReadiness: typeof waitForSandboxReadiness;
+  waitForSandboxCleanup: typeof waitForSandboxCleanup;
+  recordSandboxLifecycleEvent: typeof recordSandboxLifecycleEvent;
   validateVercelProjectAccess: typeof validateVercelProjectAccess;
   persistRepoVercelLinkState: (
     repoId: string,
@@ -141,6 +147,8 @@ export const defaultSandboxPostDeps: SandboxPostDeps = {
   resolveSandboxAiAccess,
   resolveActiveSandboxState,
   waitForSandboxReadiness,
+  waitForSandboxCleanup,
+  recordSandboxLifecycleEvent,
   validateVercelProjectAccess,
   async persistRepoVercelLinkState(repoId, userId, state) {
     const { error } = await supabaseAdmin

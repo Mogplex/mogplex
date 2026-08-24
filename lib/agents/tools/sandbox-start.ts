@@ -31,6 +31,9 @@ function normalizeLifecycle(
 }
 
 export function getSandboxStartMessage(sandbox: SandboxResolution) {
+  if (sandbox.recoveredFromCleanup) {
+    return "Previous sandbox cleanup finished automatically. Sandbox is ready to use.";
+  }
   return sandbox.source === "reused_running"
     ? "Sandbox is already running and ready to use."
     : "Sandbox is ready to use.";
@@ -77,6 +80,12 @@ async function startSandbox(
     sandboxId: sandbox.sandboxId,
     status: sandbox.status,
     sandboxResolution: sandbox.source,
+    ...(sandbox.recoveredFromCleanup
+      ? {
+          recoveredFromCleanup: true,
+          cleanupWaitMs: sandbox.cleanupWaitMs ?? 0,
+        }
+      : {}),
     message: getSandboxStartMessage(sandbox),
   };
 }
