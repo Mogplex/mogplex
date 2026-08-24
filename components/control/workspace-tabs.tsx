@@ -1,10 +1,22 @@
 "use client";
 
-import { ChatBubble, GitBranch, Server } from "iconoir-react";
+import {
+  Check,
+  ChatBubble,
+  GitBranch,
+  NavArrowDown,
+  Server,
+} from "iconoir-react";
 import type { KeyboardEvent } from "react";
 import type { SandboxRecord } from "@/lib/types";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
 import { partitionControlSandboxes } from "@/lib/control/sandbox-presentation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export type ControlView = "chat" | "worktrees" | "sandboxes";
 
@@ -29,6 +41,149 @@ function countLabel(count: number, singular: string, plural = `${singular}s`) {
 
 function statusLabel(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function shortRuntimeId(runtimeId: string) {
+  const withoutPrefix = runtimeId.replace(/^sbx[_-]?/, "");
+  return withoutPrefix.length <= 8
+    ? withoutPrefix
+    : withoutPrefix.slice(-8);
+}
+
+function readableSandboxKey(
+  repositoryName: string,
+  sandbox: SandboxRecord
+) {
+  return [
+    repositoryName,
+    sandbox.working_branch,
+    sandbox.root_directory || "",
+  ].join("\u0000");
+}
+
+type SandboxChoice = {
+  sandbox: SandboxRecord;
+  runtimeId: string;
+  runtimeStatus: string;
+  shortId: string | null;
+};
+
+function sandboxChoices(
+  sandboxes: SandboxRecord[],
+  repositoryName: string
+): SandboxChoice[] {
+  const readableCounts = new Map<string, number>();
+  for (const sandbox of sandboxes) {
+    const key = readableSandboxKey(repositoryName, sandbox);
+    readableCounts.set(key, (readableCounts.get(key) ?? 0) + 1);
+  }
+  return sandboxes.map((sandbox) => {
+    const runtimeId = sandbox.runtime_summary.sandbox_id || sandbox.id;
+    const duplicateReadableLabel =
+      (readableCounts.get(readableSandboxKey(repositoryName, sandbox)) ?? 0) >
+      1;
+    return {
+      sandbox,
+      runtimeId,
+      runtimeStatus: statusLabel(sandbox.runtime_summary.status),
+      shortId: duplicateReadableLabel ? shortRuntimeId(runtimeId) : null,
+    };
+  });
+}
+
+function sandboxChoiceDescription(
+  choice: SandboxChoice,
+  repositoryName: string
+) {
+  const root = choice.sandbox.root_directory
+    ? `, root ${choice.sandbox.root_directory}`
+    : "";
+  const disambiguator = choice.shortId
+    ? `, sandbox ${choice.shortId}`
+    : "";
+  return `${repositoryName}, branch ${choice.sandbox.working_branch}${root}, ${choice.runtimeStatus}${disambiguator}`;
+}
+
+function SandboxChoiceContent({
+  choice,
+  repositoryName,
+}: {
+  choice: SandboxChoice;
+  repositoryName: string;
+}) {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className={`size-1.5 shrink-0 rounded-full ${
+          DOT_CLASS[choice.sandbox.runtime_summary.status] ?? "bg-ink-600"
+        }`}
+      />
+      <span className="min-w-0 flex-1 truncate text-left">
+        <span className="font-medium">{repositoryName}</span>
+        <span className="text-ink-500 mx-1">·</span>
+        <span className="font-mono">{choice.sandbox.working_branch}</span>
+        {choice.sandbox.root_directory ? (
+          <>
+            <span className="text-ink-500 mx-1">·</span>
+            <span className="text-ink-400 font-mono">
+              {choice.sandbox.root_directory}
+            </span>
+          </>
+        ) : null}
+      </span>
+      <span className="text-ink-400 shrink-0 text-[10.5px]">
+        {choice.runtimeStatus}
+        {choice.shortId ? ` · ${choice.shortId}` : ""}
+      </span>
+    </>
+  );
+}
+
+function SandboxChoiceMenu({
+  choices,
+  selectedSandboxId,
+  repositoryName,
+  onSelect,
+}: {
+  choices: SandboxChoice[];
+  selectedSandboxId: string | null;
+  repositoryName: string;
+  onSelect: (sandboxId: string) => void;
+}) {
+  return (
+    <DropdownMenuContent
+      align="end"
+      className="border-ink-700 bg-ink-900 text-ink-100 w-80 max-w-[calc(100vw-2rem)]"
+    >
+      {choices.map((choice) => {
+        const selected = choice.sandbox.id === selectedSandboxId;
+        return (
+          <DropdownMenuItem
+            key={choice.sandbox.id}
+            aria-current={selected ? "true" : undefined}
+            aria-label={`Select ${sandboxChoiceDescription(choice, repositoryName)}, for chat and preview`}
+            title={choice.runtimeId}
+            onSelect={() => onSelect(choice.sandbox.id)}
+            className="focus:bg-ink-800 focus:text-white gap-2 text-[12.5px]"
+          >
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+              <SandboxChoiceContent
+                choice={choice}
+                repositoryName={repositoryName}
+              />
+            </span>
+            {selected ? (
+              <Check
+                aria-label="Selected"
+                className="text-flame-400 size-3.5 shrink-0"
+              />
+            ) : null}
+          </DropdownMenuItem>
+        );
+      })}
+    </DropdownMenuContent>
+  );
 }
 
 function handleTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -64,6 +219,7 @@ export function WorkspaceTabs({
   onViewChange,
   sandboxes,
   worktrees,
+  repositoryName,
   selectedSandboxId,
   onFocusSandbox,
 }: {
@@ -71,12 +227,25 @@ export function WorkspaceTabs({
   onViewChange: (view: ControlView) => void;
   sandboxes: SandboxRecord[];
   worktrees: OrchestrationWorktreeDTO[];
+  repositoryName: string;
   selectedSandboxId: string | null;
   onFocusSandbox: (sandboxId: string) => void;
 }) {
   const { current, history } = partitionControlSandboxes(sandboxes);
+  const choices = sandboxChoices(current, repositoryName);
+  const selectedChoice =
+    choices.find((choice) => choice.sandbox.id === selectedSandboxId) ??
+    choices[0] ??
+    null;
+  const desktopChoices = selectedChoice ? [selectedChoice] : [];
+  const desktopChoiceIds = new Set(
+    desktopChoices.map((choice) => choice.sandbox.id)
+  );
+  const overflowChoices = choices.filter(
+    (choice) => !desktopChoiceIds.has(choice.sandbox.id)
+  );
   return (
-    <div className="border-ink-800 flex items-center gap-1 overflow-x-auto border-b px-4 py-2 sm:px-6">
+    <div className="border-ink-800 flex min-w-0 flex-wrap items-center gap-1 overflow-hidden border-b px-4 py-2 sm:px-6 xl:flex-nowrap">
       <div
         role="tablist"
         aria-label="Control views"
@@ -133,40 +302,81 @@ export function WorkspaceTabs({
         </button>
       </div>
       {current.length > 0 ? (
-        <div className="bg-ink-800 mx-1 h-4 w-px shrink-0" />
+        <div className="bg-ink-800 mx-1 hidden h-4 w-px shrink-0 xl:block" />
       ) : null}
-      <div
-        role="group"
-        aria-label="Sandbox used by chat and preview"
-        className="flex items-center gap-1"
-      >
-        {current.map((sandbox) => {
-          const selected = sandbox.id === selectedSandboxId;
-          const runtimeId = sandbox.runtime_summary.sandbox_id || sandbox.id;
-          const runtimeStatus = statusLabel(sandbox.runtime_summary.status);
-          return (
-            <button
-              key={sandbox.id}
-              type="button"
-              aria-pressed={selected}
-              aria-label={`Select sandbox ${runtimeId}, ${runtimeStatus}, repository branch ${sandbox.working_branch}, for chat and preview`}
-              onClick={() => onFocusSandbox(sandbox.id)}
-              className={`${TAB_BASE} ${selected ? TAB_ON : TAB_OFF}`}
-            >
-              <span
-                aria-hidden="true"
-                className={`size-1.5 shrink-0 rounded-full ${
-                  DOT_CLASS[sandbox.runtime_summary.status] ?? "bg-ink-600"
-                }`}
+      {selectedChoice ? (
+        <div
+          role="group"
+          aria-label="Sandbox used by chat and preview"
+          className="flex w-full min-w-0 flex-none justify-start overflow-hidden pt-1 xl:w-auto xl:flex-1 xl:justify-end xl:pt-0"
+        >
+          <div className="hidden min-w-0 items-center justify-end gap-1 overflow-hidden xl:flex">
+            {desktopChoices.map((choice) => {
+              const selected = choice.sandbox.id === selectedSandboxId;
+              return (
+                <button
+                  key={choice.sandbox.id}
+                  type="button"
+                  aria-pressed={selected}
+                  aria-label={`Select ${sandboxChoiceDescription(choice, repositoryName)}, for chat and preview`}
+                  title={choice.runtimeId}
+                  onClick={() => onFocusSandbox(choice.sandbox.id)}
+                  className={`${TAB_BASE} max-w-72 ${selected ? TAB_ON : TAB_OFF}`}
+                >
+                  <SandboxChoiceContent
+                    choice={choice}
+                    repositoryName={repositoryName}
+                  />
+                </button>
+              );
+            })}
+            {overflowChoices.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Choose from ${overflowChoices.length} more sandboxes`}
+                    className={`${TAB_BASE} ${TAB_OFF}`}
+                  >
+                    +{overflowChoices.length}
+                    <NavArrowDown className="size-3 shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <SandboxChoiceMenu
+                  choices={overflowChoices}
+                  selectedSandboxId={selectedSandboxId}
+                  repositoryName={repositoryName}
+                  onSelect={onFocusSandbox}
+                />
+              </DropdownMenu>
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1 xl:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Selected sandbox ${sandboxChoiceDescription(selectedChoice, repositoryName)}. Choose sandbox for chat and preview`}
+                  title={selectedChoice.runtimeId}
+                  className={`${TAB_BASE} ${TAB_ON} w-full max-w-full`}
+                >
+                  <SandboxChoiceContent
+                    choice={selectedChoice}
+                    repositoryName={repositoryName}
+                  />
+                  <NavArrowDown className="size-3 shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <SandboxChoiceMenu
+                choices={choices}
+                selectedSandboxId={selectedSandboxId}
+                repositoryName={repositoryName}
+                onSelect={onFocusSandbox}
               />
-              <span className="font-mono">{runtimeId}</span>
-              <span className="text-ink-500 hidden max-w-36 truncate font-mono lg:inline">
-                {sandbox.working_branch}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+            </DropdownMenu>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

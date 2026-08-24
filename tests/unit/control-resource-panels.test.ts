@@ -38,6 +38,7 @@ test("Control resource tabs expose distinct counts and selected compute context"
       onViewChange: () => undefined,
       sandboxes: [sandbox],
       worktrees: [worktree],
+      repositoryName: "acme/widgets",
       selectedSandboxId: sandbox.id,
       onFocusSandbox: () => undefined,
     })
@@ -49,9 +50,11 @@ test("Control resource tabs expose distinct counts and selected compute context"
   assert.match(html, /Sandboxes, 1 current sandbox, 0 previous attempts/);
   assert.match(
     html,
-    /Select sandbox sbx_runtime123, Running, repository branch feat\/compute-context, for chat and preview/
+    /Select acme\/widgets, branch feat\/compute-context, Running, for chat and preview/
   );
-  assert.match(html, />sbx_runtime123</);
+  assert.match(html, /title="sbx_runtime123"/);
+  assert.match(html, />acme\/widgets</);
+  assert.match(html, />Running</);
 });
 
 test("Worktree panel teaches task checkout identity without compute actions", () => {
