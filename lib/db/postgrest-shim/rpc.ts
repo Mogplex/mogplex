@@ -25,6 +25,64 @@ function mapArgumentTypes(row: Record<string, unknown>) {
   return argumentTypes;
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function functionShapeCacheKey(name: string, argumentNames: string[]) {
+  return JSON.stringify([name, [...new Set(argumentNames)].sort()]);
+}
+
+type FunctionCandidate = {
+  shape: FunctionShape;
+  argumentNames: string[];
+  requiredArgumentNames: string[];
+  hasOnlyNamedArguments: boolean;
+};
+
+function functionCandidate(
+  name: string,
+  row: Record<string, unknown>
+): FunctionCandidate {
+  const argumentNames = stringArray(row.argument_names);
+  const inputCount =
+    typeof row.input_count === "number"
+      ? row.input_count
+      : argumentNames.length;
+  const defaultCount =
+    typeof row.default_count === "number" ? row.default_count : 0;
+  const requiredCount = Math.max(0, inputCount - defaultCount);
+
+  return {
+    shape: {
+      name,
+      returnsSet: Boolean(row.returns_set),
+      returnsVoid: row.type_name === "void",
+      returnsComposite: row.type_type === "c" || row.type_name === "record",
+      argumentTypes: mapArgumentTypes(row),
+    },
+    argumentNames,
+    requiredArgumentNames: argumentNames.slice(0, requiredCount),
+    hasOnlyNamedArguments: argumentNames.length === inputCount,
+  };
+}
+
+function matchesArguments(
+  candidate: FunctionCandidate,
+  suppliedArgumentNames: Set<string>
+) {
+  if (!candidate.hasOnlyNamedArguments) return false;
+  const candidateNames = new Set(candidate.argumentNames);
+  return (
+    [...suppliedArgumentNames].every((name) => candidateNames.has(name)) &&
+    candidate.requiredArgumentNames.every((name) =>
+      suppliedArgumentNames.has(name)
+    )
+  );
+}
+
 function addRpcArgument(
   sql: SqlBuilder,
   value: unknown,
@@ -55,12 +113,16 @@ function rpcData(
 export async function getFunctionShape(
   db: Queryable,
   cache: Map<string, FunctionShape>,
-  name: string
+  name: string,
+  argumentNames: string[]
 ): Promise<FunctionShape> {
-  const cached = cache.get(name);
+  const cacheKey = functionShapeCacheKey(name, argumentNames);
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
   const { rows } = await db.query(
     `select p.proretset as returns_set,
+            p.pronargs as input_count,
+            p.pronargdefaults as default_count,
             t.typname as type_name,
             t.typtype as type_type,
             arguments.argument_names,
@@ -89,22 +151,28 @@ export async function getFunctionShape(
        ) with ordinality as argument(type_oid, mode, name, ordinality)
        join pg_catalog.pg_type argument_type on argument_type.oid = argument.type_oid
      ) arguments on true
-     where n.nspname = 'public' and p.proname = $1
-     limit 1`,
+     where n.nspname = 'public' and p.proname = $1`,
     [name]
   );
   if (rows.length === 0) {
     throw new Error(`postgrest-shim: unknown function ${JSON.stringify(name)}`);
   }
-  const shape: FunctionShape = {
-    name,
-    returnsSet: Boolean(rows[0].returns_set),
-    returnsVoid: rows[0].type_name === "void",
-    returnsComposite:
-      rows[0].type_type === "c" || rows[0].type_name === "record",
-    argumentTypes: mapArgumentTypes(rows[0]),
-  };
-  cache.set(name, shape);
+  const suppliedArgumentNames = new Set(argumentNames);
+  const candidates = rows
+    .map((row) => functionCandidate(name, row))
+    .filter((candidate) => matchesArguments(candidate, suppliedArgumentNames));
+  if (candidates.length === 0) {
+    throw new Error(
+      `postgrest-shim: no function ${JSON.stringify(name)} matches arguments ${JSON.stringify([...suppliedArgumentNames].sort())}`
+    );
+  }
+  if (candidates.length > 1) {
+    throw new Error(
+      `postgrest-shim: ambiguous function ${JSON.stringify(name)} for arguments ${JSON.stringify([...suppliedArgumentNames].sort())}`
+    );
+  }
+  const shape = candidates[0].shape;
+  cache.set(cacheKey, shape);
   return shape;
 }
 
@@ -115,7 +183,12 @@ export async function executeRpc(
   args: Record<string, unknown> = {}
 ): Promise<ShimResult> {
   try {
-    const shape = await getFunctionShape(db, functionShapes, name);
+    const shape = await getFunctionShape(
+      db,
+      functionShapes,
+      name,
+      Object.keys(args)
+    );
     const sql = new SqlBuilder();
     const argList = Object.entries(args)
       .map(([key, value]) => {
