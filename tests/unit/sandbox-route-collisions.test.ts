@@ -54,7 +54,7 @@ test("POST /api/sandbox delegates a stopped persistent collision to restart", as
   assert.equal(sandboxCreations, 0);
 });
 
-test("POST /api/sandbox waits for cleanup and resumes the same launch request", async () => {
+test("POST /api/sandbox finishes cleanup before requesting a fresh invocation", async () => {
   let sandboxCreations = 0;
   let restartCalls = 0;
   let collisionCalls = 0;
@@ -100,8 +100,9 @@ test("POST /api/sandbox waits for cleanup and resumes the same launch request", 
   const body = await response.text();
   assert.match(body, /Waiting for previous sandbox cleanup/);
   assert.match(body, /Previous sandbox cleanup finished/);
-  assert.match(body, /"type":"ready"/);
-  assert.equal(collisionCalls, 2);
+  assert.match(body, /"type":"resume_required"/);
+  assert.doesNotMatch(body, /"type":"ready"/);
+  assert.equal(collisionCalls, 1);
   assert.equal(restartCalls, 0);
   assert.equal(sandboxCreations, 0);
 });

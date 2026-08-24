@@ -9,6 +9,7 @@ type WaitForSandboxCleanup = (input: {
   sandboxRecordId: string;
   userId: string;
   signal?: AbortSignal;
+  timeoutMs?: number;
 }) => Promise<SandboxCleanupWaitResult>;
 
 type SandboxClientRecordSource = Parameters<typeof toSandboxClientRecord>[0];
@@ -38,8 +39,9 @@ async function recordRecoveryEvent(
 
 /**
  * Keep the original launch request open while an owned stop/snapshot settles,
- * then hand the same request into launch again. Database notifications drive
- * the transition; the interval below is transport keepalive only.
+ * then ask the caller to resume through a fresh route invocation. Database
+ * notifications drive the transition; the interval below is transport
+ * keepalive only.
  */
 export function buildSandboxCleanupRecoveryStreamResponse(input: {
   record: SandboxClientRecordSource | SandboxRecord;
@@ -47,7 +49,6 @@ export function buildSandboxCleanupRecoveryStreamResponse(input: {
   userId: string;
   requestSignal: AbortSignal;
   waitForCleanup: WaitForSandboxCleanup;
-  resumeLaunch: () => Promise<Response>;
   recordLifecycleEvent?: typeof recordSandboxLifecycleEvent;
   nowMs?: () => number;
 }) {
@@ -187,35 +188,11 @@ export function buildSandboxCleanupRecoveryStreamResponse(input: {
           recorder
         );
 
-        const resumed = await input.resumeLaunch();
-        const contentType = resumed.headers.get("Content-Type") ?? "";
-        if (contentType.includes("text/event-stream") && resumed.body) {
-          const reader = resumed.body.getReader();
-          for (;;) {
-            if (cancelled) break;
-            const { done, value } = await reader.read();
-            if (done) break;
-            controller.enqueue(value);
-          }
-          return;
-        }
-
-        const payload = (await resumed.json().catch(() => ({}))) as {
-          error?: unknown;
-          sandbox?: unknown;
-        };
-        if (!resumed.ok || !payload.sandbox) {
-          emit({
-            type: "error",
-            message:
-              typeof payload.error === "string"
-                ? payload.error
-                : "Sandbox cleanup finished, but startup could not resume.",
-            phase: "create",
-          });
-          return;
-        }
-        emit({ type: "ready", sandbox: payload.sandbox as never });
+        // Starting compute in this invocation would combine the cleanup wait
+        // and a full launch beneath one route ceiling. The caller owns one
+        // bounded reattach, which creates a fresh execution budget while the
+        // persisted record prevents duplicate compute.
+        emit({ type: "resume_required", reason: "cleanup_recovered" });
       } catch (error) {
         if (!waitAbort.signal.aborted) {
           console.error("[sandbox/launch] cleanup recovery crashed", error);

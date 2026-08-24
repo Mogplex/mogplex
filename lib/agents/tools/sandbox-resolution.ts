@@ -166,7 +166,7 @@ type SandboxCreationStreamEvent =
 type SandboxCreationStreamResult =
   | SandboxResolution
   | SandboxResolutionFailure
-  | { streamEndedAfterSandboxCreated: true };
+  | { streamEndedAfterSandboxCreated: true; cleanupWaitMs?: number };
 
 function readSandboxCreationEvent(
   line: string
@@ -288,11 +288,17 @@ async function consumeSandboxCreationStream(
     }
   } catch (error) {
     if (!pendingSandboxRecordId || signal?.aborted) throw error;
-    return { streamEndedAfterSandboxCreated: true };
+    return {
+      streamEndedAfterSandboxCreated: true,
+      ...(cleanupWaitMs === null ? {} : { cleanupWaitMs }),
+    };
   }
 
   return pendingSandboxRecordId
-    ? { streamEndedAfterSandboxCreated: true }
+    ? {
+        streamEndedAfterSandboxCreated: true,
+        ...(cleanupWaitMs === null ? {} : { cleanupWaitMs }),
+      }
     : failed;
 }
 
@@ -397,10 +403,18 @@ export async function resolveOrCreateSandbox(
     signal,
     "created"
   );
-  return "streamEndedAfterSandboxCreated" in reattached
-    ? {
-        error: "Sandbox readiness stream ended before it became ready.",
-        reason: "sandbox_unavailable",
-      }
-    : reattached;
+  if ("streamEndedAfterSandboxCreated" in reattached) {
+    return {
+      error: "Sandbox readiness stream ended before it became ready.",
+      reason: "sandbox_unavailable",
+    };
+  }
+  if ("error" in reattached || first.cleanupWaitMs === undefined) {
+    return reattached;
+  }
+  return {
+    ...reattached,
+    recoveredFromCleanup: true,
+    cleanupWaitMs: first.cleanupWaitMs,
+  };
 }

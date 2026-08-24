@@ -59,7 +59,7 @@ test("control timeline turns resource tools into safe progress steps", () => {
   assert.doesNotMatch(JSON.stringify(events), /Private task details/);
 });
 
-test("control timeline distinguishes active and recovered sandbox cleanup", () => {
+test("control timeline distinguishes ordinary starts and recovered cleanup", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([
       { type: "step-start" },
@@ -90,7 +90,7 @@ test("control timeline distinguishes active and recovered sandbox cleanup", () =
     [
       {
         kind: "progress",
-        body: "Starting sandbox · automatic recovery active",
+        body: "Starting sandbox",
       },
       {
         kind: "progress",
