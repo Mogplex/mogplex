@@ -123,17 +123,29 @@ describe("sandbox resolution lifecycle", () => {
   });
 
   it("reports cleanup recovery timing with the resumed sandbox", async () => {
-    global.fetch = async () =>
-      new Response(
-        [
-          'data: {"type":"lifecycle","phase":"pending_cleanup","status":"waiting","elapsedMs":0}',
-          'data: {"type":"sandbox_created","recordId":"sandbox-sse"}',
-          'data: {"type":"lifecycle","phase":"pending_cleanup","status":"recovered","elapsedMs":2500}',
-          'data: {"type":"ready","sandbox":{"id":"sandbox-sse"}}',
-          "",
-        ].join("\n\n"),
-        { headers: { "Content-Type": "text/event-stream" } }
-      );
+    let requestCount = 0;
+    global.fetch = async () => {
+      requestCount += 1;
+      return requestCount === 1
+        ? new Response(
+            [
+              'data: {"type":"lifecycle","phase":"pending_cleanup","status":"waiting","elapsedMs":0}',
+              'data: {"type":"sandbox_created","recordId":"sandbox-sse"}',
+              'data: {"type":"lifecycle","phase":"pending_cleanup","status":"recovered","elapsedMs":2500}',
+              'data: {"type":"resume_required"}',
+              "",
+            ].join("\n\n"),
+            { headers: { "Content-Type": "text/event-stream" } }
+          )
+        : new Response(
+            [
+              'data: {"type":"sandbox_created","recordId":"sandbox-sse"}',
+              'data: {"type":"ready","sandbox":{"id":"sandbox-sse"}}',
+              "",
+            ].join("\n\n"),
+            { headers: { "Content-Type": "text/event-stream" } }
+          );
+    };
 
     await expect(
       resolveOrCreateSandbox("user-1", "00000000-0000-4000-8000-000000000001")
@@ -144,6 +156,7 @@ describe("sandbox resolution lifecycle", () => {
       recoveredFromCleanup: true,
       cleanupWaitMs: 2500,
     });
+    expect(requestCount).toBe(2);
   });
 
   it("returns the streamed launch failure after sandbox creation", async () => {

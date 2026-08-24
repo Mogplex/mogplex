@@ -108,6 +108,7 @@ export async function consumeSandboxLaunchResponse(
   let buffer = "";
   let latestSandbox: MogplexApiSandbox | null = null;
   let launchError: string | null = null;
+  let resumeRequired = false;
 
   // Each read blocks on a stream signal from the sandbox launcher. This is a
   // single event stream consumption path, not a repeated status check.
@@ -125,6 +126,7 @@ export async function consumeSandboxLaunchResponse(
       if (event.type === "error" && typeof event.message === "string") {
         launchError = event.message;
       }
+      if (event.type === "resume_required") resumeRequired = true;
     }
 
     if (done) break;
@@ -132,6 +134,13 @@ export async function consumeSandboxLaunchResponse(
 
   if (launchError) {
     return { ok: false, status: 502, error: launchError };
+  }
+  if (resumeRequired) {
+    return {
+      ok: false,
+      status: 409,
+      error: "Sandbox cleanup finished. Retry the launch.",
+    };
   }
   if (latestSandbox) return { ok: true, sandbox: latestSandbox };
   return {

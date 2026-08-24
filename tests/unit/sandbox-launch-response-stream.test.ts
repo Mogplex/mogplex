@@ -89,6 +89,46 @@ test("consumeSandboxLaunchResponse applies summary-backed launch events directly
   assert.equal(harness.get().activeSandboxId, "sandbox-1");
 });
 
+test("consumeSandboxLaunchResponse resumes cleanup in one fresh request", async () => {
+  const { buildSandboxStateKey, consumeSandboxLaunchResponse } =
+    await loadSandboxStore();
+  const repoId = "repo-1";
+  const launchKey = buildSandboxStateKey(repoId, "main", null);
+  const cleanupSandbox = buildSandboxRecord({ status: "paused" });
+  const readySandbox = buildSandboxRecord({
+    sandbox_id: "vm_456",
+    status: "running",
+    health_status: "running",
+  });
+  const harness = createStoreHarness(repoId);
+  let resumeCalls = 0;
+
+  const result = await consumeSandboxLaunchResponse(
+    repoId,
+    launchKey,
+    buildSseResponse([
+      {
+        type: "sandbox_created",
+        sandboxId: cleanupSandbox.sandbox_id,
+        recordId: cleanupSandbox.id,
+        sandbox: cleanupSandbox,
+      },
+      { type: "resume_required" },
+    ]),
+    harness.set as never,
+    harness.get as never,
+    undefined,
+    async () => {
+      resumeCalls += 1;
+      return buildSseResponse([{ type: "ready", sandbox: readySandbox }]);
+    }
+  );
+
+  assert.equal(resumeCalls, 1);
+  assert.equal(result?.runtime_summary.status, "running");
+  assert.equal(result?.runtime_summary.sandbox_id, "vm_456");
+});
+
 test("consumeSandboxLaunchResponse keeps summary-backed error state before returning null", async () => {
   const { buildSandboxStateKey, consumeSandboxLaunchResponse } =
     await loadSandboxStore();

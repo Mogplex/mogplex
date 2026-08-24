@@ -91,7 +91,7 @@ describe("pending sandbox readiness stream", () => {
     );
   });
 
-  it("keeps an active cleanup collision pending until the same request resumes", async () => {
+  it("keeps an active cleanup collision pending until a fresh request resumes", async () => {
     const cleanupRecord = { ...record, status: "running" };
     const response = await maybeReturnExistingSandboxResponse(
       {
@@ -118,24 +118,15 @@ describe("pending sandbox readiness stream", () => {
         recordSandboxLifecycleEvent: async () => null,
       } as never,
       launch,
-      new Request("http://localhost/api/sandbox"),
-      {
-        resumeLaunch: async () =>
-          Response.json({
-            sandbox: {
-              ...cleanupRecord,
-              status: "running",
-              health_status: "running",
-            },
-          }),
-      }
+      new Request("http://localhost/api/sandbox")
     );
 
     expect(response?.headers.get("Content-Type")).toBe("text/event-stream");
     const body = await response?.text();
     expect(body).toContain("Waiting for previous sandbox cleanup");
     expect(body).toContain("Previous sandbox cleanup finished");
-    expect(body).toContain('"type":"ready"');
+    expect(body).toContain('"type":"resume_required"');
+    expect(body).not.toContain('"type":"ready"');
   });
 
   it("holds a reused launch open until Neon reports it ready", async () => {
@@ -294,7 +285,7 @@ describe("pending sandbox readiness stream", () => {
 });
 
 describe("sandbox cleanup recovery stream", () => {
-  it("shows the pending phase, records timing, and relays resumed readiness", async () => {
+  it("shows the pending phase, records timing, and requests a fresh invocation", async () => {
     const cleanupRecord = sandboxRecord({
       status: "running",
       persistent: true,
@@ -314,11 +305,6 @@ describe("sandbox cleanup recovery stream", () => {
           status: "paused",
         },
       }),
-      resumeLaunch: async () =>
-        new Response(
-          `data: ${JSON.stringify({ type: "ready", sandbox: cleanupRecord })}\n\n`,
-          { headers: { "Content-Type": "text/event-stream" } }
-        ),
       recordLifecycleEvent: async (event) => {
         lifecycleEvents.push(event as unknown as Record<string, unknown>);
         return "event-1";
@@ -333,7 +319,8 @@ describe("sandbox cleanup recovery stream", () => {
     );
     expect(body).toContain("Waiting for previous sandbox cleanup");
     expect(body).toContain("Previous sandbox cleanup finished after 3s");
-    expect(body).toContain('"type":"ready"');
+    expect(body).toContain('"type":"resume_required"');
+    expect(body).not.toContain('"type":"ready"');
     expect(lifecycleEvents).toEqual([
       expect.objectContaining({ eventType: "start_waiting_cleanup" }),
       expect.objectContaining({
@@ -348,7 +335,6 @@ describe("sandbox cleanup recovery stream", () => {
       status: "running",
       persistent: true,
     });
-    const resumeLaunch = vi.fn(async () => Response.json({}));
     const response = buildSandboxCleanupRecoveryStreamResponse({
       record: cleanupRecord,
       repoId: cleanupRecord.repo_id,
@@ -359,14 +345,12 @@ describe("sandbox cleanup recovery stream", () => {
         message:
           "Sandbox cleanup did not finish automatically. Stop or delete the previous sandbox, then retry.",
       }),
-      resumeLaunch,
       recordLifecycleEvent: async () => "event-1",
     });
 
     const body = await response.text();
     expect(body).toContain('"phase":"cleanup"');
     expect(body).toContain("Stop or delete the previous sandbox, then retry");
-    expect(resumeLaunch).not.toHaveBeenCalled();
   });
 
   it("emits a persisted record marker for one service-restart reattach", async () => {
@@ -384,7 +368,6 @@ describe("sandbox cleanup recovery stream", () => {
         message:
           "Sandbox cleanup connection was interrupted. Reconnect to continue waiting.",
       }),
-      resumeLaunch: async () => Response.json({}),
       recordLifecycleEvent: async () => "event-1",
     });
 

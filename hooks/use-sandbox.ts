@@ -178,20 +178,23 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
     }));
 
     try {
-      const res = await fetch("/api/sandbox", {
-        method: "POST",
-        headers: getActiveTeamRequestHeaders({
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({ repoId, ...launchRequest }),
-      });
+      const requestLaunch = () =>
+        fetch("/api/sandbox", {
+          method: "POST",
+          headers: getActiveTeamRequestHeaders({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({ repoId, ...launchRequest }),
+        });
+      const res = await requestLaunch();
       return await consumeSandboxLaunchResponse(
         repoId,
         launchKey,
         res,
         set,
         get,
-        launchAttemptId
+        launchAttemptId,
+        requestLaunch
       );
     } catch (err) {
       const message =

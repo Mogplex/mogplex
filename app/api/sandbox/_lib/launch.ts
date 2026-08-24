@@ -151,8 +151,7 @@ export async function prepareSandboxLaunch(input: {
 export async function maybeReturnExistingSandboxResponse(
   deps: SandboxPostDeps,
   launch: SandboxLaunchPreparation,
-  request: Request,
-  recovery?: { resumeLaunch: () => Promise<Response> }
+  request: Request
 ) {
   const existing = await deps.getActiveSandboxForRepo(
     launch.repoId,
@@ -202,24 +201,12 @@ export async function maybeReturnExistingSandboxResponse(
   }
 
   if (existingState.kind === "cleanup_pending") {
-    if (!recovery) {
-      return NextResponse.json(
-        {
-          error:
-            "Sandbox cleanup is still running and automatic recovery is unavailable for this request.",
-          code: "sandbox_cleanup_recovery_unavailable",
-          sandboxId: existing.id,
-        },
-        { status: 503 }
-      );
-    }
     return buildSandboxCleanupRecoveryStreamResponse({
       record: existing,
       repoId: launch.repoId,
       userId: launch.creds.userId,
       requestSignal: request.signal,
       waitForCleanup: deps.waitForSandboxCleanup,
-      resumeLaunch: recovery.resumeLaunch,
       recordLifecycleEvent: deps.recordSandboxLifecycleEvent,
     });
   }
@@ -267,8 +254,7 @@ export async function maybeReturnNameCollisionResponse(
   deps: SandboxPostDeps,
   launch: SandboxLaunchPreparation,
   limitClaimId: string | null,
-  request: Request,
-  recovery?: { resumeLaunch: () => Promise<Response> }
+  request: Request
 ) {
   const sandboxName = buildSandboxName({
     repoId: launch.repoId,
@@ -311,14 +297,13 @@ export async function maybeReturnNameCollisionResponse(
 
   if (collision.kind === "busy") {
     await releaseSandboxBootLimitClaim(launch.creds.userId, limitClaimId);
-    if (collision.record && recovery) {
+    if (collision.record) {
       return buildSandboxCleanupRecoveryStreamResponse({
         record: collision.record as never,
         repoId: launch.repoId,
         userId: launch.creds.userId,
         requestSignal: request.signal,
         waitForCleanup: deps.waitForSandboxCleanup,
-        resumeLaunch: recovery.resumeLaunch,
         recordLifecycleEvent: deps.recordSandboxLifecycleEvent,
       });
     }
@@ -327,7 +312,7 @@ export async function maybeReturnNameCollisionResponse(
         error:
           "Sandbox cleanup could not be attached to automatic recovery. Stop or delete the previous sandbox, then retry.",
         code: "sandbox_cleanup_recovery_unavailable",
-        sandboxId: collision.record?.id ?? null,
+        sandboxId: null,
       },
       { status: 503 }
     );

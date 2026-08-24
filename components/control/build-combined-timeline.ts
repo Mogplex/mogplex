@@ -55,7 +55,7 @@ function toolProgressBody(
   if (toolName === "plan_mission")
     return complete ? "Plan saved" : "Saving plan";
   if (toolName === "sandbox_start") {
-    if (!complete) return "Starting sandbox · automatic recovery active";
+    if (!complete) return "Starting sandbox";
     // Defensive display for a future resolver that surfaces pending output.
     if (output?.status === "pending") return "Waiting for sandbox";
     if (output?.recoveredFromCleanup === true) {

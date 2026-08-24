@@ -182,7 +182,8 @@ export async function consumeSandboxLaunchResponse(
   res: Response,
   set: SandboxSetState,
   get: SandboxGetState,
-  launchAttemptId?: string
+  launchAttemptId?: string,
+  resumeLaunch?: () => Promise<Response>
 ) {
   const contentType = res.headers.get("Content-Type") || "";
   let launchScope = parseSandboxStateKey(repoId, launchStateKey);
@@ -209,6 +210,7 @@ export async function consumeSandboxLaunchResponse(
   const decoder = new TextDecoder();
   let buffer = "";
   let finalSandbox: SandboxRecord | null = null;
+  let shouldResume = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -256,6 +258,9 @@ export async function consumeSandboxLaunchResponse(
           updateLaunchScope(finalSandbox);
           get().setSandboxRecord(finalSandbox);
           break;
+        case "resume_required":
+          shouldResume = true;
+          break;
         case "error": {
           toast({
             title: "Sandbox error",
@@ -277,8 +282,21 @@ export async function consumeSandboxLaunchResponse(
     }
   }
 
-  if (finalSandbox) {
-    return finalSandbox;
+  if (finalSandbox) return finalSandbox;
+
+  if (shouldResume) {
+    if (!resumeLaunch)
+      throw new Error(
+        "Sandbox cleanup finished, but the launch could not resume automatically. Retry the launch."
+      );
+    return consumeSandboxLaunchResponse(
+      repoId,
+      launchStateKey,
+      await resumeLaunch(),
+      set,
+      get,
+      launchAttemptId
+    );
   }
 
   const refreshed = await get().refresh();

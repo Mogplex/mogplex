@@ -33,6 +33,7 @@ export type SandboxEvent =
       elapsedMs: number;
       message: string;
     }
+  | { type: "resume_required"; reason: "cleanup_recovered" }
   | { type: "warning"; message: string }
   | {
       type: "log";
