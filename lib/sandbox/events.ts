@@ -24,6 +24,15 @@ export type SandboxStateEvent =
 
 export type SandboxEvent =
   | SandboxStateEvent
+  | {
+      type: "lifecycle";
+      phase: "pending_cleanup";
+      status: "waiting" | "recovered";
+      sandboxId: string;
+      operationId: string;
+      elapsedMs: number;
+      message: string;
+    }
   | { type: "warning"; message: string }
   | {
       type: "log";

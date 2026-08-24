@@ -23,6 +23,7 @@ import {
 import { resolveSandboxLaunchRuntimePreparation } from "./provisioning";
 import { resolvePendingSandboxPersistenceFlag } from "./bootstrap";
 import { buildPendingSandboxWaitStreamResponse } from "./pending-stream";
+import { buildSandboxCleanupRecoveryStreamResponse } from "./cleanup-stream";
 import type { SandboxServiceCredentials } from "@/lib/sandbox/get-user-credentials";
 import type { SandboxRecordRow } from "@/lib/types";
 import type {
@@ -31,6 +32,7 @@ import type {
   SandboxBootLimitClaimResolution,
   PendingSandboxLaunchRecordResult,
   SandboxLaunchRequestInput,
+  ActiveSandboxRecord,
   toWorkspace,
 } from "./types";
 import type { SandboxPostDeps } from "./deps";
@@ -149,7 +151,8 @@ export async function prepareSandboxLaunch(input: {
 export async function maybeReturnExistingSandboxResponse(
   deps: SandboxPostDeps,
   launch: SandboxLaunchPreparation,
-  request: Request
+  request: Request,
+  recovery?: { resumeLaunch: () => Promise<Response> }
 ) {
   const existing = await deps.getActiveSandboxForRepo(
     launch.repoId,
@@ -198,6 +201,29 @@ export async function maybeReturnExistingSandboxResponse(
       : NextResponse.json({ sandbox: toSandboxClientRecord(existing) });
   }
 
+  if (existingState.kind === "cleanup_pending") {
+    if (!recovery) {
+      return NextResponse.json(
+        {
+          error:
+            "Sandbox cleanup is still running and automatic recovery is unavailable for this request.",
+          code: "sandbox_cleanup_recovery_unavailable",
+          sandboxId: existing.id,
+        },
+        { status: 503 }
+      );
+    }
+    return buildSandboxCleanupRecoveryStreamResponse({
+      record: existing,
+      repoId: launch.repoId,
+      userId: launch.creds.userId,
+      requestSignal: request.signal,
+      waitForCleanup: deps.waitForSandboxCleanup,
+      resumeLaunch: recovery.resumeLaunch,
+      recordLifecycleEvent: deps.recordSandboxLifecycleEvent,
+    });
+  }
+
   if (existingState.kind === "stopped") {
     await deps.stopSandboxRecord(existing.id, {
       expectedSandboxId: existing.sandbox_id,
@@ -241,7 +267,8 @@ export async function maybeReturnNameCollisionResponse(
   deps: SandboxPostDeps,
   launch: SandboxLaunchPreparation,
   limitClaimId: string | null,
-  request: Request
+  request: Request,
+  recovery?: { resumeLaunch: () => Promise<Response> }
 ) {
   const sandboxName = buildSandboxName({
     repoId: launch.repoId,
@@ -284,14 +311,25 @@ export async function maybeReturnNameCollisionResponse(
 
   if (collision.kind === "busy") {
     await releaseSandboxBootLimitClaim(launch.creds.userId, limitClaimId);
+    if (collision.record && recovery) {
+      return buildSandboxCleanupRecoveryStreamResponse({
+        record: collision.record as never,
+        repoId: launch.repoId,
+        userId: launch.creds.userId,
+        requestSignal: request.signal,
+        waitForCleanup: deps.waitForSandboxCleanup,
+        resumeLaunch: recovery.resumeLaunch,
+        recordLifecycleEvent: deps.recordSandboxLifecycleEvent,
+      });
+    }
     return NextResponse.json(
       {
         error:
-          "Mogplex must finish cleanup for the previous sandbox. Start it again in a moment.",
-        code: "sandbox_transition_in_progress",
+          "Sandbox cleanup could not be attached to automatic recovery. Stop or delete the previous sandbox, then retry.",
+        code: "sandbox_cleanup_recovery_unavailable",
         sandboxId: collision.record?.id ?? null,
       },
-      { status: 409 }
+      { status: 503 }
     );
   }
 
@@ -323,10 +361,30 @@ export async function claimSandboxBootLimitOrResponse(
   return { limitClaimId: limitDecision.claimId ?? null };
 }
 
+export function buildConcurrentSandboxLaunchResponse(input: {
+  deps: Pick<SandboxPostDeps, "waitForSandboxReadiness">;
+  record: ActiveSandboxRecord;
+  userId: string;
+  request: Request;
+}) {
+  return input.record.status === "creating" ||
+    input.record.status === "installing"
+    ? buildPendingSandboxWaitStreamResponse({
+        record: input.record,
+        userId: input.userId,
+        requestSignal: input.request.signal,
+        waitForReadiness: input.deps.waitForSandboxReadiness,
+      })
+    : NextResponse.json({
+        sandbox: toSandboxClientRecord(input.record),
+      });
+}
+
 export async function insertPendingSandboxLaunchRecord(input: {
   deps: SandboxPostDeps;
   launch: SandboxLaunchPreparation;
   limitClaimId: string | null;
+  request: Request;
 }): Promise<PendingSandboxLaunchRecordResult> {
   const bootStartedAt = new Date().toISOString();
   const { data: record, error: insertErr } = await supabaseAdmin
@@ -392,9 +450,33 @@ export async function insertPendingSandboxLaunchRecord(input: {
         input.launch.creds.userId,
         input.limitClaimId
       );
+      try {
+        await input.deps.recordSandboxLifecycleEvent({
+          sandboxRecordId: concurrent.id,
+          userId: input.launch.creds.userId,
+          eventType: "duplicate_start_joined",
+          payload: {
+            repo_id: input.launch.repoId,
+            lifecycle_status: concurrent.status,
+          },
+        });
+      } catch (error) {
+        console.warn("[sandbox/launch] Failed to record duplicate start join", {
+          sandboxRecordId: concurrent.id,
+          error,
+        });
+      }
+      console.info("[sandbox/launch] joined concurrent start", {
+        repoId: input.launch.repoId,
+        sandboxRecordId: concurrent.id,
+        lifecycleStatus: concurrent.status,
+      });
       return {
-        response: NextResponse.json({
-          sandbox: toSandboxClientRecord(concurrent),
+        response: buildConcurrentSandboxLaunchResponse({
+          deps: input.deps,
+          record: concurrent,
+          userId: input.launch.creds.userId,
+          request: input.request,
         }),
       };
     }

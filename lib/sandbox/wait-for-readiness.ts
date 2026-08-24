@@ -25,10 +25,17 @@ export type SandboxReadinessWaitResult =
   | { kind: "failed"; message: string }
   | { kind: "retry"; message: string };
 
+export type SandboxCleanupWaitResult =
+  | { kind: "complete"; snapshot: SandboxReadinessSnapshot | null }
+  | { kind: "failed"; message: string }
+  | { kind: "retry"; message: string };
+
 export const SANDBOX_READINESS_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_LISTENER_RECONNECTS = 3;
 const READINESS_RETRY_MESSAGE =
   "Sandbox readiness connection was interrupted. Reconnect to continue waiting.";
+const CLEANUP_RETRY_MESSAGE =
+  "Sandbox cleanup connection was interrupted. Reconnect to continue waiting.";
 
 type SandboxReadinessWaitDeps = {
   createListener: () => Promise<TableEventListener>;
@@ -88,6 +95,20 @@ function resolveSnapshot(
   return null;
 }
 
+function resolveCleanupSnapshot(
+  snapshot: SandboxReadinessSnapshot | null
+): SandboxCleanupWaitResult | null {
+  if (!snapshot) return { kind: "complete", snapshot: null };
+  if (
+    snapshot.status === "stopped" ||
+    snapshot.status === "paused" ||
+    snapshot.status === "error"
+  ) {
+    return { kind: "complete", snapshot };
+  }
+  return null;
+}
+
 function isMatchingSandboxEvent(
   payload: TableEventPayload,
   sandboxRecordId: string,
@@ -100,25 +121,38 @@ function isMatchingSandboxEvent(
   );
 }
 
-/** Wait for one sandbox to settle using Neon notifications, never polling. */
-export async function waitForSandboxReadiness(
+type SandboxTransitionWaitResult =
+  | SandboxReadinessWaitResult
+  | SandboxCleanupWaitResult;
+
+async function waitForSandboxTransition<
+  TResult extends SandboxTransitionWaitResult,
+>(
   input: {
     sandboxRecordId: string;
     userId: string;
     signal?: AbortSignal;
     timeoutMs?: number;
   },
-  overrides: Partial<SandboxReadinessWaitDeps> = {}
-): Promise<SandboxReadinessWaitResult> {
+  overrides: Partial<SandboxReadinessWaitDeps>,
+  options: {
+    resolveSnapshot: (
+      snapshot: SandboxReadinessSnapshot | null
+    ) => TResult | null;
+    retryMessage: string;
+    timeoutMessage: string;
+  }
+): Promise<TResult> {
   const deps: SandboxReadinessWaitDeps = {
     createListener: createTableEventListener,
     loadSnapshot: loadSandboxReadinessSnapshot,
     ...overrides,
   };
-  const retryResult = (): SandboxReadinessWaitResult => ({
-    kind: "retry",
-    message: READINESS_RETRY_MESSAGE,
-  });
+  const retryResult = (): TResult =>
+    ({
+      kind: "retry",
+      message: options.retryMessage,
+    }) as TResult;
   const loadSnapshotWithRetry = async () => {
     try {
       return await deps.loadSnapshot(input.sandboxRecordId, input.userId);
@@ -137,7 +171,9 @@ export async function waitForSandboxReadiness(
     initialListener = await deps.createListener();
   } catch {
     try {
-      const terminalResult = resolveSnapshot(await loadSnapshotWithRetry());
+      const terminalResult = options.resolveSnapshot(
+        await loadSnapshotWithRetry()
+      );
       return terminalResult ?? retryResult();
     } catch {
       return retryResult();
@@ -152,10 +188,7 @@ export async function waitForSandboxReadiness(
     let checkInFlight = false;
     let checkQueued = false;
 
-    const finish = (
-      result: SandboxReadinessWaitResult | null,
-      finishError?: unknown
-    ) => {
+    const finish = (result: TResult | null, finishError?: unknown) => {
       if (settled || (!result && !finishError)) return;
       settled = true;
       if (timeout) clearTimeout(timeout);
@@ -171,7 +204,7 @@ export async function waitForSandboxReadiness(
       if (settled) return;
       try {
         const snapshot = await loadSnapshotWithRetry();
-        finish(resolveSnapshot(snapshot));
+        finish(options.resolveSnapshot(snapshot));
       } catch {
         finish(retryResult());
       }
@@ -200,7 +233,7 @@ export async function waitForSandboxReadiness(
     const finishAfterListenerFailure = async () => {
       try {
         const snapshot = await loadSnapshotWithRetry();
-        const terminalResult = resolveSnapshot(snapshot);
+        const terminalResult = options.resolveSnapshot(snapshot);
         if (terminalResult) finish(terminalResult);
         else finish(retryResult());
       } catch {
@@ -254,8 +287,8 @@ export async function waitForSandboxReadiness(
       () =>
         finish({
           kind: "failed",
-          message: "Sandbox did not become ready before the wait timed out.",
-        }),
+          message: options.timeoutMessage,
+        } as TResult),
       input.timeoutMs ?? SANDBOX_READINESS_TIMEOUT_MS
     );
     if (input.signal?.aborted) abort();
@@ -265,5 +298,40 @@ export async function waitForSandboxReadiness(
       // Subscribe first, then read once to close the read/subscribe race.
       requestCheck();
     }
+  });
+}
+
+/** Wait for one sandbox to become ready using Neon notifications, never polling. */
+export function waitForSandboxReadiness(
+  input: {
+    sandboxRecordId: string;
+    userId: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  },
+  overrides: Partial<SandboxReadinessWaitDeps> = {}
+): Promise<SandboxReadinessWaitResult> {
+  return waitForSandboxTransition(input, overrides, {
+    resolveSnapshot,
+    retryMessage: READINESS_RETRY_MESSAGE,
+    timeoutMessage: "Sandbox did not become ready before the wait timed out.",
+  });
+}
+
+/** Wait for an in-flight stop or snapshot to settle, without status polling. */
+export function waitForSandboxCleanup(
+  input: {
+    sandboxRecordId: string;
+    userId: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  },
+  overrides: Partial<SandboxReadinessWaitDeps> = {}
+): Promise<SandboxCleanupWaitResult> {
+  return waitForSandboxTransition(input, overrides, {
+    resolveSnapshot: resolveCleanupSnapshot,
+    retryMessage: CLEANUP_RETRY_MESSAGE,
+    timeoutMessage:
+      "Sandbox cleanup did not finish automatically. Stop or delete the previous sandbox, then retry.",
   });
 }

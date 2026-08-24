@@ -19,7 +19,11 @@ export type SandboxLifecycleEventType =
   | "auto_pause_decision"
   | "auto_pause_succeeded"
   | "auto_pause_failed"
-  | "resume_after_auto_pause";
+  | "resume_after_auto_pause"
+  | "start_waiting_cleanup"
+  | "start_cleanup_recovered"
+  | "start_cleanup_failed"
+  | "duplicate_start_joined";
 
 export type SandboxAutoPauseDecisionCode =
   | "would_auto_pause"

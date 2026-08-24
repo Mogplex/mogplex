@@ -185,5 +185,12 @@ describe("buildOrchestratorTools", () => {
       repoId: null,
     });
     expect(withoutRepository.github_create_issue).toBeUndefined();
+
+    const whileSandboxIsPending = buildOrchestratorTools({
+      ...FULL_CONTEXT,
+      sandboxId: null,
+      sandboxBinding: { sandboxId: null, status: "pending" },
+    });
+    expect(whileSandboxIsPending.github_create_issue).toBeDefined();
   });
 });

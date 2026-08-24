@@ -334,6 +334,31 @@ test("resolveActiveSandboxState keeps stored running records active when Vercel 
   }
 });
 
+for (const providerStatus of ["stopping", "snapshotting"]) {
+  test(`resolveActiveSandboxState preserves provider ${providerStatus} as cleanup_pending`, async () => {
+    const { resolveActiveSandboxState } = await loadSandboxLiveness();
+
+    const result = await resolveActiveSandboxState(
+      {
+        sandboxCredentials: buildSandboxServiceCredentials(),
+        record: {
+          id: "sandbox-cleanup-active",
+          sandbox_id: "vm_cleanup_active",
+          status: "running",
+          created_at: "2026-04-01T10:00:00.000Z",
+        },
+      },
+      {
+        resolveSandboxRecordContext: async () => buildResolvedPlatformContext(),
+        listVercelSandboxes: async () =>
+          [{ name: "vm_cleanup_active", status: providerStatus }] as never,
+      }
+    );
+
+    assert.deepEqual(result, { kind: "cleanup_pending" });
+  });
+}
+
 test("findStaleActiveSandboxIds does not retire active records on transient Vercel lookup failures", async () => {
   const { findStaleActiveSandboxIds } = await loadSandboxLiveness();
   const originalWarn = console.warn;

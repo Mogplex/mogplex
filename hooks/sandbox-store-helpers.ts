@@ -242,6 +242,9 @@ export async function consumeSandboxLaunchResponse(
         case "log":
           get().appendLog(repoId, event.data, { ...launchScope });
           break;
+        case "lifecycle":
+          get().appendLog(repoId, `${event.message}\n`, { ...launchScope });
+          break;
         case "preview_url": {
           const sandbox = toSandboxRecord(event.sandbox);
           updateLaunchScope(sandbox);

@@ -195,7 +195,16 @@ function terminalEntryFromPart(
   const command = terminalText(input.command) ?? null;
   const sandboxId =
     terminalText(output.sandboxId) ?? terminalText(input.sandboxId) ?? null;
+  const cleanupRecoveryLine =
+    sandboxTool && output.recoveredFromCleanup === true
+      ? `Sandbox recovered and ready · cleanup ${Math.ceil(
+          (typeof output.cleanupWaitMs === "number"
+            ? Math.max(0, output.cleanupWaitMs)
+            : 0) / 1000
+        )}s`
+      : null;
   const lines = boundedTerminalLines([
+    cleanupRecoveryLine,
     output.stdout,
     output.stderr,
     output.error,

@@ -10,6 +10,8 @@ export type SandboxResolution = {
   sandboxId: string;
   status: SandboxResolutionStatus;
   source: SandboxResolutionSource;
+  recoveredFromCleanup?: boolean;
+  cleanupWaitMs?: number;
 };
 
 export type SandboxResolutionFailure = {
@@ -158,6 +160,7 @@ async function readReusedSandboxResponse(
 type SandboxCreationStreamEvent =
   | { kind: "ready"; resolution: SandboxResolution }
   | { kind: "pending"; sandboxRecordId: string }
+  | { kind: "cleanup_recovered"; elapsedMs: number }
   | { kind: "failed"; failure: SandboxResolutionFailure };
 
 type SandboxCreationStreamResult =
@@ -175,6 +178,8 @@ function readSandboxCreationEvent(
     message?: string;
     sandbox?: { id: string; runtime_summary?: { status?: string } };
     recordId?: string;
+    phase?: string;
+    elapsedMs?: number;
   };
   try {
     event = JSON.parse(line.slice(6));
@@ -196,6 +201,19 @@ function readSandboxCreationEvent(
     return {
       kind: "pending",
       sandboxRecordId: event.recordId,
+    };
+  }
+  if (
+    event.type === "lifecycle" &&
+    event.phase === "pending_cleanup" &&
+    event.status === "recovered"
+  ) {
+    return {
+      kind: "cleanup_recovered",
+      elapsedMs:
+        typeof event.elapsedMs === "number" && event.elapsedMs >= 0
+          ? event.elapsedMs
+          : 0,
     };
   }
   const lifecycleStatus =
@@ -233,6 +251,7 @@ async function consumeSandboxCreationStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let pendingSandboxRecordId: string | null = null;
+  let cleanupWaitMs: number | null = null;
 
   try {
     while (true) {
@@ -248,8 +267,22 @@ async function consumeSandboxCreationStream(
           pendingSandboxRecordId = settled.sandboxRecordId;
           continue;
         }
+        if (settled.kind === "cleanup_recovered") {
+          cleanupWaitMs = settled.elapsedMs;
+          continue;
+        }
         await reader.cancel().catch(() => {});
-        return settled.kind === "ready" ? settled.resolution : settled.failure;
+        return settled.kind === "ready"
+          ? {
+              ...settled.resolution,
+              ...(cleanupWaitMs === null
+                ? {}
+                : {
+                    recoveredFromCleanup: true,
+                    cleanupWaitMs,
+                  }),
+            }
+          : settled.failure;
       }
       if (done) break;
     }

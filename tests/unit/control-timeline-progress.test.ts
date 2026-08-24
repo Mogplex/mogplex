@@ -59,6 +59,47 @@ test("control timeline turns resource tools into safe progress steps", () => {
   assert.doesNotMatch(JSON.stringify(events), /Private task details/);
 });
 
+test("control timeline distinguishes active and recovered sandbox cleanup", () => {
+  const events = buildCombinedTimeline(undefined, [
+    assistant([
+      { type: "step-start" },
+      {
+        type: "tool-sandbox_start",
+        toolCallId: "sandbox-pending",
+        state: "input-available",
+        input: {},
+      },
+      { type: "step-start" },
+      {
+        type: "tool-sandbox_start",
+        toolCallId: "sandbox-recovered",
+        state: "output-available",
+        input: {},
+        output: {
+          ok: true,
+          status: "running",
+          recoveredFromCleanup: true,
+          cleanupWaitMs: 2_500,
+        },
+      },
+    ]),
+  ]);
+
+  assert.deepEqual(
+    events.map(({ kind, body }) => ({ kind, body })),
+    [
+      {
+        kind: "progress",
+        body: "Starting sandbox · automatic recovery active",
+      },
+      {
+        kind: "progress",
+        body: "Sandbox recovered and ready · cleanup 3s",
+      },
+    ]
+  );
+});
+
 test("control timeline surfaces structured tool failures as failures", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([

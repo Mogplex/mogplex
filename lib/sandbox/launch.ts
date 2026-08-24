@@ -283,15 +283,16 @@ export async function resolveNameCollision(
     matchingRecordForRoot?.runtime_summary.persistent === true;
 
   // Stopping and snapshotting are provider transition states, not terminal
-  // states. Preserve a live/paused record, but roll a new launch forward under
-  // a replacement name when the canonical record is already terminal or gone.
-  // This keeps recovery in the current request without application polling.
+  // states. A live record stays attached to event-driven cleanup recovery. If
+  // persistence already says the predecessor is terminal, roll the requested
+  // launch forward under a replacement name instead of recreating a stale
+  // wait after a service restart.
   if (vercelStatus === "busy") {
     if (
       !matchingRecordForRoot ||
-      ((matchingRecordForRoot.runtime_summary.status === "stopped" ||
-        matchingRecordForRoot.runtime_summary.status === "error") &&
-        matchingRecordForRoot.stop_reason === "manual")
+      matchingRecordForRoot.runtime_summary.status === "stopped" ||
+      matchingRecordForRoot.runtime_summary.status === "paused" ||
+      matchingRecordForRoot.runtime_summary.status === "error"
     ) {
       return { kind: "replace", record: matchingRecordForRoot };
     }

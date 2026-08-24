@@ -55,11 +55,15 @@ function toolProgressBody(
   if (toolName === "plan_mission")
     return complete ? "Plan saved" : "Saving plan";
   if (toolName === "sandbox_start") {
-    if (!complete) return "Starting sandbox";
+    if (!complete) return "Starting sandbox · automatic recovery active";
     // Defensive display for a future resolver that surfaces pending output.
-    return output?.status === "pending"
-      ? "Waiting for sandbox"
-      : "Sandbox ready";
+    if (output?.status === "pending") return "Waiting for sandbox";
+    if (output?.recoveredFromCleanup === true) {
+      const waitMs =
+        typeof output.cleanupWaitMs === "number" ? output.cleanupWaitMs : 0;
+      return `Sandbox recovered and ready · cleanup ${Math.ceil(waitMs / 1000)}s`;
+    }
+    return "Sandbox ready";
   }
   if (toolName === "spawn_worktree") {
     return complete ? "Worktree created" : "Creating worktree";
