@@ -20,6 +20,7 @@ function sandboxRecord(
     branch = "feat/demo",
     lastActiveAt = NOW,
     previewUrl = "https://preview.example.vercel.app",
+    rootDirectory = null,
     keepPreviewUrl = false,
     error = null,
   }: {
@@ -29,6 +30,7 @@ function sandboxRecord(
     branch?: string;
     lastActiveAt?: string;
     previewUrl?: string;
+    rootDirectory?: string | null;
     keepPreviewUrl?: boolean;
     error?: string | null;
   } = {}
@@ -53,6 +55,7 @@ function sandboxRecord(
     dev_log: null,
     runtime: null,
     terminal_cwd: null,
+    root_directory: rootDirectory,
     created_at: NOW,
     last_active_at: lastActiveAt,
     runtime_summary: {
@@ -182,6 +185,28 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
           lastActiveAt: new Date(Date.now() - 60_000).toISOString(),
         }),
         sandboxRecord("running", {
+          id: "rec-clone-a",
+          sandboxId: "sbx_clone_alpha_111111",
+          branch: "feat/demo",
+          previewUrl: "https://clone-a-preview.example.vercel.app",
+          lastActiveAt: new Date(Date.now() - 90_000).toISOString(),
+        }),
+        sandboxRecord("running", {
+          id: "rec-clone-b",
+          sandboxId: "sbx_clone_beta_222222",
+          branch: "feat/demo",
+          previewUrl: "https://clone-b-preview.example.vercel.app",
+          lastActiveAt: new Date(Date.now() - 100_000).toISOString(),
+        }),
+        sandboxRecord("running", {
+          id: "rec-root",
+          sandboxId: "sbx_web_root_333333",
+          branch: "feat/web",
+          rootDirectory: "apps/web",
+          previewUrl: "https://web-preview.example.vercel.app",
+          lastActiveAt: new Date(Date.now() - 110_000).toISOString(),
+        }),
+        sandboxRecord("running", {
           id: "rec-2",
           repoId: "repo-2",
           sandboxId: "sbx_unrelated",
@@ -236,10 +261,6 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
     .fill("Run the tests");
   await page.getByRole("button", { name: "Start mission" }).click();
   await expect(page).toHaveURL(/\/control\?mission=sess-worktrees$/);
-  await expect(
-    page.getByText("acme/widgets", { exact: true }).last()
-  ).toBeVisible();
-
   // Control view tabs follow the keyboard tab pattern and keep counts distinct.
   const chatTab = page.getByRole("tab", { name: "Chat", exact: true });
   await chatTab.focus();
@@ -250,55 +271,76 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await page.keyboard.press("ArrowRight");
   await expect(
     page.getByRole("tab", {
-      name: "Sandboxes, 2 current sandboxes, 2 previous attempts",
+      name: "Sandboxes, 5 current sandboxes, 2 previous attempts",
     })
   ).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Home");
   await expect(chatTab).toHaveAttribute("aria-selected", "true");
 
-  // Sandbox selectors use compute identity; repository branches stay secondary.
-  await expect(
-    page.getByRole("button", {
-      name: /Select sandbox sbx_live123, Running, repository branch feat\/demo/,
-    })
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", {
-      name: /Select sandbox sbx_paused, Paused, repository branch feat\/paused/,
-    })
-  ).toBeVisible();
+  // Sandbox selectors lead with readable repository context, expose status in
+  // text, and keep the full runtime ID in secondary detail.
+  const selectedSandboxChoice = page.getByRole("button", {
+    name: /Select acme\/widgets, branch feat\/demo, Running, sandbox live123/,
+  });
+  await expect(selectedSandboxChoice).toBeVisible();
+  await expect(selectedSandboxChoice).toHaveAttribute("title", "sbx_live123");
+  const overflowSelector = page.getByRole("button", {
+    name: "Choose from 4 more sandboxes",
+  });
+  await expect(overflowSelector).toBeVisible();
   await expect(page.getByRole("button", { name: /sbx_unrelated/ })).toHaveCount(
     0
   );
   await expect(
     page.getByRole("tab", {
-      name: "Sandboxes, 2 current sandboxes, 2 previous attempts",
+      name: "Sandboxes, 5 current sandboxes, 2 previous attempts",
     })
   ).toBeVisible();
   expect(chatRequests[0]?.sandboxId).toBe("rec-1");
 
-  // Sandbox selectors select the exact context sent to the agent and preview.
-  const pausedTab = page.getByRole("button", {
-    name: /Select sandbox sbx_paused/,
+  // Keyboard selection from overflow updates the exact context sent to the
+  // agent and used by preview.
+  await overflowSelector.focus();
+  await page.keyboard.press("Enter");
+  const cloneChoice = page.getByRole("menuitem", {
+    name: /Select acme\/widgets, branch feat\/demo, Running, sandbox a_111111/,
   });
-  await pausedTab.click();
-  await expect(pausedTab).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("menuitem", {
+      name: /Select acme\/widgets, branch feat\/web, root apps\/web, Running/,
+    })
+  ).toHaveAttribute("title", "sbx_web_root_333333");
+  await cloneChoice.focus();
+  await page.keyboard.press("Enter");
+  const selectedClone = page.getByRole("button", {
+    name: /Select acme\/widgets, branch feat\/demo, Running, sandbox a_111111/,
+  });
+  await expect(selectedClone).toHaveAttribute("aria-pressed", "true");
+  await expect(selectedClone).toHaveAttribute(
+    "title",
+    "sbx_clone_alpha_111111"
+  );
   await expect(page.getByText("Selected sandbox:")).toBeVisible();
   await expect(
-    page.getByText("sbx_paused", { exact: true }).last()
+    page.getByText("sbx_clone_alpha_111111", { exact: true }).last()
   ).toBeVisible();
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Open sandbox preview" })
+  ).toHaveAttribute("title", "https://clone-a-preview.example.vercel.app");
+  await page.keyboard.press("Escape");
   await page.getByRole("tab", { name: "Chat", exact: true }).click();
   await page
     .getByPlaceholder("Ask for follow-up changes or attach images")
-    .fill("Continue in the paused sandbox");
+    .fill("Continue in the selected sandbox");
   await page.keyboard.press("Enter");
   await expect.poll(() => chatRequests.length).toBe(2);
-  expect(chatRequests[1]?.sandboxId).toBe("rec-paused");
+  expect(chatRequests[1]?.sandboxId).toBe("rec-clone-a");
 
   // The Sandboxes tab shows remote compute with real status and actions.
   await page
     .getByRole("tab", {
-      name: "Sandboxes, 2 current sandboxes, 2 previous attempts",
+      name: "Sandboxes, 5 current sandboxes, 2 previous attempts",
     })
     .click();
   await expect(page.getByRole("heading", { name: "Sandboxes" })).toBeVisible();
@@ -418,6 +460,16 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
+  const narrowSelector = page.getByRole("button", {
+    name: /Selected sandbox acme\/widgets, branch .*\. Choose sandbox for chat and preview/,
+  });
+  await expect(narrowSelector).toBeVisible();
+  await narrowSelector.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("menuitem", { name: /for chat and preview/ })
+  ).toHaveCount(5);
+  await page.keyboard.press("Escape");
   await expect(
     page.getByText("Remote compute for commands and previews.")
   ).toBeVisible();

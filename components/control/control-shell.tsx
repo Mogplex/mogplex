@@ -391,6 +391,7 @@ function ControlShellInner({
           onViewChange={setView}
           sandboxes={sandboxes}
           worktrees={controlWorktrees.worktrees}
+          repositoryName={activeRepo?.full_name ?? "Repository"}
           selectedSandboxId={activeSandbox?.id ?? null}
           onFocusSandbox={(id) => {
             selectSandbox(id);
@@ -398,7 +399,6 @@ function ControlShellInner({
             setFocusSandboxId(id);
           }}
         />
-
         <div
           id={`control-${view}-panel`}
           role="tabpanel"
