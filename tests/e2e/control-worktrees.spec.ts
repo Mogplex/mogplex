@@ -254,9 +254,9 @@ test("Control ignores a stale worktree response after switching sessions", async
 
   await page.goto(scopedPath("control"));
   const sessionsRail = page.getByRole("complementary", { name: "Sessions" });
-  await sessionsRail.getByRole("button", { name: /Mission A/ }).click();
+  await sessionsRail.getByRole("button", { name: /^Mission A/ }).click();
   await expect.poll(() => missionARequested).toBe(true);
-  await sessionsRail.getByRole("button", { name: /Mission B/ }).click();
+  await sessionsRail.getByRole("button", { name: /^Mission B/ }).click();
 
   await expect(
     page.getByRole("tab", { name: "Worktrees, 1 checkout" })

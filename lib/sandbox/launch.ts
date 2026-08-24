@@ -259,6 +259,7 @@ export async function resolveNameCollision(
   | { kind: "adopt"; record: SandboxRecord }
   | { kind: "resume"; record: SandboxRecord }
   | { kind: "restart"; record: SandboxRecord }
+  | { kind: "replace"; record: SandboxRecord | null }
   | { kind: "busy"; record: SandboxRecord | null }
 > {
   const deps = { ...defaultResolveNameCollisionDeps, ...overrides };
@@ -282,11 +283,18 @@ export async function resolveNameCollision(
     matchingRecordForRoot?.runtime_summary.persistent === true;
 
   // Stopping and snapshotting are provider transition states, not terminal
-  // states. Reusing the deterministic name before the transition completes
-  // produces a second DB record whose provider create is rejected. Surface a
-  // conflict instead; a later user action can safely resume or create without
-  // any application-level polling.
+  // states. Preserve a live/paused record, but roll a new launch forward under
+  // a replacement name when the canonical record is already terminal or gone.
+  // This keeps recovery in the current request without application polling.
   if (vercelStatus === "busy") {
+    if (
+      !matchingRecordForRoot ||
+      ((matchingRecordForRoot.runtime_summary.status === "stopped" ||
+        matchingRecordForRoot.runtime_summary.status === "error") &&
+        matchingRecordForRoot.stop_reason === "manual")
+    ) {
+      return { kind: "replace", record: matchingRecordForRoot };
+    }
     return { kind: "busy", record: matchingRecordForRoot };
   }
 
@@ -306,7 +314,7 @@ export async function resolveNameCollision(
       await deps.stopMatchingRecord(matchingRecordForRoot);
     }
     await deps.deleteSandbox(sandbox);
-    return { kind: "busy", record: matchingRecordForRoot };
+    return { kind: "replace", record: matchingRecordForRoot };
   }
 
   // The resume probe can revive an expired non-persistent session while
@@ -320,7 +328,7 @@ export async function resolveNameCollision(
     isSandboxExplicitlyNonPersistent(sandbox)
   ) {
     await deps.deleteSandbox(sandbox);
-    return { kind: "busy", record: null };
+    return { kind: "replace", record: null };
   }
 
   if (matchingRecordForRoot) {
@@ -329,7 +337,7 @@ export async function resolveNameCollision(
 
   if (vercelStatus === "stopped" || vercelStatus === "error") {
     await deps.deleteSandbox(sandbox);
-    return { kind: "busy", record: null };
+    return { kind: "replace", record: null };
   }
 
   const adopted = await deps.insertAdoptedRecord({

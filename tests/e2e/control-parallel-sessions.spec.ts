@@ -191,12 +191,16 @@ test("control chats keep independent streams, status, and cancellation across sw
     "Ask for follow-up changes or attach images"
   );
 
-  await sidebar.getByRole("button", { name: /Parallel task A/ }).click();
+  await sidebar
+    .getByRole("button", { name: /^(?:Working )?Parallel task A/ })
+    .click();
   await composer.fill("Start A");
   await page.keyboard.press("Enter");
   await expect(conversation.getByText("session-a progress")).toBeVisible();
 
-  await sidebar.getByRole("button", { name: /Parallel task B/ }).click();
+  await sidebar
+    .getByRole("button", { name: /^(?:Working )?Parallel task B/ })
+    .click();
   await composer.fill("Start B");
   await page.keyboard.press("Enter");
   await expect(conversation.getByText("session-b progress")).toBeVisible();
@@ -217,11 +221,15 @@ test("control chats keep independent streams, status, and cancellation across sw
     sidebar.getByRole("button", { name: /Working.*Parallel task B/ })
   ).toBeVisible();
 
-  await sidebar.getByRole("button", { name: /Parallel task A/ }).click();
+  await sidebar
+    .getByRole("button", { name: /^(?:Working )?Parallel task A/ })
+    .click();
   await expect(page).toHaveURL(/mission=session-a/);
   await expect(composer).toHaveValue("");
   await expect(conversation.getByText("session-a progress")).toHaveCount(1);
-  await sidebar.getByRole("button", { name: /Parallel task B/ }).click();
+  await sidebar
+    .getByRole("button", { name: /^(?:Working )?Parallel task B/ })
+    .click();
   await expect(composer).toHaveValue("");
   await expect(conversation.getByText("session-b progress")).toHaveCount(1);
 
@@ -250,7 +258,9 @@ test("control chats keep independent streams, status, and cancellation across sw
       window as typeof window & { __controlParallelStreams: StreamControls }
     ).__controlParallelStreams.finish("session-a");
   });
-  await sidebar.getByRole("button", { name: /Parallel task A/ }).click();
+  await sidebar
+    .getByRole("button", { name: /^(?:Working )?Parallel task A/ })
+    .click();
   await expect(
     conversation.getByText("session-a progress session-a complete")
   ).toBeVisible();

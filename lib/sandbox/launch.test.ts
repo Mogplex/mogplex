@@ -163,6 +163,32 @@ describe("resolveNameCollision", () => {
     }
   );
 
+  it.each(["stopping", "snapshotting"])(
+    "rolls forward from a terminal record while its old provider sandbox is %s",
+    async (status) => {
+      const record = sandboxRecord({
+        status: "stopped",
+        persistent: true,
+        stopReason: "manual",
+      });
+
+      const result = await resolveNameCollision(input, {
+        getSandbox: async () =>
+          ({
+            name: input.name,
+            status,
+            sandbox: { persistent: true },
+          }) as never,
+        loadMatchingRecord: async () => record,
+        insertAdoptedRecord: async () => {
+          throw new Error("insertAdoptedRecord should not be called");
+        },
+      });
+
+      expect(result).toEqual({ kind: "replace", record });
+    }
+  );
+
   it("attaches billing admission before a paused platform collision is revived", async () => {
     const record = sandboxRecord({ status: "paused" });
     const admitted: unknown[] = [];
@@ -219,7 +245,7 @@ describe("resolveNameCollision", () => {
     );
     expect(stopMatchingRecord).toHaveBeenCalledWith(record);
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "busy", record });
+    expect(result).toEqual({ kind: "replace", record });
   });
 
   it("adopts a usable orphaned Vercel sandbox", async () => {
@@ -281,7 +307,7 @@ describe("resolveNameCollision", () => {
       }
     );
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "busy", record: null });
+    expect(result).toEqual({ kind: "replace", record: null });
   });
 
   it("threads rootDirectory through matching and adoption", async () => {
@@ -366,7 +392,7 @@ describe("resolveNameCollision", () => {
     });
 
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "busy", record: null });
+    expect(result).toEqual({ kind: "replace", record: null });
   });
 
   it("deletes a stopped orphan without reusing its name in the same request", async () => {
@@ -382,7 +408,7 @@ describe("resolveNameCollision", () => {
     });
 
     expect(deleteSandbox).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ kind: "busy", record: null });
+    expect(result).toEqual({ kind: "replace", record: null });
   });
 });
 

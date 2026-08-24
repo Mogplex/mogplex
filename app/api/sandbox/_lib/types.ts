@@ -55,6 +55,8 @@ export type SandboxLaunchPreparation = {
     treatRoot404AsReady: boolean;
   };
   sandboxSource: SandboxSource;
+  /** Fresh provider name used only to move past a terminal name collision. */
+  sandboxNameOverride?: string;
 };
 
 export type PendingSandboxLaunchRecord = {

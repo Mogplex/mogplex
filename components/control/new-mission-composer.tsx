@@ -37,6 +37,7 @@ const CREATABLE_AVAILABILITY = new Set(["available", "unverified"]);
 
 type Props = {
   repos: Repo[];
+  initialRepoId?: string | null;
   onCancel?: () => void;
   onCreate: (
     text: string,
@@ -47,11 +48,16 @@ type Props = {
   ) => Promise<boolean>;
 };
 
-export function NewMissionComposer({ repos, onCancel, onCreate }: Props) {
+export function NewMissionComposer({
+  repos,
+  initialRepoId,
+  onCancel,
+  onCreate,
+}: Props) {
   const [text, setText] = useState("");
   // null = untouched: follow the default (favorite/first repo, or "new" when
   // no repos are connected). Repos load async, so the default resolves late.
-  const [choice, setChoice] = useState<string | null>(null);
+  const [choice, setChoice] = useState<string | null>(initialRepoId ?? null);
   const [newProjectName, setNewProjectName] = useState("");
   const [projectError, setProjectError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

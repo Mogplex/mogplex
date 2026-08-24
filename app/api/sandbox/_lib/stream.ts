@@ -48,14 +48,16 @@ export async function executeSandboxLaunchStream(input: {
       environment,
       emit: input.emit,
       sandboxRecordId: input.record.id,
-      sandboxName: buildSandboxName({
-        repoId: input.launch.repoId,
-        workingBranch: input.launch.launchRequest.workingBranch,
-        recordId: input.record.id,
-        userId: input.launch.creds.userId,
-        productTeamId: input.launch.productTeamId,
-        rootDirectory: input.launch.effectiveRootDirectory,
-      }),
+      sandboxName:
+        input.launch.sandboxNameOverride ??
+        buildSandboxName({
+          repoId: input.launch.repoId,
+          workingBranch: input.launch.launchRequest.workingBranch,
+          recordId: input.record.id,
+          userId: input.launch.creds.userId,
+          productTeamId: input.launch.productTeamId,
+          rootDirectory: input.launch.effectiveRootDirectory,
+        }),
     });
 
     state.sandbox = provisioned.sandbox;

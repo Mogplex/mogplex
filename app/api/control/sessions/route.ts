@@ -239,3 +239,59 @@ export async function PUT(req: Request) {
 
   return NextResponse.json({ ok: true, session: data });
 }
+
+async function deleteOwnedSession(id: string, userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("control_sessions")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data;
+}
+
+type ControlSessionDeleteDeps = {
+  requireUserId: typeof requireUserId;
+  deleteOwnedSession: typeof deleteOwnedSession;
+};
+
+const defaultDeleteDeps: ControlSessionDeleteDeps = {
+  requireUserId,
+  deleteOwnedSession,
+};
+
+export function createControlSessionDeleteHandler(
+  overrides: Partial<ControlSessionDeleteDeps> = {}
+) {
+  const deps = { ...defaultDeleteDeps, ...overrides };
+  return async function DELETE(req: Request) {
+    const userId = await deps.requireUserId();
+    if (userId instanceof Response) return userId;
+
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    }
+
+    try {
+      const data = await deps.deleteOwnedSession(id, userId);
+      if (!data) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true, id: data.id });
+    } catch (error) {
+      console.error("[control/sessions] failed to delete chat", error);
+      return NextResponse.json(
+        { error: "Failed to delete chat" },
+        { status: 500 }
+      );
+    }
+  };
+}
+
+export const DELETE = createControlSessionDeleteHandler();
