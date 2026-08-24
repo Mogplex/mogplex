@@ -13,7 +13,7 @@
  * resolve persistence options.
  */
 
-import { Sandbox } from "@vercel/sandbox";
+import { APIError, Sandbox } from "@vercel/sandbox";
 import { getSandbox } from "@/lib/sandbox/client";
 
 type SandboxCredentials = Parameters<typeof getSandbox>[1];
@@ -71,6 +71,36 @@ export function isNotFoundError(err: unknown): boolean {
     msg.includes("does not exist") ||
     msg.includes("404")
   );
+}
+
+type SandboxApiErrorPayload = {
+  error?: {
+    code?: unknown;
+  };
+};
+
+/**
+ * Match only the SDK error emitted by a lookup for this sandbox name.
+ *
+ * Vercel currently uses the generic `not_found` code for sandbox lookups, so
+ * callers must still confirm absence with a successful scoped list request
+ * before treating this as proof that the sandbox is gone.
+ */
+export function isSandboxLookupNotFoundError(
+  err: unknown,
+  sandboxName: string
+): err is APIError<SandboxApiErrorPayload> {
+  if (!(err instanceof APIError) || err.response.status !== 404) return false;
+
+  const code = (err.json as SandboxApiErrorPayload | undefined)?.error?.code;
+  if (code !== "not_found" && code !== "sandbox_not_found") return false;
+
+  if (typeof err.sandboxName !== "string") return false;
+  try {
+    return decodeURIComponent(err.sandboxName) === sandboxName;
+  } catch {
+    return false;
+  }
 }
 
 /**

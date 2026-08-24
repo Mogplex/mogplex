@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { APIError } from "@vercel/sandbox";
 import {
   buildSandboxRouteParams,
   buildSandboxRouteRequest,
@@ -10,6 +11,20 @@ import {
   buildSandboxServiceRouteAuth,
   loadSandboxExecRouteModule,
 } from "./sandbox-service-route-test-harness";
+
+function providerLookupNotFoundError(message: string) {
+  return new APIError(
+    new Response(JSON.stringify({ error: { code: "not_found", message } }), {
+      status: 404,
+      statusText: "Not Found",
+    }),
+    {
+      message: "Status code 404 is not ok",
+      json: { error: { code: "not_found", message } },
+      sandboxName: "sandbox-runtime-123",
+    }
+  );
+}
 
 test("POST /api/sandbox/[id]/exec returns 429 when exec limits are exceeded", async () => {
   const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
@@ -188,6 +203,7 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock when the sandbox is mi
 test("POST /api/sandbox/[id]/exec identifies a provider-side missing sandbox", async () => {
   const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
   let releasedLock: { sandboxId: string; token: string } | null = null;
+  let listOptions: Record<string, unknown> | undefined;
 
   const handler = createSandboxExecPostHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
@@ -203,7 +219,13 @@ test("POST /api/sandbox/[id]/exec identifies a provider-side missing sandbox", a
     },
     resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
     getSandbox: async () => {
-      throw Object.assign(new Error("Sandbox not found"), { status: 404 });
+      throw providerLookupNotFoundError(
+        "Sandbox not found: sandbox-runtime-123"
+      );
+    },
+    listVercelSandboxes: async (_credentials, options) => {
+      listOptions = options;
+      return [];
     },
     touchSandboxLastActive: async () => {},
     renewSandboxActivityLease: async () => 0,
@@ -232,6 +254,102 @@ test("POST /api/sandbox/[id]/exec identifies a provider-side missing sandbox", a
     sandboxId: "sandbox-1",
     token: "lock-provider-missing",
   });
+  assert.deepEqual(listOptions, {
+    namePrefix: "sandbox-runtime-123",
+    limit: 1,
+    sortBy: "name",
+    sortOrder: "asc",
+  });
+});
+
+test("POST /api/sandbox/[id]/exec does not classify a missing provider project as a missing sandbox", async () => {
+  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  let listAttempted = false;
+
+  const handler = createSandboxExecPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    acquireSandboxExecLock: async () => ({
+      acquired: true as const,
+      token: "lock-provider-project-missing",
+    }),
+    enforceSandboxExecLimits: async () => ({ allowed: true, status: 200 }),
+    recordLimitDecision: async () => {},
+    releaseSandboxExecLock: async () => {},
+    resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
+    getSandbox: async () => {
+      throw Object.assign(new Error("Project not found"), { status: 404 });
+    },
+    listVercelSandboxes: async () => {
+      listAttempted = true;
+      return [];
+    },
+    touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/exec",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "git worktree remove --force /checkout",
+        }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "Project not found" });
+  assert.equal(listAttempted, false);
+});
+
+test("POST /api/sandbox/[id]/exec requires provider confirmation before classifying an ambiguous SDK 404", async () => {
+  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  let listAttempted = false;
+
+  const handler = createSandboxExecPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    acquireSandboxExecLock: async () => ({
+      acquired: true as const,
+      token: "lock-provider-ambiguous-404",
+    }),
+    enforceSandboxExecLimits: async () => ({ allowed: true, status: 200 }),
+    recordLimitDecision: async () => {},
+    releaseSandboxExecLock: async () => {},
+    resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
+    getSandbox: async () => {
+      throw providerLookupNotFoundError("Project not found");
+    },
+    listVercelSandboxes: async () => {
+      listAttempted = true;
+      throw new Error("Project not found");
+    },
+    touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/exec",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "git worktree remove --force /checkout",
+        }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "Project not found" });
+  assert.equal(listAttempted, true);
 });
 
 test("POST /api/sandbox/[id]/exec does not acquire a lock when sandbox credentials are forbidden", async () => {
