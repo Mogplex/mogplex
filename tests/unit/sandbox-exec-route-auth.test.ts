@@ -185,6 +185,55 @@ test("POST /api/sandbox/[id]/exec does not acquire a lock when the sandbox is mi
   });
 });
 
+test("POST /api/sandbox/[id]/exec identifies a provider-side missing sandbox", async () => {
+  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  let releasedLock: { sandboxId: string; token: string } | null = null;
+
+  const handler = createSandboxExecPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    acquireSandboxExecLock: async () => ({
+      acquired: true as const,
+      token: "lock-provider-missing",
+    }),
+    enforceSandboxExecLimits: async () => ({ allowed: true, status: 200 }),
+    recordLimitDecision: async () => {},
+    releaseSandboxExecLock: async (sandboxId, token) => {
+      releasedLock = { sandboxId, token };
+    },
+    resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
+    getSandbox: async () => {
+      throw Object.assign(new Error("Sandbox not found"), { status: 404 });
+    },
+    touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/exec",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "git worktree remove --force /checkout",
+        }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), {
+    error: "Sandbox not found",
+    code: "sandbox_not_found",
+  });
+  assert.deepEqual(releasedLock, {
+    sandboxId: "sandbox-1",
+    token: "lock-provider-missing",
+  });
+});
+
 test("POST /api/sandbox/[id]/exec does not acquire a lock when sandbox credentials are forbidden", async () => {
   const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
   const callOrder: string[] = [];
