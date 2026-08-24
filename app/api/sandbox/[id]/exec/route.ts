@@ -6,7 +6,8 @@ import {
   isSandboxCapabilityDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
-import { getSandbox } from "@/lib/sandbox/client";
+import { getSandbox, listVercelSandboxes } from "@/lib/sandbox/client";
+import { isSandboxLookupNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
 import {
@@ -59,12 +60,43 @@ const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
   recordLimitDecision,
   releaseSandboxExecLock,
   getSandbox,
+  listVercelSandboxes,
   resolveSandboxAiAccess,
   getGithubAccessTokenForRepo,
   syncTerminalRuntimeAuth,
   touchSandboxLastActive,
   renewSandboxActivityLease,
 };
+
+async function providerSandboxNotFoundResponse({
+  error,
+  sandboxName,
+  credentials,
+  listSandboxes,
+}: {
+  error: unknown;
+  sandboxName: string;
+  credentials: Parameters<typeof listVercelSandboxes>[0];
+  listSandboxes: typeof listVercelSandboxes;
+}) {
+  if (presentSandboxBillingAdmissionError(error)) throw error;
+  if (!isSandboxLookupNotFoundError(error, sandboxName)) throw error;
+
+  const matchingSandboxes = await listSandboxes(credentials, {
+    namePrefix: sandboxName,
+    limit: 1,
+    sortBy: "name",
+    sortOrder: "asc",
+  });
+  if (matchingSandboxes.some((sandbox) => sandbox.name === sandboxName)) {
+    throw error;
+  }
+
+  return NextResponse.json(
+    { error: "Sandbox not found", code: "sandbox_not_found" },
+    { status: 404 }
+  );
+}
 
 export function createSandboxExecPostHandler(
   overrides: Partial<SandboxExecPostDeps> = {}
@@ -172,15 +204,29 @@ export function createSandboxExecPostHandler(
         );
       }
 
-      const sandbox = await deps.getSandbox(
-        sandboxData.record.sandbox_id,
-        {
-          vercelToken: context.credentials.vercelToken,
-          vercelTeamId: context.credentials.vercelTeamId,
-          vercelProjectId: context.credentials.vercelProjectId,
-        },
-        { onResume: createSandboxBillingOnResume(id) }
-      );
+      let sandbox: Awaited<ReturnType<SandboxExecPostDeps["getSandbox"]>>;
+      try {
+        sandbox = await deps.getSandbox(
+          sandboxData.record.sandbox_id,
+          {
+            vercelToken: context.credentials.vercelToken,
+            vercelTeamId: context.credentials.vercelTeamId,
+            vercelProjectId: context.credentials.vercelProjectId,
+          },
+          { onResume: createSandboxBillingOnResume(id) }
+        );
+      } catch (error) {
+        return await providerSandboxNotFoundResponse({
+          error,
+          sandboxName: sandboxData.record.sandbox_id,
+          credentials: {
+            vercelToken: context.credentials.vercelToken,
+            vercelTeamId: context.credentials.vercelTeamId,
+            vercelProjectId: context.credentials.vercelProjectId,
+          },
+          listSandboxes: deps.listVercelSandboxes,
+        });
+      }
       await deps.renewSandboxActivityLease(sandbox);
 
       const repoRootDirectory = sandboxData.rootDirectory;

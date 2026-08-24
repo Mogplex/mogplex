@@ -178,15 +178,24 @@ export async function extendSandboxTimeout(
  * List all sandboxes for the given credentials via Sandbox.list().
  * Returns the raw list from Vercel — use for batch reconciliation.
  */
-export async function listVercelSandboxes(creds: {
-  vercelToken: string;
-  vercelTeamId?: string | null;
-  vercelProjectId: string;
-}) {
+export async function listVercelSandboxes(
+  creds: {
+    vercelToken: string;
+    vercelTeamId?: string | null;
+    vercelProjectId: string;
+  },
+  options: {
+    limit?: number;
+    sortBy?: "createdAt" | "name" | "statusUpdatedAt";
+    sortOrder?: "asc" | "desc";
+    namePrefix?: string;
+  } = {}
+) {
   const result = await Sandbox.list({
     token: creds.vercelToken,
     projectId: creds.vercelProjectId,
     ...(creds.vercelTeamId ? { teamId: creds.vercelTeamId } : {}),
+    ...options,
   });
   return result.sandboxes;
 }

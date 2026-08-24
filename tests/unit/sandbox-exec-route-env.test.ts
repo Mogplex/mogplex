@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
+import {
+  SANDBOX_BILLING_UNAVAILABLE_MESSAGE,
+  SandboxBillingAdmissionError,
+} from "@/lib/billing/sandbox-usage";
 import {
   buildSandboxRouteParams,
   buildSandboxRouteRequest,
@@ -120,6 +123,47 @@ test("POST /api/sandbox/[id]/exec returns 402 when resume billing admission is d
   assert.equal(response.status, 402);
   assert.deepEqual(await response.json(), {
     error: "Hosted sandbox compute requires a positive billing balance",
+  });
+});
+
+test("POST /api/sandbox/[id]/exec does not treat missing billing data as a missing sandbox", async () => {
+  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  const handler = createSandboxExecPostHandler({
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async () => buildOwnedSandboxServiceRecord(),
+    acquireSandboxExecLock: async () => ({
+      acquired: true as const,
+      token: "lock-billing-missing",
+    }),
+    enforceSandboxExecLimits: async () => ({ allowed: true, status: 200 }),
+    recordLimitDecision: async () => {},
+    releaseSandboxExecLock: async () => {},
+    touchSandboxLastActive: async () => {},
+    renewSandboxActivityLease: async () => 0,
+    resolveSandboxAiAccess: async () => buildSandboxServiceAiAccess(),
+    getSandbox: async () => {
+      throw new SandboxBillingAdmissionError(
+        "Sandbox billing record was not found",
+        "metering_failed"
+      );
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/exec",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "echo hello" }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: SANDBOX_BILLING_UNAVAILABLE_MESSAGE,
   });
 });
 

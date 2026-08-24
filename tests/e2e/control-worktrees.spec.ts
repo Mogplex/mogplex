@@ -76,11 +76,25 @@ test("Control counts worktrees separately from sandbox compute", async ({
     fulfillJson(route, { sandboxes: [] })
   );
   let worktreeStatus: "active" | "archived" | "pruned" = "active";
+  const pruneForces: boolean[] = [];
   await page.route("**/api/control/worktrees**", (route) => {
     if (route.request().method() === "POST") {
-      const body = route.request().postDataJSON() as { action?: string };
+      const body = route.request().postDataJSON() as {
+        action?: string;
+        force?: boolean;
+      };
       if (body.action === "archive") worktreeStatus = "archived";
-      if (body.action === "prune") worktreeStatus = "pruned";
+      if (body.action === "prune") {
+        pruneForces.push(body.force === true);
+        if (body.force !== true) {
+          return fulfillJson(
+            route,
+            { error: "Sandbox not found", forceEligible: true },
+            409
+          );
+        }
+        worktreeStatus = "pruned";
+      }
       return fulfillJson(route, { worktree: {} });
     }
     return fulfillJson(route, {
@@ -150,7 +164,18 @@ test("Control counts worktrees separately from sandbox compute", async ({
     )
   ).toBeVisible();
   await pruneDialog.getByRole("button", { name: "Prune checkout" }).click();
+
+  const retireDialog = page.getByRole("alertdialog", {
+    name: "Retire the sandbox binding?",
+  });
+  await expect(
+    retireDialog.getByText(
+      "Git could not reach the checkout because its sandbox no longer exists. Retire the task binding while keeping the Git branch and pruned worktree record. No sandbox compute is changed."
+    )
+  ).toBeVisible();
+  await retireDialog.getByRole("button", { name: "Retire binding" }).click();
   await expect(page.getByText("No worktrees yet")).toBeVisible();
+  expect(pruneForces).toEqual([false, true]);
 
   await page
     .getByRole("tab", {
