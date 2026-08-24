@@ -68,6 +68,7 @@ const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
 };
 
 function providerSandboxNotFoundResponse(error: unknown) {
+  if (presentSandboxBillingAdmissionError(error)) throw error;
   if (!isNotFoundError(error)) throw error;
   return NextResponse.json(
     { error: "Sandbox not found", code: "sandbox_not_found" },
