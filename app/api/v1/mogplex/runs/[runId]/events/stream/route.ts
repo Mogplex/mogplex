@@ -112,6 +112,7 @@ export function createMogplexApiRunEventsStreamGetHandler(
     const pendingIds: string[] = [];
     let wake: (() => void) | undefined;
     let listenerFailure: Error | undefined;
+    const getListenerFailure = () => listenerFailure;
     listener.onNotification((notification) => {
       if (
         notification.table !== "ai_call_events" ||
@@ -187,7 +188,8 @@ export function createMogplexApiRunEventsStreamGetHandler(
           if (draining || closed) return;
           draining = true;
           try {
-            if (listenerFailure) throw listenerFailure;
+            const initialFailure = getListenerFailure();
+            if (initialFailure) throw initialFailure;
             for (;;) {
               if (closed) return;
               const event = await loadNextPendingEvent({
@@ -197,6 +199,8 @@ export function createMogplexApiRunEventsStreamGetHandler(
                 userId: user.userId,
                 runId,
               });
+              const failure = getListenerFailure();
+              if (failure) throw failure;
               if (!event) return;
               if (await emit(event)) return;
             }

@@ -10,17 +10,22 @@ import { buildRunRow } from "./helpers/mogplex-api-runs-fixtures";
 
 type MockListener = TableEventListener & {
   emit: (payload: TableEventPayload) => void;
+  emitError: (error: Error) => void;
 };
 
 function createMockListener(onEnd?: () => void): MockListener {
   let notificationHandler: ((payload: TableEventPayload) => void) | undefined;
+  let errorHandler: ((error: Error) => void) | undefined;
   return {
     onNotification: (handler) => {
       notificationHandler = handler;
     },
-    onError: () => {},
+    onError: (handler) => {
+      errorHandler = handler;
+    },
     end: async () => onEnd?.(),
     emit: (payload) => notificationHandler?.(payload),
+    emitError: (error) => errorHandler?.(error),
   };
 }
 
@@ -157,4 +162,69 @@ test("run event stream closes after a terminal event", async () => {
     /event: finished/
   );
   assert.equal((await reader.read()).done, true);
+});
+
+test("run event stream closes when the listener fails during an event lookup", async () => {
+  const { createMogplexApiRunEventsStreamGetHandler } = await loadRoute();
+  const listener = createMockListener();
+  const run = presentMogplexApiRun(buildRunRow());
+  let releaseLookup!: () => void;
+  const lookupBlocked = new Promise<void>((resolve) => {
+    releaseLookup = resolve;
+  });
+  let lookupStarted!: () => void;
+  const lookupPending = new Promise<void>((resolve) => {
+    lookupStarted = resolve;
+  });
+  const consoleError = console.error;
+  console.error = () => undefined;
+  const handler = createMogplexApiRunEventsStreamGetHandler({
+    resolveApiKey: async () => ({
+      ok: true,
+      auth: { userId: "user-123", keyId: "key-1", scopes: ["read"] },
+    }),
+    listEvents: async () => ({ run, events: [] }),
+    loadEvent: async () => {
+      lookupStarted();
+      await lookupBlocked;
+      return null;
+    },
+    createListener: async () => listener,
+  });
+
+  try {
+    const response = await handler(
+      new NextRequest(
+        "http://localhost/api/v1/mogplex/runs/run-1/events/stream",
+        { headers: { authorization: "Bearer mog_valid" } }
+      ),
+      { params: Promise.resolve({ runId: "run-1" }) }
+    );
+    const reader = response.body!.getReader();
+    await reader.read();
+    await reader.read();
+    listener.emit({
+      table: "ai_call_events",
+      op: "INSERT",
+      user_id: "user-123",
+      ai_call_id: run.aiCallId,
+      id: "event-pending",
+    });
+    await lookupPending;
+    listener.emitError(new Error("listener disconnected"));
+    releaseLookup();
+
+    const closed = await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("stream stayed open after listener failure")),
+          250
+        )
+      ),
+    ]);
+    assert.equal(closed.done, true);
+  } finally {
+    console.error = consoleError;
+  }
 });
