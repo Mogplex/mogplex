@@ -1,4 +1,5 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
+import { readExternalHarnessProgress } from "@/lib/mogplex-api/harness-progress";
 import { loadOwnedAiCall, safeAppendAiCallEvent } from "@/lib/interactive-runs";
 import type {
   ExternalAgentRunRow,
@@ -250,30 +251,6 @@ async function launchSandboxViaRoute(run: ExternalAgentRunRow) {
   return readSandboxStreamResponse(response);
 }
 
-async function readHarnessStreamResponse(response: Response) {
-  if (!response.body) return;
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parsed = parseSseDataEvents(buffer);
-    buffer = parsed.remaining;
-
-    for (const event of parsed.events) {
-      if (!event || typeof event !== "object") continue;
-      const typedEvent = event as { type?: string; data?: string };
-      if (typedEvent.type === "error") {
-        throw new Error(typedEvent.data || "Harness run failed");
-      }
-    }
-  }
-}
-
 async function runHarnessViaRoute(
   run: ExternalAgentRunRow,
   sandbox: SandboxRef
@@ -303,7 +280,7 @@ async function runHarnessViaRoute(
     throw new Error((await readTextResponse(response)) || "Harness run failed");
   }
 
-  await readHarnessStreamResponse(response);
+  await readExternalHarnessProgress({ response, run });
 }
 
 async function loadRunForExecution(runId: string, userId: string) {
