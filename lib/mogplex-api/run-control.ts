@@ -173,6 +173,7 @@ async function listAiCallEvents(aiCallId: string, limit: number) {
     .select("*")
     .eq("ai_call_id", aiCallId)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit);
 
   if (error) {
