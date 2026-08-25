@@ -6,6 +6,7 @@ export type TableEventPayload = {
   op: string;
   user_id?: string | null;
   id?: string | null;
+  ai_call_id?: string | null;
 };
 
 export type TableEventListener = {
@@ -71,6 +72,7 @@ function parseTableEvent(message: Notification): TableEventPayload | null {
       op: payload.op,
       user_id: payload.user_id,
       id: payload.id,
+      ai_call_id: payload.ai_call_id,
     };
   } catch {
     return null;

@@ -137,7 +137,9 @@ function sanitizeEventPayload(payload: Record<string, unknown>) {
   };
 }
 
-function presentEvent(event: AiCallEvent): PresentedAiCallEvent {
+export function presentMogplexApiRunEvent(
+  event: AiCallEvent
+): PresentedAiCallEvent {
   return {
     id: event.id,
     type: event.event_type,
@@ -170,14 +172,14 @@ async function listAiCallEvents(aiCallId: string, limit: number) {
     .from("ai_call_events")
     .select("*")
     .eq("ai_call_id", aiCallId)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) {
     throw new Error(`Failed to list run events: ${error.message}`);
   }
 
-  return (data ?? []) as AiCallEvent[];
+  return ((data ?? []) as AiCallEvent[]).reverse();
 }
 
 async function updateRunForUser(
@@ -279,7 +281,7 @@ export async function listMogplexApiRunEvents(input: {
   const events = await deps.listEvents(run.ai_call_id, input.limit);
   return {
     run: presentMogplexApiRun(run),
-    events: events.map(presentEvent),
+    events: events.map(presentMogplexApiRunEvent),
   };
 }
 
