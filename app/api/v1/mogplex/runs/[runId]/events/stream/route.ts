@@ -3,16 +3,19 @@ import {
   createTableEventListener,
   type TableEventListener,
 } from "@/lib/db/table-event-listener";
-import { loadMogplexApiRunEvent } from "@/lib/mogplex-api/run-event";
+import {
+  listMogplexApiRunEventPage,
+  loadMogplexApiRunEvent,
+  loadMogplexApiRunEventStreamContext,
+  MogplexApiRunEventCursorError,
+  type MogplexApiRunEventCursor,
+} from "@/lib/mogplex-api/run-event";
 import { parseMogplexApiListLimit } from "@/lib/mogplex-api/request";
 import {
   mogplexApiError,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
-import {
-  listMogplexApiRunEvents,
-  type PresentedAiCallEvent,
-} from "@/lib/mogplex-api/run-control";
+import type { PresentedAiCallEvent } from "@/lib/mogplex-api/run-control";
 import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
@@ -20,18 +23,23 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 800;
 
 const TERMINAL_EVENT_TYPES = new Set(["finished", "failed", "cancelled"]);
+const STREAM_PAGE_LIMIT = 200;
 
 type RunEventsStreamDeps = {
   resolveApiKey: typeof resolveApiKey;
-  listEvents: typeof listMogplexApiRunEvents;
+  loadContext: typeof loadMogplexApiRunEventStreamContext;
+  listPage: typeof listMogplexApiRunEventPage;
   loadEvent: typeof loadMogplexApiRunEvent;
+  loadPendingEvent: typeof loadNextPendingEvent;
   createListener: () => Promise<TableEventListener>;
 };
 
 const defaultDeps: RunEventsStreamDeps = {
   resolveApiKey,
-  listEvents: listMogplexApiRunEvents,
+  loadContext: loadMogplexApiRunEventStreamContext,
+  listPage: listMogplexApiRunEventPage,
   loadEvent: loadMogplexApiRunEvent,
+  loadPendingEvent: loadNextPendingEvent,
   createListener: createTableEventListener,
 };
 
@@ -45,12 +53,28 @@ function encodeEvent(encoder: TextEncoder, event: PresentedAiCallEvent) {
   );
 }
 
+function lastEventId(request: NextRequest) {
+  return request.headers.get("last-event-id")?.trim() || null;
+}
+
+function throwListenerFailure(error: Error | undefined) {
+  if (error) throw error;
+}
+
+function hasDrainWork(input: {
+  failure?: Error;
+  requested: boolean;
+  pending: number;
+}) {
+  return Boolean(input.failure || input.requested || input.pending > 0);
+}
+
 async function loadNextPendingEvent(input: {
   pendingIds: string[];
   seen: Set<string>;
   loadEvent: RunEventsStreamDeps["loadEvent"];
   userId: string;
-  runId: string;
+  aiCallId: string;
 }): Promise<PresentedAiCallEvent | null> {
   for (;;) {
     const eventId = input.pendingIds.shift();
@@ -58,7 +82,7 @@ async function loadNextPendingEvent(input: {
     if (input.seen.has(eventId)) continue;
     const event = await input.loadEvent({
       userId: input.userId,
-      runId: input.runId,
+      aiCallId: input.aiCallId,
       eventId,
     });
     if (event) return event;
@@ -80,24 +104,28 @@ export function createMogplexApiRunEventsStreamGetHandler(
     if (!user.ok) return user.response;
 
     const { runId } = await params;
+    const resumeEventId = lastEventId(request);
     const replayLimit = parseMogplexApiListLimit(
       request.nextUrl.searchParams.get("limit")
     );
-    let initial;
+    let context;
     try {
-      initial = await deps.listEvents({
+      context = await deps.loadContext({
         userId: user.userId,
         runId,
-        limit: replayLimit,
+        lastEventId: resumeEventId,
       });
     } catch (error) {
+      if (error instanceof MogplexApiRunEventCursorError) {
+        return mogplexApiError("BAD_REQUEST", error.message, 400);
+      }
       console.error(
         "[mogplex-api/runs] failed to open run event stream",
         error
       );
       return mogplexApiError("INTERNAL_ERROR", "Failed to stream events", 500);
     }
-    if (!initial) {
+    if (!context) {
       return mogplexApiError("NOT_FOUND", "Run not found", 404);
     }
 
@@ -118,7 +146,7 @@ export function createMogplexApiRunEventsStreamGetHandler(
         notification.table !== "ai_call_events" ||
         notification.op !== "INSERT" ||
         notification.user_id !== user.userId ||
-        notification.ai_call_id !== initial.run.aiCallId ||
+        notification.ai_call_id !== context.aiCallId ||
         !notification.id
       ) {
         return;
@@ -131,25 +159,10 @@ export function createMogplexApiRunEventsStreamGetHandler(
       wake?.();
     });
 
-    let replay = initial;
-    try {
-      replay =
-        (await deps.listEvents({
-          userId: user.userId,
-          runId,
-          limit: replayLimit,
-        })) ?? initial;
-    } catch (error) {
-      await listener.end().catch(() => undefined);
-      console.error(
-        "[mogplex-api/runs] failed to replay run event stream",
-        error
-      );
-      return mogplexApiError("INTERNAL_ERROR", "Failed to stream events", 500);
-    }
-
     let closed = false;
     let draining = false;
+    let drainRequested = false;
+    let replaying = true;
     const seen = new Set<string>();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -184,45 +197,87 @@ export function createMogplexApiRunEventsStreamGetHandler(
           }
           return false;
         };
+        const replay = async () => {
+          let cursor: MogplexApiRunEventCursor | null = context.cursor;
+          const latest = resumeEventId === null;
+          for (;;) {
+            const page = await deps.listPage({
+              userId: user.userId,
+              aiCallId: context.aiCallId,
+              cursor,
+              limit: latest ? replayLimit : STREAM_PAGE_LIMIT,
+              latest,
+            });
+            const failure = getListenerFailure();
+            if (failure) throw failure;
+            for (const event of page.events) {
+              if (await emit(event)) return true;
+            }
+            cursor = page.cursor ?? cursor;
+            if (latest || !page.hasMore) return false;
+          }
+        };
         const drain = async () => {
-          if (draining || closed) return;
+          if (draining || closed) {
+            drainRequested = true;
+            return;
+          }
           draining = true;
           try {
-            const initialFailure = getListenerFailure();
-            if (initialFailure) throw initialFailure;
-            for (;;) {
-              if (closed) return;
-              const event = await loadNextPendingEvent({
-                pendingIds,
-                seen,
-                loadEvent: deps.loadEvent,
-                userId: user.userId,
-                runId,
-              });
-              const failure = getListenerFailure();
-              if (failure) throw failure;
-              if (!event) return;
-              if (await emit(event)) return;
-            }
+            do {
+              drainRequested = false;
+              throwListenerFailure(getListenerFailure());
+              for (;;) {
+                if (closed) return;
+                const event = await deps.loadPendingEvent({
+                  pendingIds,
+                  seen,
+                  loadEvent: deps.loadEvent,
+                  userId: user.userId,
+                  aiCallId: context.aiCallId,
+                });
+                throwListenerFailure(getListenerFailure());
+                if (!event) break;
+                if (await emit(event)) return;
+              }
+            } while (
+              hasDrainWork({
+                requested: drainRequested,
+                pending: pendingIds.length,
+              })
+            );
           } catch (error) {
             await fail(error);
           } finally {
             draining = false;
+            if (
+              !closed &&
+              hasDrainWork({
+                failure: getListenerFailure(),
+                requested: drainRequested,
+                pending: pendingIds.length,
+              })
+            ) {
+              void drain();
+            }
           }
         };
 
-        wake = () => void drain();
+        wake = () => {
+          drainRequested = true;
+          if (!replaying) void drain();
+        };
         request.signal.addEventListener("abort", () => void cleanup());
         controller.enqueue(encoder.encode(": connected\n\n"));
-        controller.enqueue(encodeRun(encoder, replay.run));
-        for (const event of replay.events) {
-          if (await emit(event)) return;
+        controller.enqueue(encodeRun(encoder, context.run));
+        try {
+          if (await replay()) return;
+          replaying = false;
+          await drain();
+        } catch (error) {
+          replaying = false;
+          await fail(error);
         }
-        if (listenerFailure) {
-          await fail(listenerFailure);
-          return;
-        }
-        await drain();
       },
       cancel() {
         if (closed) return;

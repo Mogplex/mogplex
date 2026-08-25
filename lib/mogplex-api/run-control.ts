@@ -172,14 +172,14 @@ async function listAiCallEvents(aiCallId: string, limit: number) {
     .from("ai_call_events")
     .select("*")
     .eq("ai_call_id", aiCallId)
-    .order("created_at", { ascending: false })
+    .order("created_at", { ascending: true })
     .limit(limit);
 
   if (error) {
     throw new Error(`Failed to list run events: ${error.message}`);
   }
 
-  return ((data ?? []) as AiCallEvent[]).reverse();
+  return (data ?? []) as AiCallEvent[];
 }
 
 async function updateRunForUser(
