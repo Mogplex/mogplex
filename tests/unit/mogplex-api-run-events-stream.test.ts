@@ -99,6 +99,14 @@ test("run event stream replays durable events and follows owned notifications", 
     table: "ai_call_events",
     op: "INSERT",
     user_id: "user-123",
+    ai_call_id: "another-call",
+    id: "ignored-other-run",
+  });
+  listener.emit({
+    table: "ai_call_events",
+    op: "INSERT",
+    user_id: "user-123",
+    ai_call_id: run.aiCallId,
     id: "event-2",
   });
 

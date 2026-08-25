@@ -47,12 +47,21 @@ describe("table event listener", () => {
 
     client.emit("notification", {
       channel: "mogplex_table_events",
-      payload: JSON.stringify({ table: "sandboxes", op: "UPDATE", id: "1" }),
+      payload: JSON.stringify({
+        table: "ai_call_events",
+        op: "INSERT",
+        id: "1",
+        ai_call_id: "call-1",
+      }),
     } as never);
 
     expect(createClientForListener).toHaveBeenCalledTimes(1);
-    expect(firstPayloads).toHaveLength(1);
-    expect(secondPayloads).toHaveLength(1);
+    expect(firstPayloads).toEqual([
+      expect.objectContaining({ ai_call_id: "call-1" }),
+    ]);
+    expect(secondPayloads).toEqual([
+      expect.objectContaining({ ai_call_id: "call-1" }),
+    ]);
     await first.end();
     expect(client.end).not.toHaveBeenCalled();
     await second.end();

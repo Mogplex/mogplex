@@ -117,6 +117,7 @@ export function createMogplexApiRunEventsStreamGetHandler(
         notification.table !== "ai_call_events" ||
         notification.op !== "INSERT" ||
         notification.user_id !== user.userId ||
+        notification.ai_call_id !== initial.run.aiCallId ||
         !notification.id
       ) {
         return;
