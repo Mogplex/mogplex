@@ -35,6 +35,10 @@ export {
   createGithubRepoList,
   createGithubIssueTool,
   createScopedGithubIssueTool,
+  createGithubIssueUpdateTool,
+  createGithubIssueCommentTool,
+  createGithubPullRequestMergeTool,
+  createGithubPullRequestStatusTool,
   // Memory tools
   createMemoryTools,
   // Virtual exec

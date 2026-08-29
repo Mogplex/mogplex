@@ -27,6 +27,16 @@ import {
 } from "./github-pr-search";
 import { createGithubRepoList } from "./github-repo-list";
 import { createGithubIssueTool } from "./github-issue";
+import {
+  createGithubIssueCommentTool,
+  createGithubIssueUpdateTool,
+} from "./github-issue-mutation";
+import { createGithubPullRequestMergeTool } from "./github-pr-merge";
+import {
+  deriveGithubRequestMutationAuthorizations,
+  type GithubRequestMutationAuthorizations,
+} from "./github-mutation-authorization";
+import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { virtualExecTool } from "./virtual-exec";
 import {
@@ -37,40 +47,19 @@ import {
 } from "./connections";
 import type { RepoToolDefaults } from "./shared";
 
-// Re-export from submodules
-export { webFetch, webSearch, browseSkills, browseVercelDocs } from "./web";
-export {
-  createTerminalExec,
-  terminalExec,
-  createWriteFile,
-  createStartSandbox,
-  createStopSandbox,
-} from "./sandbox";
-export { createReadFile, createListFiles } from "./github-files";
-export {
-  createGithubApi,
-  createGithubPullRequestTool,
-  createGithubPullRequestUpdateTool,
-} from "./github-api";
-export {
-  createGithubPrSearch,
-  type GithubPrSearchOptions,
-} from "./github-pr-search";
-export { createGithubRepoList } from "./github-repo-list";
-export {
-  createGithubIssueTool,
-  createScopedGithubIssueTool,
-} from "./github-issue";
-export { createMemoryTools, type MemoryToolContext } from "./memory";
-export { virtualExecTool } from "./virtual-exec";
-export {
-  buildDynamicConnectionTools,
-  canUseConnectionTools,
-  loadScopedConnections,
-  cleanupMcpClients,
-  DYNAMIC_CONNECTION_CAPABILITY,
-} from "./connections";
-export type { RepoToolDefaults } from "./shared";
+export * from "./public";
+
+const EMPTY_GITHUB_REQUEST_AUTHORIZATIONS: GithubRequestMutationAuthorizations =
+  {
+    pullRequestMerge: null,
+    issueMutations: [],
+  };
+
+function githubRequestAuthorizations(
+  value: GithubRequestMutationAuthorizations | undefined
+) {
+  return value ?? EMPTY_GITHUB_REQUEST_AUTHORIZATIONS;
+}
 
 /**
  * Capability tag per static tool key. Connection (REST / MCP) tools share
@@ -92,10 +81,14 @@ export const TOOL_CAPABILITY: Record<string, Capability> = {
   // This is broader than the workspace-scoped github_api tool: it performs
   // authenticated org/user/repo PR inventory using the user's own GitHub auth.
   github_pr_search: "tools.github_api",
+  github_pull_request_status: "tools.github_api",
   // Same authenticated-inventory class as github_pr_search: lists repos
   // (including private) visible to the user's installations/OAuth.
   github_list_repos: "tools.github_api",
   github_create_issue: "tools.github_api",
+  github_update_issue: "tools.github_api",
+  github_comment_issue: "tools.github_api",
+  github_merge_pull_request: "tools.github_api",
   github_create_pull_request: "tools.github_api",
   github_update_pull_request: "tools.github_api",
   write_file: "tools.write_file",
@@ -147,7 +140,8 @@ export function buildStaticTools(
    */
   capabilities: ReadonlySet<Capability> = ALL_CAPABILITIES,
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
-  githubPrSearchOptions?: GithubPrSearchOptions
+  githubPrSearchOptions?: GithubPrSearchOptions,
+  githubRequestMutationAuthorizations?: GithubRequestMutationAuthorizations
 ) {
   // Default to an empty memory context when not provided. Production calls
   // from buildTools() always pass an explicit context; direct callers
@@ -156,6 +150,9 @@ export function buildStaticTools(
   const memoryTools = userId
     ? createMemoryTools(userId, repoId, memoryContext ?? {})
     : {};
+  const requestAuthorizations = githubRequestAuthorizations(
+    githubRequestMutationAuthorizations
+  );
   const all = {
     virtual_exec: virtualExecTool,
     web_fetch: webFetch,
@@ -178,7 +175,22 @@ export function buildStaticTools(
             oauthToken: githubPrSearchOptions?.oauthToken ?? null,
             userId,
           }),
+          github_pull_request_status: createGithubPullRequestStatusTool({
+            userId,
+          }),
           github_create_issue: createGithubIssueTool({ userId }),
+          github_update_issue: createGithubIssueUpdateTool({
+            userId,
+            authorizations: requestAuthorizations.issueMutations,
+          }),
+          github_comment_issue: createGithubIssueCommentTool({
+            userId,
+            authorizations: requestAuthorizations.issueMutations,
+          }),
+          github_merge_pull_request: createGithubPullRequestMergeTool({
+            userId,
+            authorization: requestAuthorizations.pullRequestMerge,
+          }),
         }
       : {}),
     ...(githubToken
@@ -355,6 +367,8 @@ export async function buildTools(opts: {
    * durably deduplicated within this scope.
    */
   toolExecutionIdempotencyKey?: string | null;
+  /** Current user-authored request, used only for narrow mutation consent. */
+  latestUserText?: string | null;
 }): Promise<{
   tools: Record<string, Tool>;
   connections: Connection[];
@@ -402,7 +416,12 @@ export async function buildTools(opts: {
     {
       oauthToken: githubPrSearchOAuthToken,
       userId: opts.userId,
-    }
+    },
+    deriveGithubRequestMutationAuthorizations({
+      userText: opts.latestUserText,
+      repoOwner: opts.repoOwner,
+      repoName: opts.repoName,
+    })
   );
 
   const emptyCleanup = async () => undefined;

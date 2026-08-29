@@ -10,7 +10,7 @@ import type {
   ChatStartupFailure,
 } from "./types";
 import { getChatRunScope, buildChatRunMetadata } from "./types";
-import { buildChatMemorySuffix } from "./memory";
+import { buildChatMemorySuffix, extractLatestUserText } from "./memory";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { persistChatSessionMemory } from "./session-memory";
 import {
@@ -128,6 +128,7 @@ export async function executeChatRequest(input: {
         conversationId: input.body.conversationId,
         enableTools: input.body.enableTools,
         teamId,
+        latestUserText: extractLatestUserText(input.body.messages),
       },
       resolvedModel: input.resolvedModel,
       uiMessages: modelMessages as Parameters<

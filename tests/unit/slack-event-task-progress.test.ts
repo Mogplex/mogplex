@@ -81,11 +81,32 @@ test("formats partial model text without exposing reasoning events", async () =>
   assert.equal(
     formatSlackAgentProgress({
       type: "text_delta",
-      textDelta: "[PR](https://example.test/pr)",
-      accumulatedText: "Opened **the change**: [PR](https://example.test/pr)",
+      textDelta: "[PR](https://github.com/acme/widgets/pull/84)",
+      accumulatedText:
+        "Opened **the change**: [PR](https://github.com/acme/widgets/pull/84)",
     }),
-    "Opened *the change*: <https://example.test/pr|PR>"
+    "Opened *the change*: <https://github.com/acme/widgets/pull/84|PR>"
   );
+});
+
+test("sanitizes internal capability details while model text is streaming", async () => {
+  const { formatSlackAgentProgress } = await loadSlackEventTask();
+
+  const text = formatSlackAgentProgress(
+    {
+      type: "text_delta",
+      textDelta: "blocked",
+      accumulatedText:
+        "github_api only supports GET/HEAD; cross-repository paths are rejected.",
+    },
+    { userText: "Verify the failed request." }
+  );
+
+  assert.doesNotMatch(
+    text ?? "",
+    /github_api|GET\/HEAD|cross-repository paths/i
+  );
+  assert.match(text ?? "", /GitHub connection/i);
 });
 
 test("defers partial-text formatting until the updater accepts it", async () => {

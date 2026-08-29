@@ -73,6 +73,19 @@ describe("sandbox task lifecycle", () => {
     expect(stop).toHaveBeenCalledOnce();
   });
 
+  it("cleans up after a stream interruption with an active sandbox tool", async () => {
+    const { lifecycle, stop } = createLifecycle();
+    lifecycle.onToolStart({
+      toolCall: { toolName: "run_command", input: { command: "pnpm test" } },
+    });
+
+    await expect(lifecycle.cleanupAfterInterruption()).resolves.toEqual({
+      state: "stopped",
+      sandboxIds: ["sandbox-1"],
+    });
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
   it.each([
     [
       "persistent session",
