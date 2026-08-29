@@ -4,14 +4,42 @@ const DEFAULT_MAX_DEPTH = 4;
 const MAX_REDACTION_DEPTH = 20;
 const REDACTED_VALUE = "[redacted]";
 
-const SENSITIVE_KEY_PATTERN =
-  /(authorization|api[_-]?key|token|secret|password|cookie|credential|client_secret|access_token|refresh_token|session|jwt)/i;
+const SENSITIVE_KEY_TERMS = [
+  "authorization",
+  "api_key",
+  "apikey",
+  "token",
+  "secret",
+  "password",
+  "passwd",
+  "cookie",
+  "credential",
+  "client_secret",
+  "clientsecret",
+  "access_token",
+  "accesstoken",
+  "refresh_token",
+  "refreshtoken",
+  "session",
+  "jwt",
+  "private_key",
+  "privatekey",
+  "access_key_id",
+  "accesskeyid",
+] as const;
+const TEXT_ASSIGNMENT_PATTERN =
+  /\b([a-z][a-z0-9_-]*)(["']?\s*[:=]\s*)(?!\[redacted\])("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi;
 
 type TelemetrySanitizeOptions = {
   maxStringLength?: number;
   maxItems?: number;
   maxDepth?: number;
 };
+
+function isSensitiveKey(key: string) {
+  const normalized = key.toLowerCase().replaceAll("-", "_");
+  return SENSITIVE_KEY_TERMS.some((term) => normalized.includes(term));
+}
 
 function truncateTelemetryString(value: string, maxStringLength: number) {
   if (value.length <= maxStringLength) return value;
@@ -36,10 +64,46 @@ function maybeRedactJsonString(
 
 export function redactSecretsInText(value: string) {
   return value
-    .replace(/\bbearer\s+[\w+./=~-]+\b/gi, "Bearer [redacted]")
+    .replace(
+      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g,
+      REDACTED_VALUE
+    )
+    .replace(
+      /\b([a-z][a-z0-9+.-]*:\/\/)(?!x-access-token:)[^\s/:@]+:[^\s/@]+@/gi,
+      "$1[redacted]:[redacted]@"
+    )
     .replace(/(x-access-token:)[^\s@]+@/gi, "$1[redacted]@")
+    .replace(
+      /\bauthorization\s*[:=]\s*((?:basic|bearer)\s+)?[^\s,;]+/gi,
+      (_match, scheme = "") => `Authorization: ${scheme}[redacted]`
+    )
+    .replace(TEXT_ASSIGNMENT_PATTERN, (match, key, separator) =>
+      key.toLowerCase().includes("authorization")
+        ? match
+        : isSensitiveKey(key)
+          ? `${key}${separator}[redacted]`
+          : match
+    )
+    .replace(
+      /([?&](?:api[_-]?key|token|secret|password|credential|access[_-]?token)=)[^&#\s]+/gi,
+      "$1[redacted]"
+    )
+    .replace(
+      /\b(?:eyJ[A-Za-z0-9_-]{8,}\.){2}[A-Za-z0-9_-]{8,}\b/g,
+      REDACTED_VALUE
+    )
+    .replace(/\b(?:AKIA|ASIA|AIDA|AROA)[A-Z0-9]{16}\b/g, REDACTED_VALUE)
+    .replace(
+      /\b(?:password|secret|credential|token)\s+(?:is|value)\s*[:=]?\s*[^\s,;]+/gi,
+      REDACTED_VALUE
+    )
+    .replace(/\bbearer\s+[\w+./=~-]+\b/gi, "Bearer [redacted]")
     .replace(/\b(?:gh[oprsu]_\w+|github_pat_\w+)\b/g, REDACTED_VALUE)
     .replace(/\bsk-[\w-]{8,}\b/g, REDACTED_VALUE)
+    .replace(
+      /\b(?:xox[baprs]-|sk_live_|rk_live_|AIza)[A-Za-z0-9_-]{8,}\b/g,
+      REDACTED_VALUE
+    )
     .replace(/\bsb_secret_[\w-]+\b/g, REDACTED_VALUE);
 }
 
@@ -74,7 +138,7 @@ function redactSecretsInValueInternal(value: unknown, depth: number): unknown {
     return Object.fromEntries(
       Object.entries(value).map(([key, nested]) => [
         key,
-        SENSITIVE_KEY_PATTERN.test(key)
+        isSensitiveKey(key)
           ? REDACTED_VALUE
           : redactSecretsInValueInternal(nested, depth + 1),
       ])
@@ -126,7 +190,7 @@ function sanitizeTelemetryValueInternal(
     const entries = Object.entries(value)
       .slice(0, options.maxItems)
       .map(([key, nested]) =>
-        SENSITIVE_KEY_PATTERN.test(key)
+        isSensitiveKey(key)
           ? ([key, REDACTED_VALUE] as const)
           : ([
               key,

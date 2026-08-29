@@ -3,6 +3,11 @@ import {
   diffFilesFromPatch,
   extractPatchFromValue,
 } from "@/lib/control/diff-text";
+import {
+  resolveInfrastructureDiagnosticScope,
+  sanitizeAgentUserFacingError,
+  sanitizeAgentUserFacingText,
+} from "@/lib/agents/user-facing-output";
 import type { TimelineEvent } from "@/lib/control/types";
 import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from "ai";
 
@@ -113,6 +118,7 @@ export function buildCombinedTimeline(
   messages: UIMessage[]
 ): TimelineEvent[] {
   const result: TimelineEvent[] = [...(timeline || [])];
+  let latestUserText = "";
 
   // Append chat messages as timeline events
   for (const msg of messages) {
@@ -127,6 +133,7 @@ export function buildCombinedTimeline(
         .map((part) => part.text)
         .join("\n")
         .trim();
+      latestUserText = text;
       const fileCount = msg.parts.filter((part) => part.type === "file").length;
       const body =
         text ||
@@ -140,6 +147,11 @@ export function buildCombinedTimeline(
     }
 
     if (msg.role !== "assistant") continue;
+
+    const userFacingOptions = {
+      diagnosticScope: resolveInfrastructureDiagnosticScope(latestUserText),
+      userRequestText: latestUserText,
+    };
 
     let stepNumber = 0;
     for (const part of msg.parts) {
@@ -198,12 +210,14 @@ export function buildCombinedTimeline(
 
         // Handle other tool states
         if (state === "output-error") {
+          const log =
+            "errorText" in part ? String(part.errorText) : "unknown error";
           result.push({
             kind: "fail",
             label,
             time: "now",
             body: toolFailureBody(toolName),
-            log: "errorText" in part ? String(part.errorText) : "unknown error",
+            log: sanitizeAgentUserFacingError(log),
           });
         } else {
           const toolInput = "input" in part ? part.input : undefined;
@@ -215,7 +229,9 @@ export function buildCombinedTimeline(
               label,
               time: "now",
               body: toolFailureBody(toolName, output),
-              log: structuredError ?? "The tool returned an error.",
+              log: sanitizeAgentUserFacingError(
+                structuredError ?? "The tool returned an error."
+              ),
             });
             continue;
           }
@@ -258,7 +274,10 @@ export function buildCombinedTimeline(
       // Text parts — skip empties: multi-step tool loops emit steps with no
       // text, and rendering them produces blank MOGPLEX bubbles.
       if (part.type === "text" && "text" in part) {
-        const text = String(part.text).trim();
+        const text = sanitizeAgentUserFacingText(
+          String(part.text),
+          userFacingOptions
+        ).trim();
         if (!text) continue;
         result.push({
           kind: "assistant",

@@ -2,6 +2,11 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { createAiCall } from "@/lib/interactive-runs";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { promoteMemoriesForConversation } from "@/lib/agents/memory-promotion-runner";
+import {
+  createAgentUserFacingOutputTransform,
+  sanitizeAgentUserFacingError,
+  type InfrastructureDiagnosticScope,
+} from "@/lib/agents/user-facing-output";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 import { withGatewaySystemCaching } from "@/lib/models/gateway-provider-routing";
@@ -57,6 +62,8 @@ export async function executeControlChatRequest(input: {
   resolvedModel: string;
   limitClaimId: string | null;
   callStartedAt: string;
+  infrastructureDiagnosticScope: InfrastructureDiagnosticScope;
+  latestUserText: string;
 }) {
   let scope = getControlChatRunScope(input.body);
   const teamId = readActiveTeamIdHeader(input.req);
@@ -140,6 +147,7 @@ export async function executeControlChatRequest(input: {
       controlTarget: input.body.target ?? undefined,
       controlPermissions: input.body.permissions ?? undefined,
       controlMode: input.body.mode ?? undefined,
+      infrastructureDiagnosticScope: input.infrastructureDiagnosticScope,
       sandboxSelectionRequired: sandboxContext.selectionRequired,
       activeSandboxes,
       activeWorktrees: worktreeContext.worktrees,
@@ -267,6 +275,11 @@ export async function executeControlChatRequest(input: {
       abortSignal: input.req.signal,
       tools,
       stopWhen: ORCHESTRATOR_STOP_WHEN,
+      experimental_transform: createAgentUserFacingOutputTransform({
+        diagnosticScope: input.infrastructureDiagnosticScope,
+        repoName: input.body.repoName,
+        userRequestText: input.latestUserText,
+      }),
       experimental_onToolCallStart: createToolCallStartHandler(
         activeCall,
         input.userId,
@@ -339,6 +352,13 @@ export async function executeControlChatRequest(input: {
 
     const response = result.toUIMessageStreamResponse({
       messageMetadata: () => ({ ai_call_id: activeCall.id }),
+      onError: (error) =>
+        sanitizeAgentUserFacingError(
+          error instanceof Error ? error.message : "The request failed.",
+          {
+            repoName: input.body.repoName,
+          }
+        ),
     });
 
     return {

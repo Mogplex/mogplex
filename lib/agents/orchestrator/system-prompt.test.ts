@@ -48,6 +48,28 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain("Keep private chain-of-thought hidden");
   });
 
+  it("keeps infrastructure metadata out of ordinary user-facing responses", () => {
+    const prompt = buildOrchestratorSystemPrompt({});
+
+    expect(prompt).toContain("USER-FACING INFRASTRUCTURE BOUNDARY");
+    expect(prompt).toContain("repository-relative paths");
+    expect(prompt).toContain("provider names");
+    expect(prompt).toContain("compute and deployment identifiers");
+  });
+
+  it("limits explicit diagnostic disclosure to the requested scope", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      infrastructureDiagnosticScope: ["provider", "filesystem-path"],
+    });
+
+    expect(prompt).toContain("explicitly requested infrastructure diagnostics");
+    expect(prompt).toContain(
+      "only the details needed for that diagnostic request"
+    );
+    expect(prompt).toContain("provider, filesystem-path");
+    expect(prompt).toContain("Never expose credentials or secrets");
+  });
+
   it("does not recommend sandbox startup when it is not callable", () => {
     const prompt = buildOrchestratorSystemPrompt({
       availableToolNames: ["run_command", "plan_mission"],

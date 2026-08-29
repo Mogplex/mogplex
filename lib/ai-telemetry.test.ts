@@ -9,6 +9,23 @@ describe("redactSecretsInText", () => {
       )
     ).toBe("[redacted] https://x-access-token:[redacted]@github.com");
   });
+
+  it("redacts assignments, JWTs, cloud keys, and credential URLs", () => {
+    const credentialUrl = `postgres://${["app", "database-password"].join(":")}@${["db", "example"].join(".")}/app`;
+    const output = redactSecretsInText(
+      [
+        "OPENAI_API_KEY=opaque-value",
+        "Authorization: Basic encoded-value",
+        "AKIAIOSFODNN7EXAMPLE",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature-value",
+        credentialUrl,
+      ].join("\n")
+    );
+
+    expect(output).not.toMatch(
+      /opaque-value|encoded-value|AKIAIOSFODNN7EXAMPLE|eyJhbGci|database-password/
+    );
+  });
 });
 
 describe("redactSecretsInValue", () => {
