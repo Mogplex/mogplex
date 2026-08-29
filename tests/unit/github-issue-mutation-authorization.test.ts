@@ -18,11 +18,14 @@ test("authorizes exact issue comments from an explicit batch request", () => {
 });
 
 test("keeps issue update and comment grants operation-specific", () => {
+  const close = deriveGithubRequestMutationAuthorizations({
+    userText: "Close issue #42 in acme/widgets",
+  }).issueMutations;
+  const comment = deriveGithubRequestMutationAuthorizations({
+    userText: "Comment on issue #43 in acme/widgets",
+  }).issueMutations;
   assert.deepEqual(
-    deriveGithubRequestMutationAuthorizations({
-      userText:
-        "Close issue #42 in acme/widgets. Then comment on issue #43 in acme/widgets",
-    }).issueMutations,
+    [...close, ...comment],
     [
       {
         operation: "update",
@@ -64,6 +67,9 @@ test("does not authorize informational, negative, or target-free issue text", ()
     "Can we comment on issue #42 in acme/widgets?",
     "Do not close issue #42 in acme/widgets",
     "Annotate these issues",
+    'Explain why "please comment on issue #42 in acme/widgets" is unsafe',
+    "If approved, close issue #42 in acme/widgets",
+    "Close issue #42 in acme/widgets. Then comment on issue #43 in acme/widgets",
   ]) {
     assert.deepEqual(
       deriveGithubRequestMutationAuthorizations({ userText }).issueMutations,

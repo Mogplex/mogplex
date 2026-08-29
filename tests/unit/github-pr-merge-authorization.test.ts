@@ -55,14 +55,25 @@ test("allows an exact contextual PR only when the request is an instruction", ()
   );
 });
 
-test("binds consent to the target after the merge instruction", () => {
-  assert.deepEqual(
+test("rejects a merge instruction embedded in a mixed request", () => {
+  assert.equal(
     deriveMerge({
       userText:
         "Review https://github.com/acme/widgets/pull/84, then merge evil/service PR #12",
     }),
-    { owner: "evil", repo: "service", number: 12 }
+    null
   );
+});
+
+test("rejects quoted, discussed, and conditional merge instructions", () => {
+  for (const userText of [
+    'Explain why the sentence "please merge acme/widgets PR #42" is unsafe',
+    "The requested example is: please merge acme/widgets PR #42",
+    "If checks pass, please merge acme/widgets PR #42",
+    "Please merge acme/widgets PR #42 if checks pass",
+  ]) {
+    assert.equal(deriveMerge({ userText }), null);
+  }
 });
 
 test("rejects a merge clause containing multiple targets", () => {

@@ -31,17 +31,16 @@ type GithubRequestAuthorizationInput = {
   repoName?: string | null;
 };
 
-type ExplicitAction = {
-  start: number;
-  end: number;
+type ExplicitCommand = {
   operation: GithubIssueMutationOperation | "merge";
   text: string;
+  arguments: string;
 };
 
-const REQUEST_PREFIX =
-  String.raw`(?:^|[.!?]\s*|\bplease\s+|\bthen\s+|\bnow\s+|` +
-  String.raw`\b(?:can|could|would|will)\s+you\s+(?:please\s+)?|` +
-  String.raw`\bi\s+(?:want|need)\s+you\s+to\s+)`;
+const COMMAND_OPENING =
+  String.raw`(?:(?:please|now)\s+|` +
+  String.raw`(?:can|could|would|will)\s+you\s+(?:please\s+)?|` +
+  String.raw`i\s+(?:want|need)\s+you\s+to\s+)?`;
 
 const MERGE_ACTION = String.raw`(?:squash[- ]?)?merge\b`;
 const COMMENT_ACTION =
@@ -60,22 +59,26 @@ const SHORTHAND_TARGET =
   /\b([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+?)#(\d+)\b/gi;
 const REPOSITORY = /\b([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+)\b/gi;
 
-function explicitActions(
+function explicitCommand(
   text: string,
   actionSource: string,
-  operation: ExplicitAction["operation"]
+  operation: ExplicitCommand["operation"]
 ) {
-  const matches: ExplicitAction[] = [];
-  const pattern = new RegExp(`${REQUEST_PREFIX}(?:${actionSource})`, "gim");
-  for (const match of text.matchAll(pattern)) {
-    matches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      operation,
-      text: match[0],
-    });
+  if (/\b(?:if|unless|when|assuming|provided\s+that|only\s+if)\b/i.test(text)) {
+    return null;
   }
-  return matches;
+  const pattern = new RegExp(
+    String.raw`^\s*${COMMAND_OPENING}(?<action>${actionSource})(?<arguments>[\s\S]+?)\s*[.!?]?\s*$`,
+    "i"
+  );
+  const match = text.match(pattern);
+  const actionText = match?.groups?.action;
+  const args = match?.groups?.arguments?.trim();
+  if (!actionText || !args) return null;
+  if (/\b(?:merge|comment|annotate|update|edit|close|reopen)\b/i.test(args)) {
+    return null;
+  }
+  return { operation, text: actionText, arguments: args };
 }
 
 function addTarget(
@@ -149,9 +152,9 @@ function derivePullRequestMergeAuthorization(
   text: string,
   input: GithubRequestAuthorizationInput
 ) {
-  const actions = explicitActions(text, MERGE_ACTION, "merge");
-  if (actions.length !== 1) return null;
-  const clause = text.slice(actions[0].end);
+  const command = explicitCommand(text, MERGE_ACTION, "merge");
+  if (!command) return null;
+  const clause = command.arguments;
   const { targets, residual } = directTargets(clause, new Set(["pull"]));
   addTextualPullRequestTargets(targets, residual);
   if (targets.size === 0) {
@@ -232,26 +235,24 @@ function deriveIssueMutationAuthorizations(
   text: string,
   input: GithubRequestAuthorizationInput
 ) {
-  const actions = [
-    ...explicitActions(text, COMMENT_ACTION, "comment"),
-    ...explicitActions(text, UPDATE_ACTION, "update"),
-  ].sort((left, right) => left.start - right.start);
+  const commands = [
+    explicitCommand(text, COMMENT_ACTION, "comment"),
+    explicitCommand(text, UPDATE_ACTION, "update"),
+  ].filter((command): command is ExplicitCommand => command !== null);
+  if (commands.length !== 1) return [];
+  const command = commands[0];
   const authorizations: GithubIssueMutationAuthorization[] = [];
-  for (const [index, action] of actions.entries()) {
-    const clauseEnd = actions[index + 1]?.start ?? text.length;
-    const clause = text.slice(action.end, clauseEnd);
-    const operation = action.operation as GithubIssueMutationOperation;
-    for (const target of issueTargets(clause, operation, input)) {
-      authorizations.push(
-        operation === "comment"
-          ? { ...target, operation }
-          : {
-              ...target,
-              operation,
-              ...updateAuthorizationConstraints(action.text),
-            }
-      );
-    }
+  const operation = command.operation as GithubIssueMutationOperation;
+  for (const target of issueTargets(command.arguments, operation, input)) {
+    authorizations.push(
+      operation === "comment"
+        ? { ...target, operation }
+        : {
+            ...target,
+            operation,
+            ...updateAuthorizationConstraints(command.text),
+          }
+    );
   }
   return authorizations;
 }
