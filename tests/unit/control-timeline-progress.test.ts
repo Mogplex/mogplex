@@ -203,7 +203,7 @@ test("assistant text and tool errors hide infrastructure by default", () => {
   );
 });
 
-test("assistant text preserves requested diagnostics while redacting secrets", () => {
+test("assistant text preserves only requested diagnostics while redacting secrets", () => {
   const messages = [
     {
       id: "user-1",
@@ -211,14 +211,14 @@ test("assistant text preserves requested diagnostics while redacting secrets", (
       parts: [
         {
           type: "text",
-          text: "Show the raw infrastructure diagnostics and absolute paths",
+          text: "Show the sandbox provider and absolute filesystem path for diagnostics",
         },
       ],
     },
     assistant([
       {
         type: "text",
-        text: "Vercel Sandbox at /Users/me/repo with token sk-secretvalue",
+        text: "Vercel Sandbox sbx_unrelated123 at /Users/me/repo with token sk-secretvalue",
       },
     ]),
   ] as UIMessage[];
@@ -228,6 +228,7 @@ test("assistant text preserves requested diagnostics while redacting secrets", (
 
   assert.match(serialized, /Vercel Sandbox/);
   assert.match(serialized, /\/Users\/me\/repo/);
+  assert.doesNotMatch(serialized, /sbx_unrelated123/);
   assert.doesNotMatch(serialized, /sk-secretvalue/);
   assert.match(serialized, /\[redacted\]/);
 });

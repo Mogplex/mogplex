@@ -4,7 +4,8 @@ import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapte
 import { promoteMemoriesForConversation } from "@/lib/agents/memory-promotion-runner";
 import {
   createAgentUserFacingOutputTransform,
-  sanitizeAgentUserFacingText,
+  sanitizeAgentUserFacingError,
+  type InfrastructureDiagnosticScope,
 } from "@/lib/agents/user-facing-output";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
@@ -61,7 +62,7 @@ export async function executeControlChatRequest(input: {
   resolvedModel: string;
   limitClaimId: string | null;
   callStartedAt: string;
-  allowInfrastructureDiagnostics: boolean;
+  infrastructureDiagnosticScope: InfrastructureDiagnosticScope;
   latestUserText: string;
 }) {
   let scope = getControlChatRunScope(input.body);
@@ -146,7 +147,7 @@ export async function executeControlChatRequest(input: {
       controlTarget: input.body.target ?? undefined,
       controlPermissions: input.body.permissions ?? undefined,
       controlMode: input.body.mode ?? undefined,
-      allowInfrastructureDiagnostics: input.allowInfrastructureDiagnostics,
+      infrastructureDiagnosticScope: input.infrastructureDiagnosticScope,
       sandboxSelectionRequired: sandboxContext.selectionRequired,
       activeSandboxes,
       activeWorktrees: worktreeContext.worktrees,
@@ -275,7 +276,7 @@ export async function executeControlChatRequest(input: {
       tools,
       stopWhen: ORCHESTRATOR_STOP_WHEN,
       experimental_transform: createAgentUserFacingOutputTransform({
-        allowInfrastructureDiagnostics: input.allowInfrastructureDiagnostics,
+        diagnosticScope: input.infrastructureDiagnosticScope,
         repoName: input.body.repoName,
         userRequestText: input.latestUserText,
       }),
@@ -352,13 +353,10 @@ export async function executeControlChatRequest(input: {
     const response = result.toUIMessageStreamResponse({
       messageMetadata: () => ({ ai_call_id: activeCall.id }),
       onError: (error) =>
-        sanitizeAgentUserFacingText(
+        sanitizeAgentUserFacingError(
           error instanceof Error ? error.message : "The request failed.",
           {
-            allowInfrastructureDiagnostics:
-              input.allowInfrastructureDiagnostics,
             repoName: input.body.repoName,
-            userRequestText: input.latestUserText,
           }
         ),
     });

@@ -16,8 +16,8 @@ import {
   readLatestControlUserText,
 } from "./_lib/messages";
 import {
-  isExplicitInfrastructureDiagnosticRequest,
-  sanitizeAgentUserFacingText,
+  resolveInfrastructureDiagnosticScope,
+  sanitizeAgentUserFacingError,
 } from "@/lib/agents/user-facing-output";
 import type {
   ControlChatRequestBody,
@@ -60,8 +60,8 @@ export async function POST(req: Request) {
     throw error;
   }
   const latestUserText = readLatestControlUserText(normalizedMessages);
-  const allowInfrastructureDiagnostics =
-    isExplicitInfrastructureDiagnosticRequest(latestUserText);
+  const infrastructureDiagnosticScope =
+    resolveInfrastructureDiagnosticScope(latestUserText);
   const scope = getControlChatRunScope(body);
 
   // Use same rate limiting as /api/chat
@@ -86,17 +86,15 @@ export async function POST(req: Request) {
       resolvedModel,
       limitClaimId,
       callStartedAt,
-      allowInfrastructureDiagnostics,
+      infrastructureDiagnosticScope,
       latestUserText,
     });
     return result.response;
   } catch (error) {
     const internalMessage =
       error instanceof Error ? error.message : "Failed to start control run";
-    const message = sanitizeAgentUserFacingText(internalMessage, {
-      allowInfrastructureDiagnostics,
+    const message = sanitizeAgentUserFacingError(internalMessage, {
       repoName: body.repoName,
-      userRequestText: latestUserText,
     });
     const aiCall = (error as ControlStartupFailure | null)?.aiCall ?? null;
 

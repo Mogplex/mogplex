@@ -4,7 +4,8 @@ import {
   extractPatchFromValue,
 } from "@/lib/control/diff-text";
 import {
-  isExplicitInfrastructureDiagnosticRequest,
+  resolveInfrastructureDiagnosticScope,
+  sanitizeAgentUserFacingError,
   sanitizeAgentUserFacingText,
 } from "@/lib/agents/user-facing-output";
 import type { TimelineEvent } from "@/lib/control/types";
@@ -148,8 +149,7 @@ export function buildCombinedTimeline(
     if (msg.role !== "assistant") continue;
 
     const userFacingOptions = {
-      allowInfrastructureDiagnostics:
-        isExplicitInfrastructureDiagnosticRequest(latestUserText),
+      diagnosticScope: resolveInfrastructureDiagnosticScope(latestUserText),
       userRequestText: latestUserText,
     };
 
@@ -217,7 +217,7 @@ export function buildCombinedTimeline(
             label,
             time: "now",
             body: toolFailureBody(toolName),
-            log: sanitizeAgentUserFacingText(log, userFacingOptions),
+            log: sanitizeAgentUserFacingError(log),
           });
         } else {
           const toolInput = "input" in part ? part.input : undefined;
@@ -229,9 +229,8 @@ export function buildCombinedTimeline(
               label,
               time: "now",
               body: toolFailureBody(toolName, output),
-              log: sanitizeAgentUserFacingText(
-                structuredError ?? "The tool returned an error.",
-                userFacingOptions
+              log: sanitizeAgentUserFacingError(
+                structuredError ?? "The tool returned an error."
               ),
             });
             continue;

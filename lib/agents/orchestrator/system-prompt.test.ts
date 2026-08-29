@@ -49,9 +49,7 @@ describe("orchestrator resource decision prompt", () => {
   });
 
   it("keeps infrastructure metadata out of ordinary user-facing responses", () => {
-    const prompt = buildOrchestratorSystemPrompt({
-      allowInfrastructureDiagnostics: false,
-    });
+    const prompt = buildOrchestratorSystemPrompt({});
 
     expect(prompt).toContain("USER-FACING INFRASTRUCTURE BOUNDARY");
     expect(prompt).toContain("repository-relative paths");
@@ -61,13 +59,14 @@ describe("orchestrator resource decision prompt", () => {
 
   it("limits explicit diagnostic disclosure to the requested scope", () => {
     const prompt = buildOrchestratorSystemPrompt({
-      allowInfrastructureDiagnostics: true,
+      infrastructureDiagnosticScope: ["provider", "filesystem-path"],
     });
 
     expect(prompt).toContain("explicitly requested infrastructure diagnostics");
     expect(prompt).toContain(
       "only the details needed for that diagnostic request"
     );
+    expect(prompt).toContain("provider, filesystem-path");
     expect(prompt).toContain("Never expose credentials or secrets");
   });
 

@@ -1,4 +1,5 @@
 import { ORCHESTRATOR_TOOLS, getToolsByCategory } from "./registry";
+import type { InfrastructureDiagnosticScope } from "../user-facing-output";
 
 /**
  * Context for building the orchestrator system prompt.
@@ -15,8 +16,8 @@ export type OrchestratorPromptContext = {
   controlTarget?: string;
   controlPermissions?: string;
   controlMode?: string;
-  /** Authenticated user explicitly requested infrastructure diagnostics. */
-  allowInfrastructureDiagnostics?: boolean;
+  /** Authenticated user's explicitly requested infrastructure categories. */
+  infrastructureDiagnosticScope?: InfrastructureDiagnosticScope;
   /** Exact tool names exposed to this model invocation. */
   availableToolNames?: string[];
   /** Server-owned signal that execution must wait for an operator choice. */
@@ -126,10 +127,11 @@ When a worker agent fails or gets stuck:
 }
 
 function buildUserFacingInfrastructureBlock(ctx: OrchestratorPromptContext) {
-  if (ctx.allowInfrastructureDiagnostics) {
+  if (ctx.infrastructureDiagnosticScope?.length) {
+    const diagnosticScope = ctx.infrastructureDiagnosticScope.join(", ");
     return `
 <user-facing-infrastructure-boundary>
-USER-FACING INFRASTRUCTURE BOUNDARY: The authenticated operator explicitly requested infrastructure diagnostics. Include only the details needed for that diagnostic request and only for resources in the server-owned context. Never expose credentials or secrets. Return to product-level language for unrelated status and errors.
+USER-FACING INFRASTRUCTURE BOUNDARY: The authenticated operator explicitly requested infrastructure diagnostics in this exact scope: ${diagnosticScope}. Include only the details needed for that diagnostic request and only for resources in the server-owned context. Never expose credentials or secrets. Return to product-level language for unrelated status and errors.
 </user-facing-infrastructure-boundary>
 `;
   }
