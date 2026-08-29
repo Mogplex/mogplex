@@ -39,6 +39,10 @@ test("shell guard fails closed for GitHub CLI write families and GraphQL mutatio
     "gh repo edit acme/repo --visibility private",
     "gh api graphql -f query='mutation { deleteProjectV2(input: {}) { clientMutationId } }'",
     "gh api repos/acme/repo/actions/workflows/deploy.yml/dispatches -f ref=main",
+    "gh api repos/acme/repo -f name=value; gh api --method GET repos/acme/repo",
+    "/usr/bin/gh pr merge 42 --repo other/repo",
+    "./bin/gh release create v1",
+    String.raw`./bin/g\h workflow run deploy.yml`,
   ]) {
     assert.equal(
       getBlockedAgentShellCommand(command)?.reason,
@@ -57,6 +61,7 @@ test("shell guard preserves explicitly classified read-only GitHub CLI commands"
     "gh run watch 123 --exit-status",
     "gh api repos/acme/repo",
     "gh api --method GET repos/acme/repo/issues -f state=open",
+    "gh pr view 42 --json title | jq .title",
   ]) {
     assert.equal(getBlockedAgentShellCommand(command), undefined, command);
   }

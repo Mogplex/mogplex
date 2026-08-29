@@ -12,7 +12,10 @@ const HTTP_MUTATION_METHOD_PATTERN = /\b(?:POST|PUT|PATCH|DELETE)\b/i;
 const HTTP_MUTATION_FLAG_PATTERN =
   /(?:-X|--request)\s+(?:POST|PUT|PATCH|DELETE)\b/i;
 const HTTP_DATA_FLAG_PATTERN = /(?:-d|--data(?:-[\w-]+)?)\b/i;
-const GITHUB_CLI_PATTERN = /(?:^|[;&|()]|\s)gh(?:\s|$)/i;
+const GITHUB_CLI_PATTERN =
+  /(?:^|[;&|()]|\s)["']?(?:[^\s;&|()"']*\/)?g\\?h["']?(?=\s|$|[;&|()])/i;
+const GITHUB_CLI_OCCURRENCE_PATTERN =
+  /(?:^|[;&|()]|\s)["']?(?:[^\s;&|()"']*\/)?g\\?h["']?(?=\s|$|[;&|()])/gi;
 const GITHUB_CLI_MUTATION_PATTERN =
   /\b(?:issue|pr)\s+(?:create|edit|close|reopen|delete)\b/i;
 const GITHUB_CLI_API_PATTERN = /\bgh\s+api\b/i;
@@ -100,20 +103,33 @@ function isReadOnlyGitHubCliInvocation(
   return root === "help" || !subcommand;
 }
 
+function getSingleGitHubCliInvocation(command: string) {
+  const occurrences = [...command.matchAll(GITHUB_CLI_OCCURRENCE_PATTERN)];
+  const invocations = [...command.matchAll(GITHUB_CLI_INVOCATION_PATTERN)];
+  if (occurrences.length !== 1 || invocations.length !== 1) return null;
+
+  const invocation = invocations[0];
+  const invocationStart = invocation.index ?? 0;
+  const remainder = command.slice(invocationStart);
+  const separatorIndex = remainder.search(/[;&|\n]/);
+  return {
+    root: invocation[1]?.toLowerCase(),
+    subcommand: invocation[2]?.toLowerCase(),
+    segment:
+      separatorIndex === -1 ? remainder : remainder.slice(0, separatorIndex),
+  };
+}
+
 function isReadOnlyGitHubCliCommand(command: string) {
   if (!GITHUB_CLI_PATTERN.test(command)) return true;
-
-  let invocationCount = 0;
-  for (const match of command.matchAll(GITHUB_CLI_INVOCATION_PATTERN)) {
-    invocationCount += 1;
-    const root = match[1]?.toLowerCase();
-    const subcommand = match[2]?.toLowerCase();
-    if (!isReadOnlyGitHubCliInvocation(root, subcommand, command)) return false;
-  }
-
-  // A command containing `gh` that the structured matcher could not classify
-  // (for example global flags before a subcommand) fails closed.
-  return invocationCount > 0;
+  const invocation = getSingleGitHubCliInvocation(command);
+  return invocation
+    ? isReadOnlyGitHubCliInvocation(
+        invocation.root,
+        invocation.subcommand,
+        invocation.segment
+      )
+    : false;
 }
 
 export function getBlockedAgentShellCommand(command: string):

@@ -45,6 +45,9 @@ describe("sandbox GitHub capability gate", () => {
       "gh release create v1.0",
       "gh workflow run deploy.yml",
       "gh api graphql -f query='mutation { createIssue(input: {}) { issue { id } } }'",
+      "gh api repos/acme/repo -f name=value; gh api --method GET repos/acme/repo",
+      "/usr/bin/gh pr merge 42 --repo other/repo",
+      String.raw`./bin/g\h release create v1`,
     ]) {
       await expect(tool.execute({ command })).resolves.toMatchObject({
         reason: "github_write_capability_unavailable",
