@@ -97,10 +97,16 @@ function listText(input: {
   fallback: string | null;
   models: string[];
 }) {
-  const current = input.selected ?? input.fallback ?? "No usable model";
-  const source = input.selected
+  const selected =
+    input.selected && input.models.includes(input.selected)
+      ? input.selected
+      : null;
+  const current = selected ?? input.fallback ?? "No usable model";
+  const source = selected
     ? "selected for you in this channel"
-    : "default";
+    : input.selected
+      ? `default; saved selection ${input.selected} is unavailable`
+      : "default";
   return [
     `Current model: ${current} (${source})`,
     "",

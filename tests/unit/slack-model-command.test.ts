@@ -65,6 +65,30 @@ test("lists the current channel-user preference and usable models", async () => 
   assert.match(String(responses[0]?.text), /openai\/gpt-5\.4/);
 });
 
+test("shows the effective fallback when a saved preference is unavailable", async () => {
+  const { createSlackModelCommandHandler } = await loadHandler();
+  const responses: Array<Record<string, unknown>> = [];
+  const handler = createSlackModelCommandHandler({
+    getInstallation: async () => installation,
+    getUserMapping: async () => explicitMapping(),
+    listUsableModels: async () => ["openai/gpt-5.4"],
+    resolveDefaultModel: async () => "openai/gpt-5.4",
+    getPreference: async () => ({ model_id: "anthropic/claude-4" }) as never,
+    postResponse: async (_url, body) => {
+      responses.push(body);
+    },
+  });
+  await handler(payload);
+  assert.match(
+    String(responses[0]?.text),
+    /Current model: openai\/gpt-5\.4 \(default; saved selection anthropic\/claude-4 is unavailable\)/
+  );
+  assert.doesNotMatch(
+    String(responses[0]?.text),
+    /anthropic\/claude-4 \(selected for you in this channel\)/
+  );
+});
+
 test("validates and saves a model for the invoking user and channel", async () => {
   const { createSlackModelCommandHandler } = await loadHandler();
   let saved: Record<string, unknown> | null = null;
