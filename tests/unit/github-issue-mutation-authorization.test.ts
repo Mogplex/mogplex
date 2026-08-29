@@ -45,6 +45,37 @@ test("keeps issue update and comment grants operation-specific", () => {
   );
 });
 
+test("grants only issue fields explicitly named before replacement content", () => {
+  assert.deepEqual(
+    deriveGithubRequestMutationAuthorizations({
+      userText: "Update issue acme/widgets#12 title to New title",
+    }).issueMutations,
+    [
+      {
+        operation: "update",
+        owner: "acme",
+        repo: "widgets",
+        number: 12,
+        allowedFields: ["title"],
+      },
+    ]
+  );
+  assert.deepEqual(
+    deriveGithubRequestMutationAuthorizations({
+      userText: "Update issue acme/widgets#12",
+    }).issueMutations,
+    [
+      {
+        operation: "update",
+        owner: "acme",
+        repo: "widgets",
+        number: 12,
+        allowedFields: [],
+      },
+    ]
+  );
+});
+
 test("does not treat a repository reference in comment text as another target", () => {
   assert.deepEqual(
     deriveGithubRequestMutationAuthorizations({

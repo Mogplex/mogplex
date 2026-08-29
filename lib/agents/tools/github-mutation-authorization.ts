@@ -211,7 +211,10 @@ function issueTargets(
   return [...targets.values()];
 }
 
-function updateAuthorizationConstraints(actionText: string): {
+function updateAuthorizationConstraints(
+  actionText: string,
+  commandArguments: string
+): {
   allowedFields: GithubIssueUpdateField[];
   state?: "open" | "closed";
 } {
@@ -222,13 +225,17 @@ function updateAuthorizationConstraints(actionText: string): {
   if (/\bclose\b/.test(text)) {
     return { allowedFields: ["state"], state: "closed" };
   }
-  const fields: GithubIssueUpdateField[] = [];
-  if (/\btitle\b/.test(text)) fields.push("title");
-  if (/\b(?:body|description)\b/.test(text)) fields.push("body");
-  if (/\bstate\b/.test(text)) fields.push("state");
-  return {
-    allowedFields: fields.length > 0 ? fields : ["title", "body", "state"],
-  };
+  const qualifiers = `${actionText} ${
+    commandArguments.split(
+      /\b(?:to|with|saying|using the text|using this text)\b/i,
+      1
+    )[0]
+  }`.toLowerCase();
+  const allowedFields: GithubIssueUpdateField[] = [];
+  if (/\btitle\b/.test(qualifiers)) allowedFields.push("title");
+  if (/\b(?:body|description)\b/.test(qualifiers)) allowedFields.push("body");
+  if (/\bstate\b/.test(qualifiers)) allowedFields.push("state");
+  return { allowedFields };
 }
 
 function deriveIssueMutationAuthorizations(
@@ -250,7 +257,7 @@ function deriveIssueMutationAuthorizations(
         : {
             ...target,
             operation,
-            ...updateAuthorizationConstraints(command.text),
+            ...updateAuthorizationConstraints(command.text, command.arguments),
           }
     );
   }
