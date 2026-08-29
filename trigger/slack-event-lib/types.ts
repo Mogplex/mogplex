@@ -178,6 +178,13 @@ export type SlackEventTaskDeps = {
     expectedUpdatedAt?: string | null;
   }) => Promise<void>;
   runAgent: typeof runChatAgent;
+  resolveModelPreference?: (input: {
+    installationId: string;
+    channelId: string;
+    slackUserId: string;
+    mogplexUserId: string;
+    teamId: string | null;
+  }) => Promise<string | null>;
   fetchAttachment: (input: {
     botToken: string;
     url: string;

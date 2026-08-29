@@ -82,7 +82,7 @@ function assertAllowedResponseUrl(responseUrl: string): void {
   }
 }
 
-async function defaultPostResponse(
+export async function postSlackResponse(
   responseUrl: string,
   body: Record<string, unknown>
 ): Promise<void> {
@@ -101,7 +101,7 @@ const defaultDeps: SlackInteractivityDeps = {
   getInstallation: getSlackInstallationByTeamId,
   getUserMapping: getSlackUserMapping,
   cancelRun: cancelMogplexApiRun,
-  postResponse: defaultPostResponse,
+  postResponse: postSlackResponse,
 };
 
 async function respondEphemeral(
