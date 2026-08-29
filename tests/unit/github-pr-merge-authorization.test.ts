@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveGithubPullRequestMergeAuthorization } from "@/lib/agents/tools/github-pr-merge";
+import { deriveGithubRequestMutationAuthorizations } from "@/lib/agents/tools/github-mutation-authorization";
+
+const deriveMerge = (
+  input: Parameters<typeof deriveGithubRequestMutationAuthorizations>[0]
+) => deriveGithubRequestMutationAuthorizations(input).pullRequestMerge;
 
 test("derives merge consent only from an explicit request with an exact target", () => {
   assert.deepEqual(
-    deriveGithubPullRequestMergeAuthorization({
+    deriveMerge({
       userText: "Please merge PR #84 in acme/widgets",
     }),
     { owner: "acme", repo: "widgets", number: 84 }
   );
   assert.deepEqual(
-    deriveGithubPullRequestMergeAuthorization({
+    deriveMerge({
       userText: "Can you merge https://github.com/acme/widgets/pull/84?",
     }),
     { owner: "acme", repo: "widgets", number: 84 }
@@ -19,7 +23,7 @@ test("derives merge consent only from an explicit request with an exact target",
 
 test("does not authorize ambiguous, informational, or negative requests", () => {
   assert.equal(
-    deriveGithubPullRequestMergeAuthorization({
+    deriveMerge({
       userText: "Merge it",
       repoOwner: "acme",
       repoName: "widgets",
@@ -27,13 +31,13 @@ test("does not authorize ambiguous, informational, or negative requests", () => 
     null
   );
   assert.equal(
-    deriveGithubPullRequestMergeAuthorization({
+    deriveMerge({
       userText: "Is PR #84 in acme/widgets ready to merge?",
     }),
     null
   );
   assert.equal(
-    deriveGithubPullRequestMergeAuthorization({
+    deriveMerge({
       userText: "Do not merge PR #84 in acme/widgets",
     }),
     null
@@ -42,11 +46,30 @@ test("does not authorize ambiguous, informational, or negative requests", () => 
 
 test("allows an exact contextual PR only when the request is an instruction", () => {
   assert.deepEqual(
-    deriveGithubPullRequestMergeAuthorization({
+    deriveMerge({
       userText: "Merge PR #84",
       repoOwner: "acme",
       repoName: "widgets",
     }),
     { owner: "acme", repo: "widgets", number: 84 }
+  );
+});
+
+test("binds consent to the target after the merge instruction", () => {
+  assert.deepEqual(
+    deriveMerge({
+      userText:
+        "Review https://github.com/acme/widgets/pull/84, then merge evil/service PR #12",
+    }),
+    { owner: "evil", repo: "service", number: 12 }
+  );
+});
+
+test("rejects a merge clause containing multiple targets", () => {
+  assert.equal(
+    deriveMerge({
+      userText: "Merge acme/widgets#84 or evil/service#12",
+    }),
+    null
   );
 });

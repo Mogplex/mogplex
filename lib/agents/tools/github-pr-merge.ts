@@ -1,101 +1,17 @@
 import { z } from "zod";
 import { mergePullRequestIfSafe } from "@/lib/github-merge";
 import { defineTool } from "./shared";
+import type { GithubPullRequestMergeAuthorization } from "./github-mutation-authorization";
 import {
   findInstallationToken,
   normalizeLogin,
   normalizeRepoName,
 } from "./github-shared";
 
-export type GithubPullRequestMergeAuthorization = {
-  owner: string;
-  repo: string;
-  number: number;
-};
-
 type GithubPullRequestMergeOptions = {
   userId?: string | null;
   authorization?: GithubPullRequestMergeAuthorization | null;
 };
-
-function isExplicitMergeInstruction(text: string) {
-  if (/\b(?:do not|don't|dont|never)\b.{0,40}\bmerge\b/i.test(text)) {
-    return false;
-  }
-  return (
-    /(?:^|[.!?]\s*|\bplease\s+|\bthen\s+|\bnow\s+)(?:squash[- ]?)?merge\b/i.test(
-      text
-    ) ||
-    /\b(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:squash[- ]?)?merge\b/i.test(
-      text
-    ) ||
-    /\bi\s+(?:want|need)\s+you\s+to\s+(?:squash[- ]?)?merge\b/i.test(text)
-  );
-}
-
-function parseExplicitMergeTarget(
-  text: string,
-  context: { repoOwner?: string | null; repoName?: string | null }
-): GithubPullRequestMergeAuthorization | null {
-  const githubUrl = text.match(
-    /github\.com\/([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+)\/pull\/(\d+)/i
-  );
-  if (githubUrl) {
-    return {
-      owner: githubUrl[1],
-      repo: githubUrl[2].replace(/\.git$/i, ""),
-      number: Number(githubUrl[3]),
-    };
-  }
-
-  const shorthand = text.match(
-    /\b([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+?)#(\d+)\b/i
-  );
-  if (shorthand) {
-    return {
-      owner: shorthand[1],
-      repo: shorthand[2].replace(/\.git$/i, ""),
-      number: Number(shorthand[3]),
-    };
-  }
-
-  const repository = text.match(
-    /\b([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+)\b/i
-  );
-  const pullRequest = text.match(/\b(?:pr|pull request)\s*#?\s*(\d+)\b/i);
-  if (repository && pullRequest) {
-    return {
-      owner: repository[1],
-      repo: repository[2].replace(/\.git$/i, ""),
-      number: Number(pullRequest[1]),
-    };
-  }
-
-  const contextualPullRequest = text.match(/(?:\bpr\s*#?\s*|#)(\d+)\b/i);
-  if (context.repoOwner && context.repoName && contextualPullRequest) {
-    return {
-      owner: context.repoOwner,
-      repo: context.repoName,
-      number: Number(contextualPullRequest[1]),
-    };
-  }
-  return null;
-}
-
-/**
- * Derive a narrow mutation grant from the current user-authored request. The
- * model cannot create or widen this authorization, and prior assistant/tool
- * content is deliberately excluded from the decision.
- */
-export function deriveGithubPullRequestMergeAuthorization(input: {
-  userText?: string | null;
-  repoOwner?: string | null;
-  repoName?: string | null;
-}): GithubPullRequestMergeAuthorization | null {
-  const text = input.userText?.trim() ?? "";
-  if (!text || !isExplicitMergeInstruction(text)) return null;
-  return parseExplicitMergeTarget(text, input);
-}
 
 function isAuthorizedMergeTarget(
   authorization: GithubPullRequestMergeAuthorization | null | undefined,

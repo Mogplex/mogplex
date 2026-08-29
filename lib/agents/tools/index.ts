@@ -31,11 +31,11 @@ import {
   createGithubIssueCommentTool,
   createGithubIssueUpdateTool,
 } from "./github-issue-mutation";
+import { createGithubPullRequestMergeTool } from "./github-pr-merge";
 import {
-  createGithubPullRequestMergeTool,
-  deriveGithubPullRequestMergeAuthorization,
-  type GithubPullRequestMergeAuthorization,
-} from "./github-pr-merge";
+  deriveGithubRequestMutationAuthorizations,
+  type GithubRequestMutationAuthorizations,
+} from "./github-mutation-authorization";
 import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { virtualExecTool } from "./virtual-exec";
@@ -48,6 +48,18 @@ import {
 import type { RepoToolDefaults } from "./shared";
 
 export * from "./public";
+
+const EMPTY_GITHUB_REQUEST_AUTHORIZATIONS: GithubRequestMutationAuthorizations =
+  {
+    pullRequestMerge: null,
+    issueMutations: [],
+  };
+
+function githubRequestAuthorizations(
+  value: GithubRequestMutationAuthorizations | undefined
+) {
+  return value ?? EMPTY_GITHUB_REQUEST_AUTHORIZATIONS;
+}
 
 /**
  * Capability tag per static tool key. Connection (REST / MCP) tools share
@@ -129,7 +141,7 @@ export function buildStaticTools(
   capabilities: ReadonlySet<Capability> = ALL_CAPABILITIES,
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
   githubPrSearchOptions?: GithubPrSearchOptions,
-  githubPullRequestMergeAuthorization?: GithubPullRequestMergeAuthorization | null
+  githubRequestMutationAuthorizations?: GithubRequestMutationAuthorizations
 ) {
   // Default to an empty memory context when not provided. Production calls
   // from buildTools() always pass an explicit context; direct callers
@@ -138,6 +150,9 @@ export function buildStaticTools(
   const memoryTools = userId
     ? createMemoryTools(userId, repoId, memoryContext ?? {})
     : {};
+  const requestAuthorizations = githubRequestAuthorizations(
+    githubRequestMutationAuthorizations
+  );
   const all = {
     virtual_exec: virtualExecTool,
     web_fetch: webFetch,
@@ -164,11 +179,17 @@ export function buildStaticTools(
             userId,
           }),
           github_create_issue: createGithubIssueTool({ userId }),
-          github_update_issue: createGithubIssueUpdateTool({ userId }),
-          github_comment_issue: createGithubIssueCommentTool({ userId }),
+          github_update_issue: createGithubIssueUpdateTool({
+            userId,
+            authorizations: requestAuthorizations.issueMutations,
+          }),
+          github_comment_issue: createGithubIssueCommentTool({
+            userId,
+            authorizations: requestAuthorizations.issueMutations,
+          }),
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,
-            authorization: githubPullRequestMergeAuthorization,
+            authorization: requestAuthorizations.pullRequestMerge,
           }),
         }
       : {}),
@@ -396,7 +417,7 @@ export async function buildTools(opts: {
       oauthToken: githubPrSearchOAuthToken,
       userId: opts.userId,
     },
-    deriveGithubPullRequestMergeAuthorization({
+    deriveGithubRequestMutationAuthorizations({
       userText: opts.latestUserText,
       repoOwner: opts.repoOwner,
       repoName: opts.repoName,
