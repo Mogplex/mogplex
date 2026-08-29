@@ -288,6 +288,18 @@ describe("orchestrator resource decision prompt", () => {
     );
   });
 
+  it("treats sandbox cleanup and final status as part of task completion", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      availableToolNames: ["run_command", "sandbox_stop"],
+    });
+    expect(prompt).toContain(
+      "After a blocked, failed, or completed one-shot task, stop compute"
+    );
+    expect(prompt).toContain(
+      "never claim that compute stopped unless the stop was confirmed"
+    );
+  });
+
   it("directs native GitHub issue mutations to the scoped issue tool", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",

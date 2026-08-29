@@ -1,4 +1,9 @@
-import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import {
+  streamText,
+  convertToModelMessages,
+  createUIMessageStreamResponse,
+  stepCountIs,
+} from "ai";
 import { createAiCall } from "@/lib/interactive-runs";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { promoteMemoriesForConversation } from "@/lib/agents/memory-promotion-runner";
@@ -41,6 +46,10 @@ import {
 import { normalizeControlChatMessages } from "./messages";
 import { wrapControlResponseLifecycle } from "./stream-lifecycle";
 import { createControlFinalizationGuard } from "./finalization-guard";
+import {
+  appendSandboxTaskLifecycleFooter,
+  createSandboxTaskLifecycle,
+} from "@/lib/agents/orchestrator/sandbox-task-lifecycle";
 import type {
   ControlChatRequestBody,
   ActiveControlCall,
@@ -187,6 +196,11 @@ export async function executeControlChatRequest(input: {
     );
 
     const finalization = createControlFinalizationGuard();
+    const sandboxTaskLifecycle = createSandboxTaskLifecycle({
+      userId: input.userId,
+      userText: input.latestUserText,
+      binding: sandboxBinding,
+    });
     let terminalFailure: string | null = null;
     const latestSteps: Array<{
       toolCalls?: Array<{ toolName: string; input?: unknown }>;
@@ -206,6 +220,7 @@ export async function executeControlChatRequest(input: {
 
     const finalizeCancelled = async () => {
       await finalization.run(async () => {
+        await sandboxTaskLifecycle.cleanup();
         stampSandboxMetadata();
         await finalizeCancelledControlRun({
           activeCall,
@@ -220,6 +235,7 @@ export async function executeControlChatRequest(input: {
 
     const finalizeStreamFailure = async () => {
       await finalization.run(async () => {
+        await sandboxTaskLifecycle.cleanup();
         stampSandboxMetadata();
         // AI SDK 6 turns provider/model failures into stream parts and invokes
         // onFinish with usage. This path is only for a rejected response body,
@@ -266,6 +282,11 @@ export async function executeControlChatRequest(input: {
         selectedSandboxId: sandboxBinding.sandboxId,
       })
     );
+    const startToolTelemetry = createToolCallStartHandler(
+      activeCall,
+      input.userId,
+      scope
+    );
 
     const result = streamText({
       model,
@@ -280,12 +301,12 @@ export async function executeControlChatRequest(input: {
         repoName: input.body.repoName,
         userRequestText: input.latestUserText,
       }),
-      experimental_onToolCallStart: createToolCallStartHandler(
-        activeCall,
-        input.userId,
-        scope
-      ),
+      experimental_onToolCallStart(event) {
+        sandboxTaskLifecycle.onToolStart(event);
+        startToolTelemetry(event);
+      },
       experimental_onToolCallFinish(event) {
+        sandboxTaskLifecycle.onToolFinish(event);
         terminalFailure = updateSandboxStartTerminalFailure(
           terminalFailure,
           event
@@ -312,6 +333,7 @@ export async function executeControlChatRequest(input: {
         let finalizedNow = false;
         try {
           finalizedNow = await finalization.run(async () => {
+            await sandboxTaskLifecycle.cleanup();
             stampSandboxMetadata();
             await finalizeFinishedControlRun({
               activeCall,
@@ -350,7 +372,7 @@ export async function executeControlChatRequest(input: {
       },
     });
 
-    const response = result.toUIMessageStreamResponse({
+    const uiStream = result.toUIMessageStream({
       messageMetadata: () => ({ ai_call_id: activeCall.id }),
       onError: (error) =>
         sanitizeAgentUserFacingError(
@@ -359,6 +381,12 @@ export async function executeControlChatRequest(input: {
             repoName: input.body.repoName,
           }
         ),
+    });
+    const response = createUIMessageStreamResponse({
+      stream: appendSandboxTaskLifecycleFooter(uiStream, {
+        footer: sandboxTaskLifecycle.footer,
+        textPartId: `sandbox-lifecycle-${activeCall.id}`,
+      }),
     });
 
     return {
