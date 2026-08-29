@@ -15,6 +15,8 @@ export type OrchestratorPromptContext = {
   controlTarget?: string;
   controlPermissions?: string;
   controlMode?: string;
+  /** Authenticated user explicitly requested infrastructure diagnostics. */
+  allowInfrastructureDiagnostics?: boolean;
   /** Exact tool names exposed to this model invocation. */
   availableToolNames?: string[];
   /** Server-owned signal that execution must wait for an operator choice. */
@@ -45,7 +47,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}${buildUserFacingInfrastructureBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -121,6 +123,26 @@ When a worker agent fails or gets stuck:
 3. Use only the callable tools to gather evidence or continue safely
 4. Report any capability gap explicitly instead of inventing a tool call
 </debugging>`;
+}
+
+function buildUserFacingInfrastructureBlock(ctx: OrchestratorPromptContext) {
+  if (ctx.allowInfrastructureDiagnostics) {
+    return `
+<user-facing-infrastructure-boundary>
+USER-FACING INFRASTRUCTURE BOUNDARY: The authenticated operator explicitly requested infrastructure diagnostics. Include only the details needed for that diagnostic request and only for resources in the server-owned context. Never expose credentials or secrets. Return to product-level language for unrelated status and errors.
+</user-facing-infrastructure-boundary>
+`;
+  }
+
+  return `
+<user-facing-infrastructure-boundary>
+USER-FACING INFRASTRUCTURE BOUNDARY: Translate tool and runtime metadata into product-level language before responding.
+- Do not expose provider names, internal runtime topology, compute and deployment identifiers, internal URLs, or absolute host filesystem paths.
+- Use repository-relative paths when a file location helps the operator.
+- Preserve useful status and actionable next steps, such as whether the development environment is running or stopped and what the operator must do next.
+- Never copy raw stack traces, configuration variable names, credentials, or internal service errors into a response.
+</user-facing-infrastructure-boundary>
+`;
 }
 
 function buildRequiredSandboxSelectionBlock(

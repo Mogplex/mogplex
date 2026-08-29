@@ -420,3 +420,51 @@ test("control timeline renders agent markdown as formatted HTML", async ({
     page.getByRole("log", { name: "Conversation" }).getByText("| --- |")
   ).toHaveCount(0);
 });
+
+test("control timeline does not expose raw infrastructure details", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await mockControlSessionBootstrap(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+
+  const rawAgentText =
+    "The Vercel Sandbox failed at /Users/runner/acme/widgets/.worktrees/sbx_abcdef/src/app.ts for deployment dpl_123456.";
+  const streamChunks = [
+    { type: "start" },
+    { type: "text-start", id: "t1" },
+    { type: "text-delta", id: "t1", delta: rawAgentText },
+    { type: "text-end", id: "t1" },
+    { type: "finish" },
+  ];
+  const streamBody =
+    streamChunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") +
+    "data: [DONE]\n\n";
+  await page.route("**/api/control/chat", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: streamBody,
+    })
+  );
+
+  await page.goto(scopedPath("control"));
+  await page.waitForLoadState("networkidle");
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Ship the fix");
+  await page.getByRole("button", { name: "Start mission" }).click();
+
+  const conversation = page.getByRole("log", { name: "Conversation" });
+  await expect(conversation).toContainText("development environment failed");
+  await expect(conversation).toContainText("src/app.ts");
+  await expect(conversation).not.toContainText("Vercel Sandbox");
+  await expect(conversation).not.toContainText("/Users/runner");
+  await expect(conversation).not.toContainText("dpl_123456");
+});

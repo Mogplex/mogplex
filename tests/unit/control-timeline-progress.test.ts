@@ -170,6 +170,68 @@ test("assistant text is primary conversation content, not a tool event", () => {
   ]);
 });
 
+test("assistant text and tool errors hide infrastructure by default", () => {
+  const messages = [
+    {
+      id: "user-1",
+      role: "user",
+      parts: [{ type: "text", text: "Ship the fix" }],
+    },
+    assistant([
+      {
+        type: "text",
+        text: "Vercel Sandbox failed at /Users/me/repo/.worktrees/sbx_abcdef/src/app.ts for deployment dpl_123456.",
+      },
+      {
+        type: "tool-run_command",
+        toolCallId: "run-1",
+        state: "output-error",
+        input: {},
+        errorText: "at /Users/me/repo/src/app.ts with sbx_abcdef",
+      },
+    ]),
+  ] as UIMessage[];
+
+  const events = buildCombinedTimeline(undefined, messages);
+  const serialized = JSON.stringify(events);
+
+  assert.match(serialized, /development environment/);
+  assert.match(serialized, /src\/app\.ts/);
+  assert.doesNotMatch(
+    serialized,
+    /Vercel Sandbox|\/Users\/me|dpl_123456|sbx_abcdef/
+  );
+});
+
+test("assistant text preserves requested diagnostics while redacting secrets", () => {
+  const messages = [
+    {
+      id: "user-1",
+      role: "user",
+      parts: [
+        {
+          type: "text",
+          text: "Show the raw infrastructure diagnostics and absolute paths",
+        },
+      ],
+    },
+    assistant([
+      {
+        type: "text",
+        text: "Vercel Sandbox at /Users/me/repo with token sk-secretvalue",
+      },
+    ]),
+  ] as UIMessage[];
+
+  const events = buildCombinedTimeline(undefined, messages);
+  const serialized = JSON.stringify(events);
+
+  assert.match(serialized, /Vercel Sandbox/);
+  assert.match(serialized, /\/Users\/me\/repo/);
+  assert.doesNotMatch(serialized, /sk-secretvalue/);
+  assert.match(serialized, /\[redacted\]/);
+});
+
 test("tool details expose argument names without raw values", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([

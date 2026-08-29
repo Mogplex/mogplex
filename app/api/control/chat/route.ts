@@ -13,7 +13,12 @@ import { executeControlChatRequest } from "./_lib/execute";
 import {
   ControlChatValidationError,
   normalizeControlChatMessages,
+  readLatestControlUserText,
 } from "./_lib/messages";
+import {
+  isExplicitInfrastructureDiagnosticRequest,
+  sanitizeAgentUserFacingText,
+} from "@/lib/agents/user-facing-output";
 import type {
   ControlChatRequestBody,
   ControlStartupFailure,
@@ -45,14 +50,18 @@ export async function POST(req: Request) {
     ...rawBody,
     mode: rawBody.mode ?? null,
   };
+  let normalizedMessages;
   try {
-    normalizeControlChatMessages(body.messages);
+    normalizedMessages = normalizeControlChatMessages(body.messages);
   } catch (error) {
     if (error instanceof ControlChatValidationError) {
       return Response.json({ error: error.message }, { status: 400 });
     }
     throw error;
   }
+  const latestUserText = readLatestControlUserText(normalizedMessages);
+  const allowInfrastructureDiagnostics =
+    isExplicitInfrastructureDiagnosticRequest(latestUserText);
   const scope = getControlChatRunScope(body);
 
   // Use same rate limiting as /api/chat
@@ -77,11 +86,18 @@ export async function POST(req: Request) {
       resolvedModel,
       limitClaimId,
       callStartedAt,
+      allowInfrastructureDiagnostics,
+      latestUserText,
     });
     return result.response;
   } catch (error) {
-    const message =
+    const internalMessage =
       error instanceof Error ? error.message : "Failed to start control run";
+    const message = sanitizeAgentUserFacingText(internalMessage, {
+      allowInfrastructureDiagnostics,
+      repoName: body.repoName,
+      userRequestText: latestUserText,
+    });
     const aiCall = (error as ControlStartupFailure | null)?.aiCall ?? null;
 
     await persistControlStartupFailure({
@@ -90,7 +106,7 @@ export async function POST(req: Request) {
       scope,
       callStartedAt,
       limitClaimId,
-      message,
+      message: internalMessage,
     });
 
     if (isModelAllowlistUnavailableError(error)) {
