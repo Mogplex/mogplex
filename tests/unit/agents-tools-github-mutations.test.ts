@@ -315,6 +315,11 @@ test("github_merge_pull_request safely merges a PR in another installed reposito
         const { createGithubPullRequestMergeTool } = await loadToolsModule();
         const tool = createGithubPullRequestMergeTool({
           userId: "user-1",
+          authorization: {
+            owner: "acme",
+            repo: "widgets",
+            number: 84,
+          },
         }) as unknown as {
           execute: (input: {
             owner: string;
@@ -360,4 +365,26 @@ test("github_merge_pull_request safely merges a PR in another installed reposito
       },
     },
   ]);
+});
+
+test("github_merge_pull_request rejects a model-selected target without request consent", async () => {
+  const { createGithubPullRequestMergeTool } = await loadToolsModule();
+  const tool = createGithubPullRequestMergeTool({
+    userId: "user-1",
+  }) as unknown as {
+    execute: (input: {
+      owner: string;
+      repo: string;
+      number: number;
+      expectedHeadSha: string;
+    }) => Promise<{ error?: string }>;
+  };
+
+  const result = await tool.execute({
+    owner: "acme",
+    repo: "widgets",
+    number: 84,
+    expectedHeadSha: "4928f94e852191d761352294ae1eabfa34b7d0ab",
+  });
+  assert.match(result.error ?? "", /not explicitly authorized/i);
 });

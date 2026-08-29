@@ -25,6 +25,7 @@ export function createSlackRunFinalization(input: {
     onToolStart: lifecycle.onToolStart,
     onToolFinish: lifecycle.onToolFinish,
     cleanup: lifecycle.cleanup,
+    cleanupAfterInterruption: lifecycle.cleanupAfterInterruption,
     async finalize(finalText: string) {
       const text = sanitizeAgentUserFacingText(finalText, {
         repoName: input.repoName,

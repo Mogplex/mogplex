@@ -306,6 +306,12 @@ export function createSandboxTaskLifecycle(input: {
     return new Promise<void>((resolve) => sandboxToolIdleWaiters.add(resolve));
   };
 
+  const abandonInFlightSandboxTools = () => {
+    inFlightSandboxTools = 0;
+    for (const resolve of sandboxToolIdleWaiters) resolve();
+    sandboxToolIdleWaiters.clear();
+  };
+
   const performCleanup = async (): Promise<SandboxTaskLifecycleOutcome> => {
     await waitForSandboxTools();
     if (usedSandboxTool) touchBoundSandbox();
@@ -354,10 +360,16 @@ export function createSandboxTaskLifecycle(input: {
     return cleanupPromise;
   };
 
+  const cleanupAfterInterruption = () => {
+    abandonInFlightSandboxTools();
+    return cleanup();
+  };
+
   return {
     onToolStart,
     onToolFinish,
     cleanup,
+    cleanupAfterInterruption,
     footer: async () => computeFooter(await cleanup()),
   };
 }

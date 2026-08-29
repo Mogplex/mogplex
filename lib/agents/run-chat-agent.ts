@@ -293,7 +293,7 @@ export async function runChatAgent(
   try {
     await consumeStreamWithCallback(result, progressReporter);
   } catch (error) {
-    await finalization.cleanup();
+    await finalization.cleanupAfterInterruption();
     const message = error instanceof Error ? error.message : "Stream error";
     recordRunChatAiCall({
       context: input,

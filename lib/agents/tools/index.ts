@@ -31,7 +31,11 @@ import {
   createGithubIssueCommentTool,
   createGithubIssueUpdateTool,
 } from "./github-issue-mutation";
-import { createGithubPullRequestMergeTool } from "./github-pr-merge";
+import {
+  createGithubPullRequestMergeTool,
+  deriveGithubPullRequestMergeAuthorization,
+  type GithubPullRequestMergeAuthorization,
+} from "./github-pr-merge";
 import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { virtualExecTool } from "./virtual-exec";
@@ -43,46 +47,7 @@ import {
 } from "./connections";
 import type { RepoToolDefaults } from "./shared";
 
-// Re-export from submodules
-export { webFetch, webSearch, browseSkills, browseVercelDocs } from "./web";
-export {
-  createTerminalExec,
-  terminalExec,
-  createWriteFile,
-  createStartSandbox,
-  createStopSandbox,
-} from "./sandbox";
-export { createReadFile, createListFiles } from "./github-files";
-export {
-  createGithubApi,
-  createGithubPullRequestTool,
-  createGithubPullRequestUpdateTool,
-} from "./github-api";
-export {
-  createGithubPrSearch,
-  type GithubPrSearchOptions,
-} from "./github-pr-search";
-export { createGithubRepoList } from "./github-repo-list";
-export {
-  createGithubIssueTool,
-  createScopedGithubIssueTool,
-} from "./github-issue";
-export {
-  createGithubIssueCommentTool,
-  createGithubIssueUpdateTool,
-} from "./github-issue-mutation";
-export { createGithubPullRequestMergeTool } from "./github-pr-merge";
-export { createGithubPullRequestStatusTool } from "./github-pr-status";
-export { createMemoryTools, type MemoryToolContext } from "./memory";
-export { virtualExecTool } from "./virtual-exec";
-export {
-  buildDynamicConnectionTools,
-  canUseConnectionTools,
-  loadScopedConnections,
-  cleanupMcpClients,
-  DYNAMIC_CONNECTION_CAPABILITY,
-} from "./connections";
-export type { RepoToolDefaults } from "./shared";
+export * from "./public";
 
 /**
  * Capability tag per static tool key. Connection (REST / MCP) tools share
@@ -163,7 +128,8 @@ export function buildStaticTools(
    */
   capabilities: ReadonlySet<Capability> = ALL_CAPABILITIES,
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
-  githubPrSearchOptions?: GithubPrSearchOptions
+  githubPrSearchOptions?: GithubPrSearchOptions,
+  githubPullRequestMergeAuthorization?: GithubPullRequestMergeAuthorization | null
 ) {
   // Default to an empty memory context when not provided. Production calls
   // from buildTools() always pass an explicit context; direct callers
@@ -202,6 +168,7 @@ export function buildStaticTools(
           github_comment_issue: createGithubIssueCommentTool({ userId }),
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,
+            authorization: githubPullRequestMergeAuthorization,
           }),
         }
       : {}),
@@ -379,6 +346,8 @@ export async function buildTools(opts: {
    * durably deduplicated within this scope.
    */
   toolExecutionIdempotencyKey?: string | null;
+  /** Current user-authored request, used only for narrow mutation consent. */
+  latestUserText?: string | null;
 }): Promise<{
   tools: Record<string, Tool>;
   connections: Connection[];
@@ -426,7 +395,12 @@ export async function buildTools(opts: {
     {
       oauthToken: githubPrSearchOAuthToken,
       userId: opts.userId,
-    }
+    },
+    deriveGithubPullRequestMergeAuthorization({
+      userText: opts.latestUserText,
+      repoOwner: opts.repoOwner,
+      repoName: opts.repoName,
+    })
   );
 
   const emptyCleanup = async () => undefined;
