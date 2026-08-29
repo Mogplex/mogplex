@@ -190,6 +190,8 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
   )
     ? "- Use github_create_issue for an explicitly requested GitHub issue in the active repository. Never use run_command to install GitHub tooling, inspect credentials, or call GitHub APIs for that action.\n"
     : "";
+  const githubCapabilityGuidance =
+    "- GitHub writes must use a callable, server-scoped tool for the active repository. If the target differs from the active repository or the requested GitHub write action has no callable scoped tool, including a pull request merge, do not call run_command or sandbox_start to inspect CLI availability, credentials, or permissions. Explain that no supported write capability is available and tell the operator to select or connect the target repository with write access, or complete the action in GitHub.\n";
   const sandboxStartGuidance =
     ctx.sandboxSelectionRequired || !sandboxStartAvailable
       ? ""
@@ -200,7 +202,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
 
   return `
 <resource-decision-contract>
-${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}${githubIssueGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
+${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}${githubIssueGuidance}${githubCapabilityGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
 - Use plan_mission to create task identities before isolated coding work.
 - A clear request to fix or implement code in an isolated task checkout and launch its worker is already a complete coding launch request. The first emitted tool call MUST be plan_mission. Do not call summarize_history, list_files, read_file, search_repo, memory_search, run_command, or sandbox_start first.
 - Call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string. If no running sandbox is selected after planning, call sandbox_start exactly once and wait for its event-driven result. Only after it returns running, call spawn_worktree once for each returned task and spawn_subagent for each resulting worktree. Stop after the requested workers start. Discovery may precede planning only when the operator explicitly requests discovery or has not supplied enough scope to define task boundaries.

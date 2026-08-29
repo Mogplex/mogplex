@@ -15,3 +15,19 @@ test("shell guard blocks credential alternatives without matching a benign env f
     "github_mutation_blocked"
   );
 });
+
+test("shell guard rejects unsupported PR merges and shell credential probes", () => {
+  const crossRepoMerge = getBlockedAgentShellCommand(
+    "gh pr merge 42 --repo other-owner/other-repo --squash"
+  );
+  assert.equal(crossRepoMerge?.reason, "github_write_capability_unavailable");
+  assert.match(crossRepoMerge?.error ?? "", /select or connect/i);
+  assert.match(crossRepoMerge?.error ?? "", /write access/i);
+
+  const missingShellCredentials = getBlockedAgentShellCommand("gh auth status");
+  assert.equal(
+    missingShellCredentials?.reason,
+    "github_write_capability_unavailable"
+  );
+  assert.match(missingShellCredentials?.error ?? "", /sandbox.*cannot/i);
+});

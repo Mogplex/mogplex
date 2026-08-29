@@ -302,6 +302,18 @@ describe("orchestrator resource decision prompt", () => {
     );
   });
 
+  it("stops unsupported cross-repository GitHub writes before compute", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/active-repo",
+      availableToolNames: ["run_command", "sandbox_start"],
+    });
+
+    expect(prompt).toContain("requested GitHub write action has no callable");
+    expect(prompt).toContain("pull request merge");
+    expect(prompt).toContain("do not call run_command or sandbox_start");
+    expect(prompt).toContain("select or connect the target repository");
+  });
+
   it("keeps plan mode non-mutating and handles empty context", () => {
     const planPrompt = buildOrchestratorSystemPrompt({
       controlMode: "plan",
