@@ -13,13 +13,31 @@ const HTTP_MUTATION_FLAG_PATTERN =
   /(?:-X|--request)\s+(?:POST|PUT|PATCH|DELETE)\b/i;
 const HTTP_DATA_FLAG_PATTERN = /(?:-d|--data(?:-[\w-]+)?)\b/i;
 const GITHUB_CLI_PATTERN = /\bgh\b/i;
-const GITHUB_CLI_MUTATION_PATTERN =
-  /\b(?:issue|pr)\s+(?:create|edit|close|reopen|delete)\b/i;
 const GITHUB_CLI_API_PATTERN = /\bgh\s+api\b/i;
-const GITHUB_CLI_PR_MERGE_PATTERN = /\bgh\s+pr\s+merge\b/i;
-const GITHUB_CLI_AUTH_PATTERN = /\bgh\s+auth(?:\s|$)/i;
+const GITHUB_CLI_API_FIELD_PATTERN =
+  /(?:^|\s)(?:-f|-F|--raw-field|--field|--input)(?:\s|=|$)/i;
+const GITHUB_CLI_API_GET_PATTERN =
+  /(?:^|\s)(?:(?:-X|--method)\s*=?\s*GET)(?:\s|$)/i;
+const GITHUB_GRAPHQL_MUTATION_PATTERN = /\bmutation\b/i;
+const GITHUB_CLI_INVOCATION_PATTERN =
+  /\bgh\s+([a-z][\w-]*)(?:\s+([a-z][\w-]*))?/gi;
 const GITHUB_WRITE_CAPABILITY_ERROR =
   "GitHub writes require a scoped integration with write access to the target repository. Select or connect the target repository with write access, then retry through a supported GitHub action; a sandbox cannot provide GitHub credentials or permissions.";
+
+const READ_ONLY_GITHUB_CLI_COMMANDS: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  help: new Set(),
+  status: new Set(),
+  version: new Set(),
+  issue: new Set(["list", "status", "view"]),
+  pr: new Set(["checks", "diff", "list", "status", "view"]),
+  release: new Set(["download", "list", "view"]),
+  repo: new Set(["list", "view"]),
+  run: new Set(["list", "view", "watch"]),
+  search: new Set(["code", "commits", "issues", "prs", "repos"]),
+  workflow: new Set(["list", "view"]),
+};
 
 /*
  * This prevents common accidental credential reads and mutation bypasses, but
@@ -38,14 +56,52 @@ function isRawGitHubMutationCommand(command: string) {
   );
 }
 
-function isGitHubCliMutationCommand(command: string) {
+function isReadOnlyGitHubApiCommand(command: string) {
+  if (!GITHUB_CLI_API_PATTERN.test(command)) return false;
+  if (
+    GITHUB_GRAPHQL_MUTATION_PATTERN.test(command) ||
+    HTTP_MUTATION_METHOD_PATTERN.test(command) ||
+    HTTP_MUTATION_FLAG_PATTERN.test(command)
+  ) {
+    return false;
+  }
   return (
-    GITHUB_CLI_PATTERN.test(command) &&
-    (GITHUB_CLI_MUTATION_PATTERN.test(command) ||
-      (GITHUB_CLI_API_PATTERN.test(command) &&
-        (HTTP_MUTATION_METHOD_PATTERN.test(command) ||
-          HTTP_MUTATION_FLAG_PATTERN.test(command))))
+    !GITHUB_CLI_API_FIELD_PATTERN.test(command) ||
+    GITHUB_CLI_API_GET_PATTERN.test(command)
   );
+}
+
+function isReadOnlyGitHubCliInvocation(
+  root: string | undefined,
+  subcommand: string | undefined,
+  command: string
+) {
+  if (root === "api") return isReadOnlyGitHubApiCommand(command);
+  const allowedSubcommands = root
+    ? READ_ONLY_GITHUB_CLI_COMMANDS[root]
+    : undefined;
+  if (!allowedSubcommands) return false;
+  if (allowedSubcommands.size > 0) {
+    return Boolean(subcommand && allowedSubcommands.has(subcommand));
+  }
+  if (subcommand?.startsWith("-")) return true;
+  return root === "help" || !subcommand;
+}
+
+function isReadOnlyGitHubCliCommand(command: string) {
+  if (!GITHUB_CLI_PATTERN.test(command)) return true;
+
+  let invocationCount = 0;
+  for (const match of command.matchAll(GITHUB_CLI_INVOCATION_PATTERN)) {
+    invocationCount += 1;
+    const root = match[1]?.toLowerCase();
+    const subcommand = match[2]?.toLowerCase();
+    if (!isReadOnlyGitHubCliInvocation(root, subcommand, command)) return false;
+  }
+
+  // A command containing `gh` that the structured matcher could not classify
+  // (for example global flags before a subcommand) fails closed.
+  return invocationCount > 0;
 }
 
 export function getBlockedAgentShellCommand(command: string):
@@ -57,10 +113,7 @@ export function getBlockedAgentShellCommand(command: string):
         | "github_write_capability_unavailable";
     }
   | undefined {
-  if (
-    GITHUB_CLI_PR_MERGE_PATTERN.test(command) ||
-    GITHUB_CLI_AUTH_PATTERN.test(command)
-  ) {
+  if (!isReadOnlyGitHubCliCommand(command)) {
     return {
       error: GITHUB_WRITE_CAPABILITY_ERROR,
       reason: "github_write_capability_unavailable",
@@ -83,13 +136,6 @@ export function getBlockedAgentShellCommand(command: string):
     return {
       error:
         "Raw GitHub API mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
-      reason: "github_mutation_blocked",
-    };
-  }
-  if (isGitHubCliMutationCommand(command)) {
-    return {
-      error:
-        "GitHub CLI mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
       reason: "github_mutation_blocked",
     };
   }

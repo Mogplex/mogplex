@@ -31,3 +31,33 @@ test("shell guard rejects unsupported PR merges and shell credential probes", ()
   );
   assert.match(missingShellCredentials?.error ?? "", /sandbox.*cannot/i);
 });
+
+test("shell guard fails closed for GitHub CLI write families and GraphQL mutations", () => {
+  for (const command of [
+    "gh release create v1.0 --generate-notes",
+    "gh workflow run deploy.yml",
+    "gh repo edit acme/repo --visibility private",
+    "gh api graphql -f query='mutation { deleteProjectV2(input: {}) { clientMutationId } }'",
+    "gh api repos/acme/repo/actions/workflows/deploy.yml/dispatches -f ref=main",
+  ]) {
+    assert.equal(
+      getBlockedAgentShellCommand(command)?.reason,
+      "github_write_capability_unavailable",
+      command
+    );
+  }
+});
+
+test("shell guard preserves explicitly classified read-only GitHub CLI commands", () => {
+  for (const command of [
+    "gh pr view 42 --json title,state",
+    "gh issue list --state open",
+    "gh release view v1.0",
+    "gh workflow view ci.yml",
+    "gh run watch 123 --exit-status",
+    "gh api repos/acme/repo",
+    "gh api --method GET repos/acme/repo/issues -f state=open",
+  ]) {
+    assert.equal(getBlockedAgentShellCommand(command), undefined, command);
+  }
+});
