@@ -14,6 +14,7 @@ import {
   type SlackWebhookDeps,
   type SlackWebhookDispatchInput,
 } from "./_lib/event-types";
+import type { SlackModelCommandPayload } from "@/lib/slack/model-command";
 
 // Re-export types and functions that tests depend on
 export {
@@ -48,6 +49,12 @@ async function dispatchInteractivity(
 async function defaultDispatch(
   input: SlackWebhookDispatchInput
 ): Promise<void> {
+  if (input.kind === "command") {
+    const { handleSlackModelCommand } =
+      await import("@/lib/slack/model-command");
+    await handleSlackModelCommand(input.body);
+    return;
+  }
   if (input.kind === "interactivity") {
     await dispatchInteractivity(input.body);
     return;
@@ -74,6 +81,55 @@ async function defaultDispatch(
       `slack-event:${payload.eventType}`,
     ],
   });
+}
+
+function parseSlackModelCommand(
+  params: URLSearchParams
+): SlackModelCommandPayload | null {
+  const [command, teamId, channelId, slackUserId, responseUrl] = [
+    "command",
+    "team_id",
+    "channel_id",
+    "user_id",
+    "response_url",
+  ].map((field) => params.get(field)?.trim() ?? "");
+  if ([command, teamId, channelId, slackUserId, responseUrl].includes(""))
+    return null;
+  return {
+    command,
+    text: params.get("text") ?? "",
+    teamId,
+    channelId,
+    slackUserId,
+    responseUrl,
+  };
+}
+
+async function handleSlashCommandRequest(
+  rawBody: string,
+  dispatch: SlackWebhookDeps["dispatch"],
+  scheduleAfterResponse: NonNullable<SlackWebhookDeps["scheduleAfterResponse"]>
+) {
+  const payload = parseSlackModelCommand(new URLSearchParams(rawBody));
+  if (!payload) {
+    return NextResponse.json(
+      {
+        response_type: "ephemeral",
+        text: "Mogplex could not read this command. Try `/mogplex model` again.",
+      },
+      { status: 200 }
+    );
+  }
+  scheduleAfterResponse(() =>
+    safeDispatch(
+      dispatch,
+      { kind: "command", body: payload, rawBody },
+      { command: payload.command }
+    )
+  );
+  // Slack requires an acknowledgement within three seconds. The user-facing
+  // result is posted asynchronously to the signed request's response_url.
+  return new NextResponse(null, { status: 200 });
 }
 
 const defaultDeps: SlackWebhookDeps = {
@@ -225,6 +281,14 @@ export function createSlackWebhookPostHandler(
     const contentType = request.headers.get("content-type") ?? "";
 
     if (contentType.includes("application/x-www-form-urlencoded")) {
+      const params = new URLSearchParams(rawBody);
+      if (params.has("command")) {
+        return handleSlashCommandRequest(
+          rawBody,
+          deps.dispatch,
+          runAfterResponse
+        );
+      }
       return handleInteractivityRequest(
         rawBody,
         deps.dispatch,

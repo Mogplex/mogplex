@@ -15,6 +15,8 @@ import {
 } from "@/lib/slack/client";
 import { runChatAgent } from "@/lib/agents/run-chat-agent";
 import { buildAppUrl } from "@/lib/app-url";
+import { listUsableModelIdsForScope } from "@/lib/models/default-model";
+import { getSlackModelPreference } from "@/lib/slack/model-preferences";
 import { dispatchSlackMentionWorkflows } from "@/lib/flows/trigger-dispatch";
 import { defaultResolveSlackRepoContext } from "./slack-event-lib/repo-context";
 import {
@@ -87,6 +89,31 @@ const defaultDeps: SlackEventTaskDeps = {
   loadOrCreateConversation: defaultLoadOrCreateConversation,
   persistConversation: defaultPersistConversation,
   runAgent: runChatAgent,
+  resolveModelPreference: async (input) => {
+    try {
+      const preference = await getSlackModelPreference({
+        installationId: input.installationId,
+        channelId: input.channelId,
+        slackUserId: input.slackUserId,
+      });
+      if (!preference) return null;
+      const usableModels = await listUsableModelIdsForScope(
+        input.mogplexUserId,
+        {
+          teamId: input.teamId,
+        }
+      );
+      return usableModels.includes(preference.model_id)
+        ? preference.model_id
+        : null;
+    } catch (error) {
+      console.error("[slack-event] model preference lookup failed", {
+        teamId: input.teamId,
+        error,
+      });
+      return null;
+    }
+  },
   fetchAttachment: ({ botToken, url, signal }) =>
     fetch(url, {
       headers: { Authorization: `Bearer ${botToken}` },

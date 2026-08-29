@@ -4,6 +4,7 @@ import {
 } from "@/lib/slack/run-attachments";
 import type { SlackEventTaskPayload } from "@/trigger/slack-event";
 import type { SlackBlockActionsPayload } from "@/lib/slack/interactivity";
+import type { SlackModelCommandPayload } from "@/lib/slack/model-command";
 
 /**
  * Sanity ceiling on the request body. Legitimate Slack event/interactivity
@@ -67,7 +68,8 @@ export type SlackInteractivityPayload = SlackBlockActionsPayload & {
 
 export type SlackWebhookDispatchInput =
   | { kind: "event"; body: SlackEventCallbackBody; rawBody: string }
-  | { kind: "interactivity"; body: SlackInteractivityPayload; rawBody: string };
+  | { kind: "interactivity"; body: SlackInteractivityPayload; rawBody: string }
+  | { kind: "command"; body: SlackModelCommandPayload; rawBody: string };
 
 export type SlackWebhookDeps = {
   /** Lookup of the signing secret — abstracted so tests can pass a literal. */

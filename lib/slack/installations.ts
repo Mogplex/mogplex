@@ -206,3 +206,9 @@ export {
   createSlackUserLinkToken,
   consumeSlackUserLinkToken,
 } from "./user-mappings";
+
+export {
+  type SlackModelPreferenceRow,
+  getSlackModelPreference,
+  upsertSlackModelPreference,
+} from "./model-preferences";

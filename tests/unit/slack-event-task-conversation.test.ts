@@ -36,11 +36,16 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
     persistConversation: async (input) => {
       calls.push({ op: "persist", input });
     },
+    resolveModelPreference: async (input) => {
+      calls.push({ op: "model-preference", input });
+      return "openai/gpt-5.4";
+    },
     runAgent: async (input) => {
       calls.push({
         op: "agent",
         userId: input.userId,
         conversationId: input.conversationId,
+        model: input.model,
         messages: input.messages,
         onProgress: input.onProgress,
         toolExecutionIdempotencyKey: input.toolExecutionIdempotencyKey,
@@ -91,12 +96,14 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
   const agentCall = calls.find((c) => c.op === "agent") as {
     userId: string;
     conversationId: string;
+    model?: string | null;
     messages: Array<{ role: string; content: unknown }>;
     onProgress?: unknown;
     toolExecutionIdempotencyKey?: string;
   };
   assert.equal(agentCall.userId, "user-mogplex");
   assert.equal(agentCall.conversationId, "conv-1");
+  assert.equal(agentCall.model, "openai/gpt-5.4");
   assert.equal(
     agentCall.toolExecutionIdempotencyKey,
     "slack:T1:Ev123",

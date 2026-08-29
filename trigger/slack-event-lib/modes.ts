@@ -199,8 +199,16 @@ export async function runConversationalMode(input: {
       userMessage: userMessage.agent,
       userText,
     });
+    const selectedModel = await deps.resolveModelPreference?.({
+      installationId: installation.id,
+      channelId: payload.channelId,
+      slackUserId: payload.slackUserId,
+      mogplexUserId,
+      teamId: agentInput.repoContext?.teamId ?? null,
+    });
     const agentResult = await deps.runAgent({
       userId: mogplexUserId,
+      model: selectedModel ?? conversation.model,
       messages: agentInput.messages,
       conversationId: conversation.id,
       repoId: agentInput.repoContext?.repoId,
