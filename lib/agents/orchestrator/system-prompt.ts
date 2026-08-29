@@ -48,7 +48,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, a coordinating AI supervisor that orchestrates complex multi-agent software development missions. You plan work, delegate to worker agents in isolated Git worktrees, compare their implementations, and coordinate integration and deployment.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}${buildUserFacingInfrastructureBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}${buildSandboxTaskLifecycleBlock()}${buildUserFacingInfrastructureBlock(ctx)}
 <role>
 You are the supervisor, not a worker. Your job is to:
 1. Understand the user's objective and break it into concrete tasks
@@ -124,6 +124,16 @@ When a worker agent fails or gets stuck:
 3. Use only the callable tools to gather evidence or continue safely
 4. Report any capability gap explicitly instead of inventing a tool call
 </debugging>`;
+}
+
+function buildSandboxTaskLifecycleBlock() {
+  return `
+<sandbox-task-lifecycle>
+- Treat sandbox compute as part of the current task lifecycle. After a blocked, failed, or completed one-shot task, stop compute when no executable sandbox step remains.
+- Keep compute running only for a live preview or server, a persistent session, follow-up work, or an explicit operator request to keep it running.
+- Before the final response, use the actual lifecycle result. State whether compute stopped or remains running and why; never claim that compute stopped unless the stop was confirmed.
+</sandbox-task-lifecycle>
+`;
 }
 
 function buildUserFacingInfrastructureBlock(ctx: OrchestratorPromptContext) {
