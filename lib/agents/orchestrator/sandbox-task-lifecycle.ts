@@ -20,7 +20,7 @@ type SandboxState = {
   previewUrl: string | null;
 };
 
-type SandboxTaskLifecycleDeps = {
+export type SandboxTaskLifecycleDeps = {
   loadState: (
     sandboxId: string,
     userId: string
@@ -50,15 +50,20 @@ export type SandboxTaskLifecycleOutcome =
     };
 
 const SANDBOX_TOOLS = new Set([
+  "bash",
   "run_command",
   "write_file",
+  "start_sandbox",
   "sandbox_start",
+  "stop_sandbox",
   "sandbox_stop",
   "spawn_worktree",
   "spawn_subagent",
 ]);
 
 const FOLLOW_UP_TOOLS = new Set(["spawn_worktree", "spawn_subagent"]);
+const COMMAND_TOOLS = new Set(["bash", "run_command"]);
+const STOP_TOOLS = new Set(["sandbox_stop", "stop_sandbox"]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -152,7 +157,7 @@ function isConfirmedSandboxStop(
   sandboxId: string | null
 ): sandboxId is string {
   return Boolean(
-    event.toolCall.toolName === "sandbox_stop" &&
+    STOP_TOOLS.has(event.toolCall.toolName) &&
     event.success !== false &&
     output?.status === "stopped" &&
     sandboxId
@@ -177,7 +182,7 @@ async function cleanupSandboxCandidate(input: {
       ? null
       : "unconfirmed";
   } catch (error) {
-    console.error("[control/chat] automatic sandbox stop failed", {
+    console.error("[agent] automatic sandbox stop failed", {
       sandboxId: input.sandboxId,
       error,
     });
@@ -199,7 +204,7 @@ function toolRequiresFollowUp(
 ) {
   if (event.success !== true) return false;
   if (FOLLOW_UP_TOOLS.has(event.toolCall.toolName)) return true;
-  if (event.toolCall.toolName !== "run_command") return false;
+  if (!COMMAND_TOOLS.has(event.toolCall.toolName)) return false;
   const command = readString(asRecord(event.toolCall.input)?.command);
   return Boolean(
     command && output?.exitCode === 0 && isLongRunningSandboxCommand(command)

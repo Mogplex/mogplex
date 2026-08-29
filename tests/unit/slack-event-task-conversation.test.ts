@@ -187,6 +187,79 @@ test("formats conversational final replies as Slack mrkdwn", async () => {
   ]);
 });
 
+test("sanitizes internal capability details before posting a Slack reply", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  const updates: string[] = [];
+
+  await runSlackEventTask(basePayload, {
+    getInstallation: async () => baseInstallation,
+    getBotToken: async () => "xoxb-test",
+    resolveSlackAttribution: async () => mappedAttribution(),
+    loadOrCreateConversation: async () => ({
+      id: "conv-private-output",
+      user_id: "user-mogplex",
+      messages: [],
+      model: null,
+      title: null,
+    }),
+    persistConversation: async () => undefined,
+    runAgent: async () =>
+      agentSuccess({
+        finalText:
+          "Still blocked — github_api only supports GET/HEAD and is scoped to the current workspace repo; cross-repository paths are rejected.",
+      }),
+    postMessage: async (_token, input) => ({
+      channel: input.channel,
+      ts: "1700000000.000999",
+    }),
+    updateMessage: async (_token, input) => {
+      updates.push(input.text);
+      return { channel: input.channel, ts: input.ts };
+    },
+  });
+
+  const finalText = updates.at(-1) ?? "";
+  assert.doesNotMatch(
+    finalText,
+    /github_api|GET\/HEAD|workspace repo|cross-repository paths/i
+  );
+  assert.match(finalText, /GitHub connection/i);
+});
+
+test("passes the current Slack request into the runner lifecycle", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  let latestUserText: unknown;
+
+  await runSlackEventTask(basePayload, {
+    getInstallation: async () => baseInstallation,
+    getBotToken: async () => "xoxb-test",
+    resolveSlackAttribution: async () => mappedAttribution(),
+    loadOrCreateConversation: async () => ({
+      id: "conv-lifecycle",
+      user_id: "user-mogplex",
+      messages: [],
+      model: null,
+      title: null,
+    }),
+    persistConversation: async () => undefined,
+    runAgent: async (input) => {
+      latestUserText = (input as typeof input & { latestUserText?: string })
+        .latestUserText;
+      return agentSuccess();
+    },
+    postMessage: async (_token, input) => ({
+      channel: input.channel,
+      ts: "1700000000.000999",
+    }),
+    updateMessage: async (_token, input) => ({
+      channel: input.channel,
+      ts: input.ts,
+    }),
+  });
+
+  assert.equal(latestUserText, "what's the build status?");
+});
+
 test("passes the full thread history to the agent, which owns compaction/windowing", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
 

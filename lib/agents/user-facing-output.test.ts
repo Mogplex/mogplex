@@ -22,6 +22,18 @@ describe("agent user-facing output", () => {
     expect(output).toMatch(/retry the command/i);
   });
 
+  it("replaces internal GitHub capability details with actionable product language", () => {
+    const output = sanitizeAgentUserFacingText(
+      "Still blocked — github_api only supports GET/HEAD and is scoped to the current workspace repo; cross-repository paths are rejected."
+    );
+
+    expect(output).not.toMatch(
+      /github_api|GET\/HEAD|workspace repo|cross-repository paths/i
+    );
+    expect(output).toMatch(/GitHub connection/i);
+    expect(output).toMatch(/requested repository/i);
+  });
+
   it("preserves only explicitly requested diagnostic categories", () => {
     const output = sanitizeAgentUserFacingText(
       "Vercel Sandbox sbx_01HXYZ987654 failed at /vercel/sandbox/src/app.ts and called http://worker.internal/jobs/run_01HXYZ987654.",

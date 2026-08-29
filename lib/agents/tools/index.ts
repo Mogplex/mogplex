@@ -27,6 +27,12 @@ import {
 } from "./github-pr-search";
 import { createGithubRepoList } from "./github-repo-list";
 import { createGithubIssueTool } from "./github-issue";
+import {
+  createGithubIssueCommentTool,
+  createGithubIssueUpdateTool,
+} from "./github-issue-mutation";
+import { createGithubPullRequestMergeTool } from "./github-pr-merge";
+import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { virtualExecTool } from "./virtual-exec";
 import {
@@ -61,6 +67,12 @@ export {
   createGithubIssueTool,
   createScopedGithubIssueTool,
 } from "./github-issue";
+export {
+  createGithubIssueCommentTool,
+  createGithubIssueUpdateTool,
+} from "./github-issue-mutation";
+export { createGithubPullRequestMergeTool } from "./github-pr-merge";
+export { createGithubPullRequestStatusTool } from "./github-pr-status";
 export { createMemoryTools, type MemoryToolContext } from "./memory";
 export { virtualExecTool } from "./virtual-exec";
 export {
@@ -92,10 +104,14 @@ export const TOOL_CAPABILITY: Record<string, Capability> = {
   // This is broader than the workspace-scoped github_api tool: it performs
   // authenticated org/user/repo PR inventory using the user's own GitHub auth.
   github_pr_search: "tools.github_api",
+  github_pull_request_status: "tools.github_api",
   // Same authenticated-inventory class as github_pr_search: lists repos
   // (including private) visible to the user's installations/OAuth.
   github_list_repos: "tools.github_api",
   github_create_issue: "tools.github_api",
+  github_update_issue: "tools.github_api",
+  github_comment_issue: "tools.github_api",
+  github_merge_pull_request: "tools.github_api",
   github_create_pull_request: "tools.github_api",
   github_update_pull_request: "tools.github_api",
   write_file: "tools.write_file",
@@ -178,7 +194,15 @@ export function buildStaticTools(
             oauthToken: githubPrSearchOptions?.oauthToken ?? null,
             userId,
           }),
+          github_pull_request_status: createGithubPullRequestStatusTool({
+            userId,
+          }),
           github_create_issue: createGithubIssueTool({ userId }),
+          github_update_issue: createGithubIssueUpdateTool({ userId }),
+          github_comment_issue: createGithubIssueCommentTool({ userId }),
+          github_merge_pull_request: createGithubPullRequestMergeTool({
+            userId,
+          }),
         }
       : {}),
     ...(githubToken

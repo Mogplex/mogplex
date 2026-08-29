@@ -46,6 +46,7 @@ import {
   formatSlackConversationalReply,
 } from "./system";
 import { evaluateSlackRepoAgentPolicy } from "./policy";
+import { sanitizeAgentUserFacingText } from "@/lib/agents/user-facing-output";
 import { releaseSlackRepoAgentQuotaReservationBestEffort } from "./quota";
 import { buildSlackThreadContext } from "./thread-context";
 
@@ -93,8 +94,16 @@ async function loadConversationalConversation(input: {
   });
 }
 
-function formatFinalSlackText(finalText: string) {
-  return formatSlackConversationalReply(finalText || "_(no response)_");
+function formatFinalSlackText(input: {
+  finalText: string;
+  repoName?: string | null;
+  userText: string;
+}) {
+  const sanitized = sanitizeAgentUserFacingText(input.finalText, {
+    repoName: input.repoName,
+    userRequestText: input.userText,
+  });
+  return formatSlackConversationalReply(sanitized || "_(no response)_");
 }
 
 export function buildSlackToolExecutionIdempotencyKey(
@@ -170,6 +179,7 @@ export async function runConversationalMode(input: {
     agentResult: Awaited<ReturnType<typeof deps.runAgent>>;
     attachments: Awaited<ReturnType<typeof prepareSlackAttachments>>;
     userMessage: ReturnType<typeof buildSlackUserMessage>;
+    repoName: string | null;
   };
   try {
     const [attachments, slackThreadContext] = await Promise.all([
@@ -210,6 +220,7 @@ export async function runConversationalMode(input: {
       userId: mogplexUserId,
       model: selectedModel ?? conversation.model,
       messages: agentInput.messages,
+      latestUserText: userText,
       conversationId: conversation.id,
       repoId: agentInput.repoContext?.repoId,
       repoFullName: agentInput.repoContext?.repoFullName,
@@ -226,9 +237,17 @@ export async function runConversationalMode(input: {
         attribution,
       }),
       abortSignal: AbortSignal.timeout(SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS),
-      onProgress: createSlackAgentProgressHandler(progressUpdater),
+      onProgress: createSlackAgentProgressHandler(progressUpdater, {
+        repoName: agentInput.repoContext?.repoName ?? null,
+        userText,
+      }),
     });
-    completed = { agentResult, attachments, userMessage };
+    completed = {
+      agentResult,
+      attachments,
+      userMessage,
+      repoName: agentInput.repoContext?.repoName ?? null,
+    };
   } catch (error) {
     console.error("[slack-event] conversational agent failed", {
       teamId: payload.teamId,
@@ -246,9 +265,13 @@ export async function runConversationalMode(input: {
     throw error;
   }
 
-  const { agentResult, attachments, userMessage } = completed;
+  const { agentResult, attachments, userMessage, repoName } = completed;
 
-  const finalText = formatFinalSlackText(agentResult.finalText);
+  const finalText = formatFinalSlackText({
+    finalText: agentResult.finalText,
+    repoName,
+    userText,
+  });
   const slackFinalText = fitSlackMessageText(finalText);
 
   await progressUpdater.finalize(slackFinalText);

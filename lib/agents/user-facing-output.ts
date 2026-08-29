@@ -187,6 +187,40 @@ function replaceUnrequestedProvider(
     : productName;
 }
 
+function replaceInternalCapabilityDetails(text: string) {
+  return text
+    .replace(/\bgithub_api\b/gi, "the GitHub connection")
+    .replace(/\bgithub_pr_search\b/gi, "GitHub pull request search")
+    .replace(/\bgithub_pull_request_status\b/gi, "GitHub pull request status")
+    .replace(/\bgithub_list_repos\b/gi, "GitHub repository access")
+    .replace(
+      /\bgithub_(?:create|update|comment)_issue\b/gi,
+      "GitHub issue access"
+    )
+    .replace(/\bgithub_merge_pull_request\b/gi, "GitHub pull request access")
+    .replace(/\b(?:run_command|virtual_exec)\b/gi, "command execution")
+    .replace(
+      /\b(?:sandbox_start|start_sandbox)\b/gi,
+      "development environment startup"
+    )
+    .replace(
+      /\b(?:sandbox_stop|stop_sandbox)\b/gi,
+      "development environment cleanup"
+    )
+    .replace(
+      /\bonly supports?\s+GET\s*(?:\/|and)\s*HEAD(?:\s*[—-]\s*no write operations?)?/gi,
+      "does not support that write action"
+    )
+    .replace(
+      /\bis scoped to (?:the )?current workspace repo(?:sitory)?(?: only)?\b/gi,
+      "is limited to the active repository"
+    )
+    .replace(
+      /\bcross-repository paths? (?:are|is) rejected\b/gi,
+      "the requested repository is not connected"
+    );
+}
+
 /**
  * Explicit diagnostic disclosure is allowed only inside the authenticated,
  * resource-scoped Control route and only when the latest user request clearly
@@ -218,7 +252,7 @@ export function sanitizeAgentUserFacingText(
   text: string,
   options: AgentUserFacingOutputOptions = {}
 ) {
-  let sanitized = redactSecretsInText(text);
+  let sanitized = replaceInternalCapabilityDetails(redactSecretsInText(text));
   const canDisclose = (category: InfrastructureDiagnosticCategory) =>
     options.diagnosticScope?.includes(category) === true;
 

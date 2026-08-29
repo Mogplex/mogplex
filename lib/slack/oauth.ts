@@ -10,6 +10,8 @@ export const SLACK_BOT_SCOPES = [
   "channels:history",
   "channels:read",
   "chat:write",
+  // Installs the app's registered `/mogplex` command in the workspace.
+  "commands",
   // Required to download `url_private_download` images attached to Slack
   // messages so conversational and repo agents can inspect screenshots.
   "files:read",

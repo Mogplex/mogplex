@@ -26,6 +26,7 @@ import {
   type RunChatAgentProgressCallback,
 } from "@/lib/agents/run-chat-progress";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
+import { createSlackRunFinalization } from "@/lib/agents/slack-run-finalization";
 import {
   captureUsage,
   capturedUsageAiCallColumns,
@@ -48,6 +49,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export type RunChatAgentInput = ChatAgentContext & {
   messages: RunChatAgentMessage[];
+  latestUserText: string;
   model?: string | null;
   systemSuffix?: string | null;
   abortSignal?: AbortSignal;
@@ -244,6 +246,12 @@ export async function runChatAgent(
       EMPTY_CAPTURED_USAGE
     );
   const progressReporter = createRunChatProgressReporter(input.onProgress);
+  const finalization = createSlackRunFinalization({
+    userId: input.userId,
+    userText: input.latestUserText,
+    repoName: input.repoName,
+    sandboxId: input.sandboxId,
+  });
 
   const compaction = await compactAgentConversation(input, resolvedModel);
   // Compacted histories are already bounded; otherwise the pre-compaction
@@ -267,9 +275,11 @@ export async function runChatAgent(
         }
       },
       experimental_onToolCallStart(event) {
+        finalization.onToolStart(event);
         return progressReporter.toolStarted(event);
       },
       experimental_onToolCallFinish(event) {
+        finalization.onToolFinish(event);
         return progressReporter.toolFinished(event);
       },
       async onStepFinish(event) {
@@ -283,6 +293,7 @@ export async function runChatAgent(
   try {
     await consumeStreamWithCallback(result, progressReporter);
   } catch (error) {
+    await finalization.cleanup();
     const message = error instanceof Error ? error.message : "Stream error";
     recordRunChatAiCall({
       context: input,
@@ -343,9 +354,10 @@ export async function runChatAgent(
 
   const inputTokens = usage.inputTokens ?? 0;
   const outputTokens = usage.outputTokens ?? 0;
+  const userFacingFinalText = await finalization.finalize(finalText);
 
   return {
-    finalText,
+    finalText: userFacingFinalText,
     finishReason,
     inputTokens,
     outputTokens,

@@ -113,6 +113,10 @@ test("Slack OAuth requests access to download message attachments", () => {
   assert.ok(new Set<string>(SLACK_BOT_SCOPES).has("files:read"));
 });
 
+test("Slack OAuth requests the scope required to install slash commands", () => {
+  assert.ok(new Set<string>(SLACK_BOT_SCOPES).has("commands"));
+});
+
 test("exchangeSlackCode returns a structured failure for non-2xx Slack responses", async () => {
   const result = await exchangeSlackCode(
     {
