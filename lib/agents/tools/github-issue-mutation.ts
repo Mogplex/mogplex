@@ -181,6 +181,39 @@ function requestedIssueUpdateFields(input: {
   return fields;
 }
 
+async function verifyIssueResource(input: {
+  owner: string;
+  repo: string;
+  number: number;
+  githubToken: string;
+}) {
+  const response = await fetch(
+    new URL(
+      `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/issues/${input.number}`,
+      GITHUB_API_ORIGIN
+    ),
+    { headers: githubMutationHeaders(input.githubToken) }
+  );
+  const resource = (await response.json().catch(() => ({}))) as {
+    pull_request?: unknown;
+    message?: string;
+  };
+  if (!response.ok) {
+    return {
+      error:
+        resource.message ||
+        `GitHub could not verify issue #${input.number} (${response.status}).`,
+    };
+  }
+  if (resource.pull_request) {
+    return {
+      error:
+        "The authorized target is a pull request, not an issue. Use an explicitly authorized pull request action instead.",
+    };
+  }
+  return null;
+}
+
 export function createGithubIssueUpdateTool(
   options: GithubIssueMutationOptions = {}
 ) {
@@ -207,6 +240,11 @@ export function createGithubIssueUpdateTool(
         userId: options.userId,
       });
       if ("error" in context) return { error: context.error };
+      const resourceError = await verifyIssueResource({
+        ...context,
+        number,
+      });
+      if (resourceError) return resourceError;
       const updates = buildIssueUpdates({ title, body, state });
       const response = await fetch(
         new URL(

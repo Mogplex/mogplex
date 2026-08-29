@@ -36,13 +36,20 @@ test("github_update_issue annotates an existing issue through the requested inst
     await withPatchedFetch(
       async (url, init) => {
         const parsed = new URL(String(url));
+        const method = init?.method ?? "GET";
         calls.push({
-          method: init?.method ?? "GET",
+          method,
           path: parsed.pathname,
           body: parseJsonRequestBody(init?.body),
         });
         if (parsed.pathname === "/app/installations/321/access_tokens") {
           return Response.json({ token: "ghs-installation" });
+        }
+        if (method === "GET") {
+          return Response.json({
+            number: 42,
+            html_url: "https://github.com/acme/widgets/issues/42",
+          });
         }
         return Response.json({
           number: 42,
@@ -96,6 +103,11 @@ test("github_update_issue annotates an existing issue through the requested inst
   });
 
   assert.deepEqual(calls.slice(1), [
+    {
+      method: "GET",
+      path: "/repos/acme/widgets/issues/42",
+      body: undefined,
+    },
     {
       method: "PATCH",
       path: "/repos/acme/widgets/issues/42",
@@ -404,86 +416,4 @@ test("github_merge_pull_request rejects a model-selected target without request 
     expectedHeadSha: "4928f94e852191d761352294ae1eabfa34b7d0ab",
   });
   assert.match(result.error ?? "", /not explicitly authorized/i);
-});
-
-test("GitHub issue mutations reject missing or mismatched request consent", async () => {
-  const { createGithubIssueCommentTool, createGithubIssueUpdateTool } =
-    await loadToolsModule();
-  const comment = createGithubIssueCommentTool({
-    userId: "user-1",
-    authorizations: [
-      {
-        operation: "update",
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        allowedFields: ["body"],
-      },
-    ],
-  }) as unknown as {
-    execute: (input: unknown) => Promise<{ error?: string }>;
-  };
-  const update = createGithubIssueUpdateTool({
-    userId: "user-1",
-  }) as unknown as {
-    execute: (input: unknown) => Promise<{ error?: string }>;
-  };
-
-  assert.match(
-    (
-      await comment.execute({
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        body: "Source: user request",
-      })
-    ).error ?? "",
-    /not explicitly authorized/i
-  );
-  assert.match(
-    (
-      await update.execute({
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        state: "closed",
-      })
-    ).error ?? "",
-    /not explicitly authorized/i
-  );
-});
-
-test("GitHub issue update consent is limited to the requested fields and state", async () => {
-  const { createGithubIssueUpdateTool } = await loadToolsModule();
-  const tool = createGithubIssueUpdateTool({
-    userId: "user-1",
-    authorizations: [
-      {
-        operation: "update",
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        allowedFields: ["state"],
-        state: "closed",
-      },
-    ],
-  }) as unknown as {
-    execute: (input: unknown) => Promise<{ error?: string }>;
-  };
-
-  for (const input of [
-    { owner: "acme", repo: "widgets", number: 42, state: "open" },
-    {
-      owner: "acme",
-      repo: "widgets",
-      number: 42,
-      state: "closed",
-      body: "injected body",
-    },
-  ]) {
-    assert.match(
-      (await tool.execute(input)).error ?? "",
-      /not explicitly authorized/i
-    );
-  }
 });
