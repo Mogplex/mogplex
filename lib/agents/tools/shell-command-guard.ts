@@ -12,7 +12,9 @@ const HTTP_MUTATION_METHOD_PATTERN = /\b(?:POST|PUT|PATCH|DELETE)\b/i;
 const HTTP_MUTATION_FLAG_PATTERN =
   /(?:-X|--request)\s+(?:POST|PUT|PATCH|DELETE)\b/i;
 const HTTP_DATA_FLAG_PATTERN = /(?:-d|--data(?:-[\w-]+)?)\b/i;
-const GITHUB_CLI_PATTERN = /\bgh\b/i;
+const GITHUB_CLI_PATTERN = /(?:^|[;&|()]|\s)gh(?:\s|$)/i;
+const GITHUB_CLI_MUTATION_PATTERN =
+  /\b(?:issue|pr)\s+(?:create|edit|close|reopen|delete)\b/i;
 const GITHUB_CLI_API_PATTERN = /\bgh\s+api\b/i;
 const GITHUB_CLI_API_FIELD_PATTERN =
   /(?:^|\s)(?:-f|-F|--raw-field|--field|--input)(?:\s|=|$)/i;
@@ -71,6 +73,16 @@ function isReadOnlyGitHubApiCommand(command: string) {
   );
 }
 
+function isKnownGitHubCliMutation(command: string) {
+  return (
+    GITHUB_CLI_PATTERN.test(command) &&
+    (GITHUB_CLI_MUTATION_PATTERN.test(command) ||
+      (GITHUB_CLI_API_PATTERN.test(command) &&
+        (HTTP_MUTATION_METHOD_PATTERN.test(command) ||
+          HTTP_MUTATION_FLAG_PATTERN.test(command))))
+  );
+}
+
 function isReadOnlyGitHubCliInvocation(
   root: string | undefined,
   subcommand: string | undefined,
@@ -113,12 +125,6 @@ export function getBlockedAgentShellCommand(command: string):
         | "github_write_capability_unavailable";
     }
   | undefined {
-  if (!isReadOnlyGitHubCliCommand(command)) {
-    return {
-      error: GITHUB_WRITE_CAPABILITY_ERROR,
-      reason: "github_write_capability_unavailable",
-    };
-  }
   if (
     CREDENTIAL_FILE_PATTERN.test(command) ||
     CREDENTIAL_COMMAND_PATTERN.test(command) ||
@@ -130,6 +136,19 @@ export function getBlockedAgentShellCommand(command: string):
       error:
         "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
       reason: "credential_access_blocked",
+    };
+  }
+  if (isKnownGitHubCliMutation(command)) {
+    return {
+      error:
+        "GitHub CLI mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
+      reason: "github_mutation_blocked",
+    };
+  }
+  if (!isReadOnlyGitHubCliCommand(command)) {
+    return {
+      error: GITHUB_WRITE_CAPABILITY_ERROR,
+      reason: "github_write_capability_unavailable",
     };
   }
   if (isRawGitHubMutationCommand(command)) {
