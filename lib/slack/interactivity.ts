@@ -3,7 +3,11 @@ import {
   getSlackInstallationByTeamId,
   getSlackUserMapping,
   isExplicitSlackUserMapping,
+  type SlackInstallationRow,
+  type SlackUserMappingRow,
 } from "@/lib/slack/installations";
+import { listUsableModelIdsForScope } from "@/lib/models/default-model";
+import { upsertSlackModelPreference } from "@/lib/slack/model-preferences";
 import {
   cancelMogplexApiRun,
   MogplexApiRunControlError,
@@ -25,12 +29,15 @@ export type SlackBlockAction = {
   block_id?: string;
   value?: string;
   type?: string;
+  selected_option?: { value?: string };
 };
 
 export type SlackBlockActionsPayload = {
   type: string;
   team?: { id?: string };
   user?: { id?: string };
+  channel?: { id?: string };
+  container?: { channel_id?: string };
   response_url?: string;
   actions?: SlackBlockAction[];
   /**
@@ -45,11 +52,14 @@ export type SlackInteractivityResult =
   | { outcome: "ignored"; reason: string }
   | { outcome: "not_linked" }
   | { outcome: "run_not_found"; runId: string }
-  | { outcome: "run_cancelled"; runId: string; status: string };
+  | { outcome: "run_cancelled"; runId: string; status: string }
+  | { outcome: "model_updated"; modelId: string };
 
 export type SlackInteractivityDeps = {
   getInstallation: typeof getSlackInstallationByTeamId;
   getUserMapping: typeof getSlackUserMapping;
+  listUsableModels: typeof listUsableModelIdsForScope;
+  saveModelPreference: typeof upsertSlackModelPreference;
   cancelRun: typeof cancelMogplexApiRun;
   postResponse: (
     responseUrl: string,
@@ -100,6 +110,8 @@ export async function postSlackResponse(
 const defaultDeps: SlackInteractivityDeps = {
   getInstallation: getSlackInstallationByTeamId,
   getUserMapping: getSlackUserMapping,
+  listUsableModels: listUsableModelIdsForScope,
+  saveModelPreference: upsertSlackModelPreference,
   cancelRun: cancelMogplexApiRun,
   postResponse: postSlackResponse,
 };
@@ -158,11 +170,35 @@ async function removeCancelButton(
 type ResolvedActor =
   | { outcome: "ignored"; reason: string }
   | { outcome: "not_linked" }
-  | { outcome: "resolved"; mogplexUserId: string };
+  | {
+      outcome: "resolved";
+      installationId: string;
+      mogplexUserId: string;
+      slackUserId: string;
+    };
+
+function resolveInteractiveMogplexUserId(input: {
+  installation: SlackInstallationRow;
+  mapping: SlackUserMappingRow | null;
+  slackUserId: string;
+  allowInstallerFallback: boolean;
+}) {
+  if (isExplicitSlackUserMapping(input.mapping)) {
+    return input.mapping.mogplex_user_id;
+  }
+  if (
+    input.allowInstallerFallback &&
+    input.installation.authed_user_slack_id === input.slackUserId
+  ) {
+    return input.installation.installed_by_user_id;
+  }
+  return null;
+}
 
 async function resolveActorMogplexUserId(
   deps: SlackInteractivityDeps,
-  payload: SlackBlockActionsPayload
+  payload: SlackBlockActionsPayload,
+  allowInstallerFallback = false
 ): Promise<ResolvedActor> {
   const teamId = payload.team?.id;
   const slackUserId = payload.user?.id;
@@ -182,11 +218,85 @@ async function resolveActorMogplexUserId(
   // Short-circuit here rather than returning a nullable `mogplexUserId`: that
   // null must never reach `cancelMogplexApiRun` (it'd run `.eq("user_id", null)`),
   // and encoding "no mapping" as its own outcome lets the type enforce that.
-  const mogplexUserId = isExplicitSlackUserMapping(mapping)
-    ? mapping.mogplex_user_id
-    : null;
+  const mogplexUserId = resolveInteractiveMogplexUserId({
+    installation,
+    mapping,
+    slackUserId,
+    allowInstallerFallback,
+  });
   if (!mogplexUserId) return { outcome: "not_linked" };
-  return { outcome: "resolved", mogplexUserId };
+  return {
+    outcome: "resolved",
+    installationId: installation.id,
+    mogplexUserId,
+    slackUserId,
+  };
+}
+
+export const SLACK_MODEL_SELECT_ACTION_ID = "mogplex_select_model";
+
+function findModelSelection(payload: SlackBlockActionsPayload) {
+  const action = (payload.actions ?? []).find(
+    (candidate) => candidate.action_id === SLACK_MODEL_SELECT_ACTION_ID
+  );
+  if (!action) return undefined;
+  return action.selected_option?.value?.trim() ?? "";
+}
+
+function modelSelectionChannelId(payload: SlackBlockActionsPayload) {
+  return payload.channel?.id ?? payload.container?.channel_id;
+}
+
+async function updateSelectedModel(
+  deps: SlackInteractivityDeps,
+  payload: SlackBlockActionsPayload,
+  modelId: string
+): Promise<SlackInteractivityResult> {
+  const channelId = modelSelectionChannelId(payload);
+  if (!channelId) return { outcome: "ignored", reason: "missing_channel" };
+
+  const actor = await resolveActorMogplexUserId(deps, payload, true);
+  if (actor.outcome === "ignored") return actor;
+  if (actor.outcome === "not_linked") {
+    await respondEphemeral(
+      deps,
+      payload,
+      ":x: Link your Slack identity to your Mogplex account, then try again."
+    );
+    return actor;
+  }
+
+  const models = await deps.listUsableModels(actor.mogplexUserId);
+  if (!models.includes(modelId)) {
+    await respondEphemeral(
+      deps,
+      payload,
+      ":warning: That model is no longer available to your account. Run `/mogplex model` to refresh the choices."
+    );
+    return { outcome: "ignored", reason: "model_unavailable" };
+  }
+
+  try {
+    await deps.saveModelPreference({
+      installationId: actor.installationId,
+      channelId,
+      slackUserId: actor.slackUserId,
+      modelId,
+    });
+  } catch (error) {
+    await respondEphemeral(
+      deps,
+      payload,
+      "Mogplex could not update your model right now. Try again shortly."
+    );
+    throw error;
+  }
+  await respondEphemeral(
+    deps,
+    payload,
+    `Model set to ${modelId} for you in this channel. It will apply to your next eligible Mogplex response.`
+  );
+  return { outcome: "model_updated", modelId };
 }
 
 function findCancelRunId(payload: SlackBlockActionsPayload): string | null {
@@ -279,6 +389,13 @@ export async function handleSlackBlockActions(
 
   if (payload.type !== "block_actions") {
     return { outcome: "ignored", reason: "unsupported_interactivity_type" };
+  }
+
+  const selectedModel = findModelSelection(payload);
+  if (selectedModel !== undefined) {
+    return selectedModel
+      ? updateSelectedModel(deps, payload, selectedModel)
+      : { outcome: "ignored", reason: "missing_model_id" };
   }
 
   const runId = findCancelRunId(payload);

@@ -63,6 +63,45 @@ test("lists the current channel-user preference and usable models", async () => 
   assert.match(String(responses[0]?.text), /anthropic\/claude-4/);
   assert.match(String(responses[0]?.text), /selected for you in this channel/);
   assert.match(String(responses[0]?.text), /openai\/gpt-5\.4/);
+  const blocks = responses[0]?.blocks as Array<{
+    type?: string;
+    elements?: Array<{
+      type?: string;
+      action_id?: string;
+      options?: Array<{ value?: string }>;
+      initial_option?: { value?: string };
+    }>;
+  }>;
+  const picker = blocks
+    .flatMap((block) => block.elements ?? [])
+    .find((element) => element.type === "static_select");
+  assert.equal(picker?.action_id, "mogplex_select_model");
+  assert.deepEqual(
+    picker?.options?.map((option) => option.value),
+    ["openai/gpt-5.4", "anthropic/claude-4"]
+  );
+  assert.equal(picker?.initial_option?.value, "anthropic/claude-4");
+});
+
+test("opens the model picker when /mogplex has no arguments", async () => {
+  const { createSlackModelCommandHandler } = await loadHandler();
+  const responses: Array<Record<string, unknown>> = [];
+  const handler = createSlackModelCommandHandler({
+    getInstallation: async () => installation,
+    getUserMapping: async () => explicitMapping(),
+    listUsableModels: async () => ["openai/gpt-5.4"],
+    resolveDefaultModel: async () => "openai/gpt-5.4",
+    getPreference: async () => null,
+    postResponse: async (_url, body) => {
+      responses.push(body);
+    },
+  });
+
+  await handler({ ...payload, text: "" });
+
+  assert.match(String(responses[0]?.text), /Current model: openai\/gpt-5\.4/);
+  assert.doesNotMatch(String(responses[0]?.text), /^Usage:/);
+  assert.ok(Array.isArray(responses[0]?.blocks));
 });
 
 test("shows the effective fallback when a saved preference is unavailable", async () => {
