@@ -147,46 +147,46 @@ test("native chat rejects a missing conversation and a mismatched sandbox", asyn
   );
 });
 
-test("native chat rejects a sandbox saved to another same-repository workspace conversation", async () => {
+test("native chat ignores a stale browser sandbox hint and uses the saved conversation sandbox", async () => {
   let loadedSandboxId: string | null = null;
 
-  await assert.rejects(
-    resolveChatSessionContext(
-      new Request("https://app.mogplex.com/api/chat"),
-      "user-1",
-      {
-        messages: [],
-        conversationId: "conversation-workspace-a",
-        sandboxId: "sandbox-workspace-b",
-      },
-      {
-        loadConversation: async () => ({
-          id: "conversation-workspace-a",
-          user_id: "user-1",
+  const resolved = await resolveChatSessionContext(
+    new Request("https://app.mogplex.com/api/chat"),
+    "user-1",
+    {
+      messages: [],
+      conversationId: "conversation-workspace-a",
+      sandboxId: "sandbox-workspace-b",
+    },
+    {
+      loadConversation: async () => ({
+        id: "conversation-workspace-a",
+        user_id: "user-1",
+        repo_id: "repo-1",
+        workspace_session_id: "workspace-a",
+        sandbox_id: "sandbox-workspace-a",
+        model: "openai/gpt-5.6-sol",
+      }),
+      loadRepo: async () => ({
+        id: "repo-1",
+        full_name: "Mogplex/mogplex",
+        owner: "Mogplex",
+        name: "mogplex",
+        default_branch: "main",
+      }),
+      loadSandbox: async ({ sandboxId }) => {
+        loadedSandboxId = sandboxId;
+        return {
+          id: sandboxId,
           repo_id: "repo-1",
-          workspace_session_id: "workspace-a",
-          sandbox_id: "sandbox-workspace-a",
-          model: "openai/gpt-5.6-sol",
-        }),
-        loadRepo: async () => ({
-          id: "repo-1",
-          full_name: "Mogplex/mogplex",
-          owner: "Mogplex",
-          name: "mogplex",
-          default_branch: "main",
-        }),
-        loadSandbox: async ({ sandboxId }) => {
-          loadedSandboxId = sandboxId;
-          return {
-            id: sandboxId,
-            repo_id: "repo-1",
-            working_branch: "fix/workspace-a",
-          };
-        },
-      }
-    ),
-    (error) => error instanceof ChatSessionContextError && error.status === 404
+          working_branch: "fix/workspace-a",
+        };
+      },
+    }
   );
 
-  assert.equal(loadedSandboxId, null);
+  assert.equal(loadedSandboxId, "sandbox-workspace-a");
+  assert.equal(resolved.sandboxId, "sandbox-workspace-a");
+  assert.equal(resolved.workspaceSessionId, "workspace-a");
+  assert.equal(resolved.repoBranch, "fix/workspace-a");
 });
