@@ -4,10 +4,13 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
+const CONTROL_SESSION_MODEL_MIGRATION =
+  "20260830120000_control_session_model.sql";
 const MIGRATIONS = [
   "neon/migrations/20260810180000_control_sessions.sql",
   "neon/migrations/20260810190000_control_sessions_project.sql",
   "neon/migrations/20260812120000_control_sessions_repo.sql",
+  `neon/migrations/${CONTROL_SESSION_MODEL_MIGRATION}`,
 ];
 
 const USER_A = "00000000-0000-4000-8000-00000000000a";
@@ -37,6 +40,29 @@ beforeEach(async () => {
 });
 
 describe("control_sessions migration", () => {
+  it("keeps the model migration identical across production ledgers", async () => {
+    const [neonSql, supabaseSql] = await Promise.all([
+      readFile(
+        path.join(
+          REPO_ROOT,
+          "neon/migrations",
+          CONTROL_SESSION_MODEL_MIGRATION
+        ),
+        "utf8"
+      ),
+      readFile(
+        path.join(
+          REPO_ROOT,
+          "supabase/migrations",
+          CONTROL_SESSION_MODEL_MIGRATION
+        ),
+        "utf8"
+      ),
+    ]);
+
+    expect(neonSql).toBe(supabaseSql);
+  });
+
   it("creates sessions with defaults and jsonb messages", async () => {
     const { rows } = await db.query<{
       id: string;
@@ -166,5 +192,16 @@ describe("control_sessions migration", () => {
       project: "Mogplex/mogplex",
       repo_id: repoId,
     });
+  });
+
+  it("stores the selected model for the full conversation", async () => {
+    const { rows } = await db.query<{ model_id: string | null }>(
+      `insert into public.control_sessions (user_id, model_id)
+       values ($1, 'zai/glm-5.3-flash')
+       returning model_id`,
+      [USER_A]
+    );
+
+    expect(rows[0]?.model_id).toBe("zai/glm-5.3-flash");
   });
 });

@@ -21,6 +21,137 @@ export {
   type ControlPromptSandboxContext,
 } from "./sandbox-context";
 
+type ControlChatSessionContextRecord = {
+  id: string;
+  user_id: string;
+  title: string;
+  repo_id: string | null;
+  model_id: string | null;
+};
+
+type ControlChatRepoContextRecord = {
+  id: string;
+  full_name: string;
+  owner: string | null;
+  name: string | null;
+  default_branch: string | null;
+};
+
+type ControlChatSessionContextDeps = {
+  loadSession: (input: {
+    conversationId: string;
+    userId: string;
+  }) => Promise<ControlChatSessionContextRecord | null>;
+  loadRepo: (repoId: string) => Promise<ControlChatRepoContextRecord | null>;
+};
+
+const defaultControlChatSessionContextDeps: ControlChatSessionContextDeps = {
+  async loadSession(input) {
+    const { data, error } = await supabaseAdmin
+      .from("control_sessions")
+      .select("id, user_id, title, repo_id, model_id")
+      .eq("id", input.conversationId)
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async loadRepo(repoId) {
+    const { data, error } = await supabaseAdmin
+      .from("repos")
+      .select("id, full_name, owner, name, default_branch")
+      .eq("id", repoId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+};
+
+export class ControlChatSessionContextError extends Error {
+  constructor(
+    message: string,
+    readonly status: 404 | 500,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
+    this.name = "ControlChatSessionContextError";
+  }
+}
+
+/** Replace client hints with the repository bound to the owned chat session. */
+export async function resolveControlChatSessionContext(
+  userId: string,
+  body: ControlChatRequestBody,
+  deps: ControlChatSessionContextDeps = defaultControlChatSessionContextDeps
+): Promise<ControlChatRequestBody> {
+  if (!body.conversationId) return body;
+
+  let session: ControlChatSessionContextRecord | null;
+  try {
+    session = await deps.loadSession({
+      conversationId: body.conversationId,
+      userId,
+    });
+  } catch (error) {
+    throw new ControlChatSessionContextError(
+      "Could not load the Control session context.",
+      500,
+      { cause: error }
+    );
+  }
+  if (session?.user_id !== userId) {
+    throw new ControlChatSessionContextError("Control session not found.", 404);
+  }
+
+  const missionContext = {
+    missionId: session.id,
+    missionTitle: session.title,
+    model: session.model_id ?? body.model,
+  };
+  if (!session.repo_id) {
+    return {
+      ...body,
+      ...missionContext,
+      repoId: null,
+      repoFullName: null,
+      repoOwner: null,
+      repoName: null,
+      repoBranch: null,
+      repoBaseBranch: null,
+    };
+  }
+
+  let repo: ControlChatRepoContextRecord | null;
+  try {
+    repo = await deps.loadRepo(session.repo_id);
+  } catch (error) {
+    throw new ControlChatSessionContextError(
+      "Could not load the Control repository context.",
+      500,
+      { cause: error }
+    );
+  }
+  if (repo?.id !== session.repo_id) {
+    throw new ControlChatSessionContextError(
+      "The Control session repository is no longer available.",
+      404
+    );
+  }
+
+  const [fallbackOwner, fallbackName] = repo.full_name.split("/");
+  const baseBranch = repo.default_branch?.trim() || "main";
+  return {
+    ...body,
+    ...missionContext,
+    repoId: repo.id,
+    repoFullName: repo.full_name,
+    repoOwner: repo.owner?.trim() || fallbackOwner || null,
+    repoName: repo.name?.trim() || fallbackName || null,
+    repoBranch: baseBranch,
+    repoBaseBranch: baseBranch,
+  };
+}
+
 /**
  * Extract scope identifiers from the request body for event tracking.
  */

@@ -58,27 +58,43 @@ test("control composers expose permissions, model, and MCP controls without a sp
     title?: string;
     project?: string | null;
     repo_id?: string | null;
+    model_id?: string | null;
   }> = [];
+  const sessionUpdates: Array<Record<string, unknown>> = [];
+  let sessionRecord: Record<string, unknown> | null = null;
   await page.route("**/api/control/sessions", (route) => {
     const request = route.request();
+    if (request.method() === "PUT" && sessionRecord) {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      sessionUpdates.push(body);
+      sessionRecord = {
+        ...sessionRecord,
+        ...body,
+        updated_at: new Date().toISOString(),
+      };
+      return fulfillJson(route, { ok: true, session: sessionRecord });
+    }
     if (request.method() !== "POST") return route.continue();
     const body = request.postDataJSON() as {
       title?: string;
       project?: string | null;
       repo_id?: string | null;
+      model_id?: string | null;
     };
     sessionCreates.push(body);
-    return fulfillJson(route, {
+    sessionRecord = {
       id: "sess-e2e-1",
       title: body.title ?? "Session",
       project: body.project ?? null,
       repo_id: body.repo_id ?? null,
+      model_id: body.model_id ?? null,
       pinned: false,
       archived: false,
       created_at: "2026-08-11T00:00:00.000Z",
       updated_at: "2026-08-11T00:00:00.000Z",
       messages: [],
-    });
+    };
+    return fulfillJson(route, sessionRecord);
   });
   const chatRequests: Array<{
     messages?: Array<{
@@ -186,6 +202,13 @@ test("control composers expose permissions, model, and MCP controls without a sp
     page.getByRole("button", { name: "Skip Permissions" })
   ).toBeVisible();
 
+  const initialModelChip = page.getByRole("button", {
+    name: shortModel,
+    exact: true,
+  });
+  await initialModelChip.click();
+  await page.getByRole("button", { name: "anthropic/claude-sonnet-5" }).click();
+
   // No manual plan-mode gate: the composer sends straight to the agent.
   await expect(page.getByRole("button", { name: "Plan mode" })).toHaveCount(0);
   await page
@@ -216,6 +239,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await expect(page.getByText(/Mogplex is planning/)).toHaveCount(0);
   await expect(page.getByText(/Budget: \$/)).toHaveCount(0);
   expect(chatRequests[0]).toMatchObject({
+    model: "anthropic/claude-sonnet-5",
     mode: "run",
     permissions: "Skip Permissions",
     scope: "IMPLEMENT",
@@ -237,6 +261,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
   expect(sessionCreates[0]).toMatchObject({
     project: "acme/roadmap",
     repo_id: "repo-2",
+    model_id: "anthropic/claude-sonnet-5",
   });
   expect(chatRequests[0]?.messages?.at(-1)?.parts).toEqual(
     expect.arrayContaining([
@@ -256,13 +281,15 @@ test("control composers expose permissions, model, and MCP controls without a sp
     ?.parts?.find((part) => part.type === "file");
   expect(initialFilePart?.url).toContain("data:text/plain");
 
-  // Conversation composer: permissions chip, model chip preset to the account
-  // default, and the MCP connections button are all present.
+  // Conversation controls retain the persisted model.
   const composerPermissions = page.getByRole("button", {
     name: "Skip Permissions",
   });
   await expect(composerPermissions).toBeVisible();
-  const modelChip = page.getByRole("button", { name: shortModel, exact: true });
+  const modelChip = page.getByRole("button", {
+    name: "claude-sonnet-5",
+    exact: true,
+  });
   await expect(modelChip).toBeVisible();
   const mcpButton = page.getByRole("button", { name: "Tools: 0" });
   await expect(mcpButton).toBeVisible();
@@ -272,7 +299,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
 
   // Switching models routes the chosen id through to the chat request body.
   await modelChip.click();
-  await page.getByRole("button", { name: "anthropic/claude-sonnet-5" }).click();
+  await page.getByRole("button", { name: modelId }).click();
   await expect(page.getByRole("button", { name: "Plan mode" })).toHaveCount(0);
   await page
     .getByPlaceholder("Ask for follow-up changes or attach images")
@@ -281,7 +308,10 @@ test("control composers expose permissions, model, and MCP controls without a sp
 
   await expect
     .poll(() => chatRequests.at(-1)?.model, { timeout: 10_000 })
-    .toBe("anthropic/claude-sonnet-5");
+    .toBe(modelId);
+  await expect
+    .poll(() => sessionUpdates.some((update) => update.model_id === modelId))
+    .toBe(true);
   expect(chatRequests.at(-1)).toMatchObject({
     mode: "run",
     permissions: "Skip Permissions",

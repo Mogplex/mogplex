@@ -6,9 +6,10 @@ import { pickControlSessionUpdateFields } from "@/lib/control/session-update";
 import { createOrchestrationRun } from "@/lib/orchestrations/store";
 import { validateOrchestrationBranchName } from "@/lib/orchestrations/validation";
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
+import { parseControlSessionModelId } from "@/lib/control/session-model";
 
 const LIST_COLUMNS =
-  "id, title, project, repo_id, orchestration_run_id, pinned, archived, created_at, updated_at";
+  "id, title, project, repo_id, model_id, orchestration_run_id, pinned, archived, created_at, updated_at";
 
 async function getSessionRecord(id: string, userId: string) {
   const { data, error } = await supabaseAdmin
@@ -64,8 +65,13 @@ export async function POST(req: Request) {
     title?: string;
     project?: string | null;
     repo_id?: unknown;
+    model_id?: unknown;
     request?: string;
   };
+  const modelId = parseControlSessionModelId(body.model_id);
+  if (!modelId.ok) {
+    return NextResponse.json({ error: "Invalid model_id" }, { status: 400 });
+  }
   const repoAccess = await validateControlSessionRepoAccess({
     request: req,
     userId,
@@ -104,6 +110,7 @@ export async function POST(req: Request) {
       title: body.title?.trim() || "New session",
       project: body.project?.trim().slice(0, 160) || null,
       repo_id: repoAccess.value,
+      model_id: modelId.value,
     })
     .select("*")
     .single();
@@ -181,10 +188,18 @@ export async function PUT(req: Request) {
     title?: string;
     project?: string | null;
     repo_id?: unknown;
+    model_id?: unknown;
     messages?: unknown;
     pinned?: boolean;
     archived?: boolean;
   };
+  if (Object.hasOwn(body, "model_id")) {
+    const modelId = parseControlSessionModelId(body.model_id);
+    if (!modelId.ok) {
+      return NextResponse.json({ error: "Invalid model_id" }, { status: 400 });
+    }
+    body.model_id = modelId.value;
+  }
   if (Object.hasOwn(body, "repo_id")) {
     const repoAccess = await validateControlSessionRepoAccess({
       request: req,

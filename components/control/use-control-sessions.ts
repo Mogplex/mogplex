@@ -110,7 +110,8 @@ export function useControlSessions({
       title: string,
       project?: string,
       repoId?: string | null,
-      request?: string
+      request?: string,
+      modelId?: string | null
     ) => {
       const res = await fetch("/api/control/sessions", {
         method: "POST",
@@ -119,6 +120,7 @@ export function useControlSessions({
           title: title.slice(0, 80) || "New session",
           project: project?.trim() || null,
           repo_id: repoId || null,
+          model_id: modelId ?? null,
           request: request?.trim() || title,
         }),
       });
@@ -134,6 +136,7 @@ export function useControlSessions({
           title: record.title,
           project: record.project,
           repo_id: record.repo_id,
+          model_id: record.model_id,
           orchestration_run_id: record.orchestration_run_id,
           pinned: record.pinned,
           updated_at: record.updated_at,
@@ -177,6 +180,7 @@ export function useControlSessions({
   const updateSession = useCallback(
     async (fields: {
       title?: string;
+      model_id?: string | null;
       pinned?: boolean;
       archived?: boolean;
     }): Promise<boolean> => {
@@ -234,6 +238,7 @@ export function useControlSessions({
             ? {
                 ...entry,
                 title: session.title,
+                model_id: session.model_id,
                 pinned: session.pinned,
                 updated_at: session.updated_at,
               }

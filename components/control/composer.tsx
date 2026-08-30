@@ -14,7 +14,7 @@ import { McpStatusButton } from "@/components/chat/mcp-status-button";
 import { ProviderIcon } from "@/components/provider-icon";
 import { useModels } from "@/hooks/use-models";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
-import type { Mission, MissionPermissions } from "@/lib/control/types";
+import type { MissionPermissions } from "@/lib/control/types";
 import {
   appendControlComposerFiles,
   consumeControlFileInput,
@@ -39,8 +39,9 @@ type Props = {
     options: ComposerSendOptions
   ) => Promise<boolean>;
   pending: boolean;
-  mission: Mission | undefined;
   onStop: () => void;
+  initialModelId: string | null;
+  onModelSelect: (modelId: string) => Promise<boolean>;
   /** Total tokens consumed by the active session (drives the context ring). */
   usageTokens?: number;
 };
@@ -227,15 +228,19 @@ export function Composer({
   onChange,
   onSend,
   pending,
-  mission: _mission,
   onStop,
+  initialModelId,
+  onModelSelect,
   usageTokens = 0,
 }: Props) {
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const { modelIds, defaultModelId, contextLimits } = useModels();
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(
+    initialModelId
+  );
+  const [modelSaving, setModelSaving] = useState(false);
   // The user's pick wins; until then follow their account default so the chip
   // never shows a model the send path wouldn't actually use.
   const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
@@ -262,8 +267,30 @@ export function Composer({
     setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length);
   }, []);
 
+  const selectModel = useCallback(
+    async (nextModelId: string) => {
+      const previousModel = selectedModel;
+      setSelectedModel(nextModelId);
+      setModelSaving(true);
+      let saved = false;
+      try {
+        saved = await onModelSelect(nextModelId);
+      } catch {
+        saved = false;
+      } finally {
+        setModelSaving(false);
+      }
+      if (!saved) {
+        setSelectedModel((current) =>
+          current === nextModelId ? previousModel : current
+        );
+      }
+    },
+    [onModelSelect, selectedModel]
+  );
+
   const handleSend = useCallback(async () => {
-    if ((value.trim() || files.length > 0) && !pending) {
+    if ((value.trim() || files.length > 0) && !pending && !modelSaving) {
       const draft = { text: value, files: [...files] };
       onChange("");
       setFiles([]);
@@ -287,7 +314,16 @@ export function Composer({
         setFiles(draft.files);
       }
     }
-  }, [value, files, pending, modelId, permissionsIdx, onSend, onChange]);
+  }, [
+    value,
+    files,
+    pending,
+    modelSaving,
+    modelId,
+    permissionsIdx,
+    onSend,
+    onChange,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -390,8 +426,8 @@ export function Composer({
           <ModelChip
             modelId={modelId}
             modelIds={modelIds}
-            onSelect={setSelectedModel}
-            disabled={pending}
+            onSelect={(nextModelId) => void selectModel(nextModelId)}
+            disabled={pending || modelSaving}
           />
           <button
             type="button"
@@ -432,9 +468,11 @@ export function Composer({
                 type="button"
                 aria-label="Send"
                 onClick={() => void handleSend()}
-                disabled={!value.trim() && files.length === 0}
+                disabled={
+                  modelSaving || (!value.trim() && files.length === 0)
+                }
                 className={`flex size-9 items-center justify-center rounded-full transition-colors ${
-                  value.trim() || files.length > 0
+                  !modelSaving && (value.trim() || files.length > 0)
                     ? "bg-primary text-primary-foreground hover:bg-brand-accent-hover"
                     : "cursor-not-allowed bg-ink-800 text-ink-600"
                 }`}

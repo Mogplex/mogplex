@@ -242,6 +242,7 @@ function buildRepositoryBlock(ctx: OrchestratorPromptContext): string {
 Active repository: ${ctx.repoFullName}
 Base branch: ${baseBranch}
 ${ctx.repoBranch && ctx.repoBranch !== baseBranch ? `Current branch: ${ctx.repoBranch}` : ""}
+The selected Control project establishes this repository as authoritative. Treat it as the target when the operator omits a repository or refers to this repository or project. Do not ask which repository to use unless the operator explicitly names a conflicting repository.
 
 Worker agents operate on isolated task branches. Integration happens on mogplex/integrate/<mission-slug>.
 </repository>

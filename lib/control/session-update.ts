@@ -2,6 +2,7 @@ const CONTROL_SESSION_UPDATE_FIELDS = [
   "title",
   "project",
   "repo_id",
+  "model_id",
   "messages",
   "pinned",
   "archived",
