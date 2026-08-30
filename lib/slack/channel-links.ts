@@ -72,6 +72,39 @@ export async function createSlackChannelLink(input: {
   return data as SlackChannelLinkRow;
 }
 
+export async function setSlackChannelLink(
+  input: {
+    installationId: string;
+    channelId: string;
+    channelName: string | null;
+    repoId: string;
+    createdByUserId: string;
+  },
+  client: Pick<typeof supabaseAdmin, "from"> = supabaseAdmin
+): Promise<SlackChannelLinkRow> {
+  const { data, error } = await client
+    .from("slack_channel_links")
+    .upsert(
+      {
+        slack_installation_id: input.installationId,
+        channel_id: input.channelId,
+        channel_name: input.channelName,
+        repo_id: input.repoId,
+        created_by_user_id: input.createdByUserId,
+      },
+      { onConflict: "slack_installation_id,channel_id" }
+    )
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `Failed to set slack_channel_link: ${error?.message ?? "no row"}`
+    );
+  }
+  return data as SlackChannelLinkRow;
+}
+
 export async function deleteSlackChannelLink(input: {
   linkId: string;
   installationId: string;

@@ -14,7 +14,7 @@ import {
   type SlackWebhookDeps,
   type SlackWebhookDispatchInput,
 } from "./_lib/event-types";
-import type { SlackModelCommandPayload } from "@/lib/slack/model-command";
+import type { SlackCommandPayload } from "@/lib/slack/command";
 
 // Re-export types and functions that tests depend on
 export {
@@ -35,8 +35,12 @@ export {
 async function dispatchInteractivity(
   payload: SlackInteractivityPayload
 ): Promise<void> {
-  // Only `block_actions` (button clicks etc.) are wired today; other shapes
-  // (view submissions, shortcuts) are acked by the webhook and dropped here.
+  if (payload.type === "view_submission") {
+    const { handleSlackIssueModalSubmission } =
+      await import("@/lib/slack/command-interactions");
+    await handleSlackIssueModalSubmission(payload);
+    return;
+  }
   if (payload.type !== "block_actions") return;
 
   // Lazy-import so the route module stays loadable in unit tests / during the
@@ -50,9 +54,8 @@ async function defaultDispatch(
   input: SlackWebhookDispatchInput
 ): Promise<void> {
   if (input.kind === "command") {
-    const { handleSlackModelCommand } =
-      await import("@/lib/slack/model-command");
-    await handleSlackModelCommand(input.body);
+    const { handleSlackCommand } = await import("@/lib/slack/command");
+    await handleSlackCommand(input.body);
     return;
   }
   if (input.kind === "interactivity") {
@@ -83,9 +86,9 @@ async function defaultDispatch(
   });
 }
 
-function parseSlackModelCommand(
+function parseSlackCommand(
   params: URLSearchParams
-): SlackModelCommandPayload | null {
+): SlackCommandPayload | null {
   const [command, teamId, channelId, slackUserId, responseUrl] = [
     "command",
     "team_id",
@@ -102,6 +105,9 @@ function parseSlackModelCommand(
     channelId,
     slackUserId,
     responseUrl,
+    ...(params.get("trigger_id")?.trim()
+      ? { triggerId: params.get("trigger_id")!.trim() }
+      : {}),
   };
 }
 
@@ -110,12 +116,12 @@ async function handleSlashCommandRequest(
   dispatch: SlackWebhookDeps["dispatch"],
   scheduleAfterResponse: NonNullable<SlackWebhookDeps["scheduleAfterResponse"]>
 ) {
-  const payload = parseSlackModelCommand(new URLSearchParams(rawBody));
+  const payload = parseSlackCommand(new URLSearchParams(rawBody));
   if (!payload) {
     return NextResponse.json(
       {
         response_type: "ephemeral",
-        text: "Mogplex could not read this command. Try `/mogplex model` again.",
+        text: "Mogplex could not read this command. Try `/mogplex help` again.",
       },
       { status: 200 }
     );

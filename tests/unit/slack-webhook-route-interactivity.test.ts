@@ -81,3 +81,43 @@ test("rejects interactivity form payloads without a payload field", async () => 
 
   assert.equal(response.status, 400);
 });
+
+test("acknowledges issue modal submissions before deferred dispatch", async () => {
+  const { createSlackWebhookPostHandler } = await loadSlackWebhookRoute();
+  const payload = {
+    type: "view_submission",
+    team: { id: "T123" },
+    user: { id: "U1" },
+    view: { callback_id: "mogplex_issue_create" },
+  };
+  const rawBody = new URLSearchParams({
+    payload: JSON.stringify(payload),
+  }).toString();
+  const dispatched: unknown[] = [];
+  const deferred: Array<() => void | Promise<void>> = [];
+  const handler = createSlackWebhookPostHandler({
+    getSigningSecret: () => SIGNING_SECRET,
+    dispatch: (input) => {
+      dispatched.push(input);
+    },
+    scheduleAfterResponse: (work) => deferred.push(work),
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/webhooks/slack", {
+      method: "POST",
+      body: rawBody,
+      headers: signedHeaders(rawBody, {
+        contentType: "application/x-www-form-urlencoded",
+      }),
+    })
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(dispatched.length, 0);
+  await deferred[0]();
+  assert.equal(
+    (dispatched[0] as { body: { type: string } }).body.type,
+    "view_submission"
+  );
+});

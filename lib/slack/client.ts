@@ -28,6 +28,10 @@ export type SlackUpdateMessageResult = {
   ts: string;
 };
 
+export type SlackOpenViewResult = {
+  view?: { id?: string };
+};
+
 export type SlackThreadMessage = {
   type?: string;
   user?: string;
@@ -202,6 +206,19 @@ export async function updateSlackMessage(
 ): Promise<SlackUpdateMessageResult> {
   return slackApiCall<SlackUpdateMessageResult>(
     "chat.update",
+    botToken,
+    input,
+    fetchImpl
+  );
+}
+
+export async function openSlackView(
+  botToken: string,
+  input: { trigger_id: string; view: Record<string, unknown> },
+  fetchImpl?: typeof fetch
+): Promise<SlackOpenViewResult> {
+  return slackApiCall<SlackOpenViewResult>(
+    "views.open",
     botToken,
     input,
     fetchImpl

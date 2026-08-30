@@ -1,5 +1,16 @@
 import type { SlackBlock } from "@/lib/slack/client";
 import {
+  SLACK_COMMAND_SELECT_ACTION_ID,
+  SLACK_CREATE_ISSUE_ACTION_ID,
+  SLACK_MERGE_PR_ACTION_ID,
+  SLACK_MODEL_SELECT_ACTION_ID,
+  SLACK_REFRESH_PRS_ACTION_ID,
+  SLACK_REPO_SELECT_ACTION_ID,
+  SLACK_VIEW_RUN_ACTION_ID,
+} from "@/lib/slack/command-actions";
+import type { SlackCommandPayload } from "@/lib/slack/command";
+import { postSlackResponse } from "@/lib/slack/response";
+import {
   getSlackInstallationByTeamId,
   getSlackUserMapping,
   isExplicitSlackUserMapping,
@@ -39,6 +50,7 @@ export type SlackBlockActionsPayload = {
   channel?: { id?: string };
   container?: { channel_id?: string };
   response_url?: string;
+  trigger_id?: string;
   actions?: SlackBlockAction[];
   /**
    * The message the clicked block is attached to. Slack includes this on
@@ -53,7 +65,10 @@ export type SlackInteractivityResult =
   | { outcome: "not_linked" }
   | { outcome: "run_not_found"; runId: string }
   | { outcome: "run_cancelled"; runId: string; status: string }
-  | { outcome: "model_updated"; modelId: string };
+  | { outcome: "model_updated"; modelId: string }
+  | { outcome: "command_dispatched"; command: string }
+  | { outcome: "pull_request_merged"; number: number }
+  | { outcome: "pull_request_queued"; number: number };
 
 export type SlackInteractivityDeps = {
   getInstallation: typeof getSlackInstallationByTeamId;
@@ -61,51 +76,18 @@ export type SlackInteractivityDeps = {
   listUsableModels: typeof listUsableModelIdsForScope;
   saveModelPreference: typeof upsertSlackModelPreference;
   cancelRun: typeof cancelMogplexApiRun;
+  dispatchCommand: (payload: SlackCommandPayload) => Promise<void>;
+  mergePullRequest: (
+    payload: SlackBlockActionsPayload,
+    rawValue: string
+  ) => Promise<SlackInteractivityResult>;
   postResponse: (
     responseUrl: string,
     body: Record<string, unknown>
   ) => Promise<void>;
 };
 
-/**
- * Hosts we'll POST a Slack `response_url` to. Slack always uses
- * `hooks.slack.com`; `*.slack.test` covers local/CI fixtures. Anything else is
- * rejected — defense-in-depth against an SSRF via a tampered interactivity
- * payload (the inbound HMAC check already makes that hard, but this is cheap).
- */
-const ALLOWED_RESPONSE_URL_HOSTS = new Set([
-  "hooks.slack.com",
-  "hooks.slack.test",
-]);
-
-function assertAllowedResponseUrl(responseUrl: string): void {
-  let host: string;
-  try {
-    host = new URL(responseUrl).hostname;
-  } catch {
-    throw new Error(`Invalid Slack response_url: ${responseUrl}`);
-  }
-  if (!ALLOWED_RESPONSE_URL_HOSTS.has(host)) {
-    throw new Error(
-      `Refusing to POST Slack response_url to unexpected host: ${host}`
-    );
-  }
-}
-
-export async function postSlackResponse(
-  responseUrl: string,
-  body: Record<string, unknown>
-): Promise<void> {
-  assertAllowedResponseUrl(responseUrl);
-  const response = await fetch(responseUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`Slack response_url POST failed: HTTP ${response.status}`);
-  }
-}
+export { postSlackResponse } from "@/lib/slack/response";
 
 const defaultDeps: SlackInteractivityDeps = {
   getInstallation: getSlackInstallationByTeamId,
@@ -113,6 +95,15 @@ const defaultDeps: SlackInteractivityDeps = {
   listUsableModels: listUsableModelIdsForScope,
   saveModelPreference: upsertSlackModelPreference,
   cancelRun: cancelMogplexApiRun,
+  dispatchCommand: async (payload) => {
+    const { handleSlackCommand } = await import("@/lib/slack/command");
+    await handleSlackCommand(payload);
+  },
+  mergePullRequest: async (payload, rawValue) => {
+    const { handleSlackPullRequestMergeAction } =
+      await import("@/lib/slack/command-interactions");
+    return handleSlackPullRequestMergeAction(payload, rawValue);
+  },
   postResponse: postSlackResponse,
 };
 
@@ -233,7 +224,7 @@ async function resolveActorMogplexUserId(
   };
 }
 
-export const SLACK_MODEL_SELECT_ACTION_ID = "mogplex_select_model";
+export { SLACK_MODEL_SELECT_ACTION_ID } from "@/lib/slack/command-actions";
 
 function findModelSelection(payload: SlackBlockActionsPayload) {
   const action = (payload.actions ?? []).find(
@@ -245,6 +236,64 @@ function findModelSelection(payload: SlackBlockActionsPayload) {
 
 function modelSelectionChannelId(payload: SlackBlockActionsPayload) {
   return payload.channel?.id ?? payload.container?.channel_id;
+}
+
+const DISPATCHABLE_COMMANDS = new Set([
+  "status",
+  "repo",
+  "prs",
+  "issues",
+  "usage",
+  "model",
+]);
+
+function findCommandDispatch(payload: SlackBlockActionsPayload) {
+  for (const action of payload.actions ?? []) {
+    if (action.action_id === SLACK_COMMAND_SELECT_ACTION_ID) {
+      const command = action.selected_option?.value?.trim() ?? "";
+      return DISPATCHABLE_COMMANDS.has(command) ? command : "";
+    }
+    if (action.action_id === SLACK_REPO_SELECT_ACTION_ID) {
+      const repoId = action.selected_option?.value?.trim() ?? "";
+      return repoId ? `repo ${repoId}` : "";
+    }
+    if (action.action_id === SLACK_CREATE_ISSUE_ACTION_ID) {
+      return "issues create";
+    }
+    if (action.action_id === SLACK_REFRESH_PRS_ACTION_ID) return "prs";
+  }
+  return undefined;
+}
+
+async function dispatchSelectedCommand(
+  deps: SlackInteractivityDeps,
+  payload: SlackBlockActionsPayload,
+  command: string
+): Promise<SlackInteractivityResult> {
+  const teamId = payload.team?.id;
+  const slackUserId = payload.user?.id;
+  const channelId = payload.channel?.id ?? payload.container?.channel_id;
+  const responseUrl = payload.response_url;
+  if (!teamId || !slackUserId || !channelId || !responseUrl) {
+    return { outcome: "ignored", reason: "missing_command_context" };
+  }
+  await deps.dispatchCommand({
+    command: "/mogplex",
+    text: command,
+    teamId,
+    channelId,
+    slackUserId,
+    responseUrl,
+    ...(payload.trigger_id ? { triggerId: payload.trigger_id } : {}),
+  });
+  return { outcome: "command_dispatched", command };
+}
+
+function findMergeActionValue(payload: SlackBlockActionsPayload) {
+  const action = (payload.actions ?? []).find(
+    (candidate) => candidate.action_id === SLACK_MERGE_PR_ACTION_ID
+  );
+  return action ? (action.value?.trim() ?? "") : undefined;
 }
 
 async function updateSelectedModel(
@@ -377,9 +426,9 @@ async function cancelRunAndRespond(
 /**
  * Handle a Slack `block_actions` interactivity payload.
  *
- * Currently only the "Cancel run" button is wired; unknown actions are a no-op
- * (the webhook has already acked, so Slack just hides the spinner). New buttons
- * should be added here rather than spreading interactivity logic across modules.
+ * Unknown actions are a no-op (the webhook has already acked, so Slack just
+ * hides the spinner). New buttons should be added here rather than spreading
+ * interactivity routing across modules.
  */
 export async function handleSlackBlockActions(
   payload: SlackBlockActionsPayload,
@@ -396,6 +445,28 @@ export async function handleSlackBlockActions(
     return selectedModel
       ? updateSelectedModel(deps, payload, selectedModel)
       : { outcome: "ignored", reason: "missing_model_id" };
+  }
+
+  const command = findCommandDispatch(payload);
+  if (command !== undefined) {
+    return command
+      ? dispatchSelectedCommand(deps, payload, command)
+      : { outcome: "ignored", reason: "invalid_command_selection" };
+  }
+
+  const mergeValue = findMergeActionValue(payload);
+  if (mergeValue !== undefined) {
+    return mergeValue
+      ? deps.mergePullRequest(payload, mergeValue)
+      : { outcome: "ignored", reason: "invalid_merge_action" };
+  }
+
+  if (
+    (payload.actions ?? []).some(
+      (candidate) => candidate.action_id === SLACK_VIEW_RUN_ACTION_ID
+    )
+  ) {
+    return { outcome: "ignored", reason: "link_action" };
   }
 
   const runId = findCancelRunId(payload);

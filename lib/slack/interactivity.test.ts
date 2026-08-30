@@ -1,11 +1,13 @@
 import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 
 let postSlackResponse: typeof import("./interactivity").postSlackResponse;
+let handleSlackBlockActions: typeof import("./interactivity").handleSlackBlockActions;
 
 beforeAll(async () => {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  ({ postSlackResponse } = await import("./interactivity"));
+  ({ postSlackResponse, handleSlackBlockActions } =
+    await import("./interactivity"));
 });
 
 afterEach(() => {
@@ -39,5 +41,72 @@ describe("Slack response posting", () => {
       postSlackResponse("https://example.com/response", { text: "Updated" })
     ).rejects.toThrow("unexpected host");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("Slack command action routing", () => {
+  const payload = {
+    type: "block_actions",
+    team: { id: "T1" },
+    user: { id: "U1" },
+    channel: { id: "C1" },
+    response_url: "https://hooks.slack.test/response",
+    trigger_id: "trigger-1",
+  };
+
+  it("dispatches command and repository picker selections", async () => {
+    const dispatchCommand = vi.fn(async () => undefined);
+    await expect(
+      handleSlackBlockActions(
+        {
+          ...payload,
+          actions: [
+            {
+              action_id: "mogplex_select_repo",
+              selected_option: { value: "repo-1" },
+            },
+          ],
+        },
+        { dispatchCommand }
+      )
+    ).resolves.toEqual({
+      outcome: "command_dispatched",
+      command: "repo repo-1",
+    });
+    expect(dispatchCommand).toHaveBeenCalledWith({
+      command: "/mogplex",
+      text: "repo repo-1",
+      teamId: "T1",
+      channelId: "C1",
+      slackUserId: "U1",
+      responseUrl: "https://hooks.slack.test/response",
+      triggerId: "trigger-1",
+    });
+  });
+
+  it("routes confirmed PR merges through the protected action handler", async () => {
+    const mergePullRequest = vi.fn(async () => ({
+      outcome: "pull_request_queued" as const,
+      number: 17,
+    }));
+    const rawValue = JSON.stringify({ number: 17 });
+    await expect(
+      handleSlackBlockActions(
+        {
+          ...payload,
+          actions: [
+            {
+              action_id: "mogplex_merge_pr",
+              value: rawValue,
+            },
+          ],
+        },
+        { mergePullRequest }
+      )
+    ).resolves.toEqual({ outcome: "pull_request_queued", number: 17 });
+    expect(mergePullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ team: { id: "T1" } }),
+      rawValue
+    );
   });
 });
