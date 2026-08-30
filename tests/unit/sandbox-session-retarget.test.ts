@@ -118,6 +118,9 @@ function seedHarnessConversation(
   useConversationsStore.setState({
     conversations: {
       [paneId]: {
+        id: paneId,
+        repoId: "repo-1",
+        workspaceSessionId: "workspace-1",
         messages: [],
         localMsgs: [],
         harnessState: {

@@ -14,6 +14,11 @@ import type {
 import { getChatRunScope } from "./_lib/types";
 import { persistChatStartupFailure } from "./_lib/finalization";
 import { executeChatRequest } from "./_lib/execute";
+import {
+  ChatSessionContextError,
+  resolveChatSessionContext,
+} from "./_lib/session-context";
+import { ChatValidationError, normalizeChatMessages } from "./_lib/messages";
 
 // Re-export test helpers from memory module
 export {
@@ -24,6 +29,7 @@ export {
 const defaultChatPostDeps: ChatPostDeps = {
   requireUserId,
   enforceChatLimits,
+  resolveChatSessionContext,
 };
 
 export function createChatPostHandler(overrides: Partial<ChatPostDeps> = {}) {
@@ -36,7 +42,33 @@ export function createChatPostHandler(overrides: Partial<ChatPostDeps> = {}) {
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body = (await req.json()) as ChatRequestBody;
+    let hintedBody: ChatRequestBody;
+    try {
+      hintedBody = (await req.json()) as ChatRequestBody;
+    } catch {
+      return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
+
+    let body: ChatRequestBody;
+    try {
+      body = await deps.resolveChatSessionContext(req, userId, hintedBody);
+    } catch (error) {
+      const status =
+        error instanceof ChatSessionContextError ? error.status : 500;
+      const message =
+        error instanceof ChatSessionContextError
+          ? error.message
+          : "Could not load the conversation context.";
+      return Response.json({ error: message }, { status });
+    }
+    try {
+      body.messages = normalizeChatMessages(body.messages);
+    } catch (error) {
+      if (error instanceof ChatValidationError) {
+        return Response.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
+    }
     const scope = getChatRunScope(body);
 
     const limitDecision = await deps.enforceChatLimits({

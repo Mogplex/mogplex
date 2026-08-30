@@ -1,12 +1,12 @@
 "use client";
 import { create } from "zustand";
+import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { DEFAULT_NEW_AGENT_MODEL_ID } from "@/lib/agents/model-options";
 import type {
   ConversationListItem,
   ConversationState,
   HarnessId,
   HarnessSessionState,
-  HarnessState,
   LocalMessage,
   Message,
 } from "./conversation-types";
@@ -19,19 +19,10 @@ import {
   messagesEqual,
   queueConversationSync,
 } from "./conversation-utils";
+import { createConversationState } from "./conversation-state";
 
-export type {
-  ConversationListItem,
-  ConversationState,
-  HarnessId,
-  HarnessSessionState,
-  HarnessState,
-  LocalMessage,
-  LocalMessageSegment,
-  LocalToolCall,
-  LocalToolCallState,
-  Message,
-} from "./conversation-types";
+export type * from "./conversation-types";
+export { getHarnessResumeSessionId } from "./conversation-state";
 
 type ConversationsStore = {
   conversations: Record<string, ConversationState>;
@@ -41,10 +32,19 @@ type ConversationsStore = {
   setUserId: (id: string | null) => void;
   setDefaultModel: (model: string) => void;
   getConversation: (paneId: string) => ConversationState;
-  loadConversation: (paneId: string) => Promise<void>;
-  hydrateConversation: (
+  loadConversation: (
     paneId: string,
-    payload: Partial<ConversationState>
+    conversationId?: string,
+    expectedRepoId?: string | null,
+    signal?: AbortSignal
+  ) => Promise<ConversationState | null>;
+  startConversation: (
+    paneId: string,
+    context: {
+      id: string;
+      repoId: string | null;
+      workspaceSessionId: string | null;
+    }
   ) => void;
   setMessages: (paneId: string, messages: Message[]) => void;
   addLocalMsg: (paneId: string, msg: LocalMessage) => void;
@@ -68,33 +68,10 @@ type ConversationsStore = {
   setModel: (paneId: string, model: string) => void;
   setMode: (paneId: string, mode: "AUTO" | "YOLO" | "SAFE") => void;
   removeConversation: (paneId: string) => void;
-  syncToSupabase: (paneId: string) => Promise<void>;
-  fetchConversationList: () => Promise<void>;
+  syncToSupabase: (paneId: string) => Promise<boolean>;
+  fetchConversationList: (repoId?: string | null) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
 };
-
-const defaultState = (model: string): ConversationState => ({
-  messages: [],
-  localMsgs: [],
-  harnessState: {},
-  model,
-  mode: "AUTO",
-  updatedAt: null,
-});
-
-export function getHarnessResumeSessionId(
-  harnessState: HarnessState,
-  harnessId: HarnessId,
-  sandboxId?: string | null
-) {
-  if (!sandboxId) return null;
-
-  const session = harnessState[harnessId];
-  if (!session?.sessionId) return null;
-  if (session.sandboxId !== sandboxId) return null;
-
-  return session.sessionId;
-}
 
 export const useConversationsStore = create<ConversationsStore>((set, get) => ({
   conversations: {},
@@ -106,54 +83,75 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
   setDefaultModel: (model) => set({ defaultModel: model }),
 
   getConversation: (paneId) =>
-    get().conversations[paneId] || defaultState(get().defaultModel),
+    get().conversations[paneId] ||
+    createConversationState(get().defaultModel, paneId),
 
-  loadConversation: async (paneId) => {
+  loadConversation: async (paneId, conversationId, expectedRepoId, signal) => {
+    const requestedConversationId = conversationId ?? paneId;
     try {
-      const res = await fetch(`/api/conversations?id=${paneId}`);
-      if (!res.ok) return;
+      const res = await fetch(
+        `/api/conversations?id=${requestedConversationId}`,
+        { headers: getActiveTeamRequestHeaders(), signal }
+      );
+      if (!res.ok) return null;
       const data = await res.json();
+      if (signal?.aborted) return null;
 
       if (data) {
+        const repoId = data.repo_id ?? null;
+        if (expectedRepoId !== undefined && repoId !== expectedRepoId) {
+          return null;
+        }
+        const loadedConversation: ConversationState = {
+          id: data.id,
+          repoId,
+          workspaceSessionId: data.workspace_session_id ?? null,
+          messages: data.messages || [],
+          localMsgs: normalizeLocalMessages(data.local_msgs),
+          harnessState: normalizeHarnessState(data.harness_state),
+          model: data.model || get().defaultModel,
+          mode: data.mode || "AUTO",
+          title: data.title || undefined,
+          updatedAt: data.updated_at || null,
+        };
         set((state) => ({
           conversations: {
             ...state.conversations,
-            [paneId]: {
-              messages: data.messages || [],
-              localMsgs: normalizeLocalMessages(data.local_msgs),
-              harnessState: normalizeHarnessState(data.harness_state),
-              model: data.model || get().defaultModel,
-              mode: data.mode || "AUTO",
-              title: data.title || undefined,
-              updatedAt: data.updated_at || null,
-            },
+            [paneId]: loadedConversation,
           },
         }));
+        return loadedConversation;
       }
     } catch (error) {
-      console.warn("Failed to load conversation", { paneId, error });
+      if (signal?.aborted) return null;
+      console.warn("Failed to load conversation", {
+        paneId,
+        conversationId: requestedConversationId,
+        error,
+      });
     }
+    return null;
   },
 
-  hydrateConversation: (paneId, payload) => {
+  startConversation: (paneId, context) => {
     set((state) => {
       const current =
-        state.conversations[paneId] || defaultState(get().defaultModel);
+        state.conversations[paneId] ||
+        createConversationState(get().defaultModel, context.id, context);
       return {
         conversations: {
           ...state.conversations,
           [paneId]: {
-            ...current,
-            ...payload,
-            updatedAt: current.updatedAt ?? null,
+            ...createConversationState(current.model, context.id, context),
+            mode: current.mode,
           },
         },
       };
     });
-    void get().syncToSupabase(paneId);
   },
 
   syncToSupabase: async (paneId) => {
+    let succeeded = false;
     await queueConversationSync(paneId, async () => {
       const { userId } = get();
       if (!userId) return;
@@ -161,14 +159,18 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       const conv = get().conversations[paneId];
       if (!conv) return;
 
-      const title = conv.title || extractTitle(conv.messages);
+      const title = conv.title || extractTitle(conv.messages) || "";
 
       try {
         const res = await fetch("/api/conversations", {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getActiveTeamRequestHeaders({
+            "Content-Type": "application/json",
+          }),
           body: JSON.stringify({
-            id: paneId,
+            id: conv.id,
+            repo_id: conv.repoId,
+            workspace_session_id: conv.workspaceSessionId,
             model: conv.model,
             mode: conv.mode,
             messages: conv.messages,
@@ -199,6 +201,7 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
           });
           console.warn("Conversation sync skipped due to version conflict", {
             paneId,
+            conversationId: conv.id,
           });
           return;
         }
@@ -233,17 +236,24 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
             },
           };
         });
+        succeeded = true;
       } catch (error) {
-        console.warn("Failed to sync conversation", { paneId, error });
+        console.warn("Failed to sync conversation", {
+          paneId,
+          conversationId: conv.id,
+          error,
+        });
       }
     });
+    return succeeded;
   },
 
   setMessages: (paneId, messages) => {
     let changed = false;
     set((state) => {
       const current =
-        state.conversations[paneId] || defaultState(get().defaultModel);
+        state.conversations[paneId] ||
+        createConversationState(get().defaultModel, paneId);
       if (messagesEqual(current.messages, messages)) {
         return state;
       }
@@ -261,7 +271,8 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
   addLocalMsg: (paneId, msg) => {
     set((state) => {
       const conv =
-        state.conversations[paneId] || defaultState(get().defaultModel);
+        state.conversations[paneId] ||
+        createConversationState(get().defaultModel, paneId);
       return {
         conversations: {
           ...state.conversations,
@@ -349,7 +360,8 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
   setHarnessState: (paneId, harnessId, session) => {
     set((state) => {
       const conv =
-        state.conversations[paneId] || defaultState(get().defaultModel);
+        state.conversations[paneId] ||
+        createConversationState(get().defaultModel, paneId);
       const nextHarnessState = { ...conv.harnessState };
 
       if (session) {
@@ -389,7 +401,8 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       conversations: {
         ...state.conversations,
         [paneId]: {
-          ...(state.conversations[paneId] || defaultState(get().defaultModel)),
+          ...(state.conversations[paneId] ||
+            createConversationState(get().defaultModel, paneId)),
           messages: [],
           localMsgs: [],
           harnessState: {},
@@ -405,7 +418,8 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       conversations: {
         ...state.conversations,
         [paneId]: {
-          ...(state.conversations[paneId] || defaultState(get().defaultModel)),
+          ...(state.conversations[paneId] ||
+            createConversationState(get().defaultModel, paneId)),
           model,
         },
       },
@@ -418,7 +432,8 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       conversations: {
         ...state.conversations,
         [paneId]: {
-          ...(state.conversations[paneId] || defaultState(get().defaultModel)),
+          ...(state.conversations[paneId] ||
+            createConversationState(get().defaultModel, paneId)),
           mode,
         },
       },
@@ -427,16 +442,27 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
   },
 
   removeConversation: async (paneId) => {
+    const conversationId = get().conversations[paneId]?.id;
     set((state) => {
       const { [paneId]: _, ...rest } = state.conversations;
       return { conversations: rest };
     });
-    await fetch(`/api/conversations?id=${paneId}`, { method: "DELETE" });
+    if (!conversationId) return;
+    await fetch(`/api/conversations?id=${conversationId}`, {
+      method: "DELETE",
+      headers: getActiveTeamRequestHeaders(),
+    });
   },
 
-  fetchConversationList: async () => {
+  fetchConversationList: async (repoId) => {
     try {
-      const res = await fetch("/api/conversations");
+      const query = new URLSearchParams();
+      if (repoId) query.set("repo_id", repoId);
+      else if (repoId === null) query.set("projectless", "true");
+      const res = await fetch(
+        `/api/conversations${query.size > 0 ? `?${query}` : ""}`,
+        { headers: getActiveTeamRequestHeaders() }
+      );
       if (!res.ok) return;
       const data = await res.json();
       set({ conversationList: data || [] });
@@ -450,7 +476,10 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       conversationList: state.conversationList.filter((c) => c.id !== id),
     }));
     try {
-      await fetch(`/api/conversations?id=${id}`, { method: "DELETE" });
+      await fetch(`/api/conversations?id=${id}`, {
+        method: "DELETE",
+        headers: getActiveTeamRequestHeaders(),
+      });
     } catch (error) {
       console.warn("Failed to delete conversation", { id, error });
     }

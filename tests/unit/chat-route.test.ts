@@ -13,6 +13,7 @@ test("POST /api/chat returns 429 before starting a chat run when limits are exce
 
   const handler = createChatPostHandler({
     requireUserId: async () => "user-123",
+    resolveChatSessionContext: async (_request, _userId, body) => body,
     enforceChatLimits: async () => ({
       allowed: false,
       status: 429,

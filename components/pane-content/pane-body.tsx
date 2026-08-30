@@ -124,6 +124,7 @@ export function PaneBody({
           activeRepo={activeRepo}
           activeSandbox={resolvedSandbox}
           onStreamingChange={onStreamingChange}
+          onUpdatePane={onUpdatePane}
         />
       );
 

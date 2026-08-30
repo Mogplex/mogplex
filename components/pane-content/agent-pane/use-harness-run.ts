@@ -20,6 +20,7 @@ import {
 import { ensureSessionSandboxBinding } from "@/lib/sandbox/session-retarget";
 import type { Repo } from "@/lib/types";
 import type { HarnessId } from "@/lib/harness/config";
+import type { CommandInputAttachment as Attachment } from "@/components/command-input-types";
 import { createStreamProcessor, type StreamEvent } from "./stream-processor";
 
 // Stable empty object to avoid re-render loops in Zustand selectors
@@ -27,6 +28,8 @@ const EMPTY_HARNESS_STATE: Record<string, unknown> = {};
 
 interface UseHarnessRunParams {
   paneId: string;
+  conversationId: string;
+  workspaceSessionId: string | null;
   model: string;
   mode: "AUTO" | "YOLO" | "SAFE";
   activeRepo?: Pick<Repo, "id"> | null;
@@ -35,6 +38,8 @@ interface UseHarnessRunParams {
 
 export function useHarnessRun({
   paneId,
+  conversationId,
+  workspaceSessionId,
   model,
   mode,
   activeRepo,
@@ -69,8 +74,28 @@ export function useHarnessRun({
   );
 
   const executeHarnessRun = useCallback(
-    async (input: string) => {
+    async (input: string, attachments?: Attachment[]) => {
+      const saved = await syncConversation(paneId);
+      if (!saved) {
+        addLocalMsg(paneId, {
+          id: crypto.randomUUID(),
+          text: "Could not save this conversation. Try again before sending.",
+        });
+        return;
+      }
       const harnessId = model.replace("harness:", "") as HarnessId;
+      const prompt = input.trim() || "Review the attached file(s).";
+      const harnessAttachments = attachments?.flatMap((attachment) =>
+        attachment.data
+          ? [
+              {
+                name: attachment.name,
+                mediaType: attachment.mediaType,
+                dataUrl: attachment.data,
+              },
+            ]
+          : []
+      );
 
       const sessionsSnapshot = useSessionsStore.getState();
       const activeSession =
@@ -141,7 +166,7 @@ export function useHarnessRun({
         sandboxId ?? null
       );
 
-      addLocalMsg(paneId, { id: crypto.randomUUID(), text: `you: ${input}` });
+      addLocalMsg(paneId, { id: crypto.randomUUID(), text: `you: ${prompt}` });
       const outputMsgId = crypto.randomUUID();
       addLocalMsg(paneId, { id: outputMsgId, text: "▸ running..." });
 
@@ -181,9 +206,9 @@ export function useHarnessRun({
             }),
             body: JSON.stringify({
               harness: harnessId,
-              prompt: input,
-              conversationId: paneId,
-              workspaceSessionId: activeSessionId,
+              prompt,
+              conversationId,
+              workspaceSessionId,
               resumeSessionId,
               mode,
               prepareOnly: true,
@@ -214,12 +239,15 @@ export function useHarnessRun({
             }),
             body: JSON.stringify({
               harness: harnessId,
-              prompt: input,
-              conversationId: paneId,
-              workspaceSessionId: activeSessionId,
+              prompt,
+              conversationId,
+              workspaceSessionId,
               resumeSessionId,
               mode,
               aiCallId: prepared.aiCallId,
+              ...(harnessAttachments?.length
+                ? { attachments: harnessAttachments }
+                : {}),
             }),
             signal: controller.signal,
           });
@@ -354,6 +382,7 @@ export function useHarnessRun({
       activeSandboxId,
       activeSessionId,
       addLocalMsg,
+      conversationId,
       harnessState,
       launchRepoSandbox,
       mode,
@@ -362,14 +391,15 @@ export function useHarnessRun({
       setHarnessState,
       syncConversation,
       updateLocalMsg,
+      workspaceSessionId,
     ]
   );
 
   const submitToHarness = useCallback(
-    async (input: string) => {
+    async (input: string, attachments?: Attachment[]) => {
       setIsHarnessRunning(true);
       try {
-        await executeHarnessRun(input);
+        await executeHarnessRun(input, attachments);
       } finally {
         setIsHarnessRunning(false);
         activeHarnessCallIdRef.current = null;
