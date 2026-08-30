@@ -133,6 +133,113 @@ test("cancels the run and confirms via response_url for a linked user", async ()
   );
 });
 
+test("saves a model selected from the Slack picker for the user and channel", async () => {
+  const saved: Array<Record<string, string>> = [];
+  const { deps, posted } = makeDeps({
+    listUsableModels: async () => ["openai/gpt-5.4", "anthropic/claude-4"],
+    saveModelPreference: async (input) => {
+      saved.push(input);
+      return { model_id: input.modelId } as never;
+    },
+  });
+  const result = await mod.handleSlackBlockActions(
+    makePayload({
+      channel: { id: "C789" },
+      actions: [
+        {
+          action_id: mod.SLACK_MODEL_SELECT_ACTION_ID,
+          type: "static_select",
+          selected_option: { value: "anthropic/claude-4" },
+        },
+      ],
+    }),
+    deps
+  );
+
+  assert.deepEqual(result, {
+    outcome: "model_updated",
+    modelId: "anthropic/claude-4",
+  });
+  assert.deepEqual(saved, [
+    {
+      installationId: "install-1",
+      channelId: "C789",
+      slackUserId: "U456",
+      modelId: "anthropic/claude-4",
+    },
+  ]);
+  assert.match(String(findEphemeral(posted)?.body.text), /Model set to/);
+});
+
+test("rejects a model selection that is not available to the user", async () => {
+  let saveCount = 0;
+  const { deps, posted } = makeDeps({
+    listUsableModels: async () => ["openai/gpt-5.4"],
+    saveModelPreference: async () => {
+      saveCount += 1;
+      return {} as never;
+    },
+  });
+  const result = await mod.handleSlackBlockActions(
+    makePayload({
+      channel: { id: "C789" },
+      actions: [
+        {
+          action_id: mod.SLACK_MODEL_SELECT_ACTION_ID,
+          type: "static_select",
+          selected_option: { value: "unavailable/model" },
+        },
+      ],
+    }),
+    deps
+  );
+
+  assert.deepEqual(result, {
+    outcome: "ignored",
+    reason: "model_unavailable",
+  });
+  assert.equal(saveCount, 0);
+  assert.match(String(findEphemeral(posted)?.body.text), /no longer available/);
+});
+
+test("allows the Slack installer to use the model picker fallback", async () => {
+  const saved: Array<Record<string, string>> = [];
+  const { deps } = makeDeps({
+    getInstallation: async () =>
+      ({
+        id: "install-1",
+        authed_user_slack_id: "U456",
+        installed_by_user_id: "mog-owner-1",
+      }) as Awaited<ReturnType<SlackInteractivityDeps["getInstallation"]>>,
+    getUserMapping: async () => null,
+    listUsableModels: async (userId) => {
+      assert.equal(userId, "mog-owner-1");
+      return ["openai/gpt-5.4"];
+    },
+    saveModelPreference: async (input) => {
+      saved.push(input);
+      return {} as never;
+    },
+  });
+
+  const result = await mod.handleSlackBlockActions(
+    makePayload({
+      channel: { id: "C789" },
+      actions: [
+        {
+          action_id: mod.SLACK_MODEL_SELECT_ACTION_ID,
+          type: "static_select",
+          selected_option: { value: "openai/gpt-5.4" },
+        },
+      ],
+    }),
+    deps
+  );
+
+  assert.equal(result.outcome, "model_updated");
+  assert.equal(saved.length, 1);
+});
+
 test("ignores payloads without the cancel-run action", async () => {
   const { deps, posted } = makeDeps();
   const result = await mod.handleSlackBlockActions(

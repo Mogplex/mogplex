@@ -14,7 +14,10 @@ import {
   getSlackModelPreference,
   upsertSlackModelPreference,
 } from "@/lib/slack/model-preferences";
-import { postSlackResponse } from "@/lib/slack/interactivity";
+import {
+  postSlackResponse,
+  SLACK_MODEL_SELECT_ACTION_ID,
+} from "@/lib/slack/interactivity";
 
 export type SlackModelCommandPayload = {
   command: string;
@@ -63,11 +66,13 @@ function resolveMogplexUserId(
 }
 
 function readModelArgument(payload: SlackModelCommandPayload) {
-  if (!["/mogplex", "/model"].includes(payload.command.toLowerCase())) {
+  const command = payload.command.trim().toLowerCase();
+  if (!["/mogplex", "/model"].includes(command)) {
     return null;
   }
   const words = payload.text.trim().split(/\s+/).filter(Boolean);
-  if (payload.command === "/model") return words.join(" ");
+  if (command === "/model") return words.join(" ");
+  if (words.length === 0) return "";
   if (words[0]?.toLowerCase() !== "model") return null;
   return words.slice(1).join(" ");
 }
@@ -116,15 +121,84 @@ function listText(input: {
   ].join("\n");
 }
 
+function effectiveModel(input: {
+  selected: string | null;
+  fallback: string | null;
+  models: string[];
+}) {
+  return input.selected && input.models.includes(input.selected)
+    ? input.selected
+    : input.fallback && input.models.includes(input.fallback)
+      ? input.fallback
+      : null;
+}
+
+function buildModelPickerBlocks(input: {
+  selected: string | null;
+  fallback: string | null;
+  models: string[];
+}) {
+  if (input.models.length === 0) return undefined;
+
+  const current = effectiveModel(input);
+  const visibleModels = input.models.slice(0, 100);
+  if (current && !visibleModels.includes(current)) {
+    visibleModels[visibleModels.length - 1] = current;
+  }
+  const options = visibleModels.map((modelId) => ({
+    text: { type: "plain_text", text: modelId.slice(0, 75), emoji: true },
+    value: modelId,
+  }));
+  const initialOption = current
+    ? options.find((option) => option.value === current)
+    : undefined;
+
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: current
+          ? `*Current model:* \`${current}\``
+          : "*Current model:* No usable model",
+      },
+    },
+    {
+      type: "actions",
+      block_id: "mogplex_model_picker",
+      elements: [
+        {
+          type: "static_select",
+          action_id: SLACK_MODEL_SELECT_ACTION_ID,
+          placeholder: { type: "plain_text", text: "Choose a model" },
+          options,
+          ...(initialOption ? { initial_option: initialOption } : {}),
+        },
+      ],
+    },
+    {
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text: "Or use `/mogplex model <model-id>`.",
+        },
+      ],
+    },
+  ];
+}
+
 async function respond(
   deps: SlackModelCommandDeps,
   payload: SlackModelCommandPayload,
-  text: string
+  text: string,
+  blocks?: Array<Record<string, unknown>>
 ) {
   await deps.postResponse(payload.responseUrl, {
     response_type: "ephemeral",
     replace_original: false,
     text,
+    ...(blocks ? { blocks } : {}),
   });
 }
 
@@ -159,10 +233,16 @@ async function handleAuthorizedModelCommand(input: {
     deps.resolveDefaultModel(user.mogplexUserId),
   ]);
   if (!modelArgument) {
+    const pickerInput = {
+      selected: preference?.model_id ?? null,
+      fallback,
+      models,
+    };
     await respond(
       deps,
       payload,
-      listText({ selected: preference?.model_id ?? null, fallback, models })
+      listText(pickerInput),
+      buildModelPickerBlocks(pickerInput)
     );
     return;
   }
