@@ -3,12 +3,14 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { validateControlSessionRepoAccess } from "@/lib/control/session-repo-access";
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
+import { isUuid } from "@/lib/uuid";
 
 type ConversationRecord = {
   id: string;
   user_id: string;
   repo_id: string | null;
   workspace_session_id: string | null;
+  sandbox_id: string | null;
   updated_at: string | null;
   [key: string]: unknown;
 };
@@ -49,6 +51,60 @@ function parseWorkspaceSessionId(value: unknown) {
     return { ok: false } as const;
   }
   return { ok: true, value: value.trim() || null } as const;
+}
+
+function parseSandboxId(value: unknown) {
+  if (value === undefined) return { ok: true, value: undefined } as const;
+  if (value === null) return { ok: true, value: null } as const;
+  if (typeof value !== "string") return { ok: false } as const;
+  const trimmed = value.trim();
+  if (!isUuid(trimmed)) return { ok: false } as const;
+  return { ok: true, value: trimmed } as const;
+}
+
+async function validateSandboxBinding(input: {
+  sandboxId: string | null | undefined;
+  repoId: string | null;
+  userId: string;
+}) {
+  if (input.sandboxId === undefined) {
+    return { value: undefined } as const;
+  }
+  if (input.sandboxId === null) {
+    return { value: null } as const;
+  }
+  if (!input.repoId) {
+    return {
+      response: NextResponse.json(
+        { error: "A projectless conversation cannot use a sandbox" },
+        { status: 400 }
+      ),
+    } as const;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("sandboxes")
+    .select("id, repo_id")
+    .eq("id", input.sandboxId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (error) {
+    return {
+      response: NextResponse.json(
+        { error: "Could not validate the conversation sandbox" },
+        { status: 500 }
+      ),
+    } as const;
+  }
+  if (data?.repo_id !== input.repoId) {
+    return {
+      response: NextResponse.json(
+        { error: "Conversation sandbox not found" },
+        { status: 404 }
+      ),
+    } as const;
+  }
+  return { value: data.id as string } as const;
 }
 
 export function pickConversationMutableFields(body: Record<string, unknown>) {
@@ -178,6 +234,10 @@ export async function PUT(req: Request) {
       { status: 400 }
     );
   }
+  const sandboxId = parseSandboxId(body.sandbox_id);
+  if (!sandboxId.ok) {
+    return NextResponse.json({ error: "Invalid sandbox_id" }, { status: 400 });
+  }
 
   const fields = pickConversationMutableFields(body);
   const updatedAt = new Date().toISOString();
@@ -217,9 +277,24 @@ export async function PUT(req: Request) {
       );
     }
 
+    const sandboxBinding = await validateSandboxBinding({
+      sandboxId: sandboxId.value,
+      repoId: current.repo_id,
+      userId,
+    });
+    if ("response" in sandboxBinding) return sandboxBinding.response;
+    const sandboxFields =
+      sandboxBinding.value === undefined
+        ? {}
+        : { sandbox_id: sandboxBinding.value };
+
     const { data, error } = await supabaseAdmin
       .from("conversations")
-      .update({ ...fields, updated_at: updatedAt })
+      .update({
+        ...fields,
+        ...sandboxFields,
+        updated_at: updatedAt,
+      })
       .eq("id", id)
       .eq("user_id", userId)
       .eq("updated_at", expectedUpdatedAt)
@@ -245,6 +320,12 @@ export async function PUT(req: Request) {
     repoId: body.repo_id ?? null,
   });
   if ("response" in repoAccess) return repoAccess.response;
+  const sandboxBinding = await validateSandboxBinding({
+    sandboxId: sandboxId.value ?? null,
+    repoId: repoAccess.value,
+    userId,
+  });
+  if ("response" in sandboxBinding) return sandboxBinding.response;
 
   const { data, error } = await supabaseAdmin
     .from("conversations")
@@ -253,6 +334,7 @@ export async function PUT(req: Request) {
       user_id: userId,
       repo_id: repoAccess.value,
       workspace_session_id: workspaceSessionId.value ?? null,
+      sandbox_id: sandboxBinding.value ?? null,
       ...fields,
       updated_at: updatedAt,
     })

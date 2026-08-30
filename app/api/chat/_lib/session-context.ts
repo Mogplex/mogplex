@@ -8,6 +8,7 @@ type ChatConversationContextRecord = {
   user_id: string;
   repo_id: string | null;
   workspace_session_id: string | null;
+  sandbox_id: string | null;
   model: string;
 };
 
@@ -45,7 +46,7 @@ const defaultChatSessionContextDeps: ChatSessionContextDeps = {
   async loadConversation(input) {
     const { data, error } = await supabaseAdmin
       .from("conversations")
-      .select("id, user_id, repo_id, workspace_session_id, model")
+      .select("id, user_id, repo_id, workspace_session_id, sandbox_id, model")
       .eq("id", input.conversationId)
       .eq("user_id", input.userId)
       .maybeSingle();
@@ -163,11 +164,18 @@ export async function resolveChatSessionContext(
     );
   }
 
+  if (body.sandboxId && body.sandboxId !== conversation.sandbox_id) {
+    throw new ChatSessionContextError(
+      "The conversation sandbox is no longer available.",
+      404
+    );
+  }
+
   let sandbox: ChatSandboxContextRecord | null = null;
-  if (body.sandboxId) {
+  if (conversation.sandbox_id) {
     try {
       sandbox = await deps.loadSandbox({
-        sandboxId: body.sandboxId,
+        sandboxId: conversation.sandbox_id,
         userId,
       });
     } catch (error) {

@@ -68,6 +68,7 @@ export function buildConversationSyncBody(
     id: conv.id,
     repo_id: conv.repoId,
     workspace_session_id: conv.workspaceSessionId,
+    sandbox_id: conv.sandboxId ?? null,
     model: conv.model,
     mode: conv.mode,
     messages: conv.messages,

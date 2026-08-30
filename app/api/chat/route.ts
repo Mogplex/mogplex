@@ -42,12 +42,20 @@ export function createChatPostHandler(overrides: Partial<ChatPostDeps> = {}) {
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    let hintedBody: ChatRequestBody;
+    let parsedBody: unknown;
     try {
-      hintedBody = (await req.json()) as ChatRequestBody;
+      parsedBody = await req.json();
     } catch {
       return Response.json({ error: "Invalid JSON body." }, { status: 400 });
     }
+    if (
+      parsedBody === null ||
+      typeof parsedBody !== "object" ||
+      Array.isArray(parsedBody)
+    ) {
+      return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
+    const hintedBody = parsedBody as ChatRequestBody;
 
     let body: ChatRequestBody;
     try {

@@ -17,6 +17,7 @@ test("conversation updates allowlist mutable fields and redact persisted secrets
     user_id: "victim-user",
     repo_id: "victim-repo",
     workspace_session_id: "victim-workspace",
+    sandbox_id: "victim-sandbox",
     model: "openai/gpt-5.6-sol",
     mode: "SAFE",
     messages: [
@@ -30,6 +31,7 @@ test("conversation updates allowlist mutable fields and redact persisted secrets
   assert.equal(Object.hasOwn(fields, "user_id"), false);
   assert.equal(Object.hasOwn(fields, "repo_id"), false);
   assert.equal(Object.hasOwn(fields, "workspace_session_id"), false);
+  assert.equal(Object.hasOwn(fields, "sandbox_id"), false);
   assert.equal(fields.model, "openai/gpt-5.6-sol");
   assert.equal(fields.mode, "SAFE");
   assert.doesNotMatch(JSON.stringify(fields.messages), /ghp_abcdefgh12345678/);
@@ -75,6 +77,7 @@ test("starting a new chat assigns a fresh persisted identity without clearing th
       id: "conversation-new",
       repoId: "repo-new",
       workspaceSessionId: "workspace-new",
+      sandboxId: null,
     });
 
     assert.equal(requests.length, 0);
@@ -84,6 +87,7 @@ test("starting a new chat assigns a fresh persisted identity without clearing th
         id: "conversation-new",
         repoId: "repo-new",
         workspaceSessionId: "workspace-new",
+        sandboxId: null,
         messages: [],
         localMsgs: [],
         harnessState: {},
@@ -102,6 +106,7 @@ test("starting a new chat assigns a fresh persisted identity without clearing th
       id: "conversation-new",
       repo_id: "repo-new",
       workspace_session_id: "workspace-new",
+      sandbox_id: null,
       model: "openai/gpt-5.6-sol",
       mode: "AUTO",
       messages: [],
@@ -302,6 +307,7 @@ test("an in-flight sync never updates a replacement conversation", async () => {
       id: "conversation-new",
       repoId: "repo-1",
       workspaceSessionId: "workspace-1",
+      sandboxId: null,
     });
     releaseResponse?.(
       Response.json({
@@ -317,6 +323,7 @@ test("an in-flight sync never updates a replacement conversation", async () => {
       id: "conversation-new",
       repoId: "repo-1",
       workspaceSessionId: "workspace-1",
+      sandboxId: null,
       messages: [],
       localMsgs: [],
       harnessState: {},

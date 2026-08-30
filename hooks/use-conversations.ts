@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { DEFAULT_NEW_AGENT_MODEL_ID } from "@/lib/agents/model-options";
 import type {
+  ConversationContext,
   ConversationListItem,
   ConversationState,
   HarnessId,
@@ -43,14 +44,7 @@ type ConversationsStore = {
     expectedRepoId?: string | null,
     signal?: AbortSignal
   ) => Promise<ConversationState | null>;
-  startConversation: (
-    paneId: string,
-    context: {
-      id: string;
-      repoId: string | null;
-      workspaceSessionId: string | null;
-    }
-  ) => void;
+  startConversation: (paneId: string, context: ConversationContext) => void;
   setMessages: (paneId: string, messages: Message[]) => void;
   addLocalMsg: (paneId: string, msg: LocalMessage) => void;
   updateLocalMsg: (
@@ -60,7 +54,7 @@ type ConversationsStore = {
   ) => void;
   retargetHarnessSandboxIds: (
     paneIds: string[],
-    previousSandboxId: string,
+    previousSandboxId: string | null,
     nextSandboxId: string | null
   ) => void;
   setHarnessState: (
@@ -111,6 +105,7 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
           id: data.id,
           repoId,
           workspaceSessionId: data.workspace_session_id ?? null,
+          sandboxId: data.sandbox_id ?? null,
           messages: data.messages || [],
           localMsgs: normalizeLocalMessages(data.local_msgs),
           harnessState: normalizeHarnessState(data.harness_state),
@@ -340,6 +335,8 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
         const conversation = state.conversations[paneId];
         if (!conversation) continue;
 
+        const sandboxChanged =
+          (conversation.sandboxId ?? null) === previousSandboxId;
         let harnessChanged = false;
         const nextHarnessState = { ...conversation.harnessState };
 
@@ -354,10 +351,11 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
           harnessChanged = true;
         }
 
-        if (!harnessChanged) continue;
+        if (!sandboxChanged && !harnessChanged) continue;
 
         nextConversations[paneId] = {
           ...conversation,
+          ...(sandboxChanged ? { sandboxId: nextSandboxId } : {}),
           harnessState: nextHarnessState,
         };
         changedPaneIds.push(paneId);

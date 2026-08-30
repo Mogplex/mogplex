@@ -45,11 +45,23 @@ export function ensureSessionSandboxBinding(
     return true;
   }
 
+  const session = useSessionsStore
+    .getState()
+    .sessions.find((candidate) => candidate.id === sessionId);
+  if (!session) return false;
+
   useSessionsStore.getState().setActiveSessionSandbox(nextSandboxId, {
     previousSandboxId,
     replacePaneSandboxIds: true,
     sessionId,
   });
+  useConversationsStore
+    .getState()
+    .retargetHarnessSandboxIds(
+      collectPaneIds(session.paneTree),
+      previousSandboxId ?? null,
+      nextSandboxId
+    );
 
   return true;
 }

@@ -98,6 +98,7 @@ export function AgentPane({
     conversationId: pane.conversationId ?? pane.id,
     repoId: activeRepo?.id ?? null,
     workspaceSessionId: activeSessionId,
+    sandboxId: activeSandbox?.id ?? null,
   });
 
   const transport = useMemo(
@@ -387,12 +388,14 @@ export function AgentPane({
       id: conversationId,
       repoId: activeRepo?.id ?? null,
       workspaceSessionId: activeSessionId,
+      sandboxId: activeSandbox?.id ?? null,
     });
     onUpdatePane?.({ conversationId });
     setMessages([]);
     setShowHistory(false);
   }, [
     activeRepo?.id,
+    activeSandbox?.id,
     activeSessionId,
     onUpdatePane,
     pane.id,

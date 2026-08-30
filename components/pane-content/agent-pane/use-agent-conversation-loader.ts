@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { useConversationsStore } from "@/hooks/use-conversations";
 
@@ -9,6 +9,7 @@ export function useAgentConversationLoader(input: {
   conversationId: string;
   repoId: string | null;
   workspaceSessionId: string;
+  sandboxId: string | null;
 }) {
   const [loaded, setLoaded] = useState(false);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
@@ -22,6 +23,11 @@ export function useAgentConversationLoader(input: {
   const setDefaultModel = useConversationsStore(
     (state) => state.setDefaultModel
   );
+  const sandboxIdRef = useRef(input.sandboxId);
+
+  useEffect(() => {
+    sandboxIdRef.current = input.sandboxId;
+  }, [input.sandboxId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +60,7 @@ export function useAgentConversationLoader(input: {
                 id: input.conversationId,
                 repoId: input.repoId,
                 workspaceSessionId: input.workspaceSessionId,
+                sandboxId: sandboxIdRef.current,
               });
             }
           }

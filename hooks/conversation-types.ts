@@ -31,10 +31,18 @@ export type HarnessSessionState = {
 
 export type HarnessState = Partial<Record<HarnessId, HarnessSessionState>>;
 
+export type ConversationContext = {
+  id: string;
+  repoId: string | null;
+  workspaceSessionId: string | null;
+  sandboxId?: string | null;
+};
+
 export type ConversationState = {
   id: string;
   repoId: string | null;
   workspaceSessionId: string | null;
+  sandboxId?: string | null;
   messages: Message[];
   localMsgs: LocalMessage[];
   harnessState: HarnessState;
@@ -48,6 +56,7 @@ export type ConversationListItem = {
   id: string;
   repo_id: string | null;
   workspace_session_id: string | null;
+  sandbox_id?: string | null;
   model: string;
   mode: string;
   title: string | null;

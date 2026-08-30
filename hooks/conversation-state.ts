@@ -1,4 +1,5 @@
 import type {
+  ConversationContext,
   ConversationState,
   HarnessId,
   HarnessState,
@@ -7,12 +8,13 @@ import type {
 export function createConversationState(
   model: string,
   id: string,
-  context?: { repoId?: string | null; workspaceSessionId?: string | null }
+  context?: Partial<Omit<ConversationContext, "id">>
 ): ConversationState {
   return {
     id,
     repoId: context?.repoId ?? null,
     workspaceSessionId: context?.workspaceSessionId ?? null,
+    sandboxId: context?.sandboxId ?? null,
     messages: [],
     localMsgs: [],
     harnessState: {},
