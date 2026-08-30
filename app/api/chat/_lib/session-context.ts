@@ -164,13 +164,6 @@ export async function resolveChatSessionContext(
     );
   }
 
-  if (body.sandboxId && body.sandboxId !== conversation.sandbox_id) {
-    throw new ChatSessionContextError(
-      "The conversation sandbox is no longer available.",
-      404
-    );
-  }
-
   let sandbox: ChatSandboxContextRecord | null = null;
   if (conversation.sandbox_id) {
     try {
