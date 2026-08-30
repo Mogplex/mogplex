@@ -58,6 +58,19 @@ type RepoModelsGetDeps = {
   }>;
 };
 
+type RepoModelsPostDeps = {
+  requireUserId: typeof requireUserId;
+  getOwnedRepo: typeof getOwnedRepo;
+  upsertRepoModelOverride: (input: {
+    repoId: string;
+    modelId: string;
+  }) => Promise<{ error: { message: string } | null }>;
+  deleteRepoModelOverride: (input: {
+    repoId: string;
+    modelId: string;
+  }) => Promise<{ error: { message: string } | null }>;
+};
+
 const defaultRepoModelsGetDeps: RepoModelsGetDeps = {
   requireUserId,
   getOwnedRepo,
@@ -107,6 +120,28 @@ const defaultRepoModelsGetDeps: RepoModelsGetDeps = {
       data,
       error: error ? { message: error.message } : null,
     };
+  },
+};
+
+const defaultRepoModelsPostDeps: RepoModelsPostDeps = {
+  requireUserId,
+  getOwnedRepo,
+  async upsertRepoModelOverride(input) {
+    const { error } = await supabaseAdmin
+      .from("repo_model_overrides")
+      .upsert(
+        { repo_id: input.repoId, model_id: input.modelId, excluded: true },
+        { onConflict: "repo_id,model_id" }
+      );
+    return { error: error ? { message: error.message } : null };
+  },
+  async deleteRepoModelOverride(input) {
+    const { error } = await supabaseAdmin
+      .from("repo_model_overrides")
+      .delete()
+      .eq("repo_id", input.repoId)
+      .eq("model_id", input.modelId);
+    return { error: error ? { message: error.message } : null };
   },
 };
 
@@ -195,39 +230,46 @@ function resolveRepoModels(
 export const GET = createRepoModelsGetHandler();
 
 /** Exclude/include a model for this repo */
-export async function POST(req: NextRequest, ctx: RouteContext) {
-  const { id: repoId } = await ctx.params;
-  const userId = await requireUserId();
-  if (userId instanceof Response) return userId;
-  const repo = await getOwnedRepo(repoId, userId);
-  if (!repo)
-    return NextResponse.json({ error: "Repo not found" }, { status: 404 });
+export function createRepoModelsPostHandler(
+  overrides: Partial<RepoModelsPostDeps> = {}
+) {
+  const deps: RepoModelsPostDeps = {
+    ...defaultRepoModelsPostDeps,
+    ...overrides,
+  };
 
-  const { model_id, excluded } = await req.json();
-  if (!model_id || typeof excluded !== "boolean") {
-    return NextResponse.json(
-      { error: "model_id and excluded required" },
-      { status: 400 }
-    );
-  }
+  return async function POST(req: NextRequest, ctx: RouteContext) {
+    const { id: repoId } = await ctx.params;
+    const userId = await deps.requireUserId();
+    if (userId instanceof Response) return userId;
+    const repo = await deps.getOwnedRepo(repoId, userId);
+    if (!repo) {
+      return NextResponse.json({ error: "Repo not found" }, { status: 404 });
+    }
 
-  if (excluded) {
-    const { error } = await supabaseAdmin
-      .from("repo_model_overrides")
-      .upsert(
-        { repo_id: repoId, model_id, excluded },
-        { onConflict: "repo_id,model_id" }
+    const body = await req.json().catch(() => null);
+    const modelId =
+      body && typeof body.model_id === "string" ? body.model_id.trim() : "";
+    const excluded = body?.excluded;
+    if (!modelId || typeof excluded !== "boolean") {
+      return NextResponse.json(
+        { error: "model_id and excluded required" },
+        { status: 400 }
       );
-    if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
-  } else {
-    // Remove the override (un-exclude)
-    await supabaseAdmin
-      .from("repo_model_overrides")
-      .delete()
-      .eq("repo_id", repoId)
-      .eq("model_id", model_id);
-  }
+    }
 
-  return NextResponse.json({ ok: true });
+    const result = excluded
+      ? await deps.upsertRepoModelOverride({ repoId, modelId })
+      : await deps.deleteRepoModelOverride({ repoId, modelId });
+    if (result.error) {
+      return NextResponse.json(
+        { error: result.error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  };
 }
+
+export const POST = createRepoModelsPostHandler();

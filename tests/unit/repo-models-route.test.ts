@@ -234,3 +234,27 @@ test("GET /api/repos/[id]/models returns 500 when the profile settings load fail
   assert.equal(response.status, 500);
   assert.equal((await response.json()).error, "profile read failed");
 });
+
+test("POST /api/repos/[id]/models reports a failed unexclude write", async () => {
+  const { createRepoModelsPostHandler } = await loadRepoModelsRoute();
+  const handler = createRepoModelsPostHandler({
+    requireUserId: async () => "user-123",
+    getOwnedRepo: async <T = { id: string }>() => ({ id: "repo-123" }) as T,
+    upsertRepoModelOverride: async () => ({ error: null }),
+    deleteRepoModelOverride: async () => ({
+      error: { message: "delete failed" },
+    }),
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/repos/repo-123/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_id: "openai/gpt-5.6-sol", excluded: false }),
+    }) as never,
+    { params: Promise.resolve({ id: "repo-123" }) }
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "delete failed" });
+});

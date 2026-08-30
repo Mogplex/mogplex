@@ -160,31 +160,22 @@ test("control chat normalization caps file parts per request", () => {
   );
 });
 
-test("control chat normalization allows capped file parts across message history", () => {
-  const messages = normalizeControlChatMessages([
-    {
-      role: "user",
-      parts: Array.from({ length: 3 }, (_, index) => ({
-        type: "file" as const,
-        filename: `prior-${index}.txt`,
-        mediaType: "text/plain",
-        url: "data:text/plain;base64,cGxhbg==",
-      })),
-    },
-    {
-      role: "user",
-      parts: Array.from({ length: 3 }, (_, index) => ({
-        type: "file" as const,
-        filename: `current-${index}.txt`,
-        mediaType: "text/plain",
-        url: "data:text/plain;base64,cGxhbg==",
-      })),
-    },
-  ]);
-
-  assert.equal(messages.length, 2);
-  assert.equal(messages[0]?.parts.length, 3);
-  assert.equal(messages[1]?.parts.length, 3);
+test("control chat caps file parts across the full request history", () => {
+  assert.throws(
+    () =>
+      normalizeControlChatMessages(
+        Array.from({ length: 3 }, (_, messageIndex) => ({
+          role: "user",
+          parts: Array.from({ length: 2 }, (_, partIndex) => ({
+            type: "file" as const,
+            filename: `attachment-${messageIndex}-${partIndex}.txt`,
+            mediaType: "text/plain",
+            url: "data:text/plain;base64,cGxhbg==",
+          })),
+        }))
+      ),
+    /supports up to 5 file attachments/
+  );
 });
 
 test("control prompt sandbox context comes from an owned server record", async () => {
