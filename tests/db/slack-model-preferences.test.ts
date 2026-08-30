@@ -4,8 +4,10 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
-const MIGRATION =
+const SUPABASE_MIGRATION =
   "supabase/migrations/20260829150000_slack_model_preferences.sql";
+const NEON_MIGRATION =
+  "neon/migrations/20260829150000_slack_model_preferences.sql";
 
 let db: PGlite;
 
@@ -18,7 +20,9 @@ beforeAll(async () => {
     create table public.slack_installations (id uuid primary key);
     create table public.ai_models (id text primary key);
   `);
-  await db.exec(await readFile(path.join(REPO_ROOT, MIGRATION), "utf8"));
+  await db.exec(
+    await readFile(path.join(REPO_ROOT, SUPABASE_MIGRATION), "utf8")
+  );
 });
 
 afterAll(async () => {
@@ -26,6 +30,15 @@ afterAll(async () => {
 });
 
 describe("Slack model preference scope", () => {
+  it("ships the same schema for the active Neon backend", async () => {
+    const [supabaseMigration, neonMigration] = await Promise.all([
+      readFile(path.join(REPO_ROOT, SUPABASE_MIGRATION), "utf8"),
+      readFile(path.join(REPO_ROOT, NEON_MIGRATION), "utf8"),
+    ]);
+
+    expect(neonMigration).toBe(supabaseMigration);
+  });
+
   it("stores one model per installation, channel, and Slack user", async () => {
     await db.exec(`
       insert into public.slack_installations values
