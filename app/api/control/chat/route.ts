@@ -5,7 +5,9 @@ import {
   isModelAllowlistUnavailableError,
 } from "@/lib/team-capabilities";
 import {
+  ControlChatSessionContextError,
   getControlChatRunScope,
+  resolveControlChatSessionContext,
   resolveControlChatModelId,
 } from "./_lib/context";
 import { persistControlStartupFailure } from "./_lib/lifecycle";
@@ -46,10 +48,22 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const body: ControlChatRequestBody = {
+  const hintedBody: ControlChatRequestBody = {
     ...rawBody,
     mode: rawBody.mode ?? null,
   };
+  let body: ControlChatRequestBody;
+  try {
+    body = await resolveControlChatSessionContext(userId, hintedBody);
+  } catch (error) {
+    const status =
+      error instanceof ControlChatSessionContextError ? error.status : 500;
+    const message =
+      error instanceof ControlChatSessionContextError
+        ? error.message
+        : "Could not load the Control session context.";
+    return Response.json({ error: message }, { status });
+  }
   let normalizedMessages;
   try {
     normalizedMessages = normalizeControlChatMessages(body.messages);

@@ -2,11 +2,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { UIMessage } from "ai";
-import {
-  MISSION_PERMISSION_OPTIONS,
-  type Mission,
-  type ControlSeedData,
-} from "@/lib/control/types";
+import { type Mission, type ControlSeedData } from "@/lib/control/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
@@ -42,6 +38,7 @@ import { useControlChatComposer } from "./use-control-chat-composer";
 import { TerminalActivity } from "./terminal-activity";
 import { useControlSessionActions } from "./use-control-session-actions";
 import { useControlSandboxStart } from "./use-control-sandbox-start";
+import { useControlComposerActions } from "./use-control-composer-actions";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
@@ -224,7 +221,8 @@ function ControlShellInner({
         missionTitle,
         project,
         repoId,
-        text
+        text,
+        options.model
       );
       if (!createdSessionId) {
         if (!createdRepo)
@@ -284,18 +282,12 @@ function ControlShellInner({
   const chatError =
     localChatError ?? activeChatError?.message ?? persistError ?? null;
 
-  const sendInstruction = useCallback(
-    (text: string) => {
-      setView("chat");
-      void handleSend(text, "mission", "IMPLEMENT", {
-        model: null,
-        permissions: MISSION_PERMISSION_OPTIONS[0],
-        mode: "run",
-        files: [],
-      });
-    },
-    [handleSend]
-  );
+  const { selectModel, sendInstruction } = useControlComposerActions({
+    updateSession,
+    setChatError,
+    send: handleSend,
+    openChat: useCallback(() => setView("chat"), []),
+  });
 
   useControlSessionUrl({
     scope,
@@ -473,12 +465,14 @@ function ControlShellInner({
                 )}
                 <TerminalActivity messages={messages} />
                 <Composer
+                  key={`composer-${activeChatId}`}
                   value={composerInput}
                   onChange={setComposerInput}
                   onSend={handleSend}
                   pending={chatPending}
-                  mission={mission}
                   onStop={stop}
+                  initialModelId={activeSession?.model_id ?? null}
+                  onModelSelect={selectModel}
                   usageTokens={usageTokens}
                 />
               </div>

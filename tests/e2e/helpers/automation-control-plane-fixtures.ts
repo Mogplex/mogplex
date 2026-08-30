@@ -37,6 +37,9 @@ export async function mockBaseChrome(page: Page) {
       catalog: [{ id: modelId, context_length: 128000, is_enabled: true }],
     })
   );
+  await page.route("**/api/control/worktrees**", (route) =>
+    fulfillJson(route, { worktrees: [] })
+  );
 }
 
 export async function mockControlSessionBootstrap(page: Page) {
@@ -59,12 +62,14 @@ export async function mockControlSessionBootstrap(page: Page) {
         title?: string;
         project?: string | null;
         repo_id?: string | null;
+        model_id?: string | null;
       };
       session = {
         id: "session-control-default",
         title: body.title ?? "Control session",
         project: body.project ?? "acme/widgets",
         repo_id: body.repo_id ?? "repo-control-default",
+        model_id: body.model_id ?? null,
         orchestration_run_id: "run-control-default",
         pinned: false,
         archived: false,
@@ -75,10 +80,14 @@ export async function mockControlSessionBootstrap(page: Page) {
       return fulfillJson(route, session);
     }
     if (request.method() === "PUT" && session) {
-      const body = request.postDataJSON() as { messages?: unknown[] };
+      const body = request.postDataJSON() as {
+        messages?: unknown[];
+        model_id?: string | null;
+      };
       session = {
         ...session,
         messages: body.messages ?? session.messages,
+        model_id: body.model_id ?? session.model_id,
         updated_at: "2026-08-13T00:00:01.000Z",
       };
       return fulfillJson(route, { ok: true, session });

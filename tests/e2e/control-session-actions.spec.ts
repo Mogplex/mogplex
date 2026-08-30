@@ -12,6 +12,7 @@ type Session = {
   title: string;
   project: string;
   repo_id: string;
+  model_id: string | null;
   orchestration_run_id: string;
   pinned: boolean;
   archived: boolean;
@@ -26,6 +27,7 @@ function session(id: string, title: string): Session {
     title,
     project: "acme/widgets",
     repo_id: "repo-1",
+    model_id: null,
     orchestration_run_id: `run-${id}`,
     pinned: false,
     archived: false,
@@ -83,6 +85,7 @@ test("project and chat rows expose scoped actions without hijacking navigation",
     session("session-old", "Old investigation"),
   ];
   const deletedIds: string[] = [];
+  const chatRequests: Array<Record<string, unknown>> = [];
   let rejectFirstDelete = true;
 
   await page.route("**/api/control/sessions**", (route) => {
@@ -98,6 +101,17 @@ test("project and chat rows expose scoped actions without hijacking navigation",
       if (index !== -1) sessions.splice(index, 1);
       return fulfillJson(route, { ok: true, id });
     }
+    if (request.method() === "PUT") {
+      const body = request.postDataJSON() as {
+        id?: string;
+        messages?: unknown[];
+      };
+      const target = sessions.find((entry) => entry.id === body.id);
+      if (!target) return fulfillJson(route, { error: "Not found" }, 404);
+      target.messages = body.messages ?? target.messages;
+      target.updated_at = new Date().toISOString();
+      return fulfillJson(route, { ok: true, session: target });
+    }
     if (request.method() === "GET" && id) {
       return fulfillJson(
         route,
@@ -111,7 +125,36 @@ test("project and chat rows expose scoped actions without hijacking navigation",
         sessions.map(({ messages: _messages, ...summary }) => summary)
       );
     }
+    if (request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        title?: string;
+        project?: string;
+        repo_id?: string;
+        model_id?: string | null;
+      };
+      const created = {
+        ...session("session-project-chat", body.title ?? "Project chat"),
+        project: body.project ?? "acme/widgets",
+        repo_id: body.repo_id ?? "repo-1",
+        model_id: body.model_id ?? null,
+      };
+      sessions.unshift(created);
+      return fulfillJson(route, created);
+    }
     return route.fallback();
+  });
+  await page.route("**/api/control/chat", (route) => {
+    chatRequests.push(
+      route.request().postDataJSON() as Record<string, unknown>
+    );
+    return route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: chatStream("Review started in the selected project."),
+    });
   });
 
   await page.goto(`${scopedPath("control")}?mission=session-active`);
@@ -125,6 +168,23 @@ test("project and chat rows expose scoped actions without hijacking navigation",
   await expect(page.getByLabel("Project", { exact: true })).toContainText(
     "acme/widgets"
   );
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Review the last three pull requests");
+  await page.getByRole("button", { name: "Start mission" }).click();
+  await expect(
+    page.getByText("Review started in the selected project.")
+  ).toBeVisible();
+  await expect.poll(() => chatRequests.length).toBe(1);
+  expect(chatRequests[0]).toMatchObject({
+    conversationId: "session-project-chat",
+    missionId: "session-project-chat",
+    repoId: "repo-1",
+    repoFullName: "acme/widgets",
+    repoOwner: "acme",
+    repoName: "widgets",
+    repoBaseBranch: "main",
+  });
 
   const oldSessionRow = sidebar.getByRole("button", {
     name: /^Old investigation /,

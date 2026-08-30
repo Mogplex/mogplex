@@ -6,6 +6,17 @@ import {
 } from "./system-prompt";
 
 describe("orchestrator resource decision prompt", () => {
+  it("treats the selected Control repository as the implicit request target", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "Mogplex/mogplex",
+    });
+
+    expect(prompt).toContain(
+      "Treat it as the target when the operator omits a repository"
+    );
+    expect(prompt).toContain("Do not ask which repository to use");
+  });
+
   it("advertises only callable tools while diagnostics retain planned tools", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",
