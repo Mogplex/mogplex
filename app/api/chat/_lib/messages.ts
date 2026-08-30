@@ -6,6 +6,12 @@ type NormalizedChatMessage = Omit<UIMessage, "id">;
 const MAX_CHAT_FILE_DATA_URL_CHARS = 5_600_000;
 const MAX_CHAT_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_CHAT_FILE_PARTS = 5;
+const MAX_CHAT_TOTAL_FILE_BYTES = MAX_CHAT_FILE_BYTES * MAX_CHAT_FILE_PARTS;
+
+type ChatFileBudget = {
+  count: number;
+  bytes: number;
+};
 
 export class ChatValidationError extends Error {
   constructor(message: string) {
@@ -14,7 +20,39 @@ export class ChatValidationError extends Error {
   }
 }
 
-function normalizeFilePart(part: ChatRequestPart): FileUIPart {
+function readFilePartBytes(part: ChatRequestPart): number {
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/.exec(
+    part.url ?? ""
+  );
+  if (!match || match[1]?.toLowerCase() !== part.mediaType?.toLowerCase()) {
+    throw new ChatValidationError("Invalid chat file attachment.");
+  }
+  const decodedBytes = Buffer.byteLength(match[2] ?? "", "base64");
+  if (decodedBytes > MAX_CHAT_FILE_BYTES) {
+    throw new ChatValidationError("Invalid chat file attachment.");
+  }
+  return decodedBytes;
+}
+
+function applyFileBudget(budget: ChatFileBudget, decodedBytes: number) {
+  budget.count += 1;
+  if (budget.count > MAX_CHAT_FILE_PARTS) {
+    throw new ChatValidationError(
+      `Chat supports up to ${MAX_CHAT_FILE_PARTS} file attachments.`
+    );
+  }
+  budget.bytes += decodedBytes;
+  if (budget.bytes > MAX_CHAT_TOTAL_FILE_BYTES) {
+    throw new ChatValidationError(
+      "Chat file attachments exceed the total size limit."
+    );
+  }
+}
+
+function normalizeFilePart(
+  part: ChatRequestPart,
+  budget: ChatFileBudget
+): FileUIPart {
   if (
     part.type !== "file" ||
     typeof part.mediaType !== "string" ||
@@ -33,14 +71,7 @@ function normalizeFilePart(part: ChatRequestPart): FileUIPart {
       "Chat file attachment exceeds the size limit."
     );
   }
-  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/.exec(part.url);
-  if (
-    !match ||
-    match[1]?.toLowerCase() !== part.mediaType.toLowerCase() ||
-    Buffer.byteLength(match[2] ?? "", "base64") > MAX_CHAT_FILE_BYTES
-  ) {
-    throw new ChatValidationError("Invalid chat file attachment.");
-  }
+  applyFileBudget(budget, readFilePartBytes(part));
   return {
     type: "file",
     mediaType: part.mediaType,
@@ -56,6 +87,7 @@ export function normalizeChatMessages(
     throw new ChatValidationError("Invalid chat messages.");
   }
 
+  const fileBudget: ChatFileBudget = { count: 0, bytes: 0 };
   return (messages as unknown[]).map((message) => {
     if (typeof message !== "object" || message === null) {
       throw new ChatValidationError("Invalid chat message.");
@@ -77,7 +109,6 @@ export function normalizeChatMessages(
       throw new ChatValidationError("Invalid chat message.");
     }
 
-    let filePartCount = 0;
     return {
       role: chatMessage.role,
       parts: (parts as unknown[]).flatMap<UIMessage["parts"][number]>(
@@ -99,13 +130,7 @@ export function normalizeChatMessages(
             return [{ type: "text", text: chatPart.text }];
           }
           if (chatPart.type === "file") {
-            filePartCount += 1;
-            if (filePartCount > MAX_CHAT_FILE_PARTS) {
-              throw new ChatValidationError(
-                `Chat supports up to ${MAX_CHAT_FILE_PARTS} file attachments.`
-              );
-            }
-            return [normalizeFilePart(chatPart)];
+            return [normalizeFilePart(chatPart, fileBudget)];
           }
           return [chatPart as UIMessage["parts"][number]];
         }

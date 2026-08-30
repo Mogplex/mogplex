@@ -202,7 +202,7 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
 
         set((state) => {
           const current = state.conversations[paneId];
-          if (!current) return state;
+          if (current?.id !== conv.id) return state;
           return {
             conversations: {
               ...state.conversations,

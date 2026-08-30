@@ -66,16 +66,16 @@ test("native chat rejects remote and oversized file parts", () => {
   );
   assert.throws(
     () =>
-      normalizeChatMessages([
-        {
+      normalizeChatMessages(
+        Array.from({ length: 3 }, () => ({
           role: "user",
-          parts: Array.from({ length: 6 }, () => ({
+          parts: Array.from({ length: 2 }, () => ({
             type: "file" as const,
             mediaType: "text/plain",
             url: "data:text/plain;base64,bm90ZXM=",
           })),
-        },
-      ]),
+        }))
+      ),
     /up to 5 file attachments/
   );
   assert.throws(

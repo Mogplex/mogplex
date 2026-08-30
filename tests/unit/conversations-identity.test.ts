@@ -175,6 +175,75 @@ test("a conversation conflict never advances the stale local version", async () 
   }
 });
 
+test("an in-flight sync never updates a replacement conversation", async () => {
+  const originalFetch = globalThis.fetch;
+  let releaseResponse: ((response: Response) => void) | undefined;
+  let markRequestStarted: (() => void) | undefined;
+  const response = new Promise<Response>((resolve) => {
+    releaseResponse = resolve;
+  });
+  const requestStarted = new Promise<void>((resolve) => {
+    markRequestStarted = resolve;
+  });
+
+  globalThis.fetch = (async () => {
+    markRequestStarted?.();
+    return response;
+  }) as typeof fetch;
+
+  try {
+    useConversationsStore.setState({
+      userId: "user-1",
+      conversations: {
+        "pane-1": {
+          id: "conversation-old",
+          repoId: "repo-1",
+          workspaceSessionId: "workspace-1",
+          messages: [],
+          localMsgs: [],
+          harnessState: {},
+          model: "openai/gpt-5.6-sol",
+          mode: "AUTO",
+          updatedAt: null,
+        },
+      },
+    });
+
+    const sync = useConversationsStore.getState().syncToSupabase("pane-1");
+    await requestStarted;
+    useConversationsStore.getState().startConversation("pane-1", {
+      id: "conversation-new",
+      repoId: "repo-1",
+      workspaceSessionId: "workspace-1",
+    });
+    releaseResponse?.(
+      Response.json({
+        conversation: {
+          updated_at: "2026-08-30T12:00:00.000Z",
+          title: "Old conversation",
+        },
+      })
+    );
+
+    assert.equal(await sync, true);
+    assert.deepEqual(useConversationsStore.getState().conversations["pane-1"], {
+      id: "conversation-new",
+      repoId: "repo-1",
+      workspaceSessionId: "workspace-1",
+      messages: [],
+      localMsgs: [],
+      harnessState: {},
+      model: "openai/gpt-5.6-sol",
+      mode: "AUTO",
+      updatedAt: null,
+    });
+  } finally {
+    releaseResponse?.(Response.json({}));
+    globalThis.fetch = originalFetch;
+    resetStore();
+  }
+});
+
 test("closing a pane deletes its persisted conversation identity, not the pane identity", async () => {
   const originalFetch = globalThis.fetch;
   const requests: string[] = [];
