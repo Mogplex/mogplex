@@ -37,6 +37,9 @@ export async function mockBaseChrome(page: Page) {
       catalog: [{ id: modelId, context_length: 128000, is_enabled: true }],
     })
   );
+  await page.route("**/api/control/worktrees**", (route) =>
+    fulfillJson(route, { worktrees: [] })
+  );
 }
 
 export async function mockControlSessionBootstrap(page: Page) {

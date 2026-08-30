@@ -465,7 +465,7 @@ function ControlShellInner({
                 )}
                 <TerminalActivity messages={messages} />
                 <Composer
-                  key={activeChatId}
+                  key={`composer-${activeChatId}`}
                   value={composerInput}
                   onChange={setComposerInput}
                   onSend={handleSend}

@@ -300,18 +300,18 @@ test("control composers expose permissions, model, and MCP controls without a sp
   // Switching models routes the chosen id through to the chat request body.
   await modelChip.click();
   await page.getByRole("button", { name: modelId }).click();
+  await expect
+    .poll(() => sessionUpdates.some((update) => update.model_id === modelId))
+    .toBe(true);
   await expect(page.getByRole("button", { name: "Plan mode" })).toHaveCount(0);
   await page
     .getByPlaceholder("Ask for follow-up changes or attach images")
     .fill("Summarize progress");
-  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Send" }).click();
 
   await expect
     .poll(() => chatRequests.at(-1)?.model, { timeout: 10_000 })
     .toBe(modelId);
-  await expect
-    .poll(() => sessionUpdates.some((update) => update.model_id === modelId))
-    .toBe(true);
   expect(chatRequests.at(-1)).toMatchObject({
     mode: "run",
     permissions: "Skip Permissions",
