@@ -20,6 +20,11 @@ import {
   queueConversationSync,
 } from "./conversation-utils";
 import { createConversationState } from "./conversation-state";
+import {
+  buildConversationSyncBody,
+  reconcileConversation,
+  type PersistedConversation,
+} from "./conversation-sync";
 
 export type * from "./conversation-types";
 export { getHarnessResumeSessionId } from "./conversation-state";
@@ -159,27 +164,42 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       const conv = get().conversations[paneId];
       if (!conv) return;
 
-      const title = conv.title || extractTitle(conv.messages) || "";
+      let pending = conv;
+      let title = conv.title || extractTitle(conv.messages) || "";
 
       try {
-        const res = await fetch("/api/conversations", {
+        let res = await fetch("/api/conversations", {
           method: "PUT",
           headers: getActiveTeamRequestHeaders({
             "Content-Type": "application/json",
           }),
-          body: JSON.stringify({
-            id: conv.id,
-            repo_id: conv.repoId,
-            workspace_session_id: conv.workspaceSessionId,
-            model: conv.model,
-            mode: conv.mode,
-            messages: conv.messages,
-            local_msgs: conv.localMsgs,
-            harness_state: conv.harnessState,
-            title,
-            expected_updated_at: conv.updatedAt ?? null,
-          }),
+          body: buildConversationSyncBody(pending, title),
         });
+
+        if (res.status === 409) {
+          const conflict = (await res.json().catch(() => null)) as {
+            conversation?: PersistedConversation | null;
+          } | null;
+          const reconciled = conflict?.conversation
+            ? reconcileConversation(conv, conflict.conversation)
+            : null;
+          if (!reconciled) {
+            console.warn("Conversation sync could not reconcile conflict", {
+              paneId,
+              conversationId: conv.id,
+            });
+            return;
+          }
+          pending = reconciled;
+          title = reconciled.title || extractTitle(reconciled.messages) || "";
+          res = await fetch("/api/conversations", {
+            method: "PUT",
+            headers: getActiveTeamRequestHeaders({
+              "Content-Type": "application/json",
+            }),
+            body: buildConversationSyncBody(pending, title),
+          });
+        }
 
         if (res.status === 409) {
           console.warn("Conversation sync skipped due to version conflict", {
@@ -203,18 +223,34 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
         set((state) => {
           const current = state.conversations[paneId];
           if (current?.id !== conv.id) return state;
+          const reconciledCurrent =
+            pending === conv
+              ? current
+              : (reconcileConversation(current, {
+                  id: pending.id,
+                  messages: pending.messages,
+                  local_msgs: pending.localMsgs,
+                  harness_state: pending.harnessState,
+                  model: pending.model,
+                  mode: pending.mode,
+                  title: pending.title,
+                  updated_at:
+                    data.conversation?.updated_at ?? pending.updatedAt,
+                }) ?? current);
           return {
             conversations: {
               ...state.conversations,
               [paneId]: {
-                ...current,
+                ...reconciledCurrent,
                 title:
-                  current.title ||
+                  reconciledCurrent.title ||
                   title ||
                   data.conversation?.title ||
                   undefined,
                 updatedAt:
-                  data.conversation?.updated_at ?? current.updatedAt ?? null,
+                  data.conversation?.updated_at ??
+                  reconciledCurrent.updatedAt ??
+                  null,
               },
             },
           };
@@ -424,16 +460,10 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
     void get().syncToSupabase(paneId);
   },
 
-  removeConversation: async (paneId) => {
-    const conversationId = get().conversations[paneId]?.id;
+  removeConversation: (paneId) => {
     set((state) => {
       const { [paneId]: _, ...rest } = state.conversations;
       return { conversations: rest };
-    });
-    if (!conversationId) return;
-    await fetch(`/api/conversations?id=${conversationId}`, {
-      method: "DELETE",
-      headers: getActiveTeamRequestHeaders(),
     });
   },
 

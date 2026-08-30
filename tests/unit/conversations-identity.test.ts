@@ -116,7 +116,7 @@ test("starting a new chat assigns a fresh persisted identity without clearing th
   }
 });
 
-test("a conversation conflict never advances the stale local version", async () => {
+test("repeated conversation conflicts never advance the local version", async () => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ expected_updated_at: string; messages: unknown[] }> =
     [];
@@ -127,8 +127,13 @@ test("a conversation conflict never advances the stale local version", async () 
       {
         error: "CONFLICT",
         conversation: {
+          id: "conversation-1",
           updated_at: "2026-08-30T12:00:00.000Z",
           messages: [{ id: "server-message", role: "user", parts: [] }],
+          local_msgs: [],
+          harness_state: {},
+          model: "openai/gpt-5.6-sol",
+          mode: "AUTO",
         },
       },
       { status: 409 }
@@ -163,11 +168,93 @@ test("a conversation conflict never advances the stale local version", async () 
     );
     assert.deepEqual(
       requests.map((request) => request.expected_updated_at),
-      ["2026-08-30T11:00:00.000Z", "2026-08-30T11:00:00.000Z"]
+      [
+        "2026-08-30T11:00:00.000Z",
+        "2026-08-30T12:00:00.000Z",
+        "2026-08-30T11:00:00.000Z",
+        "2026-08-30T12:00:00.000Z",
+      ]
     );
     assert.equal(
       useConversationsStore.getState().conversations["pane-1"]?.messages[0]?.id,
       "stale-message"
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetStore();
+  }
+});
+
+test("a conversation conflict rebases distinct messages and retries once", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{
+    expected_updated_at: string;
+    messages: Array<{ id: string }>;
+  }> = [];
+
+  globalThis.fetch = (async (_input, init) => {
+    requests.push(JSON.parse(String(init?.body)));
+    if (requests.length === 1) {
+      return Response.json(
+        {
+          error: "CONFLICT",
+          conversation: {
+            id: "conversation-1",
+            updated_at: "2026-08-30T12:00:00.000Z",
+            messages: [{ id: "server-message", role: "user", parts: [] }],
+            local_msgs: [],
+            harness_state: {},
+            model: "openai/gpt-5.6-sol",
+            mode: "AUTO",
+          },
+        },
+        { status: 409 }
+      );
+    }
+    return Response.json({
+      conversation: { updated_at: "2026-08-30T12:01:00.000Z" },
+    });
+  }) as typeof fetch;
+
+  try {
+    useConversationsStore.setState({
+      userId: "user-1",
+      conversations: {
+        "pane-1": {
+          id: "conversation-1",
+          repoId: "repo-1",
+          workspaceSessionId: "workspace-1",
+          messages: [{ id: "local-message", role: "user", parts: [] }],
+          localMsgs: [],
+          harnessState: {},
+          model: "openai/gpt-5.6-sol",
+          mode: "AUTO",
+          updatedAt: "2026-08-30T11:00:00.000Z",
+        },
+      },
+    });
+
+    assert.equal(
+      await useConversationsStore.getState().syncToSupabase("pane-1"),
+      true
+    );
+    assert.deepEqual(
+      requests.map((request) => request.expected_updated_at),
+      ["2026-08-30T11:00:00.000Z", "2026-08-30T12:00:00.000Z"]
+    );
+    assert.deepEqual(
+      requests[1]?.messages.map((message) => message.id),
+      ["server-message", "local-message"]
+    );
+    assert.deepEqual(
+      useConversationsStore
+        .getState()
+        .conversations["pane-1"]?.messages.map((message) => message.id),
+      ["server-message", "local-message"]
+    );
+    assert.equal(
+      useConversationsStore.getState().conversations["pane-1"]?.updatedAt,
+      "2026-08-30T12:01:00.000Z"
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -244,7 +331,7 @@ test("an in-flight sync never updates a replacement conversation", async () => {
   }
 });
 
-test("closing a pane deletes its persisted conversation identity, not the pane identity", async () => {
+test("closing a pane only removes local state and preserves saved history", async () => {
   const originalFetch = globalThis.fetch;
   const requests: string[] = [];
 
@@ -272,7 +359,7 @@ test("closing a pane deletes its persisted conversation identity, not the pane i
 
     await useConversationsStore.getState().removeConversation("pane-1");
 
-    assert.deepEqual(requests, ["/api/conversations?id=conversation-1"]);
+    assert.deepEqual(requests, []);
     assert.equal(
       useConversationsStore.getState().conversations["pane-1"],
       undefined
