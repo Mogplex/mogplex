@@ -4,7 +4,7 @@ import {
 } from "@/lib/slack/run-attachments";
 import type { SlackEventTaskPayload } from "@/trigger/slack-event";
 import type { SlackBlockActionsPayload } from "@/lib/slack/interactivity";
-import type { SlackModelCommandPayload } from "@/lib/slack/model-command";
+import type { SlackCommandPayload } from "@/lib/slack/command";
 
 /**
  * Sanity ceiling on the request body. Legitimate Slack event/interactivity
@@ -64,12 +64,22 @@ export type SlackEventPayload =
 // vacuous (any `{ type: string }` would satisfy it), defeating that check.
 export type SlackInteractivityPayload = SlackBlockActionsPayload & {
   trigger_id?: string;
+  view?: {
+    callback_id?: string;
+    private_metadata?: string;
+    state?: {
+      values?: Record<
+        string,
+        Record<string, { value?: string | null } | undefined>
+      >;
+    };
+  };
 };
 
 export type SlackWebhookDispatchInput =
   | { kind: "event"; body: SlackEventCallbackBody; rawBody: string }
   | { kind: "interactivity"; body: SlackInteractivityPayload; rawBody: string }
-  | { kind: "command"; body: SlackModelCommandPayload; rawBody: string };
+  | { kind: "command"; body: SlackCommandPayload; rawBody: string };
 
 export type SlackWebhookDeps = {
   /** Lookup of the signing secret — abstracted so tests can pass a literal. */

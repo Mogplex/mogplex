@@ -186,6 +186,7 @@ export {
   getSlackChannelLink,
   listSlackChannelLinks,
   createSlackChannelLink,
+  setSlackChannelLink,
   deleteSlackChannelLink,
 } from "./channel-links";
 

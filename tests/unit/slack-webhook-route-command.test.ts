@@ -15,6 +15,7 @@ test("acknowledges a verified slash command before deferred dispatch", async () 
     channel_id: "C123",
     user_id: "U123",
     response_url: "https://hooks.slack.test/response",
+    trigger_id: "trigger-1",
   }).toString();
   const deferred: Array<() => void | Promise<void>> = [];
   const dispatched: unknown[] = [];
@@ -52,6 +53,7 @@ test("acknowledges a verified slash command before deferred dispatch", async () 
         channelId: "C123",
         slackUserId: "U123",
         responseUrl: "https://hooks.slack.test/response",
+        triggerId: "trigger-1",
       },
     },
   ]);

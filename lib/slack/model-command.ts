@@ -14,10 +14,8 @@ import {
   getSlackModelPreference,
   upsertSlackModelPreference,
 } from "@/lib/slack/model-preferences";
-import {
-  postSlackResponse,
-  SLACK_MODEL_SELECT_ACTION_ID,
-} from "@/lib/slack/interactivity";
+import { SLACK_MODEL_SELECT_ACTION_ID } from "@/lib/slack/command-actions";
+import { postSlackResponse } from "@/lib/slack/response";
 
 export type SlackModelCommandPayload = {
   command: string;
@@ -26,6 +24,7 @@ export type SlackModelCommandPayload = {
   channelId: string;
   slackUserId: string;
   responseUrl: string;
+  triggerId?: string;
 };
 
 type SlackModelCommandDeps = {
