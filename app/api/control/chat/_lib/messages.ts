@@ -37,7 +37,19 @@ function readFilePartBytes(part: ControlChatRequestPart): number {
       "Invalid control chat file attachment."
     );
   }
-  const decodedBytes = Buffer.byteLength(match[2] ?? "", "base64");
+  const encodedData = match[2] ?? "";
+  if (encodedData.length % 4 !== 0) {
+    throw new ControlChatValidationError(
+      "Invalid control chat file attachment."
+    );
+  }
+  const decodedData = Buffer.from(encodedData, "base64");
+  if (decodedData.toString("base64") !== encodedData) {
+    throw new ControlChatValidationError(
+      "Invalid control chat file attachment."
+    );
+  }
+  const decodedBytes = decodedData.byteLength;
   if (decodedBytes > MAX_CONTROL_FILE_BYTES) {
     throw new ControlChatValidationError(
       "Control chat file attachment exceeds the size limit."
