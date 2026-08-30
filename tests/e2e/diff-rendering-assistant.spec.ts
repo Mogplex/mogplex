@@ -18,6 +18,9 @@ test("assistant diff blocks render through the shared diff viewer", async ({
   await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
     if (route.request().method() === "GET") {
       await fulfillJson(route, {
+        id: new URL(route.request().url()).searchParams.get("id"),
+        repo_id: repo.id,
+        workspace_session_id: null,
         messages: [],
         local_msgs: [],
         model: modelId,
@@ -81,6 +84,9 @@ test("malformed diff fences fall back to the normal code renderer", async ({
   await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
     if (route.request().method() === "GET") {
       await fulfillJson(route, {
+        id: new URL(route.request().url()).searchParams.get("id"),
+        repo_id: repo.id,
+        workspace_session_id: null,
         messages: [],
         local_msgs: [],
         model: modelId,
@@ -147,6 +153,9 @@ test("saved local messages render patches through the shared diff viewer", async
   await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
     if (route.request().method() === "GET") {
       await fulfillJson(route, {
+        id: new URL(route.request().url()).searchParams.get("id"),
+        repo_id: repo.id,
+        workspace_session_id: null,
         messages: [],
         local_msgs: [{ id: "local-1", text: patch }],
         model: modelId,
@@ -185,6 +194,9 @@ test("assistant tool parts render nested diff output through the shared viewer",
   await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
     if (route.request().method() === "GET") {
       await fulfillJson(route, {
+        id: new URL(route.request().url()).searchParams.get("id"),
+        repo_id: repo.id,
+        workspace_session_id: null,
         messages: [],
         local_msgs: [],
         model: modelId,

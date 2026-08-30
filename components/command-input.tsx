@@ -6,8 +6,10 @@ import { getCommandInputSuggestions } from "@/lib/command-input-autocomplete"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { ClaudeFill, OpenaiFill } from "@/components/icons/harness-icons"
 import { McpStatusButton } from "@/components/chat/mcp-status-button"
+import type { CommandInputAttachment as Attachment } from "./command-input-types"
+import { useCommandInputAttachments } from "./use-command-input-attachments"
 
-export type Attachment = { type: "image" | "file"; name: string; url: string; data?: string }
+export type { CommandInputAttachment as Attachment } from "./command-input-types"
 
 interface Props {
   onSubmit: (cmd: string, attachments?: Attachment[]) => void
@@ -49,7 +51,6 @@ export function CommandInput({
   const [value, setValue] = useState("")
   const [showMenu, setShowMenu] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(0)
-  const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [modelFilter, setModelFilter] = useState("")
@@ -59,40 +60,26 @@ export function CommandInput({
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const [menuPos, setMenuPos] = useState<{ left: number; bottom: number } | null>(null)
   const allCmds = useMemo(() => [...builtinCommands, ...customCommands], [builtinCommands, customCommands])
-
-  const processFile = (file: File) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const isImage = file.type.startsWith("image/")
-      setAttachments(prev => [...prev, {
-        type: isImage ? "image" : "file",
-        name: file.name,
-        url: URL.createObjectURL(file),
-        data: reader.result as string
-      }])
-    }
-    reader.readAsDataURL(file)
-  }
+  const {
+    addFiles,
+    attachmentError,
+    attachments,
+    clearAttachments,
+    removeAttachment,
+  } = useCommandInputAttachments()
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    const files = Array.from(e.dataTransfer.files)
-    files.forEach(processFile)
+    void addFiles(Array.from(e.dataTransfer.files))
   }
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    const items = Array.from(e.clipboardData.items)
-    items.forEach(item => {
-      if (item.kind === "file") {
-        const file = item.getAsFile()
-        if (file) processFile(file)
-      }
+    const files = Array.from(e.clipboardData.items).flatMap(item => {
+      const file = item.kind === "file" ? item.getAsFile() : null
+      return file ? [file] : []
     })
-  }
-
-  const removeAttachment = (idx: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== idx))
+    if (files.length > 0) void addFiles(files)
   }
 
   const getFilteredCmds = useCallback(() => {
@@ -162,7 +149,7 @@ export function CommandInput({
       if (value.trim() || attachments.length) {
         onSubmit(value.trim(), attachments.length ? attachments : undefined)
         setValue("")
-        setAttachments([])
+        clearAttachments()
       }
     }
   }
@@ -220,9 +207,14 @@ export function CommandInput({
               ) : (
                 <div className="h-12 w-12 bg-secondary flex items-center justify-center border border-border rounded text-[11px] text-muted-foreground">{a.name.slice(-4)}</div>
               )}
-              <button onClick={() => removeAttachment(i)} className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[11px] rounded-full opacity-0 group-hover:opacity-100">×</button>
+              <button type="button" aria-label={`Remove ${a.name}`} onClick={() => removeAttachment(i)} className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[11px] rounded-full opacity-0 group-hover:opacity-100">×</button>
             </div>
           ))}
+        </div>
+      )}
+      {attachmentError && (
+        <div role="alert" className="text-accent-red border-border border-t px-3 py-1.5 text-xs">
+          {attachmentError}
         </div>
       )}
       <div className={`flex items-end gap-2 px-3 py-3 border-t border-border bg-secondary pb-[max(0.75rem,env(safe-area-inset-bottom))] ${isDragging ? "bg-accent-blue/10 border-dashed border-accent-blue" : ""}`}>

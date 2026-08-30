@@ -33,6 +33,7 @@ export type PaneNode = {
   terminalSessionKey?: string;
   filePath?: string;
   previewTab?: PreviewPaneTab;
+  conversationId?: string;
 };
 
 export type FilePathMutationScope = {

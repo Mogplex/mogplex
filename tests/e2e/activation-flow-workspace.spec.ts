@@ -94,9 +94,13 @@ test("activation flow tracks repo sync, preview start, workspace open, and previ
     .getByTestId("preview-feedback-input")
     .fill("Make the header clearer and tighten the hero spacing.");
 
-  const chatRequest = page.waitForRequest("**/api/chat");
+  const chatResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/chat") &&
+      response.request().method() === "POST"
+  );
   await page.getByTestId("preview-feedback-send").click();
-  await chatRequest;
+  await chatResponse;
 
   const chatBody = harness.getLastChatBody();
   expect(JSON.stringify(chatBody)).toContain("[Preview feedback —");

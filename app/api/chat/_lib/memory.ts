@@ -18,7 +18,7 @@ export function extractLatestUserText(
   const lastUserMessage = [...messages]
     .reverse()
     .find((message) => message.role === "user");
-  const rawContent = lastUserMessage?.content;
+  const rawContent = lastUserMessage?.parts ?? lastUserMessage?.content;
 
   if (typeof rawContent === "string") {
     return rawContent.slice(0, maxLength);

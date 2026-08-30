@@ -5,6 +5,10 @@ import {
   normalizeSlackRunImageAttachmentsMetadata,
 } from "@/lib/slack/run-attachments";
 import { buildHarnessDeliveryPrompt } from "@/lib/harness/git-delivery";
+import {
+  materializeBrowserAttachmentsForHarness,
+  type BrowserHarnessAttachment,
+} from "@/lib/harness/browser-attachments";
 import type { HarnessId } from "@/lib/harness/config";
 import type { MemoryScope } from "@/lib/memories-client";
 import type { Sandbox } from "@vercel/sandbox";
@@ -261,8 +265,15 @@ export async function setupSlackAttachmentsAndPrompt(
   prompt: string,
   memoryScope: MemoryScope | undefined,
   gitWorkspace: GitWorkspaceSetupResult,
-  slackImageAttachments: unknown
+  slackImageAttachments: unknown,
+  browserAttachments: BrowserHarnessAttachment[] | null
 ): Promise<SlackAttachmentsSetupResult> {
+  const browserAttachmentMaterialization =
+    await materializeBrowserAttachmentsForHarness({
+      sandbox,
+      rootDirectory: ctx.rootDirectory,
+      attachments: browserAttachments,
+    });
   const slackAttachmentMaterialization =
     await materializeSlackImageAttachmentsForHarness({
       deps,
@@ -300,8 +311,12 @@ export async function setupSlackAttachmentsAndPrompt(
     });
   }
 
+  const promptWithBrowserAttachments =
+    browserAttachmentMaterialization.promptSection
+      ? `${prompt.trim()}\n\n${browserAttachmentMaterialization.promptSection}`
+      : prompt.trim();
   const trimmedPrompt = appendSlackAttachmentPromptSection(
-    prompt.trim(),
+    promptWithBrowserAttachments,
     slackAttachmentMaterialization.promptSection
   );
   const promptWithMemoryContext = await deps.loadHarnessPromptWithMemoryContext(

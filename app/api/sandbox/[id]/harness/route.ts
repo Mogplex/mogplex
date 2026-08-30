@@ -13,6 +13,7 @@ import {
   loadOwnedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
 import type { HarnessId } from "@/lib/harness/config";
+import { readBrowserHarnessAttachments } from "@/lib/harness/browser-attachments";
 import {
   createSandboxBillingOnResume,
   presentSandboxBillingAdmissionError,
@@ -90,6 +91,7 @@ export function createSandboxHarnessPostHandler(
       aiCallId?: string | null;
       prepareOnly?: boolean;
       slackImageAttachments?: unknown;
+      attachments?: unknown;
       worktreeId?: string | null;
     };
     try {
@@ -98,6 +100,13 @@ export function createSandboxHarnessPostHandler(
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
     const { harness, prompt } = body;
+    const browserAttachments = readBrowserHarnessAttachments(body.attachments);
+    if (!browserAttachments.ok) {
+      return NextResponse.json(
+        { error: browserAttachments.error },
+        { status: 400 }
+      );
+    }
 
     if (!harness || !VALID_HARNESSES.has(harness as HarnessId)) {
       return NextResponse.json({ error: "Invalid harness" }, { status: 400 });
@@ -291,7 +300,8 @@ export function createSandboxHarnessPostHandler(
           prompt,
           memoryScope,
           gitWorkspace,
-          body.slackImageAttachments
+          body.slackImageAttachments,
+          browserAttachments.value
         );
 
       const result = await deps.runHarness(

@@ -118,6 +118,10 @@ function seedHarnessConversation(
   useConversationsStore.setState({
     conversations: {
       [paneId]: {
+        id: paneId,
+        repoId: "repo-1",
+        workspaceSessionId: "workspace-1",
+        sandboxId,
         messages: [],
         localMsgs: [],
         harnessState: {
@@ -182,6 +186,7 @@ test("retargetSessionToSandbox updates pane bindings and harness sandbox state",
     conversation?.harnessState["claude-code"]?.sandboxId,
     "sandbox-b"
   );
+  assert.equal(conversation?.sandboxId, "sandbox-b");
 });
 
 test("ensureSessionSandboxBinding binds preview panes when launching a sandbox from a session without a prior sandbox", async () => {
@@ -251,4 +256,5 @@ test("ensureSessionSandboxBinding preserves pane retargeting after restart pre-c
     conversation?.harnessState["claude-code"]?.sandboxId,
     "sandbox-b"
   );
+  assert.equal(conversation?.sandboxId, "sandbox-b");
 });

@@ -41,6 +41,8 @@ export async function mockActivationFlow(
     string,
     {
       id: string;
+      repo_id: string | null;
+      workspace_session_id: string | null;
       messages: unknown[];
       local_msgs: unknown[];
       model: string;
@@ -123,18 +125,7 @@ export async function mockActivationFlow(
     if (route.request().method() === "GET") {
       const id = url.searchParams.get("id");
       if (id) {
-        await fulfillJson(
-          route,
-          conversations.get(id) ?? {
-            id,
-            messages: [],
-            local_msgs: [],
-            model: modelId,
-            mode: "AUTO",
-            title: null,
-            updated_at: null,
-          }
-        );
+        await fulfillJson(route, conversations.get(id) ?? null);
         return;
       }
 
@@ -145,6 +136,8 @@ export async function mockActivationFlow(
     if (route.request().method() === "PUT") {
       const body = route.request().postDataJSON() as {
         id: string;
+        repo_id?: string | null;
+        workspace_session_id?: string | null;
         messages?: unknown[];
         local_msgs?: unknown[];
         model?: string;
@@ -154,6 +147,9 @@ export async function mockActivationFlow(
       const current = conversations.get(body.id);
       const conversation = {
         id: body.id,
+        repo_id: body.repo_id ?? current?.repo_id ?? null,
+        workspace_session_id:
+          body.workspace_session_id ?? current?.workspace_session_id ?? null,
         messages: body.messages ?? current?.messages ?? [],
         local_msgs: body.local_msgs ?? current?.local_msgs ?? [],
         model: body.model ?? current?.model ?? modelId,

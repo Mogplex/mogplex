@@ -13,6 +13,7 @@ test("POST /api/chat returns 429 before starting a chat run when limits are exce
 
   const handler = createChatPostHandler({
     requireUserId: async () => "user-123",
+    resolveChatSessionContext: async (_request, _userId, body) => body,
     enforceChatLimits: async () => ({
       allowed: false,
       status: 429,
@@ -50,6 +51,32 @@ test("POST /api/chat returns 429 before starting a chat run when limits are exce
       windowSeconds: 3600,
     },
   });
+});
+
+test("POST /api/chat rejects non-object JSON bodies before context resolution", async () => {
+  const { createChatPostHandler } = await loadChatRoute();
+  let contextResolutionCalls = 0;
+  const handler = createChatPostHandler({
+    requireUserId: async () => "user-123",
+    resolveChatSessionContext: async (_request, _userId, body) => {
+      contextResolutionCalls += 1;
+      return body;
+    },
+  });
+
+  for (const body of [null, [], "chat", 1]) {
+    const response = await handler(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    );
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "Invalid JSON body." });
+  }
+  assert.equal(contextResolutionCalls, 0);
 });
 
 test("buildMemoryQueryFromMessages prefers the latest user text content", async () => {

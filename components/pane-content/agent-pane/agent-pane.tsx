@@ -11,10 +11,11 @@ import {
 import { useCustomCommands } from "@/hooks/use-custom-commands";
 import { useConversationsStore } from "@/hooks/use-conversations";
 import { CommandInput } from "@/components/command-input";
+import type { CommandInputAttachment as Attachment } from "@/components/command-input-types";
 import { parseSlashCommand, buildBuiltinCommands } from "@/lib/slash-commands";
 import { useModels } from "@/hooks/use-models";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport } from "ai";
 import { usePreviewFeedbackStore } from "@/hooks/use-preview-feedback";
 import { buildChatRequestBody } from "@/lib/agents/chat-request-body";
 import type { Repo } from "@/lib/types";
@@ -23,6 +24,7 @@ import { EMPTY_LOCAL_MESSAGES, estimateTokens } from "../utils";
 import { AgentHeader } from "./agent-header";
 import { ConversationHistory } from "./conversation-history";
 import { ChatMessageList } from "./chat-message-list";
+import { useAgentConversationLoader } from "./use-agent-conversation-loader";
 
 interface AgentPaneProps {
   pane: PaneNode;
@@ -34,6 +36,7 @@ interface AgentPaneProps {
     | null;
   activeSandbox?: { id: string } | null;
   onStreamingChange?: (s: boolean) => void;
+  onUpdatePane?: (updates: Partial<PaneNode>) => void;
 }
 
 export function AgentPane({
@@ -42,24 +45,22 @@ export function AgentPane({
   activeRepo,
   activeSandbox,
   onStreamingChange,
+  onUpdatePane,
 }: AgentPaneProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const { asSlashCommands } = useCustomCommands();
   const { modelIds, contextLimits } = useModels();
-  const [loaded, setLoaded] = useState(false);
-  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const hydratedConversationRef = useRef<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
   const conversation = useConversationsStore(
     useCallback((state) => state.conversations[pane.id], [pane.id])
   );
-  const setUserId = useConversationsStore((state) => state.setUserId);
   const loadConversation = useConversationsStore(
     (state) => state.loadConversation
   );
-  const hydrateConversation = useConversationsStore(
-    (state) => state.hydrateConversation
+  const startConversation = useConversationsStore(
+    (state) => state.startConversation
   );
   const syncMessages = useConversationsStore((state) => state.setMessages);
   const syncConversation = useConversationsStore(
@@ -82,9 +83,6 @@ export function AgentPane({
   const storeDefaultModel = useConversationsStore(
     (state) => state.defaultModel
   );
-  const setDefaultModel = useConversationsStore(
-    (state) => state.setDefaultModel
-  );
   const model = conversation?.model || storeDefaultModel;
   const mode = conversation?.mode || "AUTO";
   const builtinCommands = useMemo(
@@ -92,51 +90,16 @@ export function AgentPane({
     [model, modelIds]
   );
   const localMsgs = conversation?.localMsgs ?? EMPTY_LOCAL_MESSAGES;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const init = async () => {
-      setLoaded(false);
-      setInitialMessages([]);
-
-      try {
-        const [authRes, settingsRes] = await Promise.all([
-          fetch("/api/auth/user"),
-          fetch("/api/settings"),
-        ]);
-        if (settingsRes.ok) {
-          const settings = await settingsRes.json();
-          if (settings.default_model) {
-            setDefaultModel(settings.default_model);
-          }
-        }
-        if (authRes.ok) {
-          const { user } = await authRes.json();
-          if (user?.id) {
-            setUserId(user.id);
-            await loadConversation(pane.id);
-          }
-        }
-      } catch (error) {
-        console.warn("Failed to load pane context", { paneId: pane.id, error });
-      }
-
-      if (cancelled) return;
-
-      const storedConversation = useConversationsStore
-        .getState()
-        .getConversation(pane.id);
-      setInitialMessages(storedConversation.messages);
-      setLoaded(true);
-    };
-
-    void init();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadConversation, pane.id, setDefaultModel, setUserId]);
+  const activeSessionId = useSessionsStore((state) => state.activeSessionId);
+  const activeConversationId =
+    conversation?.id ?? pane.conversationId ?? pane.id;
+  const { initialMessages, loaded } = useAgentConversationLoader({
+    paneId: pane.id,
+    conversationId: pane.conversationId ?? pane.id,
+    repoId: activeRepo?.id ?? null,
+    workspaceSessionId: activeSessionId,
+    sandboxId: activeSandbox?.id ?? null,
+  });
 
   const transport = useMemo(
     () =>
@@ -151,7 +114,7 @@ export function AgentPane({
     id: pane.id,
     messages: initialMessages,
   });
-  const { calls: conversationRuns } = useConversationRuns(pane.id);
+  const { calls: conversationRuns } = useConversationRuns(activeConversationId);
   const liveConversationRuns = useMemo(
     () =>
       conversationRuns.filter(
@@ -170,6 +133,8 @@ export function AgentPane({
     abortHarnessRun,
   } = useHarnessRun({
     paneId: pane.id,
+    conversationId: activeConversationId,
+    workspaceSessionId: conversation?.workspaceSessionId ?? activeSessionId,
     model,
     mode,
     activeRepo,
@@ -193,14 +158,14 @@ export function AgentPane({
 
   useEffect(() => {
     if (!loaded) return;
-    if (hydratedConversationRef.current === pane.id) return;
+    if (hydratedConversationRef.current === activeConversationId) return;
 
     const storedConversation = useConversationsStore
       .getState()
       .getConversation(pane.id);
     setMessages(storedConversation.messages);
-    hydratedConversationRef.current = pane.id;
-  }, [loaded, pane.id, setMessages]);
+    hydratedConversationRef.current = activeConversationId;
+  }, [activeConversationId, loaded, pane.id, setMessages]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -299,18 +264,15 @@ export function AgentPane({
     abortHarnessRun,
   ]);
 
-  const activeSessionId = useSessionsStore((state) => state.activeSessionId);
-
   const handleSubmit = useCallback(
-    (input: string) => {
+    async (input: string, attachments?: Attachment[]) => {
       if (isAgentRunning) return;
 
-      const result = parseSlashCommand(
-        input,
-        builtinCommands,
-        asSlashCommands(),
-        { allowUnknown: model.startsWith("harness:") }
-      );
+      const result = attachments?.length
+        ? null
+        : parseSlashCommand(input, builtinCommands, asSlashCommands(), {
+            allowUnknown: model.startsWith("harness:"),
+          });
       if (result) {
         if (result.action === "set_model") {
           setModel(pane.id, result.payload as string);
@@ -340,25 +302,48 @@ export function AgentPane({
           result.action === "passthrough" &&
           model.startsWith("harness:")
         ) {
-          void submitToHarness(input);
+          void submitToHarness(input, attachments);
         }
         return;
       }
 
       if (model.startsWith("harness:")) {
-        void submitToHarness(input);
+        void submitToHarness(input, attachments);
         return;
       }
 
-      sendMessage(
-        { text: input },
+      const saved = await syncConversation(pane.id);
+      if (!saved) {
+        addLocalMsg(pane.id, {
+          id: crypto.randomUUID(),
+          text: "Could not save this conversation. Try again before sending.",
+        });
+        return;
+      }
+      const files = attachments?.flatMap((attachment) =>
+        attachment.data
+          ? [
+              {
+                type: "file" as const,
+                mediaType: attachment.mediaType,
+                filename: attachment.name,
+                url: attachment.data,
+              },
+            ]
+          : []
+      );
+      await sendMessage(
+        {
+          text: input.trim() || "Review the attached file(s).",
+          ...(files?.length ? { files } : {}),
+        },
         {
           body: buildChatRequestBody(
             model,
             activeRepo,
             activeSandbox,
-            pane.id,
-            activeSessionId
+            activeConversationId,
+            conversation?.workspaceSessionId ?? activeSessionId
           ),
         }
       );
@@ -373,12 +358,15 @@ export function AgentPane({
       clearMessages,
       isAgentRunning,
       model,
+      activeConversationId,
+      conversation?.workspaceSessionId,
       pane.id,
       sendMessage,
       setMessages,
       setMode,
       setModel,
       submitToHarness,
+      syncConversation,
     ]
   );
 
@@ -395,40 +383,51 @@ export function AgentPane({
   }, [pendingFeedback, loaded, consumeFeedback, handleSubmit]);
 
   const handleNewChat = useCallback(() => {
+    const conversationId = crypto.randomUUID();
+    startConversation(pane.id, {
+      id: conversationId,
+      repoId: activeRepo?.id ?? null,
+      workspaceSessionId: activeSessionId,
+      sandboxId: activeSandbox?.id ?? null,
+    });
+    onUpdatePane?.({ conversationId });
     setMessages([]);
-    clearMessages(pane.id);
     setShowHistory(false);
-  }, [clearMessages, pane.id, setMessages]);
+  }, [
+    activeRepo?.id,
+    activeSandbox?.id,
+    activeSessionId,
+    onUpdatePane,
+    pane.id,
+    setMessages,
+    startConversation,
+  ]);
 
   const handleResumeConversation = useCallback(
     async (convId: string) => {
-      await loadConversation(convId);
-      const conv = useConversationsStore.getState().getConversation(convId);
-      hydrateConversation(pane.id, {
-        messages: conv.messages,
-        localMsgs: conv.localMsgs,
-        harnessState: conv.harnessState,
-        model: conv.model,
-        mode: conv.mode,
-        title: conv.title,
-      });
-      setInitialMessages(conv.messages);
+      const conv = await loadConversation(
+        pane.id,
+        convId,
+        activeRepo?.id ?? null
+      );
+      if (!conv) return;
+      onUpdatePane?.({ conversationId: conv.id });
       setMessages(conv.messages);
       setShowHistory(false);
     },
-    [hydrateConversation, loadConversation, pane.id, setMessages]
+    [activeRepo?.id, loadConversation, onUpdatePane, pane.id, setMessages]
   );
 
   const handleToggleHistory = useCallback(() => {
     if (!showHistory) {
-      void fetchConversationList();
+      void fetchConversationList(activeRepo?.id ?? null);
     }
     setShowHistory((v) => !v);
-  }, [showHistory, fetchConversationList]);
+  }, [activeRepo?.id, showHistory, fetchConversationList]);
 
   // Filter out current pane and empty conversations
   const historyItems = conversationList.filter(
-    (c) => c.id !== pane.id && c.updated_at
+    (c) => c.id !== activeConversationId && c.updated_at
   );
 
   return (

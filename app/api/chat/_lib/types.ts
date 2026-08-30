@@ -1,15 +1,26 @@
 import type { requireUserId } from "@/lib/auth";
 import type { enforceChatLimits } from "@/lib/request-limits";
 import type { createAiCall } from "@/lib/interactive-runs";
+import type { resolveChatSessionContext } from "./session-context";
 
 export const MEMORY_CONTEXT_TIMEOUT_MS = 3000;
 export const SESSION_MEMORY_DUPLICATE_WINDOW_MS = 60_000;
 export const SESSION_MEMORY_RETENTION_LIMIT = 50;
 export const SESSION_MEMORY_PRUNE_SCAN_LIMIT = 75;
 
+export type ChatRequestPart = {
+  type: string;
+  text?: string;
+  mediaType?: string;
+  filename?: string;
+  url?: string;
+  [key: string]: unknown;
+};
+
 export type ChatRequestMessage = {
   role?: string;
-  content?: string | Array<{ type: string; text?: string }>;
+  content?: string | ChatRequestPart[];
+  parts?: ChatRequestPart[];
 };
 
 export type ChatRequestBody = {
@@ -39,6 +50,7 @@ export type ChatRunMetadata = {
   repo_name: string | null;
   repo_branch: string | null;
   team_id: string | null;
+  workspace_session_id: string | null;
 };
 
 export type ChatMemoryContext = {
@@ -55,6 +67,7 @@ export type ChatStartupFailure = Error & {
 export type ChatPostDeps = {
   requireUserId: typeof requireUserId;
   enforceChatLimits: typeof enforceChatLimits;
+  resolveChatSessionContext: typeof resolveChatSessionContext;
 };
 
 export function getChatRunScope(body: ChatRequestBody): ChatRunScope {
@@ -75,5 +88,6 @@ export function buildChatRunMetadata(
     repo_name: body.repoName ?? null,
     repo_branch: body.repoBranch ?? null,
     team_id: teamId,
+    workspace_session_id: body.workspaceSessionId ?? null,
   };
 }
