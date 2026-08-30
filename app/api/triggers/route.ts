@@ -35,30 +35,41 @@ function slugify(name: string): string {
 
 const defaultTriggerAgentDeps = {
   async loadOwnedAgent(agentId: string, userId: string) {
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("agents")
       .select("id, name, slug")
       .eq("id", agentId)
       .eq("user_id", userId)
       .maybeSingle();
 
+    if (error) throw new Error("Failed to load agent", { cause: error });
     return data;
   },
   async updateAgentSlug(agentId: string, slug: string) {
-    await supabaseAdmin.from("agents").update({ slug }).eq("id", agentId);
+    const { error } = await supabaseAdmin
+      .from("agents")
+      .update({ slug })
+      .eq("id", agentId);
+
+    if (error) {
+      throw new Error("Failed to update agent slug", { cause: error });
+    }
   },
 };
 
 const defaultTriggerPostDeps: TriggerPostDeps = {
   requireUserId,
   async loadOwnedInstallation(installationId, userId) {
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("github_installations")
       .select("id")
       .eq("user_id", userId)
       .eq("installation_id", installationId)
       .maybeSingle();
 
+    if (error) {
+      throw new Error("Failed to load installation", { cause: error });
+    }
     return data;
   },
   ...defaultTriggerAgentDeps,
@@ -81,13 +92,28 @@ async function resolveOwnedTriggerAgent(
     );
   }
 
-  const agent = await deps.loadOwnedAgent(agentId, userId);
+  let agent: Awaited<ReturnType<TriggerPostDeps["loadOwnedAgent"]>>;
+  try {
+    agent = await deps.loadOwnedAgent(agentId, userId);
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to load agent" },
+      { status: 500 }
+    );
+  }
   if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
   if (!agent.slug) {
-    await deps.updateAgentSlug(agent.id, slugify(agent.name));
+    try {
+      await deps.updateAgentSlug(agent.id, slugify(agent.name));
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to prepare agent" },
+        { status: 500 }
+      );
+    }
   }
 
   return agent.id;
@@ -171,7 +197,10 @@ export function createTriggersPostHandler(
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const { installation_id, agent_id, event, is_default } = body;
 
     if (!installation_id || !agent_id || !event) {
@@ -181,10 +210,17 @@ export function createTriggersPostHandler(
       );
     }
 
-    const installation = await deps.loadOwnedInstallation(
-      installation_id,
-      userId
-    );
+    let installation: Awaited<
+      ReturnType<TriggerPostDeps["loadOwnedInstallation"]>
+    >;
+    try {
+      installation = await deps.loadOwnedInstallation(installation_id, userId);
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to load installation" },
+        { status: 500 }
+      );
+    }
     if (!installation) {
       return NextResponse.json(
         { error: "Installation not found" },
@@ -232,7 +268,10 @@ export function createTriggersPutHandler(
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const { id, ...updates } = body;
 
     if (!id)

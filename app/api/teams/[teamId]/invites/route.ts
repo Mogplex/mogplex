@@ -30,12 +30,20 @@ export async function POST(
 
   const { teamId } = await context.params;
 
-  let body: { email?: unknown; role?: unknown };
+  let parsedBody: unknown;
   try {
-    body = await request.json();
+    parsedBody = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+  if (
+    !parsedBody ||
+    typeof parsedBody !== "object" ||
+    Array.isArray(parsedBody)
+  ) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const body = parsedBody as Record<string, unknown>;
 
   const emailRaw = typeof body.email === "string" ? body.email.trim() : "";
   const email = emailRaw.toLowerCase();
@@ -65,18 +73,31 @@ export async function POST(
   // Skip when this email is already a team member (joined via prior invite or
   // direct add). The DB doesn't enforce email→member uniqueness because we key
   // on user_id; check explicitly so the inviter sees a clear error.
-  const { data: existing } = await supabaseAdmin
+  const { data: existing, error: profileLookupError } = await supabaseAdmin
     .from("profiles")
     .select("id")
     .eq("email", email)
     .maybeSingle();
+  if (profileLookupError) {
+    return NextResponse.json(
+      { error: "Failed to check existing team membership" },
+      { status: 500 }
+    );
+  }
   if (existing) {
-    const { data: alreadyMember } = await supabaseAdmin
-      .from("team_members")
-      .select("team_id")
-      .eq("team_id", teamId)
-      .eq("user_id", existing.id)
-      .maybeSingle();
+    const { data: alreadyMember, error: memberLookupError } =
+      await supabaseAdmin
+        .from("team_members")
+        .select("team_id")
+        .eq("team_id", teamId)
+        .eq("user_id", existing.id)
+        .maybeSingle();
+    if (memberLookupError) {
+      return NextResponse.json(
+        { error: "Failed to check existing team membership" },
+        { status: 500 }
+      );
+    }
     if (alreadyMember) {
       return NextResponse.json(
         { error: "That user is already a team member" },
@@ -90,16 +111,25 @@ export async function POST(
       .from("teams")
       .select("id, name, slug")
       .eq("id", teamId)
-      .single(),
+      .maybeSingle(),
     supabaseAdmin
       .from("profiles")
       .select("name, username")
       .eq("id", profileId)
-      .single(),
+      .maybeSingle(),
   ]);
 
-  if (teamResult.error || !teamResult.data) {
+  if (teamResult.error) {
+    return NextResponse.json({ error: "Failed to load team" }, { status: 500 });
+  }
+  if (!teamResult.data) {
     return NextResponse.json({ error: "Team not found" }, { status: 404 });
+  }
+  if (inviterResult.error) {
+    return NextResponse.json(
+      { error: "Failed to load inviter" },
+      { status: 500 }
+    );
   }
 
   const token = generateInviteToken();
@@ -133,7 +163,7 @@ export async function POST(
     inviterName,
     role: role as InviteRole,
     token,
-  });
+  }).catch(() => ({ ok: false as const, reason: "resend_error" as const }));
 
   const delivery: CreateInviteResponse["delivery"] = sendResult.ok
     ? sendResult.channel

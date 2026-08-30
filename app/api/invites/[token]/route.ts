@@ -18,183 +18,265 @@ export type InviteLookupResponse = {
   currentEmail: string | null;
 };
 
-async function lookupInvite(token: string) {
+type InviteLookupRow = {
+  id: string;
+  team_id: string;
+  email: string;
+  role: "admin" | "developer" | "viewer";
+  expires_at: string;
+  accepted_at: string | null;
+  invited_by_user_id: string | null;
+};
+
+type InviteGetDeps = {
+  requireProfileId: typeof requireProfileId;
+  lookupInvite: (token: string) => Promise<InviteLookupRow | null>;
+  loadTeam: (teamId: string) => Promise<{ name: string; slug: string } | null>;
+  getInviterName: (profileId: string | null) => Promise<string | null>;
+  getProfileEmail: (profileId: string) => Promise<string | null>;
+};
+
+async function lookupInvite(token: string): Promise<InviteLookupRow | null> {
   // Service-role: the recipient is authed but not yet a team member, so RLS
   // (team_invites_admin policy) would block reading the invite row otherwise.
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("team_invites")
     .select(
       "id, team_id, email, role, expires_at, accepted_at, invited_by_user_id"
     )
     .eq("token", token)
     .maybeSingle();
-  return data;
+  if (error) throw new Error("Failed to load invite", { cause: error });
+  return data as InviteLookupRow | null;
+}
+
+async function loadTeam(teamId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("teams")
+    .select("name, slug")
+    .eq("id", teamId)
+    .maybeSingle();
+  if (error) throw new Error("Failed to load team", { cause: error });
+  return data as { name: string; slug: string } | null;
 }
 
 async function getInviterName(profileId: string | null) {
   if (!profileId) return null;
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("name, username")
     .eq("id", profileId)
     .maybeSingle();
+  if (error) throw new Error("Failed to load inviter", { cause: error });
   return (
     (data?.name as string | null) || (data?.username as string | null) || null
   );
 }
 
 async function getProfileEmail(profileId: string) {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("email")
     .eq("id", profileId)
     .maybeSingle();
+  if (error) throw new Error("Failed to load profile", { cause: error });
   return (data?.email as string | null) || null;
 }
 
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ token: string }> }
-) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
+const defaultInviteGetDeps: InviteGetDeps = {
+  requireProfileId,
+  lookupInvite,
+  loadTeam,
+  getInviterName,
+  getProfileEmail,
+};
 
-  const { token } = await context.params;
-  const invite = await lookupInvite(token);
-  if (!invite) {
-    return NextResponse.json({ error: "Invite not found" }, { status: 404 });
-  }
+export function createInviteGetHandler(overrides: Partial<InviteGetDeps> = {}) {
+  const deps: InviteGetDeps = { ...defaultInviteGetDeps, ...overrides };
 
-  const { data: team } = await supabaseAdmin
-    .from("teams")
-    .select("name, slug")
-    .eq("id", invite.team_id)
-    .single();
+  return async function GET(
+    _request: Request,
+    context: { params: Promise<{ token: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
 
-  if (!team) {
-    return NextResponse.json({ error: "Team not found" }, { status: 404 });
-  }
+    try {
+      const { token } = await context.params;
+      const invite = await deps.lookupInvite(token);
+      if (!invite) {
+        return NextResponse.json(
+          { error: "Invite not found" },
+          { status: 404 }
+        );
+      }
 
-  const [inviterName, currentEmail] = await Promise.all([
-    getInviterName((invite.invited_by_user_id as string | null) ?? null),
-    getProfileEmail(profileId),
-  ]);
+      const team = await deps.loadTeam(invite.team_id);
+      if (!team) {
+        return NextResponse.json({ error: "Team not found" }, { status: 404 });
+      }
 
-  const expired = new Date(invite.expires_at as string).getTime() < Date.now();
-  const alreadyAccepted = Boolean(invite.accepted_at);
-  const inviteEmail = (invite.email as string).toLowerCase();
-  const userEmail = currentEmail?.toLowerCase() ?? null;
-  const emailMatch = userEmail !== null && userEmail === inviteEmail;
+      const [inviterName, currentEmail] = await Promise.all([
+        deps.getInviterName(invite.invited_by_user_id),
+        deps.getProfileEmail(profileId),
+      ]);
 
-  const body: InviteLookupResponse = {
-    invite: {
-      teamName: team.name as string,
-      teamSlug: team.slug as string,
-      inviterName,
-      role: invite.role as "admin" | "developer" | "viewer",
-      expiresAt: invite.expires_at as string,
-      expired,
-      alreadyAccepted,
-    },
-    emailMatch,
-    inviteEmail,
-    currentEmail,
+      const expired = new Date(invite.expires_at).getTime() < Date.now();
+      const alreadyAccepted = Boolean(invite.accepted_at);
+      const inviteEmail = invite.email.toLowerCase();
+      const userEmail = currentEmail?.toLowerCase() ?? null;
+      const emailMatch = userEmail !== null && userEmail === inviteEmail;
+
+      const body: InviteLookupResponse = {
+        invite: {
+          teamName: team.name,
+          teamSlug: team.slug,
+          inviterName,
+          role: invite.role,
+          expiresAt: invite.expires_at,
+          expired,
+          alreadyAccepted,
+        },
+        emailMatch,
+        inviteEmail,
+        currentEmail,
+      };
+
+      return NextResponse.json(body);
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to load invite" },
+        { status: 500 }
+      );
+    }
   };
-
-  return NextResponse.json(body);
 }
+
+export const GET = createInviteGetHandler();
 
 export type AcceptInviteResponse = {
   team: { id: string; slug: string };
 };
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ token: string }> }
-) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
+type AtomicInviteAcceptance = {
+  invite_id: string;
+  team_id: string;
+  team_slug: string;
+  invite_email: string;
+  invite_role: "admin" | "developer" | "viewer";
+  email_match: boolean;
+};
 
-  const { token } = await context.params;
+type AcceptInviteDeps = {
+  requireProfileId: typeof requireProfileId;
+  acceptInvite: (input: {
+    token: string;
+    profileId: string;
+    confirmMismatch: boolean;
+  }) => Promise<{
+    data: AtomicInviteAcceptance | null;
+    error: { message: string } | null;
+  }>;
+  recordTeamAuditEvent: typeof recordTeamAuditEvent;
+};
 
-  let body: { confirmMismatch?: unknown };
-  try {
-    body = (await request.json().catch(() => ({}))) as typeof body;
-  } catch {
-    body = {};
-  }
-  const confirmMismatch = body.confirmMismatch === true;
+const defaultAcceptInviteDeps: AcceptInviteDeps = {
+  requireProfileId,
+  async acceptInvite(input) {
+    const { data, error } = await supabaseAdmin
+      .rpc("accept_team_invite", {
+        p_token: input.token,
+        p_profile_id: input.profileId,
+        p_confirm_mismatch: input.confirmMismatch,
+      })
+      .maybeSingle();
+    return {
+      data: data as AtomicInviteAcceptance | null,
+      error: error ? { message: error.message } : null,
+    };
+  },
+  recordTeamAuditEvent,
+};
 
-  const invite = await lookupInvite(token);
-  if (!invite) {
+function inviteAcceptanceErrorResponse(message: string) {
+  if (message.includes("invite_not_found")) {
     return NextResponse.json({ error: "Invite not found" }, { status: 404 });
   }
-  if (invite.accepted_at) {
+  if (message.includes("already_accepted")) {
     return NextResponse.json({ error: "already_accepted" }, { status: 410 });
   }
-  if (new Date(invite.expires_at as string).getTime() < Date.now()) {
+  if (message.includes("expired")) {
     return NextResponse.json({ error: "expired" }, { status: 410 });
   }
-
-  const currentEmail = await getProfileEmail(profileId);
-  const inviteEmail = (invite.email as string).toLowerCase();
-  const emailMatch =
-    currentEmail !== null && currentEmail.toLowerCase() === inviteEmail;
-  if (!emailMatch && !confirmMismatch) {
+  if (message.includes("mismatch_unconfirmed")) {
     return NextResponse.json(
       { error: "mismatch_unconfirmed" },
       { status: 409 }
     );
   }
-
-  // Insert membership + mark invite accepted. Service-role bypasses the
-  // is_team_admin() check on team_members_write — the user is the new member,
-  // not an admin yet.
-  const { error: memberError } = await supabaseAdmin
-    .from("team_members")
-    .insert({
-      team_id: invite.team_id,
-      user_id: profileId,
-      role: invite.role,
-      invited_by_user_id: invite.invited_by_user_id,
-    });
-
-  if (memberError && memberError.code !== "23505") {
-    return NextResponse.json(
-      { error: memberError.message || "Failed to join team" },
-      { status: 500 }
-    );
+  if (message.includes("profile_not_found")) {
+    return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
-
-  await supabaseAdmin
-    .from("team_invites")
-    .update({ accepted_at: new Date().toISOString() })
-    .eq("id", invite.id);
-
-  const { data: team } = await supabaseAdmin
-    .from("teams")
-    .select("id, slug")
-    .eq("id", invite.team_id)
-    .single();
-
-  if (!team) {
+  if (message.includes("team_not_found")) {
     return NextResponse.json({ error: "Team not found" }, { status: 404 });
   }
-
-  await recordTeamAuditEvent({
-    productTeamId: invite.team_id as string,
-    actorUserId: profileId,
-    action: "invite.accepted",
-    targetType: "invite",
-    targetId: invite.id as string,
-    payload: {
-      email: invite.email as string,
-      role: invite.role as string,
-      email_match: emailMatch,
-    },
-  });
-
-  return NextResponse.json({
-    team: { id: team.id as string, slug: team.slug as string },
-  });
+  return NextResponse.json(
+    { error: "Failed to accept invite" },
+    { status: 500 }
+  );
 }
+
+export function createAcceptInviteHandler(
+  overrides: Partial<AcceptInviteDeps> = {}
+) {
+  const deps: AcceptInviteDeps = {
+    ...defaultAcceptInviteDeps,
+    ...overrides,
+  };
+
+  return async function POST(
+    request: Request,
+    context: { params: Promise<{ token: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
+
+    const { token } = await context.params;
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { data, error } = await deps.acceptInvite({
+      token,
+      profileId,
+      confirmMismatch:
+        (body as Record<string, unknown>).confirmMismatch === true,
+    });
+    if (error) return inviteAcceptanceErrorResponse(error.message);
+    if (!data) {
+      return NextResponse.json(
+        { error: "Failed to accept invite" },
+        { status: 500 }
+      );
+    }
+
+    await deps.recordTeamAuditEvent({
+      productTeamId: data.team_id,
+      actorUserId: profileId,
+      action: "invite.accepted",
+      targetType: "invite",
+      targetId: data.invite_id,
+      payload: {
+        email: data.invite_email,
+        role: data.invite_role,
+        email_match: data.email_match,
+      },
+    });
+
+    return NextResponse.json({
+      team: { id: data.team_id, slug: data.team_slug },
+    });
+  };
+}
+
+export const POST = createAcceptInviteHandler();

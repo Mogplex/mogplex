@@ -17,6 +17,32 @@ export function createScopedSkillResponse<T extends object>(skill: T | null) {
   return NextResponse.json(withGlobalScope(skill));
 }
 
+const SKILL_TYPES = new Set(["runbook", "tool", "prompt", "workflow"]);
+
+export function pickSkillWriteFields(input: unknown) {
+  const fields: Record<string, unknown> = {};
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return fields;
+  const body = input as Record<string, unknown>;
+  if (typeof body.name === "string") fields.name = body.name;
+  if (body.description === null || typeof body.description === "string") {
+    fields.description = body.description;
+  }
+  if (typeof body.content === "string") fields.content = body.content;
+  if (typeof body.type === "string" && SKILL_TYPES.has(body.type)) {
+    fields.type = body.type;
+  }
+  if (typeof body.model === "string") fields.model = body.model;
+  if (typeof body.is_public === "boolean") fields.is_public = body.is_public;
+  if (
+    Array.isArray(body.tags) &&
+    body.tags.every((tag) => typeof tag === "string")
+  ) {
+    fields.tags = body.tags;
+  }
+  return fields;
+}
+
 export async function GET(req: Request) {
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
@@ -45,10 +71,17 @@ export async function POST(req: Request) {
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
 
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  const fields = pickSkillWriteFields(body);
+  if (typeof fields.name !== "string" || typeof fields.content !== "string") {
+    return NextResponse.json(
+      { error: "name and content are required" },
+      { status: 400 }
+    );
+  }
   const { data, error } = await supabaseAdmin
     .from("skills")
-    .insert({ ...body, user_id: userId })
+    .insert({ ...fields, user_id: userId })
     .select()
     .single();
 
@@ -61,8 +94,21 @@ export async function PUT(req: Request) {
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
 
-  const body = await req.json();
-  const { id, ...updates } = body;
+  const body = await req.json().catch(() => null);
+  const id =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>).id
+      : null;
+  if (typeof id !== "string" || !id.trim()) {
+    return NextResponse.json({ error: "Invalid skill id" }, { status: 400 });
+  }
+  const updates = pickSkillWriteFields(body);
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json(
+      { error: "No valid fields to update" },
+      { status: 400 }
+    );
+  }
 
   const { data, error } = await supabaseAdmin
     .from("skills")
