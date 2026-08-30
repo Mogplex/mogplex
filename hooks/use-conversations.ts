@@ -182,23 +182,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
         });
 
         if (res.status === 409) {
-          const data = (await res.json().catch(() => null)) as {
-            conversation?: { updated_at?: string | null };
-          } | null;
-          const latestUpdatedAt = data?.conversation?.updated_at ?? null;
-          set((state) => {
-            const current = state.conversations[paneId];
-            if (!current) return state;
-            return {
-              conversations: {
-                ...state.conversations,
-                [paneId]: {
-                  ...current,
-                  updatedAt: latestUpdatedAt,
-                },
-              },
-            };
-          });
           console.warn("Conversation sync skipped due to version conflict", {
             paneId,
             conversationId: conv.id,

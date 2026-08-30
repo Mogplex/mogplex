@@ -98,6 +98,17 @@ test("native chat rejects remote and oversized file parts", () => {
     () => normalizeChatMessages([{ role: "owner", parts: [] }]),
     /Invalid chat message role/
   );
+  assert.throws(
+    () => normalizeChatMessages([{ role: "user", parts: [null as never] }]),
+    /Invalid chat message part/
+  );
+  assert.throws(
+    () =>
+      normalizeChatMessages([
+        { role: "user", parts: [{ type: "text", text: 7 as never }] },
+      ]),
+    /Invalid chat text part/
+  );
 });
 
 test("browser harness attachments are decoded into ignored sandbox files", async () => {

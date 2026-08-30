@@ -116,6 +116,65 @@ test("starting a new chat assigns a fresh persisted identity without clearing th
   }
 });
 
+test("a conversation conflict never advances the stale local version", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ expected_updated_at: string; messages: unknown[] }> =
+    [];
+
+  globalThis.fetch = (async (_input, init) => {
+    requests.push(JSON.parse(String(init?.body)));
+    return Response.json(
+      {
+        error: "CONFLICT",
+        conversation: {
+          updated_at: "2026-08-30T12:00:00.000Z",
+          messages: [{ id: "server-message", role: "user", parts: [] }],
+        },
+      },
+      { status: 409 }
+    );
+  }) as typeof fetch;
+
+  try {
+    useConversationsStore.setState({
+      userId: "user-1",
+      conversations: {
+        "pane-1": {
+          id: "conversation-1",
+          repoId: "repo-1",
+          workspaceSessionId: "workspace-1",
+          messages: [{ id: "stale-message", role: "user", parts: [] }],
+          localMsgs: [],
+          harnessState: {},
+          model: "openai/gpt-5.6-sol",
+          mode: "AUTO",
+          updatedAt: "2026-08-30T11:00:00.000Z",
+        },
+      },
+    });
+
+    assert.equal(
+      await useConversationsStore.getState().syncToSupabase("pane-1"),
+      false
+    );
+    assert.equal(
+      await useConversationsStore.getState().syncToSupabase("pane-1"),
+      false
+    );
+    assert.deepEqual(
+      requests.map((request) => request.expected_updated_at),
+      ["2026-08-30T11:00:00.000Z", "2026-08-30T11:00:00.000Z"]
+    );
+    assert.equal(
+      useConversationsStore.getState().conversations["pane-1"]?.messages[0]?.id,
+      "stale-message"
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetStore();
+  }
+});
+
 test("closing a pane deletes its persisted conversation identity, not the pane identity", async () => {
   const originalFetch = globalThis.fetch;
   const requests: string[] = [];

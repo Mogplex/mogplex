@@ -80,21 +80,36 @@ export function normalizeChatMessages(
     let filePartCount = 0;
     return {
       role: chatMessage.role,
-      parts: parts.flatMap<UIMessage["parts"][number]>((part) => {
-        if (part.type === "text") {
-          return [{ type: "text", text: part.text ?? "" }];
-        }
-        if (part.type === "file") {
-          filePartCount += 1;
-          if (filePartCount > MAX_CHAT_FILE_PARTS) {
-            throw new ChatValidationError(
-              `Chat supports up to ${MAX_CHAT_FILE_PARTS} file attachments.`
-            );
+      parts: (parts as unknown[]).flatMap<UIMessage["parts"][number]>(
+        (part) => {
+          if (
+            typeof part !== "object" ||
+            part === null ||
+            Array.isArray(part) ||
+            typeof (part as ChatRequestPart).type !== "string" ||
+            (part as ChatRequestPart).type.length === 0
+          ) {
+            throw new ChatValidationError("Invalid chat message part.");
           }
-          return [normalizeFilePart(part)];
+          const chatPart = part as ChatRequestPart;
+          if (chatPart.type === "text") {
+            if (typeof chatPart.text !== "string") {
+              throw new ChatValidationError("Invalid chat text part.");
+            }
+            return [{ type: "text", text: chatPart.text }];
+          }
+          if (chatPart.type === "file") {
+            filePartCount += 1;
+            if (filePartCount > MAX_CHAT_FILE_PARTS) {
+              throw new ChatValidationError(
+                `Chat supports up to ${MAX_CHAT_FILE_PARTS} file attachments.`
+              );
+            }
+            return [normalizeFilePart(chatPart)];
+          }
+          return [chatPart as UIMessage["parts"][number]];
         }
-        return [part as UIMessage["parts"][number]];
-      }),
+      ),
     };
   });
 }
