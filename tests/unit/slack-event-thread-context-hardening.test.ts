@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { resolveKnownSlackAttribution } from "@/trigger/slack-event-lib/attribution";
-import { extractSlackRepoCandidates } from "@/trigger/slack-event-lib/repo-context";
+import {
+  extractSlackBareRepoNameCandidates,
+  extractSlackRepoCandidates,
+} from "@/trigger/slack-event-lib/repo-context";
 import { buildSlackThreadContext } from "@/trigger/slack-event-lib/thread-context";
 import {
   baseInstallation,
@@ -47,6 +50,36 @@ test("bounds repo candidates and ignores GitHub-like subdomains", () => {
       ),
     ]),
     Array.from({ length: 10 }, (_, index) => `owner-${index}/repo-${index}`)
+  );
+});
+
+test("extracts bare repo names, newest text first, without URLs or short noise", () => {
+  assert.deepEqual(
+    extractSlackBareRepoNameCandidates([
+      "Please fix this in widgets: https://widgets.example/app/preview at 2:30 PM",
+      "See https://github.com/acme/widgets/issues/1 and Widgets again.",
+      "Then mogplex.",
+    ]),
+    [
+      "Please",
+      "fix",
+      "this",
+      "widgets",
+      "See",
+      "and",
+      "again",
+      "Then",
+      "mogplex",
+    ]
+  );
+});
+
+test("bounds bare repo name candidates", () => {
+  assert.equal(
+    extractSlackBareRepoNameCandidates([
+      Array.from({ length: 60 }, (_, index) => `word${index}`).join(" "),
+    ]).length,
+    40
   );
 });
 

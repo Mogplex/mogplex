@@ -166,9 +166,30 @@ test("buildSlackThreadConcurrencyKey scopes Trigger runs to one Slack thread", a
       teamId: "T123",
       channelId: "C1",
       threadTs: "1700000000.000100",
+      channelType: "channel",
     }),
     "slack-thread:T123:C1:1700000000.000100"
   );
+});
+
+test("buildSlackThreadConcurrencyKey serializes every message in a DM channel", async () => {
+  const { buildSlackThreadConcurrencyKey } = await loadSlackWebhookRoute();
+
+  const first = buildSlackThreadConcurrencyKey({
+    teamId: "T123",
+    channelId: "D1",
+    threadTs: "1700000000.000100",
+    channelType: "im",
+  });
+  const second = buildSlackThreadConcurrencyKey({
+    teamId: "T123",
+    channelId: "D1",
+    threadTs: "1700000009.000100",
+    channelType: "im",
+  });
+
+  assert.equal(first, "slack-thread:T123:D1:D1");
+  assert.equal(first, second);
 });
 
 test("supports non-mention messages in direct conversations and only thread replies in channels", async () => {

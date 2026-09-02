@@ -392,3 +392,86 @@ for (const channelType of ["group"] as const) {
     assert.equal(postedThreadTs, "1700000000.000100");
   });
 }
+
+test("continues one conversation across top-level DM messages", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+
+  let conversationLookup:
+    | { channelId: string; threadTs: string; requireExisting?: boolean }
+    | undefined;
+  let repoTexts: string[] = [];
+  let agentMessages: Array<{ role: string; content: unknown }> = [];
+  let postedThreadTs: string | undefined = "unset";
+
+  const result = await runSlackEventTask(
+    {
+      ...basePayload,
+      channelId: "D1",
+      channelType: "im" as const,
+      eventType: "message" as const,
+      text: "Can you fix it?",
+      threadTs: "1700000009.000100",
+      messageTs: "1700000009.000100",
+    },
+    {
+      getInstallation: async () => baseInstallation,
+      getBotToken: async () => "xoxb-test",
+      resolveSlackAttribution: async () => mappedAttribution(),
+      getChannelLink: async () => {
+        throw new Error("should not lookup channel links for DM messages");
+      },
+      loadOrCreateConversation: async (input) => {
+        conversationLookup = {
+          channelId: input.channelId,
+          threadTs: input.threadTs,
+          requireExisting: input.requireExisting,
+        };
+        return {
+          id: "conv-dm",
+          user_id: "user-mogplex",
+          messages: [
+            { role: "user", content: "Please fix this in acme/widgets" },
+            { role: "assistant", content: "Filed issue #1465." },
+          ],
+          model: null,
+          title: null,
+        };
+      },
+      resolveRepoContext: async (input) => {
+        repoTexts = input.texts;
+        return null;
+      },
+      persistConversation: async () => undefined,
+      runAgent: async (input) => {
+        agentMessages = input.messages;
+        return agentSuccess({ finalText: "On it." });
+      },
+      postMessage: async (_token, input) => {
+        postedThreadTs = input.thread_ts;
+        return { channel: input.channel, ts: "1700000009.000999" };
+      },
+      updateMessage: async (_token, input) => ({
+        channel: input.channel,
+        ts: input.ts,
+      }),
+    }
+  );
+
+  assert.equal(result.outcome, "conversational_reply");
+  // The DM channel, not the individual message, identifies the conversation.
+  assert.deepEqual(conversationLookup, {
+    channelId: "D1",
+    threadTs: "D1",
+    requireExisting: false,
+  });
+  assert.equal(postedThreadTs, undefined);
+  assert.equal(agentMessages.length, 3);
+  assert.equal(agentMessages[0]?.content, "Please fix this in acme/widgets");
+  assert.equal(agentMessages.at(-1)?.content, "Can you fix it?");
+  // Newest text first, then earlier user turns, so a repo named earlier in the
+  // DM still resolves.
+  assert.deepEqual(repoTexts, [
+    "Can you fix it?",
+    "Please fix this in acme/widgets",
+  ]);
+});
