@@ -20,7 +20,13 @@ export const NEXT_CONFIG_CANDIDATES = [
 
 export const MOGPLEX_SANDBOX_ORIGIN_PATTERN = "*.vercel.run";
 
-const INJECTION_MARKER = "// mogplex: allowedDevOrigins";
+/**
+ * Comment appended to the line Mogplex injects into `next.config.*` at sandbox
+ * boot. Git delivery uses it to recognise (and revert) the platform's own edit
+ * so it is never mistaken for, or committed as, the user's work.
+ */
+export const NEXT_CONFIG_INJECTION_MARKER = "// mogplex: allowedDevOrigins";
+const INJECTION_MARKER = NEXT_CONFIG_INJECTION_MARKER;
 
 /**
  * Patterns used to locate the opening brace of the exported config object.

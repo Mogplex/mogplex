@@ -1,3 +1,5 @@
+import { NEXT_CONFIG_INJECTION_MARKER } from "@/lib/sandbox/runtimes/next-config-patch";
+
 /**
  * Shared agent branch synchronization state machine. Callers provide
  * MOGPLEX_BASE_BRANCH, MOGPLEX_WORKING_BRANCH, and MOGPLEX_CREATE_BRANCH in
@@ -5,12 +7,36 @@
  * them.
  */
 export function buildAgentGitSyncScript() {
+  const marker = NEXT_CONFIG_INJECTION_MARKER;
   return `
 set -eu
 git check-ref-format --branch "$MOGPLEX_BASE_BRANCH" >/dev/null
 git check-ref-format --branch "$MOGPLEX_WORKING_BRANCH" >/dev/null
 if [ -n "$MOGPLEX_FALLBACK_BRANCH" ]; then
   git check-ref-format --branch "$MOGPLEX_FALLBACK_BRANCH" >/dev/null
+fi
+if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
+  # Sandbox boot leaves platform-owned artifacts behind: runtime files under
+  # .mogplex/ and the allowedDevOrigins preview patch in next.config.*. Neither
+  # is the user's work, so neutralize both before judging whether the tree is
+  # clean. A next.config.* edit that touches anything beyond the marked line is
+  # left alone and fails the check like any other local change.
+  repo_top="$(git rev-parse --show-toplevel)"
+  for runtime_dir in "$repo_top/.mogplex" ./.mogplex; do
+    if [ -d "$runtime_dir" ] && [ ! -e "$runtime_dir/.gitignore" ]; then
+      printf '*\n' > "$runtime_dir/.gitignore"
+    fi
+  done
+  for cfg in next.config.mjs next.config.js next.config.ts next.config.cjs; do
+    [ -f "$cfg" ] || continue
+    if git ls-files --error-unmatch -- "$cfg" >/dev/null 2>&1; then
+      if ! git diff --quiet -- "$cfg" && [ -z "$(git diff -U0 -- "$cfg" | grep -E '^[-+][^-+]' | grep -Fv '${marker}')" ]; then
+        git checkout -- "$cfg"
+      fi
+    elif grep -Fq '${marker}' "$cfg"; then
+      rm -f -- "$cfg"
+    fi
+  done
 fi
 if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ] && [ -n "$(git status --porcelain)" ]; then
   echo "The sandbox workspace is not clean before the agent run. Commit, discard, or move the existing changes, then retry." >&2
