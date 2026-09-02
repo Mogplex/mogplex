@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -33,6 +40,7 @@ function createRepoWithOrigin() {
   git(work, "config", "user.email", "test@example.com");
   git(work, "config", "user.name", "Test");
   git(work, "config", "commit.gpgsign", "false");
+  git(work, "config", "core.fileMode", "true");
   writeFileSync(path.join(work, "next.config.mjs"), ORIGINAL_NEXT_CONFIG);
   mkdirSync(path.join(work, "src"));
   writeFileSync(path.join(work, "src", "app.ts"), "export const a = 1;\n");
@@ -145,6 +153,19 @@ describe("agent git sync on a freshly booted sandbox", () => {
     expect(readFileSync(path.join(work, "next.config.mjs"), "utf8")).toBe(
       edited
     );
+  });
+
+  it("should not revert the injected line when the user also changed the file mode", () => {
+    const configPath = path.join(work, "next.config.mjs");
+    const patched = readFileSync(configPath, "utf8");
+    chmodSync(configPath, 0o755);
+
+    const result = runSync(work);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("next.config.mjs");
+    expect(readFileSync(configPath, "utf8")).toBe(patched);
+    expect(statSync(configPath).mode & 0o111).not.toBe(0);
   });
 
   describe("for a repo without a next.config", () => {

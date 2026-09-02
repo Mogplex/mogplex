@@ -47,9 +47,9 @@ if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
   # .mogplex/ and the allowedDevOrigins preview patch in next.config.*. Neither
   # is the user's work, so neutralize both before judging whether the tree is
   # clean. A tracked next.config.* whose diff is anything other than the exact
-  # injected line, or an untracked one that no longer matches the
-  # boot-generated file byte for byte, is left alone and fails the check like
-  # any other local change.
+  # injected line (including a file-mode change), or an untracked one that no
+  # longer matches the boot-generated file byte for byte, is left alone and
+  # fails the check like any other local change.
   repo_top="$(git rev-parse --show-toplevel)"
   for runtime_dir in "$repo_top/.mogplex" ./.mogplex; do
     if [ -d "$runtime_dir" ] && [ ! -e "$runtime_dir/.gitignore" ]; then
@@ -59,7 +59,7 @@ if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
   for cfg in next.config.mjs next.config.js next.config.ts next.config.cjs; do
     [ -f "$cfg" ] || continue
     if git ls-files --error-unmatch -- "$cfg" >/dev/null 2>&1; then
-      if ! git diff --quiet -- "$cfg" && [ "$(git diff -U0 -- "$cfg" | grep -E '^[-+][^-+]')" = '+${injectedLine}' ]; then
+      if ! git diff --quiet -- "$cfg" && [ -z "$(git diff --summary -- "$cfg")" ] && [ "$(git diff -U0 -- "$cfg" | grep -E '^[-+][^-+]')" = '+${injectedLine}' ]; then
         git checkout -- "$cfg"
       fi
     elif [ "$(git hash-object --no-filters -- "$cfg")" = "${standaloneBlobId}" ]; then
