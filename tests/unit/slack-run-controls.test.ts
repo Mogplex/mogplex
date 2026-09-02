@@ -148,3 +148,94 @@ test("readSlackRunControlsMetadata only accepts complete coordinates", () => {
     null
   );
 });
+
+test("stripSlackRunControlsForTerminalRun links the pull request from a successful run's output", async () => {
+  const updates: UpdateSlackMessageInput[] = [];
+  const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.test";
+    await stripSlackRunControlsForTerminalRun(
+      {
+        id: "run-2",
+        ai_call_id: "call-2",
+        user_id: "user-1",
+        metadata: {
+          [SLACK_RUN_CONTROLS_METADATA_KEY]: {
+            teamId: "T1",
+            channelId: "D1",
+            messageTs: "1700000000.0002",
+          },
+        },
+      },
+      "success",
+      {
+        getSlackBotToken: async () => "xoxb-token",
+        updateSlackMessage: async (_botToken, input) => {
+          updates.push(input);
+        },
+        loadRunOutput: async (run) => {
+          assert.equal(run.ai_call_id, "call-2");
+          return "Fixed it and opened https://github.com/acme/widgets/pull/7 for review.";
+        },
+      }
+    );
+  } finally {
+    if (originalAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+    }
+  }
+
+  assert.equal(updates.length, 1);
+  assert.match(updates[0].text, /Run `run-2` finished/);
+  assert.match(
+    updates[0].text,
+    /\*Pull request:\* <https:\/\/github\.com\/acme\/widgets\/pull\/7\|acme\/widgets#7>/
+  );
+  assert.match(updates[0].text, /Fixed it and opened/);
+  assert.equal(updates[0].channel, "D1");
+});
+
+test("stripSlackRunControlsForTerminalRun ignores output loading failures", async () => {
+  const updates: UpdateSlackMessageInput[] = [];
+  const originalWarn = console.warn;
+  const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  console.warn = () => undefined;
+  process.env.NEXT_PUBLIC_APP_URL = "https://app.test";
+  try {
+    await stripSlackRunControlsForTerminalRun(
+      {
+        id: "run-3",
+        metadata: {
+          [SLACK_RUN_CONTROLS_METADATA_KEY]: {
+            teamId: "T1",
+            channelId: "D1",
+            messageTs: "1700000000.0003",
+          },
+        },
+      },
+      "success",
+      {
+        getSlackBotToken: async () => "xoxb-token",
+        updateSlackMessage: async (_botToken, input) => {
+          updates.push(input);
+        },
+        loadRunOutput: async () => {
+          throw new Error("events unavailable");
+        },
+      }
+    );
+  } finally {
+    console.warn = originalWarn;
+    if (originalAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+    }
+  }
+
+  assert.equal(updates.length, 1);
+  assert.match(updates[0].text, /Run `run-3` finished/);
+});

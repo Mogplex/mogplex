@@ -2,10 +2,6 @@ import type {
   SlackChannelLinkRow,
   SlackInstallationRow,
 } from "@/lib/slack/installations";
-import {
-  buildCancelRunActionsBlock,
-  buildRepoAgentRunStartedText,
-} from "@/lib/slack/run-controls";
 import type {
   ConversationRow,
   SlackAttribution,
@@ -14,7 +10,6 @@ import type {
   SlackEventTaskPayload,
   SlackEventTaskResult,
   SlackThreadContext,
-  StartRepoAgentRunResult,
 } from "./types";
 import { persistConversationTurn } from "./conversation";
 import {
@@ -27,8 +22,6 @@ import {
   createDebouncedSlackUpdater,
   finalizeSlackUpdaterBestEffort,
   postOrReuseSlackMessage,
-  updateMessageBestEffort,
-  postMessageBestEffort,
   saveSlackTerminalState,
 } from "./messaging";
 import {
@@ -45,9 +38,12 @@ import {
   fitSlackMessageText,
   formatSlackConversationalReply,
 } from "./system";
-import { evaluateSlackRepoAgentPolicy } from "./policy";
 import { sanitizeAgentUserFacingText } from "@/lib/agents/user-facing-output";
-import { releaseSlackRepoAgentQuotaReservationBestEffort } from "./quota";
+import { launchSlackRepoAgentRun } from "./repo-agent-launch";
+import {
+  createSlackStartRepoAgentRunTool,
+  SLACK_START_REPO_AGENT_RUN_TOOL_NAME,
+} from "./repo-agent-tool";
 import {
   buildSlackThreadContext,
   getRunChatAgentMessageText,
@@ -191,6 +187,7 @@ export async function runConversationalMode(input: {
 
   let completed: {
     agentResult: Awaited<ReturnType<typeof deps.runAgent>>;
+    launchedRunId: string | null;
     attachments: Awaited<ReturnType<typeof prepareSlackAttachments>>;
     userMessage: ReturnType<typeof buildSlackUserMessage>;
     repoName: string | null;
@@ -223,6 +220,16 @@ export async function runConversationalMode(input: {
       userMessage: userMessage.agent,
       userText,
     });
+    const repoAgentRun = createSlackStartRepoAgentRunTool({
+      deps,
+      payload,
+      botToken,
+      mogplexUserId,
+      attribution,
+      installation,
+      repoContext: agentInput.repoContext,
+      userText,
+    });
     const selectedModel = await deps.resolveModelPreference?.({
       installationId: installation.id,
       channelId: payload.channelId,
@@ -246,6 +253,9 @@ export async function runConversationalMode(input: {
       // this scope for another pass would intentionally replay matching calls.
       toolExecutionIdempotencyKey:
         buildSlackToolExecutionIdempotencyKey(payload),
+      additionalTools: {
+        [SLACK_START_REPO_AGENT_RUN_TOOL_NAME]: repoAgentRun.tool,
+      },
       systemSuffix: buildSlackConversationalSystemSuffix({
         channelLinkState: resolvedChannelLinkState,
         attribution,
@@ -258,6 +268,7 @@ export async function runConversationalMode(input: {
     });
     completed = {
       agentResult,
+      launchedRunId: repoAgentRun.getLaunchedRunId(),
       attachments,
       userMessage,
       repoName: agentInput.repoContext?.repoName ?? null,
@@ -279,7 +290,8 @@ export async function runConversationalMode(input: {
     throw error;
   }
 
-  const { agentResult, attachments, userMessage, repoName } = completed;
+  const { agentResult, launchedRunId, attachments, userMessage, repoName } =
+    completed;
 
   const finalText = formatFinalSlackText({
     finalText: agentResult.finalText,
@@ -306,6 +318,7 @@ export async function runConversationalMode(input: {
     mogplexUserId,
     attachments_attached: attachments.attachedCount,
     attachments_dropped: attachments.droppedCount,
+    ...(launchedRunId ? { runId: launchedRunId } : {}),
   };
 }
 
@@ -330,26 +343,6 @@ export async function runRepoAgentMode(input: {
     userText,
   } = input;
 
-  const policy = await evaluateSlackRepoAgentPolicy({
-    deps,
-    eventId: payload.eventId,
-    installation,
-    slackUserId: payload.slackUserId,
-  });
-  if (!policy.allowed) {
-    // Repo-agent policy denials originate from app_mention events, so keep the
-    // notice grouped under the Slack thread that invoked the agent.
-    await deps.postMessage(botToken, {
-      channel: payload.channelId,
-      thread_ts: payload.threadTs,
-      text: policy.message,
-    });
-    return {
-      outcome: policy.outcome,
-      mogplexUserId,
-    };
-  }
-
   const attachments = prepareSlackRepoAgentAttachments(payload);
   const prompt = buildSlackRepoAgentPrompt({
     text: userText,
@@ -359,111 +352,35 @@ export async function runRepoAgentMode(input: {
     return { outcome: "skipped_empty_text", mogplexUserId };
   }
 
-  let placeholder: { channel: string; ts: string } | null = null;
-  let runStart: StartRepoAgentRunResult;
-  try {
-    const postedPlaceholder = await postOrReuseSlackMessage({
-      deps,
-      botToken,
-      channelId: payload.channelId,
-      threadTs: payload.threadTs,
-      postThreadTs: payload.threadTs,
-      eventId: payload.eventId,
-      metadataKey: "slackRepoAgentPlaceholder",
-      text: ":robot_face: Starting repo agent run...",
-    });
-    placeholder = postedPlaceholder;
-
-    runStart = await deps.startRepoAgentRun({
-      mogplexUserId,
-      repoId: channelLink.repo_id,
-      prompt,
-      // Slack `event_id` is unique per delivery - reuse so retries dedupe.
-      idempotencyKey: `slack:${payload.eventId}`,
-      slackContext: {
-        mode: "repo_agent",
-        teamId: payload.teamId,
-        installationId: installation.id,
-        channelId: payload.channelId,
-        slackUserId: payload.slackUserId,
-        slackEmail: attribution.slackEmail,
-        attributionMode: attribution.mode,
-      },
-      slackMessage: {
-        teamId: payload.teamId,
-        channelId: payload.channelId,
-        messageTs: postedPlaceholder.ts,
-      },
-      slackAttachments: attachments.files,
-      slackAttachmentDroppedCount: attachments.droppedCount,
-    });
-  } catch (error) {
-    console.error("[slack-event] repo-agent start failed", {
-      teamId: payload.teamId,
-      eventId: payload.eventId,
-      error,
-    });
-    const message =
-      ":warning: Couldn't start the run. Open Mogplex for details or try again.";
-    if (policy.quotaReservation) {
-      // Release before notifying; both steps are best-effort and swallow failures.
-      await releaseSlackRepoAgentQuotaReservationBestEffort(
-        deps,
-        policy.quotaReservation
-      );
+  const launch = await launchSlackRepoAgentRun({
+    deps,
+    payload,
+    botToken,
+    mogplexUserId,
+    attribution,
+    installation,
+    repoId: channelLink.repo_id,
+    prompt,
+    attachments,
+    // Repo-agent mentions come from channel threads, so keep every message
+    // grouped under the Slack thread that invoked the agent.
+    postThreadTs: payload.threadTs,
+  });
+  if (!launch.ok) {
+    if (launch.kind === "policy_denied") {
+      return { outcome: launch.outcome, mogplexUserId };
     }
-    const terminalFailureDelivered = await (placeholder
-      ? updateMessageBestEffort(
-          deps,
-          botToken,
-          {
-            channel: payload.channelId,
-            ts: placeholder.ts,
-            text: message,
-          },
-          "repo-agent error placeholder update"
-        )
-      : postMessageBestEffort(
-          deps,
-          botToken,
-          {
-            channel: payload.channelId,
-            thread_ts: payload.threadTs,
-            text: message,
-          },
-          "repo-agent error notice"
-        ));
-    if (terminalFailureDelivered) {
+    if (launch.terminalFailureDelivered) {
       await saveSlackTerminalState("failed");
     }
-    throw error;
+    throw launch.error;
   }
-
-  if (!placeholder) {
-    throw new Error("Slack repo-agent placeholder was not created");
-  }
-
-  const runUrl = deps.buildRunUrl(runStart.runId);
-  const startedText = buildRepoAgentRunStartedText(runStart.runId, runUrl);
-  await deps.updateMessage(botToken, {
-    channel: payload.channelId,
-    ts: placeholder.ts,
-    text: startedText,
-    blocks: [
-      { type: "section", text: { type: "mrkdwn", text: startedText } },
-      // This block is stripped either reactively (the interactivity handler,
-      // when the button is clicked on a finished run / once a cancel is in
-      // flight - see `removeCancelButton` in lib/slack/interactivity.ts) or
-      // proactively by the run-completion hook in lib/mogplex-api/run-execution.ts.
-      buildCancelRunActionsBlock(runStart.runId),
-    ],
-  });
   await saveSlackTerminalState("delivered");
 
   return {
     outcome: "repo_agent_run_started",
     mogplexUserId,
-    runId: runStart.runId,
+    runId: launch.runId,
     attachments_attached: attachments.attachedCount,
     attachments_dropped: attachments.droppedCount,
   };

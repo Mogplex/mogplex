@@ -6,10 +6,11 @@ import type {
 } from "./types";
 import type { SlackInstallationRow } from "@/lib/slack/installations";
 
-export const SLACK_MESSAGE_TEXT_MAX_CHARS = 4_000;
-
-const SLACK_SHORTENED_SUFFIX =
-  "\n\n_(Response shortened to fit Slack. Ask a narrower follow-up for more detail.)_";
+export {
+  SLACK_MESSAGE_TEXT_MAX_CHARS,
+  fitSlackMessageText,
+  formatSlackConversationalReply,
+} from "@/lib/slack/format";
 
 export function buildSlackConversationalSystemSuffix(input: {
   channelLinkState: SlackChannelLinkState;
@@ -34,6 +35,9 @@ You are replying in Slack through the Mogplex app.
 ${location}
 ${githubIdentity}
 - Do not say "No active repo selected" or ask the user to select a repo in the web app. Give Slack-native next steps.
+- You cannot run code, start a sandbox, or edit files from Slack. When the user asks you to fix a bug, resolve an issue or error report, implement a change, or otherwise modify code in a repository, call start_repo_agent_run immediately with a complete, self-contained task: include the error message, stack trace, file paths, issue or alert links, and acceptance criteria from the conversation. Do not file a GitHub issue in place of a fix, and do not ask for confirmation unless the target repository is unknown.
+- If start_repo_agent_run reports that no repository is in context, ask the user which connected repository (owner/repo) to use, then call it again.
+- After start_repo_agent_run succeeds, reply in one or two sentences with the run link. The run posts its own status message and pull request link when it finishes.
 - Continue from this thread's prior messages. If the user confirms, says yes, go, execute, or proceed, treat that as approval of the most recent proposed action.
 - Ask at most one blocking question when scope, credentials, or a destructive choice is missing. For repo scope, ask for "all connected repos" or owner/repo slugs.
 - For GitHub PR inventory questions across an org, user, repo, or "my PRs", use authenticated GitHub PR search when available. Do not use public web search for these unless the user explicitly asks for public-only results.
@@ -49,30 +53,6 @@ ${githubIdentity}
 - Never mention internal tool names, HTTP method restrictions, repository-scope enforcement, provider names, runtime paths, or implementation-stack details. Describe only whether the requested action succeeded and the user-facing next step.
 - Keep Slack replies concise. Do not present option menus or long implementation checklists unless the user asks for a plan.
 </slack_context>`;
-}
-
-function sanitizeSlackLinkLabel(label: string) {
-  const sanitized = label.replace(/[<>|]/g, "").trim();
-  return sanitized || "link";
-}
-
-export function formatSlackConversationalReply(text: string) {
-  return text
-    .replace(
-      /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      (_match, label: string, url: string) =>
-        `<${url}|${sanitizeSlackLinkLabel(label)}>`
-    )
-    .replace(/\*\*([^\n*][^\n]*?)\*\*/g, "*$1*");
-}
-
-export function fitSlackMessageText(text: string) {
-  const characters = Array.from(text);
-  if (characters.length <= SLACK_MESSAGE_TEXT_MAX_CHARS) return text;
-
-  const prefixLength =
-    SLACK_MESSAGE_TEXT_MAX_CHARS - Array.from(SLACK_SHORTENED_SUFFIX).length;
-  return `${characters.slice(0, prefixLength).join("")}${SLACK_SHORTENED_SUFFIX}`;
 }
 
 export async function sendSlackAccountLinkNotice(input: {
