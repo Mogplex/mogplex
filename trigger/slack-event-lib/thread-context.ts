@@ -38,7 +38,7 @@ function slackSpeaker(input: { user?: string; bot_id?: string }) {
   return "Slack message";
 }
 
-function messageText(message: RunChatAgentMessage) {
+export function getRunChatAgentMessageText(message: RunChatAgentMessage) {
   if (typeof message.content === "string") return message.content;
   return message.content
     .filter((part) => part.type === "text")
@@ -48,7 +48,10 @@ function messageText(message: RunChatAgentMessage) {
 
 function knownConversationTexts(messages: RunChatAgentMessage[]) {
   return new Set(
-    messages.map(messageText).map(normalizeSlackText).filter(Boolean)
+    messages
+      .map(getRunChatAgentMessageText)
+      .map(normalizeSlackText)
+      .filter(Boolean)
   );
 }
 

@@ -48,7 +48,11 @@ import {
 import { evaluateSlackRepoAgentPolicy } from "./policy";
 import { sanitizeAgentUserFacingText } from "@/lib/agents/user-facing-output";
 import { releaseSlackRepoAgentQuotaReservationBestEffort } from "./quota";
-import { buildSlackThreadContext } from "./thread-context";
+import {
+  buildSlackThreadContext,
+  getRunChatAgentMessageText,
+} from "./thread-context";
+import { getSlackConversationThreadTs } from "@/lib/slack/conversation-scope";
 
 // Trigger hard-stops this task at 15 minutes. Abort the model first so the
 // normal catch path still has time to replace the Slack placeholder.
@@ -69,9 +73,19 @@ async function buildConversationalAgentInput(input: {
       : []),
     input.userMessage,
   ];
+  // Newest text first so the most recently named repository wins when a
+  // long-lived conversation (a DM channel, say) mentions more than one.
+  const priorUserTexts = input.conversation.messages
+    .filter((message) => message.role === "user")
+    .map(getRunChatAgentMessageText)
+    .filter(Boolean);
   const repoContext = await input.deps.resolveRepoContext({
     mogplexUserId: input.mogplexUserId,
-    texts: [...input.slackThreadContext.texts, input.userText],
+    texts: [
+      input.userText,
+      ...[...input.slackThreadContext.texts].reverse(),
+      ...priorUserTexts.reverse(),
+    ],
   });
 
   return { messages, repoContext };
@@ -88,7 +102,7 @@ async function loadConversationalConversation(input: {
   return input.deps.loadOrCreateConversation({
     installation: input.installation,
     channelId: input.payload.channelId,
-    threadTs: input.payload.threadTs,
+    threadTs: getSlackConversationThreadTs(input.payload),
     mogplexUserId: input.mogplexUserId,
     requireExisting: requiresExistingSlackConversation(input.payload),
   });
