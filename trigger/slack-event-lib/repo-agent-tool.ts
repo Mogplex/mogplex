@@ -35,6 +35,12 @@ export type SlackStartRepoAgentRunToolResult =
   | { ok: true; runId: string; runUrl: string; repository: string }
   | { ok: false; error: string };
 
+type LaunchAttempt = {
+  /** Settles the per-event slot: a started run or a policy denial. */
+  final: boolean;
+  result: SlackStartRepoAgentRunToolResult;
+};
+
 export function buildSlackDelegatedRunPrompt(input: {
   task: string;
   userText: string;
@@ -60,7 +66,14 @@ export function createSlackStartRepoAgentRunTool(input: {
   repoContext: SlackRepoContext | null;
   userText: string;
 }): { tool: Tool; getLaunchedRunId: () => string | null } {
-  let launched: SlackStartRepoAgentRunToolResult | null = null;
+  // One run per Slack event. The model may emit several tool calls in one
+  // step and the AI SDK executes them concurrently, so the slot is claimed
+  // synchronously before the first await: later callers await the same
+  // in-flight attempt instead of starting their own. Only a started run or a
+  // policy denial settles the slot; a repository lookup miss or a start
+  // failure releases it so a corrected follow-up call can try again.
+  let settled: SlackStartRepoAgentRunToolResult | null = null;
+  let inFlight: Promise<LaunchAttempt> | null = null;
 
   async function resolveRepo(repository: string | undefined) {
     if (repository?.trim()) {
@@ -80,15 +93,13 @@ export function createSlackStartRepoAgentRunTool(input: {
     };
   }
 
-  async function execute(
+  async function attemptLaunch(
     args: z.infer<typeof startRepoAgentRunParams>
-  ): Promise<SlackStartRepoAgentRunToolResult> {
-    // One run per Slack event: a second call in the same turn reports the
-    // first result instead of starting another run.
-    if (launched) return launched;
-
+  ): Promise<LaunchAttempt> {
     const repo = await resolveRepo(args.repository);
-    if ("error" in repo) return { ok: false, error: repo.error };
+    if ("error" in repo) {
+      return { final: false, result: { ok: false, error: repo.error } };
+    }
 
     const attachments = prepareSlackRepoAgentAttachments(input.payload);
     const prompt = buildSlackRepoAgentPrompt({
@@ -111,23 +122,44 @@ export function createSlackStartRepoAgentRunTool(input: {
       postThreadTs: getSlackReplyThreadTs(input.payload),
     });
     if (result.ok) {
-      launched = {
-        ok: true,
-        runId: result.runId,
-        runUrl: result.runUrl,
-        repository: repo.repoFullName,
+      return {
+        final: true,
+        result: {
+          ok: true,
+          runId: result.runId,
+          runUrl: result.runUrl,
+          repository: repo.repoFullName,
+        },
       };
-      return launched;
     }
     if (result.kind === "policy_denied") {
-      launched = { ok: false, error: result.message };
-      return launched;
+      return { final: true, result: { ok: false, error: result.message } };
     }
     return {
-      ok: false,
-      error:
-        "The run could not be started. Tell the user to try again or open Mogplex for details.",
+      final: false,
+      result: {
+        ok: false,
+        error:
+          "The run could not be started. Tell the user to try again or open Mogplex for details.",
+      },
     };
+  }
+
+  async function execute(
+    args: z.infer<typeof startRepoAgentRunParams>
+  ): Promise<SlackStartRepoAgentRunToolResult> {
+    if (settled) return settled;
+    if (inFlight) return (await inFlight).result;
+
+    const attempt = attemptLaunch(args);
+    inFlight = attempt;
+    try {
+      const outcome = await attempt;
+      if (outcome.final) settled = outcome.result;
+      return outcome.result;
+    } finally {
+      inFlight = null;
+    }
   }
 
   return {
@@ -137,6 +169,6 @@ export function createSlackStartRepoAgentRunTool(input: {
       inputSchema: startRepoAgentRunParams,
       execute,
     }),
-    getLaunchedRunId: () => (launched?.ok ? launched.runId : null),
+    getLaunchedRunId: () => (settled?.ok ? settled.runId : null),
   };
 }

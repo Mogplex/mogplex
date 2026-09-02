@@ -264,6 +264,64 @@ test("repo-agent tool starts at most one run per Slack event", async () => {
   assert.deepEqual(toolResults[0], toolResults[1]);
 });
 
+test("repo-agent tool serializes concurrent calls from one model step into a single run", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+
+  let starts = 0;
+  let placeholders = 0;
+  let toolResults: ToolResult[] = [];
+
+  await runSlackEventTask(dmPayload, {
+    getInstallation: async () => baseInstallation,
+    getBotToken: async () => "xoxb-test",
+    resolveSlackAttribution: async () => mappedAttribution(),
+    resolveRepoContext: async () => widgetsRepo,
+    loadOrCreateConversation: async () => ({
+      id: "conv-dm",
+      user_id: "user-mogplex",
+      messages: [],
+      model: null,
+      title: null,
+    }),
+    persistConversation: async () => undefined,
+    runAgent: async (input) => {
+      toolResults = await Promise.all([
+        callTool(input.additionalTools, { task: "a" }),
+        callTool(input.additionalTools, { task: "b" }),
+        callTool(input.additionalTools, { task: "c" }),
+      ]);
+      return agentSuccess({ finalText: "ok" });
+    },
+    startRepoAgentRun: async () => {
+      starts += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return { runId: "run-once" };
+    },
+    buildRunUrl: (runId) => `https://example.test/runs/${runId}`,
+    postMessage: async (_token, input) => {
+      if (input.text.includes("Starting repo agent run")) placeholders += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return { channel: input.channel, ts: "1700000000.000999" };
+    },
+    updateMessage: async (_token, input) => ({
+      channel: input.channel,
+      ts: input.ts,
+    }),
+  });
+
+  assert.equal(starts, 1);
+  assert.equal(placeholders, 1);
+  assert.equal(toolResults.length, 3);
+  assert.deepEqual(toolResults[0], {
+    ok: true,
+    runId: "run-once",
+    runUrl: "https://example.test/runs/run-once",
+    repository: "acme/widgets",
+  });
+  assert.deepEqual(toolResults[1], toolResults[0]);
+  assert.deepEqual(toolResults[2], toolResults[0]);
+});
+
 test("repo-agent tool reports policy denials to the agent and posts the notice", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
 
