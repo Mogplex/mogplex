@@ -129,6 +129,24 @@ describe("agent git sync on a freshly booted sandbox", () => {
     );
   });
 
+  it("should not revert an edit to the injected line itself even though the marker remains", () => {
+    const current = readFileSync(path.join(work, "next.config.mjs"), "utf8");
+    const edited = current.replace(
+      '["*.vercel.run"]',
+      '["*.vercel.run", "preview.example.com"]'
+    );
+    expect(edited).not.toBe(current);
+    writeFileSync(path.join(work, "next.config.mjs"), edited);
+
+    const result = runSync(work);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("next.config.mjs");
+    expect(readFileSync(path.join(work, "next.config.mjs"), "utf8")).toBe(
+      edited
+    );
+  });
+
   describe("for a repo without a next.config", () => {
     beforeEach(() => {
       git(work, "checkout", "--", "next.config.mjs");

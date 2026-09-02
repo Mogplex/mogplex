@@ -29,6 +29,17 @@ export const NEXT_CONFIG_INJECTION_MARKER = "// mogplex: allowedDevOrigins";
 const INJECTION_MARKER = NEXT_CONFIG_INJECTION_MARKER;
 
 /**
+ * The exact line `patchNextConfigContent` inserts into an existing config.
+ * Git delivery compares a config's diff against it verbatim, so an edit to
+ * the origin list that keeps the marker is still treated as the user's work.
+ */
+export function buildNextConfigInjectedLine(
+  origin: string = MOGPLEX_SANDBOX_ORIGIN_PATTERN
+): string {
+  return `  allowedDevOrigins: [${JSON.stringify(origin)}], ${INJECTION_MARKER}`;
+}
+
+/**
  * Patterns used to locate the opening brace of the exported config object.
  * Tried in priority order — the first match wins:
  *
@@ -141,7 +152,7 @@ export function patchNextConfigContent(
   }
 
   const insertionPoint = opening.index + opening.length;
-  const injection = `\n  allowedDevOrigins: [${JSON.stringify(origin)}], ${INJECTION_MARKER}`;
+  const injection = `\n${buildNextConfigInjectedLine(origin)}`;
 
   return {
     kind: "patched",
