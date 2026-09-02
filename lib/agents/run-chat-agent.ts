@@ -3,6 +3,7 @@ import {
   type streamText,
   type LanguageModelUsage,
   type ProviderMetadata,
+  type Tool,
 } from "ai";
 import {
   COMPACTION_CHAR_BUDGET,
@@ -53,6 +54,8 @@ export type RunChatAgentInput = ChatAgentContext & {
   model?: string | null;
   systemSuffix?: string | null;
   abortSignal?: AbortSignal;
+  /** Surface-specific tools merged into the standard chat tool set. */
+  additionalTools?: Record<string, Tool>;
   /**
    * Reports safe output and tool lifecycle events to external chat surfaces.
    * Tool inputs, tool outputs, and model reasoning are never included. Errors
@@ -268,6 +271,7 @@ export async function runChatAgent(
     >[0],
     systemSuffix: input.systemSuffix,
     abortSignal: input.abortSignal,
+    additionalTools: input.additionalTools,
     hooks: {
       onChunk(event) {
         if (event.chunk.type === "reasoning-delta") {

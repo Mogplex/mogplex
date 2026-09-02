@@ -1,5 +1,7 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { buildTools } from "@/lib/agents/tools";
+import { selectChatTools } from "@/lib/agents/chat-surface-tools";
+import type { Tool } from "ai";
 import {
   buildSystemPrompt,
   resolveAgentDeliveryBranch,
@@ -161,6 +163,12 @@ export type CreateChatModelStreamInput = {
   systemSuffix?: string | null;
   abortSignal?: AbortSignal;
   hooks?: ChatModelStreamHooks;
+  /**
+   * Caller-scoped tools merged in after surface filtering. The Slack event
+   * handler uses this to expose a repo-agent launcher bound to the inbound
+   * Slack message.
+   */
+  additionalTools?: Record<string, Tool>;
 };
 
 export type CreateChatModelStreamResult = {
@@ -233,9 +241,16 @@ export async function createChatModelStream(
     }
   );
 
-  const { tools, connections, cleanup } = await buildTools(
-    buildToolsInput(context)
-  );
+  const {
+    tools: builtTools,
+    connections,
+    cleanup,
+  } = await buildTools(buildToolsInput(context));
+  const tools = selectChatTools({
+    tools: builtTools,
+    surface: context.surface ?? "chat",
+    additionalTools: input.additionalTools,
+  });
   let cleanedUp = false;
   const cleanupTools = async () => {
     if (cleanedUp) return;

@@ -20,6 +20,7 @@ const TOOL_START_TEXT: Readonly<Record<string, string>> = {
   github_update_pull_request: "Updating the pull request...",
   github_list_repos: "Checking repositories...",
   github_pr_search: "Searching pull requests...",
+  start_repo_agent_run: "Starting a repo agent run...",
   list_files: "Checking repository files...",
   list_memories: "Checking saved memories...",
   read_file: "Reading a repository file...",
