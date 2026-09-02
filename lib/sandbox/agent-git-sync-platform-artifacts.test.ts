@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildAgentGitSyncScript } from "./agent-git-sync";
-import { patchNextConfigContent } from "./runtimes/next-config-patch";
+import {
+  buildStandaloneNextConfig,
+  patchNextConfigContent,
+} from "./runtimes/next-config-patch";
 
 const ORIGINAL_NEXT_CONFIG = [
   "/** @type {import('next').NextConfig} */",
@@ -126,19 +129,39 @@ describe("agent git sync on a freshly booted sandbox", () => {
     );
   });
 
-  it("should remove a standalone next.config the platform wrote for a repo without one", () => {
-    git(work, "checkout", "--", "next.config.mjs");
-    git(work, "rm", "-q", "next.config.mjs");
-    git(work, "commit", "-q", "-m", "drop config");
-    git(work, "push", "-q", "origin", "main");
-    writeFileSync(
-      path.join(work, "next.config.mjs"),
-      "// mogplex: allowedDevOrigins\nexport default { allowedDevOrigins: ['*.vercel.run'] };\n"
-    );
+  describe("for a repo without a next.config", () => {
+    beforeEach(() => {
+      git(work, "checkout", "--", "next.config.mjs");
+      git(work, "rm", "-q", "next.config.mjs");
+      git(work, "commit", "-q", "-m", "drop config");
+      git(work, "push", "-q", "origin", "main");
+      writeFileSync(
+        path.join(work, "next.config.mjs"),
+        buildStandaloneNextConfig()
+      );
+    });
 
-    const result = runSync(work);
+    it("should remove the untouched standalone next.config the platform wrote at boot", () => {
+      const result = runSync(work);
 
-    expect(result.exitCode).toBe(0);
-    expect(git(work, "status", "--porcelain")).toBe("");
+      expect(result.exitCode).toBe(0);
+      expect(git(work, "status", "--porcelain")).toBe("");
+    });
+
+    it("should keep a standalone next.config the user has edited and refuse the run", () => {
+      const edited = buildStandaloneNextConfig().replace(
+        "const nextConfig = {",
+        "const nextConfig = {\n  reactStrictMode: true,"
+      );
+      writeFileSync(path.join(work, "next.config.mjs"), edited);
+
+      const result = runSync(work);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("next.config.mjs");
+      expect(readFileSync(path.join(work, "next.config.mjs"), "utf8")).toBe(
+        edited
+      );
+    });
   });
 });

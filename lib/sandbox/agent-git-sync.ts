@@ -1,4 +1,25 @@
-import { NEXT_CONFIG_INJECTION_MARKER } from "@/lib/sandbox/runtimes/next-config-patch";
+import { createHash } from "node:crypto";
+import {
+  buildStandaloneNextConfig,
+  NEXT_CONFIG_INJECTION_MARKER,
+} from "@/lib/sandbox/runtimes/next-config-patch";
+
+/**
+ * Git blob id (`git hash-object`) of the standalone next.config the platform
+ * writes at sandbox boot for repos without one. The sync script only deletes
+ * an untracked config whose blob id still matches, so any user edit to that
+ * file keeps it in place and fails the clean-tree check.
+ */
+export function getStandaloneNextConfigBlobId() {
+  const content = Buffer.from(buildStandaloneNextConfig(), "utf8");
+  // Git blob ids are SHA-1 by definition; this is an identity check, not a
+  // security hash.
+  // eslint-disable-next-line sonarjs/hashing
+  return createHash("sha1")
+    .update(`blob ${content.byteLength}\0`)
+    .update(content)
+    .digest("hex");
+}
 
 /**
  * Shared agent branch synchronization state machine. Callers provide
@@ -8,6 +29,7 @@ import { NEXT_CONFIG_INJECTION_MARKER } from "@/lib/sandbox/runtimes/next-config
  */
 export function buildAgentGitSyncScript() {
   const marker = NEXT_CONFIG_INJECTION_MARKER;
+  const standaloneBlobId = getStandaloneNextConfigBlobId();
   return `
 set -eu
 git check-ref-format --branch "$MOGPLEX_BASE_BRANCH" >/dev/null
@@ -19,8 +41,9 @@ if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
   # Sandbox boot leaves platform-owned artifacts behind: runtime files under
   # .mogplex/ and the allowedDevOrigins preview patch in next.config.*. Neither
   # is the user's work, so neutralize both before judging whether the tree is
-  # clean. A next.config.* edit that touches anything beyond the marked line is
-  # left alone and fails the check like any other local change.
+  # clean. A tracked next.config.* whose diff goes beyond the marked line, or an
+  # untracked one that no longer matches the boot-generated file byte for byte,
+  # is left alone and fails the check like any other local change.
   repo_top="$(git rev-parse --show-toplevel)"
   for runtime_dir in "$repo_top/.mogplex" ./.mogplex; do
     if [ -d "$runtime_dir" ] && [ ! -e "$runtime_dir/.gitignore" ]; then
@@ -33,7 +56,7 @@ if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
       if ! git diff --quiet -- "$cfg" && [ -z "$(git diff -U0 -- "$cfg" | grep -E '^[-+][^-+]' | grep -Fv '${marker}')" ]; then
         git checkout -- "$cfg"
       fi
-    elif grep -Fq '${marker}' "$cfg"; then
+    elif [ "$(git hash-object --no-filters -- "$cfg")" = "${standaloneBlobId}" ]; then
       rm -f -- "$cfg"
     fi
   done
