@@ -8,6 +8,7 @@ import {
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { NextRequest } from "next/server";
 import type { ObservabilityJob } from "@/lib/types";
+import { loadUserAgentRunJobs } from "@/lib/observability/agent-run-jobs";
 import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
 
 type JobsFilters = {
@@ -95,32 +96,41 @@ export async function GET(req: NextRequest) {
     to: filters.to,
   });
 
-  const jobs = runs
-    .map<ObservabilityJob>((run) => buildObservabilityJob(scope, run))
-    .filter((job) => {
-      if (filters.sourceKind && job.source_kind !== filters.sourceKind)
-        return false;
-      if (filters.sourceType && job.source_type !== filters.sourceType)
-        return false;
-      if (filters.repoId && job.repo.id !== filters.repoId) return false;
-      if (filters.agentId) {
-        if (job.flow_id) {
-          const flowAttribution = resolveFlowVersionAttribution(scope, {
-            flowId: job.flow_id,
-            flowVersionId: job.flow_version_id,
-            metadata: job.metadata,
-          });
-          if (flowAttribution?.agentIds.includes(filters.agentId) !== true) {
-            return false;
-          }
-        } else if (job.agent.id !== filters.agentId) {
+  // Agent runs (API, MCP, CLI, Slack) are listed alongside automation runs so
+  // every run the user started is visible here.
+  const agentRunJobs = await loadUserAgentRunJobs({
+    userId,
+    scope,
+    filters: { status: filters.status, from: filters.from, to: filters.to },
+  });
+
+  const jobs = [
+    ...runs.map<ObservabilityJob>((run) => buildObservabilityJob(scope, run)),
+    ...agentRunJobs,
+  ].filter((job) => {
+    if (filters.sourceKind && job.source_kind !== filters.sourceKind)
+      return false;
+    if (filters.sourceType && job.source_type !== filters.sourceType)
+      return false;
+    if (filters.repoId && job.repo.id !== filters.repoId) return false;
+    if (filters.agentId) {
+      if (job.flow_id) {
+        const flowAttribution = resolveFlowVersionAttribution(scope, {
+          flowId: job.flow_id,
+          flowVersionId: job.flow_version_id,
+          metadata: job.metadata,
+        });
+        if (flowAttribution?.agentIds.includes(filters.agentId) !== true) {
           return false;
         }
+      } else if (job.agent.id !== filters.agentId) {
+        return false;
       }
-      if (filters.onlyRepairable && !job.repairable) return false;
-      if (filters.onlyRetried && !job.retry_of_job_run_id) return false;
-      return true;
-    });
+    }
+    if (filters.onlyRepairable && !job.repairable) return false;
+    if (filters.onlyRetried && !job.retry_of_job_run_id) return false;
+    return true;
+  });
 
   jobs.sort((a, b) => compareJobs(a, b, filters.sort, filters.order));
 
@@ -196,7 +206,7 @@ export async function GET(req: NextRequest) {
     }
 
     for (const job of paged) {
-      job.latest_ai_call = latestByJobId.get(job.id) || null;
+      job.latest_ai_call = latestByJobId.get(job.id) || job.latest_ai_call;
       job.latest_dispatch_event = latestDispatchByJobId.get(job.id) || null;
     }
   }
