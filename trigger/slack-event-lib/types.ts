@@ -178,12 +178,20 @@ export type SlackEventTaskDeps = {
     expectedUpdatedAt?: string | null;
   }) => Promise<void>;
   runAgent: typeof runChatAgent;
+  /**
+   * Model for this conversational turn, or null to fall back to the
+   * conversation's stored model. Receives the stamped conversation model and
+   * whether the turn carries images so the resolver can avoid a model the
+   * user disabled or one that cannot see attachments.
+   */
   resolveModelPreference?: (input: {
     installationId: string;
     channelId: string;
     slackUserId: string;
     mogplexUserId: string;
     teamId: string | null;
+    conversationModel: string | null;
+    needsVision: boolean;
   }) => Promise<string | null>;
   fetchAttachment: (input: {
     botToken: string;

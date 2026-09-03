@@ -398,9 +398,17 @@ test("DM system guidance tells the agent to delegate code changes", async () => 
     }),
   });
 
-  assert.match(systemSuffix ?? "", /call start_repo_agent_run immediately/);
+  assert.match(systemSuffix ?? "", /call start_repo_agent_run right away/);
   assert.match(
     systemSuffix ?? "",
-    /Do not file a GitHub issue in place of a fix/
+    /never file a GitHub issue in place of a fix/
+  );
+  assert.match(
+    systemSuffix ?? "",
+    /Never offer a choice such as "create an issue or start a fix"/
+  );
+  assert.match(
+    systemSuffix ?? "",
+    /Do not investigate the code yourself, post findings, or propose a plan/
   );
 });
