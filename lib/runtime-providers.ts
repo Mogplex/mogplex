@@ -11,14 +11,20 @@ export function getRepoSnapshotRuntimeProvider(): BackgroundRuntimeProvider {
   return "trigger";
 }
 
-export function getTriggerProjectRef() {
-  const value = process.env.TRIGGER_PROJECT_REF;
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
+/**
+ * Whether this process can trigger Trigger.dev tasks. The SDK authenticates
+ * with a secret key or access token alone; the project ref is baked into the
+ * deployment. Deployed workers receive the credential from the platform, not
+ * from the application's own environment, so requiring an app-level project
+ * ref here would wrongly refuse tasks that trigger other tasks.
+ */
+export function isTriggerRuntimeConfigured() {
+  return (
+    hasValue(process.env.TRIGGER_SECRET_KEY) ||
+    hasValue(process.env.TRIGGER_ACCESS_TOKEN)
+  );
 }
 
-export function isTriggerRuntimeConfigured() {
-  const secretKey = process.env.TRIGGER_SECRET_KEY;
-  return Boolean(secretKey && getTriggerProjectRef());
+function hasValue(value: string | undefined) {
+  return typeof value === "string" && value.trim().length > 0;
 }
