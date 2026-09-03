@@ -6,8 +6,9 @@
  * default, which may be a model the user has disabled. This picker therefore
  * ranks the explicit Slack preference first, then the user's stored default,
  * and only then the conversation's stamped model, restricted to models the
- * user can actually invoke. When the turn carries images it prefers a model
- * that can see them.
+ * user can actually invoke, falling back to the first usable model. It returns
+ * null only when the scope can invoke nothing. When the turn carries images it
+ * prefers a model that can see them.
  */
 
 export type SlackTurnModelCandidate = {
@@ -52,5 +53,7 @@ export function pickSlackTurnModel(input: {
     if (seeing) return seeing;
   }
 
-  return ranked[0] ?? null;
+  // Null only when the scope has no usable model at all; otherwise a stamped
+  // model the user cannot invoke must never be the fallback.
+  return ranked[0] ?? input.usableModels[0]?.id ?? null;
 }

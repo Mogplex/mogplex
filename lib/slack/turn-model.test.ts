@@ -31,7 +31,7 @@ describe("pickSlackTurnModel", () => {
     ).toBe(seeing.id);
   });
 
-  it("should skip a stamped conversation model the user cannot invoke", () => {
+  it("should replace a stamped conversation model the user cannot invoke with a usable one", () => {
     expect(
       pickSlackTurnModel({
         preferredModel: null,
@@ -40,7 +40,7 @@ describe("pickSlackTurnModel", () => {
         usableModels,
         needsVision: false,
       })
-    ).toBeNull();
+    ).toBe(seeing.id);
     expect(
       pickSlackTurnModel({
         preferredModel: disabledModelId,
@@ -50,6 +50,18 @@ describe("pickSlackTurnModel", () => {
         needsVision: false,
       })
     ).toBe(textOnly.id);
+  });
+
+  it("should return null only when the scope can invoke no model at all", () => {
+    expect(
+      pickSlackTurnModel({
+        preferredModel: disabledModelId,
+        storedDefaultModel: disabledModelId,
+        conversationModel: disabledModelId,
+        usableModels: [],
+        needsVision: true,
+      })
+    ).toBeNull();
   });
 
   it("should prefer a model that can see images when the turn has attachments", () => {
