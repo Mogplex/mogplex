@@ -46,6 +46,10 @@ test("fetches Slack image attachments and sends them to the conversational agent
       persistConversation: async (input) => {
         calls.push({ op: "persist", input });
       },
+      resolveModelPreference: async (input) => {
+        calls.push({ op: "model", input });
+        return null;
+      },
       fetchAttachment: async (input) => {
         calls.push({
           op: "fetch",
@@ -75,6 +79,14 @@ test("fetches Slack image attachments and sends them to the conversational agent
   assert.equal(result.outcome, "conversational_reply");
   assert.equal(result.attachments_attached, 1);
   assert.equal(result.attachments_dropped, 0);
+
+  // The turn's model resolver learns that images are attached so it can pick
+  // a model that can see them.
+  const modelCall = calls.find((c) => c.op === "model") as {
+    input: { needsVision: boolean; conversationModel: string | null };
+  };
+  assert.equal(modelCall.input.needsVision, true);
+  assert.equal(modelCall.input.conversationModel, null);
 
   const fetchCall = calls.find((c) => c.op === "fetch") as {
     botToken: string;

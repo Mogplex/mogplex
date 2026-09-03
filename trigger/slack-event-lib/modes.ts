@@ -236,6 +236,8 @@ export async function runConversationalMode(input: {
       slackUserId: payload.slackUserId,
       mogplexUserId,
       teamId: agentInput.repoContext?.teamId ?? null,
+      conversationModel: conversation.model,
+      needsVision: attachments.contentParts.length > 0,
     });
     const agentResult = await deps.runAgent({
       userId: mogplexUserId,

@@ -15,8 +15,7 @@ import {
 } from "@/lib/slack/client";
 import { runChatAgent } from "@/lib/agents/run-chat-agent";
 import { buildAppUrl } from "@/lib/app-url";
-import { listUsableModelIdsForScope } from "@/lib/models/default-model";
-import { getSlackModelPreference } from "@/lib/slack/model-preferences";
+import { resolveSlackTurnModel } from "@/lib/slack/turn-model-resolve";
 import { dispatchSlackMentionWorkflows } from "@/lib/flows/trigger-dispatch";
 import { defaultResolveSlackRepoContext } from "./slack-event-lib/repo-context";
 import {
@@ -91,23 +90,9 @@ const defaultDeps: SlackEventTaskDeps = {
   runAgent: runChatAgent,
   resolveModelPreference: async (input) => {
     try {
-      const preference = await getSlackModelPreference({
-        installationId: input.installationId,
-        channelId: input.channelId,
-        slackUserId: input.slackUserId,
-      });
-      if (!preference) return null;
-      const usableModels = await listUsableModelIdsForScope(
-        input.mogplexUserId,
-        {
-          teamId: input.teamId,
-        }
-      );
-      return usableModels.includes(preference.model_id)
-        ? preference.model_id
-        : null;
+      return await resolveSlackTurnModel(input);
     } catch (error) {
-      console.error("[slack-event] model preference lookup failed", {
+      console.error("[slack-event] turn model resolution failed", {
         teamId: input.teamId,
         error,
       });
@@ -298,6 +283,11 @@ export async function runSlackEventTask(
 export const handleSlackEventTask = task({
   id: TRIGGER_TASK_IDS.slackEventHandler,
   maxDuration: SLACK_EVENT_TASK_MAX_DURATION_SECONDS,
+  // The webhook triggers with a per-conversation concurrencyKey; the limit
+  // applies per key, so turns in one DM or thread run one at a time while
+  // different conversations still run in parallel. Without it a follow-up
+  // message starts before the previous turn is persisted and loses context.
+  queue: { concurrencyLimit: 1 },
   retry: { maxAttempts: 2 },
   onFailure: async ({ payload }) => {
     await recoverSlackEventTerminalFailure(payload);
