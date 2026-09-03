@@ -18,6 +18,15 @@ export const AGENT_RUN_QUERY_LIMIT = 10000;
 // call lookup runs in bounded batches. It is applied to the returned page
 // only, never to a user's whole run history.
 export const AGENT_RUN_AI_CALL_BATCH_SIZE = 200;
+const AGENT_RUN_AI_CALL_BATCH_CONCURRENCY = 4;
+
+// Sort keys whose values come from the backing AI call. Sorting by them
+// requires the calls to be attached before pagination.
+const AI_CALL_SORT_FIELDS = new Set([
+  "duration_ms",
+  "started_at",
+  "completed_at",
+]);
 
 export type AgentRunAiCallSummary = Pick<
   AiCall,
@@ -81,6 +90,11 @@ export function shouldLoadAgentRunJobs(
   sourceKind: string | null | undefined
 ): boolean {
   return !sourceKind || sourceKind === AGENT_RUN_SOURCE_KIND;
+}
+
+/** True when the requested sort orders by a field only the AI call carries. */
+export function needsAgentRunAiCallsBeforeSort(sort: string): boolean {
+  return AI_CALL_SORT_FIELDS.has(sort);
 }
 
 /** Runs use `streaming` where the Runs table filter says `running`. */
@@ -309,11 +323,19 @@ export async function attachAgentRunAiCalls(
   for (let i = 0; i < aiCallIds.length; i += AGENT_RUN_AI_CALL_BATCH_SIZE) {
     batches.push(aiCallIds.slice(i, i + AGENT_RUN_AI_CALL_BATCH_SIZE));
   }
-  const results = await Promise.all(
-    batches.map((batch) => deps.loadAiCalls(batch))
-  );
-  for (const aiCall of results.flat()) {
-    const job = jobsByCallId.get(aiCall.id);
-    if (job) applyAgentRunAiCall(job, aiCall);
+  for (
+    let i = 0;
+    i < batches.length;
+    i += AGENT_RUN_AI_CALL_BATCH_CONCURRENCY
+  ) {
+    const results = await Promise.all(
+      batches
+        .slice(i, i + AGENT_RUN_AI_CALL_BATCH_CONCURRENCY)
+        .map((batch) => deps.loadAiCalls(batch))
+    );
+    for (const aiCall of results.flat()) {
+      const job = jobsByCallId.get(aiCall.id);
+      if (job) applyAgentRunAiCall(job, aiCall);
+    }
   }
 }

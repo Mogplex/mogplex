@@ -8,6 +8,7 @@ import {
   buildAgentRunObservabilityJob,
   loadUserAgentRunJobs,
   mapAgentRunStatus,
+  needsAgentRunAiCallsBeforeSort,
   resolveAgentRunStatusFilter,
   shouldLoadAgentRunJobs,
   type AgentRunAiCallSummary,
@@ -92,6 +93,16 @@ describe("shouldLoadAgentRunJobs", () => {
     expect(shouldLoadAgentRunJobs(undefined)).toBe(true);
     expect(shouldLoadAgentRunJobs("agent_run")).toBe(true);
     expect(shouldLoadAgentRunJobs("flow")).toBe(false);
+  });
+});
+
+describe("needsAgentRunAiCallsBeforeSort", () => {
+  it("should require call usage before sorting by call-derived fields only", () => {
+    expect(needsAgentRunAiCallsBeforeSort("duration_ms")).toBe(true);
+    expect(needsAgentRunAiCallsBeforeSort("started_at")).toBe(true);
+    expect(needsAgentRunAiCallsBeforeSort("completed_at")).toBe(true);
+    expect(needsAgentRunAiCallsBeforeSort("created_at")).toBe(false);
+    expect(needsAgentRunAiCallsBeforeSort("status")).toBe(false);
   });
 });
 
