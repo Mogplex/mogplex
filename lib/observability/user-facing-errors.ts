@@ -53,13 +53,14 @@ const SAFE_FAILURE_FIELDS = new Set([
   "line",
   "severity",
   "branch",
+  "harness",
   "review_dedup_key",
 ]);
 // Dispatch context recorded before a run fails (PR refs, shas, titles, repo
 // names) carries no diagnostics; wiping it made failed runs render as if the
 // error had been copied into every metadata field.
 const SAFE_FAILURE_FIELD_SUFFIX_PATTERN =
-  /_(?:id|type|at|ref|sha|title|author|login|full_name|label|provider|phase|source)$/;
+  /_(?:id|type|at|ref|sha|title|author|login|full_name|label|provider|phase|source|branch)$/;
 const FAILURE_CONTEXT_RESET_KEYS = new Set([
   "agent",
   "ai_calls",
@@ -74,6 +75,7 @@ const FAILURE_CONTEXT_RESET_KEYS = new Set([
   "tool_calls",
   "input",
   "input_preview",
+  "prompt",
 ]);
 
 type FailureKind =

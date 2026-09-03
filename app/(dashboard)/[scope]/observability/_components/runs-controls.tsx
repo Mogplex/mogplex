@@ -52,6 +52,7 @@ export function RunsControls({
             { label: "Trigger", value: "trigger" },
             { label: "Assignment", value: "assignment" },
             { label: "Manual Retry", value: "manual_retry" },
+            { label: "Agent Run", value: "agent_run" },
           ]}
           onChange={(value) => onUpdateJobFilter("sourceKind", value || undefined)}
         />

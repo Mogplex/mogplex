@@ -18,7 +18,8 @@ export type FlowRunAiCallDetail = AiCall & {
 };
 
 export type ObservabilityJob = JobRun & {
-  source_kind: JobRunSourceKind;
+  // Agent runs started via the API, MCP, CLI or Slack are listed as jobs too.
+  source_kind: JobRunSourceKind | "agent_run";
   source_type: string;
   repo: {
     id: string | null;
