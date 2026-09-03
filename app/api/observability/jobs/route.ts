@@ -8,7 +8,10 @@ import {
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { NextRequest } from "next/server";
 import type { ObservabilityJob } from "@/lib/types";
-import { loadUserAgentRunJobs } from "@/lib/observability/agent-run-jobs";
+import {
+  loadUserAgentRunJobs,
+  shouldLoadAgentRunJobs,
+} from "@/lib/observability/agent-run-jobs";
 import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
 
 type JobsFilters = {
@@ -98,11 +101,13 @@ export async function GET(req: NextRequest) {
 
   // Agent runs (API, MCP, CLI, Slack) are listed alongside automation runs so
   // every run the user started is visible here.
-  const agentRunJobs = await loadUserAgentRunJobs({
-    userId,
-    scope,
-    filters: { status: filters.status, from: filters.from, to: filters.to },
-  });
+  const agentRunJobs = shouldLoadAgentRunJobs(filters.sourceKind)
+    ? await loadUserAgentRunJobs({
+        userId,
+        scope,
+        filters: { status: filters.status, from: filters.from, to: filters.to },
+      })
+    : [];
 
   const jobs = [
     ...runs.map<ObservabilityJob>((run) => buildObservabilityJob(scope, run)),

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
 import { createEmptyUserAutomationScope } from "@/lib/user-automation-scope";
 import {
+  AGENT_RUN_AI_CALL_BATCH_SIZE,
   buildAgentRunObservabilityJob,
   loadUserAgentRunJobs,
   mapAgentRunStatus,
   resolveAgentRunStatusFilter,
+  shouldLoadAgentRunJobs,
   type AgentRunAiCallSummary,
 } from "./agent-run-jobs";
 
@@ -196,5 +198,42 @@ describe("loadUserAgentRunJobs", () => {
       }
     );
     expect(empty).toEqual([]);
+  });
+
+  it("should look up backing calls in bounded batches", async () => {
+    const runCount = AGENT_RUN_AI_CALL_BATCH_SIZE * 2 + 1;
+    const rows = Array.from({ length: runCount }, (_, index) =>
+      makeRun({ id: `run-${index}`, ai_call_id: `call-${index}` })
+    );
+    const batches: string[][] = [];
+
+    const jobs = await loadUserAgentRunJobs(
+      { userId: "user-1", scope: makeScope(), filters: {} },
+      {
+        loadRows: async () => rows,
+        loadAiCalls: async (ids) => {
+          batches.push(ids);
+          return ids.map((id) => ({ ...call, id }));
+        },
+      }
+    );
+
+    expect(batches.map((batch) => batch.length)).toEqual([
+      AGENT_RUN_AI_CALL_BATCH_SIZE,
+      AGENT_RUN_AI_CALL_BATCH_SIZE,
+      1,
+    ]);
+    expect(jobs).toHaveLength(runCount);
+    expect(
+      jobs.every((job) => job.latest_ai_call?.id === `call-${job.id.slice(4)}`)
+    ).toBe(true);
+  });
+});
+
+describe("shouldLoadAgentRunJobs", () => {
+  it("should skip the agent-run lookup when another source kind is selected", () => {
+    expect(shouldLoadAgentRunJobs(undefined)).toBe(true);
+    expect(shouldLoadAgentRunJobs("agent_run")).toBe(true);
+    expect(shouldLoadAgentRunJobs("flow")).toBe(false);
   });
 });

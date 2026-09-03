@@ -14,6 +14,10 @@ export const AGENT_RUN_SOURCE_KIND = "agent_run" as const;
 
 export const AGENT_RUN_QUERY_LIMIT = 10000;
 
+// PostgREST serializes `.in()` filters into the request URL, so the backing
+// call lookup runs in bounded batches instead of one filter over every run.
+export const AGENT_RUN_AI_CALL_BATCH_SIZE = 200;
+
 export type AgentRunAiCallSummary = Pick<
   AiCall,
   | "id"
@@ -66,6 +70,13 @@ export function mapAgentRunStatus(
     default:
       return "failed";
   }
+}
+
+/** Agent runs only need loading when the source filter can include them. */
+export function shouldLoadAgentRunJobs(
+  sourceKind: string | null | undefined
+): boolean {
+  return !sourceKind || sourceKind === AGENT_RUN_SOURCE_KIND;
 }
 
 /** Runs use `streaming` where the Runs table filter says `running`. */
@@ -251,8 +262,14 @@ export async function loadUserAgentRunJobs(
   });
   if (rows.length === 0) return [];
 
-  const aiCalls = await deps.loadAiCalls(rows.map((row) => row.ai_call_id));
-  const aiCallsById = new Map(aiCalls.map((aiCall) => [aiCall.id, aiCall]));
+  const aiCallsById = new Map<string, AgentRunAiCallSummary>();
+  const aiCallIds = rows.map((row) => row.ai_call_id);
+  for (let i = 0; i < aiCallIds.length; i += AGENT_RUN_AI_CALL_BATCH_SIZE) {
+    const batch = await deps.loadAiCalls(
+      aiCallIds.slice(i, i + AGENT_RUN_AI_CALL_BATCH_SIZE)
+    );
+    for (const aiCall of batch) aiCallsById.set(aiCall.id, aiCall);
+  }
 
   return rows.map((row) =>
     buildAgentRunObservabilityJob(
