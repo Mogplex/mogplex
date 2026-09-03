@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
+import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
 import { createEmptyUserAutomationScope } from "@/lib/user-automation-scope";
 import {
   AGENT_RUN_AI_CALL_BATCH_SIZE,
+  attachAgentRunAiCalls,
   buildAgentRunObservabilityJob,
   loadUserAgentRunJobs,
   mapAgentRunStatus,
@@ -85,79 +87,93 @@ describe("resolveAgentRunStatusFilter", () => {
   });
 });
 
+describe("shouldLoadAgentRunJobs", () => {
+  it("should skip the agent-run lookup when another source kind is selected", () => {
+    expect(shouldLoadAgentRunJobs(undefined)).toBe(true);
+    expect(shouldLoadAgentRunJobs("agent_run")).toBe(true);
+    expect(shouldLoadAgentRunJobs("flow")).toBe(false);
+  });
+});
+
 describe("buildAgentRunObservabilityJob", () => {
-  it("should present a failed run with its repo, harness, error and call summary", () => {
-    const job = buildAgentRunObservabilityJob(makeScope(), makeRun(), call);
+  it("should present a run with its repo, harness, error and curated metadata", () => {
+    const job = buildAgentRunObservabilityJob(
+      makeScope(),
+      makeRun({
+        metadata: {
+          source: "external-api",
+          slack: { teamId: "T1", channelId: "C1" },
+          slack_team_id: "T1",
+          slack_user_id: "U1",
+        },
+      })
+    );
 
     expect(job.id).toBe("run-1");
     expect(job.source_kind).toBe("agent_run");
-    expect(job.source_type).toBe("api");
+    expect(job.source_type).toBe("slack");
     expect(job.status).toBe("failed");
     expect(job.error).toBe("Trigger.dev runtime is not configured");
     expect(job.repo).toEqual({ id: "repo-1", full_name: "Mogplex/mogplex" });
     expect(job.agent.name).toBe("claude-code");
     expect(job.runtime_provider).toBe("trigger");
     expect(job.runtime_run_id).toBe("run_trigger_1");
-    expect(job.started_at).toBe(call.started_at);
-    expect(job.completed_at).toBe(call.completed_at);
-    expect(job.input_tokens).toBe(120);
-    expect(job.output_tokens).toBe(30);
-    expect(job.cost_usd).toBe(0.02);
-    expect(job.duration_ms).toBe(4200);
-    expect(job.latest_ai_call).toEqual({
-      id: "call-1",
-      status: "failed",
-      model: "anthropic/claude-sonnet-5",
-      total_tokens: 150,
-      tool_calls_count: 3,
-      started_at: call.started_at,
-    });
+    expect(job.started_at).toBe("2026-09-03T21:57:27.442Z");
+    expect(job.completed_at).toBe("2026-09-03T21:57:28.000Z");
+    expect(job.latest_ai_call).toBeNull();
+    expect(job.cost_usd).toBeNull();
     expect(job.repairable).toBe(false);
     expect(job.requeueable).toBe(false);
     expect(job.cancelable).toBe(false);
-    expect(job.metadata).toMatchObject({
+    expect(job.metadata).toEqual({
+      source: "external-api",
       repo_id: "repo-1",
       repo_full_name: "Mogplex/mogplex",
       harness: "claude-code",
       ai_call_id: "call-1",
+      base_branch: "main",
       working_branch: "mogplex/agent-1",
+      sandbox_id: null,
+      worktree_id: null,
+      conversation_id: null,
+      slack_team_id: "T1",
+      slack_user_id: "U1",
       prompt: "Fix the mobile layout",
     });
   });
 
-  it("should label runs started from Slack and keep the repo id when the repo is unknown", () => {
+  it("should label API runs, keep an unknown repo id, and leave pending runs unstarted", () => {
     const job = buildAgentRunObservabilityJob(
       createEmptyUserAutomationScope(),
-      makeRun({
-        repo_id: "repo-missing",
-        status: "streaming",
-        metadata: { source: "external-api", slack: { teamId: "T1" } },
-      }),
-      null
+      makeRun({ repo_id: "repo-missing", status: "pending", error: null })
     );
 
-    expect(job.source_type).toBe("slack");
-    expect(job.status).toBe("running");
+    expect(job.source_type).toBe("api");
+    expect(job.status).toBe("pending");
     expect(job.repo).toEqual({ id: "repo-missing", full_name: null });
-    expect(job.latest_ai_call).toBeNull();
     expect(job.started_at).toBeNull();
     expect(job.completed_at).toBeNull();
+    expect(job.metadata?.slack_team_id).toBeUndefined();
   });
 
-  it("should fall back to the run update time as completion when the call has none", () => {
-    const job = buildAgentRunObservabilityJob(
-      makeScope(),
-      makeRun({ status: "success" }),
-      { ...call, status: "success", completed_at: null }
-    );
+  it("should keep the run details readable after failure sanitization", () => {
+    const job = buildAgentRunObservabilityJob(makeScope(), makeRun());
+    const sanitized = sanitizeObservabilityPayload(job, "JOB", job.id);
 
-    expect(job.completed_at).toBe("2026-09-03T21:57:28.000Z");
+    expect(sanitized.metadata).toMatchObject({
+      harness: "claude-code",
+      prompt: "Fix the mobile layout",
+      base_branch: "main",
+      working_branch: "mogplex/agent-1",
+      repo_full_name: "Mogplex/mogplex",
+      ai_call_id: "call-1",
+    });
+    expect(sanitized.error).not.toContain("Trigger.dev");
   });
 });
 
 describe("loadUserAgentRunJobs", () => {
-  it("should join each run with its call and skip the call lookup when there are no runs", async () => {
-    const seen: string[][] = [];
+  it("should translate the status filter and build one job per run", async () => {
     const jobs = await loadUserAgentRunJobs(
       { userId: "user-1", scope: makeScope(), filters: { status: "running" } },
       {
@@ -173,67 +189,81 @@ describe("loadUserAgentRunJobs", () => {
             makeRun({ id: "run-2", ai_call_id: "call-2" }),
           ];
         },
-        loadAiCalls: async (ids) => {
-          seen.push(ids);
-          return [call];
-        },
       }
     );
 
-    expect(seen).toEqual([["call-1", "call-2"]]);
-    expect(jobs.map((job) => [job.id, job.latest_ai_call?.id ?? null])).toEqual(
-      [
-        ["run-1", "call-1"],
-        ["run-2", null],
-      ]
-    );
+    expect(jobs.map((job) => [job.id, job.status])).toEqual([
+      ["run-1", "running"],
+      ["run-2", "failed"],
+    ]);
+  });
+});
 
-    const empty = await loadUserAgentRunJobs(
-      { userId: "user-1", scope: makeScope(), filters: {} },
-      {
-        loadRows: async () => [],
-        loadAiCalls: async () => {
-          throw new Error("should not be called");
-        },
-      }
-    );
-    expect(empty).toEqual([]);
+describe("attachAgentRunAiCalls", () => {
+  it("should overlay call usage on agent-run jobs only and leave others untouched", async () => {
+    const agentJob = buildAgentRunObservabilityJob(makeScope(), makeRun());
+    const otherJob = {
+      ...buildAgentRunObservabilityJob(makeScope(), makeRun({ id: "job-9" })),
+      source_kind: "flow" as const,
+      metadata: { ai_call_id: "call-9" },
+    };
+    const seen: string[][] = [];
+
+    await attachAgentRunAiCalls([agentJob, otherJob], {
+      loadAiCalls: async (ids) => {
+        seen.push(ids);
+        return [call];
+      },
+    });
+
+    expect(seen).toEqual([["call-1"]]);
+    expect(agentJob.latest_ai_call).toEqual({
+      id: "call-1",
+      status: "failed",
+      model: "anthropic/claude-sonnet-5",
+      total_tokens: 150,
+      tool_calls_count: 3,
+      started_at: call.started_at,
+    });
+    expect(agentJob.started_at).toBe(call.started_at);
+    expect(agentJob.completed_at).toBe(call.completed_at);
+    expect(agentJob.input_tokens).toBe(120);
+    expect(agentJob.output_tokens).toBe(30);
+    expect(agentJob.cost_usd).toBe(0.02);
+    expect(agentJob.duration_ms).toBe(4200);
+    expect(otherJob.latest_ai_call).toBeNull();
   });
 
-  it("should look up backing calls in bounded batches", async () => {
+  it("should skip the lookup with no agent runs and fetch large sets in bounded batches", async () => {
+    await attachAgentRunAiCalls([], {
+      loadAiCalls: async () => {
+        throw new Error("should not be called");
+      },
+    });
+
     const runCount = AGENT_RUN_AI_CALL_BATCH_SIZE * 2 + 1;
-    const rows = Array.from({ length: runCount }, (_, index) =>
-      makeRun({ id: `run-${index}`, ai_call_id: `call-${index}` })
+    const jobs = Array.from({ length: runCount }, (_, index) =>
+      buildAgentRunObservabilityJob(
+        makeScope(),
+        makeRun({ id: `run-${index}`, ai_call_id: `call-${index}` })
+      )
     );
     const batches: string[][] = [];
 
-    const jobs = await loadUserAgentRunJobs(
-      { userId: "user-1", scope: makeScope(), filters: {} },
-      {
-        loadRows: async () => rows,
-        loadAiCalls: async (ids) => {
-          batches.push(ids);
-          return ids.map((id) => ({ ...call, id }));
-        },
-      }
-    );
+    await attachAgentRunAiCalls(jobs, {
+      loadAiCalls: async (ids) => {
+        batches.push(ids);
+        return ids.map((id) => ({ ...call, id }));
+      },
+    });
 
     expect(batches.map((batch) => batch.length)).toEqual([
       AGENT_RUN_AI_CALL_BATCH_SIZE,
       AGENT_RUN_AI_CALL_BATCH_SIZE,
       1,
     ]);
-    expect(jobs).toHaveLength(runCount);
     expect(
       jobs.every((job) => job.latest_ai_call?.id === `call-${job.id.slice(4)}`)
     ).toBe(true);
-  });
-});
-
-describe("shouldLoadAgentRunJobs", () => {
-  it("should skip the agent-run lookup when another source kind is selected", () => {
-    expect(shouldLoadAgentRunJobs(undefined)).toBe(true);
-    expect(shouldLoadAgentRunJobs("agent_run")).toBe(true);
-    expect(shouldLoadAgentRunJobs("flow")).toBe(false);
   });
 });

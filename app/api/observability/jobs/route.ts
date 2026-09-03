@@ -9,6 +9,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { NextRequest } from "next/server";
 import type { ObservabilityJob } from "@/lib/types";
 import {
+  attachAgentRunAiCalls,
   loadUserAgentRunJobs,
   shouldLoadAgentRunJobs,
 } from "@/lib/observability/agent-run-jobs";
@@ -167,6 +168,9 @@ export async function GET(req: NextRequest) {
         .in("job_run_id", jobIds)
         .order("created_at", { ascending: false })
         .limit(10000),
+      // Agent-run rows carry their usage on a backing AI call; only the page
+      // being returned is enriched.
+      attachAgentRunAiCalls(paged),
     ]);
 
     if (aiCallsError) {

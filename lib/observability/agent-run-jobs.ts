@@ -15,7 +15,8 @@ export const AGENT_RUN_SOURCE_KIND = "agent_run" as const;
 export const AGENT_RUN_QUERY_LIMIT = 10000;
 
 // PostgREST serializes `.in()` filters into the request URL, so the backing
-// call lookup runs in bounded batches instead of one filter over every run.
+// call lookup runs in bounded batches. It is applied to the returned page
+// only, never to a user's whole run history.
 export const AGENT_RUN_AI_CALL_BATCH_SIZE = 200;
 
 export type AgentRunAiCallSummary = Pick<
@@ -49,8 +50,11 @@ export type LoadAgentRunRowsInput = {
   to: string | undefined;
 };
 
-export type AgentRunJobsDeps = {
+export type AgentRunRowsDeps = {
   loadRows: (input: LoadAgentRunRowsInput) => Promise<ExternalAgentRunRow[]>;
+};
+
+export type AgentRunAiCallsDeps = {
   loadAiCalls: (aiCallIds: string[]) => Promise<AgentRunAiCallSummary[]>;
 };
 
@@ -87,6 +91,14 @@ export function resolveAgentRunStatusFilter(
   return status === "running" ? "streaming" : status;
 }
 
+function readMetadataString(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string
+): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
 function getAgentRunSourceType(run: ExternalAgentRunRow): string {
   const metadata = run.metadata ?? {};
   if (metadata.slack && typeof metadata.slack === "object") return "slack";
@@ -104,12 +116,15 @@ function toFiniteNumber(value: unknown): number | null {
 
 type AgentRunRepo = { id: string; full_name: string | null } | null;
 
+// Only named, owner-visible run fields are exposed; the raw metadata JSON
+// carries integration state (Slack message coordinates, attachment refs) that
+// the expanded row has no use for and the failure sanitizer would blank out.
 function buildAgentRunMetadata(
   run: ExternalAgentRunRow,
   repo: AgentRunRepo
 ): Record<string, unknown> {
-  return {
-    ...run.metadata,
+  const metadata: Record<string, unknown> = {
+    source: readMetadataString(run.metadata, "source") ?? "external-api",
     repo_id: run.repo_id,
     repo_full_name: repo?.full_name ?? null,
     harness: run.harness,
@@ -117,42 +132,26 @@ function buildAgentRunMetadata(
     base_branch: run.base_branch,
     working_branch: run.working_branch,
     sandbox_id: run.sandbox_id,
-    prompt: run.prompt,
+    worktree_id: run.worktree_id,
+    conversation_id: run.conversation_id,
   };
+  const slackTeamId = readMetadataString(run.metadata, "slack_team_id");
+  const slackUserId = readMetadataString(run.metadata, "slack_user_id");
+  if (slackTeamId) metadata.slack_team_id = slackTeamId;
+  if (slackUserId) metadata.slack_user_id = slackUserId;
+  metadata.prompt = run.prompt;
+  return metadata;
 }
 
-function buildAgentRunLatestAiCall(
-  aiCall: AgentRunAiCallSummary | null
-): ObservabilityJob["latest_ai_call"] {
-  if (!aiCall) return null;
-  return {
-    id: aiCall.id,
-    status: aiCall.status,
-    model: aiCall.model,
-    total_tokens: aiCall.total_tokens,
-    tool_calls_count: aiCall.tool_calls_count,
-    started_at: aiCall.started_at,
-  };
-}
-
-function buildAgentRunUsage(aiCall: AgentRunAiCallSummary | null) {
-  return {
-    input_tokens: aiCall?.input_tokens ?? null,
-    output_tokens: aiCall?.output_tokens ?? null,
-    cost_usd: toFiniteNumber(aiCall?.cost_usd),
-    duration_ms: aiCall?.duration_ms ?? null,
-  };
-}
-
-function buildAgentRunTiming(
-  run: ExternalAgentRunRow,
-  aiCall: AgentRunAiCallSummary | null
-) {
+// Until the backing call is attached, timing comes from the run row so the
+// table sorts sensibly: a pending run has not started, a terminal run ended
+// at its last update.
+function buildAgentRunTiming(run: ExternalAgentRunRow) {
   const isTerminal = TERMINAL_AGENT_RUN_STATUSES.has(run.status);
   return {
     created_at: run.created_at,
-    started_at: aiCall?.started_at ?? null,
-    completed_at: aiCall?.completed_at ?? (isTerminal ? run.updated_at : null),
+    started_at: run.status === "pending" ? null : run.created_at,
+    completed_at: isTerminal ? run.updated_at : null,
     last_start_attempt_at: run.created_at,
     cancelled_at: run.status === "cancelled" ? run.updated_at : null,
   };
@@ -160,8 +159,7 @@ function buildAgentRunTiming(
 
 export function buildAgentRunObservabilityJob(
   scope: UserAutomationScope,
-  run: ExternalAgentRunRow,
-  aiCall: AgentRunAiCallSummary | null
+  run: ExternalAgentRunRow
 ): ObservabilityJob {
   const repo = scope.reposById.get(run.repo_id) ?? null;
 
@@ -176,8 +174,11 @@ export function buildAgentRunObservabilityJob(
     workflow_run_id: null,
     retry_of_job_run_id: null,
     status: mapAgentRunStatus(run.status),
-    ...buildAgentRunTiming(run, aiCall),
-    ...buildAgentRunUsage(aiCall),
+    ...buildAgentRunTiming(run),
+    input_tokens: null,
+    output_tokens: null,
+    cost_usd: null,
+    duration_ms: null,
     error: run.error,
     start_attempts: 1,
     last_start_error: null,
@@ -197,11 +198,31 @@ export function buildAgentRunObservabilityJob(
       name: run.harness,
       slug: null,
     },
-    latest_ai_call: buildAgentRunLatestAiCall(aiCall),
+    latest_ai_call: null,
     latest_dispatch_event: null,
     repairable: false,
     requeueable: false,
     cancelable: false,
+  };
+}
+
+function applyAgentRunAiCall(
+  job: ObservabilityJob,
+  aiCall: AgentRunAiCallSummary
+) {
+  job.started_at = aiCall.started_at ?? job.started_at;
+  job.completed_at = aiCall.completed_at ?? job.completed_at;
+  job.input_tokens = aiCall.input_tokens;
+  job.output_tokens = aiCall.output_tokens;
+  job.cost_usd = toFiniteNumber(aiCall.cost_usd);
+  job.duration_ms = aiCall.duration_ms;
+  job.latest_ai_call = {
+    id: aiCall.id,
+    status: aiCall.status,
+    model: aiCall.model,
+    total_tokens: aiCall.total_tokens,
+    tool_calls_count: aiCall.tool_calls_count,
+    started_at: aiCall.started_at,
   };
 }
 
@@ -234,15 +255,18 @@ async function loadAgentRunAiCallsFromDb(
     .from("ai_calls")
     .select(AGENT_RUN_AI_CALL_SELECT)
     .in("id", aiCallIds)
-    .limit(AGENT_RUN_QUERY_LIMIT);
+    .limit(aiCallIds.length);
   if (error) {
     throw new Error(`Failed to load agent run calls: ${error.message}`);
   }
   return (data ?? []) as AgentRunAiCallSummary[];
 }
 
-const defaultAgentRunJobsDeps: AgentRunJobsDeps = {
+const defaultAgentRunRowsDeps: AgentRunRowsDeps = {
   loadRows: loadAgentRunRowsFromDb,
+};
+
+const defaultAgentRunAiCallsDeps: AgentRunAiCallsDeps = {
   loadAiCalls: loadAgentRunAiCallsFromDb,
 };
 
@@ -252,7 +276,7 @@ export async function loadUserAgentRunJobs(
     scope: UserAutomationScope;
     filters: AgentRunJobFilters;
   },
-  deps: AgentRunJobsDeps = defaultAgentRunJobsDeps
+  deps: AgentRunRowsDeps = defaultAgentRunRowsDeps
 ): Promise<ObservabilityJob[]> {
   const rows = await deps.loadRows({
     userId: input.userId,
@@ -260,22 +284,36 @@ export async function loadUserAgentRunJobs(
     from: input.filters.from ?? undefined,
     to: input.filters.to ?? undefined,
   });
-  if (rows.length === 0) return [];
+  return rows.map((row) => buildAgentRunObservabilityJob(input.scope, row));
+}
 
-  const aiCallsById = new Map<string, AgentRunAiCallSummary>();
-  const aiCallIds = rows.map((row) => row.ai_call_id);
-  for (let i = 0; i < aiCallIds.length; i += AGENT_RUN_AI_CALL_BATCH_SIZE) {
-    const batch = await deps.loadAiCalls(
-      aiCallIds.slice(i, i + AGENT_RUN_AI_CALL_BATCH_SIZE)
-    );
-    for (const aiCall of batch) aiCallsById.set(aiCall.id, aiCall);
+/**
+ * Fills in tokens, cost, timing and the latest-call summary for the agent-run
+ * jobs in a result page. Call this after pagination so the lookup is bounded
+ * by the page size, not by the user's run history.
+ */
+export async function attachAgentRunAiCalls(
+  jobs: ObservabilityJob[],
+  deps: AgentRunAiCallsDeps = defaultAgentRunAiCallsDeps
+): Promise<void> {
+  const jobsByCallId = new Map<string, ObservabilityJob>();
+  for (const job of jobs) {
+    if (job.source_kind !== AGENT_RUN_SOURCE_KIND) continue;
+    const aiCallId = readMetadataString(job.metadata, "ai_call_id");
+    if (aiCallId) jobsByCallId.set(aiCallId, job);
   }
+  if (jobsByCallId.size === 0) return;
 
-  return rows.map((row) =>
-    buildAgentRunObservabilityJob(
-      input.scope,
-      row,
-      aiCallsById.get(row.ai_call_id) ?? null
-    )
+  const aiCallIds = [...jobsByCallId.keys()];
+  const batches: string[][] = [];
+  for (let i = 0; i < aiCallIds.length; i += AGENT_RUN_AI_CALL_BATCH_SIZE) {
+    batches.push(aiCallIds.slice(i, i + AGENT_RUN_AI_CALL_BATCH_SIZE));
+  }
+  const results = await Promise.all(
+    batches.map((batch) => deps.loadAiCalls(batch))
   );
+  for (const aiCall of results.flat()) {
+    const job = jobsByCallId.get(aiCall.id);
+    if (job) applyAgentRunAiCall(job, aiCall);
+  }
 }
