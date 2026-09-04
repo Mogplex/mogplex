@@ -75,6 +75,7 @@ test("executeExternalAgentRun launches the sandbox, runs the harness, and mirror
         assert.equal(run.status, "streaming");
         assert.equal(sandbox.recordId, "sandbox-record-1");
         harnessRan = true;
+        return { output: "" };
       },
       loadAiCall: async () => buildAiCall({ status: "success" }),
       appendEvent: async () => {
@@ -147,7 +148,7 @@ test("executeExternalAgentRun notifies the terminal-state hook on success and fa
         recordId: "sandbox-record-1",
         sandboxId: "sbx_123",
       }),
-      runHarness: async () => {},
+      runHarness: async () => ({ output: "" }),
       loadAiCall: async () => buildAiCall({ status: "success" }),
       appendEvent: async () => null,
       notifyRunReachedTerminalState: notify,
@@ -162,7 +163,7 @@ test("executeExternalAgentRun notifies the terminal-state hook on success and fa
       launchSandbox: async () => {
         throw new Error("boom");
       },
-      runHarness: async () => {},
+      runHarness: async () => ({ output: "" }),
       loadAiCall: async () => buildAiCall(),
       appendEvent: async () => null,
       notifyRunReachedTerminalState: notify,
@@ -189,7 +190,7 @@ test("executeExternalAgentRun swallows a throwing terminal-state hook", async ()
           recordId: "sandbox-record-1",
           sandboxId: "sbx_123",
         }),
-        runHarness: async () => {},
+        runHarness: async () => ({ output: "" }),
         loadAiCall: async () => buildAiCall({ status: "success" }),
         appendEvent: async () => null,
         notifyRunReachedTerminalState: async () => {
@@ -216,7 +217,7 @@ test("executeExternalAgentRun re-notifies when the run was already terminal", as
       launchSandbox: async () => {
         throw new Error("launchSandbox should not run");
       },
-      runHarness: async () => {},
+      runHarness: async () => ({ output: "" }),
       loadAiCall: async () => buildAiCall({ status: "success" }),
       appendEvent: async () => null,
       notifyRunReachedTerminalState: async (run, status) => {
@@ -226,4 +227,87 @@ test("executeExternalAgentRun re-notifies when the run was already terminal", as
   );
   assert.equal(result.status, "success");
   assert.deepEqual(notified, [{ runId: "run-1", status: "success" }]);
+});
+
+test("executeExternalAgentRun pauses at a checkpoint instead of finishing", async () => {
+  let currentRun = buildRunRow({ status: "pending" });
+  const updates: Array<Partial<ExternalAgentRunRow>> = [];
+  const checkpoints: Array<{ runId: string; previewUrl: string | null }> = [];
+  let terminalNotified = false;
+
+  const result = await executeExternalAgentRun(
+    { runId: "run-1", userId: "user-123" },
+    {
+      loadRun: async () => currentRun,
+      updateRun: async (_userId, _runId, update) => {
+        updates.push(update);
+        currentRun = { ...currentRun, ...update };
+        return currentRun;
+      },
+      launchSandbox: async () => ({
+        recordId: "sandbox-record-1",
+        sandboxId: "sbx_123",
+      }),
+      runHarness: async () => ({
+        output:
+          'done\n<<<MOGPLEX_CHECKPOINT>>>\n{"previewUrl":"https://sb.vercel.run","summary":"moved sign in"}\n<<<END_MOGPLEX_CHECKPOINT>>>',
+      }),
+      loadAiCall: async () => buildAiCall({ status: "success" }),
+      appendEvent: async () => null,
+      notifyRunReachedTerminalState: async () => {
+        terminalNotified = true;
+      },
+      notifyRunCheckpoint: async (run, checkpoint) => {
+        checkpoints.push({
+          runId: run.id,
+          previewUrl: checkpoint.previewUrl,
+        });
+      },
+    }
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(result.status, "awaiting_input");
+  assert.equal(currentRun.status, "awaiting_input");
+  assert.equal(terminalNotified, false);
+  assert.deepEqual(checkpoints, [
+    { runId: "run-1", previewUrl: "https://sb.vercel.run" },
+  ]);
+  assert.deepEqual(
+    updates.map((update) => update.status),
+    ["streaming", "awaiting_input"]
+  );
+});
+
+test("executeExternalAgentRun ignores a checkpoint marker when the pass failed", async () => {
+  let currentRun = buildRunRow({ status: "pending" });
+  let checkpointNotified = false;
+
+  const result = await executeExternalAgentRun(
+    { runId: "run-1", userId: "user-123" },
+    {
+      loadRun: async () => currentRun,
+      updateRun: async (_userId, _runId, update) => {
+        currentRun = { ...currentRun, ...update };
+        return currentRun;
+      },
+      launchSandbox: async () => ({
+        recordId: "sandbox-record-1",
+        sandboxId: "sbx_123",
+      }),
+      runHarness: async () => ({
+        output: "<<<MOGPLEX_CHECKPOINT>>>\n{}\n<<<END_MOGPLEX_CHECKPOINT>>>",
+      }),
+      loadAiCall: async () => buildAiCall({ status: "failed" }),
+      appendEvent: async () => null,
+      notifyRunReachedTerminalState: async () => {},
+      notifyRunCheckpoint: async () => {
+        checkpointNotified = true;
+      },
+    }
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(currentRun.status, "failed");
+  assert.equal(checkpointNotified, false);
 });

@@ -71,7 +71,7 @@ async function persistRenderedProgress(input: {
   appendEvent: AppendEvent;
   toolStates: Map<string, string>;
   onProgress?: OnProgress;
-}) {
+}): Promise<string> {
   if (input.rendered.text) {
     await input.appendEvent({
       ...eventContext(input.run),
@@ -120,6 +120,8 @@ async function persistRenderedProgress(input: {
       });
     }
   }
+
+  return input.rendered.text ?? "";
 }
 
 async function persistHarnessEvents(input: {
@@ -129,7 +131,8 @@ async function persistHarnessEvents(input: {
   appendEvent: AppendEvent;
   toolStates: Map<string, string>;
   onProgress?: OnProgress;
-}) {
+}): Promise<string> {
+  let text = "";
   for (const event of input.events) {
     if (!event || typeof event !== "object") continue;
     const typedEvent = event as HarnessStreamEvent;
@@ -139,7 +142,7 @@ async function persistHarnessEvents(input: {
     if (typedEvent.type !== "log" || typeof typedEvent.data !== "string") {
       continue;
     }
-    await persistRenderedProgress({
+    text += await persistRenderedProgress({
       rendered: input.renderer.push(
         typedEvent.stream ?? "stdout",
         typedEvent.data
@@ -150,6 +153,7 @@ async function persistHarnessEvents(input: {
       onProgress: input.onProgress,
     });
   }
+  return text;
 }
 
 export async function readExternalHarnessProgress(input: {
@@ -158,8 +162,8 @@ export async function readExternalHarnessProgress(input: {
   appendEvent?: AppendEvent;
   /** Best-effort live surface for run actions (e.g. the Slack thread feed). */
   onProgress?: OnProgress;
-}): Promise<void> {
-  if (!input.response.body) return;
+}): Promise<{ output: string }> {
+  if (!input.response.body) return { output: "" };
 
   const appendEvent = input.appendEvent ?? safeAppendAiCallEvent;
   const renderer = createHarnessOutputRenderer(input.run.harness);
@@ -167,6 +171,7 @@ export async function readExternalHarnessProgress(input: {
   const reader = input.response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let output = "";
 
   for (;;) {
     const { value, done } = await reader.read();
@@ -175,7 +180,7 @@ export async function readExternalHarnessProgress(input: {
     const parsed = parseSseDataEvents(buffer);
     buffer = parsed.remaining;
 
-    await persistHarnessEvents({
+    output += await persistHarnessEvents({
       events: parsed.events,
       renderer,
       run: input.run,
@@ -185,11 +190,13 @@ export async function readExternalHarnessProgress(input: {
     });
   }
 
-  await persistRenderedProgress({
+  output += await persistRenderedProgress({
     rendered: renderer.flush(),
     run: input.run,
     appendEvent,
     toolStates,
     onProgress: input.onProgress,
   });
+
+  return { output };
 }
