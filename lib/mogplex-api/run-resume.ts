@@ -47,6 +47,8 @@ import {
 } from "@/lib/mogplex-api/run-execution-finalize";
 import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
 import { stripSlackRunControlsForTerminalRun } from "@/lib/slack/run-controls-notify";
+import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
+import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
 
 export type ResumeExternalAgentRunPayload = {
@@ -55,6 +57,83 @@ export type ResumeExternalAgentRunPayload = {
   /** The user's steering reply that triggered this resume. */
   steer: string;
 };
+
+/**
+ * Queues a resume segment on Trigger. A resume can't run inline in the Slack
+ * event task (a segment can take many minutes), so the Slack reply handler
+ * dispatches it here. Resumes of the same run share a concurrency key so they
+ * serialize; the caller owns idempotency (e.g. keyed on the Slack message ts).
+ */
+type TriggerHandle = { id?: string | null };
+type TriggerResumeTask = (
+  taskId: string,
+  payload: ResumeExternalAgentRunPayload,
+  options: Record<string, unknown>
+) => Promise<TriggerHandle>;
+
+type QueueResumeDeps = {
+  isRuntimeConfigured: () => boolean;
+  triggerTask: TriggerResumeTask;
+};
+
+async function defaultTriggerResumeTask(
+  taskId: string,
+  payload: ResumeExternalAgentRunPayload,
+  options: Record<string, unknown>
+): Promise<TriggerHandle> {
+  const { tasks } = await import("@trigger.dev/sdk/v3");
+  return tasks.trigger(taskId, payload, options);
+}
+
+export async function queueResumeExternalAgentRun(
+  input: {
+    runId: string;
+    userId: string;
+    repoId: string;
+    steer: string;
+    idempotencyKey: string;
+  },
+  overrides: Partial<QueueResumeDeps> = {}
+): Promise<{ runtimeProvider: "trigger"; runtimeRunId: string | null }> {
+  const deps: QueueResumeDeps = {
+    isRuntimeConfigured: isTriggerRuntimeConfigured,
+    triggerTask: defaultTriggerResumeTask,
+    ...overrides,
+  };
+
+  if (!deps.isRuntimeConfigured()) {
+    throw new Error("Trigger.dev runtime is not configured");
+  }
+
+  const handle = await deps.triggerTask(
+    TRIGGER_TASK_IDS.resumeAgentRun,
+    {
+      runId: input.runId,
+      userId: input.userId,
+      steer: input.steer,
+    },
+    {
+      idempotencyKey: input.idempotencyKey,
+      concurrencyKey: `resume-agent-run:${input.runId}`,
+      maxAttempts: 1,
+      tags: [
+        `user:${input.userId}`,
+        `repo:${input.repoId}`,
+        `external-run:${input.runId}`,
+      ],
+      metadata: {
+        runId: input.runId,
+        userId: input.userId,
+        repoId: input.repoId,
+      },
+    }
+  );
+
+  return {
+    runtimeProvider: "trigger",
+    runtimeRunId: handle.id ?? null,
+  };
+}
 
 type ResumeExternalAgentRunDeps = FinalizeDeps & {
   loadRun: (
