@@ -17,6 +17,7 @@ export default defineConfig({
     include: [
       "lib/**/*.test.ts",
       "app/api/sandbox/_lib/pending-stream.test.ts",
+      "app/api/sandbox/_lib/baseline-fallback.test.ts",
     ],
     coverage: {
       // Consumed by the diff-coverage job in pr-protection.yml: cobertura XML

@@ -8,16 +8,13 @@ import {
 import { checkSandboxHealth } from "@/lib/sandbox/health-status";
 import { updateSandboxRecord } from "@/lib/sandbox/records";
 import { getRepoLinkedVercelProject } from "@/lib/vercel/env-vars";
-import { clearRepoSnapshotIfCurrent } from "@/lib/repo-snapshots";
 import { readSandboxPersistentFlag } from "@/lib/sandbox/persistence";
-import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
-import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 import { SANDBOX_STREAM_SELECT } from "./constants";
 import {
   toStreamSandboxRecord,
   toStreamStatusSandboxRecord,
 } from "./response-shaping";
-import { createWorkingBranchInSandbox } from "./utils";
+import { fallbackFromBaselineToGit } from "./baseline-fallback";
 import {
   shouldQueueSnapshotWarmupOnSandboxLaunch,
   summarizeDeferredSnapshotWarmupQueueResult,
@@ -26,7 +23,6 @@ import {
   stopSandboxInstanceBestEffort,
   prepareSandboxLaunchBillingCloseBestEffort,
 } from "./failure-handling";
-import { configureSandboxGitAccess } from "./provisioning";
 import type { SandboxEvent } from "@/lib/sandbox/events";
 import type { SandboxRecord, SandboxRecordRow } from "@/lib/types";
 import type {
@@ -94,39 +90,6 @@ export function emitStreamSandboxStatus(
     status,
     sandbox: toStreamStatusSandboxRecord(record),
   });
-}
-
-export async function queueSandboxReadinessReconciliationWarning(input: {
-  deps: SandboxPostDeps;
-  recordId: string;
-  sandboxId: string;
-  emit: (event: SandboxEvent) => void;
-}) {
-  try {
-    const readinessRun = await input.deps.startSandboxReadinessReconciliation({
-      sandboxRecordId: input.recordId,
-      expectedSandboxId: input.sandboxId,
-      source: "launch",
-    });
-    if (
-      !readinessRun.queued &&
-      readinessRun.reason !== "trigger_not_configured"
-    ) {
-      input.emit({
-        type: "warning",
-        message: "Sandbox readiness reconciliation could not be queued.",
-      });
-    }
-  } catch (error) {
-    console.error(
-      "[sandbox/create] Failed to queue sandbox readiness reconciliation",
-      error
-    );
-    input.emit({
-      type: "warning",
-      message: "Sandbox readiness reconciliation could not be queued.",
-    });
-  }
 }
 
 function createSandboxBootstrapStream(input: {
@@ -368,74 +331,6 @@ async function consumeSandboxBootstrapStreamOnce(input: {
   }
 }
 
-async function fallbackFromBaselineToGit(input: {
-  state: SandboxLaunchState;
-  launch: SandboxLaunchPreparation;
-  deps: SandboxPostDeps;
-  environment: SandboxLaunchEnvironment;
-  emit: (event: SandboxEvent) => void;
-}) {
-  await prepareSandboxLaunchBillingCloseBestEffort({
-    deps: input.deps,
-    recordId: input.state.streamSandboxRecord.id,
-    phase: "baseline fallback",
-  });
-  await stopSandboxInstanceBestEffort(input.state.sandbox);
-  if (input.launch.repo.snapshot_id) {
-    await clearRepoSnapshotIfCurrent(
-      input.launch.repoId,
-      input.launch.repo.snapshot_id
-    );
-  }
-  const fresh = await input.deps.createSandboxForRepo({
-    vercelToken: input.launch.createContext.credentials.vercelToken,
-    vercelTeamId: input.launch.createContext.credentials.vercelTeamId,
-    vercelProjectId: input.launch.createContext.credentials.vercelProjectId,
-    githubToken: input.launch.githubToken,
-    repoFullName: input.launch.repo.full_name,
-    branch: input.launch.cloneRevision,
-    runtime: input.launch.runtime,
-    devPort: input.launch.configuredDevPort,
-    timeoutMs: input.launch.effectiveSandboxTimeoutMs,
-    envVars: input.environment.envResolution.envVars,
-    networkPolicy: input.environment.networkPolicy,
-    // Baseline->git fallback still reuses the record's name so the user
-    // sees a stable sandbox identifier across the recovery path.
-    name:
-      input.launch.sandboxNameOverride ??
-      buildSandboxName({
-        repoId: input.launch.repoId,
-        workingBranch: input.launch.launchRequest.workingBranch,
-        recordId: input.state.streamSandboxRecord.id,
-        userId: input.launch.creds.userId,
-        productTeamId: input.launch.productTeamId,
-        rootDirectory: input.launch.effectiveRootDirectory,
-      }),
-    onResume: createSandboxBillingOnResume(input.state.streamSandboxRecord.id),
-  });
-  input.state.sandbox = fresh;
-  input.state.restoredFromSnapshot = false;
-  input.state.restoredFromBaselineSnapshot = false;
-  await input.deps.requireSandboxBillingSession(
-    input.state.streamSandboxRecord.id,
-    fresh
-  );
-  await configureSandboxGitAccess({
-    sandbox: fresh,
-    githubToken: input.launch.githubToken,
-    userId: input.launch.creds.userId,
-  });
-  if (input.launch.launchRequest.createBranch) {
-    await createWorkingBranchInSandbox(fresh, {
-      ...input.launch.launchRequest,
-      // Use the launch-time effective path so the branch is created in
-      // the same workspace the dev server will boot at, not the repo's
-      // persistent default.
-      rootDirectory: input.launch.effectiveRootDirectory,
-    });
-  }
-}
-
 export async function consumeSandboxBootstrapStream(input: {
   state: SandboxLaunchState;
   launch: SandboxLaunchPreparation;
@@ -458,7 +353,10 @@ export async function consumeSandboxBootstrapStream(input: {
         message:
           "Baseline snapshot could not be applied cleanly; retrying with a fresh git clone.",
       });
-      await fallbackFromBaselineToGit(input);
+      const replaced = await fallbackFromBaselineToGit(input);
+      if (!replaced) {
+        return;
+      }
       await consumeSandboxBootstrapStreamOnce(input);
       return;
     }
