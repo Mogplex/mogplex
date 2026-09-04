@@ -4,8 +4,8 @@ import type { Command } from "@vercel/sandbox";
  * The Vercel Sandbox API caps a single logs() or wait() request at a few
  * minutes. A detached command keeps running past that cap, so a capped or
  * dropped streaming request means "this request ended", not "the command
- * failed". These are the transient signals we reconnect from; anything else
- * is a real failure and propagates.
+ * failed". These are the transient signals we resume from; anything else is a
+ * real failure and propagates.
  */
 export function isResumableCommandStreamError(error: unknown): boolean {
   if (!error) return false;
@@ -24,6 +24,7 @@ export type StreamCommandLogsDeps = {
    */
   getExitCode: (cmdId: string) => Promise<number | null>;
   delay?: (ms: number) => Promise<void>;
+  now?: () => number;
 };
 
 export type StreamCommandLogsOptions = {
@@ -33,42 +34,52 @@ export type StreamCommandLogsOptions = {
     attempt: number;
     error: unknown;
   }) => Promise<void> | void;
-  /** Reconnect ceiling before giving up. */
-  maxReconnects?: number;
+  /**
+   * Wall-clock budget for the whole run. Once exceeded, a still-running
+   * command is failed. Keep this at or above the caller's own run timeout so
+   * that timeout fires first for a genuinely stuck command.
+   */
+  deadlineMs?: number;
+  /** Delay between poll attempts once the live stream has ended. */
   reconnectDelayMs?: number;
 };
 
-// A worker run may span ~30 minutes; with a multi-minute cap per request this
-// ceiling leaves generous headroom before a genuinely stuck stream is failed.
-const DEFAULT_MAX_RECONNECTS = 60;
-const DEFAULT_RECONNECT_DELAY_MS = 1_000;
+// The harness worker caps a run at 30 minutes; this backstop sits above that
+// so the worker's own timeout fails a genuinely stuck command first.
+const DEFAULT_DEADLINE_MS = 40 * 60 * 1000;
+const DEFAULT_RECONNECT_DELAY_MS = 3_000;
 
 const defaultDelay = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * Streams a detached command's logs to `onLog` and returns its exit code,
- * reconnecting when the sandbox caps or drops the streaming request before
- * the command finishes.
+ * Streams a detached command's logs to `onLog` and returns its exit code.
  *
- * The logs endpoint replays a command's buffered output from the start on
- * every connection, so lines are de-duplicated by position: only lines beyond
- * the count already emitted are forwarded. Completion is detected out of band
- * via `getExitCode`, because a capped request never delivers the final
- * `wait()` result.
+ * The sandbox caps a single logs request at a few minutes, then serves a
+ * snapshot of the command's buffered output rather than a live tail. So the
+ * first connection follows the command live until the cap, and afterwards
+ * each poll re-reads the snapshot and forwards whatever is new. Completion is
+ * detected out of band via `getExitCode`, because a capped request never
+ * delivers the final `wait()` result. Output is de-duplicated by position:
+ * only lines beyond the count already emitted are forwarded.
+ *
+ * Polling continues until the command finishes or the wall-clock deadline is
+ * reached; a run legitimately longer than the request cap is never abandoned.
  */
 export async function streamCommandLogsWithResume(
   options: StreamCommandLogsOptions,
   deps: StreamCommandLogsDeps
 ): Promise<number> {
   const { command } = options;
-  const maxReconnects = options.maxReconnects ?? DEFAULT_MAX_RECONNECTS;
+  const deadlineMs = options.deadlineMs ?? DEFAULT_DEADLINE_MS;
   const reconnectDelayMs =
     options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS;
   const delay = deps.delay ?? defaultDelay;
+  const now = deps.now ?? Date.now;
+  const startedAt = now();
 
   let emitted = 0;
-  let reconnects = 0;
+  let attempts = 0;
 
   for (;;) {
     let streamError: unknown = null;
@@ -87,8 +98,7 @@ export async function streamCommandLogsWithResume(
     const exitCode = await deps.getExitCode(command.cmdId);
     if (exitCode !== null) return exitCode;
 
-    reconnects += 1;
-    if (reconnects > maxReconnects) {
+    if (now() - startedAt >= deadlineMs) {
       if (streamError instanceof Error) throw streamError;
       throw new Error(
         typeof streamError === "string" && streamError
@@ -96,8 +106,10 @@ export async function streamCommandLogsWithResume(
           : "Sandbox command stream ended before the command completed"
       );
     }
+
+    attempts += 1;
     if (options.onReconnect) {
-      await options.onReconnect({ attempt: reconnects, error: streamError });
+      await options.onReconnect({ attempt: attempts, error: streamError });
     }
     await delay(reconnectDelayMs);
   }
