@@ -40,6 +40,7 @@ export async function defaultStartRepoAgentRun(
       prompt: input.prompt,
       harness: "claude-code",
     },
+    origin: "slack",
     extraMetadata,
   });
   return { runId: result.run.runId };

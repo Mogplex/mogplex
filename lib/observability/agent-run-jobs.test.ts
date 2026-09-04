@@ -138,6 +138,7 @@ describe("buildAgentRunObservabilityJob", () => {
     expect(job.cancelable).toBe(false);
     expect(job.metadata).toEqual({
       source: "external-api",
+      origin: "slack",
       repo_id: "repo-1",
       repo_full_name: "Mogplex/mogplex",
       harness: "claude-code",
@@ -165,6 +166,16 @@ describe("buildAgentRunObservabilityJob", () => {
     expect(job.started_at).toBeNull();
     expect(job.completed_at).toBeNull();
     expect(job.metadata?.slack_team_id).toBeUndefined();
+  });
+
+  it("should read the run origin from metadata when present", () => {
+    const job = buildAgentRunObservabilityJob(
+      makeScope(),
+      makeRun({ metadata: { source: "external-api", run_origin: "mcp" } })
+    );
+
+    expect(job.source_type).toBe("mcp");
+    expect(job.metadata?.origin).toBe("mcp");
   });
 
   it("should keep the run details readable after failure sanitization", () => {

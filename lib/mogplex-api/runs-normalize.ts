@@ -184,6 +184,12 @@ export function buildRunMetadata(input: {
   repo: OwnedRepoForRun;
   sandbox: ActiveSandboxForRun | null;
   apiKey: Pick<ApiKeyAuth, "keyId" | "scopes">;
+  /**
+   * Where the run was triggered from — "slack", "api", "mcp", "cli". Recorded
+   * as `run_origin` for display. Distinct from `source`, which the harness
+   * route reuses as a claim marker and must stay "external-api".
+   */
+  origin?: string;
   /** Caller-supplied extras (e.g. Slack message coords). Core fields below
    *  always win — a caller can't clobber `source`, `request_hash`, etc. */
   extraMetadata?: Record<string, unknown>;
@@ -191,6 +197,7 @@ export function buildRunMetadata(input: {
   return {
     ...input.extraMetadata,
     source: "external-api",
+    run_origin: input.origin ?? "api",
     external_request_id: input.idempotencyKey,
     request_hash: input.requestHash,
     api_key_id: input.apiKey.keyId,
