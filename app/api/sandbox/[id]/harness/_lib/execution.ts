@@ -9,6 +9,7 @@ import type { MemoryScope } from "@/lib/memories-client";
 import type { Sandbox, Command } from "@vercel/sandbox";
 import type { SandboxHarnessPostDeps } from "./types";
 import { isClosedSandboxStreamError, isCancellationRequested } from "./stream";
+import { streamCommandLogsWithResume } from "@/lib/sandbox/command-stream";
 import type { GitWorkspaceSetupResult } from "./setup";
 
 export type HarnessRunResult = {
@@ -80,21 +81,41 @@ export function createHarnessStreamBody(
           controller.enqueue(encoder.encode(installEvent));
         }
 
-        for await (const log of result.command.logs()) {
-          await deps.renewSandboxActivityLease(sandbox);
-          if (log.stream === "stderr") {
-            failureStderr = appendHarnessFailureOutput(failureStderr, log.data);
-          } else {
-            failureStdout = appendHarnessFailureOutput(failureStdout, log.data);
+        const exitCode = await streamCommandLogsWithResume(
+          {
+            command: result.command,
+            onLog: async (log) => {
+              await deps.renewSandboxActivityLease(sandbox);
+              if (log.stream === "stderr") {
+                failureStderr = appendHarnessFailureOutput(
+                  failureStderr,
+                  log.data
+                );
+              } else {
+                failureStdout = appendHarnessFailureOutput(
+                  failureStdout,
+                  log.data
+                );
+              }
+              const sessionId = sessionParser.push(log.stream, log.data);
+              if (sessionId) {
+                const sessionEvent = `data: ${JSON.stringify({ type: "session", sessionId })}\n\n`;
+                controller.enqueue(encoder.encode(sessionEvent));
+              }
+              const event = `data: ${JSON.stringify({ type: "log", stream: log.stream, data: log.data })}\n\n`;
+              controller.enqueue(encoder.encode(event));
+            },
+            onReconnect: async () => {
+              // The detached agent command outlived a single log request; keep
+              // the VM lease warm while a fresh stream is established.
+              await deps.renewSandboxActivityLease(sandbox).catch(() => {});
+            },
+          },
+          {
+            getExitCode: async (cmdId) =>
+              (await sandbox.getCommand(cmdId)).exitCode,
           }
-          const sessionId = sessionParser.push(log.stream, log.data);
-          if (sessionId) {
-            const sessionEvent = `data: ${JSON.stringify({ type: "session", sessionId })}\n\n`;
-            controller.enqueue(encoder.encode(sessionEvent));
-          }
-          const event = `data: ${JSON.stringify({ type: "log", stream: log.stream, data: log.data })}\n\n`;
-          controller.enqueue(encoder.encode(event));
-        }
+        );
 
         const finalSessionId = sessionParser.flush();
         if (finalSessionId) {
@@ -102,7 +123,7 @@ export function createHarnessStreamBody(
           controller.enqueue(encoder.encode(sessionEvent));
         }
 
-        const exitResult = await result.command.wait();
+        const exitResult = { exitCode };
         const currentCall = await deps.loadOwnedAiCall(
           ctx.userId,
           ctx.aiCallId
