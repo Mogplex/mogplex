@@ -5,6 +5,27 @@ import { safeAppendAiCallEvent } from "@/lib/interactive-runs";
 
 type AppendEvent = typeof safeAppendAiCallEvent;
 
+/** A live action from the running agent, for surfacing outside the event log. */
+export type HarnessProgressUpdate =
+  | { kind: "assistant_text"; text: string }
+  | { kind: "tool_started"; toolName: string }
+  | { kind: "tool_finished"; toolName: string; state: string };
+
+type OnProgress = (update: HarnessProgressUpdate) => void | Promise<void>;
+
+async function emitProgress(
+  onProgress: OnProgress | undefined,
+  update: HarnessProgressUpdate
+) {
+  if (!onProgress) return;
+  try {
+    await onProgress(update);
+  } catch (error) {
+    // Progress surfacing is best-effort; never let it fail the run.
+    console.warn("[harness-progress] progress hook failed", error);
+  }
+}
+
 type HarnessStreamEvent = {
   type?: string;
   stream?: string;
@@ -49,6 +70,7 @@ async function persistRenderedProgress(input: {
   run: ExternalAgentRunRow;
   appendEvent: AppendEvent;
   toolStates: Map<string, string>;
+  onProgress?: OnProgress;
 }) {
   if (input.rendered.text) {
     await input.appendEvent({
@@ -56,6 +78,10 @@ async function persistRenderedProgress(input: {
       eventType: "log",
       message: input.rendered.text,
       payload: { kind: "assistant_delta" },
+    });
+    await emitProgress(input.onProgress, {
+      kind: "assistant_text",
+      text: input.rendered.text,
     });
   }
 
@@ -72,6 +98,10 @@ async function persistRenderedProgress(input: {
         message: `${tool.name} started`,
         payload: { kind: "tool", toolCallId: tool.id, state: tool.state },
       });
+      await emitProgress(input.onProgress, {
+        kind: "tool_started",
+        toolName: tool.name,
+      });
       continue;
     }
 
@@ -83,6 +113,11 @@ async function persistRenderedProgress(input: {
         message: toolFinishedMessage(tool.name, tool.state),
         payload: { kind: "tool", toolCallId: tool.id, state: tool.state },
       });
+      await emitProgress(input.onProgress, {
+        kind: "tool_finished",
+        toolName: tool.name,
+        state: tool.state,
+      });
     }
   }
 }
@@ -93,6 +128,7 @@ async function persistHarnessEvents(input: {
   run: ExternalAgentRunRow;
   appendEvent: AppendEvent;
   toolStates: Map<string, string>;
+  onProgress?: OnProgress;
 }) {
   for (const event of input.events) {
     if (!event || typeof event !== "object") continue;
@@ -111,6 +147,7 @@ async function persistHarnessEvents(input: {
       run: input.run,
       appendEvent: input.appendEvent,
       toolStates: input.toolStates,
+      onProgress: input.onProgress,
     });
   }
 }
@@ -119,6 +156,8 @@ export async function readExternalHarnessProgress(input: {
   response: Response;
   run: ExternalAgentRunRow;
   appendEvent?: AppendEvent;
+  /** Best-effort live surface for run actions (e.g. the Slack thread feed). */
+  onProgress?: OnProgress;
 }): Promise<void> {
   if (!input.response.body) return;
 
@@ -142,6 +181,7 @@ export async function readExternalHarnessProgress(input: {
       run: input.run,
       appendEvent,
       toolStates,
+      onProgress: input.onProgress,
     });
   }
 
@@ -150,5 +190,6 @@ export async function readExternalHarnessProgress(input: {
     run: input.run,
     appendEvent,
     toolStates,
+    onProgress: input.onProgress,
   });
 }
