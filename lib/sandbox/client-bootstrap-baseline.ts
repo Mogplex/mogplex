@@ -2,17 +2,18 @@ import type { Sandbox } from "@vercel/sandbox";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { computeLockfileHashFromSandbox } from "@/lib/sandbox/lockfile-hash";
 import { BaselineSnapshotRestoreError } from "@/lib/sandbox/baseline-errors";
+import {
+  buildBaselineCheckoutCommand,
+  buildBaselineFetchCommand,
+  resolveBaselineFetchRefs,
+} from "@/lib/sandbox/baseline-git-commands";
 import type { SandboxBootstrapStreamEvent } from "@/lib/sandbox/events";
 import type {
   ResolvedBootstrapContext,
   BaselineSnapshotBootstrapOpts,
 } from "./client-types";
 import { withTimeout, BOOTSTRAP_STEP_TIMEOUT_MS } from "./client-validation";
-import {
-  buildShellCommand,
-  shellQuote,
-  buildWithBunOnPathCommand,
-} from "./client-shell";
+import { buildShellCommand, buildWithBunOnPathCommand } from "./client-shell";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
 import {
   launchDetachedDevCommand,
@@ -53,16 +54,11 @@ async function* runBaselineFetchPhase(
   context: ResolvedBootstrapContext,
   opts: BaselineSnapshotBootstrapOpts
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
-  const fetchRefs = opts.createBranch
-    ? [opts.baseBranch]
-    : [opts.baseBranch, opts.workingBranch];
-  const fetchCommand = `git fetch --depth=1 origin ${fetchRefs
-    .map(shellQuote)
-    .join(" ")}`;
+  const fetchRefs = resolveBaselineFetchRefs(opts);
   try {
     const fetchResult = await runShellInSandbox(
       sandbox,
-      fetchCommand,
+      buildBaselineFetchCommand(opts),
       context.runtimeEnv,
       context.normalizedRoot,
       `git fetch ${fetchRefs.join(",")}`
@@ -84,17 +80,10 @@ async function* runBaselineCheckoutPhase(
   context: ResolvedBootstrapContext,
   opts: BaselineSnapshotBootstrapOpts
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
-  const checkoutCommand = opts.createBranch
-    ? `git checkout -b ${shellQuote(opts.workingBranch)} origin/${shellQuote(
-        opts.baseBranch
-      )} && git push -u origin ${shellQuote(opts.workingBranch)}`
-    : `git checkout -B ${shellQuote(opts.workingBranch)} origin/${shellQuote(
-        opts.workingBranch
-      )}`;
   try {
     const checkoutResult = await runShellInSandbox(
       sandbox,
-      checkoutCommand,
+      buildBaselineCheckoutCommand(opts),
       context.runtimeEnv,
       context.normalizedRoot,
       `git checkout ${opts.workingBranch}`

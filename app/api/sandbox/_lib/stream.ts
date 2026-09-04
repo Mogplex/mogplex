@@ -10,9 +10,9 @@ import {
   transitionSandboxRecordToInstalling,
   createInitialSandboxLaunchState,
   emitStreamSandboxStatus,
-  queueSandboxReadinessReconciliationWarning,
   consumeSandboxBootstrapStream,
 } from "./bootstrap";
+import { queueSandboxReadinessReconciliationWarning } from "./readiness-queue";
 import {
   classifySandboxLaunchFailure,
   handleSandboxLaunchFailure,
