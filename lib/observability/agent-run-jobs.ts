@@ -73,7 +73,11 @@ export function mapAgentRunStatus(
   status: ExternalAgentRunRow["status"] | string
 ): ObservabilityJob["status"] {
   switch (status) {
+    // A paused run (awaiting_input) is still in flight, just waiting on the
+    // user. The observability status set has no distinct "paused" badge yet,
+    // so show it as running rather than failing; a dedicated badge can follow.
     case "streaming":
+    case "awaiting_input":
       return "running";
     case "pending":
     case "success":

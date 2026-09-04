@@ -25,7 +25,7 @@ test("cancelMogplexApiRun finalizes pending runs without a runtime command", asy
         currentRun = { ...currentRun, ...update };
         return currentRun;
       },
-      loadAiCall: async () => buildAiCall({ status: currentRun.status }),
+      loadAiCall: async () => buildAiCall({ status: "pending" }),
       requestCancellation: async () =>
         buildAiCall({
           status: "pending",
@@ -119,7 +119,7 @@ test("cancelMogplexApiRun strips the Slack run-controls button on terminal trans
         currentRun = { ...currentRun, ...update };
         return currentRun;
       },
-      loadAiCall: async () => buildAiCall({ status: currentRun.status }),
+      loadAiCall: async () => buildAiCall({ status: "pending" }),
       requestCancellation: async () =>
         buildAiCall({
           status: "pending",
