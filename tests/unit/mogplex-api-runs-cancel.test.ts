@@ -55,6 +55,50 @@ test("cancelMogplexApiRun finalizes pending runs without a runtime command", asy
   assert.equal(events.length, 2);
 });
 
+test("cancelMogplexApiRun still finalizes when killing the runtime command fails", async () => {
+  let currentRun = buildRunRow({ status: "streaming" });
+  let killAttempts = 0;
+
+  const result = await cancelMogplexApiRun({
+    userId: "user-123",
+    runId: "run-1",
+    deps: {
+      loadRun: async () => currentRun,
+      updateRun: async (_userId, _runId, update) => {
+        currentRun = { ...currentRun, ...update };
+        return currentRun;
+      },
+      loadAiCall: async () =>
+        buildAiCall({ status: "streaming", runtime_command_id: "cmd-1" }),
+      requestCancellation: async () =>
+        buildAiCall({
+          status: "streaming",
+          control_state: "cancel_requested",
+          runtime_command_id: "cmd-1",
+          cancel_requested_at: "2026-04-28T00:01:00.000Z",
+        }),
+      finalizeCancelled: async () =>
+        buildAiCall({
+          status: "cancelled",
+          control_state: "cancelled",
+          runtime_command_id: "cmd-1",
+          cancel_requested_at: "2026-04-28T00:01:00.000Z",
+        }),
+      appendEvent: async () => null,
+      killRuntimeCommand: async () => {
+        killAttempts += 1;
+        throw new Error("Status code 400 is not ok");
+      },
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(killAttempts, 1);
+  assert.equal(result.status, "cancelled");
+  assert.equal(result.run.status, "cancelled");
+  assert.equal(currentRun.status, "cancelled");
+});
+
 test("cancelMogplexApiRun strips the Slack run-controls button on terminal transitions", async () => {
   const notified: Array<{ runId: string; status: string }> = [];
   const notifyTerminal = async (

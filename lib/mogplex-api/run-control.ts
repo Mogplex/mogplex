@@ -418,11 +418,23 @@ export async function cancelMogplexApiRun(input: {
   }
 
   if (currentCall.runtime_command_id) {
-    await deps.killRuntimeCommand({
-      user_id: run.user_id,
-      sandbox_record_id: run.sandbox_record_id,
-      runtimeCommandId: currentCall.runtime_command_id,
-    });
+    // Best-effort: cancellation is already requested and the run is about to be
+    // finalized below. If the sandbox is gone or its API errors, killing the
+    // command must not abort the cancel — the run would otherwise stay active
+    // and the caller would see a generic failure.
+    try {
+      await deps.killRuntimeCommand({
+        user_id: run.user_id,
+        sandbox_record_id: run.sandbox_record_id,
+        runtimeCommandId: currentCall.runtime_command_id,
+      });
+    } catch (error) {
+      console.warn(
+        "[mogplex-api/cancel] failed to kill runtime command",
+        run.id,
+        error
+      );
+    }
   }
 
   const cancelledCall = await deps.finalizeCancelled(
