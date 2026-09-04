@@ -49,8 +49,11 @@ function buildScenario(
   const fresh = buildSandbox(FRESH_NAME, calls);
 
   const deps = {
-    createSandboxForRepo: vi.fn(async () => {
+    createSandboxForRepo: vi.fn(async (opts: { name?: string }) => {
       calls.push("create");
+      // The provider honours the requested name; mirror that so the record
+      // repoint is asserted against the name actually created.
+      fresh.name = opts.name ?? fresh.name;
       return fresh;
     }),
     requireSandboxBillingSession: vi.fn(async () => {
@@ -236,7 +239,7 @@ describe("fallbackFromBaselineToGit", () => {
     });
   });
 
-  it("should stop the old VM first only when it already holds the target name", async () => {
+  it("should take a distinct replacement name when the old VM already holds the stable name", async () => {
     const scenario = buildScenario({ previousName: FRESH_NAME });
 
     const replaced = await fallbackFromBaselineToGit(
@@ -245,10 +248,26 @@ describe("fallbackFromBaselineToGit", () => {
     );
 
     expect(replaced).toBe(true);
+    const replacementName = `${FRESH_NAME}-record1`;
+    expect(scenario.deps.createSandboxForRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ name: replacementName })
+    );
+    // The record's compare-and-swap moves sandbox_id off the old name, so the
+    // stale reconciler's guard is invalidated exactly as in the common case.
+    expect(scenario.helpers.updateSandboxRecord).toHaveBeenCalledWith(
+      "record-1",
+      expect.objectContaining({ sandbox_id: replacementName }),
+      expect.objectContaining({ expectedSandboxId: FRESH_NAME })
+    );
+    expect(
+      scenario.deps.startSandboxReadinessReconciliation
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedSandboxId: replacementName })
+    );
     expect(scenario.calls).toEqual([
-      `stop:${FRESH_NAME}`,
       "create",
       "repoint",
+      `stop:${FRESH_NAME}`,
       "billing",
     ]);
     expect(scenario.previous.stop).toHaveBeenCalledTimes(1);

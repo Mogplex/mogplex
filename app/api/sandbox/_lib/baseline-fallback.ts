@@ -1,7 +1,10 @@
 import { updateSandboxRecord } from "@/lib/sandbox/records";
 import { clearRepoSnapshotIfCurrent } from "@/lib/repo-snapshots";
 import { readSandboxPersistentFlag } from "@/lib/sandbox/persistence";
-import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
+import {
+  buildSandboxName,
+  buildSandboxReplacementName,
+} from "@/lib/sandbox/sandbox-name";
 import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 import { SANDBOX_STREAM_SELECT } from "./constants";
 import { toStreamSandboxRecord } from "./response-shaping";
@@ -58,7 +61,7 @@ const defaultHelpers: BaselineFallbackHelpers = {
 function resolveFallbackSandboxName(input: BaselineFallbackInput): string {
   // Baseline->git fallback still reuses the record's deterministic name so
   // the user sees a stable sandbox identifier across the recovery path.
-  return (
+  const stableName =
     input.launch.sandboxNameOverride ??
     buildSandboxName({
       repoId: input.launch.repoId,
@@ -67,8 +70,18 @@ function resolveFallbackSandboxName(input: BaselineFallbackInput): string {
       userId: input.launch.creds.userId,
       productTeamId: input.launch.productTeamId,
       rootDirectory: input.launch.effectiveRootDirectory,
-    })
-  );
+    });
+  // The fresh VM's name must differ from the record's current sandbox_id:
+  // the repoint below is a compare-and-swap on that column, and only a
+  // changed value invalidates the stale reconciler's guard. A snapshot VM is
+  // provider-named so the stable name is normally free; if it is not, take
+  // the deterministic replacement identity instead of reusing the name.
+  return stableName === input.state.streamSandboxRecord.sandbox_id
+    ? buildSandboxReplacementName(
+        stableName,
+        input.state.streamSandboxRecord.id
+      )
+    : stableName;
 }
 
 /**
@@ -79,9 +92,10 @@ function resolveFallbackSandboxName(input: BaselineFallbackInput): string {
  * is stopped: the launch-time readiness reconciler was queued with the old
  * VM's name, and every write it makes is guarded on that name. Once the
  * record names the fresh VM, a late probe of the stopped old VM cannot mark
- * the record `stopped`/`vm_gone` underneath the bootstrap. Activation later
- * guards on the fresh name, which now matches. A reconciler for the fresh VM
- * is queued at the end.
+ * the record `stopped`/`vm_gone` underneath the bootstrap. That only holds
+ * because the fresh VM never reuses the old VM's name (see
+ * `resolveFallbackSandboxName`). Activation later guards on the fresh name,
+ * which now matches. A reconciler for the fresh VM is queued at the end.
  *
  * Returns `false` when the record left the bootstrapping states in the
  * meantime (cancelled, reaped, superseded). Both VMs are stopped and the
@@ -107,15 +121,6 @@ export async function fallbackFromBaselineToGit(
       input.launch.repoId,
       input.launch.repo.snapshot_id
     );
-  }
-
-  // A snapshot-restored VM carries a provider-generated name, so the fresh
-  // clone can take the deterministic name while the old VM is still up. Only
-  // a genuine name collision forces the old VM to go first (and reopens the
-  // reconciler window this ordering otherwise closes).
-  const reusesName = previous?.name === targetName;
-  if (reusesName) {
-    await helpers.stopSandboxInstanceBestEffort(previous);
   }
 
   const fresh = await input.deps.createSandboxForRepo({
@@ -149,9 +154,7 @@ export async function fallbackFromBaselineToGit(
 
   if (!repointed) {
     await helpers.stopSandboxInstanceBestEffort(fresh);
-    if (!reusesName) {
-      await helpers.stopSandboxInstanceBestEffort(previous);
-    }
+    await helpers.stopSandboxInstanceBestEffort(previous);
     input.emit({
       type: "error",
       message: BASELINE_FALLBACK_CANCELLED_MESSAGE,
@@ -165,9 +168,7 @@ export async function fallbackFromBaselineToGit(
   input.state.restoredFromSnapshot = false;
   input.state.restoredFromBaselineSnapshot = false;
 
-  if (!reusesName) {
-    await helpers.stopSandboxInstanceBestEffort(previous);
-  }
+  await helpers.stopSandboxInstanceBestEffort(previous);
 
   await input.deps.requireSandboxBillingSession(recordId, fresh);
   await helpers.configureSandboxGitAccess({
