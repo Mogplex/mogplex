@@ -214,4 +214,4 @@ Participation in this project is governed by [CODE_OF_CONDUCT.md](./CODE_OF_COND
 
 ## License
 
-Mogplex is released under the [Apache License 2.0](./LICENSE).
+Mogplex is released under the [Apache License 2.0](./LICENSE). The full license text is included in the repository root, and it applies to every file in this repository unless a file states otherwise.
