@@ -280,7 +280,18 @@ async function runHarnessViaRoute(
     throw new Error((await readTextResponse(response)) || "Harness run failed");
   }
 
-  await readExternalHarnessProgress({ response, run });
+  const { createSlackRunProgressReporter } =
+    await import("@/lib/slack/run-progress-notify");
+  const progress = createSlackRunProgressReporter(run);
+  try {
+    await readExternalHarnessProgress({
+      response,
+      run,
+      onProgress: progress.report,
+    });
+  } finally {
+    await progress.flush();
+  }
 }
 
 async function loadRunForExecution(runId: string, userId: string) {
