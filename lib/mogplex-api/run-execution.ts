@@ -1,21 +1,27 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { readExternalHarnessProgress } from "@/lib/mogplex-api/harness-progress";
-import {
-  parseHarnessCheckpoint,
-  type HarnessCheckpoint,
-} from "@/lib/harness/checkpoint";
+import type { HarnessCheckpoint } from "@/lib/harness/checkpoint";
 import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
 import {
   launchSandboxViaRoute,
   readTextResponse,
   type SandboxRef,
 } from "@/lib/mogplex-api/run-execution-launch";
+import {
+  finalizeHarnessPass,
+  type ExternalAgentRunExecutionResult,
+  type ExternalAgentRunUpdate,
+  type HarnessRunResult,
+} from "@/lib/mogplex-api/run-execution-finalize";
+import {
+  loadRunForExecution,
+  updateExternalAgentRun,
+} from "@/lib/mogplex-api/run-execution-data";
 import { loadOwnedAiCall, safeAppendAiCallEvent } from "@/lib/interactive-runs";
 import type {
   ExternalAgentRunRow,
   MogplexApiRunStatus,
 } from "@/lib/mogplex-api/runs";
-import type { AiCall } from "@/lib/types";
 import { stripSlackRunControlsForTerminalRun } from "@/lib/slack/run-controls-notify";
 import {
   normalizeSlackRunImageAttachmentsMetadata,
@@ -27,33 +33,6 @@ export type ExternalAgentRunExecutionPayload = {
   runId: string;
   userId: string;
 };
-
-export type ExternalAgentRunExecutionResult = {
-  success: boolean;
-  runId: string;
-  status: MogplexApiRunStatus | "not_found";
-  error: string | null;
-};
-
-/**
- * What a harness pass produced: the agent's aggregated assistant output and
- * the CLI session id (when the harness reported one) so the run can be resumed.
- */
-type HarnessRunResult = {
-  output: string;
-  sessionId: string | null;
-};
-
-type ExternalAgentRunUpdate = Partial<
-  Pick<
-    ExternalAgentRunRow,
-    | "sandbox_record_id"
-    | "sandbox_id"
-    | "status"
-    | "error"
-    | "harness_session_id"
-  >
->;
 
 type ExternalAgentRunExecutionDeps = {
   loadRun: (
@@ -109,17 +88,8 @@ const TERMINAL_RUN_STATUSES = new Set<MogplexApiRunStatus>([
   "cancelled",
 ]);
 
-async function getSupabaseAdmin() {
-  const mod = await import("@/lib/supabase/admin");
-  return mod.supabaseAdmin;
-}
-
 function toErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "External run failed";
-}
-
-function parseAiCallStatus(call: AiCall | null): MogplexApiRunStatus {
-  return call?.status ?? "failed";
 }
 
 export function buildExternalAgentHarnessRequestBody(
@@ -181,45 +151,6 @@ async function runHarnessViaRoute(
   } finally {
     await progress.flush();
   }
-}
-
-async function loadRunForExecution(runId: string, userId: string) {
-  const supabaseAdmin = await getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from("external_agent_runs")
-    .select("*")
-    .eq("id", runId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load external agent run: ${error.message}`);
-  }
-
-  return (data as ExternalAgentRunRow | null) ?? null;
-}
-
-async function updateExternalAgentRun(
-  userId: string,
-  runId: string,
-  update: ExternalAgentRunUpdate
-) {
-  const supabaseAdmin = await getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from("external_agent_runs")
-    .update(update)
-    .eq("user_id", userId)
-    .eq("id", runId)
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    throw new Error(
-      error?.message || `Failed to update external agent run ${runId}`
-    );
-  }
-
-  return data as ExternalAgentRunRow;
 }
 
 const defaultExecutionDeps: ExternalAgentRunExecutionDeps = {
@@ -305,50 +236,10 @@ export async function executeExternalAgentRun(
 
     const harnessResult = await deps.runHarness(run, sandbox);
 
-    // Persist the CLI session id so a later segment can resume the same
-    // conversation. Only overwrite when the harness reported one this pass.
-    const sessionUpdate: ExternalAgentRunUpdate = harnessResult.sessionId
-      ? { harness_session_id: harnessResult.sessionId }
-      : {};
-
-    const aiCall = await deps.loadAiCall(run.user_id, run.ai_call_id);
-    const status = parseAiCallStatus(aiCall);
-
-    // A successful pass that declared a checkpoint pauses for user feedback
-    // instead of finishing: keep the run and its sandbox alive, surface the
-    // preview, and wait for the user to steer or approve. A failed pass never
-    // pauses — a checkpoint marker in failing output is ignored.
-    if (status === "success") {
-      const checkpoint = parseHarnessCheckpoint(harnessResult.output);
-      if (checkpoint) {
-        run = await deps.updateRun(run.user_id, run.id, {
-          ...sessionUpdate,
-          status: "awaiting_input",
-          error: null,
-        });
-        await safeNotifyCheckpoint(run, checkpoint);
-        return {
-          success: true,
-          runId: run.id,
-          status: "awaiting_input",
-          error: null,
-        };
-      }
-    }
-
-    run = await deps.updateRun(run.user_id, run.id, {
-      ...sessionUpdate,
-      status,
-      error: aiCall?.error ?? null,
+    return await finalizeHarnessPass(run, harnessResult, deps, {
+      terminal: safeNotifyTerminal,
+      checkpoint: safeNotifyCheckpoint,
     });
-    await safeNotifyTerminal(run, status);
-
-    return {
-      success: status === "success",
-      runId: run.id,
-      status,
-      error: aiCall?.error ?? null,
-    };
   } catch (error) {
     const message = toErrorMessage(error);
     run = await deps.updateRun(run.user_id, run.id, {
@@ -374,3 +265,5 @@ export async function executeExternalAgentRun(
     };
   }
 }
+
+export { type ExternalAgentRunExecutionResult } from "@/lib/mogplex-api/run-execution-finalize";
