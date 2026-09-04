@@ -46,18 +46,25 @@ if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
   # Sandbox boot leaves platform-owned artifacts behind: runtime files under
   # .mogplex/ and the allowedDevOrigins preview patch in next.config.*. Neither
   # is the user's work, so neutralize both before judging whether the tree is
-  # clean. A tracked next.config.* whose diff is anything other than the exact
-  # injected line (including a file-mode change), or an untracked one that no
-  # longer matches the boot-generated file byte for byte, is left alone and
-  # fails the check like any other local change.
+  # clean. Boot writes them into whichever directory hosts the app, which in a
+  # monorepo is a subdirectory (e.g. apps/web/) and not the repo root or this
+  # script's cwd, so scan the whole tree rather than two fixed locations. A
+  # tracked next.config.* whose diff is anything other than the exact injected
+  # line (including a file-mode change), or an untracked one that no longer
+  # matches the boot-generated file byte for byte, is left alone and fails the
+  # check like any other local change.
   repo_top="$(git rev-parse --show-toplevel)"
-  for runtime_dir in "$repo_top/.mogplex" ./.mogplex; do
-    if [ -d "$runtime_dir" ] && [ ! -e "$runtime_dir/.gitignore" ]; then
+  # .mogplex is platform-reserved (delivery refuses committing it), so ignore
+  # every one wherever boot wrote it. node_modules, .git, and build output
+  # (.next/dist/.turbo, which can hold tens of thousands of files after a boot)
+  # are pruned since no platform artifact is ever written under them.
+  find "$repo_top" -name node_modules -prune -o -name .git -prune -o -name .next -prune -o -name dist -prune -o -name .turbo -prune -o -type d -name .mogplex -print 2>/dev/null | while IFS= read -r runtime_dir; do
+    if [ ! -e "$runtime_dir/.gitignore" ]; then
       printf '*\n' > "$runtime_dir/.gitignore"
     fi
   done
-  for cfg in next.config.mjs next.config.js next.config.ts next.config.cjs; do
-    [ -f "$cfg" ] || continue
+  find "$repo_top" -name node_modules -prune -o -name .git -prune -o -name .next -prune -o -name dist -prune -o -name .turbo -prune -o -type f -name 'next.config.*' -print 2>/dev/null | while IFS= read -r cfg; do
+    case "$cfg" in *.mjs|*.js|*.ts|*.cjs) ;; *) continue ;; esac
     if git ls-files --error-unmatch -- "$cfg" >/dev/null 2>&1; then
       if ! git diff --quiet -- "$cfg" && [ -z "$(git diff --summary -- "$cfg")" ] && [ "$(git diff -U0 -- "$cfg" | grep -E '^[-+][^-+]')" = '+${injectedLine}' ]; then
         git checkout -- "$cfg"

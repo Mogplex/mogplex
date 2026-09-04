@@ -204,3 +204,79 @@ describe("agent git sync on a freshly booted sandbox", () => {
     });
   });
 });
+
+function createMonorepoWithOrigin() {
+  const root = mkdtempSync(path.join(tmpdir(), "mogplex-git-sync-mono-"));
+  const origin = path.join(root, "origin.git");
+  const work = path.join(root, "work");
+  mkdirSync(work);
+  execFileSync("git", ["init", "--bare", "--initial-branch=main", origin]);
+  git(work, "init", "--initial-branch=main");
+  git(work, "config", "user.email", "test@example.com");
+  git(work, "config", "user.name", "Test");
+  git(work, "config", "commit.gpgsign", "false");
+  git(work, "config", "core.fileMode", "true");
+  mkdirSync(path.join(work, "apps", "web"), { recursive: true });
+  writeFileSync(
+    path.join(work, "apps", "web", "next.config.mjs"),
+    ORIGINAL_NEXT_CONFIG
+  );
+  writeFileSync(
+    path.join(work, "package.json"),
+    '{"name":"mono","private":true}\n'
+  );
+  git(work, "add", ".");
+  git(work, "commit", "-q", "-m", "init");
+  git(work, "remote", "add", "origin", origin);
+  git(work, "push", "-q", "-u", "origin", "main");
+  return work;
+}
+
+function applyMonorepoBootArtifacts(work: string) {
+  const webDir = path.join(work, "apps", "web");
+  mkdirSync(path.join(webDir, ".mogplex"));
+  writeFileSync(path.join(webDir, ".mogplex", "dev.log"), "booted\n");
+  const patched = patchNextConfigContent(ORIGINAL_NEXT_CONFIG);
+  if (patched.kind !== "patched") throw new Error("expected a patched config");
+  writeFileSync(path.join(webDir, "next.config.mjs"), patched.content);
+}
+
+describe("agent git sync in a monorepo app subdirectory", () => {
+  // Boot writes .mogplex/ and the next.config patch into the app dir (apps/web),
+  // but when the run has no rootDirectory the sync runs from the repo root. The
+  // clean-check must still neutralize those artifacts wherever they live.
+  it("should treat boot artifacts in the app subdir as clean when synced from the repo root", () => {
+    const work = createMonorepoWithOrigin();
+    applyMonorepoBootArtifacts(work);
+
+    const result = runSync(work);
+
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(git(work, "status", "--porcelain")).toBe("");
+    expect(
+      readFileSync(path.join(work, "apps", "web", "next.config.mjs"), "utf8")
+    ).toBe(ORIGINAL_NEXT_CONFIG);
+    expect(
+      readFileSync(
+        path.join(work, "apps", "web", ".mogplex", ".gitignore"),
+        "utf8"
+      )
+    ).toBe("*\n");
+  });
+
+  it("should still refuse the user's own uncommitted work in the app subdir", () => {
+    const work = createMonorepoWithOrigin();
+    applyMonorepoBootArtifacts(work);
+    writeFileSync(
+      path.join(work, "apps", "web", "page.ts"),
+      "export const x = 1;\n"
+    );
+
+    const result = runSync(work);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("workspace is not clean");
+    expect(result.stderr).toContain("apps/web/page.ts");
+  });
+});
