@@ -65,27 +65,21 @@ export async function startExecStream(
           encoder.encode(encode({ type: "run", cmdId: detachedCmd.cmdId }))
         );
 
-        const exitCode = await streamCommandLogsWithResume(
-          {
-            command: detachedCmd,
-            onLog: async (log) => {
-              if (onActivity) await onActivity();
-              controller.enqueue(
-                encoder.encode(
-                  encode({
-                    type: "log",
-                    stream: log.stream,
-                    data: redactSecretsInText(log.data),
-                  })
-                )
-              );
-            },
+        const exitCode = await streamCommandLogsWithResume({
+          command: detachedCmd,
+          onLog: async (log) => {
+            if (onActivity) await onActivity();
+            controller.enqueue(
+              encoder.encode(
+                encode({
+                  type: "log",
+                  stream: log.stream,
+                  data: redactSecretsInText(log.data),
+                })
+              )
+            );
           },
-          {
-            getExitCode: async (cmdId) =>
-              (await sandbox.getCommand(cmdId)).exitCode,
-          }
-        );
+        });
 
         const exit = { exitCode };
 

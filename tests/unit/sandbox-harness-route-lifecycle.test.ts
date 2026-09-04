@@ -55,9 +55,7 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
       }),
     getSandbox: async (_name, _credentials, options) => {
       billingResumeHookAttached = typeof options?.onResume === "function";
-      return {
-        getCommand: async () => ({ exitCode: 1 }),
-      } as never;
+      return {} as never;
     },
     runHarness: async () =>
       ({
@@ -191,8 +189,7 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
         aiBillingSource: "user_ai_gateway",
         gatewayApiKey: "gateway-key",
       }),
-    getSandbox: async () =>
-      ({ getCommand: async () => ({ exitCode: 0 }) }) as never,
+    getSandbox: async () => ({}) as never,
     runHarness: async (_sandbox, _harness, _prompt, _env, options) => {
       harnessCwd = options?.cwd;
       return {
@@ -305,8 +302,7 @@ test("POST /api/sandbox/[id]/harness reports pull request delivery failures", as
         aiBillingSource: "user_ai_gateway",
         gatewayApiKey: "gateway-key",
       }),
-    getSandbox: async () =>
-      ({ getCommand: async () => ({ exitCode: 0 }) }) as never,
+    getSandbox: async () => ({}) as never,
     runHarness: async () =>
       ({
         installed: false,
@@ -393,8 +389,7 @@ test("POST /api/sandbox/[id]/harness never publishes after cancellation", async 
         aiBillingSource: "user_ai_gateway",
         gatewayApiKey: "gateway-key",
       }),
-    getSandbox: async () =>
-      ({ getCommand: async () => ({ exitCode: 0 }) }) as never,
+    getSandbox: async () => ({}) as never,
     runHarness: async () =>
       ({
         installed: false,
