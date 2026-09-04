@@ -215,3 +215,5 @@ Participation in this project is governed by [CODE_OF_CONDUCT.md](./CODE_OF_COND
 ## License
 
 Mogplex is released under the [Apache License 2.0](./LICENSE).
+
+The full license text, including the terms that apply to any contributions you submit, is in the [LICENSE](./LICENSE) file at the root of this repository.
