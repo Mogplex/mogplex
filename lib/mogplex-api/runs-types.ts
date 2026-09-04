@@ -14,6 +14,9 @@ export const MOGPLEX_API_RUN_STATUSES = [
   "success",
   "failed",
   "cancelled",
+  // A run paused at a checkpoint, waiting for the user before it continues.
+  // Non-terminal and resumable.
+  "awaiting_input",
 ] as const;
 export type MogplexApiRunStatus = (typeof MOGPLEX_API_RUN_STATUSES)[number];
 

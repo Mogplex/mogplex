@@ -73,6 +73,7 @@ function makeScope() {
 describe("mapAgentRunStatus", () => {
   it("should map streaming agent runs onto the running job status", () => {
     expect(mapAgentRunStatus("streaming")).toBe("running");
+    expect(mapAgentRunStatus("awaiting_input")).toBe("running");
     expect(mapAgentRunStatus("pending")).toBe("pending");
     expect(mapAgentRunStatus("success")).toBe("success");
     expect(mapAgentRunStatus("failed")).toBe("failed");
