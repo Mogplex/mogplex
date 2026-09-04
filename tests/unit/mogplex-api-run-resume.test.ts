@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildResumeContinuePrompt,
+  queueResumeExternalAgentRun,
   resumeExternalAgentRun,
 } from "../../lib/mogplex-api/run-resume";
 import type { ExternalAgentRunRow } from "../../lib/mogplex-api/runs";
@@ -198,4 +199,56 @@ test("resumeExternalAgentRun records a failed segment launch", async () => {
   assert.equal(result.error, "boot limit reached");
   assert.equal(currentRun.status, "failed");
   assert.equal(failedEvents.length, 1);
+});
+
+test("queueResumeExternalAgentRun throws when the trigger runtime is not configured", async () => {
+  await assert.rejects(
+    queueResumeExternalAgentRun(
+      {
+        runId: "run-1",
+        userId: "user-123",
+        repoId: "repo-1",
+        steer: "go",
+        idempotencyKey: "resume:run-1:ts-1",
+      },
+      { isRuntimeConfigured: () => false }
+    ),
+    /not configured/
+  );
+});
+
+test("queueResumeExternalAgentRun dispatches the resume task and serializes per run", async () => {
+  let dispatched:
+    | { taskId: string; payload: unknown; options: Record<string, unknown> }
+    | undefined;
+
+  const result = await queueResumeExternalAgentRun(
+    {
+      runId: "run-1",
+      userId: "user-123",
+      repoId: "repo-1",
+      steer: "shrink the header",
+      idempotencyKey: "resume:run-1:ts-1",
+    },
+    {
+      isRuntimeConfigured: () => true,
+      triggerTask: async (taskId, payload, options) => {
+        dispatched = { taskId, payload, options };
+        return { id: "trigger-run-9" };
+      },
+    }
+  );
+
+  assert.deepEqual(result, {
+    runtimeProvider: "trigger",
+    runtimeRunId: "trigger-run-9",
+  });
+  assert.equal(dispatched?.taskId, "execute-resume-agent-run");
+  assert.deepEqual(dispatched?.payload, {
+    runId: "run-1",
+    userId: "user-123",
+    steer: "shrink the header",
+  });
+  assert.equal(dispatched?.options.idempotencyKey, "resume:run-1:ts-1");
+  assert.equal(dispatched?.options.concurrencyKey, "resume-agent-run:run-1");
 });
