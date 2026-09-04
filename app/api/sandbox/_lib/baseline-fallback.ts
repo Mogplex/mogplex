@@ -139,18 +139,29 @@ export async function fallbackFromBaselineToGit(
     onResume: createSandboxBillingOnResume(recordId),
   });
 
-  const repointed = await helpers.updateSandboxRecord(
-    recordId,
-    {
-      sandbox_id: fresh.name,
-      persistent: readSandboxPersistentFlag(fresh) ?? false,
-    },
-    {
-      expectedSandboxId: previousSandboxId,
-      fromStatuses: BOOTSTRAPPING_STATUSES,
-      select: SANDBOX_STREAM_SELECT,
-    }
-  );
+  let repointed: Awaited<ReturnType<typeof updateSandboxRecord>>;
+  try {
+    repointed = await helpers.updateSandboxRecord(
+      recordId,
+      {
+        sandbox_id: fresh.name,
+        persistent: readSandboxPersistentFlag(fresh) ?? false,
+      },
+      {
+        expectedSandboxId: previousSandboxId,
+        fromStatuses: BOOTSTRAPPING_STATUSES,
+        select: SANDBOX_STREAM_SELECT,
+      }
+    );
+  } catch (error) {
+    // The launch failure handler only knows about `state.sandbox`, which is
+    // still the previous VM here. Stop the fresh VM ourselves so a database
+    // error on the repoint does not leak it. Billing sessions are keyed by
+    // record, not VM, so the handler's billing close still covers any session
+    // the fresh VM opened.
+    await helpers.stopSandboxInstanceBestEffort(fresh);
+    throw error;
+  }
 
   if (!repointed) {
     await helpers.stopSandboxInstanceBestEffort(fresh);

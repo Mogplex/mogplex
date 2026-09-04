@@ -40,6 +40,7 @@ function buildScenario(
   options: {
     previousName?: string;
     repointSucceeds?: boolean;
+    repointError?: Error;
     createBranch?: boolean;
   } = {}
 ) {
@@ -114,6 +115,7 @@ function buildScenario(
   const helpers = {
     updateSandboxRecord: vi.fn(async () => {
       calls.push("repoint");
+      if (options.repointError) throw options.repointError;
       return options.repointSucceeds === false ? null : buildRecord(FRESH_NAME);
     }),
     clearRepoSnapshotIfCurrent: vi.fn(async () => {}),
@@ -237,6 +239,28 @@ describe("fallbackFromBaselineToGit", () => {
       message: BASELINE_FALLBACK_CANCELLED_MESSAGE,
       phase: "bootstrap",
     });
+  });
+
+  it("should stop the fresh VM and rethrow when the record repoint throws", async () => {
+    const repointError = new Error("database unavailable");
+    const scenario = buildScenario({ repointError });
+
+    await expect(
+      fallbackFromBaselineToGit(scenario.input, scenario.helpers as never)
+    ).rejects.toBe(repointError);
+
+    // The fresh VM is not yet `state.sandbox`, so the outer launch failure
+    // handler would never stop it; the fallback must do so before rethrowing.
+    expect(scenario.fresh.stop).toHaveBeenCalledTimes(1);
+    // The previous VM is still `state.sandbox` and is the outer handler's job.
+    expect(scenario.previous.stop).not.toHaveBeenCalled();
+    expect(scenario.state.sandbox).toBe(scenario.previous);
+    expect(scenario.state.streamSandboxRecord.sandbox_id).toBe("snapshot-vm");
+    expect(scenario.deps.requireSandboxBillingSession).not.toHaveBeenCalled();
+    expect(
+      scenario.deps.startSandboxReadinessReconciliation
+    ).not.toHaveBeenCalled();
+    expect(scenario.events).toEqual([]);
   });
 
   it("should take a distinct replacement name when the old VM already holds the stable name", async () => {
