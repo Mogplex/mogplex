@@ -58,7 +58,6 @@ test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", a
             stderr: async () => "",
           };
         },
-        getCommand: async () => ({ exitCode: 0 }),
         readFile: async () => {
           throw new Error("missing");
         },
