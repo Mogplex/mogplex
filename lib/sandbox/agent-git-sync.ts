@@ -55,13 +55,15 @@ if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
   # check like any other local change.
   repo_top="$(git rev-parse --show-toplevel)"
   # .mogplex is platform-reserved (delivery refuses committing it), so ignore
-  # every one wherever boot wrote it. node_modules/.git are pruned.
-  find "$repo_top" -name node_modules -prune -o -name .git -prune -o -type d -name .mogplex -print 2>/dev/null | while IFS= read -r runtime_dir; do
+  # every one wherever boot wrote it. node_modules, .git, and build output
+  # (.next/dist/.turbo, which can hold tens of thousands of files after a boot)
+  # are pruned since no platform artifact is ever written under them.
+  find "$repo_top" -name node_modules -prune -o -name .git -prune -o -name .next -prune -o -name dist -prune -o -name .turbo -prune -o -type d -name .mogplex -print 2>/dev/null | while IFS= read -r runtime_dir; do
     if [ ! -e "$runtime_dir/.gitignore" ]; then
       printf '*\n' > "$runtime_dir/.gitignore"
     fi
   done
-  find "$repo_top" -name node_modules -prune -o -name .git -prune -o -type f -name 'next.config.*' -print 2>/dev/null | while IFS= read -r cfg; do
+  find "$repo_top" -name node_modules -prune -o -name .git -prune -o -name .next -prune -o -name dist -prune -o -name .turbo -prune -o -type f -name 'next.config.*' -print 2>/dev/null | while IFS= read -r cfg; do
     case "$cfg" in *.mjs|*.js|*.ts|*.cjs) ;; *) continue ;; esac
     if git ls-files --error-unmatch -- "$cfg" >/dev/null 2>&1; then
       if ! git diff --quiet -- "$cfg" && [ -z "$(git diff --summary -- "$cfg")" ] && [ "$(git diff -U0 -- "$cfg" | grep -E '^[-+][^-+]')" = '+${injectedLine}' ]; then
