@@ -325,3 +325,82 @@ test("POST /api/sandbox/[id]/restart finalizes the old session before waking the
     ["admit-replacement"],
   ]);
 });
+
+test("POST /api/sandbox/[id]/restart relaunches through legacy restart when Vercel has no resumable sandbox behind the name", async () => {
+  const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
+  const releasedClaims: string[] = [];
+  const stopReasons: unknown[] = [];
+  const fetchBodies: unknown[] = [];
+
+  const handler = createSandboxRestartHandler({
+    loadOwnedSandboxRouteRecord: (async (
+      _request: Request,
+      _id: string,
+      options?: { select?: string }
+    ) => {
+      if (options?.select === "id, sandbox_id, persistent") {
+        return {
+          ok: true as const,
+          auth: { userId: "user-1" },
+          repo: null,
+          rootDirectory: undefined,
+          record: { id: "sandbox-1", sandbox_id: "vm_123", persistent: true },
+        };
+      }
+      return buildLoadedSandboxRestartRecord() as never;
+    }) as never,
+    loadOwnedSandboxRouteContext: (async () =>
+      buildLoadedPersistentRestartContext({ status: "stopped" })) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    enforceSandboxBootLimits: (async () => ({
+      allowed: true,
+      claimId: "claim-restart-gone",
+    })) as never,
+    releaseLimitClaim: (async (input: { claimId: string }) => {
+      releasedClaims.push(input.claimId);
+      return true;
+    }) as never,
+    getSandbox: (async () => {
+      throw Object.assign(
+        new Error("Named sandbox 'vm_123' has no latest sandbox."),
+        { status: 404 }
+      );
+    }) as never,
+    updateSandboxRecord: (async () => {
+      throw new Error("updateSandboxRecord should not be called");
+    }) as never,
+    stopSandboxRecord: (async (
+      _id: string,
+      options: { stopReason?: unknown }
+    ) => {
+      stopReasons.push(options.stopReason);
+      return { id: "sandbox-1" } as never;
+    }) as never,
+    fetchImpl: async (_input, init) => {
+      fetchBodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "POST", suffix: "/restart" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(releasedClaims, ["claim-restart-gone"]);
+  assert.deepEqual(stopReasons, ["manual"]);
+  assert.deepEqual(fetchBodies, [
+    {
+      repoId: "repo-1",
+      baseBranch: "main",
+      workingBranch: "feature-a",
+      createBranch: false,
+    },
+  ]);
+});

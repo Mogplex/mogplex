@@ -11,6 +11,7 @@ import {
   type SandboxLifecycleConflictEvent,
 } from "@/lib/sandbox/lifecycle-conflict";
 import { isSandboxExplicitlyNonPersistent } from "@/lib/sandbox/persistence";
+import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import type { SandboxEvent } from "@/lib/sandbox/events";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import { presentSandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
@@ -138,6 +139,17 @@ async function handlePersistentRestart(
     await deps.requireSandboxBillingSession(record.id, sandbox);
   } catch (err) {
     await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+    if (isNotFoundError(err)) {
+      // Vercel no longer has a resumable sandbox behind this name (its last
+      // session and snapshot expired). Nothing can be woken, so retire the
+      // record and relaunch through the collection route, which reconciles
+      // the stale provider name before creating a replacement.
+      console.info(
+        "[sandbox/restart] provider sandbox gone; relaunching through legacy restart",
+        { sandboxRecordId: record.id, sandboxId: record.sandbox_id }
+      );
+      return handleLegacyRestart(request, id, deps);
+    }
     const billingError = presentSandboxBillingAdmissionError(err);
     const message =
       billingError?.message ??
