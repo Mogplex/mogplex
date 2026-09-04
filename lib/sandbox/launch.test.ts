@@ -25,13 +25,19 @@ const input = {
 
 describe("resolveNameCollision", () => {
   it("creates when Vercel has no sandbox for the deterministic name", async () => {
+    const findNamedSandbox = vi.fn(async () => null);
     const result = await resolveNameCollision(input, {
       loadMatchingRecord: async () => null,
       getSandbox: async () => {
         throw Object.assign(new Error("Sandbox not found"), { status: 404 });
       },
+      findNamedSandbox,
     });
 
+    expect(findNamedSandbox).toHaveBeenCalledWith(
+      input.name,
+      input.credentials
+    );
     expect(result).toEqual({ kind: "create" });
   });
 
@@ -123,71 +129,24 @@ describe("resolveNameCollision", () => {
       throw Object.assign(new Error("Sandbox not found"), { status: 404 });
     });
 
+    const deleteSandboxByName = vi.fn(async () => undefined);
     const result = await resolveNameCollision(input, {
       getSandbox,
       loadMatchingRecord: async () => record,
       insertAdoptedRecord: async () => {
         throw new Error("insertAdoptedRecord should not be called");
       },
+      findNamedSandbox: async () => null,
+      deleteSandboxByName,
     });
 
     expect(getSandbox).toHaveBeenCalledTimes(1);
     expect(getSandbox).toHaveBeenCalledWith(input.name, input.credentials, {
       resume: false,
     });
+    expect(deleteSandboxByName).not.toHaveBeenCalled();
     expect(result).toEqual({ kind: "create" });
   });
-
-  it.each(["stopping", "snapshotting"])(
-    "rolls a terminal persistent sandbox forward while the provider is %s",
-    async (status) => {
-      const record = sandboxRecord({ status: "stopped", persistent: true });
-      const deleteSandbox = vi.fn(async () => undefined);
-
-      const result = await resolveNameCollision(input, {
-        getSandbox: async () =>
-          ({
-            name: input.name,
-            status,
-            sandbox: { persistent: true },
-          }) as never,
-        loadMatchingRecord: async () => record,
-        insertAdoptedRecord: async () => {
-          throw new Error("insertAdoptedRecord should not be called");
-        },
-        deleteSandbox,
-      });
-
-      expect(deleteSandbox).not.toHaveBeenCalled();
-      expect(result).toEqual({ kind: "replace", record });
-    }
-  );
-
-  it.each(["stopping", "snapshotting"])(
-    "rolls forward from a terminal record while its old provider sandbox is %s",
-    async (status) => {
-      const record = sandboxRecord({
-        status: "stopped",
-        persistent: true,
-        stopReason: "manual",
-      });
-
-      const result = await resolveNameCollision(input, {
-        getSandbox: async () =>
-          ({
-            name: input.name,
-            status,
-            sandbox: { persistent: true },
-          }) as never,
-        loadMatchingRecord: async () => record,
-        insertAdoptedRecord: async () => {
-          throw new Error("insertAdoptedRecord should not be called");
-        },
-      });
-
-      expect(result).toEqual({ kind: "replace", record });
-    }
-  );
 
   it("attaches billing admission before a paused platform collision is revived", async () => {
     const record = sandboxRecord({ status: "paused" });

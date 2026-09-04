@@ -6,6 +6,10 @@ import {
   readSandboxPersistentFlag,
 } from "@/lib/sandbox/persistence";
 import { stopSandboxRecord } from "@/lib/sandbox/records";
+import {
+  deleteVercelSandboxByName,
+  findVercelSandboxByName,
+} from "@/lib/sandbox/named-sandbox";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -69,6 +73,8 @@ type ResolveNameCollisionDeps = {
     sandboxRecordId: string,
     sandbox: VercelSandboxHandle
   ) => Promise<unknown>;
+  findNamedSandbox: typeof findVercelSandboxByName;
+  deleteSandboxByName: typeof deleteVercelSandboxByName;
 };
 
 const SANDBOX_COLLISION_SELECT =
@@ -201,7 +207,69 @@ const defaultResolveNameCollisionDeps: ResolveNameCollisionDeps = {
   requireBillingSession(sandboxRecordId, sandbox) {
     return requireSandboxBillingSession(sandboxRecordId, sandbox as never);
   },
+  findNamedSandbox: findVercelSandboxByName,
+  deleteSandboxByName: deleteVercelSandboxByName,
 };
+
+function matchRecordForRoot(
+  record: SandboxRecord | null,
+  rootDirectory: string | null
+) {
+  return record && (record.root_directory ?? null) === rootDirectory
+    ? record
+    : null;
+}
+
+/**
+ * Neither probe could retrieve the name. That does not prove the name is
+ * free: Vercel keeps a named-sandbox entity after its sessions and snapshot
+ * expire, and in that state GET returns 404 while a create with the same name
+ * is rejected as a duplicate. Confirm through the list endpoint and free the
+ * name before handing the launch to the fresh-create path.
+ */
+async function resolveUnretrievableName(
+  deps: ResolveNameCollisionDeps,
+  input: ResolveNameCollisionInput,
+  matchingRecord: SandboxRecord | null
+): Promise<
+  { kind: "create" } | { kind: "replace"; record: SandboxRecord | null }
+> {
+  const stale = await deps.findNamedSandbox(input.name, input.credentials);
+  if (!stale) return { kind: "create" };
+
+  const matchingRecordForRoot = matchRecordForRoot(
+    matchingRecord,
+    input.rootDirectory
+  );
+  const staleStatus = normalizeVercelSandboxStatus(stale);
+  if (staleStatus !== "stopped" && staleStatus !== "error") {
+    // The provider still reports activity we cannot attach to. Leave it
+    // alone and roll this launch forward under a replacement name.
+    return { kind: "replace", record: matchingRecordForRoot };
+  }
+
+  // The provider has nothing left to resume, so a record that still looks
+  // live is stale. Retire it before the name is reused.
+  if (matchingRecordForRoot) {
+    await deps.stopMatchingRecord(matchingRecordForRoot);
+  }
+
+  try {
+    await deps.deleteSandboxByName(input.name, input.credentials);
+  } catch (error: unknown) {
+    console.warn("[sandbox/launch] could not free stale sandbox name", {
+      name: input.name,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { kind: "replace", record: matchingRecordForRoot };
+  }
+
+  console.info("[sandbox/launch] freed stale sandbox name for reuse", {
+    name: input.name,
+    previousSandboxRecordId: matchingRecordForRoot?.id ?? null,
+  });
+  return { kind: "create" };
+}
 
 async function getSandboxForNameCollision(
   deps: ResolveNameCollisionDeps,
@@ -225,7 +293,8 @@ async function getSandboxForNameCollision(
   // A terminal persistent DB record should only be restarted when its named
   // provider sandbox still exists. Do not let this collision probe wake it;
   // the restart route owns admission, resume, and bootstrap. If the provider
-  // name is gone, continue through the normal fresh-create path.
+  // cannot retrieve the name, resolveUnretrievableName decides whether it is
+  // free or merely stale.
   if (isRestartablePersistentRecord(matchingRecord)) return null;
 
   try {
@@ -267,15 +336,14 @@ export async function resolveNameCollision(
   // be attached before that probe is allowed to wake a paid sandbox.
   const matchingRecord = await deps.loadMatchingRecord(input);
   const probe = await getSandboxForNameCollision(deps, input, matchingRecord);
-  if (!probe) return { kind: "create" };
+  if (!probe) return resolveUnretrievableName(deps, input, matchingRecord);
   const { sandbox, revived } = probe;
 
   const vercelStatus = normalizeVercelSandboxStatus(sandbox);
-  const matchingRecordForRoot =
-    matchingRecord &&
-    (matchingRecord.root_directory ?? null) === input.rootDirectory
-      ? matchingRecord
-      : null;
+  const matchingRecordForRoot = matchRecordForRoot(
+    matchingRecord,
+    input.rootDirectory
+  );
   const matchingRecordNeedsRestart = isRestartablePersistentRecord(
     matchingRecordForRoot
   );
