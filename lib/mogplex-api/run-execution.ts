@@ -35,15 +35,23 @@ export type ExternalAgentRunExecutionResult = {
   error: string | null;
 };
 
-/** What a harness pass produced: the agent's aggregated assistant output. */
+/**
+ * What a harness pass produced: the agent's aggregated assistant output and
+ * the CLI session id (when the harness reported one) so the run can be resumed.
+ */
 type HarnessRunResult = {
   output: string;
+  sessionId: string | null;
 };
 
 type ExternalAgentRunUpdate = Partial<
   Pick<
     ExternalAgentRunRow,
-    "sandbox_record_id" | "sandbox_id" | "status" | "error"
+    | "sandbox_record_id"
+    | "sandbox_id"
+    | "status"
+    | "error"
+    | "harness_session_id"
   >
 >;
 
@@ -297,6 +305,12 @@ export async function executeExternalAgentRun(
 
     const harnessResult = await deps.runHarness(run, sandbox);
 
+    // Persist the CLI session id so a later segment can resume the same
+    // conversation. Only overwrite when the harness reported one this pass.
+    const sessionUpdate: ExternalAgentRunUpdate = harnessResult.sessionId
+      ? { harness_session_id: harnessResult.sessionId }
+      : {};
+
     const aiCall = await deps.loadAiCall(run.user_id, run.ai_call_id);
     const status = parseAiCallStatus(aiCall);
 
@@ -308,6 +322,7 @@ export async function executeExternalAgentRun(
       const checkpoint = parseHarnessCheckpoint(harnessResult.output);
       if (checkpoint) {
         run = await deps.updateRun(run.user_id, run.id, {
+          ...sessionUpdate,
           status: "awaiting_input",
           error: null,
         });
@@ -322,6 +337,7 @@ export async function executeExternalAgentRun(
     }
 
     run = await deps.updateRun(run.user_id, run.id, {
+      ...sessionUpdate,
       status,
       error: aiCall?.error ?? null,
     });

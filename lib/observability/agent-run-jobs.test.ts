@@ -36,6 +36,7 @@ function makeRun(
     root_directory: null,
     conversation_id: null,
     workspace_session_id: null,
+    harness_session_id: null,
     mode: null,
     runtime_provider: "trigger",
     runtime_run_id: "run_trigger_1",

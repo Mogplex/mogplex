@@ -53,6 +53,7 @@ export type ExternalAgentRunRow = {
   root_directory: string | null;
   conversation_id: string | null;
   workspace_session_id: string | null;
+  harness_session_id: string | null;
   mode: string | null;
   runtime_provider: string | null;
   runtime_run_id: string | null;

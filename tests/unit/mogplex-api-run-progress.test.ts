@@ -90,6 +90,30 @@ test("external harness progress persists assistant deltas and tool transitions",
   );
 });
 
+test("external harness progress returns the aggregated output and session id", async () => {
+  const response = harnessResponse([
+    {
+      type: "log",
+      stream: "stdout",
+      data: `${JSON.stringify({
+        type: "item.completed",
+        item: { id: "message-1", type: "agent_message", text: "Done" },
+      })}\n`,
+    },
+    { type: "session", sessionId: "sess-xyz" },
+    { type: "done", exitCode: 0 },
+  ]);
+
+  const result = await readExternalHarnessProgress({
+    response,
+    run: buildRunRow({ harness: "codex" }),
+    appendEvent: async () => null,
+  });
+
+  assert.equal(result.sessionId, "sess-xyz");
+  assert.match(result.output, /Done/);
+});
+
 test("external harness progress rejects harness error events", async () => {
   await assert.rejects(
     readExternalHarnessProgress({

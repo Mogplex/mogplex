@@ -56,6 +56,7 @@ export function buildRunRow(
     root_directory: null,
     conversation_id: null,
     workspace_session_id: null,
+    harness_session_id: null,
     mode: null,
     runtime_provider: null,
     runtime_run_id: null,

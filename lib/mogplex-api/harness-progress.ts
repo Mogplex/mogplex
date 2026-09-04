@@ -30,6 +30,7 @@ type HarnessStreamEvent = {
   type?: string;
   stream?: string;
   data?: string;
+  sessionId?: string;
 };
 
 function parseSseDataEvents(buffer: string) {
@@ -131,13 +132,20 @@ async function persistHarnessEvents(input: {
   appendEvent: AppendEvent;
   toolStates: Map<string, string>;
   onProgress?: OnProgress;
-}): Promise<string> {
+}): Promise<{ text: string; sessionId: string | null }> {
   let text = "";
+  let sessionId: string | null = null;
   for (const event of input.events) {
     if (!event || typeof event !== "object") continue;
     const typedEvent = event as HarnessStreamEvent;
     if (typedEvent.type === "error") {
       throw new Error(typedEvent.data || "Harness run failed");
+    }
+    if (typedEvent.type === "session") {
+      if (typeof typedEvent.sessionId === "string") {
+        sessionId = typedEvent.sessionId;
+      }
+      continue;
     }
     if (typedEvent.type !== "log" || typeof typedEvent.data !== "string") {
       continue;
@@ -153,7 +161,7 @@ async function persistHarnessEvents(input: {
       onProgress: input.onProgress,
     });
   }
-  return text;
+  return { text, sessionId };
 }
 
 export async function readExternalHarnessProgress(input: {
@@ -162,8 +170,8 @@ export async function readExternalHarnessProgress(input: {
   appendEvent?: AppendEvent;
   /** Best-effort live surface for run actions (e.g. the Slack thread feed). */
   onProgress?: OnProgress;
-}): Promise<{ output: string }> {
-  if (!input.response.body) return { output: "" };
+}): Promise<{ output: string; sessionId: string | null }> {
+  if (!input.response.body) return { output: "", sessionId: null };
 
   const appendEvent = input.appendEvent ?? safeAppendAiCallEvent;
   const renderer = createHarnessOutputRenderer(input.run.harness);
@@ -172,6 +180,7 @@ export async function readExternalHarnessProgress(input: {
   const decoder = new TextDecoder();
   let buffer = "";
   let output = "";
+  let sessionId: string | null = null;
 
   for (;;) {
     const { value, done } = await reader.read();
@@ -180,7 +189,7 @@ export async function readExternalHarnessProgress(input: {
     const parsed = parseSseDataEvents(buffer);
     buffer = parsed.remaining;
 
-    output += await persistHarnessEvents({
+    const batch = await persistHarnessEvents({
       events: parsed.events,
       renderer,
       run: input.run,
@@ -188,6 +197,8 @@ export async function readExternalHarnessProgress(input: {
       toolStates,
       onProgress: input.onProgress,
     });
+    output += batch.text;
+    if (batch.sessionId) sessionId = batch.sessionId;
   }
 
   output += await persistRenderedProgress({
@@ -198,5 +209,5 @@ export async function readExternalHarnessProgress(input: {
     onProgress: input.onProgress,
   });
 
-  return { output };
+  return { output, sessionId };
 }
