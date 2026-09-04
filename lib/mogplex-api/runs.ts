@@ -200,6 +200,8 @@ export async function startMogplexApiRun(input: {
    * the "Cancel run" message coordinates so the completion hook can find it.
    */
   extraMetadata?: Record<string, unknown>;
+  /** Where the run was triggered from — "slack", "api", "mcp", "cli". */
+  origin?: string;
   deps?: Partial<StartMogplexApiRunDeps>;
 }) {
   const deps: StartMogplexApiRunDeps = {
@@ -306,6 +308,7 @@ export async function startMogplexApiRun(input: {
     repo,
     sandbox,
     apiKey: input.user,
+    origin: input.origin,
     extraMetadata: input.extraMetadata,
   });
   const aiCall = await deps.createAiCall({

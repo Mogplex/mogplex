@@ -114,6 +114,8 @@ function readMetadataString(
 }
 
 function getAgentRunSourceType(run: ExternalAgentRunRow): string {
+  const origin = readMetadataString(run.metadata, "run_origin");
+  if (origin) return origin;
   const metadata = run.metadata ?? {};
   if (metadata.slack && typeof metadata.slack === "object") return "slack";
   return "api";
@@ -139,6 +141,7 @@ function buildAgentRunMetadata(
 ): Record<string, unknown> {
   const metadata: Record<string, unknown> = {
     source: readMetadataString(run.metadata, "source") ?? "external-api",
+    origin: getAgentRunSourceType(run),
     repo_id: run.repo_id,
     repo_full_name: repo?.full_name ?? null,
     harness: run.harness,

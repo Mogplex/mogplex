@@ -46,6 +46,7 @@ const SAFE_FAILURE_FIELDS = new Set([
   "source",
   "source_kind",
   "source_type",
+  "origin",
   "model",
   "name",
   "slug",
