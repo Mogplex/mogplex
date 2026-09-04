@@ -156,7 +156,7 @@ export function buildDetectBunUsageScript() {
   ].join("\n");
 }
 
-/** Resolve the dev port based on framework. Vite defaults to 5173, everything else to 3000. */
+/** Read an explicit port out of a command (`--port`, `-p`, or `PORT=`). Returns null when the command doesn't pin one. */
 export function extractPortFromCommand(command?: string | null) {
   if (!command) return null;
 
