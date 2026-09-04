@@ -72,12 +72,13 @@ export function buildCheckpointProtocolInstructions(): string {
   return [
     "Checkpoint protocol for this run:",
     "1. Implement the change, then verify it: run lint, build, and typecheck and make them pass.",
-    "2. Start the dev server as a BACKGROUND service so it does not block (for example append ` &` or use the platform's background run), capture its preview URL, and do not wait on it.",
-    "3. Do NOT open a pull request yet. Instead print exactly this block and then end your turn:",
+    "2. Commit ALL your work and push it to the working branch before pausing. This is REQUIRED: if the user asks for changes, the run continues in a fresh checkout of this branch, so anything left uncommitted is lost. Never pause with uncommitted or unpushed changes.",
+    "3. Start the dev server as a BACKGROUND service so it does not block (for example append ` &` or use the platform's background run), capture its preview URL, and do not wait on it.",
+    "4. Do NOT open a pull request yet. Instead print exactly this block and then end your turn:",
     CHECKPOINT_MARKER_START,
     '{"previewUrl":"<the dev server URL>","summary":"<one or two sentences on what you did and what to review>"}',
     CHECKPOINT_MARKER_END,
-    "4. Wait for the user's feedback. When they approve (for example they say 'ship it'), open the pull request; otherwise apply their guidance and reach the next checkpoint the same way.",
+    "5. Wait for the user's feedback. When they approve (for example they say 'ship it'), open the pull request; otherwise apply their guidance and reach the next checkpoint the same way.",
     "Never run a long-lived or interactive command in the foreground; it will stall the run.",
   ].join("\n");
 }

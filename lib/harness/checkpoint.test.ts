@@ -71,4 +71,10 @@ describe("buildCheckpointProtocolInstructions", () => {
     expect(text.toLowerCase()).toContain("background");
     expect(text.toLowerCase()).toContain("do not open a pull request");
   });
+
+  it("should require committing and pushing before a pause", () => {
+    const text = buildCheckpointProtocolInstructions().toLowerCase();
+    expect(text).toContain("commit");
+    expect(text).toContain("push");
+  });
 });
