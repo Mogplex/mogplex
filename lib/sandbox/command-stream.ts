@@ -38,8 +38,10 @@ export type StreamCommandLogsOptions = {
   reconnectDelayMs?: number;
 };
 
-// A worker run may span ~30 minutes; with a multi-minute cap per request this
-// ceiling leaves generous headroom before a genuinely stuck stream is failed.
+// This ceiling counts reconnect attempts, not elapsed time. Each attempt
+// covers one multi-minute request cap, so 60 of them comfortably outlast a
+// ~30-minute worker run: exhausting them means the stream is stuck, not that
+// the command is merely long-running.
 const DEFAULT_MAX_RECONNECTS = 60;
 const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 
