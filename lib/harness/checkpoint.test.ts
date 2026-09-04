@@ -57,7 +57,9 @@ describe("parseHarnessCheckpoint", () => {
 
   it("should handle a missing end marker by reading to the end", () => {
     const output = `${CHECKPOINT_MARKER_START}\n{"previewUrl":"https://x.example"}`;
-    expect(parseHarnessCheckpoint(output)?.previewUrl).toBe("https://x.example");
+    expect(parseHarnessCheckpoint(output)?.previewUrl).toBe(
+      "https://x.example"
+    );
   });
 });
 
