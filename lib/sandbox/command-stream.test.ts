@@ -137,19 +137,69 @@ describe("streamCommandLogsWithResume", () => {
     ).rejects.toThrow("prompt was rejected");
   });
 
-  it("should give up after the reconnect ceiling and surface the last error", async () => {
+  it("should keep polling a long-running command until it finishes, past the cap", async () => {
+    const allLines: Line[] = [
+      { stream: "stdout", data: "start" },
+      { stream: "stdout", data: "mid" },
+      { stream: "stdout", data: "end" },
+    ];
+    // The live stream caps after one line; the command keeps running through
+    // several polls before it finally exits, each poll snapshot adding output.
+    const { command, connectionCount } = makeCommand(
+      [
+        { upto: 1, throwError: new Error("Status code 400 is not ok") },
+        { upto: 1 },
+        { upto: 2 },
+        { upto: 3 },
+      ],
+      allLines
+    );
+    const seen: Line[] = [];
+    let reads = 0;
+
+    const exitCode = await streamCommandLogsWithResume(
+      {
+        command,
+        onLog: (log) => {
+          seen.push(log);
+        },
+        reconnectDelayMs: 0,
+      },
+      {
+        getExitCode: async () => {
+          reads += 1;
+          return reads >= 4 ? 0 : null;
+        },
+        delay: async () => {},
+      }
+    );
+
+    expect(exitCode).toBe(0);
+    expect(seen).toEqual(allLines);
+    expect(connectionCount()).toBe(4);
+  });
+
+  it("should fail a still-running command once the wall-clock deadline passes", async () => {
     const capped = new Error("Status code 400 is not ok");
     const { command } = makeCommand([{ upto: 0, throwError: capped }], []);
+    let clock = 0;
 
     await expect(
       streamCommandLogsWithResume(
         {
           command,
           onLog: () => {},
-          maxReconnects: 2,
+          deadlineMs: 1_000,
           reconnectDelayMs: 0,
         },
-        { getExitCode: async () => null, delay: async () => {} }
+        {
+          getExitCode: async () => null,
+          delay: async () => {},
+          now: () => {
+            clock += 600;
+            return clock;
+          },
+        }
       )
     ).rejects.toThrow("Status code 400 is not ok");
   });
