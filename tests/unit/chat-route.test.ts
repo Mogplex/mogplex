@@ -8,6 +8,14 @@ async function loadChatRoute() {
   return import("../../app/api/chat/route");
 }
 
+test("workspace chat reserves the platform's extended execution duration", async () => {
+  const route = await loadChatRoute();
+  assert.equal("maxDuration" in route ? route.maxDuration : undefined, 1800);
+  const { ACTIVE_CHAT_STALE_THRESHOLD_MS } =
+    await import("../../lib/interactive-runs");
+  assert.equal(ACTIVE_CHAT_STALE_THRESHOLD_MS, 1800 * 1000);
+});
+
 test("POST /api/chat returns 429 before starting a chat run when limits are exceeded", async () => {
   const { createChatPostHandler } = await loadChatRoute();
 

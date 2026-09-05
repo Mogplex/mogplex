@@ -18,6 +18,8 @@ export function buildUiMessageStreamBody(text: string) {
     "",
     `data: ${JSON.stringify({ type: "text-end", id: "assistant-1" })}`,
     "",
+    `data: ${JSON.stringify({ type: "finish", finishReason: "stop" })}`,
+    "",
     "data: [DONE]",
     "",
   ].join("\n");

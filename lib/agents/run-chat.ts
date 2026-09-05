@@ -16,6 +16,7 @@ import {
 } from "@/lib/models/gateway-provider-routing";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { demoteStaleToolOutputs } from "@/lib/agents/compaction/reduce";
+import { withChatStreamCleanup } from "@/lib/agents/chat-stream-cleanup";
 
 /**
  * The shared streaming core for every chat entry point: model resolution,
@@ -81,6 +82,7 @@ export type ChatModelStreamHooks = Partial<
     | "experimental_onToolCallFinish"
     | "onAbort"
     | "onChunk"
+    | "onError"
     | "onFinish"
     | "onStepFinish"
   >
@@ -267,23 +269,7 @@ export async function createChatModelStream(
   const systemPrompt = input.systemSuffix
     ? `${baseSystemPrompt}\n\n${input.systemSuffix}`
     : baseSystemPrompt;
-  const hooks: ChatModelStreamHooks = {
-    ...input.hooks,
-    async onAbort(event) {
-      try {
-        await input.hooks?.onAbort?.(event);
-      } finally {
-        await cleanupTools();
-      }
-    },
-    async onFinish(event) {
-      try {
-        await input.hooks?.onFinish?.(event);
-      } finally {
-        await cleanupTools();
-      }
-    },
-  };
+  const hooks = withChatStreamCleanup(input.hooks, cleanupTools);
 
   try {
     const result = streamText({

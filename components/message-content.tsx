@@ -13,6 +13,7 @@ interface ToolPart {
   state: string
   input?: unknown
   output?: unknown
+  errorText?: string
 }
 
 function isToolPart(part: { type: string }): part is ToolPart {
@@ -26,13 +27,14 @@ function ToolCallPart({ part }: { part: ToolPart }) {
 
   return (
     <div className="my-1.5 border border-border text-[10px] rounded-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-2 py-1 bg-secondary/80 cursor-pointer" onClick={() => setOpen(!open)}>
+      <button type="button" aria-expanded={open} className="flex w-full items-center gap-2 px-2 py-1 bg-secondary/80 cursor-pointer" onClick={() => setOpen(!open)}>
         <span className="text-accent-blue font-mono">{name}</span>
-        <span className="ml-auto text-muted-foreground">{done ? "done" : "running..."}</span>
+        <span className="ml-auto text-muted-foreground">{part.state === "output-error" ? "error" : part.state === "output-denied" ? "denied" : done ? "done" : "running..."}</span>
         <span className="text-muted-foreground">{open ? "[-]" : "[+]"}</span>
-      </div>
+      </button>
       {open && (
         <div className="p-2 space-y-1">
+          {part.state === "output-error" && part.errorText && <p className="text-accent-red">{part.errorText}</p>}
           <div>
             <span className="text-muted-foreground">INPUT: </span>
             <StructuredValueViewer value={part.input} className="my-1" stringLanguage="language-json" />

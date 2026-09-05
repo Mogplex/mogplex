@@ -27,7 +27,7 @@ export const AI_CALL_EVENT_TYPES = [
 ] as const;
 export type AiCallEventType = (typeof AI_CALL_EVENT_TYPES)[number];
 
-export const ACTIVE_CHAT_STALE_THRESHOLD_MS = 5 * 60 * 1000;
+export const ACTIVE_CHAT_STALE_THRESHOLD_MS = 30 * 60 * 1000;
 export const ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 export const PREPARED_HARNESS_STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
@@ -359,8 +359,8 @@ export function isStaleLiveInteractiveCall(
     return false;
   }
 
-  // Chat streams are bounded by the serverless streaming timeout (max ~5 min
-  // on Vercel Pro), so the chat threshold applies uniformly regardless of
+  // Chat streams are bounded by /api/chat's 30-minute platform deadline,
+  // so the chat threshold applies uniformly regardless of
   // anchor presence. This keeps stale chat rows out of live-run UI.
   //
   // Non-chat interactive runs (agent jobs via Trigger.dev) can legitimately

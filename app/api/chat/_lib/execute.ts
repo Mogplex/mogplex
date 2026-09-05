@@ -13,15 +13,14 @@ import { getChatRunScope, buildChatRunMetadata } from "./types";
 import { buildChatMemorySuffix, extractLatestUserText } from "./memory";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { persistChatSessionMemory } from "./session-memory";
+import { withChatStreamKeepalive } from "@/lib/agents/chat-stream-response";
+import { CHAT_INTERRUPTED_MESSAGE } from "@/lib/agents/chat-stream";
 import {
   markChatRunStreaming,
   createToolCallStartHandler,
   createToolCallFinishHandler,
 } from "./events";
-import {
-  finalizeCancelledChatRun,
-  finalizeFinishedChatRun,
-} from "./finalization";
+import { createChatFinalizationHooks } from "./lifecycle";
 
 export async function executeChatRequest(input: {
   req: Request;
@@ -59,9 +58,14 @@ export async function executeChatRequest(input: {
     );
     void persistChatSessionMemory(input.userId, input.body);
 
-    let finalized = false;
-
     const hooks: ChatModelStreamHooks = {
+      ...createChatFinalizationHooks({
+        activeCall,
+        userId: input.userId,
+        scope,
+        limitClaimId: input.limitClaimId,
+        callStartedAt: input.callStartedAt,
+      }),
       experimental_onToolCallStart: createToolCallStartHandler(
         activeCall,
         input.userId,
@@ -72,33 +76,6 @@ export async function executeChatRequest(input: {
         input.userId,
         scope
       ),
-      async onAbort({ steps }) {
-        if (finalized) return;
-        finalized = true;
-        await finalizeCancelledChatRun({
-          activeCall,
-          userId: input.userId,
-          scope,
-          limitClaimId: input.limitClaimId,
-          callStartedAt: input.callStartedAt,
-          steps,
-        });
-      },
-      async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
-        if (finalized) return;
-        finalized = true;
-        await finalizeFinishedChatRun({
-          activeCall,
-          userId: input.userId,
-          scope,
-          limitClaimId: input.limitClaimId,
-          callStartedAt: input.callStartedAt,
-          finishReason,
-          totalUsage,
-          providerMetadata,
-          steps,
-        });
-      },
     };
 
     const modelMessages = await compactChatMessagesForModel({
@@ -141,9 +118,12 @@ export async function executeChatRequest(input: {
 
     return {
       aiCall: activeCall,
-      response: result.toUIMessageStreamResponse({
-        messageMetadata: () => ({ ai_call_id: activeCall.id }),
-      }),
+      response: withChatStreamKeepalive(
+        result.toUIMessageStreamResponse({
+          onError: () => CHAT_INTERRUPTED_MESSAGE,
+          messageMetadata: () => ({ ai_call_id: activeCall.id }),
+        })
+      ),
     };
   } catch (error) {
     const startupError =
