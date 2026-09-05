@@ -68,7 +68,7 @@ jobs:
 
   diff-coverage:
     # Advisory (not a required check yet): changed lines in lib/** must be
-    # covered by the vitest tier. The absolute lib coverage number is low and
+    # covered by the lib, unit, or DB tier. The absolute coverage number is low and
     # irrelevant — this gates only the lines a PR touches, so coverage ratchets
     # up with each change instead of demanding a backfill. Promote to a
     # required check via the ruleset once it has run quietly for a while;
@@ -109,8 +109,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run vitest tier with coverage
-        run: pnpm exec vitest run --coverage
+      - name: Run library tier with coverage
+        run: >-
+          pnpm exec vitest run --coverage
+          --coverage.reporter=lcov
+          --coverage.reportsDirectory=coverage/lib
+
+      - name: Run database tier with coverage
+        # Keep WASM database bootstraps within the runner's four CPUs. This
+        # does not raise test timeouts or alter application concurrency.
+        run: >-
+          pnpm exec vitest run -c vitest-db.config.ts --maxWorkers=4
+          --coverage --coverage.provider=v8
+          --coverage.include='lib/**' --coverage.exclude='lib/**/*.test.ts'
+          --coverage.reporter=lcov --coverage.reportsDirectory=coverage/db
+
+      - name: Run unit tier with native Node coverage
+        run: |
+          mkdir -p coverage/unit
+          pnpm exec tsx --require ./tests/support/bundler-shims.cjs \
+            --enable-source-maps --experimental-test-coverage \
+            --test-coverage-include='**/lib/**' \
+            --test-coverage-exclude='**/node_modules/**' \
+            --test-reporter=tap --test-reporter-destination=stdout \
+            --test-reporter=lcov --test-reporter-destination=coverage/unit/lcov.info \
+            --test tests/unit/*.test.ts
 
       - name: Install diff-cover
         run: pipx install diff-cover
@@ -120,7 +143,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          diff-cover coverage/cobertura-coverage.xml \
+          diff-cover coverage/lib/lcov.info coverage/db/lcov.info coverage/unit/lcov.info \
             --compare-branch "origin/${BASE_REF}" \
             --include "lib/**" \
             --fail-under 80

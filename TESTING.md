@@ -126,8 +126,11 @@ Two of the rules above are checked mechanically:
 
 Two advisory checks probe whether tests are meaningful, not just present:
 
-- **diff-coverage** (`pr-protection.yml`) runs the vitest tier with coverage
-  and fails when changed `lib/**` lines are under 80% covered. It gates only
+- **diff-coverage** (`pr-protection.yml`) combines LCOV reports from the lib,
+  unit, and DB tiers and fails when changed `lib/**` lines are under 80%
+  covered. Unit coverage uses Node's native runner with source maps; the lib
+  and DB tiers use Vitest's V8 coverage. Tests stay in the tier where their
+  behavior lives, and execution in any tier counts. It gates only
   the lines a PR touches, so coverage ratchets up with each change instead of
   demanding a backfill.
 - **mutation** (`mutation.yml`) runs incremental Stryker over the `lib/**`
