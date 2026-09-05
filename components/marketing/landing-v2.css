@@ -3270,7 +3270,10 @@ path.mpx-dag-line,
     display: none;
   }
 
-  .mpx-button.is-small {
+  /* Only the first action pushes right; a bare `.is-small` selector here
+     would give both buttons `margin-left: auto` and split the free space
+     between brand → Sign in → Start now. */
+  .mpx-nav > .mpx-button.is-secondary {
     margin-left: auto;
   }
 
