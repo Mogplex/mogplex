@@ -1,6 +1,7 @@
 import { AbortTaskRunError, metadata, task } from "@trigger.dev/sdk/v3";
 import { executeExternalAgentRun } from "@/lib/mogplex-api/run-execution";
 import { superviseExternalAgentRun } from "@/lib/mogplex-api/run-supervisor";
+import { notifyControlWorkerCompletion } from "@/lib/control/continuation-dispatch";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import type { ExternalAgentRunExecutionPayload } from "@/lib/mogplex-api/run-execution";
 
@@ -40,6 +41,9 @@ export const executeExternalAgentRunTask = task({
     metadata.set("runId", payload.runId);
     metadata.set("userId", payload.userId);
     const result = await superviseExternalAgentRun(payload, ctx.run.id);
+    // A supervisor retry reuses the completed worker and retries only delivery.
+    // Awaiting-input also wakes the coordinator to explain the blocker.
+    await notifyControlWorkerCompletion(payload.userId, payload.runId);
     metadata.set("status", result.status);
     metadata.set("success", result.success);
     if (!result.success && result.status !== "cancelled") {

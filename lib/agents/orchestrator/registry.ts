@@ -119,6 +119,7 @@ function buildToolForDef(
   repoDefaults: RepoToolDefaults
 ): Tool | null {
   if (!def.implemented) return null;
+  if (def.name === "await_workers") return ctx.workerHandoffTool ?? null;
 
   if (def.name === "read_file") {
     return createReadFile(ctx.githubToken, repoDefaults);
@@ -147,7 +148,8 @@ function buildToolForDef(
       ctx.sandboxBinding?.sandboxId ?? undefined,
       ctx.userId,
       ctx.repoId ?? undefined,
-      ctx.sandboxBinding
+      ctx.sandboxBinding,
+      ctx.sandboxExecution
     );
   }
   if (def.name === "sandbox_start") {

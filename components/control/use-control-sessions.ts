@@ -8,8 +8,12 @@ import {
   type ControlSessionRecord,
 } from "@/lib/control/session-persistence";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
+import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 
 const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
+const SESSION_EVENTS = [
+  { table: "control_sessions", filter: "user_id=eq.$USER_ID" },
+];
 
 /**
  * DB-backed control chat sessions: list, create, restore, and persist.
@@ -25,6 +29,7 @@ export function useControlSessions({
   setSessionMessages,
   removeSessionMessages,
   deepLinkTarget,
+  chatPending = false,
 }: {
   sessionId: string | null;
   setSessionId: (id: string | null) => void;
@@ -32,6 +37,7 @@ export function useControlSessions({
   removeSessionMessages: (sessionId: string) => void;
   /** Session id from the URL (?mission=) to restore once the list loads. */
   deepLinkTarget?: string | null;
+  chatPending?: boolean;
 }) {
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
@@ -40,6 +46,47 @@ export function useControlSessions({
   const removedSessionIdsRef = useRef(new Set<string>());
   const selectionRevisionRef = useRef(0);
   const restoredSelectionRef = useRef(false);
+  const refreshRevisionRef = useRef(0);
+
+  const refreshCurrent = useCallback(async () => {
+    if (!sessionId || chatPending) return;
+    const requestRevision = ++refreshRevisionRef.current;
+    const mutationRevision = mutationRevisionRef.current;
+    const res = await fetch(
+      `/api/control/sessions?id=${encodeURIComponent(sessionId)}`
+    );
+    if (!res.ok) return;
+    const record = (await res.json()) as ControlSessionRecord;
+    if (
+      requestRevision !== refreshRevisionRef.current ||
+      mutationRevision !== mutationRevisionRef.current ||
+      record.id !== sessionId
+    )
+      return;
+    // hydrate refuses active streams, unsaved local edits and failed saves.
+    if (setSessionMessages(record.id, record.messages ?? [])) {
+      updatedAtBySessionRef.current.set(record.id, record.updated_at);
+      setSessions((current) =>
+        current.map((entry) =>
+          entry.id === record.id
+            ? { ...entry, updated_at: record.updated_at }
+            : entry
+        )
+      );
+    }
+  }, [sessionId, chatPending, setSessionMessages]);
+  useRealtimeRouteRefresh({
+    channelName: "control-conversation",
+    specs: SESSION_EVENTS,
+    enabled: Boolean(sessionId),
+    onInvalidate: refreshCurrent,
+  });
+  useEffect(() => {
+    void refreshCurrent();
+    return () => {
+      refreshRevisionRef.current++;
+    };
+  }, [refreshCurrent]);
 
   const refreshList = useCallback(async () => {
     const revision = mutationRevisionRef.current;

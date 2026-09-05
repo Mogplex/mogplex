@@ -8,6 +8,14 @@ import type { OrchestratorToolDef } from "../types";
 
 export const PLANNING_TOOLS: OrchestratorToolDef[] = [
   {
+    name: "await_workers",
+    category: "planning",
+    description:
+      "Resume the coordinator automatically after the mission's exact worker set finishes",
+    access: "mutation",
+    implemented: true,
+  },
+  {
     name: "plan_mission",
     category: "planning",
     description: "Create a structured mission plan from a high-level objective",

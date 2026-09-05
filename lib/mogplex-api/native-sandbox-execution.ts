@@ -5,7 +5,8 @@ import type { SandboxExecPostDeps } from "@/app/api/sandbox/[id]/exec/_lib/types
 export function createNativeSandboxExecution(
   userId: string,
   teamId: string | null,
-  overrides: Partial<SandboxExecPostDeps> = {}
+  overrides: Partial<SandboxExecPostDeps> = {},
+  signal?: AbortSignal
 ): SandboxCommandExecution {
   return {
     retryOnSandboxLoss: false,
@@ -19,6 +20,7 @@ export function createNativeSandboxExecution(
           method: "POST",
           headers: buildInternalApiHeaders(userId, { teamId }),
           body: JSON.stringify(body),
+          signal,
         }),
         { params: Promise.resolve({ id: sandboxId }) }
       );

@@ -40,7 +40,7 @@ import { useControlSessionActions } from "./use-control-session-actions";
 import { useControlSandboxStart } from "./use-control-sandbox-start";
 import { useControlComposerActions } from "./use-control-composer-actions";
 import { useControlWorkers } from "./use-control-workers";
-import { MissionWorkers } from "./mission-workers";
+import { MissionExecutionStatus } from "./coordinator-followup";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
@@ -140,6 +140,7 @@ function ControlShellInner({
     setSessionMessages,
     removeSessionMessages: removeSessionState,
     deepLinkTarget: searchParams.get("mission"),
+    chatPending,
   });
   const displaySessions = useMemo(
     () => canonicalizeControlSessionProjects(sessions, repos),
@@ -456,7 +457,7 @@ function ControlShellInner({
                   trailing={
                     <>
                       {!chatPending && hasChanges && <ChangedFilesCard messages={messages} />}
-                      <MissionWorkers workers={controlWorkers.workers} error={controlWorkers.error} loading={controlWorkers.loading} onRefresh={controlWorkers.refresh} />
+                      <MissionExecutionStatus sessionId={sessionId} workers={controlWorkers.workers} error={controlWorkers.error} loading={controlWorkers.loading} onRefresh={controlWorkers.refresh} />
                     </>
                   }
                 />

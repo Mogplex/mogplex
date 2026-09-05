@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createControlWorkerHandoff } from "@/lib/control/worker-handoff";
 import {
   ORCHESTRATOR_TOOLS,
   buildOrchestratorTools,
@@ -26,6 +27,13 @@ const FULL_CONTEXT: OrchestratorToolContext = {
   conversationId: "conversation-1",
   workspaceSessionId: "ws-session-1",
   aiCallId: "ai-call-1",
+  workerHandoffTool: createControlWorkerHandoff({
+    userId: "user-1",
+    sessionId: "mission-1",
+    parentAiCallId: "ai-call-1",
+    messages: [],
+    context: { repoId: "repo-1", missionId: "mission-1", model: "fixture" },
+  }).tool,
 };
 
 describe("buildOrchestratorTools", () => {
@@ -95,6 +103,10 @@ describe("buildOrchestratorTools", () => {
       repoId: null,
     });
     expect(withoutRepository.sandbox_start).toBeUndefined();
+    expect(
+      buildOrchestratorTools({ ...FULL_CONTEXT, workerHandoffTool: undefined })
+        .await_workers
+    ).toBeUndefined();
   });
 
   it("omits sandbox execution tools while server-owned selection is ambiguous", () => {

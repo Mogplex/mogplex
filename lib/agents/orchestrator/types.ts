@@ -74,6 +74,9 @@ export type OrchestratorToolContext = {
   controlMode?: "plan" | "run" | null;
   /** Operator-selected permission preset, currently retained for policy audit. */
   controlPermissions?: string | null;
+  /** Present only for a persisted, server-scoped Control execution. */
+  workerHandoffTool?: import("ai").Tool;
+  sandboxExecution?: import("@/lib/agents/tools/sandbox").SandboxCommandExecution;
 };
 
 /**
