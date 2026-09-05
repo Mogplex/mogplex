@@ -107,7 +107,7 @@ export function createHarnessStreamBody(
           onReconnect: async () => {
             // The detached agent command outlived a single log request; keep
             // the VM lease warm while completion is re-established.
-            await deps.renewSandboxActivityLease(sandbox).catch(() => {});
+            await deps.renewSandboxActivityLease(sandbox);
           },
         });
 

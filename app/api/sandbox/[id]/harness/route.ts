@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { SANDBOX_AGENT_EXECUTION_LEASE_MS } from "@/lib/sandbox/activity-lease";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isSandboxCapabilityDeniedError } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
@@ -18,7 +19,6 @@ import {
   createSandboxBillingOnResume,
   presentSandboxBillingAdmissionError,
 } from "@/lib/billing/sandbox-usage";
-
 import {
   VALID_HARNESSES,
   HARNESS_ROUTE_SELECT,
@@ -267,10 +267,12 @@ export function createSandboxHarnessPostHandler(
         },
         { onResume: createSandboxBillingOnResume(id) }
       );
-
-      await deps.renewSandboxActivityLease(sandbox);
+      await deps.renewSandboxActivityLease(
+        sandbox,
+        undefined,
+        SANDBOX_AGENT_EXECUTION_LEASE_MS
+      );
       await deps.touchSandboxLastActive(id);
-
       const { runtimeEnv, githubToken } = await setupSandboxEnv(
         deps,
         setupCtx,

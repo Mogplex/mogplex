@@ -9,7 +9,7 @@ import {
 } from "../../tests/unit/helpers/mogplex-api-runs-fixtures";
 
 async function exercise(
-  mode: "success" | "error" | "cancelled" | "unauthorized",
+  mode: "success" | "error" | "cancelled" | "unauthorized" | "lease_failure",
   response = "Fixed the header."
 ) {
   let call = buildAiCall({ model: "harness:mogplex" });
@@ -18,6 +18,7 @@ async function exercise(
   const events: string[] = [];
   let cleaned = false;
   let closed = false;
+  let executionLeaseAcquired = false;
   const model = new MockLanguageModelV3({
     doStream: async () => ({
       stream: new ReadableStream({
@@ -60,6 +61,11 @@ async function exercise(
       { recordId: "sandbox-record-1", sandboxId: "sbx_123" },
       {
         loadCall: async () => call,
+        ensureExecutionLease: async (_run, _sandbox, teamId) => {
+          assert.equal(teamId, "team-1");
+          if (mode === "lease_failure") throw new Error("Lease refused");
+          executionLeaseAcquired = true;
+        },
         loadContext: async () => {
           if (mode === "unauthorized")
             throw new Error("Active sandbox not found for this agent run");
@@ -72,7 +78,7 @@ async function exercise(
             repoBranch: "fix/header",
             repoBaseBranch: "main",
             sandboxId: "sandbox-record-1",
-            teamId: null,
+            teamId: "team-1",
             conversationId: null,
             workspaceSessionId: null,
             surface: "chat",
@@ -95,18 +101,25 @@ async function exercise(
             },
           };
         },
-        createStream: async (input) => ({
-          result: streamText({
-            model,
-            prompt: run.prompt,
-            abortSignal: input.abortSignal,
-            ...input.hooks,
-          }),
-          connections: [],
-          cleanup: async () => {
-            cleaned = true;
-          },
-        }),
+        createStream: async (input) => {
+          assert.equal(
+            executionLeaseAcquired,
+            true,
+            "reserve VM lifetime before starting the agent"
+          );
+          return {
+            result: streamText({
+              model,
+              prompt: run.prompt,
+              abortSignal: input.abortSignal,
+              ...input.hooks,
+            }),
+            connections: [],
+            cleanup: async () => {
+              cleaned = true;
+            },
+          };
+        },
         createProgress: () => ({ async report() {}, async flush() {} }),
         updateCall: async (_id, update) => {
           call = { ...call, ...update };
@@ -173,6 +186,14 @@ test("native cancellation prevents model execution and finalizes the existing ca
 test("unavailable owned sandbox fails before model execution", async () => {
   const result = await exercise("unauthorized");
   assert.match(String(result.caught), /Active sandbox not found/);
+  assert.equal(result.call.status, "failed");
+  assert.equal(result.model.doStreamCalls.length, 0);
+  assert.ok(result.closed);
+});
+
+test("a failed execution lease prevents model work and finalizes the call", async () => {
+  const result = await exercise("lease_failure");
+  assert.match(String(result.caught), /Lease refused/);
   assert.equal(result.call.status, "failed");
   assert.equal(result.model.doStreamCalls.length, 0);
   assert.ok(result.closed);

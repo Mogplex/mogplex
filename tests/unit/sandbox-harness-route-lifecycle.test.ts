@@ -38,6 +38,7 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
   let persistedStatus: string | undefined;
   let persistedError: string | null | undefined;
   let billingResumeHookAttached = false;
+  let executionLeaseMs: number | undefined;
 
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
@@ -57,8 +58,9 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
       billingResumeHookAttached = typeof options?.onResume === "function";
       return {} as never;
     },
-    runHarness: async () =>
-      ({
+    runHarness: async () => {
+      assert.equal(executionLeaseMs, 35 * 60_000);
+      return {
         installed: false,
         installLogs: "",
         command: {
@@ -72,8 +74,12 @@ test("POST /api/sandbox/[id]/harness persists classified failures and returns th
           wait: async () => ({ exitCode: 1 }),
           kill: async () => {},
         },
-      }) as never,
-    renewSandboxActivityLease: async () => 0,
+      } as never;
+    },
+    renewSandboxActivityLease: async (_sandbox, _now, leaseMs) => {
+      executionLeaseMs = leaseMs;
+      return 0;
+    },
     stopSandboxRecord: async () => null,
     touchSandboxLastActive: async () => {},
     resolveRepoSandboxEnv: async () => ({
