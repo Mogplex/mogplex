@@ -8,7 +8,10 @@ import {
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getSandbox, listVercelSandboxes } from "@/lib/sandbox/client";
 import { isSandboxLookupNotFoundError } from "@/lib/sandbox/sdk-adapter";
-import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
+import {
+  renewSandboxActivityLease,
+  SANDBOX_AGENT_EXECUTION_LEASE_MS,
+} from "@/lib/sandbox/activity-lease";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
 import {
   acquireSandboxExecLock,
@@ -40,6 +43,9 @@ import {
   ensureHarnessInstalled,
 } from "./_lib/command-detection";
 import type { ExecSandboxRecord, SandboxExecPostDeps } from "./_lib/types";
+
+// Match the existing agent execution window instead of the 300s web default.
+export const maxDuration = 1800;
 
 const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
   getSandboxServiceCredentials,
@@ -227,7 +233,11 @@ export function createSandboxExecPostHandler(
           listSandboxes: deps.listVercelSandboxes,
         });
       }
-      await deps.renewSandboxActivityLease(sandbox);
+      await deps.renewSandboxActivityLease(
+        sandbox,
+        Date.now(),
+        SANDBOX_AGENT_EXECUTION_LEASE_MS
+      );
 
       const repoRootDirectory = sandboxData.rootDirectory;
       const envResolution = await resolveRepoSandboxEnv({

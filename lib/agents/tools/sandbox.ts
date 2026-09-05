@@ -14,25 +14,16 @@ import {
   type SandboxSelection,
 } from "./sandbox-binding";
 import { getBlockedAgentShellCommand } from "./shell-command-guard";
+import {
+  postSandboxExec,
+  EXEC_STDOUT_LIMIT,
+  EXEC_STDERR_LIMIT,
+} from "./sandbox-http-execution";
 
 export { getBlockedAgentShellCommand } from "./shell-command-guard";
 
 export { resolveOrCreateSandbox } from "./sandbox-resolution";
 export { createStartSandbox } from "./sandbox-start";
-
-const EXEC_STDOUT_LIMIT = 10_000;
-const EXEC_STDERR_LIMIT = 5000;
-function postSandboxExec(
-  sandboxId: string,
-  headers: HeadersInit,
-  body: { command: string; cwd?: string }
-): Promise<Response> {
-  return fetch(`${resolveAppBaseUrl()}/api/sandbox/${sandboxId}/exec`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
-}
 
 export type SandboxCommandExecution = {
   execute: typeof postSandboxExec;
