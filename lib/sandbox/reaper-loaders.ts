@@ -16,7 +16,7 @@ export async function loadActiveSandboxes(
   client: SupabaseClient = supabaseAdmin
 ): Promise<ReaperSandboxRecord[]> {
   const select =
-    "id, sandbox_id, user_id, status, health_status, exec_lock_token, persistent, created_at, last_active_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, repo:repos(sandbox_timeout_ms, sandbox_idle_timeout_ms, workspace:workspaces(sandbox_timeout_ms, sandbox_idle_timeout_ms))";
+    "id, sandbox_id, user_id, status, health_status, exec_lock_token, persistent, created_at, last_boot_started_at, last_active_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, repo:repos(sandbox_timeout_ms, sandbox_idle_timeout_ms, workspace:workspaces(sandbox_timeout_ms, sandbox_idle_timeout_ms))";
   const pausingCutoffIso = new Date(
     Date.now() - STALE_PAUSING_THRESHOLD_MS
   ).toISOString();

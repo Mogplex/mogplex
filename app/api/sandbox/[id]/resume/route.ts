@@ -151,6 +151,8 @@ export function createSandboxResumeHandler(
           status: "installing",
           health_status: "starting",
           stop_reason: null,
+          last_boot_started_at: new Date().toISOString(),
+          last_boot_completed_at: null,
           last_active_at: new Date().toISOString(),
         },
         {

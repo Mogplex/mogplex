@@ -17,6 +17,7 @@ test("POST /api/sandbox/[id]/resume transitions paused -> installing and streams
   const updateCalls: Array<Record<string, unknown>> = [];
   const resumeRootDirectory = "apps/web";
   const resumeTerminalCwd = "/workspace/apps/web";
+  const resumeStartedAt = Date.now();
 
   const handler = createSandboxResumeHandler({
     loadOwnedSandboxRouteContext: (async () =>
@@ -85,6 +86,9 @@ test("POST /api/sandbox/[id]/resume transitions paused -> installing and streams
     ),
     "expected an installing->running update call"
   );
+  const bootStart = Date.parse(String(updateCalls[0].last_boot_started_at));
+  assert.ok(bootStart >= resumeStartedAt && bootStart <= Date.now());
+  assert.equal(updateCalls[0].last_boot_completed_at, null);
 });
 
 test("POST /api/sandbox/[id]/resume records resume_after_auto_pause metric", async () => {

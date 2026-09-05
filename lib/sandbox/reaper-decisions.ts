@@ -67,6 +67,12 @@ export function buildActiveSandboxEvaluation(
     sandbox.last_active_at || sandbox.created_at
   ).getTime();
   const createdAt = new Date(sandbox.created_at).getTime();
+  // Persistent records outlive their VM sessions. Boot and lifetime limits
+  // apply to the current session, not the first creation of the record.
+  const bootStartedAt = new Date(sandbox.last_boot_started_at ?? "").getTime();
+  const sessionStartedAt = Number.isFinite(bootStartedAt)
+    ? Math.max(createdAt, bootStartedAt)
+    : createdAt;
 
   return {
     credentials: toReaperSandboxCredentials(liveness),
@@ -74,7 +80,7 @@ export function buildActiveSandboxEvaluation(
     vmRunning: liveness?.kind === "running",
     idleThresholdMs,
     idleMs: nowMs - lastActive,
-    ageMs: nowMs - createdAt,
+    ageMs: nowMs - sessionStartedAt,
     busy:
       Boolean(sandbox.exec_lock_token) ||
       busySandboxIds.has(sandbox.id) ||
