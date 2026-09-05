@@ -89,9 +89,10 @@ export function createSandboxDetailGetHandler(
       if (liveStatus !== record.status) {
         let persisted = false;
         try {
-          await (liveStatus === "stopped"
+          const updated = await (liveStatus === "stopped"
             ? deps.stopSandboxRecord(id, {
                 expectedSandboxId: record.sandbox_id,
+                fromStatuses: record.status,
                 stopReason: "vm_gone",
               })
             : deps.updateSandboxRecord(
@@ -99,8 +100,21 @@ export function createSandboxDetailGetHandler(
                 { status: "running" },
                 {
                   expectedSandboxId: record.sandbox_id,
+                  fromStatuses: record.status,
                 }
               ));
+          if (!updated) {
+            const latest =
+              await deps.loadOwnedSandboxRouteRecord<SandboxStatusRecord>(
+                request,
+                id,
+                { select: "*" }
+              );
+            if (!latest.ok) return buildSandboxRouteErrorResponse(latest);
+            return NextResponse.json({
+              sandbox: toSandboxClientRecord(latest.record),
+            });
+          }
           persisted = true;
         } catch (error) {
           console.error(
