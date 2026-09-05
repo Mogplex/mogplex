@@ -16,7 +16,7 @@ async function triggerContinuation(
       userId: ticket.user_id,
       continuationId: ticket.id,
     },
-    { idempotencyKey: `control-continuation:${ticket.id}`, maxAttempts: 1 }
+    { idempotencyKey: `control-continuation:${ticket.id}`, maxAttempts: 3 }
   );
 }
 

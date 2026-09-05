@@ -3,6 +3,7 @@ export const TRIGGER_TASK_IDS = {
   externalAgentRun: "execute-external-agent-run",
   externalAgentRunWorker: "execute-external-agent-run-worker",
   controlContinuation: "execute-control-continuation",
+  controlContinuationWorker: "execute-control-continuation-worker",
   resumeAgentRun: "execute-resume-agent-run",
   repoSnapshotBuild: "build-repo-snapshot",
   sandboxReaper: "sandbox-reaper",

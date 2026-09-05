@@ -11,6 +11,7 @@ import {
   claimControlContinuation,
   controlContinuationContextSchema,
   listControlContinuations,
+  loadControlContinuation,
 } from "@/lib/control/continuation-store";
 import { notifyControlWorkerCompletion } from "@/lib/control/continuation-dispatch";
 import { guardControlBackgroundTools } from "@/lib/control/background-context";
@@ -69,7 +70,11 @@ it.each(["stop", "abort", "error", "checkpoint-failure", "approval"] as const)(
       });
       expect(output).toMatchObject({ status: "waiting" });
       expect(
-        (await listControlContinuations(f.owner, f.sessionId, client))[0]
+        await loadControlContinuation(
+          f.owner,
+          (await listControlContinuations(f.owner, f.sessionId, client))[0].id,
+          client
+        )
       ).toMatchObject({
         parent_ready: false,
         request_context: { sandboxId: binding.sandboxId },

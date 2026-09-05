@@ -5,7 +5,7 @@ export type ControlContinuationSummary = Pick<
   "id" | "status" | "error" | "parent_ready" | "updated_at" | "worker_run_ids"
 >;
 export function controlContinuationSummary(
-  ticket: ControlContinuation
+  ticket: ControlContinuationSummary
 ): ControlContinuationSummary {
   const { id, status, error, parent_ready, updated_at, worker_run_ids } =
     ticket;

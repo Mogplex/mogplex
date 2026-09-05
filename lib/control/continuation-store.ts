@@ -177,14 +177,29 @@ export async function listControlContinuations(
   sessionId: string,
   client: Client = supabaseAdmin
 ) {
-  const { data, error } = await client
-    .from("control_continuations")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("session_id", sessionId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error("Could not load coordinator follow-ups.");
-  return (data ?? []).map((row) => parseTicket(row)!);
+  const summary = continuationSchema.pick({
+    id: true,
+    status: true,
+    error: true,
+    parent_ready: true,
+    updated_at: true,
+    worker_run_ids: true,
+  });
+  const query = () =>
+    client
+      .from("control_continuations")
+      .select("id,status,error,parent_ready,updated_at,worker_run_ids")
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false });
+  const active = await query().in("status", ["waiting", "ready", "running"]);
+  if (active.error) throw new Error("Could not load coordinator follow-ups.");
+  if (active.data?.length) return active.data.map((row) => summary.parse(row));
+  // The UI renders all active tickets, or exactly the latest historical ticket.
+  // Never load hidden history or saved prompts on each realtime invalidation.
+  const latest = await query().limit(1);
+  if (latest.error) throw new Error("Could not load coordinator follow-ups.");
+  return (latest.data ?? []).map((row) => summary.parse(row));
 }
 
 export async function continuationsForWorker(
@@ -239,15 +254,21 @@ export async function updateClaimedControlContinuation(
 }
 
 export async function recordControlContinuationFailure(
-  input: { userId: string; id: string; runtimeRunId: string },
+  input: {
+    userId: string;
+    id: string;
+    runtimeRunId: string;
+    timedOut?: boolean;
+  },
   client: Client = supabaseAdmin
 ) {
   const { data, error } = await client
     .from("control_continuations")
     .update({
       status: "failed",
-      error:
-        "The coordinator follow-up stopped before finishing. Review its saved output before continuing; it was not replayed.",
+      error: input.timedOut
+        ? "The coordinator reached its time limit. Saved output is available; it was not replayed."
+        : "The coordinator follow-up stopped before finishing. Review its saved output before continuing; it was not replayed.",
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.id)
