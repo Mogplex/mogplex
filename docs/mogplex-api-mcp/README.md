@@ -38,6 +38,12 @@ Let another chat app safely delegate repo-bound work to Mogplex agents. A user s
 - Flow/automation job precedent: `lib/automation-dispatch.ts`, `lib/workflows/automation-job-workflow.ts`
 - Multi-agent orchestration foundation: `lib/orchestrations/*`
 
+Codex workers require `setpriv` from util-linux in the Linux sandbox image.
+The runner clears inherited and ambient capabilities and sets `no_new_privs`
+before launching Codex; this lets its command sandbox run under the provider's
+non-root user. SAFE/AUTO/YOLO and approval policies remain unchanged. If
+`setpriv` is missing or fails, execution fails without an unisolated retry.
+
 ## Target External API
 
 Initial API namespace:

@@ -89,9 +89,24 @@ export async function runHarness(
         };
 
   await throwIfCancelled(opts?.shouldCancel, { installed, installLogs });
+  // Persistent Linux sandboxes can give their non-root user ambient
+  // capabilities. Codex's bubblewrap rejects those privileges. Drop them
+  // before exec, without changing the selected Codex sandbox/approval policy.
+  // setpriv (util-linux) is required; never fall back to an unisolated launch.
   const command = await sandbox.runCommand({
-    cmd,
-    args: harnessId === "codex" ? [...codexProviderArgs(env), ...args] : args,
+    cmd: harnessId === "codex" ? "setpriv" : cmd,
+    args:
+      harnessId === "codex"
+        ? [
+            "--no-new-privs",
+            "--inh-caps=-all",
+            "--ambient-caps=-all",
+            "--",
+            cmd,
+            ...codexProviderArgs(env),
+            ...args,
+          ]
+        : args,
     detached: true,
     cwd: opts?.cwd,
     env,
