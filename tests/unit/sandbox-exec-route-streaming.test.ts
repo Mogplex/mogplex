@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { APIError } from "@vercel/sandbox";
+import { startExecStream } from "../../lib/sandbox/exec-stream";
 import {
   buildSandboxRouteParams,
   buildSandboxRouteRequest,
@@ -96,4 +98,40 @@ test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", a
   assert.match(body, /\[redacted\]/);
   assert.match(body, /"type":"done"/);
   assert.match(body, /"exitCode":0/);
+});
+
+test("exec emits an error and releases its lock when the provider session is gone", async () => {
+  let released = false;
+  let waited = false;
+  const response = await startExecStream({
+    sandbox: {
+      runCommand: async () => ({
+        cmdId: "cmd-stopped",
+        async *logs() {
+          yield { stream: "stdout", data: "started\n" };
+          throw new APIError(new Response(null, { status: 410 }), {
+            message: "Status code 410 is not ok",
+            json: { error: { code: "sandbox_stopped" } },
+          });
+        },
+        wait: async () => {
+          waited = true;
+          return { exitCode: 0 };
+        },
+      }),
+    } as never,
+    run: { kind: "shell", command: "example" },
+    cwd: undefined,
+    env: {},
+    reportedCwd: "/vercel/sandbox",
+    onComplete: () => {
+      released = true;
+    },
+  });
+  const body = await response.text();
+  assert.match(body, /"type":"error"/);
+  assert.match(body, /410/);
+  assert.doesNotMatch(body, /"type":"done"/);
+  assert.equal(released, true);
+  assert.equal(waited, false);
 });

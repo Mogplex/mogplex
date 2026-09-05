@@ -1,6 +1,7 @@
 // WRITE execution helpers for the PostgREST shim builder.
 
 import { SchemaCache } from "../schema-cache";
+import { serializeVectorValue } from "../vector";
 import {
   compileColumnPath,
   parseSelect,
@@ -45,7 +46,7 @@ export async function castValue(
   if (udt === "json" || udt === "jsonb") {
     return `${sql.add(JSON.stringify(value))}::${udt}`;
   }
-  return sql.add(value);
+  return sql.add(serializeVectorValue(value, udt));
 }
 
 export async function executeInsert(
