@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { markTerminalSlackDelivery } from "./run-terminal-notification";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   finishCallAfterRuntime,
@@ -22,6 +23,25 @@ function databaseReply(data: unknown, error: { message: string } | null) {
   };
   return { from: () => query } as unknown as SupabaseClient;
 }
+
+it("delivery recording failures propagate and successful writes finish", async () => {
+  await expect(
+    markTerminalSlackDelivery(
+      buildRunRow(),
+      "failed",
+      "key",
+      databaseReply(null, { message: "unavailable" })
+    )
+  ).rejects.toThrow("Failed to record terminal Slack delivery: unavailable");
+  await expect(
+    markTerminalSlackDelivery(
+      buildRunRow(),
+      "failed",
+      "key",
+      databaseReply({ id: "run-1" }, null)
+    )
+  ).resolves.toBeUndefined();
+});
 
 it("propagates database failure so supervision retries instead of reporting cleanup", async () => {
   const client = databaseReply(null, { message: "database unavailable" });

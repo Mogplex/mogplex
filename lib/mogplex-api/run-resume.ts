@@ -46,7 +46,7 @@ import {
   type FinalizeDeps,
 } from "@/lib/mogplex-api/run-execution-finalize";
 import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
-import { stripSlackRunControlsForTerminalRun } from "@/lib/slack/run-controls-notify";
+import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
 import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
@@ -156,7 +156,7 @@ const defaultResumeDeps: ResumeExternalAgentRunDeps = {
   runHarness: runHarnessViaRoute,
   loadAiCall: loadOwnedAiCall,
   appendEvent: safeAppendAiCallEvent,
-  notifyRunReachedTerminalState: stripSlackRunControlsForTerminalRun,
+  notifyRunReachedTerminalState: notifyTerminalSlackRunOnce,
   notifyRunCheckpoint: notifySlackRunCheckpoint,
 };
 

@@ -10,6 +10,10 @@ import {
 } from "@/lib/mogplex-api/run-runtime-store";
 import { loadMogplexApiRun } from "@/lib/mogplex-api/runs";
 import {
+  markTerminalSlackDelivery,
+  notifyTerminalSlackRunOnce,
+} from "@/lib/mogplex-api/run-terminal-notification";
+import {
   buildAiCall,
   buildRunRow,
 } from "../unit/helpers/mogplex-api-runs-fixtures";
@@ -67,6 +71,7 @@ beforeAll(async () => {
     "20260322144500_ai_call_cancellation_control.sql",
     "20260428100000_external_agent_runs.sql",
     "20260904184000_external_agent_run_awaiting_input.sql",
+    "20260905022500_external_run_terminal_delivery.sql",
   ]) {
     await pg.exec(
       await readFile(
@@ -115,6 +120,66 @@ it("finalizes without erasing usage or retained command identity", async () => {
     error: "worker timed out",
   });
   expect(result?.completed_at).toBeTruthy();
+});
+
+it.each(["supabase", "neon"])(
+  "%s delivery migration is nullable, additive, and idempotent",
+  async (backend) => {
+    await pg.exec(
+      "alter table external_agent_runs drop column slack_terminal_notification_key"
+    );
+    const sql = await readFile(
+      new URL(
+        `../../${backend}/migrations/20260905022500_external_run_terminal_delivery.sql`,
+        import.meta.url
+      ),
+      "utf8"
+    );
+    await pg.exec(sql);
+    await pg.exec(sql);
+    const result = await pg.query(
+      "select status, slack_terminal_notification_key from external_agent_runs"
+    );
+    expect(result.rows).toEqual([
+      { status: "streaming", slack_terminal_notification_key: null },
+    ]);
+  }
+);
+
+it("delivery markers cannot cross owners, calls, or terminal status", async () => {
+  await pg.exec("update external_agent_runs set status='failed'");
+  for (const row of [
+    { ...expectedRun(), user_id: otherUser },
+    { ...expectedRun(), ai_call_id: "00000000-0000-4000-8000-000000000099" },
+  ])
+    await markTerminalSlackDelivery(row, "failed", "wrong", client);
+  await markTerminalSlackDelivery(expectedRun(), "success", "wrong", client);
+  expect(
+    (
+      await pg.query(
+        "select slack_terminal_notification_key from external_agent_runs"
+      )
+    ).rows
+  ).toEqual([{ slack_terminal_notification_key: null }]);
+  await markTerminalSlackDelivery(expectedRun(), "failed", "delivered", client);
+  expect(
+    (
+      await pg.query(
+        "select slack_terminal_notification_key from external_agent_runs"
+      )
+    ).rows
+  ).toEqual([{ slack_terminal_notification_key: "delivered" }]);
+});
+
+it("active runs cannot be marked as terminally delivered", async () => {
+  await markTerminalSlackDelivery(expectedRun(), "streaming", "wrong", client);
+  expect(
+    (
+      await pg.query(
+        "select slack_terminal_notification_key from external_agent_runs"
+      )
+    ).rows
+  ).toEqual([{ slack_terminal_notification_key: null }]);
 });
 it("rejects cross-user call and run updates", async () => {
   expect(
@@ -207,6 +272,11 @@ it("can reconcile an unassigned legacy runtime only while it is still unassigned
 });
 
 it("a public detail read repairs a hard-timed-out run through actual SQL, without restarting work", async () => {
+  await pg.query("update external_agent_runs set metadata=$1::jsonb", [
+    JSON.stringify({
+      slackRunControls: { teamId: "T1", channelId: "C1", messageTs: "1.1" },
+    }),
+  ]);
   const loadRun = async () =>
     (
       await pg.query<ExternalAgentRunRow>(
@@ -222,28 +292,38 @@ it("a public detail read repairs a hard-timed-out run through actual SQL, withou
       )
     ).rows[0] ?? null;
   const notifications: string[] = [];
-  const detail = await loadMogplexApiRun({
-    userId: user,
-    runId,
-    deps: { loadRunById: loadRun },
-    runtimeDeps: {
-      readRuntime: async () => ({
-        id: "run_worker",
-        taskIdentifier: "execute-external-agent-run",
-        status: "TIMED_OUT",
-      }),
-      loadRun,
-      loadCall,
-      finishCall: (call, status, error) =>
-        finishCallAfterRuntime(call, status, error, client),
-      syncRun: (run, status, error) =>
-        syncRunAfterRuntime(run, status, error, client),
-      appendEvent: async () => null,
-      notifyTerminal: async (_run, status) => {
-        notifications.push(status);
+  const readDetail = () =>
+    loadMogplexApiRun({
+      userId: user,
+      runId,
+      deps: { loadRunById: loadRun },
+      runtimeDeps: {
+        readRuntime: async () => ({
+          id: "run_worker",
+          taskIdentifier: "execute-external-agent-run",
+          status: "TIMED_OUT",
+        }),
+        loadRun,
+        loadCall,
+        finishCall: (call, status, error) =>
+          finishCallAfterRuntime(call, status, error, client),
+        syncRun: (run, status, error) =>
+          syncRunAfterRuntime(run, status, error, client),
+        appendEvent: async () => null,
+        notifyTerminal: (run, status) =>
+          notifyTerminalSlackRunOnce(run, status, {
+            send: async (_run, sentStatus) => {
+              notifications.push(sentStatus);
+              return true;
+            },
+            markDelivered: (row, sentStatus, key) =>
+              markTerminalSlackDelivery(row, sentStatus, key, client),
+          }),
       },
-    },
-  });
+    });
+  const detail = await readDetail();
+  await readDetail();
+  await readDetail();
   expect(detail).toMatchObject({
     status: "failed",
     error: "Agent worker timed out before completion.",

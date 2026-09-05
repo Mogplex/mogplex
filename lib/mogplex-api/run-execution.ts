@@ -21,7 +21,7 @@ import {
 } from "@/lib/mogplex-api/run-execution-data";
 import { loadOwnedAiCall, safeAppendAiCallEvent } from "@/lib/interactive-runs";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
-import { stripSlackRunControlsForTerminalRun } from "@/lib/slack/run-controls-notify";
+import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
 import {
   normalizeSlackRunImageAttachmentsMetadata,
   SLACK_RUN_IMAGE_ATTACHMENTS_METADATA_KEY,
@@ -128,7 +128,7 @@ const defaultExecutionDeps: ExternalAgentRunExecutionDeps = {
   runHarness: runHarnessViaRoute,
   loadAiCall: loadOwnedAiCall,
   appendEvent: safeAppendAiCallEvent,
-  notifyRunReachedTerminalState: stripSlackRunControlsForTerminalRun,
+  notifyRunReachedTerminalState: notifyTerminalSlackRunOnce,
   notifyRunCheckpoint: notifySlackRunCheckpoint,
 };
 

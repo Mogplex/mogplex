@@ -188,13 +188,14 @@ it("replaces the Slack message with a failed result and no Cancel action", async
         >["updateSlackMessage"]
       >[1]
     | undefined;
-  f.deps.notifyTerminal = (run, status) =>
-    stripSlackRunControlsForTerminalRun(run, status, {
+  f.deps.notifyTerminal = async (run, status) => {
+    await stripSlackRunControlsForTerminalRun(run, status, {
       getSlackBotToken: async () => "test-slack-token",
       updateSlackMessage: async (_token, input) => {
         slackMessage = input;
       },
     });
+  };
   await finalizeRunAfterWorkerExit(f.run(), timeout, f.deps);
   expect(slackMessage).toMatchObject({ channel: "D_TEST", ts: "123.456" });
   expect(slackMessage?.text).toMatch(/failed/i);

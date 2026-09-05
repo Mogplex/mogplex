@@ -12,7 +12,7 @@ import {
   type ExternalAgentRunRow,
   type MogplexApiRunStatus,
 } from "./runs";
-import { stripSlackRunControlsForTerminalRun } from "@/lib/slack/run-controls-notify";
+import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
 import type { AiCall, AiCallEvent } from "@/lib/types";
 
 export type PresentedAiCallEvent = {
@@ -59,7 +59,7 @@ type RunCancelDeps = {
    * may throw; callers must absorb failures so cancellation still completes.
    */
   notifyTerminal: (
-    run: { id: string; metadata: unknown },
+    run: ExternalAgentRunRow,
     status: MogplexApiRunStatus
   ) => Promise<void>;
 };
@@ -264,7 +264,7 @@ const defaultCancelDeps: RunCancelDeps = {
   finalizeCancelled: finalizeAiCallAsCancelledIfActive,
   appendEvent: safeAppendAiCallEvent,
   killRuntimeCommand,
-  notifyTerminal: stripSlackRunControlsForTerminalRun,
+  notifyTerminal: notifyTerminalSlackRunOnce,
 };
 
 export async function listMogplexApiRunEvents(input: {
@@ -330,7 +330,7 @@ export async function cancelMogplexApiRun(input: {
     ...input.deps,
   };
   const safeNotifyTerminal = async (
-    terminalRun: { id: string; metadata: unknown },
+    terminalRun: ExternalAgentRunRow,
     status: MogplexApiRunStatus
   ): Promise<void> => {
     try {

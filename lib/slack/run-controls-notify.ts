@@ -86,12 +86,12 @@ export async function stripSlackRunControlsForTerminalRun(
   run: SlackNotifiableRun,
   status: MogplexApiRunStatus,
   deps?: SlackRunControlsNotifyDeps
-): Promise<void> {
+): Promise<boolean> {
   const slack = readSlackRunControlsMetadata(run.metadata);
-  if (!slack) return;
+  if (!slack) return false;
   const slackDeps = deps ?? (await loadSlackRunControlsNotifyDeps());
   const botToken = await slackDeps.getSlackBotToken(slack.teamId);
-  if (!botToken) return;
+  if (!botToken) return false;
   const runUrl = buildAppUrl(`/runs/${run.id}`).toString();
   const statusLine = buildRepoAgentRunFinishedText(run.id, runUrl, status);
   const text = buildRepoAgentRunResultText({
@@ -111,4 +111,5 @@ export async function stripSlackRunControlsForTerminalRun(
     text,
     blocks,
   });
+  return true;
 }

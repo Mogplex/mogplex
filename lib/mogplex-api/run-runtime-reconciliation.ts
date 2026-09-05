@@ -1,5 +1,5 @@
 import { loadOwnedAiCall, safeAppendAiCallEvent } from "@/lib/interactive-runs";
-import { stripSlackRunControlsForTerminalRun } from "@/lib/slack/run-controls-notify";
+import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
 import { loadRunForExecution } from "./run-execution-data";
 import {
   finishCallAfterRuntime,
@@ -18,7 +18,7 @@ export type RuntimeFinalizationDeps = {
   finishCall: typeof finishCallAfterRuntime;
   syncRun: typeof syncRunAfterRuntime;
   appendEvent: typeof safeAppendAiCallEvent;
-  notifyTerminal: typeof stripSlackRunControlsForTerminalRun;
+  notifyTerminal: typeof notifyTerminalSlackRunOnce;
 };
 const defaultDeps: RuntimeFinalizationDeps = {
   loadRun: loadRunForExecution,
@@ -26,7 +26,7 @@ const defaultDeps: RuntimeFinalizationDeps = {
   finishCall: finishCallAfterRuntime,
   syncRun: syncRunAfterRuntime,
   appendEvent: safeAppendAiCallEvent,
-  notifyTerminal: stripSlackRunControlsForTerminalRun,
+  notifyTerminal: notifyTerminalSlackRunOnce,
 };
 
 export function isTerminalRunStatus(
