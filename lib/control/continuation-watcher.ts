@@ -1,4 +1,5 @@
 import { createTableEventListener } from "@/lib/db/table-event-listener";
+import { createControlSupabaseListener } from "./continuation-supabase-listener";
 
 /** A live execution lease, never a timer/poll or a waiting background job. */
 export async function watchControlContinuation(
@@ -9,9 +10,13 @@ export async function watchControlContinuation(
     assertCurrent: () => Promise<void>;
     abort: (error: unknown) => void;
   },
-  createListener = createTableEventListener
+  createListener?: typeof createTableEventListener
 ) {
-  const listener = await createListener();
+  const listener = await (createListener
+    ? createListener()
+    : process.env.MOGPLEX_DATA_BACKEND === "neon"
+      ? createTableEventListener()
+      : createControlSupabaseListener(input));
   listener.onError(input.abort);
   listener.onNotification((event) => {
     if (event.user_id !== input.userId) return;

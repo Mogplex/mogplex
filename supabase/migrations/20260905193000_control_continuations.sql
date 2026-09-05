@@ -31,6 +31,29 @@ alter table public.control_continuations enable row level security;
 revoke all on public.control_continuations from public, anon, authenticated;
 grant select, insert, update on public.control_continuations to service_role;
 
+-- Supabase postgres_changes checks the subscriber's SELECT policy. Keep all
+-- mutations server-only; a signed-in owner may read their own handoff.
+do $$
+declare target text;
+begin
+  if to_regprocedure('public.current_profile_id()') is not null then
+    drop policy if exists control_continuations_owner_read on public.control_continuations;
+    create policy control_continuations_owner_read on public.control_continuations
+      for select to authenticated using (user_id = (select public.current_profile_id()));
+    grant select on public.control_continuations to authenticated;
+  end if;
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime' and not puballtables) then
+    foreach target in array array['control_continuations','control_sessions'] loop
+      if not exists (
+        select 1 from pg_publication_tables
+        where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = target
+      ) then
+        execute format('alter publication supabase_realtime add table public.%I', target);
+      end if;
+    end loop;
+  end if;
+end $$;
+
 create or replace function public.control_latest_user_message(p_messages jsonb)
 returns jsonb language sql immutable security invoker set search_path = public as $$
   select value from jsonb_array_elements(p_messages) with ordinality m

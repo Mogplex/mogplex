@@ -4,6 +4,8 @@ import type { TableEventPayload } from "@/lib/db/table-event-listener";
 import { watchControlContinuation } from "@/lib/control/continuation-watcher";
 import { assertControlContinuationCurrent } from "@/lib/control/continuation-store";
 import { controlContinuationDatabase } from "../support/control-continuation-database";
+import { supabaseRealtimeSocket } from "../support/supabase-realtime-socket";
+import { createControlSupabaseListener } from "@/lib/control/continuation-supabase-listener";
 
 it.each(["neon", "supabase"] as const)(
   "%s emits owner-scoped cancellation events and interrupts the coordinator without polling",
@@ -104,3 +106,64 @@ it.each(["neon", "supabase"] as const)(
     }
   }
 );
+
+it("a persisted cancellation interrupts the coordinator through the real Supabase wire protocol", async () => {
+  const f = await controlContinuationDatabase("supabase");
+  const network = supabaseRealtimeSocket();
+  try {
+    const { continuation } = await f.rpc<{ continuation: { id: string } }>(
+      "control_register_continuation",
+      f.registerArgs
+    );
+    await f.db.query(
+      "update control_continuations set status='running',runtime_run_id='runtime' where id=$1",
+      [continuation.id]
+    );
+    const scope = {
+      userId: f.owner,
+      sessionId: f.sessionId,
+      continuationId: continuation.id,
+    };
+    const controller = new AbortController();
+    const client = f.client as unknown as Parameters<
+      typeof assertControlContinuationCurrent
+    >[3];
+    const watcher = await watchControlContinuation(
+      {
+        ...scope,
+        assertCurrent: () =>
+          assertControlContinuationCurrent(
+            f.owner,
+            continuation.id,
+            "runtime",
+            client
+          ),
+        abort: (error) => controller.abort(error),
+      },
+      () => createControlSupabaseListener(scope, network.client)
+    );
+    const unlisten = await f.db.listen("mogplex_table_events", (raw) => {
+      const event = JSON.parse(raw) as TableEventPayload;
+      network.emit(event.table, { id: event.id, user_id: event.user_id });
+    });
+    try {
+      const aborted = new Promise<void>((resolve) =>
+        controller.signal.addEventListener("abort", () => resolve(), {
+          once: true,
+        })
+      );
+      await f.db.query(
+        "update control_sessions set archived=true where id=$1",
+        [f.sessionId]
+      );
+      await aborted;
+      expect(controller.signal.reason.message).toContain("superseded");
+    } finally {
+      await unlisten();
+      await watcher.end();
+    }
+    expect(network.client.getChannels()).toHaveLength(0);
+  } finally {
+    await f.db.close();
+  }
+});
