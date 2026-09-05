@@ -9,7 +9,8 @@ import {
 } from "../../tests/unit/helpers/mogplex-api-runs-fixtures";
 
 async function exercise(
-  mode: "success" | "error" | "cancelled" | "unauthorized"
+  mode: "success" | "error" | "cancelled" | "unauthorized",
+  response = "Fixed the header."
 ) {
   let call = buildAiCall({ model: "harness:mogplex" });
   const run = buildRunRow({ harness: "mogplex" });
@@ -28,11 +29,9 @@ async function exercise(
             });
           } else {
             sink.enqueue({ type: "text-start", id: "text" });
-            sink.enqueue({
-              type: "text-delta",
-              id: "text",
-              delta: "Fixed the header.",
-            });
+            for (const delta of response) {
+              sink.enqueue({ type: "text-delta", id: "text", delta });
+            }
             sink.enqueue({ type: "text-end", id: "text" });
             sink.enqueue({
               type: "finish",
@@ -143,8 +142,16 @@ test("native runner consumes real SDK output and records usage on the existing c
   assert.equal(result.call.input_tokens, 12);
   assert.equal(result.call.output_tokens, 5);
   assert.ok(result.events.includes("log"));
+  assert.equal(result.events.filter((event) => event === "log").length, 1);
   assert.ok(result.events.includes("finished"));
   assert.ok(result.cleaned && result.closed);
+});
+
+test("native runner bounds telemetry writes for a long token-sized stream", async () => {
+  const response = "x".repeat(5000);
+  const result = await exercise("success", response);
+  assert.equal(result.result?.output, response);
+  assert.equal(result.events.filter((event) => event === "log").length, 3);
 });
 
 test("native provider failure cannot become a successful empty run", async () => {

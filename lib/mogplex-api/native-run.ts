@@ -54,6 +54,7 @@ export async function runNativeMogplexAgent(
   const progress = deps.createProgress(run);
   let usage = EMPTY_CAPTURED_USAGE;
   let output = "";
+  let pendingText = "";
   let toolCount = 0;
   const event = (
     data: Pick<
@@ -68,10 +69,23 @@ export async function runNativeMogplexAgent(
       conversationId: run.conversation_id,
       ...data,
     });
+  // Bound telemetry writes by text size, not provider token/chunk count.
+  // Tool boundaries and completion flush the remainder without a polling timer.
+  const flushText = async () => {
+    const text = pendingText;
+    pendingText = "";
+    if (text)
+      await event({
+        eventType: "log",
+        message: text,
+        payload: { kind: "assistant_delta" },
+      });
+  };
   const finish = async (
     status: "success" | "failed" | "cancelled",
     error: string | null
   ) => {
+    await flushText();
     const update = buildAiCallCompletionUpdate({
       startedAt: call.started_at,
       status,
@@ -139,6 +153,7 @@ export async function runNativeMogplexAgent(
         },
         async experimental_onToolCallStart({ toolCall }) {
           toolCount += 1;
+          await flushText();
           await event({
             eventType: "tool_started",
             toolName: toolCall.toolName,
@@ -174,11 +189,8 @@ export async function runNativeMogplexAgent(
       if (part.type === "error") throw part.error;
       if (part.type === "text-delta") {
         output += part.text;
-        await event({
-          eventType: "log",
-          message: part.text,
-          payload: { kind: "assistant_delta" },
-        });
+        pendingText += part.text;
+        if (pendingText.length >= 2048) await flushText();
         await progress.report({ kind: "assistant_text", text: part.text });
       }
     }

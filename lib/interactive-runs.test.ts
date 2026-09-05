@@ -5,12 +5,74 @@ import {
   appendAiCallEvent,
   safeAppendAiCallEvent,
   sanitizeAiCallEventInput,
+  updateAiCallIfActive,
 } from "./interactive-runs";
 
 vi.hoisted(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
+});
+
+describe("active call updates", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(supabaseAdmin, "from");
+  });
+
+  it.each(["active", "cancel_requested", "cancelled"])(
+    "only advances a run while its control state is active (%s)",
+    async (controlState) => {
+      let row: Record<string, unknown> = {
+        id: "call-1",
+        status: "pending",
+        control_state: controlState,
+        model: "harness:mogplex",
+      };
+      let update: Record<string, unknown> = {};
+      const filters: Array<(row: Record<string, unknown>) => boolean> = [];
+      const query = {
+        update(value: Record<string, unknown>) {
+          update = value;
+          return query;
+        },
+        eq(key: string, value: unknown) {
+          filters.push((record) => record[key] === value);
+          return query;
+        },
+        in(key: string, values: unknown[]) {
+          filters.push((record) => values.includes(record[key]));
+          return query;
+        },
+        select() {
+          return query;
+        },
+        async maybeSingle() {
+          if (!filters.every((filter) => filter(row)))
+            return { data: null, error: null };
+          row = { ...row, ...update };
+          return { data: row, error: null };
+        },
+      };
+      Object.defineProperty(supabaseAdmin, "from", {
+        configurable: true,
+        value: () => query,
+      });
+      const result = await updateAiCallIfActive("call-1", {
+        status: "streaming",
+        model: "test/native",
+      });
+      if (controlState === "active") {
+        expect(result).toMatchObject({
+          status: "streaming",
+          model: "test/native",
+        });
+      } else {
+        expect(result).toBeNull();
+        expect(row.status).toBe("pending");
+        expect(row.model).toBe("harness:mogplex");
+      }
+    }
+  );
 });
 
 describe("sanitizeAiCallEventInput", () => {
