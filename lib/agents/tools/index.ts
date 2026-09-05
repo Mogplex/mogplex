@@ -11,6 +11,7 @@ import type { Connection } from "@/lib/types";
 import { webFetch, webSearch, browseSkills, browseVercelDocs } from "./web";
 import {
   createTerminalExec,
+  type SandboxCommandExecution,
   createWriteFile,
   createStartSandbox,
   createStopSandbox,
@@ -141,12 +142,10 @@ export function buildStaticTools(
   capabilities: ReadonlySet<Capability> = ALL_CAPABILITIES,
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
   githubPrSearchOptions?: GithubPrSearchOptions,
-  githubRequestMutationAuthorizations?: GithubRequestMutationAuthorizations
+  githubRequestMutationAuthorizations?: GithubRequestMutationAuthorizations,
+  sandboxExecution?: SandboxCommandExecution
 ) {
-  // Default to an empty memory context when not provided. Production calls
-  // from buildTools() always pass an explicit context; direct callers
-  // (ALL_TOOLS, tests) get the correct empty-scope behaviour so memories
-  // aren't tagged with a stray sandbox_id that the widget doesn't filter on.
+  // Do not infer sandbox memory scope; buildTools supplies it explicitly.
   const memoryTools = userId
     ? createMemoryTools(userId, repoId, memoryContext ?? {})
     : {};
@@ -159,7 +158,13 @@ export function buildStaticTools(
     web_search: webSearch,
     browse_skills: browseSkills,
     browse_vercel_docs: browseVercelDocs,
-    bash: createTerminalExec(sandboxId, userId, repoId),
+    bash: createTerminalExec(
+      sandboxId,
+      userId,
+      repoId,
+      undefined,
+      sandboxExecution
+    ),
     read_file: createReadFile(githubToken, repoDefaults),
     list_files: createListFiles(githubToken, repoDefaults),
     stop_sandbox: createStopSandbox(userId),
@@ -346,6 +351,7 @@ function recordDeniedTools(
 }
 
 export async function buildTools(opts: {
+  sandboxExecution?: SandboxCommandExecution;
   sandboxId?: string;
   userId?: string;
   repoId?: string;
@@ -421,7 +427,8 @@ export async function buildTools(opts: {
       userText: opts.latestUserText,
       repoOwner: opts.repoOwner,
       repoName: opts.repoName,
-    })
+    }),
+    opts.sandboxExecution
   );
 
   const emptyCleanup = async () => undefined;
