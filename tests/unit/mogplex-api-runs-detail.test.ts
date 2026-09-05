@@ -8,10 +8,66 @@ import {
 } from "../../lib/mogplex-api/runs";
 import {
   buildAiCallEvent,
+  buildAiCall,
   buildRunRow,
   loadRunDetailRoute,
   loadRunEventsRoute,
 } from "./helpers/mogplex-api-runs-fixtures";
+
+test("GET repairs an owned timed-out worker and returns its terminal state", async () => {
+  const { createMogplexApiRunDetailGetHandler } = await loadRunDetailRoute();
+  let run = buildRunRow({
+    status: "streaming",
+    runtime_provider: "trigger",
+    runtime_run_id: "run_worker",
+  });
+  let call = buildAiCall({ status: "streaming" });
+  let notified = false;
+  const handler = createMogplexApiRunDetailGetHandler({
+    resolveApiKey: async () => ({
+      ok: true,
+      auth: { userId: run.user_id, keyId: "key-1", scopes: ["read"] },
+    }),
+    loadRun: async () =>
+      loadMogplexApiRun({
+        userId: run.user_id,
+        runId: run.id,
+        deps: { loadRunById: async () => run },
+        runtimeDeps: {
+          readRuntime: async () => ({
+            id: "run_worker",
+            taskIdentifier: "execute-external-agent-run",
+            status: "TIMED_OUT",
+          }),
+          loadRun: async () => run,
+          loadCall: async () => call,
+          finishCall: async (_call, status, error) =>
+            (call = { ...call, status, error }),
+          syncRun: async (_run, status, error) =>
+            (run = { ...run, status, error }),
+          appendEvent: async () => null,
+          notifyTerminal: async () => {
+            notified = true;
+          },
+        },
+      }),
+  });
+  const response = await handler(
+    new NextRequest("http://localhost/api/v1/mogplex/runs/run-1", {
+      headers: { authorization: "Bearer mog_valid" },
+    }),
+    { params: Promise.resolve({ runId: "run-1" }) }
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.run.status, "failed");
+  assert.equal(
+    body.data.run.error,
+    "Agent worker timed out before completion."
+  );
+  assert.equal(call.status, "failed");
+  assert.equal(notified, true);
+});
 
 test("GET /api/v1/mogplex/runs/:runId returns owned run details", async () => {
   const { createMogplexApiRunDetailGetHandler } = await loadRunDetailRoute();

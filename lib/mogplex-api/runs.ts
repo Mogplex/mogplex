@@ -6,6 +6,7 @@
  * normalization to ./runs-normalize.ts.
  */
 import { createAiCall } from "@/lib/interactive-runs";
+import { reconcileExternalAgentRunRuntime } from "./run-runtime";
 import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import type { ApiKeyAuth } from "@/lib/auth/api-key";
@@ -390,11 +391,26 @@ export async function loadMogplexApiRun(input: {
   userId: string;
   runId: string;
   deps?: Partial<Pick<StartMogplexApiRunDeps, "loadRunById">>;
+  runtimeDeps?: Parameters<typeof reconcileExternalAgentRunRuntime>[1];
 }) {
   const deps = {
     loadRunById,
     ...input.deps,
   };
-  const run = await deps.loadRunById(input.userId, input.runId);
+  let run = await deps.loadRunById(input.userId, input.runId);
+  if (run) {
+    try {
+      run = await reconcileExternalAgentRunRuntime(run, input.runtimeDeps);
+    } catch (error) {
+      // Provider outages are not evidence of run failure. If only Slack
+      // delivery failed after persistence, still return the newly saved state.
+      console.warn(
+        "[mogplex-api/runs] runtime reconciliation unavailable",
+        input.runId,
+        error
+      );
+      run = await deps.loadRunById(input.userId, input.runId);
+    }
+  }
   return run ? presentMogplexApiRun(run) : null;
 }
