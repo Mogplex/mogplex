@@ -229,6 +229,7 @@ function applySharedFilters(
     repoId: string | null;
     sandboxRecordId: string | null;
     conversationId: string | null;
+    callIds: string[] | null;
     agentId: string | null;
     slackAttributionMode: string | null;
     from: string | null;
@@ -293,6 +294,7 @@ function applySharedFilters(
     );
   if (input.conversationId)
     nextQuery = nextQuery.eq("conversation_id", input.conversationId);
+  if (input.callIds) nextQuery = nextQuery.in("id", input.callIds);
   if (input.agentId)
     nextQuery = nextQuery.filter("metadata->>agent_id", "eq", input.agentId);
   if (
@@ -346,6 +348,23 @@ export function createObservabilityCallsGetHandler(
     const from = params.get("from");
     const to = params.get("to");
     const conversationId = params.get("conversation_id");
+    const callIds = params.get("call_ids")?.split(",") ?? null;
+    if (
+      callIds &&
+      (!conversationId ||
+        callIds.length > 100 ||
+        callIds.some(
+          (id) =>
+            !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(
+              id
+            )
+        ))
+    ) {
+      return NextResponse.json(
+        { error: "call_ids requires a conversation_id and 1 to 100 UUIDs" },
+        { status: 400 }
+      );
+    }
     const agentId = params.get("agent_id");
     const slackAttributionMode = params.get("slack_attribution_mode");
     const searchPattern = buildSearchPattern(params.get("q"));
@@ -385,6 +404,7 @@ export function createObservabilityCallsGetHandler(
       repoId,
       sandboxRecordId,
       conversationId,
+      callIds,
       agentId,
       slackAttributionMode,
       from,

@@ -4,7 +4,7 @@ import { markInterruptedChatResponse } from "./chat-stream";
 
 type ChatRunState = Pick<AiCall, "id" | "type" | "status" | "conversation_id">;
 
-function savedCallId(message: UIMessage): string | null {
+export function savedChatCallId(message: UIMessage): string | null {
   const metadata = message.metadata;
   if (!metadata || typeof metadata !== "object" || !("ai_call_id" in metadata))
     return null;
@@ -14,7 +14,7 @@ function savedCallId(message: UIMessage): string | null {
 export function needsChatHistoryRecovery(message: UIMessage): boolean {
   return (
     message.role === "assistant" &&
-    Boolean(savedCallId(message)) &&
+    Boolean(savedChatCallId(message)) &&
     message.parts.some(
       (part) =>
         (isToolUIPart(part) &&
@@ -48,7 +48,7 @@ export function reconcileChatHistory(
   const reconciled = messages.map((message) => {
     if (
       !needsChatHistoryRecovery(message) ||
-      !terminalIds.has(savedCallId(message)!)
+      !terminalIds.has(savedChatCallId(message)!)
     )
       return message;
     changed = true;

@@ -15,11 +15,12 @@ test("reloaded history reconciles a terminal run without replaying or losing com
   await initializeTrackedEvents(page);
   await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
+  const savedCallId = "00000000-0000-4000-8000-000000000001";
   let savedMessages: UIMessage[] = [
     {
       id: "saved-response",
       role: "assistant",
-      metadata: { ai_call_id: "saved-call" },
+      metadata: { ai_call_id: savedCallId },
       parts: [
         { type: "text", text: "Checking the project", state: "done" },
         {
@@ -94,19 +95,25 @@ test("reloaded history reconciles a terminal run without replaying or losing com
         billingProjectId: null,
         billingTeamId: null,
         aiBillingSource: "platform",
-        callId: "saved-call",
+        callId: savedCallId,
       }),
       status: "failed",
       conversation_id: conversationId,
     };
+    const newerCalls = Array.from({ length: 101 }, (_, index) => ({
+      ...call,
+      id: `00000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}`,
+    }));
     const calls =
       params.get("conversation_id") === conversationId &&
       params.get("live_only") !== "true"
-        ? [call]
+        ? params.get("call_ids")?.split(",").includes(savedCallId)
+          ? [call]
+          : newerCalls.slice(0, 100)
         : [];
     await fulfillJson(route, {
       calls,
-      total: calls.length,
+      total: params.has("call_ids") ? calls.length : 102,
       page: 1,
       limit: 100,
     });

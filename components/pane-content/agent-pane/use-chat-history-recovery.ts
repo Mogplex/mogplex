@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import useSWR from "swr";
 import type { UIMessage } from "ai";
-import { useObservabilityCalls } from "@/hooks/use-observability";
-import { useConversationsStore } from "@/hooks/use-conversations";
+import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
+import { USER_AI_CALLS_REALTIME_SPEC } from "@/lib/observability/realtime-specs";
 import {
-  needsChatHistoryRecovery,
-  reconcileChatHistory,
-} from "@/lib/agents/chat-history-recovery";
+  buildChatHistoryRequests,
+  loadChatHistoryCalls,
+} from "@/lib/agents/chat-history-requests";
+import { useConversationsStore } from "@/hooks/use-conversations";
+import { reconcileChatHistory } from "@/lib/agents/chat-history-recovery";
 
 export function useChatHistoryRecovery(input: {
   paneId: string;
@@ -17,24 +20,27 @@ export function useChatHistoryRecovery(input: {
   enabled: boolean;
 }) {
   const { paneId, conversationId, messages, setMessages, enabled } = input;
-  const { data } = useObservabilityCalls(
-    enabled && messages.some(needsChatHistoryRecovery)
-      ? {
-          conversationId,
-          type: "chat",
-          page: 1,
-          limit: 100,
-          sort: "started_at",
-          order: "desc",
-        }
-      : null
+  const urls = useMemo(
+    () => (enabled ? buildChatHistoryRequests(messages, conversationId) : []),
+    [conversationId, enabled, messages]
   );
+  const { data, mutate } = useSWR(
+    urls.length > 0 ? urls : null,
+    (requests: string[]) => loadChatHistoryCalls(requests),
+    { shouldRetryOnError: false }
+  );
+  useRealtimeRouteRefresh({
+    channelName: `chat-history:${conversationId}`,
+    specs: [USER_AI_CALLS_REALTIME_SPEC],
+    onInvalidate: mutate,
+    enabled: urls.length > 0,
+  });
 
   useEffect(() => {
     if (!enabled || !data) return;
     const store = useConversationsStore.getState();
     if (store.conversations[paneId]?.id !== conversationId) return;
-    const next = reconcileChatHistory(messages, data.calls, conversationId);
+    const next = reconcileChatHistory(messages, data, conversationId);
     if (next === messages) return;
     setMessages(next);
     store.setMessages(paneId, next);
