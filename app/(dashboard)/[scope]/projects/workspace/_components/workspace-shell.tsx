@@ -231,6 +231,7 @@ export function WorkspaceShell() {
   // Auto-restart stopped sandboxes when restoring a session
   const autoRestartedRef = useRef<string | null>(null);
   useEffect(() => {
+    if (activeSession?.externalRunId) return;
     resetAutoRestartedSandboxRef(autoRestartedRef, activeSessionSandboxId);
     const candidate = getSessionSandboxRestartCandidate({
       activeRepoId: activeRepo?.id,
@@ -262,6 +263,7 @@ export function WorkspaceShell() {
     activeRepo?.id,
     activeSessionId,
     activeSessionSandbox,
+    activeSession?.externalRunId,
     activeSessionSandboxId,
     sandboxCreating,
   ]);

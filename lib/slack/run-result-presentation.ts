@@ -87,7 +87,7 @@ export function buildRunResultMessage(input: {
   }
   const receipts = guidanceReceiptText(guidance);
   if (receipts) paragraphs.push(`Your guidance\n${receipts}`);
-  const runUrl = buildAppUrl(`/runs/${run.id}`).toString();
+  const runUrl = buildAppUrl(`/runs/${run.id}?view=details`).toString();
   const blocks: SlackBlock[] = [
     { type: "header", text: { type: "plain_text", text: title } },
     ...paragraphs.map((text) => ({

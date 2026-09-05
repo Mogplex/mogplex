@@ -29,6 +29,9 @@ test("observability renders nested tool output diffs with the shared viewer", as
   // mocks below must come after mockBaseApp's empty-calls defaults.
   await enableScopedE2EAuth(page);
   await mockBaseApp(page);
+  await page.route("**/api/realtime/events?*", (route) =>
+    route.fulfill({ status: 204 })
+  );
 
   await page.route("**/api/observability/calls*", (route) =>
     fulfillJson(route, {
@@ -140,7 +143,7 @@ test("observability renders nested tool output diffs with the shared viewer", as
     page.getByRole("heading", { name: "Observability", level: 1 })
   ).toBeVisible();
   // The call_id deep link lands the table tab group on the Activity tab.
-  await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: /^Usage/ })).toHaveAttribute(
     "aria-selected",
     "true"
   );

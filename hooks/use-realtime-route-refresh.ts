@@ -36,22 +36,28 @@ export function useRealtimeRouteRefresh({
   specs,
   onInvalidate,
   enabled = true,
+  onConnectionChange,
 }: {
   channelName: string;
   specs: RealtimeRefreshSpec[];
   onInvalidate: () => void | Promise<unknown>;
   enabled?: boolean;
+  onConnectionChange?: (
+    state: "connecting" | "connected" | "disconnected"
+  ) => void;
 }) {
   const { user } = useUser();
   const supabase = useMemo(() => createClient(), []);
   const invalidateRef = useRef(onInvalidate);
+  const connectionRef = useRef(onConnectionChange);
   const scheduledRef = useRef(false);
   const channelId = useId();
   const specsKey = JSON.stringify(specs);
 
   useEffect(() => {
     invalidateRef.current = onInvalidate;
-  }, [onInvalidate]);
+    connectionRef.current = onConnectionChange;
+  }, [onInvalidate, onConnectionChange]);
 
   const resolvedSpecs = useMemo(() => {
     const parsedSpecs = JSON.parse(specsKey) as RealtimeRefreshSpec[];
@@ -87,6 +93,10 @@ export function useRealtimeRouteRefresh({
     tables: neonTables,
     enabled: enabled && useNeonBackend && resolvedSpecs.length > 0,
     onEvent: scheduleNeonInvalidate,
+    onConnectionChange: (state) => {
+      connectionRef.current?.(state);
+      if (state === "connected") scheduleNeonInvalidate();
+    },
   });
 
   // Supabase path: existing postgres_changes subscription
@@ -95,6 +105,7 @@ export function useRealtimeRouteRefresh({
     if (useNeonBackend || !enabled || resolvedSpecs.length === 0) return;
 
     const channel = supabase.channel(`${channelName}:${channelId}`);
+    connectionRef.current?.("connecting");
     const scheduleInvalidate = () => {
       if (scheduledRef.current) return;
       scheduledRef.current = true;
@@ -123,6 +134,16 @@ export function useRealtimeRouteRefresh({
     }
 
     channel.subscribe((status: string, error) => {
+      if (status === "SUBSCRIBED") {
+        connectionRef.current?.("connected");
+        scheduleInvalidate();
+      }
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT" ||
+        status === "CLOSED"
+      )
+        connectionRef.current?.("disconnected");
       if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
       console.error(
         `[realtime-route-refresh] ${channelName} subscription ${status.toLowerCase()}`,

@@ -1,217 +1,67 @@
 "use client"
 
-import { type ColumnDef } from "@tanstack/react-table"
-import { useMemo } from "react"
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { DataTable } from "@/components/ui/data-table"
 import type { JobsFilters } from "@/hooks/use-observability"
 import type { ObservabilityJob } from "@/lib/types"
-import {
-  AutomationCostCell,
-  AutomationStatusCell,
-} from "./automation-presentation-cells"
-import {
-  formatDispatchOutcome,
-  formatTokens,
-  getJobAutomationSummary,
-  timeAgo,
-} from "./formatters"
-import { JobExpandedRow } from "./job-expanded-row"
+import { presentWork, workDuration } from "@/lib/observability/work-presentation"
+import { AutomationCostCell } from "./automation-presentation-cells"
+import { StatusBadge } from "./badges"
+import { timeAgo } from "./formatters"
 import { PaginationControls } from "./pagination-controls"
 import { RunsControls } from "./runs-controls"
+import { RunInspector } from "./run-inspector"
+import type { WorkAction } from "./work-actions"
+import { useEffect, useRef } from "react"
 
-export function RunsSection({
-  jobs,
-  jobsLoading,
-  jobsTotal,
-  jobsPages,
-  jobFilters,
-  isCurrentPendingView,
-  jobActionId,
-  jobActionError,
-  onUpdateJobFilter,
-  onRunJobAction,
-}: {
-  jobs: ObservabilityJob[]
-  jobsLoading: boolean
-  jobsTotal: number
-  jobsPages: number
-  jobFilters: JobsFilters
-  isCurrentPendingView: boolean
-  jobActionId: string | null
-  jobActionError: string | null
-  onUpdateJobFilter: (key: keyof JobsFilters, value: JobsFilters[keyof JobsFilters]) => void
-  onRunJobAction: (jobId: string, action: "repair" | "requeue" | "cancel") => Promise<void>
+export function RunsSection({ jobs, jobsLoading, jobsTotal, jobsPages, jobFilters, isCurrentPendingView, jobActionId, jobActionError, loadError, onRefresh, onUpdateJobFilter, onRunJobAction }: {
+  jobs: ObservabilityJob[]; jobsLoading: boolean; jobsTotal: number; jobsPages: number;
+  jobFilters: JobsFilters; isCurrentPendingView: boolean; jobActionId: string | null;
+  jobActionError: string | null; loadError?: unknown; onRefresh?: () => void;
+  onUpdateJobFilter: (key: keyof JobsFilters, value: JobsFilters[keyof JobsFilters]) => void;
+  onRunJobAction: (jobId: string, action: WorkAction) => Promise<void>;
 }) {
-  const jobColumns = useMemo<ColumnDef<ObservabilityJob, unknown>[]>(() => [
-    {
-      accessorKey: "created_at",
-      header: "Time",
-      cell: ({ row }) => <span title={row.original.created_at}>{timeAgo(row.original.created_at)}</span>,
-    },
-    {
-      id: "repo",
-      header: "Repo",
-      cell: ({ row }) => row.original.repo.full_name ? (
-        <span className="text-muted-foreground">{row.original.repo.full_name.split("/").pop()}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-    },
-    {
-      id: "agent",
-      header: "Agent",
-      cell: ({ row }) => row.original.agent.name ? (
-        <span>{row.original.agent.name}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-    },
-    {
-      id: "source",
-      header: "Source",
-      cell: ({ row }) => (
-        <div className="space-y-0.5">
-          <div className="capitalize text-foreground">{row.original.source_kind.replace("_", " ")}</div>
-          <div className="text-xs text-muted-foreground">{row.original.source_type}</div>
+  const params = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
+  const { scope } = useParams<{ scope: string }>()
+  const selected = params.get("run_id")
+  const source = params.get("run_kind") ?? "flow"
+  const previousSelected = useRef(selected)
+  useEffect(() => {
+    if (!selected && previousSelected.current) document.getElementById(`work-${previousSelected.current}`)?.focus()
+    previousSelected.current = selected
+  }, [selected])
+  const select = (job?: ObservabilityJob) => {
+    const next = new URLSearchParams(params)
+    if (job) { next.set("run_id", job.id); next.set("run_kind", job.source_kind) }
+    else { next.delete("run_id"); next.delete("run_kind") }
+    router.push(`${pathname}?${next}`, { scroll: false })
+  }
+  return <section id="runs" tabIndex={-1} className="min-w-0 scroll-mt-4 space-y-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+    <RunsControls jobsLoading={jobsLoading} jobFilters={jobFilters} isCurrentPendingView={isCurrentPendingView} onUpdateJobFilter={onUpdateJobFilter} />
+    {Boolean(loadError) && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm"><p>Runs could not be refreshed. Previously loaded results may be out of date.</p><Button variant="outline" onClick={onRefresh}>Try again</Button></div>}
+    <div className={selected ? "grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]" : "min-w-0"}>
+      <div className={selected ? "hidden min-w-0 xl:block" : "min-w-0"}>
+        <div className="overflow-hidden rounded-md border border-border">
+          {!selected && <div aria-hidden="true" className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_5rem] gap-4 border-b border-border bg-muted px-4 py-3 text-xs font-medium text-muted-foreground lg:grid"><span>Work</span><span>Repository</span><span>State</span><span>Started / duration</span><span>Cost</span><span>Action</span></div>}
+          {jobsLoading && jobs.length === 0 ? <div role="status" aria-label="Loading runs" className="space-y-4 p-4">{[0, 1, 2].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div>
+            : jobs.length === 0 ? <div className="space-y-2 p-6"><h3 className="font-medium">{loadError ? "Run history unavailable" : "No runs match this view"}</h3><p className="text-sm text-muted-foreground">{loadError ? "Try refreshing when your connection is restored." : "Change the date range or filters. Runs appear here after you start work from a workspace, Slack, or an automation."}</p></div>
+            : <ul className="divide-y divide-border">{jobs.map((job) => {
+              const work = presentWork(job, scope)
+              return <li key={job.id} className={`grid gap-3 p-4 hover:bg-muted ${selected === job.id ? "bg-muted" : "bg-card"} ${selected ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_5rem] lg:items-center lg:gap-4"}`}>
+                <div className="min-w-0"><button id={`work-${job.id}`} type="button" aria-current={selected === job.id ? "true" : undefined} className="line-clamp-2 min-h-11 text-left text-sm font-medium underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" onClick={() => select(job)}>{work.title}</button><p className="truncate text-xs text-muted-foreground">{job.agent.name} · {job.source_type.replaceAll("_", " ")}</p></div>
+                {!selected && <p className="break-words text-sm text-muted-foreground">{job.repo.full_name ?? "Repository unavailable"}</p>}
+                <div><StatusBadge status={job.status} label={work.label} /></div>
+                <div className="text-xs text-muted-foreground"><time dateTime={job.started_at ?? job.created_at} title={new Date(job.started_at ?? job.created_at).toLocaleString()}>{timeAgo(job.started_at ?? job.created_at)}</time><p className="tabular-nums">{workDuration(job)}</p>{selected && <p>{job.repo.full_name}</p>}</div>
+                <div className="text-sm"><AutomationCostCell status={job.status} costUsd={job.cost_usd} /></div>
+                {!selected && <Button variant="outline" size="sm" aria-label={`Inspect ${work.title}`} onClick={() => select(job)}>Inspect</Button>}
+              </li>
+            })}</ul>}
         </div>
-      ),
-    },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => (
-        <AutomationStatusCell
-          status={row.original.status}
-          metadata={row.original.latest_dispatch_event?.metadata}
-          error={row.original.error}
-        />
-      ),
-    },
-    {
-      id: "automation",
-      header: "Automation",
-      cell: ({ row }) => row.original.latest_dispatch_event ? (
-        <div className="space-y-0.5">
-          <div className="text-foreground">{getJobAutomationSummary(row.original)}</div>
-          <div className="text-xs text-muted-foreground">{formatDispatchOutcome(row.original.latest_dispatch_event.outcome)}</div>
-        </div>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-    },
-    {
-      accessorKey: "start_attempts",
-      header: "Attempts",
-      cell: ({ row }) => row.original.start_attempts,
-    },
-    {
-      accessorKey: "cost_usd",
-      header: "Cost",
-      cell: ({ row }) => (
-        <AutomationCostCell
-          status={row.original.status}
-          costUsd={row.original.cost_usd}
-        />
-      ),
-    },
-    {
-      id: "latest_call",
-      header: "Latest Call",
-      cell: ({ row }) => row.original.latest_ai_call ? (
-        <div className="space-y-0.5">
-          <div className="text-foreground">{row.original.latest_ai_call.model.split("/").pop()}</div>
-          <div className="text-xs text-muted-foreground">
-            {formatTokens(row.original.latest_ai_call.total_tokens)} · {row.original.latest_ai_call.tool_calls_count} tools
-          </div>
-        </div>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-1">
-          {row.original.repairable && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              disabled={jobActionId !== null}
-              onClick={(event) => {
-                event.stopPropagation()
-                void onRunJobAction(row.original.id, "repair")
-              }}
-            >
-              Repair
-            </Button>
-          )}
-          {row.original.cancelable && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              disabled={jobActionId !== null}
-              onClick={(event) => {
-                event.stopPropagation()
-                void onRunJobAction(row.original.id, "cancel")
-              }}
-            >
-              Cancel
-            </Button>
-          )}
-          {row.original.requeueable && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              disabled={jobActionId !== null}
-              onClick={(event) => {
-                event.stopPropagation()
-                void onRunJobAction(row.original.id, "requeue")
-              }}
-            >
-              Requeue
-            </Button>
-          )}
-          {!row.original.repairable && !row.original.requeueable && !row.original.cancelable && (
-            <span className="text-xs text-muted-foreground">—</span>
-          )}
-        </div>
-      ),
-    },
-  ], [jobActionId, onRunJobAction])
-
-  return (
-    <section
-      id="runs"
-      tabIndex={-1}
-      className="scroll-mt-4 space-y-3 focus:outline-none"
-    >
-      <RunsControls
-        jobsLoading={jobsLoading}
-        jobFilters={jobFilters}
-        isCurrentPendingView={isCurrentPendingView}
-        onUpdateJobFilter={onUpdateJobFilter}
-      />
-      {jobActionError && (
-        <p role="alert" className="text-xs text-destructive">
-          {jobActionError}
-        </p>
-      )}
-
-      <div className="border border-border rounded-md overflow-hidden">
-        <DataTable columns={jobColumns} data={jobs} renderExpandedRow={(job) => <JobExpandedRow job={job} />} />
+        <PaginationControls page={jobFilters.page} totalPages={jobsPages} total={jobsTotal} limit={jobFilters.limit} onChange={(page) => onUpdateJobFilter("page", page)} />
       </div>
-      <PaginationControls
-        page={jobFilters.page}
-        totalPages={jobsPages}
-        total={jobsTotal}
-        limit={jobFilters.limit}
-        onChange={(page) => onUpdateJobFilter("page", page)}
-      />
-    </section>
-  )
+      {selected && <RunInspector key={`${source}:${selected}`} id={selected} source={source} busy={jobActionId !== null} error={jobActionError} onAction={onRunJobAction} onClose={() => select()} />}
+    </div>
+  </section>
 }

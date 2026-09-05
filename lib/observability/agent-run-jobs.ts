@@ -149,6 +149,7 @@ function buildAgentRunMetadata(
     repo_id: run.repo_id,
     repo_full_name: repo?.full_name ?? null,
     harness: run.harness,
+    run_status: run.status,
     ai_call_id: run.ai_call_id,
     base_branch: run.base_branch,
     working_branch: run.working_branch,
@@ -247,15 +248,19 @@ function applyAgentRunAiCall(
   };
 }
 
-async function loadAgentRunRowsFromDb(
-  input: LoadAgentRunRowsInput
+export async function loadAgentRunRowsFromDb(
+  input: LoadAgentRunRowsInput,
+  client?: import("@supabase/supabase-js").SupabaseClient
 ): Promise<ExternalAgentRunRow[]> {
-  const { supabaseAdmin } = await import("@/lib/supabase/admin");
-  let query = supabaseAdmin
+  const database =
+    client ?? (await import("@/lib/supabase/admin")).supabaseAdmin;
+  let query = database
     .from("external_agent_runs")
     .select("*")
     .eq("user_id", input.userId);
-  if (input.status) query = query.eq("status", input.status);
+  if (input.status === "streaming")
+    query = query.in("status", ["streaming", "awaiting_input"]);
+  else if (input.status) query = query.eq("status", input.status);
   if (input.from) query = query.gte("created_at", input.from);
   if (input.to) query = query.lte("created_at", input.to);
   const { data, error } = await query

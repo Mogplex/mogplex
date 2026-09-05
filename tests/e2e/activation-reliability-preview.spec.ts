@@ -228,7 +228,7 @@ test("user-billed sandbox errors stay aligned across preview, health, and observ
   await expect(
     page.getByRole("heading", { name: "Observability" })
   ).toBeVisible();
-  await page.getByRole("tab", { name: /^Activity/ }).click();
+  await page.getByRole("tab", { name: /^Usage/ }).click();
 
   const callsSection = page.getByRole("tabpanel");
   await callsSection.locator("tbody tr").first().click();

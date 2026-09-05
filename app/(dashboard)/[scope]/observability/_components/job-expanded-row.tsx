@@ -2,158 +2,23 @@
 
 import { StructuredValueViewer } from "@/components/diffs/structured-value-viewer"
 import { getJobRunRuntimeProvider, getJobRunRuntimeRunId } from "@/lib/job-run-runtime"
-import {
-  formatAutomationTimeoutBudgetLabel,
-  getAutomationCostPrimaryLabel,
-  getAutomationCostSecondaryLabel,
-  getAutomationCostState,
-  getAutomationStatusPresentation,
-  readAutomationFailureClass,
-} from "@/lib/observability/automation-run-presentation"
 import type { ObservabilityJob } from "@/lib/types"
-import {
-  formatDispatchOutcome,
-  formatDispatchReason,
-  getJobAutomationSummary,
-} from "./formatters"
-import { GithubEventLinkPanel } from "./github-event-link-panel"
+import { formatDispatchOutcome, formatDispatchReason } from "./formatters"
 
 export function JobExpandedRow({ job }: { job: ObservabilityJob }) {
-  const runtimeProvider = getJobRunRuntimeProvider(job)
-  const runtimeRunId = getJobRunRuntimeRunId(job)
-  const statusPresentation = getAutomationStatusPresentation({
-    status: job.status,
-    metadata: job.latest_dispatch_event?.metadata,
-    error: job.error,
-  })
-  const timeoutBudget = formatAutomationTimeoutBudgetLabel(
-    statusPresentation.timeoutBudgetMs
-  )
-  const costState = getAutomationCostState({
-    status: job.status,
-    costUsd: job.cost_usd,
-  })
-  const costSecondaryLabel = getAutomationCostSecondaryLabel(costState)
-  const costPrimaryLabel = getAutomationCostPrimaryLabel({
-    costState,
-    costUsd: job.cost_usd,
-  })
-  const failureClass = readAutomationFailureClass(job.latest_dispatch_event?.metadata)
-
-  return (
-    <div className="p-4 space-y-3 text-sm">
-      <GithubEventLinkPanel
-        sourceType={job.source_type}
-        repoFullName={job.repo.full_name}
-        metadata={job.metadata}
-      />
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <div>
-          <div className="ui-label mb-0.5">Runtime Run</div>
-          <div className="font-mono text-foreground break-all">{runtimeRunId || "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Runtime Provider</div>
-          <div className="text-foreground break-words">{runtimeProvider || "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Last Start Source</div>
-          <div className="text-foreground break-words">{job.last_start_source || "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Retry Lineage</div>
-          <div className="font-mono text-foreground break-all">{job.retry_of_job_run_id || "—"}</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <div>
-          <div className="ui-label mb-0.5">Run Result</div>
-          <div className="text-foreground break-words">{statusPresentation.label}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Run Cost</div>
-          <div className="text-foreground break-words">{costPrimaryLabel}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Cost State</div>
-          <div className="text-foreground break-words">
-            {costState === "known"
-              ? "recorded"
-              : costSecondaryLabel ?? costState}
-          </div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Timeout Budget</div>
-          <div className="text-foreground break-words">{timeoutBudget || "—"}</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <div>
-          <div className="ui-label mb-0.5">Latest Automation Outcome</div>
-          <div className="text-foreground break-words">{job.latest_dispatch_event ? getJobAutomationSummary(job) : "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Dispatch Outcome</div>
-          <div className="text-foreground break-words">{job.latest_dispatch_event ? formatDispatchOutcome(job.latest_dispatch_event.outcome) : "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Dispatch Reason</div>
-          <div className="text-foreground break-words">{job.latest_dispatch_event ? formatDispatchReason(job.latest_dispatch_event.reason, job.latest_dispatch_event.metadata) : "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Failure Class</div>
-          <div className="text-foreground break-words">{failureClass || "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Dispatch Event</div>
-          <div className="text-foreground break-words">{job.latest_dispatch_event ? `${job.latest_dispatch_event.event_kind} · ${new Date(job.latest_dispatch_event.created_at).toLocaleString()}` : "—"}</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <div>
-          <div className="ui-label mb-0.5">Cancellation Requested</div>
-          <div className="text-foreground break-words">{job.cancel_requested_at ? new Date(job.cancel_requested_at).toLocaleString() : "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Cancelled At</div>
-          <div className="text-foreground break-words">{job.cancelled_at ? new Date(job.cancelled_at).toLocaleString() : "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Cancel Reason</div>
-          <div className="font-mono text-foreground break-all">{job.cancel_reason || "—"}</div>
-        </div>
-        <div>
-          <div className="ui-label mb-0.5">Cancel Error</div>
-          <div className="font-mono text-foreground break-all">{job.cancel_error || "—"}</div>
-        </div>
-      </div>
-
-      {job.last_start_error && (
-        <div>
-          <div className="ui-label mb-1">Last Start Error</div>
-          <div className="rounded bg-accent-red/5 px-2 py-1 font-mono text-accent-red break-words">
-            {job.last_start_error}
-          </div>
-        </div>
-      )}
-
-      {job.error && (
-        <div>
-          <div className="ui-label mb-1">Run Error</div>
-          <div className="rounded bg-accent-red/5 px-2 py-1 font-mono text-accent-red break-words">
-            {job.error}
-          </div>
-        </div>
-      )}
-
-      <div>
-        <div className="ui-label mb-1">Metadata</div>
-        <StructuredValueViewer value={job.metadata || {}} className="my-0" stringLanguage="language-json" />
-      </div>
-    </div>
-  )
+  const fields = [
+    ["Run ID", job.id], ["Runtime run", getJobRunRuntimeRunId(job)],
+    ["Runtime provider", getJobRunRuntimeProvider(job)], ["Last start source", job.last_start_source],
+    ["Retry of run", job.retry_of_job_run_id],
+    ["Dispatch outcome", job.latest_dispatch_event ? formatDispatchOutcome(job.latest_dispatch_event.outcome) : null],
+    ["Dispatch reason", job.latest_dispatch_event ? formatDispatchReason(job.latest_dispatch_event.reason, job.latest_dispatch_event.metadata) : null],
+    ["Cancellation requested", job.cancel_requested_at], ["Cancelled at", job.cancelled_at],
+    ["Cancel reason", job.cancel_reason], ["Cancel error", job.cancel_error],
+    ["Last start error", job.last_start_error], ["Run error", job.error],
+  ].filter((field) => field[1])
+  return <div className="space-y-5 p-5 text-sm">
+    <p className="text-muted-foreground">Technical context for troubleshooting. Only recorded fields are shown.</p>
+    <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">{fields.map(([label, value]) => <div key={label}><dt className="mb-1 text-xs text-muted-foreground">{label}</dt><dd className="break-all text-sm">{value}</dd></div>)}</dl>
+    <details><summary className="cursor-pointer py-2 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Sanitized metadata</summary><StructuredValueViewer value={job.metadata ?? {}} className="my-0 max-h-96 overflow-auto" stringLanguage="language-json" /></details>
+  </div>
 }

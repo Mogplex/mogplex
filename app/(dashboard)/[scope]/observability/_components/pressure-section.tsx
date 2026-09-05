@@ -112,7 +112,7 @@ export function PressureSection({
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="ui-meta">Queue suppression, deferrals, and start failures across the automation fleet.</p>
+          <p className="text-sm text-muted-foreground">Why work started, waited, or was skipped. Counts are events, not failed runs; one run may produce several events.</p>
         </div>
         {pressureLoading && <span className="text-sm text-muted-foreground animate-pulse">Loading pressure…</span>}
       </div>

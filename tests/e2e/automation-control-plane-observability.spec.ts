@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { ObservabilityJob } from "@/lib/types";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { emptyAutomationFailuresResponse } from "./helpers/activation-fixtures";
 import {
@@ -7,11 +8,6 @@ import {
   modelId,
 } from "./helpers/automation-control-plane-fixtures";
 
-// RunsSection is mounted on the observability page again (the run-based
-// summary cards need a runs table beneath them — a run that fails before
-// making a model call has no Activity row). The once-orphaned
-// LiveRunsSection/CallsSection were deleted: the Activity table's Live
-// status filter covers that view.
 test("observability centers runtime runs and exposes repair/requeue actions", async ({
   page,
 }) => {
@@ -20,6 +16,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   let cancelCount = 0;
   const jobRequests: URL[] = [];
   const callRequests: URL[] = [];
+  let jobs: ObservabilityJob[] = [];
 
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
@@ -61,7 +58,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
 
   await page.route("**/api/observability/jobs?*", async (route) => {
     jobRequests.push(new URL(route.request().url()));
-    await fulfillJson(route, {
+    const payload = {
       jobs: [
         {
           id: "job-failed",
@@ -76,6 +73,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
           input_tokens: 100,
           output_tokens: 200,
           duration_ms: 50000,
+          cost_usd: null,
           error:
             "This Mogplex account cannot use hosted AI because it has no credit. Add funds or choose a plan in Settings > Billing. Or add an AI Gateway or provider key in Settings > API Keys.",
           start_attempts: 1,
@@ -124,6 +122,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
           input_tokens: null,
           output_tokens: null,
           duration_ms: null,
+          cost_usd: null,
           error: null,
           start_attempts: 2,
           last_start_attempt_at: "2026-03-21T18:05:00.000Z",
@@ -164,6 +163,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
           input_tokens: 50,
           output_tokens: 60,
           duration_ms: 35000,
+          cost_usd: null,
           error: null,
           start_attempts: 1,
           last_start_attempt_at: "2026-03-21T17:00:00.000Z",
@@ -194,10 +194,29 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
           repairable: false,
           requeueable: false,
         },
-      ],
+      ] satisfies ObservabilityJob[],
       total: 30,
       page: Number(new URL(route.request().url()).searchParams.get("page")),
       limit: 25,
+    };
+    jobs = payload.jobs;
+    await fulfillJson(route, payload);
+  });
+
+  await page.route(/\/api\/observability\/jobs\/[^/?]+(?:\?.*)?$/, (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").at(-1);
+    const job = jobs.find((candidate) => candidate.id === id);
+    return fulfillJson(route, {
+      run: job
+        ? {
+            ...job,
+            dispatch_events: job.latest_dispatch_event
+              ? [job.latest_dispatch_event]
+              : [],
+            ai_calls: [],
+            review_findings: [],
+          }
+        : null,
     });
   });
 
@@ -333,7 +352,9 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await expect(
     page.getByRole("heading", { name: "Automation health" })
   ).toBeVisible();
-  await expect(page.getByText("Needs attention")).toBeVisible();
+  await expect(
+    page.getByLabel("Automation health").getByText("Needs attention")
+  ).toBeVisible();
   await expect(page.getByText("Run success")).toBeVisible();
   await expect(page.getByText("66.7%", { exact: true })).toBeVisible();
   await expect(page.getByText("Operational signals")).toBeVisible();
@@ -358,7 +379,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   expect(recoveryRequest.searchParams.get("from")).toBeNull();
   expect(recoveryRequest.searchParams.get("to")).toBeNull();
   await expect(
-    page.getByText("Current pending runs across all dates.")
+    page.getByText("Current active work across all dates.")
   ).toBeVisible();
 
   const pendingRequestPromise = page.waitForRequest((request) => {
@@ -379,38 +400,59 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
     .click();
   // The prevented-events drill-down switches the table tab group to the
   // Pressure tab with the outcome filter applied.
-  await expect(page.getByRole("tab", { name: /^Pressure/ })).toHaveAttribute(
-    "aria-selected",
-    "true"
-  );
+  await expect(
+    page.getByRole("tab", { name: /^Automation events/ })
+  ).toHaveAttribute("aria-selected", "true");
   await expect(page.getByLabel("Outcome")).toHaveValue("suppressed");
   await page.getByRole("tab", { name: /^Runs/ }).click();
   await expect(page.getByLabel("Run status")).toBeVisible();
-  await expect(page.getByText("Refactor Bot")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Repair", exact: true })
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Requeue" })).toBeVisible();
-  await page.getByText("Refactor Bot").click();
+  await page.getByRole("button", { name: "Refactor Bot", exact: true }).click();
+  const inspector = page.getByRole("region", {
+    name: "Run details",
+    exact: true,
+  });
   await expect(
     page.getByText(
       "This Mogplex account cannot use hosted AI because it has no credit. Add funds or choose a plan in Settings > Billing. Or add an AI Gateway or provider key in Settings > API Keys."
     )
   ).toBeVisible();
   await expect(
-    page.getByText("Repository run limit reached").first()
+    inspector.getByRole("button", { name: "Retry as new run", exact: true })
   ).toBeVisible();
-  await expect(page.getByText("No findings").first()).toBeVisible();
-
-  await page.getByRole("button", { name: "Cancel" }).click();
+  await inspector
+    .getByRole("button", { name: "Retry as new run", exact: true })
+    .click();
+  await inspector
+    .getByRole("button", { name: "Confirm retry as new run" })
+    .click();
+  await expect.poll(() => requeueCount).toBe(1);
+  await inspector.getByRole("button", { name: "Back to runs" }).click();
+  await page.getByRole("button", { name: "Mention Bot", exact: true }).click();
+  await expect(
+    inspector.getByText("Repository run limit reached")
+  ).toBeVisible();
+  await inspector
+    .getByRole("button", { name: "Cancel run", exact: true })
+    .click();
+  await inspector.getByRole("button", { name: "Confirm cancel run" }).click();
   await expect(
     page
       .getByRole("alert")
       .filter({ hasText: "Job run is no longer cancelable" })
   ).toBeVisible();
-  await page.getByRole("button", { name: "Repair", exact: true }).click();
-  await page.getByRole("button", { name: "Requeue" }).click();
+  await inspector
+    .getByRole("button", { name: "Repair run", exact: true })
+    .click();
+  await inspector.getByRole("button", { name: "Confirm repair run" }).click();
+  await expect.poll(() => repairCount).toBe(1);
+  await inspector.getByRole("button", { name: "Back to runs" }).click();
+  await page.getByRole("button", { name: "Reviewer Bot", exact: true }).click();
+  await expect(
+    inspector.getByText(
+      "The review completed with no findings. This does not mean the PR has been merged."
+    )
+  ).toBeVisible();
+  await inspector.getByRole("button", { name: "Back to runs" }).click();
 
   expect(cancelCount).toBe(1);
   expect(repairCount).toBe(1);
@@ -421,7 +463,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   const activePanel = page.getByRole("tabpanel");
   await activePanel.getByRole("button", { name: "Next" }).click();
   await expect(activePanel.getByText("Showing 26–30 of 30")).toBeVisible();
-  await page.getByRole("tab", { name: /^Activity/ }).click();
+  await page.getByRole("tab", { name: /^Usage/ }).click();
   await activePanel.getByRole("button", { name: "Next" }).click();
   await expect(activePanel.getByText("Showing 51–75 of 75")).toBeVisible();
 
@@ -430,6 +472,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
 
   const previousJobsFrom = jobRequests.at(-1)?.searchParams.get("from");
   const previousCallsFrom = callRequests.at(-1)?.searchParams.get("from");
+  expect(previousCallsFrom).toBe(callRequests[0]?.searchParams.get("from"));
   const changedJobsRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return (

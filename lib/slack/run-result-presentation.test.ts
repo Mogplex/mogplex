@@ -212,7 +212,7 @@ it("renders verified artifact navigation and guidance in the Slack blocks", () =
       {
         type: "button",
         text: { type: "plain_text", text: "View run details" },
-        url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1`,
+        url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1?view=details`,
         action_id: "mogplex-view-run",
       },
       {
@@ -266,7 +266,7 @@ it("offers only verified branch navigation and keeps missing-work recovery expli
       { action_id: "mogplex-view-branch", url: evidence.github.branch?.url },
       {
         action_id: "mogplex-view-run",
-        url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1`,
+        url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1?view=details`,
       },
     ],
   });

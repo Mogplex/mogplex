@@ -2,14 +2,16 @@ import { notFound, redirect } from "next/navigation";
 import { requireUserId } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-import { scopedHref } from "@/lib/scoped-href";
+import { runDeepLinkDestination } from "@/lib/run-workspace/navigation";
 
 type RunDeepLinkPageProps = {
   params: Promise<{ scope: string; runId: string }>;
+  searchParams: Promise<{ view?: string }>;
 };
 
 export default async function RunDeepLinkPage({
   params,
+  searchParams,
 }: RunDeepLinkPageProps) {
   const userIdOrResponse = await requireUserId();
   if (userIdOrResponse instanceof Response) redirect("/login");
@@ -27,5 +29,5 @@ export default async function RunDeepLinkPage({
   }
   if (!data?.ai_call_id) notFound();
 
-  redirect(scopedHref(scope, `/observability?call_id=${encodeURIComponent(data.ai_call_id)}`));
+  redirect(runDeepLinkDestination(scope, runId, data.ai_call_id, (await searchParams).view));
 }

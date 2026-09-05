@@ -22,6 +22,7 @@ export type PreviewPaneTab = "preview" | "code" | "health";
 export type PaneSandboxBinding = "session" | "pinned";
 
 export type PaneNode = {
+  externalRunId?: string;
   id: string;
   type: PaneType;
   name: string;

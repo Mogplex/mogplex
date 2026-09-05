@@ -122,5 +122,5 @@ jobs:
           set -euo pipefail
           diff-cover coverage/cobertura-coverage.xml \
             --compare-branch "origin/${BASE_REF}" \
-            --include "lib/*" \
+            --include "lib/**" \
             --fail-under 80

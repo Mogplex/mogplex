@@ -38,6 +38,12 @@ import {
   type RunDrilldown,
 } from "./_components/observability-summary"
 import { PendingApprovalsSection } from "./_components/pending-approvals-section"
+import { AttentionRuns } from "./_components/attention-runs"
+import { LoadError } from "./_components/load-error"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { UsageAndCost, ReconciliationNotice } from "./_components/observability-usage-section"
+import { readWorkView, writeWorkFilters, type WorkView } from "@/lib/observability/work-route"
 import { PressureSection } from "./_components/pressure-section"
 import { RunsSection } from "./_components/runs-section"
 
@@ -50,7 +56,8 @@ const INITIAL_FILTERS: ActivityFilters = {
 
 type TableTab = "runs" | "failures" | "pressure" | "activity"
 
-function TabCount({ value }: { value: number }) {
+function TabCount({ value }: { value: number | undefined }) {
+  if (value === undefined) return null
   return (
     <span className="tabular-nums text-xs text-muted-foreground">{value}</span>
   )
@@ -69,15 +76,17 @@ function ObservabilityContent() {
     [searchParams]
   )
 
+  const { preset: rangePreset, custom: { from: customFrom, to: customTo } } = dateRangeSelection
   const dateRange = useMemo(() => {
-    if (isCustomRangeIncomplete(dateRangeSelection)) return {}
+    const custom = { from: customFrom, to: customTo }
+    if (isCustomRangeIncomplete({ preset: rangePreset, custom })) return {}
     return resolveActivityDateRange(
-      dateRangeSelection.preset,
-      dateRangeSelection.custom
+      rangePreset,
+      custom
     )
-  }, [dateRangeSelection])
+  }, [rangePreset, customFrom, customTo])
 
-  const { stats } = useObservabilityStats(dateRange)
+  const { stats, error: statsError, refresh: refreshStats } = useObservabilityStats(dateRange)
 
   const {
     callFilters: legacyCallFilters,
@@ -111,7 +120,7 @@ function ObservabilityContent() {
     []
   )
 
-  const { data, isLoading } = useObservabilityActivity(filters)
+  const { data, isLoading, error: activityError, refresh: refreshActivity } = useObservabilityActivity(filters)
   const calls = useMemo(() => data?.calls ?? [], [data?.calls])
   const total = data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / filters.limit))
@@ -119,14 +128,14 @@ function ObservabilityContent() {
   // Terminal run views share the page-level date range. Pending runs are
   // current state, so their table view must remain unbounded just like the
   // pending/stale summary metrics above.
-  const { jobFilters, setJobFilters, updateJobFilter } = useObservabilityJobFilters()
-  const isCurrentPendingView = jobFilters.status === "pending"
+  const { jobFilters, updateJobFilter } = useObservabilityJobFilters()
+  const isCurrentPendingView = jobFilters.status === "pending" || jobFilters.status === "awaiting_input" || jobFilters.status === "running"
   const jobsQuery = useMemo<JobsFilters>(() => ({
     ...jobFilters,
     from: isCurrentPendingView ? undefined : dateRange.from,
     to: isCurrentPendingView ? undefined : dateRange.to,
   }), [jobFilters, dateRange.from, dateRange.to, isCurrentPendingView])
-  const { data: jobsData, isLoading: jobsLoading, refresh: refreshJobs } = useObservabilityJobs(jobsQuery)
+  const { data: jobsData, isLoading: jobsLoading, error: jobsError, refresh: refreshJobs } = useObservabilityJobs(jobsQuery)
   const jobs = jobsData?.jobs ?? []
   const jobsTotal = jobsData?.total ?? 0
   const jobsPages = Math.max(1, Math.ceil(jobsTotal / jobFilters.limit))
@@ -142,7 +151,7 @@ function ObservabilityContent() {
     from: dateRange.from,
     to: dateRange.to,
   }), [automationFailureFilters, dateRange.from, dateRange.to])
-  const { data: failuresData, isLoading: failuresLoading } =
+  const { data: failuresData, isLoading: failuresLoading, error: failuresError, refresh: refreshFailures } =
     useObservabilityAutomationFailures(failuresQuery)
   const failuresPages = Math.max(
     1,
@@ -156,7 +165,7 @@ function ObservabilityContent() {
     from: dateRange.from,
     to: dateRange.to,
   }), [pressureFilters, dateRange.from, dateRange.to])
-  const { data: pressureData, isLoading: pressureLoading } =
+  const { data: pressureData, isLoading: pressureLoading, error: pressureError, refresh: refreshPressure } =
     useObservabilityAutomationEvents(pressureQuery)
   const pressureTotal = pressureData?.total ?? 0
   const pressurePages = Math.max(
@@ -165,11 +174,13 @@ function ObservabilityContent() {
   )
   // Call/sandbox/repo deep links (e.g. from Sandbox health) target the
   // Activity table, so they must land on its tab rather than the default.
-  const [activeTable, setActiveTable] = useState<TableTab>(() =>
-    selectedCallId || legacyCallFilters.repoId || legacyCallFilters.sandboxRecordId
-      ? "activity"
-      : "runs"
-  )
+  const viewToTab: Record<WorkView, TableTab> = { runs: "runs", attention: "failures", events: "pressure", usage: "activity" }
+  const activeTable = viewToTab[readWorkView(new URLSearchParams(searchParams))]
+  const setActiveTable = useCallback((tab: TableTab) => {
+    const next = new URLSearchParams(searchParams)
+    next.set("view", ({ runs: "runs", failures: "attention", pressure: "events", activity: "usage" } as const)[tab])
+    router.replace(`${pathname}?${next}`, { scroll: false })
+  }, [searchParams, router, pathname])
   // Focus runs as an effect because the target section only mounts after the
   // tab switch renders; the seq counter re-fires it when the tab is unchanged.
   const [tableFocusRequest, setTableFocusRequest] = useState<{
@@ -185,7 +196,7 @@ function ObservabilityContent() {
   const focusSection = useCallback((sectionId: "runs" | "pressure") => {
     setActiveTable(sectionId)
     setTableFocusRequest((prev) => ({ tab: sectionId, seq: (prev?.seq ?? 0) + 1 }))
-  }, [])
+  }, [setActiveTable])
   const inspectPressure = useCallback(
     (outcome: PressureOutcome) => {
       updatePressureFilter("outcome", outcome)
@@ -196,40 +207,42 @@ function ObservabilityContent() {
   const inspectRuns = useCallback(
     (target: RunDrilldown) => {
       const pending = target !== "failed"
-      setJobFilters((current) => ({
-        ...current,
+      const next = writeWorkFilters(new URLSearchParams(searchParams), {
+        ...jobFilters,
         status: pending ? "pending" : "failed",
         onlyRepairable: target === "repairable_pending" || undefined,
         page: 1,
-      }))
-      focusSection("runs")
+      })
+      next.set("view", "runs")
+      router.replace(`${pathname}?${next}`, { scroll: false })
+      setTableFocusRequest((prev) => ({ tab: "runs", seq: (prev?.seq ?? 0) + 1 }))
     },
-    [focusSection, setJobFilters]
+    [jobFilters, pathname, router, searchParams]
   )
   const handleDateRangeChange = useCallback(
     (next: ActivityDateRangeSelection) => {
       // Reset every range-bound table in the same event so none requests a
       // stale page for the new, potentially smaller result window.
       updateFilter("page", 1)
-      updateJobFilter("page", 1)
       updateAutomationFailureFilter("page", 1)
       updatePressureFilter("page", 1)
       // Pass the scoped pathname: the builder's "/observability" default
       // depends on the proxy rescue redirect to recover the scope.
-      router.replace(buildActivityDateRangeHref(searchParams, next, pathname))
+      const updated = new URLSearchParams(window.location.search)
+      updated.delete("run_page")
+      router.replace(buildActivityDateRangeHref(updated, next, pathname))
     },
     [
       pathname,
       router,
-      searchParams,
       updateAutomationFailureFilter,
       updateFilter,
-      updateJobFilter,
       updatePressureFilter,
     ]
   )
   const [jobActionId, setJobActionId] = useState<string | null>(null)
-  const [jobActionError, setJobActionError] = useState<string | null>(null)
+  const [jobActionError, setJobActionError] = useState<{ id: string; message: string } | null>(null)
+  const [actionReceipt, setActionReceipt] = useState<{ message: string; runId?: string } | null>(null)
   // One action in flight at a time: jobActionId only disables the acting
   // row's buttons, so without this guard a second job's action could start
   // and then be re-enabled mid-flight by the first action's cleanup.
@@ -240,19 +253,26 @@ function ObservabilityContent() {
     jobActionInFlight.current = true
     setJobActionId(jobId)
     setJobActionError(null)
+    setActionReceipt(null)
     try {
       const res = await fetch(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as {
           error?: string
         } | null
-        setJobActionError(body?.error ?? `Failed to ${action} job run`)
+        setJobActionError({ id: jobId, message: body?.error ?? `Failed to ${action} job run` })
         return
       }
+      const result = await res.json().catch(() => null) as { started?: boolean; suppressed?: boolean; deferred?: boolean; jobRunId?: string } | null
+      const message = result?.suppressed && !result.jobRunId ? "The request was accepted, but no new run was queued. Check automation events for the reason."
+        : action === "cancel" ? "Cancellation requested. The run may take time to stop."
+        : result?.started ? "The runtime accepted the start request. Follow the run for its result."
+        : "Request accepted. Execution has not been confirmed; check the latest run state."
+      setActionReceipt({ message, runId: typeof result?.jobRunId === "string" ? result.jobRunId : undefined })
       await refreshJobs()
     } catch (error) {
       console.error(`Failed to ${action} job run`, error)
-      setJobActionError(`Failed to ${action} job run`)
+      setJobActionError({ id: jobId, message: `Failed to ${action} job run` })
     } finally {
       jobActionInFlight.current = false
       setJobActionId(null)
@@ -301,11 +321,11 @@ function ObservabilityContent() {
   }, [repos])
 
   return (
-    <div className="p-3 space-y-4 md:p-4 md:space-y-6">
+    <div className="observability-work min-w-0 p-3 space-y-4 md:p-6 md:space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="ui-page-title">Observability</h1>
-          <p className="ui-page-subtitle">Automation health, controls, AI usage, and cost across your fleet.</p>
+          <p className="ui-page-subtitle">Follow the work, understand the outcome, and decide what happens next.</p>
         </div>
         <ActivityDateRangeFilter
           selection={dateRangeSelection}
@@ -313,32 +333,33 @@ function ObservabilityContent() {
         />
       </div>
 
-      <ObservabilitySummary
+      {statsError ? <LoadError subject="Automation health" onRetry={() => void refreshStats()} /> : <ObservabilitySummary
         summary={stats?.summary}
         rangePreset={dateRangeSelection.preset}
         onInspectPressure={inspectPressure}
         onInspectRuns={inspectRuns}
-      />
+        showUsage={false}
+      />}
 
-      <PendingApprovalsSection />
+      {actionReceipt && <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-card p-4 text-sm"><p>{actionReceipt.message}</p>{actionReceipt.runId && <Button asChild variant="outline" size="sm"><Link href={`/${scope}/observability?view=runs&run_id=${encodeURIComponent(actionReceipt.runId)}`}>Inspect retry run</Link></Button>}</div>}
 
       <Tabs
         value={activeTable}
         onValueChange={(value) => setActiveTable(value as TableTab)}
         className="gap-3"
       >
-        <TabsList>
+        <TabsList className="h-auto max-w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="runs">
-            Runs <TabCount value={jobsTotal} />
+            Runs <TabCount value={jobsData?.total} />
           </TabsTrigger>
           <TabsTrigger value="failures">
-            Failures <TabCount value={failuresData?.total ?? 0} />
+            Needs attention
           </TabsTrigger>
           <TabsTrigger value="pressure">
-            Pressure <TabCount value={pressureTotal} />
+            Automation events <TabCount value={pressureData?.total} />
           </TabsTrigger>
           <TabsTrigger value="activity">
-            Activity <TabCount value={total} />
+            Usage <TabCount value={data?.total} />
           </TabsTrigger>
         </TabsList>
 
@@ -351,35 +372,48 @@ function ObservabilityContent() {
             jobFilters={jobFilters}
             isCurrentPendingView={isCurrentPendingView}
             jobActionId={jobActionId}
-            jobActionError={jobActionError}
+            jobActionError={jobActionError?.id === searchParams.get("run_id") ? jobActionError.message : null}
+            loadError={jobsError}
+            onRefresh={() => void refreshJobs()}
             onUpdateJobFilter={updateJobFilter}
             onRunJobAction={runJobAction}
           />
         </TabsContent>
 
         <TabsContent value="failures">
-          <AutomationFailuresSection
+          <div className="space-y-6">
+          <PendingApprovalsSection showEmpty />
+          <AttentionRuns status="awaiting_input" />
+          <AttentionRuns />
+          <details className="rounded-md border border-border p-4">
+          <summary className="cursor-pointer text-sm font-medium">Failure history in selected dates{failuresData ? ` (${failuresData.total})` : ""}</summary>
+          <p className="my-3 text-sm text-muted-foreground">Past failures and recovery attempts are history, not a count of unresolved problems.</p>
+          {failuresError ? <LoadError subject="Failure history" onRetry={() => void refreshFailures()} /> : <AutomationFailuresSection
             data={failuresData}
             isLoading={failuresLoading}
             filters={automationFailureFilters}
             pages={failuresPages}
             onUpdateFilter={updateAutomationFailureFilter}
-          />
+          />}
+          </details>
+          </div>
         </TabsContent>
 
         <TabsContent value="pressure">
-          <PressureSection
+          {pressureError ? <LoadError subject="Automation events" onRetry={() => void refreshPressure()} /> : <PressureSection
             pressureEvents={pressureData?.events ?? []}
             pressureLoading={pressureLoading}
             pressureTotal={pressureTotal}
             pressurePages={pressurePages}
             pressureFilters={pressureFilters}
             onUpdatePressureFilter={updatePressureFilter}
-          />
+          />}
         </TabsContent>
 
         <TabsContent value="activity">
-          <ActivitySection
+          <div className="space-y-6">
+          {stats?.summary && <><UsageAndCost summary={stats.summary} rangeLabel="Selected dates" /><ReconciliationNotice pending={stats.summary.reconciliation_pending} /></>}
+          {activityError ? <LoadError subject="AI activity" onRetry={() => void refreshActivity()} /> : <ActivitySection
             calls={calls}
             isLoading={isLoading}
             total={total}
@@ -391,7 +425,8 @@ function ObservabilityContent() {
             onExpandedRowToggle={handleExpandedRowToggle}
             onOpenSandboxHealth={handleOpenSandboxHealth}
             canOpenSandboxHealth={canOpenSandboxHealth}
-          />
+          />}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

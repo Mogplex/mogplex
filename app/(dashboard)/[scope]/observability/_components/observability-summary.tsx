@@ -39,11 +39,13 @@ export function ObservabilitySummary({
   rangePreset,
   onInspectPressure,
   onInspectRuns,
+  showUsage = true,
 }: {
   summary?: ObservabilityStats["summary"];
   rangePreset?: ActivityDateRangePreset;
   onInspectPressure: InspectPressure;
   onInspectRuns: InspectRuns;
+  showUsage?: boolean;
 }) {
   if (!summary) return <LoadingSummary />;
 
@@ -71,8 +73,8 @@ export function ObservabilitySummary({
     healthStatus === "needs_attention"
       ? `Some runs need review in ${rangeLabel}. Past start attempts and prevented runs are listed separately.`
       : runSuccessRate === null
-        ? `No runs reached a verdict in ${rangeLabel}. Nothing currently needs action.`
-        : "No failed or stuck runs need action. Past start attempts and prevented runs are shown below as history.";
+        ? `No automation runs reached a verdict in ${rangeLabel}. Check Needs attention for requests waiting on you.`
+        : "No failed or stuck automation runs were found in this view. Check Needs attention for approval and input requests.";
 
   return (
     <div className="space-y-4">
@@ -134,8 +136,8 @@ export function ObservabilitySummary({
         </div>
       </section>
 
-      <UsageAndCost summary={summary} rangeLabel={rangeLabel} />
-      <ReconciliationNotice pending={summary.reconciliation_pending} />
+      {showUsage && <><UsageAndCost summary={summary} rangeLabel={rangeLabel} />
+      <ReconciliationNotice pending={summary.reconciliation_pending} /></>}
     </div>
   );
 }

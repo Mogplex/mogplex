@@ -50,7 +50,7 @@ test("observability can open the matching sandbox health tab in the workspace", 
   await page.goto(scopedPath("observability"));
   await page.waitForLoadState("networkidle");
 
-  await page.getByRole("tab", { name: /^Activity/ }).click();
+  await page.getByRole("tab", { name: /^Usage/ }).click();
   const callsSection = page.getByRole("tabpanel");
   await callsSection.locator("tbody tr").first().click();
   await expect(
@@ -154,7 +154,7 @@ test("sandbox health can open exact sandbox-scoped observability calls", async (
   // Repo/sandbox filters arrive via the URL, which lands the page on the
   // Activity tab of the table tab group with the matching call row
   // auto-expanded.
-  await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: /^Usage/ })).toHaveAttribute(
     "aria-selected",
     "true"
   );

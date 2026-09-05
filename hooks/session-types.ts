@@ -15,6 +15,7 @@ export const SESSION_COLORS = [
 export type SessionColor = (typeof SESSION_COLORS)[number];
 
 export type Session = {
+  externalRunId?: string;
   id: string;
   index: number;
   name: string;

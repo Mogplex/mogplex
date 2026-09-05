@@ -24,7 +24,7 @@ async function installObservabilityMocks(page: Page) {
     aiBillingSource: "user_ai_gateway",
   });
 
-  await page.route("**/api/observability/stats", (route) =>
+  await page.route("**/api/observability/stats*", (route) =>
     fulfillJson(route, buildObservabilitySummary([call]))
   );
   await page.route(/\/api\/observability\/jobs(?:\?.*)?$/, (route) =>
@@ -64,6 +64,9 @@ test("observability surfaces sandbox compute and AI billing details", async ({
     },
   });
   await installBaseMocks(page, state);
+  await page.route("**/api/realtime/events?*", (route) =>
+    route.fulfill({ status: 204 })
+  );
   await installObservabilityMocks(page);
 
   await page.goto(scopedPath("observability"));
@@ -72,7 +75,7 @@ test("observability surfaces sandbox compute and AI billing details", async ({
   await expect(
     page.getByRole("heading", { name: "Observability" })
   ).toBeVisible();
-  await page.getByRole("tab", { name: /^Activity/ }).click();
+  await page.getByRole("tab", { name: /^Usage/ }).click();
 
   const activitySection = page.getByRole("tabpanel");
   await activitySection.locator("tbody tr").first().click();

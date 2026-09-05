@@ -3,6 +3,9 @@ import { buildE2EAuthHeaders } from "./helpers/auth";
 import { connectedUser, fulfillJson } from "./helpers/flows-pane-runs-fixtures";
 
 test("recent runs open a detailed observability dialog", async ({ page }) => {
+  await page.route("**/api/realtime/events?*", (route) =>
+    route.fulfill({ status: 204 })
+  );
   // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
   // the 1280px dock-mode threshold.
   await page.setViewportSize({ width: 1600, height: 900 });

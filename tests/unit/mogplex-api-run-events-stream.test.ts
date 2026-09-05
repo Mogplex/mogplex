@@ -72,6 +72,34 @@ function auth() {
   };
 }
 
+test("workspace streams authenticate with a session and replay every page before closing terminal history", async () => {
+  const { createMogplexApiRunEventsStreamGetHandler } = await loadRoute();
+  let pages = 0;
+  let ended = 0;
+  const run = presentMogplexApiRun({ ...buildRunRow(), status: "failed" });
+  const handler = createMogplexApiRunEventsStreamGetHandler({
+    resolveUser: async () => ({ ok: true, userId: "user-123" }),
+    replayFromStart: true,
+    loadContext: async () => ({ run, aiCallId: run.aiCallId, cursor: null }),
+    listPage: async (input) => {
+      assert.equal(input.latest, false);
+      pages++;
+      return page([event(`event-${pages}`)], pages === 1);
+    },
+    createListener: async () => createMockListener(() => ended++),
+  });
+  const response = await handler(
+    new NextRequest("http://localhost/api/runs/run-1/stream"),
+    { params: Promise.resolve({ runId: "run-1" }) }
+  );
+  const body = await response.text();
+  assert.match(body, /event-1/);
+  assert.match(body, /event-2/);
+  assert.match(body, /replay_complete/);
+  assert.equal(pages, 2);
+  assert.equal(ended, 1);
+});
+
 test("run event stream replays durable events and follows owned notifications", async () => {
   const { createMogplexApiRunEventsStreamGetHandler } = await loadRoute();
   let ended = 0;
