@@ -88,9 +88,8 @@ export function validateSandboxCreateRequest(input: {
  * false). This matches Phase 10 of the plan — the migration ships
  * in the repo but not the runtime until an operator opts in.
  *
- * The automatic 403 fallback (see createWithPersistentFallback below)
- * further protects against projects that lack the permission once
- * ENABLE is flipped on.
+ * Once enabled, persistence is required. A provider denial must fail the
+ * launch rather than silently create a VM that loses work on expiry.
  */
 export function persistentSandboxesDisabledByEnv(): boolean {
   // Explicit disable wins.
@@ -112,60 +111,6 @@ export function resolvePersistentSandboxOptions(opts: {
     snapshotExpiration:
       opts.snapshotExpirationMs ?? DEFAULT_PERSISTENT_SNAPSHOT_EXPIRATION_MS,
   };
-}
-
-/**
- * Classify whether an error from Sandbox.create signals that the
- * Vercel team/project lacks the persistent-sandboxes beta permission.
- * The SDK doesn't yet expose a typed error class for this, so we
- * match on message + any exposed status-like fields defensively.
- *
- * Exported for test coverage.
- */
-export function isPersistentSandboxPermissionError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const anyErr = err as {
-    status?: unknown;
-    statusCode?: unknown;
-    message?: unknown;
-  };
-  const status = anyErr.status ?? anyErr.statusCode;
-  if (status === 403) return true;
-  if (typeof anyErr.message !== "string") return false;
-  const msg = anyErr.message.toLowerCase();
-  const mentionsPersistent = msg.includes("persistent");
-  const mentionsDenied =
-    msg.includes("permission") ||
-    msg.includes("forbidden") ||
-    msg.includes("not enabled") ||
-    msg.includes("not allowed") ||
-    msg.includes("403");
-  return mentionsPersistent && mentionsDenied;
-}
-
-/**
- * Run `attempt` once with `persistent: true`; on a permission error,
- * retry once with `persistent: false`. Used by the two Sandbox.create
- * helpers so we gracefully degrade when the target Vercel project
- * doesn't have the persistent-sandboxes permission granted.
- */
-export async function createWithPersistentFallback<TSandbox>(
-  attempt: (persistent: boolean) => Promise<TSandbox>,
-  requestedPersistent: boolean
-): Promise<TSandbox> {
-  if (!requestedPersistent) {
-    return attempt(false);
-  }
-  try {
-    return await attempt(true);
-  } catch (err) {
-    if (!isPersistentSandboxPermissionError(err)) throw err;
-    console.warn(
-      "[sandbox/create] Persistent sandbox creation denied by Vercel, falling back to ephemeral",
-      { error: err instanceof Error ? err.message : err }
-    );
-    return attempt(false);
-  }
 }
 
 export class SandboxBootstrapError extends Error {
