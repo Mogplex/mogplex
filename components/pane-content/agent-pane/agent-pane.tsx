@@ -14,6 +14,7 @@ import type { CommandInputAttachment as Attachment } from "@/components/command-
 import { parseSlashCommand, buildBuiltinCommands } from "@/lib/slash-commands";
 import { useModels } from "@/hooks/use-models";
 import { useWorkspaceChat } from "./use-workspace-chat";
+import { useChatHistoryRecovery } from "./use-chat-history-recovery";
 import { CHAT_INTERRUPTED_MESSAGE } from "@/lib/agents/chat-stream";
 import { usePreviewFeedbackStore } from "@/hooks/use-preview-feedback";
 import { buildChatRequestBody } from "@/lib/agents/chat-request-body";
@@ -160,6 +161,13 @@ export function AgentPane({
   }, [loaded, messages, pane.id, syncMessages]);
 
   const isStreaming = status === "streaming" || status === "submitted";
+  useChatHistoryRecovery({
+    paneId: pane.id,
+    conversationId: activeConversationId,
+    messages,
+    setMessages,
+    enabled: loaded && !isStreaming,
+  });
   const isAgentRunning =
     isStreaming || isHarnessRunning || Boolean(activeHarnessRun);
 
