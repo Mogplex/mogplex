@@ -24,9 +24,12 @@ export function buildActiveRepoProps(
 }
 
 export function buildActiveSandboxProps(
-  activeSandbox: SandboxRecord | null
+  activeSandbox: SandboxRecord | null,
+  activeSessionSandboxId: string | null
 ): ActiveSandboxProps | null {
-  return activeSandbox ? { id: activeSandbox.id } : null;
+  // The session binding survives reloads before the sandbox record hydrates.
+  const id = activeSessionSandboxId ?? activeSandbox?.id;
+  return id ? { id } : null;
 }
 
 export function resetAutoRestartedSandboxRef(

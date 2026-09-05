@@ -378,7 +378,7 @@ export function WorkspaceShell() {
   }, [activeId, split, closePane, paneCount]);
 
   const repoProps = buildActiveRepoProps(activeRepo, activeSandbox);
-  const sandboxProps = buildActiveSandboxProps(activeSandbox);
+  const sandboxProps = buildActiveSandboxProps(activeSandbox, activeSessionSandboxId);
 
   if (isMobile) {
     return (
