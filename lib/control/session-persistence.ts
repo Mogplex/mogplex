@@ -32,8 +32,8 @@ export async function persistControlSessionMessages({
 
   let res = await put(expectedUpdatedAt);
   if (res.status === 409) {
-    // Another tab/device won the race: retry once from its fresh revision
-    // while keeping this later local message array as the last writer.
+    // Retry against the fresh revision. The server merges by message identity,
+    // retaining saved replies that this older browser snapshot cannot contain.
     const fresh = await fetcher(`/api/control/sessions?id=${sessionId}`);
     if (!fresh.ok) {
       throw new Error(`Failed to rebase control session (${fresh.status})`);

@@ -1,16 +1,20 @@
 import type { createAiCall } from "@/lib/interactive-runs";
+import type { UIMessage } from "ai";
 
 /**
  * Message format accepted by the Control chat endpoint.
  * Clients send AI SDK UIMessages (`parts`); a plain `content` string/array is also accepted.
  */
 export type ControlChatRequestMessage = {
+  id?: string;
+  metadata?: unknown;
   role?: string;
   content?: string | Array<ControlChatRequestPart>;
   parts?: Array<ControlChatRequestPart>;
 };
 
 export type ControlChatRequestPart =
+  | UIMessage["parts"][number]
   | { type: "text"; text?: string }
   | {
       type: "file";

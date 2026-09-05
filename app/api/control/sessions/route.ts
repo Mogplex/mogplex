@@ -7,12 +7,18 @@ import { createOrchestrationRun } from "@/lib/orchestrations/store";
 import { validateOrchestrationBranchName } from "@/lib/orchestrations/validation";
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
 import { parseControlSessionModelId } from "@/lib/control/session-model";
+import { mergePersistedControlMessages } from "@/lib/control/transcript-store";
+import { validateControlChatMessages } from "../chat/_lib/messages";
 
 const LIST_COLUMNS =
   "id, title, project, repo_id, model_id, orchestration_run_id, pinned, archived, created_at, updated_at";
 
-async function getSessionRecord(id: string, userId: string) {
-  const { data, error } = await supabaseAdmin
+async function getSessionRecord(
+  id: string,
+  userId: string,
+  client = supabaseAdmin
+) {
+  const { data, error } = await client
     .from("control_sessions")
     .select("*")
     .eq("id", id)
@@ -178,82 +184,114 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
-  const userId = await requireUserId();
-  if (userId instanceof Response) return userId;
+const defaultPutDeps = { requireUserId, client: supabaseAdmin };
 
-  const body = (await req.json()) as {
-    id?: string;
-    expected_updated_at?: string | null;
-    title?: string;
-    project?: string | null;
-    repo_id?: unknown;
-    model_id?: unknown;
-    messages?: unknown;
-    pinned?: boolean;
-    archived?: boolean;
-  };
-  if (Object.hasOwn(body, "model_id")) {
-    const modelId = parseControlSessionModelId(body.model_id);
-    if (!modelId.ok) {
-      return NextResponse.json({ error: "Invalid model_id" }, { status: 400 });
+export function createControlSessionsPutHandler(deps = defaultPutDeps) {
+  return async function PUT(req: Request) {
+    const userId = await deps.requireUserId();
+    if (userId instanceof Response) return userId;
+
+    const body = (await req.json().catch(() => null)) as {
+      id?: string;
+      expected_updated_at?: string | null;
+      title?: string;
+      project?: string | null;
+      repo_id?: unknown;
+      model_id?: unknown;
+      messages?: unknown;
+      pinned?: boolean;
+      archived?: boolean;
+    } | null;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
-    body.model_id = modelId.value;
-  }
-  if (Object.hasOwn(body, "repo_id")) {
-    const repoAccess = await validateControlSessionRepoAccess({
-      request: req,
-      userId,
-      repoId: body.repo_id,
-    });
-    if (!repoAccess.ok) {
+    if (Object.hasOwn(body, "model_id")) {
+      const modelId = parseControlSessionModelId(body.model_id);
+      if (!modelId.ok) {
+        return NextResponse.json(
+          { error: "Invalid model_id" },
+          { status: 400 }
+        );
+      }
+      body.model_id = modelId.value;
+    }
+    if (Object.hasOwn(body, "repo_id")) {
+      const repoAccess = await validateControlSessionRepoAccess({
+        request: req,
+        userId,
+        repoId: body.repo_id,
+      });
+      if (!repoAccess.ok) {
+        return NextResponse.json(
+          { error: repoAccess.error },
+          { status: repoAccess.status }
+        );
+      }
+      body.repo_id = repoAccess.value;
+    }
+    const { id, expected_updated_at: expectedUpdatedAt } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    }
+    if (!expectedUpdatedAt) {
       return NextResponse.json(
-        { error: repoAccess.error },
-        { status: repoAccess.status }
+        { error: "Missing expected_updated_at" },
+        { status: 400 }
       );
     }
-    body.repo_id = repoAccess.value;
-  }
-  const { id, expected_updated_at: expectedUpdatedAt } = body;
 
-  if (!id) {
-    return NextResponse.json({ error: "Missing id" }, { status: 400 });
-  }
-  if (!expectedUpdatedAt) {
-    return NextResponse.json(
-      { error: "Missing expected_updated_at" },
-      { status: 400 }
-    );
-  }
+    const fields = pickControlSessionUpdateFields(body);
+    if (Object.hasOwn(fields, "messages")) {
+      const current = await getSessionRecord(id, userId, deps.client);
+      if (!current || current.archived) {
+        return NextResponse.json(
+          { error: "CONFLICT", session: current },
+          { status: 409 }
+        );
+      }
+      try {
+        const incoming = await validateControlChatMessages(
+          fields.messages as Parameters<typeof validateControlChatMessages>[0]
+        );
+        const saved = await validateControlChatMessages(current.messages ?? []);
+        fields.messages = redactSecretsInValue(
+          mergePersistedControlMessages(saved, incoming)
+        );
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid Control messages" },
+          { status: 400 }
+        );
+      }
+    }
 
-  const fields = pickControlSessionUpdateFields(body);
-  if (Object.hasOwn(fields, "messages")) {
-    fields.messages = redactSecretsInValue(fields.messages);
-  }
+    const { data, error } = await deps.client
+      .from("control_sessions")
+      .update({ ...fields, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .eq("updated_at", expectedUpdatedAt)
+      .select("*")
+      .maybeSingle();
 
-  const { data, error } = await supabaseAdmin
-    .from("control_sessions")
-    .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .eq("user_id", userId)
-    .eq("updated_at", expectedUpdatedAt)
-    .select("*")
-    .maybeSingle();
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+    if (!data) {
+      const current = await getSessionRecord(id, userId, deps.client);
+      return NextResponse.json(
+        { error: "CONFLICT", session: current },
+        { status: 409 }
+      );
+    }
 
-  if (!data) {
-    const current = await getSessionRecord(id, userId);
-    return NextResponse.json(
-      { error: "CONFLICT", session: current },
-      { status: 409 }
-    );
-  }
-
-  return NextResponse.json({ ok: true, session: data });
+    return NextResponse.json({ ok: true, session: data });
+  };
 }
+
+export const PUT = createControlSessionsPutHandler();
 
 async function deleteOwnedSession(id: string, userId: string) {
   const { data, error } = await supabaseAdmin
