@@ -107,6 +107,7 @@ test("routes app_mention in a linked channel through the repo-agent branch", asy
     teamId: "T1",
     channelId: "C1",
     messageTs: "1700000000.000999",
+    threadTs: "1700000000.000100",
   });
 
   const placeholderPost = calls.find((c) => c.op === "post") as {
@@ -114,7 +115,10 @@ test("routes app_mention in a linked channel through the repo-agent branch", asy
   };
   assert.equal(placeholderPost.input.channel, "C1");
   assert.equal(placeholderPost.input.thread_ts, "1700000000.000100");
-  assert.match(placeholderPost.input.text, /Starting repo agent run/);
+  assert.match(
+    placeholderPost.input.text,
+    /Preparing your task: fix the failing test in repo/
+  );
 
   const finalUpdate = calls.findLast((c) => c.op === "update") as {
     input: { text: string };

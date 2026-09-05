@@ -53,7 +53,8 @@ for (const preference of [null, "mogplex", "codex", "claude-code"] as const) {
           slackUserId: "U1",
         });
         return preference;
-      }
+      },
+      async () => {}
     );
     assert.equal(result.runId, stored.id);
     assert.equal(stored.harness, preference ?? "mogplex");

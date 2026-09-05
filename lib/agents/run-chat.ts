@@ -2,7 +2,7 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { SandboxCommandExecution } from "@/lib/agents/tools/sandbox";
 import { buildTools } from "@/lib/agents/tools";
 import { selectChatTools } from "@/lib/agents/chat-surface-tools";
-import type { Tool } from "ai";
+import type { Tool, ModelMessage } from "ai";
 import {
   buildSystemPrompt,
   resolveAgentDeliveryBranch,
@@ -175,6 +175,11 @@ export type CreateChatModelStreamInput = {
    * Slack message.
    */
   additionalTools?: Record<string, Tool>;
+  /** Server-owned input delivered at an actual model-step boundary. */
+  prepareMessages?: (
+    messages: ModelMessage[],
+    stepNumber: number
+  ) => Promise<ModelMessage[]>;
 };
 
 export type CreateChatModelStreamResult = {
@@ -283,8 +288,11 @@ export async function createChatModelStream(
       // Step-level context reduction: within a long tool loop, demote stale
       // oversized tool outputs to typed references so a 100-step run cannot
       // outgrow the window on dead payloads. Deterministic — no model call.
-      prepareStep: ({ messages }) => {
-        const reduced = demoteStaleToolOutputs(messages);
+      prepareStep: async ({ messages, stepNumber }) => {
+        const prepared = input.prepareMessages
+          ? await input.prepareMessages(messages, stepNumber)
+          : messages;
+        const reduced = demoteStaleToolOutputs(prepared);
         return reduced === messages ? undefined : { messages: reduced };
       },
       ...hooks,

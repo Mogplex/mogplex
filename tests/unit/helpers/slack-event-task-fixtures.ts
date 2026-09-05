@@ -14,7 +14,18 @@ export function restoreFetch() {
 export async function loadSlackEventTask() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../../trigger/slack-event");
+  const task = await import("../../../trigger/slack-event");
+  return {
+    ...task,
+    runSlackEventTask: (
+      payload: Parameters<typeof task.runSlackEventTask>[0],
+      overrides: Parameters<typeof task.runSlackEventTask>[1] = {}
+    ) =>
+      task.runSlackEventTask(payload, {
+        findGuidanceRuns: async () => [],
+        ...overrides,
+      }),
+  };
 }
 
 export type AgentResult = {

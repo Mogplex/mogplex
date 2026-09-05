@@ -23,11 +23,7 @@ import {
   cancelMogplexApiRun,
   MogplexApiRunControlError,
 } from "@/lib/mogplex-api/run-control";
-import {
-  isRunControlsBlock,
-  SLACK_CANCEL_RUN_ACTION_ID,
-  buildTextSectionBlocks,
-} from "@/lib/slack/run-controls";
+import { SLACK_CANCEL_RUN_ACTION_ID } from "@/lib/slack/run-controls";
 
 export {
   buildCancelRunActionsBlock,
@@ -54,8 +50,8 @@ export type SlackBlockActionsPayload = {
   actions?: SlackBlockAction[];
   /**
    * The message the clicked block is attached to. Slack includes this on
-   * `block_actions`; we use it to re-render the message without the
-   * run-controls block once the run is no longer cancellable.
+   * `block_actions`. It is a potentially stale snapshot, never the source for
+   * rewriting a run card; the delivery worker loads authoritative run state.
    */
   message?: { text?: string; blocks?: SlackBlock[] };
 };
@@ -123,38 +119,6 @@ async function respondEphemeral(
     // The interaction is already acked by the webhook — a failed follow-up
     // message shouldn't bubble up and trigger a Slack retry of the action.
     console.warn("[slack-interactivity] response_url post failed", error);
-  }
-}
-
-/**
- * Re-render the button's message without the run-controls block — used once the
- * run can no longer be cancelled, so a stale "Cancel run" button doesn't linger.
- * Best-effort: a failed update just leaves the (now inert) button in place.
- */
-async function removeCancelButton(
-  deps: SlackInteractivityDeps,
-  payload: SlackBlockActionsPayload
-): Promise<void> {
-  const responseUrl = payload.response_url;
-  if (!responseUrl) return;
-
-  const blocks = payload.message?.blocks ?? [];
-  if (!blocks.some(isRunControlsBlock)) return;
-
-  const text = payload.message?.text ?? "";
-  const remaining = blocks.filter((block) => !isRunControlsBlock(block));
-  const nextBlocks =
-    remaining.length > 0 ? remaining : buildTextSectionBlocks(text);
-  if (!nextBlocks) return;
-
-  try {
-    await deps.postResponse(responseUrl, {
-      replace_original: true,
-      text,
-      blocks: nextBlocks,
-    });
-  } catch (error) {
-    console.warn("[slack-interactivity] failed to strip cancel button", error);
   }
 }
 
@@ -399,28 +363,23 @@ async function cancelRunAndRespond(
   // cancelled) before this click — nothing was cancelled here, so don't pretend
   // otherwise.
   if (result.alreadyTerminal) {
-    // User-visible feedback first; the button strip is best-effort. (Slack
-    // caps `response_url` reuse at ~5 calls — keep the ephemeral ahead of the
-    // optional follow-up so a strip failure can never starve it.)
+    // Acknowledge the click independently of the authoritative card delivery.
     await respondEphemeral(
       deps,
       payload,
       `:grey_question: Run \`${runId}\` has already finished (status: ${result.status}).`
     );
-    // The run is done — drop the now-useless button so nobody else clicks it.
-    await removeCancelButton(deps, payload);
+    // cancelRun enqueues the authoritative terminal card. Never replace it
+    // with the potentially old message captured in this interaction payload.
     return { outcome: "run_not_found", runId };
   }
 
-  // Cancellation is in flight — the run won't accept another cancel, so remove
-  // the button rather than leave it for a redundant second click. Same ordering
-  // rationale as the terminal branch above: ephemeral first, strip best-effort.
+  // The durable delivery worker removes Cancel; never reuse the clicked card.
   await respondEphemeral(
     deps,
     payload,
     `:octagonal_sign: Cancellation requested for run \`${runId}\` (status: ${result.status}).`
   );
-  await removeCancelButton(deps, payload);
   return { outcome: "run_cancelled", runId, status: result.status };
 }
 

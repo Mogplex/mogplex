@@ -23,6 +23,9 @@ function makeDeps() {
       },
       now: () => clock,
       minUpdateIntervalMs: 1000,
+      wait: async (milliseconds: number) => {
+        clock += milliseconds;
+      },
     },
   };
 }
@@ -41,6 +44,62 @@ function cancelBlock(input: UpdateSlackMessageInput) {
 }
 
 describe("createSlackRunProgressReporter", () => {
+  it("assembles assistant deltas into a stable update", async () => {
+    const { updates, deps } = makeDeps();
+    const reporter = createSlackRunProgressReporter(runWithSlack, deps);
+    await reporter.report({ kind: "assistant_text", text: "Found the " });
+    await reporter.report({
+      kind: "assistant_text",
+      text: "overlapping controls.",
+    });
+    await reporter.flush();
+    expect(updates.at(-1)!.text).toContain("Found the overlapping controls.");
+  });
+
+  it("replaces a started task with its completed state instead of another running bullet", async () => {
+    const { updates, deps } = makeDeps();
+    const reporter = createSlackRunProgressReporter(runWithSlack, deps);
+    await reporter.report({
+      kind: "tool_started",
+      toolName: "Bash",
+      toolCallId: "test-1",
+      input: { command: "pnpm test" },
+    });
+    await reporter.report({
+      kind: "tool_finished",
+      toolName: "Bash",
+      toolCallId: "test-1",
+      state: "success",
+    });
+    await reporter.flush();
+    const plan = updates.at(-1)!.blocks?.find((block) => block.type === "plan");
+    expect(plan).toMatchObject({
+      tasks: [
+        { task_id: "test-1", title: "Running tests", status: "complete" },
+      ],
+    });
+    expect(updates.at(-1)!.text).toContain("Completed: Running tests");
+    expect(updates.at(-1)!.text).not.toContain("• Running a command");
+  });
+
+  it("retains a failed delivery for the next flush", async () => {
+    const { updates, deps } = makeDeps();
+    let fail = true;
+    const reporter = createSlackRunProgressReporter(runWithSlack, {
+      ...deps,
+      updateSlackMessage: async (token, input) => {
+        if (fail) {
+          fail = false;
+          throw new Error("Slack unavailable");
+        }
+        return deps.updateSlackMessage(token, input);
+      },
+    });
+    await reporter.report({ kind: "tool_started", toolName: "Read" });
+    await reporter.flush();
+    expect(updates).toHaveLength(1);
+  });
+
   it("should be a no-op for a run without Slack coordinates", async () => {
     const { updates, deps } = makeDeps();
     const reporter = createSlackRunProgressReporter(
@@ -65,10 +124,10 @@ describe("createSlackRunProgressReporter", () => {
     await reporter.report({ kind: "tool_started", toolName: "Edit" }); // posts
     await reporter.flush(); // nothing new pending
 
-    expect(updates).toHaveLength(2);
+    expect(updates).toHaveLength(3);
     expect(updates[0]!.text).toContain("Reading a file");
     expect(updates[1]!.text).toContain("Running a command");
-    expect(updates[1]!.text).toContain("Editing a file");
+    expect(updates[2]!.text).toContain("Editing a file");
     expect(updates[0]!.channel).toBe("C1");
     expect(updates[0]!.ts).toBe("123.45");
     expect(cancelBlock(updates[0]!)).toBeDefined();
@@ -91,8 +150,12 @@ describe("createSlackRunProgressReporter", () => {
     }); // posts
     await reporter.flush();
 
-    expect(updates.at(-1)!.text).toContain("> Investigating the mobile header");
-    expect(updates.at(-1)!.text).toContain("Running a command (failed)");
+    expect(updates.at(-1)!.text).toContain(
+      "Investigating the mobile header more detail"
+    );
+    expect(updates.at(-1)!.text).toContain(
+      "Needs attention: Running a command"
+    );
   });
 
   it("should not post when no bot token is available", async () => {

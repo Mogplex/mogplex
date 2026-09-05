@@ -1,13 +1,16 @@
-import { buildAppUrl } from "@/lib/app-url";
-import {
-  buildCancelRunActionsBlock,
-  buildTextSectionBlocks,
-  readSlackRunControlsMetadata,
-} from "@/lib/slack/run-controls";
+import { readSlackRunControlsMetadata } from "./run-controls";
+import { setTimeout as delay } from "node:timers/promises";
 import type { HarnessProgressUpdate } from "@/lib/mogplex-api/harness-progress";
-import type { SlackBlock, UpdateSlackMessageInput } from "@/lib/slack/client";
-
-type SlackNotifiableRun = { id: string; metadata: unknown };
+import type { UpdateSlackMessageInput } from "./client";
+import {
+  applyRunProgress,
+  createRunProgressState,
+  finishProgressText,
+} from "./run-progress-state";
+import {
+  buildRunProgressMessage,
+  type ProgressRun,
+} from "./run-progress-presentation";
 
 type SlackRunProgressImpl = {
   getSlackBotToken: (teamId: string) => Promise<string | null>;
@@ -16,154 +19,97 @@ type SlackRunProgressImpl = {
     input: UpdateSlackMessageInput
   ) => Promise<unknown>;
 };
-
 export type SlackRunProgressDeps = Partial<SlackRunProgressImpl> & {
   now?: () => number;
-  /**
-   * Minimum gap between Slack message edits. This paces `chat.update` under
-   * Slack's per-channel rate limit; it is not a run timeout — the run's own
-   * checkpoints decide when work stops.
-   */
+  /** Existing Slack edit pacing; semantic tool/phase boundaries flush explicitly. */
   minUpdateIntervalMs?: number;
+  wait?: (milliseconds: number) => Promise<void>;
 };
-
 export type SlackRunProgressReporter = {
   report: (update: HarnessProgressUpdate) => Promise<void>;
   flush: () => Promise<void>;
 };
-
-const MAX_FEED_LINES = 8;
-const MAX_CURRENT_TEXT = 180;
-const DEFAULT_MIN_UPDATE_INTERVAL_MS = 2_500;
-
-// Claude Code tool names mapped to short, user-facing action lines.
-const TOOL_LABELS: Readonly<Record<string, string>> = {
-  bash: "Running a command",
-  read: "Reading a file",
-  edit: "Editing a file",
-  multiedit: "Editing files",
-  write: "Writing a file",
-  grep: "Searching the code",
-  glob: "Finding files",
-  ls: "Listing files",
-  todowrite: "Planning the work",
-  task: "Running a sub-task",
-  webfetch: "Reading a page",
-  websearch: "Searching the web",
-};
-
-function toolLabel(name: string): string {
-  return TOOL_LABELS[name.toLowerCase()] ?? `Using ${name}`;
-}
-
-function firstLine(text: string): string {
-  const line = text.trim().split("\n")[0]?.trim() ?? "";
-  return line.length > MAX_CURRENT_TEXT
-    ? `${line.slice(0, MAX_CURRENT_TEXT)}…`
-    : line;
-}
-
 const NOOP_REPORTER: SlackRunProgressReporter = {
   report: async () => {},
   flush: async () => {},
 };
 
-async function loadDefaultImpl(): Promise<SlackRunProgressImpl> {
-  const { getSlackBotToken, updateSlackMessage } =
-    await import("@/lib/slack/client");
-  return { getSlackBotToken, updateSlackMessage };
-}
-
-/**
- * Builds a reporter that streams a run's live actions into the Slack thread it
- * was started from, so the user can watch the agent work (and steer). Updates
- * edit the run's originating message, keeping the "Cancel run" button. A run
- * with no Slack coordinates gets an inert no-op reporter. All Slack calls are
- * best-effort: a failure is logged and never interrupts the run.
- */
+/** One ordered writer. Failed deliveries stay dirty; no timer or status polling. */
 export function createSlackRunProgressReporter(
-  run: SlackNotifiableRun,
+  run: ProgressRun,
   deps: SlackRunProgressDeps = {}
 ): SlackRunProgressReporter {
   const slack = readSlackRunControlsMetadata(run.metadata);
   if (!slack) return NOOP_REPORTER;
   const { teamId, channelId, messageTs } = slack;
-
   const now = deps.now ?? Date.now;
-  const minInterval =
-    deps.minUpdateIntervalMs ?? DEFAULT_MIN_UPDATE_INTERVAL_MS;
-  const runUrl = buildAppUrl(`/runs/${run.id}`).toString();
-
-  const feed: string[] = [];
-  let currentText: string | null = null;
-  let dirty = false;
+  const state = createRunProgressState(now());
+  let revision = 0;
+  let sentRevision = 0;
   let lastUpdateAt = -Infinity;
-  let impl: SlackRunProgressImpl | null =
-    deps.getSlackBotToken && deps.updateSlackMessage
-      ? {
-          getSlackBotToken: deps.getSlackBotToken,
-          updateSlackMessage: deps.updateSlackMessage,
+  let pending = Promise.resolve();
+  let botToken: string | undefined;
+  const minInterval = deps.minUpdateIntervalMs ?? 2500;
+  const wait = deps.wait ?? delay;
+  function enqueueFlush() {
+    pending = pending.then(async () => {
+      if (sentRevision === revision) return;
+      const sendingRevision = revision;
+      try {
+        if (!deps.getSlackBotToken && !deps.updateSlackMessage) {
+          if (!run.user_id || !run.ai_call_id)
+            throw new Error("Missing run identity");
+          const { publishRunProgress } = await import("./run-progress-store");
+          const { queueSlackRunDelivery } =
+            await import("./run-delivery-queue");
+          const saved = await publishRunProgress({
+            runId: run.id,
+            userId: run.user_id,
+            aiCallId: run.ai_call_id,
+            state,
+          });
+          if (saved !== null)
+            await queueSlackRunDelivery({ runId: run.id, userId: run.user_id });
+          sentRevision = sendingRevision;
+          lastUpdateAt = now();
+          return;
         }
-      : null;
-  let botToken: string | null | undefined;
-
-  async function resolveImpl(): Promise<SlackRunProgressImpl> {
-    if (!impl) impl = await loadDefaultImpl();
-    return impl;
-  }
-
-  function composeText(): string {
-    const header = `:hourglass_flowing_sand: Working on run \`${run.id}\` — <${runUrl}|view in Mogplex>`;
-    const lines = feed.slice(-MAX_FEED_LINES).map((line) => `• ${line}`);
-    const body = lines.length > 0 ? `\n${lines.join("\n")}` : "";
-    const current = currentText ? `\n\n> ${currentText}` : "";
-    return `${header}${body}${current}`;
-  }
-
-  async function flushToSlack(): Promise<void> {
-    if (!dirty) return;
-    dirty = false;
-    try {
-      const resolved = await resolveImpl();
-      if (botToken === undefined) {
-        botToken = await resolved.getSlackBotToken(teamId);
+        // Only direct transports wait here. Production saves/queues immediately;
+        // the delivery worker owns Slack pacing without delaying the coding agent.
+        const remaining = minInterval - (now() - lastUpdateAt);
+        if (remaining > 0) await wait(remaining);
+        const impl =
+          deps.getSlackBotToken && deps.updateSlackMessage
+            ? {
+                getSlackBotToken: deps.getSlackBotToken,
+                updateSlackMessage: deps.updateSlackMessage,
+              }
+            : await import("./client");
+        const token = botToken ?? (await impl.getSlackBotToken(teamId));
+        if (!token) return;
+        botToken = token;
+        const message = buildRunProgressMessage(run, state);
+        await impl.updateSlackMessage(token, {
+          channel: channelId,
+          ts: messageTs,
+          ...message,
+        });
+        sentRevision = sendingRevision;
+        lastUpdateAt = now();
+      } catch {
+        console.warn("[slack-run-progress] update failed", run.id);
       }
-      if (!botToken) return;
-      const text = composeText();
-      const blocks: SlackBlock[] = [
-        ...(buildTextSectionBlocks(text) ?? []),
-        buildCancelRunActionsBlock(run.id),
-      ];
-      lastUpdateAt = now();
-      await resolved.updateSlackMessage(botToken, {
-        channel: channelId,
-        ts: messageTs,
-        text,
-        blocks,
-      });
-    } catch (error) {
-      console.warn("[slack-run-progress] update failed", run.id, error);
-    }
+    });
+    return pending;
   }
-
   return {
     async report(update) {
-      if (update.kind === "assistant_text") {
-        const line = firstLine(update.text);
-        if (!line) return;
-        currentText = line;
-      } else if (update.kind === "tool_started") {
-        feed.push(toolLabel(update.toolName));
-      } else if (update.state === "error" || update.state === "denied") {
-        feed.push(`${toolLabel(update.toolName)} (failed)`);
-      } else {
-        return;
-      }
-      dirty = true;
-      if (now() - lastUpdateAt >= minInterval) await flushToSlack();
+      if (applyRunProgress(state, update, now())) revision += 1;
+      await enqueueFlush();
     },
     async flush() {
-      await flushToSlack();
+      if (finishProgressText(state)) revision += 1;
+      await enqueueFlush();
     },
   };
 }

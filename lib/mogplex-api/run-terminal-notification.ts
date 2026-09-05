@@ -1,6 +1,6 @@
 import type { ExternalAgentRunRow, MogplexApiRunStatus } from "./runs-types";
 import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
-import { stripSlackRunControlsForTerminalRun } from "@/lib/slack/run-controls-notify";
+import { queueTerminalSlackRun } from "@/lib/slack/run-delivery-queue";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -39,9 +39,27 @@ export async function markTerminalSlackDelivery(
 }
 
 const defaultDeps: NotificationDeps = {
-  send: stripSlackRunControlsForTerminalRun,
+  send: queueTerminalSlackRun,
   markDelivered: markTerminalSlackDelivery,
 };
+
+export function terminalSlackDeliveryKey(
+  run: ExternalAgentRunRow,
+  status: MogplexApiRunStatus
+): string | null {
+  const slack = readSlackRunControlsMetadata(run.metadata);
+  if (!slack) return null;
+  return JSON.stringify([
+    run.ai_call_id,
+    status,
+    slack.teamId,
+    slack.channelId,
+    slack.messageTs,
+    // A guidance receipt can settle after the first terminal delivery. Keep
+    // legacy zero-revision keys compatible while allowing that final receipt.
+    ...(run.slack_progress_revision ? [run.slack_progress_revision] : []),
+  ]);
+}
 
 export async function notifyTerminalSlackRunOnce(
   run: ExternalAgentRunRow,
@@ -50,15 +68,8 @@ export async function notifyTerminalSlackRunOnce(
 ): Promise<void> {
   if (status !== "success" && status !== "failed" && status !== "cancelled")
     return;
-  const slack = readSlackRunControlsMetadata(run.metadata);
-  if (!slack) return;
-  const key = JSON.stringify([
-    run.ai_call_id,
-    status,
-    slack.teamId,
-    slack.channelId,
-    slack.messageTs,
-  ]);
+  const key = terminalSlackDeliveryKey(run, status);
+  if (!key) return;
   if (run.slack_terminal_notification_key === key) return;
   const deps = { ...defaultDeps, ...overrides };
   // A missing bot token is not a delivered edit. Leave it pending so a later

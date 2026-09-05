@@ -10,9 +10,14 @@ process.env.NEXT_PUBLIC_APP_URL ||= "https://mogplex.com";
 
 function makeDeps() {
   const posts: PostSlackMessageInput[] = [];
+  const queued: string[] = [];
   return {
     posts,
+    queued,
     deps: {
+      queueUpdate: async (input: { runId: string; userId: string }) => {
+        queued.push(input.runId);
+      },
       getSlackBotToken: async () => "xoxb-test" as string | null,
       postSlackMessage: async (
         _token: string,
@@ -26,7 +31,9 @@ function makeDeps() {
 
 const runWithSlack = {
   id: "run-1",
+  user_id: "user-1",
   metadata: {
+    slack_thread_ts: "123.00",
     slackRunControls: { teamId: "T1", channelId: "C1", messageTs: "123.45" },
   },
 };
@@ -45,8 +52,8 @@ describe("buildRunCheckpointText", () => {
     });
     expect(text).toContain("Moved sign in into the menu.");
     expect(text).toContain("https://sb-abc.vercel.run");
-    expect(text.toLowerCase()).toContain("reply in this thread");
-    expect(text).toContain("ship it");
+    expect(text).toContain("Review the work in Mogplex");
+    expect(text).not.toContain("ship it");
   });
 
   it("should omit the preview line when there is no preview URL", () => {
@@ -56,18 +63,19 @@ describe("buildRunCheckpointText", () => {
       checkpoint: { previewUrl: null, summary: null },
     });
     expect(text).not.toContain("Preview:");
-    expect(text.toLowerCase()).toContain("reply in this thread");
+    expect(text).toContain("Review the work in Mogplex");
   });
 });
 
 describe("notifySlackRunCheckpoint", () => {
   it("should post a thread reply with the checkpoint details", async () => {
-    const { posts, deps } = makeDeps();
+    const { posts, queued, deps } = makeDeps();
     await notifySlackRunCheckpoint(runWithSlack, fullCheckpoint, deps);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].channel).toBe("C1");
-    expect(posts[0].thread_ts).toBe("123.45");
+    expect(posts[0].thread_ts).toBe("123.00");
+    expect(queued).toEqual(["run-1"]);
     expect(posts[0].text).toContain("https://sb-abc.vercel.run");
     expect(posts[0].blocks?.length).toBeGreaterThan(0);
   });

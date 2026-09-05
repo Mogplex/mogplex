@@ -85,6 +85,15 @@ const findEphemeral = (posted: PostedResponse[]) =>
 const findButtonStrip = (posted: PostedResponse[]) =>
   posted.find((p) => p.body.replace_original === true);
 
+test("a stale cancel click never replaces the result with captured working text", async () => {
+  const { deps, posted } = makeDeps({
+    cancelRun: async () => okCancel("success", true),
+  });
+  await mod.handleSlackBlockActions(makePayload(), deps);
+  assert.equal(findButtonStrip(posted), undefined);
+  assert.ok(findEphemeral(posted));
+});
+
 test("buildCancelRunActionsBlock carries the action id and run id", () => {
   const block = mod.buildCancelRunActionsBlock("run_xyz") as {
     type: string;
@@ -121,16 +130,8 @@ test("cancels the run and confirms via response_url for a linked user", async ()
   assert.equal(ephemeral.url, "https://hooks.slack.test/response");
   assert.match(String(ephemeral.body.text), /run_abc/);
 
-  // The "Cancel run" button is dropped once cancellation is in flight.
-  const strip = findButtonStrip(posted);
-  assert.ok(strip);
-  const stripBlocks = strip.body.blocks as Array<{ block_id?: string }>;
-  assert.ok(stripBlocks.length > 0);
-  assert.ok(
-    stripBlocks.every(
-      (block) => block.block_id !== mod.SLACK_RUN_CONTROLS_BLOCK_ID
-    )
-  );
+  // The run delivery worker renders the new state; a click cannot replay old text.
+  assert.equal(findButtonStrip(posted), undefined);
 });
 
 test("saves a model selected from the Slack picker for the user and channel", async () => {
@@ -338,8 +339,8 @@ test("treats an already-finished run as run_not_found", async () => {
   assert.ok(ephemeral);
   assert.match(String(ephemeral.body.text), /already finished/);
   assert.match(String(ephemeral.body.text), /success/);
-  // A finished run's button is stale — strip it from the message.
-  assert.ok(findButtonStrip(posted));
+  // The serialized run writer owns the final card, not the stale click payload.
+  assert.equal(findButtonStrip(posted), undefined);
 });
 
 test("treats an already-cancelled run as run_not_found, not run_cancelled", async () => {
@@ -353,7 +354,7 @@ test("treats an already-cancelled run as run_not_found, not run_cancelled", asyn
   const ephemeral = findEphemeral(posted);
   assert.ok(ephemeral);
   assert.match(String(ephemeral.body.text), /already finished/);
-  assert.ok(findButtonStrip(posted));
+  assert.equal(findButtonStrip(posted), undefined);
 });
 
 test("skips the button strip when the message has no run-controls block", async () => {

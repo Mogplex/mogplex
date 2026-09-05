@@ -17,6 +17,7 @@ export const TRIGGER_TASK_IDS = {
   aiSpendDivergenceCheck: "check-ai-spend-divergence",
   zombieRowReaper: "zombie-row-reaper",
   slackEventHandler: "handle-slack-event",
+  slackRunDelivery: "deliver-slack-run-update",
   slackToolExecutionRetention: "retain-slack-tool-executions",
   workflowSchedule: "dispatch-workflow-schedule",
 } as const;

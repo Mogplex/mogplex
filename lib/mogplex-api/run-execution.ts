@@ -1,6 +1,7 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { readExternalHarnessProgress } from "@/lib/mogplex-api/harness-progress";
 import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
+import { createSlackRunProgressReporter } from "@/lib/slack/run-progress-notify";
 import {
   launchSandboxViaRoute,
   readTextResponse,
@@ -34,6 +35,7 @@ export type {
 } from "@/lib/mogplex-api/run-execution-finalize";
 
 type ExternalAgentRunExecutionDeps = FinalizeDeps & {
+  createProgress: typeof createSlackRunProgressReporter;
   loadRun: (
     runId: string,
     userId: string
@@ -130,6 +132,7 @@ const defaultExecutionDeps: ExternalAgentRunExecutionDeps = {
   appendEvent: safeAppendAiCallEvent,
   notifyRunReachedTerminalState: notifyTerminalSlackRunOnce,
   notifyRunCheckpoint: notifySlackRunCheckpoint,
+  createProgress: createSlackRunProgressReporter,
 };
 
 export async function executeExternalAgentRun(
@@ -171,13 +174,26 @@ export async function executeExternalAgentRun(
     };
   }
 
+  const progress = deps.createProgress(run);
   try {
+    await progress.report({
+      kind: "phase",
+      phase: "Preparing workspace",
+      summary: "Starting the isolated workspace for your task.",
+      next: "Inspect the repository and your request.",
+    });
     const sandbox = await deps.launchSandbox(run);
     run = await deps.updateRun(run.user_id, run.id, {
       sandbox_record_id: sandbox.recordId,
       sandbox_id: sandbox.sandboxId,
       status: "streaming",
       error: null,
+    });
+    await progress.report({
+      kind: "phase",
+      phase: "Investigating",
+      summary: "The workspace is ready. Starting the coding agent.",
+      next: "Inspect the repository and your request.",
     });
 
     const harnessResult = await deps.runHarness(run, sandbox);

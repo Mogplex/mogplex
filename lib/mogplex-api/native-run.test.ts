@@ -1,19 +1,48 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { streamText } from "ai";
+import { streamText, stepCountIs, tool } from "ai";
+import { z } from "zod";
+import type { HarnessProgressUpdate } from "./harness-progress";
 import { MockLanguageModelV3 } from "ai/test";
 import { runNativeMogplexAgent } from "./native-run";
+import { createRunGuidanceSession } from "@/lib/slack/run-guidance-session";
+import type { RunGuidance } from "@/lib/slack/run-guidance-store";
 import {
   buildAiCall,
   buildRunRow,
 } from "../../tests/unit/helpers/mogplex-api-runs-fixtures";
 
 async function exercise(
-  mode: "success" | "error" | "cancelled" | "unauthorized" | "lease_failure",
+  mode:
+    | "success"
+    | "error"
+    | "cancelled"
+    | "unauthorized"
+    | "lease_failure"
+    | "tool_progress"
+    | "guidance",
   response = "Fixed the header."
 ) {
   let call = buildAiCall({ model: "harness:mogplex" });
-  const run = buildRunRow({ harness: "mogplex" });
+  const run = buildRunRow({
+    harness: "mogplex",
+    ...(mode === "tool_progress" || mode === "guidance"
+      ? {
+          metadata: {
+            slack_guidance_enabled: mode === "guidance",
+            slackRunControls: {
+              teamId: "T1",
+              channelId: "D1",
+              messageTs: "1.2",
+            },
+          },
+        }
+      : {}),
+  });
+  const progress: HarnessProgressUpdate[] = [];
+  let guidanceRows: RunGuidance[] = [];
+  const guidanceSteps: number[] = [];
+  let modelStep = 0;
   const controller = new AbortController();
   const events: string[] = [];
   let cleaned = false;
@@ -27,6 +56,39 @@ async function exercise(
             sink.enqueue({
               type: "error",
               error: new Error("Provider disconnected"),
+            });
+          } else if (
+            (mode === "tool_progress" || mode === "guidance") &&
+            modelStep++ === 0
+          ) {
+            sink.enqueue({
+              type: "tool-call",
+              toolCallId: "progress-1",
+              toolName: "report_progress",
+              input: JSON.stringify({
+                phase: "Verifying",
+                summary: "Updated the header layout.",
+                next: "Run the regression tests.",
+              }),
+            });
+            sink.enqueue({
+              type: "tool-call",
+              toolCallId: "command-1",
+              toolName: "terminal_exec",
+              input: JSON.stringify({ command: "pnpm test" }),
+            });
+            sink.enqueue({
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: "tool-calls" },
+              usage: {
+                inputTokens: {
+                  total: 12,
+                  noCache: 12,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                },
+                outputTokens: { total: 5, text: 5, reasoning: 0 },
+              },
             });
           } else {
             sink.enqueue({ type: "text-start", id: "text" });
@@ -115,7 +177,40 @@ async function exercise(
             result: streamText({
               model,
               prompt: run.prompt,
+              prepareStep: async ({ messages, stepNumber }) => ({
+                messages: input.prepareMessages
+                  ? await input.prepareMessages(messages, stepNumber)
+                  : messages,
+              }),
               abortSignal: input.abortSignal,
+              tools: {
+                ...input.additionalTools,
+                terminal_exec: tool({
+                  inputSchema: z.object({ command: z.string() }),
+                  execute: async () => {
+                    if (mode === "guidance")
+                      guidanceRows = [
+                        {
+                          id: "00000000-0000-4000-8000-000000000005",
+                          run_id: run.id,
+                          user_id: run.user_id,
+                          ai_call_id: run.ai_call_id,
+                          body: "Keep the desktop header unchanged.",
+                          status: "received",
+                          attachments: null,
+                          created_at: new Date(0).toISOString(),
+                          delivered_step: null,
+                        },
+                      ];
+                    return {
+                      exitCode: 1,
+                      stdout: "",
+                      stderr: "test failure",
+                    };
+                  },
+                }),
+              },
+              stopWhen: stepCountIs(3),
               ...input.hooks,
             }),
             connections: [],
@@ -124,7 +219,31 @@ async function exercise(
             },
           };
         },
-        createProgress: () => ({ async report() {}, async flush() {} }),
+        createProgress: () => ({
+          async report(update) {
+            progress.push(update);
+          },
+          async flush() {},
+        }),
+        createGuidance: (row) =>
+          createRunGuidanceSession(row, {
+            load: async () => guidanceRows,
+            deliver: async (receipt) => {
+              assert.ok(
+                JSON.stringify(model.doStreamCalls.at(-1)?.prompt).includes(
+                  "Keep the desktop header unchanged."
+                )
+              );
+              guidanceSteps.push(receipt.step);
+              guidanceRows = guidanceRows.map((entry) => ({
+                ...entry,
+                status: "delivered",
+                delivered_step: receipt.step,
+              }));
+              return receipt.ids.length;
+            },
+            queue: async () => {},
+          }),
         updateCall: async (_id, update) => {
           call = { ...call, ...update };
           return call;
@@ -146,8 +265,67 @@ async function exercise(
   } catch (error) {
     caught = error;
   }
-  return { call, result, caught, events, cleaned, closed, model };
+  return {
+    call,
+    result,
+    caught,
+    events,
+    cleaned,
+    closed,
+    model,
+    progress,
+    guidanceSteps,
+  };
 }
+
+test("a real SDK run receives mid-command Slack guidance at its next model step and acknowledges only afterward", async () => {
+  const result = await exercise("guidance");
+  assert.equal(result.caught, undefined);
+  assert.equal(result.model.doStreamCalls.length, 2);
+  assert.ok(
+    !JSON.stringify(result.model.doStreamCalls[0].prompt).includes(
+      "Keep the desktop header unchanged."
+    )
+  );
+  assert.ok(
+    JSON.stringify(result.model.doStreamCalls[1].prompt).includes(
+      "Keep the desktop header unchanged."
+    )
+  );
+  assert.deepEqual(result.guidanceSteps, [1]);
+});
+
+test("native SDK tool hooks retain identities, inputs, failed exits and complete text boundaries", async () => {
+  const result = await exercise("tool_progress");
+  assert.equal(result.caught, undefined);
+  assert.ok(
+    result.progress.some(
+      (update) =>
+        update.kind === "phase" &&
+        update.phase === "Verifying" &&
+        update.next === "Run the regression tests."
+    )
+  );
+  assert.ok(
+    result.progress.some(
+      (update) =>
+        update.kind === "tool_started" &&
+        update.toolCallId === "command-1" &&
+        JSON.stringify(update.input) ===
+          JSON.stringify({ command: "pnpm test" })
+    )
+  );
+  assert.ok(
+    result.progress.some(
+      (update) =>
+        update.kind === "tool_finished" &&
+        update.toolCallId === "command-1" &&
+        (update.output as { exitCode: number }).exitCode === 1
+    )
+  );
+  assert.equal(result.progress.at(-1)?.kind, "assistant_text_end");
+  assert.equal(result.model.doStreamCalls.length, 2);
+});
 
 test("native runner consumes real SDK output and records usage on the existing call", async () => {
   const result = await exercise("success");
