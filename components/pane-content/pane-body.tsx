@@ -4,6 +4,7 @@ import type { SandboxError } from "@/lib/sandbox/error-state";
 import type { Repo } from "@/lib/types";
 import dynamic from "next/dynamic";
 import { AgentPane } from "./agent-pane";
+import { ExternalRunPane } from "./agent-pane/external-run-pane";
 import { ToolsPane } from "./tools-pane";
 import { MemoriesPane } from "./memories-pane";
 import { SandboxPendingOverlay } from "./sandbox-overlay";
@@ -117,6 +118,7 @@ export function PaneBody({
       return <HomePane />;
 
     case "agent":
+      if (pane.externalRunId) return <ExternalRunPane key={pane.externalRunId} pane={{ ...pane, externalRunId: pane.externalRunId }} onStreamingChange={onStreamingChange} onUpdatePane={onUpdatePane} />;
       return (
         <AgentPane
           pane={pane}

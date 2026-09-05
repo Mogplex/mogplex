@@ -29,6 +29,7 @@ test("observability activity realtime stays user scoped", () => {
 
 test("observability jobs realtime covers job rows and user-owned side tables", () => {
   assert.deepEqual(OBSERVABILITY_JOBS_REALTIME_SPECS, [
+    { table: "external_agent_runs", filter: "user_id=eq.$USER_ID" },
     JOB_RUNS_REALTIME_SPEC,
     USER_AI_CALLS_REALTIME_SPEC,
     USER_AUTOMATION_DISPATCH_EVENTS_REALTIME_SPEC,

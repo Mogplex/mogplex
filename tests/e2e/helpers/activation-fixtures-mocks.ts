@@ -31,6 +31,11 @@ export async function mockActivationFlow(
     user?: MockUser;
   }
 ) {
+  // Fixture-only tests must not subscribe to a configured external database.
+  // Live transport specs override this with their own network fixture.
+  await page.route("**/api/realtime/events?*", (route) =>
+    route.fulfill({ status: 204 })
+  );
   let repos: MockRepo[] = options?.initialRepos ?? [];
   let lastChatBody: Record<string, unknown> | null = null;
   let sandboxLaunchRequests = 0;
@@ -74,7 +79,7 @@ export async function mockActivationFlow(
   await page.route("**/api/agents", (route) => fulfillJson(route, []));
   await page.route("**/api/assignments", (route) => fulfillJson(route, []));
   await page.route("**/api/commands", (route) => fulfillJson(route, []));
-  await page.route("**/api/observability/stats", (route) =>
+  await page.route("**/api/observability/stats*", (route) =>
     fulfillJson(route, buildObservabilitySummary(observabilityCalls))
   );
   await page.route(/\/api\/observability\/jobs(?:\?.*)?$/, (route) =>

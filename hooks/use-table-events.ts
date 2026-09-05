@@ -11,6 +11,9 @@ export type UseTableEventsOptions = {
   tables: string[];
   enabled?: boolean;
   onEvent: (event: TableEvent) => void;
+  onConnectionChange?: (
+    state: "connecting" | "connected" | "disconnected"
+  ) => void;
 };
 
 /**
@@ -26,12 +29,15 @@ export function useTableEvents({
   tables,
   enabled = true,
   onEvent,
+  onConnectionChange,
 }: UseTableEventsOptions): void {
   const onEventRef = useRef(onEvent);
+  const connectionRef = useRef(onConnectionChange);
 
   useEffect(() => {
     onEventRef.current = onEvent;
-  }, [onEvent]);
+    connectionRef.current = onConnectionChange;
+  }, [onEvent, onConnectionChange]);
 
   const tablesKey = tables.slice().sort().join(",");
 
@@ -40,6 +46,8 @@ export function useTableEvents({
 
     const url = `/api/realtime/events?tables=${encodeURIComponent(tablesKey)}`;
     const eventSource = new EventSource(url);
+    connectionRef.current?.("connecting");
+    const handleOpen = () => connectionRef.current?.("connected");
 
     const handleMessage = (event: MessageEvent) => {
       try {
@@ -51,14 +59,16 @@ export function useTableEvents({
     };
 
     const handleError = () => {
-      // EventSource auto-reconnects, no action needed
+      connectionRef.current?.("disconnected");
     };
 
     eventSource.addEventListener("message", handleMessage);
+    eventSource.addEventListener("open", handleOpen);
     eventSource.addEventListener("error", handleError);
 
     return () => {
       eventSource.removeEventListener("message", handleMessage);
+      eventSource.removeEventListener("open", handleOpen);
       eventSource.removeEventListener("error", handleError);
       eventSource.close();
     };

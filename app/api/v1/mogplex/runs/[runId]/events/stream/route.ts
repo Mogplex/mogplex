@@ -26,6 +26,12 @@ const TERMINAL_EVENT_TYPES = new Set(["finished", "failed", "cancelled"]);
 const STREAM_PAGE_LIMIT = 200;
 
 type RunEventsStreamDeps = {
+  resolveUser?: (
+    request: Request
+  ) => Promise<
+    { ok: true; userId: string } | { ok: false; response: Response }
+  >;
+  replayFromStart?: boolean;
   resolveApiKey: typeof resolveApiKey;
   loadContext: typeof loadMogplexApiRunEventStreamContext;
   listPage: typeof listMogplexApiRunEventPage;
@@ -98,9 +104,11 @@ export function createMogplexApiRunEventsStreamGetHandler(
     request: NextRequest,
     { params }: { params: Promise<{ runId: string }> }
   ): Promise<Response> {
-    const user = await resolveMogplexApiUser(request, {
-      resolveApiKey: deps.resolveApiKey,
-    });
+    const user = deps.resolveUser
+      ? await deps.resolveUser(request)
+      : await resolveMogplexApiUser(request, {
+          resolveApiKey: deps.resolveApiKey,
+        });
     if (!user.ok) return user.response;
 
     const { runId } = await params;
@@ -199,7 +207,7 @@ export function createMogplexApiRunEventsStreamGetHandler(
         };
         const replay = async () => {
           let cursor: MogplexApiRunEventCursor | null = context.cursor;
-          const latest = resumeEventId === null;
+          const latest = resumeEventId === null && !deps.replayFromStart;
           for (;;) {
             const page = await deps.listPage({
               userId: user.userId,
@@ -272,6 +280,14 @@ export function createMogplexApiRunEventsStreamGetHandler(
         controller.enqueue(encodeRun(encoder, context.run));
         try {
           if (await replay()) return;
+          if (deps.replayFromStart)
+            controller.enqueue(
+              encoder.encode("event: replay_complete\ndata: {}\n\n")
+            );
+          if (!["pending", "streaming"].includes(context.run.status)) {
+            await close();
+            return;
+          }
           replaying = false;
           await drain();
         } catch (error) {

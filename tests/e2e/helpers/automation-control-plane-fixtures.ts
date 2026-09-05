@@ -25,6 +25,9 @@ export async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 export async function mockBaseChrome(page: Page) {
+  await page.route("**/api/realtime/events?*", (route) =>
+    route.fulfill({ status: 204 })
+  );
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
   );

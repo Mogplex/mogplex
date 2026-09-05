@@ -996,6 +996,39 @@
     @apply text-foreground text-lg font-semibold tracking-tight sm:text-2xl;
   }
 
+  /* Observability uses the shared Foundry palette with readable semantic
+     foregrounds in each theme, including the small status labels. */
+  .observability-work {
+    --accent-green: oklch(43% 0.11 149.58);
+    --accent-amber: oklch(43% 0.10 70.08);
+    --accent-blue: oklch(44% 0.14 259.81);
+    --accent-red: oklch(47% 0.17 25.33);
+    --primary-foreground: var(--neutral-11);
+    --ring: var(--brand-accent);
+  }
+
+  .dark .observability-work {
+    --accent-green: oklch(76% 0.13 149.58);
+    --accent-amber: oklch(79% 0.13 70.08);
+    --accent-blue: oklch(78% 0.10 259.81);
+    --accent-red: oklch(76% 0.13 25.33);
+  }
+
+  .observability-work :is(.ui-label, .ui-meta, .ui-section-caption) {
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .observability-work [data-slot="button"].border {
+    border-color: var(--border);
+  }
+
+  @media (max-width: 640px) {
+    .observability-work :is([data-slot="button"], [role="tab"], select) {
+      min-height: 44px;
+    }
+  }
+
   .ui-page-subtitle {
     @apply text-muted-foreground text-sm leading-6;
   }

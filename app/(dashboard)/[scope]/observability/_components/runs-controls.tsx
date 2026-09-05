@@ -19,10 +19,10 @@ export function RunsControls({
     <>
       <div className="flex items-center justify-between">
         <div>
-          <p className="ui-meta">Background runtime runs with repair and retry controls. Current failures and pending recovery appear in Automation health above.</p>
+          <p className="text-sm text-muted-foreground">Inspect work, review its output, or open the workspace to continue.</p>
           {isCurrentPendingView ? (
             <p className="ui-meta text-foreground">
-              Current pending runs across all dates.
+              Current active work across all dates.
             </p>
           ) : null}
         </div>
@@ -37,6 +37,7 @@ export function RunsControls({
             { label: "All", value: "" },
             { label: "Pending", value: "pending" },
             { label: "Running", value: "running" },
+            { label: "Needs input", value: "awaiting_input" },
             { label: "Success", value: "success" },
             { label: "Failed", value: "failed" },
             { label: "Cancelled", value: "cancelled" },

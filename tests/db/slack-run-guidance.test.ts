@@ -1,8 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
+import { NextResponse } from "next/server";
 import { beforeAll, beforeEach, afterAll, expect, it } from "vitest";
 import { createPostgrestShim } from "@/lib/db/postgrest-shim";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createRunGuidancePostHandler } from "@/app/api/runs/[runId]/guidance/route";
+import { loadWorkspaceRun } from "@/lib/run-workspace/context";
 import {
   submitSlackRunGuidance,
   deliverRunGuidance,
@@ -94,6 +97,58 @@ it("accepts exact-thread owner guidance once across webhook retries", async () =
   ).toEqual([
     { body: "Keep the desktop header unchanged.", status: "received" },
   ]);
+});
+
+it("workspace guidance authenticates the owner and persists once through the same live inbox", async () => {
+  const request = (body: unknown) =>
+    new Request("http://localhost/api/runs/guidance", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    });
+  const id = "00000000-0000-4000-8000-000000000005";
+  const handler = (userId: string | null) =>
+    createRunGuidancePostHandler({
+      requireUserId: async () =>
+        userId ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      loadRun: (userId, runId) => loadWorkspaceRun(userId, runId, client),
+      submit: (input) => submitSlackRunGuidance(input, client),
+    });
+  const params = { params: Promise.resolve({ runId: run }) };
+  expect(
+    (await handler(null)(request({ id, text: "Guide" }), params)).status
+  ).toBe(401);
+  expect(
+    (await handler(owner)(request({ id, text: " " }), params)).status
+  ).toBe(400);
+  expect(
+    (await handler(other)(request({ id, text: "Guide" }), params)).status
+  ).toBe(404);
+  const body = {
+    id,
+    text: "Keep desktop unchanged",
+    userId: other,
+    runId: other,
+  };
+  const first = await handler(owner)(request(body), params);
+  expect(first.status).toBe(200);
+  expect(await first.json()).toMatchObject({ status: "received" });
+  await handler(owner)(request(body), params);
+  const rows = await loadRunGuidance(
+    { id: run, user_id: owner, ai_call_id: call },
+    client
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0].body).toBe("Keep desktop unchanged");
+  await db.query(
+    "update external_agent_runs set status='success' where id=$1",
+    [run]
+  );
+  const late = await handler(owner)(
+    request({ id: other, text: "Too late" }),
+    params
+  );
+  expect(await late.json()).toMatchObject({ status: "not_applied" });
 });
 
 it("round-trips the production store through real SQL including JSON attachments and UUID arrays", async () => {

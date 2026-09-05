@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { loadOwnedJobRunDetail } from "@/lib/job-run-service";
+import { loadAgentRunDetail } from "@/lib/observability/agent-run-detail";
+import { z } from "zod";
 import type { NextRequest } from "next/server";
 import {
   buildObservabilityIncidentId,
@@ -10,11 +12,13 @@ import {
 type ObservabilityJobDetailGetDeps = {
   requireUserId: typeof requireUserId;
   loadOwnedJobRunDetail: typeof loadOwnedJobRunDetail;
+  loadAgentRunDetail: typeof loadAgentRunDetail;
 };
 
 const defaultObservabilityJobDetailGetDeps: ObservabilityJobDetailGetDeps = {
   requireUserId,
   loadOwnedJobRunDetail,
+  loadAgentRunDetail,
 };
 
 export function createObservabilityJobDetailGetHandler(
@@ -26,7 +30,7 @@ export function createObservabilityJobDetailGetHandler(
   };
 
   return async function GET(
-    _request: NextRequest,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
   ) {
     const userId = await deps.requireUserId();
@@ -35,7 +39,14 @@ export function createObservabilityJobDetailGetHandler(
     const { id } = await params;
 
     try {
-      const { run } = await deps.loadOwnedJobRunDetail(userId, id);
+      const isAgent =
+        new URL(request.url).searchParams.get("source") === "agent_run";
+      if (isAgent && !z.string().uuid().safeParse(id).success) {
+        return NextResponse.json({ error: "Invalid run ID" }, { status: 400 });
+      }
+      const run = isAgent
+        ? await deps.loadAgentRunDetail(userId, id)
+        : (await deps.loadOwnedJobRunDetail(userId, id)).run;
 
       if (!run) {
         return NextResponse.json(

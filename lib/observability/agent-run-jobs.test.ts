@@ -138,6 +138,7 @@ describe("buildAgentRunObservabilityJob", () => {
     expect(job.requeueable).toBe(false);
     expect(job.cancelable).toBe(false);
     expect(job.metadata).toEqual({
+      run_status: "failed",
       source: "external-api",
       origin: "slack",
       repo_id: "repo-1",

@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, type SetStateAction } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  readWorkFilters,
+  writeWorkFilters,
+} from "@/lib/observability/work-route";
 import type { JobsFilters } from "@/hooks/use-observability";
 
 const INITIAL_JOB_FILTERS: JobsFilters = {
@@ -27,15 +32,36 @@ export function mergeUpdatedJobFilters<K extends keyof JobsFilters>(
 }
 
 export function useObservabilityJobFilters() {
-  const [jobFilters, setJobFilters] = useState<JobsFilters>(() =>
-    createInitialJobFilters()
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const jobFilters = useMemo(
+    () => readWorkFilters(new URLSearchParams(params)),
+    [params]
+  );
+  const setJobFilters = useCallback(
+    (update: SetStateAction<JobsFilters>) => {
+      // These filters only drive client queries. Native history updates the URL
+      // synchronously and Next's useSearchParams subscription follows it, so a
+      // second control cannot overwrite a still-pending router transition.
+      const current = new URLSearchParams(window.location.search);
+      const next =
+        typeof update === "function"
+          ? update(readWorkFilters(current))
+          : update;
+      window.history.replaceState(
+        null,
+        "",
+        `${pathname}?${writeWorkFilters(current, next)}`
+      );
+    },
+    [pathname]
   );
 
   const updateJobFilter = useCallback(
     <K extends keyof JobsFilters>(key: K, value: JobsFilters[K]) => {
       setJobFilters((prev) => mergeUpdatedJobFilters(prev, key, value));
     },
-    []
+    [setJobFilters]
   );
 
   return {

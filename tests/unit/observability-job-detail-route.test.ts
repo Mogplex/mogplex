@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { NextResponse } from "next/server";
 
 async function loadObservabilityJobDetailRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -7,6 +8,35 @@ async function loadObservabilityJobDetailRoute() {
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
   return import("../../app/api/observability/jobs/[id]/route");
 }
+
+test("agent detail enforces auth, validates identifiers and distinguishes not found", async () => {
+  const { createObservabilityJobDetailGetHandler } =
+    await loadObservabilityJobDetailRoute();
+  const id = "00000000-0000-4000-8000-000000000077";
+  for (const [authenticated, requestedId, expectedStatus] of [
+    [false, id, 401],
+    [true, "bad-id", 400],
+    [true, id, 404],
+  ] as const) {
+    const handler = createObservabilityJobDetailGetHandler({
+      requireUserId: async () =>
+        authenticated
+          ? "user-1"
+          : NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      loadAgentRunDetail: async () => null,
+      loadOwnedJobRunDetail: async () => {
+        throw new Error("Wrong run source");
+      },
+    });
+    const result = await handler(
+      new Request(
+        `http://localhost/api/observability/jobs/${requestedId}?source=agent_run`
+      ) as never,
+      { params: Promise.resolve({ id: requestedId }) }
+    );
+    assert.equal(result.status, expectedStatus);
+  }
+});
 
 test("GET /api/observability/jobs/[id] returns 404 for missing owned runs", async () => {
   const { createObservabilityJobDetailGetHandler } =

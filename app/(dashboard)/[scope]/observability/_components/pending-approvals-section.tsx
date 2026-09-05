@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useId, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -9,6 +9,7 @@ import type {
   FlowToolApprovalWaitConfig,
 } from "@/lib/types"
 import { timeAgo } from "./formatters"
+import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh"
 
 type PendingApproval = {
   id: string
@@ -45,6 +46,7 @@ function PendingApprovalRow({
   onResolved: () => void
 }) {
   const [note, setNote] = useState("")
+  const noteId = useId()
   const [submitting, setSubmitting] = useState<"approve" | "deny" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showInput, setShowInput] = useState(false)
@@ -79,7 +81,7 @@ function PendingApprovalRow({
   return (
     <div className="px-4 py-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-xs font-medium text-amber-600 dark:text-amber-400">
+        <span className="rounded border border-[var(--accent-amber)]/30 bg-[var(--accent-amber)]/10 px-2 py-0.5 font-mono text-xs font-medium text-[var(--accent-amber)]">
           {isToolApproval ? config.toolName : "Manual approval"}
         </span>
         <span className="text-sm text-foreground">
@@ -113,7 +115,9 @@ function PendingApprovalRow({
       )}
 
       <div className="flex flex-wrap items-start gap-2">
+        <label htmlFor={noteId} className="sr-only">Decision note</label>
         <Textarea
+          id={noteId}
           value={note}
           onChange={(event) => setNote(event.target.value)}
           placeholder={
@@ -150,13 +154,16 @@ function PendingApprovalRow({
 
 // Human workflow decisions. Renders nothing while no run is waiting so the
 // page stays uncluttered.
-export function PendingApprovalsSection() {
-  const { data, mutate } = useSWR<{
+export function PendingApprovalsSection({ showEmpty = false }: { showEmpty?: boolean }) {
+  const { data, mutate, error, isLoading } = useSWR<{
     approvals: PendingApproval[]
     hasMore?: boolean
-  }>("/api/flows/approvals", fetcher, { refreshInterval: 5_000 })
+  }>("/api/flows/approvals", fetcher, { shouldRetryOnError: false })
+  useRealtimeRouteRefresh({ channelName: "observability-approvals", specs: [{ table: "flow_waits", filter: "user_id=eq.$USER_ID" }, { table: "job_runs" }], onInvalidate: mutate })
   const approvals = data?.approvals ?? []
-  if (approvals.length === 0) return null
+  if (error) return <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">Approval requests could not be loaded.<Button variant="outline" onClick={() => void mutate()}>Try again</Button></div>
+  if (isLoading) return showEmpty ? <p role="status" className="text-sm">Loading approval requests…</p> : null
+  if (approvals.length === 0) return showEmpty ? <section className="space-y-2"><h2 className="text-base font-semibold">Approval requests</h2><p className="text-sm text-muted-foreground">No workflow approval requests are waiting for your decision.</p></section> : null
 
   return (
     <section className="space-y-3">
