@@ -3270,10 +3270,14 @@ path.mpx-dag-line,
     display: none;
   }
 
-  /* Only the first action pushes right; a bare `.is-small` selector here
-     would give both buttons `margin-left: auto` and split the free space
-     between brand → Sign in → Start now. */
+  /* Sign in lives in the mobile menu, so the bar keeps only Start now and
+     the toggle. Scope `margin-left: auto` to that one button; a bare
+     `.is-small` selector would also hit form submit buttons. */
   .mpx-nav > .mpx-button.is-secondary {
+    display: none;
+  }
+
+  .mpx-nav > .mpx-button.is-primary {
     margin-left: auto;
   }
 
