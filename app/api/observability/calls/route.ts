@@ -7,6 +7,7 @@ import type { NextRequest } from "next/server";
 import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import type { AiCall, SandboxCallContext } from "@/lib/types";
 import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
+import { isUuid } from "@/lib/uuid";
 
 type AiCallRow = Record<string, unknown>;
 type QueryResult = {
@@ -353,12 +354,7 @@ export function createObservabilityCallsGetHandler(
       callIds &&
       (!conversationId ||
         callIds.length > 100 ||
-        callIds.some(
-          (id) =>
-            !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(
-              id
-            )
-        ))
+        callIds.some((id) => !isUuid(id)))
     ) {
       return NextResponse.json(
         { error: "call_ids requires a conversation_id and 1 to 100 UUIDs" },

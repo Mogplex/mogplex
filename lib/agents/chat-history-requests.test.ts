@@ -68,6 +68,21 @@ it("reads each finite batch once without executing a chat or treating missing ro
   expect(requested).toEqual(urls);
 });
 
+it("does not let malformed saved IDs prevent valid candidates from being queried", () => {
+  const valid = message(1);
+  const invalid = ["call", "", "bad,id"].map((id) => ({
+    ...message(2),
+    metadata: { ai_call_id: id },
+  }));
+  expect(buildChatHistoryRequests([...invalid, valid], "conversation")).toEqual(
+    buildChatHistoryRequests([valid], "conversation")
+  );
+  expect(buildChatHistoryRequests(invalid, "conversation")).toEqual([]);
+  expect(
+    buildChatHistoryRequests([{ ...valid, metadata: null }], "conversation")
+  ).toEqual([]);
+});
+
 it("combines exact batch results and rejects an unsuccessful lookup", async () => {
   const calls = await loadChatHistoryCalls(["/first", "/second"], async (url) =>
     Response.json({ calls: [{ id: String(url) }] })

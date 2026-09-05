@@ -1,5 +1,6 @@
 import type { UIMessage } from "ai";
 import type { AiCall } from "@/lib/types";
+import { isUuid } from "@/lib/uuid";
 import {
   needsChatHistoryRecovery,
   savedChatCallId,
@@ -12,7 +13,7 @@ export function buildChatHistoryRequests(
 ): string[] {
   const ids = [
     ...new Set(messages.filter(needsChatHistoryRecovery).map(savedChatCallId)),
-  ].filter((id): id is string => id !== null);
+  ].filter((id): id is string => id !== null && isUuid(id));
   const urls: string[] = [];
   for (let start = 0; start < ids.length; start += 100) {
     const params = new URLSearchParams({
