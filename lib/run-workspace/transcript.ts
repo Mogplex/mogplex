@@ -1,5 +1,5 @@
 import type { UIMessage, DynamicToolUIPart } from "ai";
-import { isRunActive, type RunWorkspaceEvent } from "./types";
+import type { RunWorkspaceEvent } from "./types";
 
 /** Read-only projection of durable events into the existing workspace chat UI. */
 export function projectRunTranscript(
@@ -64,7 +64,7 @@ export function projectRunTranscript(
   const last = parts.at(-1);
   if (finalText && (last?.type !== "text" || !last.text.endsWith(finalText)))
     text(finalText);
-  if (!isRunActive(status))
+  if (["success", "failed", "cancelled"].includes(status))
     for (const tool of tools.values()) {
       if (tool.state === "input-available")
         Object.assign(tool, {

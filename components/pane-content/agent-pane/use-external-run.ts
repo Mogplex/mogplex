@@ -73,7 +73,16 @@ export function useExternalRun(runId: string) {
     };
   }, [reload, invalidateRequests]);
 
+  // The server closes a checkpoint replay. Reopen when the owned snapshot
+  // leaves that checkpoint, without polling or remounting the workspace.
+  const streamPhase =
+    context?.runId === runId
+      ? context.status === "awaiting_input"
+        ? "paused"
+        : "ready"
+      : "loading";
   useEffect(() => {
+    if (streamPhase === "loading") return;
     const source = new EventSource(`/api/runs/${runId}/stream`);
     let active = true;
     let readable = true;
@@ -143,7 +152,7 @@ export function useExternalRun(runId: string) {
       setConnection("Connection interrupted. Reconnecting…")
     );
     return () => source.close();
-  }, [runId, reload]);
+  }, [runId, reload, streamPhase]);
   const terminal = events.findLast((event) =>
     ["finished", "failed", "cancelled"].includes(event.type)
   );

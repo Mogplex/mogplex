@@ -45,17 +45,37 @@ it("reconstructs ordered chat and tools without duplicate events or final text",
   ]);
 });
 
-it("does not leave an unfinished tool running after a failed run", () => {
-  const messages = projectRunTranscript(
+it.each(["success", "failed", "cancelled"])(
+  "does not leave an unfinished tool running after a %s run",
+  (status) => {
+    const messages = projectRunTranscript(
+      "r",
+      "Fix",
+      [event("1", "tool_started", "", { toolCallId: "t" })],
+      status
+    );
+    expect(messages[1].parts[0]).toMatchObject({
+      state: "output-error",
+      errorText: expect.stringContaining("No completion result"),
+    });
+  }
+);
+
+it("keeps an awaiting-input tool resumable rather than marking it failed", () => {
+  const start = event("1", "tool_started", "", { toolCallId: "t" });
+  const paused = projectRunTranscript("r", "Fix", [start], "awaiting_input");
+  expect(paused[1].parts[0]).toMatchObject({ state: "input-available" });
+  expect(paused[1].parts[0]).not.toHaveProperty("errorText");
+  const resumed = projectRunTranscript(
     "r",
     "Fix",
-    [event("1", "tool_started", "", { toolCallId: "t" })],
-    "failed"
+    [
+      start,
+      event("2", "tool_finished", "", { toolCallId: "t", state: "success" }),
+    ],
+    "success"
   );
-  expect(messages[1].parts[0]).toMatchObject({
-    state: "output-error",
-    errorText: expect.stringContaining("No completion result"),
-  });
+  expect(resumed[1].parts[0]).toMatchObject({ state: "output-available" });
 });
 
 it("does not report a denied harness tool as successful", () => {

@@ -41,12 +41,16 @@ test("workspace reconnect reconciles status and sandbox without a new table even
   });
   await page.route("**/api/runs/*/workspace", async (route) => {
     const snapshot = structuredClone(run);
-    if (holdNext) {
+    const stale = holdNext;
+    if (stale) {
       holdNext = false;
       staleStarted();
       await staleGate;
     }
-    await fulfillJson(route, snapshot);
+    await route.fulfill({
+      json: snapshot,
+      headers: { "x-test-snapshot": stale ? "stale" : "fresh" },
+    });
   });
   const sandbox = buildSandboxFixture({
     repoId: "repo-1",
@@ -119,11 +123,17 @@ test("workspace reconnect reconciles status and sandbox without a new table even
     await expect(
       page.getByRole("textbox", { name: "Guide this run" })
     ).toHaveCount(0);
-    const staleResponse = page.waitForResponse((response) =>
-      response.url().endsWith("/workspace")
+    const staleResponse = page.waitForResponse(
+      (response) => response.headers()["x-test-snapshot"] === "stale"
     );
     releaseStale();
     await (await staleResponse).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        )
+    );
     await expect(
       page.getByText("Waiting for input", { exact: true })
     ).toBeVisible();
@@ -144,6 +154,98 @@ test("workspace reconnect reconciles status and sandbox without a new table even
   } finally {
     releaseStale();
     for (const response of streams.keys()) response.end();
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("an awaiting-input workspace resumes its stream without remounting", async ({
+  page,
+}, testInfo) => {
+  await initializeTrackedEvents(page);
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page, { initialRepos: [syncedRepo] });
+  const run: RunWorkspaceContext = {
+    runId: "00000000-0000-4000-8000-000000000904",
+    aiCallId: "call-resume",
+    prompt: "Fix mobile controls",
+    status: "awaiting_input",
+    sandboxRecordId: null,
+    workingBranch: "fix/mobile",
+    canGuide: true,
+    repo: {
+      ...syncedRepo,
+      user_id: "user-1",
+      created_at: "2026-09-05T00:00:00Z",
+    },
+  };
+  await page.route("**/api/runs/*/workspace", (route) =>
+    fulfillJson(route, run)
+  );
+  const streams = new Set<ServerResponse>();
+  const server = createServer((request, response) => {
+    response.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Access-Control-Allow-Origin": new URL(
+        String(testInfo.project.use.baseURL)
+      ).origin,
+      "Cache-Control": "no-cache",
+    });
+    response.write("retry: 1500\n\n");
+    streams.add(response);
+    response.on("close", () => streams.delete(response));
+    if (request.url !== "/run") return;
+    response.write(`event: run\ndata: ${JSON.stringify(run)}\n\n`);
+    if (run.status === "awaiting_input") {
+      response.end("event: replay_complete\ndata: {}\n\n");
+      return;
+    }
+    const event = (id: string, type: string, message: string, payload = {}) =>
+      `id: ${id}\nevent: ${type}\ndata: ${JSON.stringify({ id, type, message, payload, toolName: null, createdAt: "2026-09-05T00:00:00Z" })}\n\n`;
+    response.write(
+      event("resumed-report", "log", "Resumed and finished the mobile fix.", {
+        kind: "assistant_final",
+      })
+    );
+    run.status = "success";
+    response.end(event("resumed-done", "finished", "Completed"));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new Error("No fixture address");
+  try {
+    await page.route("**/api/runs/*/stream", (route) =>
+      route.continue({ url: `http://127.0.0.1:${address.port}/run` })
+    );
+    await page.route("**/api/realtime/events?*", (route) =>
+      route.continue({ url: `http://127.0.0.1:${address.port}/tables` })
+    );
+    await page.goto(scopedPath(`projects/workspace?run=${run.runId}`));
+    await expect(
+      page.getByText("Waiting for input", { exact: true })
+    ).toBeVisible();
+    await expect(
+      page.getByText("History loaded", { exact: true })
+    ).toBeVisible();
+    // A decision in another tab resumes the run; this workspace stays mounted.
+    run.status = "streaming";
+    for (const response of streams)
+      response.write('data: {"table":"external_agent_runs","op":"UPDATE"}\n\n');
+    await expect(
+      page.getByText("Resumed and finished the mobile fix.", { exact: true })
+    ).toBeVisible();
+    await expect(page.getByText("Run complete", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Continue in workspace chat" })
+    ).toBeEnabled();
+    await expect(
+      page.getByText("Resumed and finished the mobile fix.", { exact: true })
+    ).toHaveCount(1);
+  } finally {
+    for (const response of streams) response.end();
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve()))
