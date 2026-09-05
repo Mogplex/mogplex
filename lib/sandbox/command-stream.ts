@@ -1,16 +1,27 @@
 import type { Command } from "@vercel/sandbox";
+import { APIError, StreamError } from "@vercel/sandbox";
 
 /**
- * The Vercel Sandbox API caps a single logs() or wait() request at a few
- * minutes. A detached command keeps running past that cap, so a capped or
- * dropped request means "this request ended", not "the command failed". These
+ * A detached command can outlive a dropped logs() or wait() connection.
+ * A transport interruption means "this request ended", not "the command failed". These
  * are the transient signals we retry across; anything else is a real failure
  * and propagates.
  */
 export function isResumableCommandStreamError(error: unknown): boolean {
   if (!error) return false;
+  // Provider lifecycle/status codes take precedence over vague text such as
+  // "stream ended". A stopped session cannot execute its command again.
+  if (error instanceof StreamError) return error.code === "stream_ended_early";
+  if (error instanceof Error && error.name === "AbortError") return false;
   const message = error instanceof Error ? error.message : String(error);
-  return /status code (?:4\d\d|5\d\d) is not ok|stream (?:closed|ended|error)|socket hang up|other side closed|econnreset|epipe|etimedout|terminated|aborted|premature close|network (?:error|timeout)|fetch failed|expected a stream of logs|no response body/i.test(
+  const status =
+    error instanceof APIError
+      ? error.response.status
+      : Number(/status code (\d{3}) is not ok/i.exec(message)?.[1]);
+  // The SDK already retries HTTP 429/5xx with backoff and Retry-After. Once
+  // those attempts are exhausted, do not start another retry cycle here.
+  if (Number.isFinite(status)) return false;
+  return /stream (?:closed|ended)|socket hang up|other side closed|econnreset|epipe|etimedout|terminated|premature close|network (?:error|timeout)|fetch failed/i.test(
     message
   );
 }
@@ -18,7 +29,6 @@ export function isResumableCommandStreamError(error: unknown): boolean {
 export type CommandLogLine = { stream: "stdout" | "stderr"; data: string };
 
 export type StreamCommandLogsDeps = {
-  delay?: (ms: number) => Promise<void>;
   now?: () => number;
 };
 
@@ -35,33 +45,25 @@ export type StreamCommandLogsOptions = {
    * that timeout fires first for a genuinely stuck command.
    */
   deadlineMs?: number;
-  /** Delay between wait retries once the live stream has been capped. */
-  reconnectDelayMs?: number;
 };
 
 // The harness worker caps a run at 30 minutes; this backstop sits above that
 // so the worker's own timeout fails a genuinely stuck command first.
 const DEFAULT_DEADLINE_MS = 40 * 60 * 1000;
-const DEFAULT_RECONNECT_DELAY_MS = 3_000;
-
-const defaultDelay = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * Streams a detached command's logs to `onLog` and returns its exit code.
  *
- * The sandbox caps a single logs or wait request at a few minutes, then serves
- * a snapshot of the command's buffered output rather than a live tail. So the
- * first pass follows the command live until the cap, then completion is
+ * The first pass follows the command's logs until that stream ends; completion is
  * established with command.wait(), which is retried across further caps while
  * new snapshot output is flushed between attempts. Completion must come from
  * wait(): a capped logs stream ends without an exit code, and a finished
  * detached command is only reliably reported by wait(). Output is
  * de-duplicated by position, because each connection replays from the start.
  *
- * Retries continue until the command finishes or the wall-clock deadline is
- * reached, so a run legitimately longer than the request cap is never
- * abandoned.
+ * A failed reattachment without new output is surfaced, rather than spinning
+ * through fresh SDK retry cycles during an outage. A quiet command can still
+ * reconnect once; further recovery requires evidence of progress.
  */
 export async function streamCommandLogsWithResume(
   options: StreamCommandLogsOptions,
@@ -69,25 +71,34 @@ export async function streamCommandLogsWithResume(
 ): Promise<number> {
   const { command } = options;
   const deadlineMs = options.deadlineMs ?? DEFAULT_DEADLINE_MS;
-  const reconnectDelayMs =
-    options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS;
-  const delay = deps.delay ?? defaultDelay;
   const now = deps.now ?? Date.now;
   const startedAt = now();
 
   let emitted = 0;
   let attempts = 0;
+  let lastReconnectPosition = -1;
 
   const flushLogs = async () => {
+    const iterator = command.logs()[Symbol.asyncIterator]();
     try {
       let index = 0;
-      for await (const log of command.logs()) {
+      for (;;) {
+        let next: IteratorResult<CommandLogLine>;
+        try {
+          next = await iterator.next();
+        } catch (error) {
+          if (!isResumableCommandStreamError(error)) throw error;
+          return;
+        }
+        if (next.done) return;
         if (index++ < emitted) continue;
+        // Consumer failures (DB writes, leases, disconnected SSE clients) are
+        // not provider transport failures and must never be swallowed.
+        await options.onLog(next.value);
         emitted += 1;
-        await options.onLog({ stream: log.stream, data: log.data });
       }
-    } catch (error) {
-      if (!isResumableCommandStreamError(error)) throw error;
+    } finally {
+      await iterator.return?.();
     }
   };
 
@@ -97,19 +108,28 @@ export async function streamCommandLogsWithResume(
   // Establish completion authoritatively with wait(), retrying across caps and
   // flushing any newly buffered output between attempts.
   for (;;) {
+    let exitCode: number;
     try {
       const result = await command.wait();
-      await flushLogs();
-      return result.exitCode;
+      exitCode = result.exitCode;
     } catch (error) {
       if (!isResumableCommandStreamError(error)) throw error;
       if (now() - startedAt >= deadlineMs) throw error;
+      // The SDK already retries connection failures with backoff. Permit one
+      // reattachment per observed output position, but never spin on repeated
+      // failures against the same replayed snapshot (including no output).
+      if (emitted === lastReconnectPosition) throw error;
+      lastReconnectPosition = emitted;
       attempts += 1;
       if (options.onReconnect) {
         await options.onReconnect({ attempt: attempts, error });
       }
       await flushLogs();
-      await delay(reconnectDelayMs);
+      // Reattach the provider's blocking completion request when its transport
+      // ends. No timer-driven status checks and no command restart.
+      continue;
     }
+    await flushLogs();
+    return exitCode;
   }
 }
