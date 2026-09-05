@@ -3,8 +3,15 @@ import {
   convertToModelMessages,
   createUIMessageStreamResponse,
   stepCountIs,
+  isToolOrDynamicToolUIPart,
 } from "ai";
 import { controlMessageMetadata } from "@/lib/control/context-usage";
+import {
+  prepareControlRequestHistory,
+  controlMessagesForModel,
+} from "@/lib/control/request-history";
+import { saveControlTranscript } from "@/lib/control/transcript-store";
+import { persistedControlStream } from "@/lib/control/persisted-stream";
 import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
 import { createAiCall } from "@/lib/interactive-runs";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
@@ -45,7 +52,7 @@ import {
   getControlStreamTerminalFailure,
   updateSandboxStartTerminalFailure,
 } from "./lifecycle";
-import { normalizeControlChatMessages } from "./messages";
+import { validateControlChatMessages } from "./messages";
 import { wrapControlResponseLifecycle } from "./stream-lifecycle";
 import { createControlFinalizationGuard } from "./finalization-guard";
 import {
@@ -259,7 +266,40 @@ export async function executeControlChatRequest(input: {
 
     // Convert messages to model format. Clients send AI SDK UIMessages
     // (`parts`); a plain `content` string/array is also accepted.
-    const uiMessages = normalizeControlChatMessages(input.body.messages);
+    let uiMessages = await validateControlChatMessages(input.body.messages);
+    let continuationMessageId: string | undefined;
+    let claimedApprovalIds: string[] = [];
+    let completeApproval: (() => Promise<void>) | undefined;
+    let expectedMessages = uiMessages;
+    if (scope.missionId) {
+      const saved = await saveControlTranscript({
+        userId: input.userId,
+        sessionId: scope.missionId,
+        messages: uiMessages,
+      });
+      expectedMessages = saved.messages;
+      const prepared = await prepareControlRequestHistory({
+        userId: input.userId,
+        sessionId: scope.missionId,
+        aiCallId: activeCall.id,
+        savedMessages: saved.messages,
+        incomingMessages: uiMessages,
+      });
+      uiMessages = await validateControlChatMessages(prepared.messages);
+      continuationMessageId = prepared.continuationMessageId;
+      claimedApprovalIds = prepared.claimedApprovalIds;
+      completeApproval = prepared.complete;
+    } else if (
+      uiMessages.some((message) =>
+        message.parts.some(
+          (part) =>
+            isToolOrDynamicToolUIPart(part) &&
+            part.state === "approval-responded"
+        )
+      )
+    ) {
+      throw new Error("Approve actions from a saved Control conversation.");
+    }
 
     // Compact oversized histories into a checkpoint handoff (same adapter as
     // /api/chat: validated checkpoint, prefix reuse, ai_call_events audit).
@@ -296,7 +336,12 @@ export async function executeControlChatRequest(input: {
       model,
       providerOptions,
       system: withGatewaySystemCaching(systemPrompt, gatewayContext),
-      messages: await convertToModelMessages(modelMessages),
+      messages: await convertToModelMessages(
+        controlMessagesForModel(modelMessages, claimedApprovalIds),
+        {
+          ignoreIncompleteToolCalls: true,
+        }
+      ),
       abortSignal: input.req.signal,
       tools,
       stopWhen: ORCHESTRATOR_STOP_WHEN,
@@ -387,15 +432,47 @@ export async function executeControlChatRequest(input: {
           }
         ),
     });
+    const visibleStream = appendSandboxTaskLifecycleFooter(uiStream, {
+      footer: sandboxTaskLifecycle.footer,
+      textPartId: `sandbox-lifecycle-${activeCall.id}`,
+    });
+    const sessionId = scope.missionId;
+    const durable = sessionId
+      ? await persistedControlStream({
+          stream: visibleStream,
+          messages: uiMessages,
+          expectedMessages,
+          messageId: `control-${activeCall.id}`,
+          continuationMessageId,
+          onComplete: completeApproval,
+          save: (messages, previous) =>
+            saveControlTranscript({
+              userId: input.userId,
+              sessionId,
+              messages,
+              expectedMessages: previous,
+            }),
+          onError: (error) => {
+            const message = sanitizeAgentUserFacingError(
+              error instanceof Error
+                ? error.message
+                : "Could not save the Control conversation."
+            );
+            console.error("[control/chat] transcript checkpoint failed", {
+              aiCallId: activeCall.id,
+              message,
+            });
+            return message;
+          },
+        })
+      : { stream: visibleStream, completion: null };
     const response = createUIMessageStreamResponse({
-      stream: appendSandboxTaskLifecycleFooter(uiStream, {
-        footer: sandboxTaskLifecycle.footer,
-        textPartId: `sandbox-lifecycle-${activeCall.id}`,
-      }),
+      stream: durable.stream,
     });
 
     return {
       aiCall: activeCall,
+      completion: durable.completion,
       response: wrapControlResponseLifecycle(response, async (closure) => {
         if (closure === "cancelled") await finalizeCancelled();
         if (closure === "error") await finalizeStreamFailure();

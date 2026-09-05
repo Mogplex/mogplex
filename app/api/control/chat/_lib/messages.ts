@@ -1,10 +1,11 @@
 import type { FileUIPart, TextUIPart, UIMessage } from "ai";
+import { validateUIMessages } from "ai";
 import type {
   ControlChatRequestMessage,
   ControlChatRequestPart,
 } from "./types";
 
-type NormalizedControlChatMessage = Omit<UIMessage, "id">;
+type NormalizedControlChatMessage = UIMessage;
 
 const MAX_CONTROL_FILE_DATA_URL_CHARS = 5_600_000;
 const MAX_CONTROL_FILE_BYTES = 4 * 1024 * 1024;
@@ -114,11 +115,17 @@ export function normalizeControlChatMessages(
   }
 
   const fileBudget: ControlFileBudget = { count: 0, bytes: 0 };
-  return (messages as unknown[]).map((message) => {
+  const ids = new Set<string>();
+  return (messages as unknown[]).map((message, index) => {
     if (typeof message !== "object" || message === null) {
       throw new ControlChatValidationError("Invalid control chat message.");
     }
     const controlMessage = message as ControlChatRequestMessage;
+    const id = controlMessage.id ?? `control-legacy-${index}`;
+    if (typeof id !== "string" || !id.trim() || ids.has(id)) {
+      throw new ControlChatValidationError("Invalid control chat message id.");
+    }
+    ids.add(id);
     if (
       controlMessage.role !== "user" &&
       controlMessage.role !== "assistant" &&
@@ -138,9 +145,13 @@ export function normalizeControlChatMessages(
     }
 
     return {
+      id,
+      ...(controlMessage.metadata === undefined
+        ? {}
+        : { metadata: controlMessage.metadata }),
       role: controlMessage.role as "user" | "assistant" | "system",
-      parts: (parts as unknown[]).flatMap<TextUIPart | FileUIPart>(
-        (part): Array<TextUIPart | FileUIPart> => {
+      parts: (parts as unknown[]).flatMap<UIMessage["parts"][number]>(
+        (part): UIMessage["parts"] => {
           if (
             typeof part !== "object" ||
             part === null ||
@@ -151,6 +162,22 @@ export function normalizeControlChatMessages(
             );
           }
           const controlPart = part as ControlChatRequestPart;
+          if (
+            typeof controlPart.type === "string" &&
+            (controlPart.type.startsWith("tool-") ||
+              controlPart.type === "dynamic-tool" ||
+              controlPart.type === "step-start" ||
+              controlPart.type === "reasoning")
+          ) {
+            if (controlMessage.role !== "assistant") {
+              throw new ControlChatValidationError(
+                "Tool and reasoning history must belong to an assistant message."
+              );
+            }
+            // Preserve the SDK wire shape; validateControlChatMessages performs
+            // SDK structural validation before the route or executor uses it.
+            return [controlPart as UIMessage["parts"][number]];
+          }
           if (controlPart.type === "text") {
             if (typeof controlPart.text !== "string") {
               throw new ControlChatValidationError(
@@ -167,6 +194,19 @@ export function normalizeControlChatMessages(
       ),
     };
   });
+}
+
+export async function validateControlChatMessages(
+  messages: ControlChatRequestMessage[]
+): Promise<UIMessage[]> {
+  const normalized = normalizeControlChatMessages(messages);
+  try {
+    return await validateUIMessages({ messages: normalized });
+  } catch {
+    throw new ControlChatValidationError(
+      "Invalid Control chat history. Reload the saved conversation and try again."
+    );
+  }
 }
 
 export function readLatestControlUserText(

@@ -1,4 +1,5 @@
 import { requireUserId } from "@/lib/auth";
+import { after } from "next/server";
 import { buildLimitResponse, enforceChatLimits } from "@/lib/request-limits";
 import {
   ALLOWLIST_UNAVAILABLE_RETRY_AFTER_SECONDS,
@@ -14,7 +15,7 @@ import { persistControlStartupFailure } from "./_lib/lifecycle";
 import { executeControlChatRequest } from "./_lib/execute";
 import {
   ControlChatValidationError,
-  normalizeControlChatMessages,
+  validateControlChatMessages,
   readLatestControlUserText,
 } from "./_lib/messages";
 import {
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
   }
   let normalizedMessages;
   try {
-    normalizedMessages = normalizeControlChatMessages(body.messages);
+    normalizedMessages = await validateControlChatMessages(body.messages);
   } catch (error) {
     if (error instanceof ControlChatValidationError) {
       return Response.json({ error: error.message }, { status: 400 });
@@ -103,6 +104,7 @@ export async function POST(req: Request) {
       infrastructureDiagnosticScope,
       latestUserText,
     });
+    if (result.completion) after(result.completion);
     return result.response;
   } catch (error) {
     const internalMessage =
