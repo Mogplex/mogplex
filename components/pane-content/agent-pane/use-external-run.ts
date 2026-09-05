@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useSessionsStore } from "@/hooks/use-sessions";
 import {
@@ -15,8 +15,13 @@ export function useExternalRun(runId: string) {
   const [events, setEvents] = useState<RunWorkspaceEvent[]>([]);
   const [connection, setConnection] = useState("Connecting to run…");
   const [error, setError] = useState<string | null>(null);
+  const requestVersion = useRef(0);
+  const invalidateRequests = useCallback(() => {
+    requestVersion.current++;
+  }, []);
   const reload = useCallback(
     async (signal?: AbortSignal) => {
+      const version = ++requestVersion.current;
       try {
         const res = await fetch(`/api/runs/${runId}/workspace`, { signal });
         if (!res.ok)
@@ -24,7 +29,7 @@ export function useExternalRun(runId: string) {
             "Could not load this run. Check access and try again."
           );
         const data = runWorkspaceSchema.parse(await res.json());
-        if (signal?.aborted) return;
+        if (signal?.aborted || version !== requestVersion.current) return;
         setContext(data);
         setError(null);
         useSessionsStore.setState((state) => ({
@@ -41,7 +46,7 @@ export function useExternalRun(runId: string) {
           ),
         }));
       } catch (cause) {
-        if (!signal?.aborted)
+        if (!signal?.aborted && version === requestVersion.current)
           setError(
             cause instanceof Error ? cause.message : "Could not load run"
           );
@@ -50,16 +55,22 @@ export function useExternalRun(runId: string) {
     [runId]
   );
   useTableEvents({
-    tables: ["ai_calls", "sandboxes"],
+    tables: ["external_agent_runs", "ai_calls", "sandboxes"],
     onEvent: () => {
       void reload();
+    },
+    onConnectionChange: (state) => {
+      if (state === "connected") void reload();
     },
   });
   useEffect(() => {
     const controller = new AbortController();
     void reload(controller.signal);
-    return () => controller.abort();
-  }, [reload]);
+    return () => {
+      controller.abort();
+      invalidateRequests();
+    };
+  }, [reload, invalidateRequests]);
 
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/stream`);
@@ -74,6 +85,9 @@ export function useExternalRun(runId: string) {
       }
     });
     source.addEventListener("replay_complete", () => {
+      // Replayed events do not include sandbox assignment or saved guidance.
+      // Reconcile the owned snapshot even if no table event follows the gap.
+      void reload();
       setConnection(active ? "Live" : "History loaded");
       if (!active) source.close();
     });

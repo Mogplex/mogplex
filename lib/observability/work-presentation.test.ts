@@ -120,4 +120,145 @@ describe("work presentation", () => {
       workDuration(jobFixture({ duration_ms: null, started_at: null }))
     ).toBe("Not started");
   });
+  it.each([
+    [
+      "pending",
+      "Pending",
+      "The run is waiting to start. No completed result is available yet.",
+    ],
+    [
+      "running",
+      "Running",
+      "Execution is in progress. The latest recorded activity appears below.",
+    ],
+    [
+      "cancelled",
+      "Cancelled",
+      "Execution was cancelled. Any recorded output remains available below.",
+    ],
+    [
+      "failed",
+      "Failed",
+      "The run stopped before completing. Review the latest event and available recovery actions.",
+    ],
+    [
+      "success",
+      "Completed",
+      "Execution completed. Review the output to confirm the intended result.",
+    ],
+  ] as const)(
+    "explains %s without inventing an outcome",
+    (status, label, summary) => {
+      expect(presentWork(jobFixture({ status }), "me")).toMatchObject({
+        label,
+        summary,
+        waiting: false,
+        callHref: null,
+      });
+    }
+  );
+  it("uses a recorded failure and exposes awaiting input only while still active", () => {
+    expect(
+      presentWork(
+        jobFixture({ status: "failed", error: "Could not complete this run." }),
+        "me"
+      ).summary
+    ).toBe("Could not complete this run.");
+    expect(
+      presentWork(
+        jobFixture({
+          status: "running",
+          metadata: { run_status: "awaiting_input" },
+        }),
+        "me"
+      )
+    ).toMatchObject({
+      waiting: true,
+      label: "Needs your input",
+      summary:
+        "The agent is waiting for your input. Open the work to review its request.",
+    });
+    expect(
+      presentWork(
+        jobFixture({
+          status: "success",
+          metadata: { run_status: "awaiting_input" },
+        }),
+        "me"
+      ).waiting
+    ).toBe(false);
+  });
+  it("falls back through task identity and trims recorded branch names", () => {
+    const base = jobFixture({ source_kind: "agent_run", metadata: {} });
+    expect(
+      presentWork(
+        {
+          ...base,
+          metadata: {
+            prompt: "  Fix controls  ",
+            pr_title: "PR title",
+            working_branch: " fix/mobile ",
+            head_ref: "old",
+          },
+        },
+        "me"
+      )
+    ).toMatchObject({
+      title: "Fix controls",
+      subtitle: "PR title",
+      branch: "fix/mobile",
+    });
+    expect(
+      presentWork(
+        { ...base, metadata: { prompt: " ", pr_title: "PR title" } },
+        "me"
+      ).title
+    ).toBe("PR title");
+    expect(
+      presentWork(
+        {
+          ...base,
+          metadata: { issue_title: "Issue title", head_ref: " fix/issue " },
+        },
+        "me"
+      )
+    ).toMatchObject({
+      title: "Issue title",
+      subtitle: null,
+      branch: "fix/issue",
+    });
+    expect(presentWork(base, "me").title).toBe("PR Review Agent");
+    expect(
+      presentWork(
+        { ...base, agent: { id: null, name: null, slug: null } },
+        "me"
+      ).title
+    ).toBe("Agent work");
+  });
+  it("links actual call usage and encodes scope and run identities", () => {
+    const job = jobFixture({
+      id: "run/one",
+      source_kind: "agent_run",
+      latest_ai_call: {
+        id: "call/one",
+        model: "test-model",
+        status: "success",
+        total_tokens: 12,
+        tool_calls_count: 1,
+        started_at: "2026-09-05",
+      },
+    });
+    expect(presentWork(job, "team one")).toMatchObject({
+      workspaceHref: "/team%20one/runs/run%2Fone",
+      callHref: "/team%20one/observability?view=usage&call_id=call%2Fone",
+    });
+  });
+  it("uses completed timestamps, clamps negative duration and rejects invalid dates", () => {
+    expect(workDuration(jobFixture({ duration_ms: null }))).toBe("1m 10s");
+    expect(workDuration(jobFixture({ duration_ms: -1000 }))).toBe("0s");
+    expect(workDuration(jobFixture({ duration_ms: 1999 }))).toBe("1s");
+    expect(
+      workDuration(jobFixture({ duration_ms: null, started_at: "invalid" }))
+    ).toBe("Not started");
+  });
 });
