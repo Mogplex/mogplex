@@ -8,6 +8,42 @@ import { buildRunResultMessage } from "./run-result-presentation";
 
 process.env.NEXT_PUBLIC_APP_URL ||= "https://mogplex.com";
 
+it("starts a long report at its beginning and labels a word-bounded excerpt", () => {
+  const message = buildRunResultMessage({
+    run,
+    status: "success",
+    output:
+      "The requested fix is complete. " + "Verification passed. ".repeat(150),
+    evidence: emptyRunResultEvidence(),
+    guidance: [],
+  });
+  expect(message.text).toContain(
+    "Agent’s closing report (excerpt)\nThe requested fix is complete."
+  );
+  const report = message.blocks.find(
+    (block) =>
+      block.type === "section" &&
+      JSON.stringify(block).includes("Agent’s closing report")
+  );
+  expect(JSON.stringify(report)).toMatch(/(?:Verification|passed\.)…/);
+});
+
+it("uses the latest durable update for an interrupted run instead of its early activity log", () => {
+  const state = createRunProgressState(1000);
+  state.summary = "The build failed; verification is unfinished.";
+  const message = buildRunResultMessage({
+    run: { ...run, slack_progress: serializeRunProgress(state) },
+    status: "failed",
+    output: "I will inspect the repository.",
+    evidence: emptyRunResultEvidence(),
+    guidance: [],
+  });
+  expect(message.text).toContain(
+    "Last agent update\nThe build failed; verification is unfinished."
+  );
+  expect(message.text).not.toContain("I will inspect the repository.");
+});
+
 it("redacts complete output before taking its tail so truncation cannot expose a partial credential", () => {
   const output = "Token: sk-" + "secret-fixture".repeat(160) + " Finished.";
   const message = buildRunResultMessage({
@@ -123,4 +159,119 @@ it("reports actual check exits without turning a finished command into passed te
   });
   expect(message.text).toContain("exited with code 1");
   expect(message.text).toContain("Recorded checks");
+});
+
+it("renders verified artifact navigation and guidance in the Slack blocks", () => {
+  const prUrl = "https://github.com/acme/app/pull/42";
+  const message = buildRunResultMessage({
+    run,
+    status: "success",
+    output: "Changed the header.",
+    evidence: {
+      github: {
+        checked: true,
+        branch: null,
+        pullRequests: [{ number: 42, state: "open", url: prUrl }],
+      },
+      workspace: { status: "paused", persistent: true, snapshotRecorded: true },
+    },
+    guidance: [
+      {
+        id: "g1",
+        run_id: run.id,
+        user_id: "u1",
+        ai_call_id: "a1",
+        body: "Keep desktop unchanged",
+        status: "delivered",
+        delivered_step: 1,
+        attachments: null,
+        created_at: new Date(0).toISOString(),
+      },
+    ],
+  });
+  expect(message.blocks).toContainEqual({
+    type: "section",
+    text: { type: "plain_text", text: `Artifacts\nPR #42 · open\n${prUrl}` },
+  });
+  expect(message.blocks).toContainEqual({
+    type: "section",
+    text: {
+      type: "plain_text",
+      text: "Your guidance\nSupplied to agent step 2: Keep desktop unchanged",
+    },
+  });
+  expect(message.blocks.find((block) => block.type === "actions")).toEqual({
+    type: "actions",
+    elements: [
+      {
+        type: "button",
+        text: { type: "plain_text", text: "Review pull request" },
+        url: prUrl,
+        action_id: "mogplex-view-pr",
+      },
+      {
+        type: "button",
+        text: { type: "plain_text", text: "View run details" },
+        url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1`,
+        action_id: "mogplex-view-run",
+      },
+      {
+        type: "button",
+        text: { type: "plain_text", text: "Inspect workspaces" },
+        url: `${process.env.NEXT_PUBLIC_APP_URL}/projects/repositories/sandboxes`,
+        action_id: "mogplex-view-workspaces",
+      },
+    ],
+  });
+  expect(JSON.stringify(message.blocks)).toContain("a snapshot is recorded");
+  expect(JSON.stringify(message.blocks)).toContain("with persistent storage");
+});
+
+it("offers only verified branch navigation and keeps missing-work recovery explicit", () => {
+  const evidence = emptyRunResultEvidence();
+  evidence.github = {
+    checked: true,
+    branch: {
+      sha: "a".repeat(40),
+      url: "https://github.com/acme/app/tree/" + "a".repeat(40),
+    },
+    pullRequests: [],
+  };
+  const state = createRunProgressState(1000);
+  state.summary = "Inspected the header; edits are unfinished.";
+  const message = buildRunResultMessage({
+    run: { ...run, slack_progress: serializeRunProgress(state) },
+    status: "failed",
+    output: null,
+    evidence,
+    guidance: [],
+  });
+  expect(message.blocks).toContainEqual({
+    type: "section",
+    text: {
+      type: "plain_text",
+      text: "Last agent update\nInspected the header; edits are unfinished.",
+    },
+  });
+  expect(message.text).toContain(
+    "No pull request was found for this working branch."
+  );
+  expect(JSON.stringify(message.blocks)).toContain(
+    "No recoverable workspace has been verified."
+  );
+  expect(
+    message.blocks.find((block) => block.type === "actions")
+  ).toMatchObject({
+    elements: [
+      { action_id: "mogplex-view-branch", url: evidence.github.branch?.url },
+      {
+        action_id: "mogplex-view-run",
+        url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1`,
+      },
+    ],
+  });
+  expect(JSON.stringify(message.blocks)).not.toContain("mogplex-view-pr");
+  expect(JSON.stringify(message.blocks)).not.toContain(
+    "mogplex-view-workspaces"
+  );
 });

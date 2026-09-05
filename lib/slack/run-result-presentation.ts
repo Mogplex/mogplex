@@ -31,15 +31,22 @@ export function buildRunResultMessage(input: {
         ? "Run cancelled"
         : "Run failed · Work may be incomplete";
   const snapshot = readRunProgressSnapshot(run.slack_progress);
-  const report = output?.trim()
-    ? Array.from(progressText(output, Number.MAX_SAFE_INTEGER))
-        .slice(-1500)
-        .join("")
-    : snapshot?.summary;
+  const fullReport =
+    status !== "success" && snapshot?.summary
+      ? snapshot.summary
+      : output?.trim()
+        ? progressText(output, Number.MAX_SAFE_INTEGER)
+        : snapshot?.summary;
+  const reportCharacters = Array.from(fullReport ?? "");
+  const excerpt = reportCharacters.length > 1500;
+  const head = reportCharacters.slice(0, 1499).join("");
+  const report = excerpt
+    ? `${head.slice(0, head.lastIndexOf(" ") > 0 ? head.lastIndexOf(" ") : head.length).trimEnd()}…`
+    : fullReport;
   const paragraphs = [result];
   if (report)
     paragraphs.push(
-      `${status === "success" ? "Agent’s closing report" : "Last agent update"}\n${report}`
+      `${status === "success" ? "Agent’s closing report" : "Last agent update"}${excerpt ? " (excerpt)" : ""}\n${report}`
     );
   const checks = [...(snapshot?.tasks.values() ?? [])]
     .filter((task) =>

@@ -57,9 +57,26 @@ async function loadSlackRunControlsNotifyDeps(): Promise<SlackRunControlsNotifyD
   };
 }
 
-async function loadRunOutput(run: SlackNotifiableRun): Promise<string | null> {
+export async function loadRunOutput(
+  run: SlackNotifiableRun
+): Promise<string | null> {
   if (!run.ai_call_id || !run.user_id) return null;
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
+  const { data: final, error: finalError } = await supabaseAdmin
+    .from("ai_call_events")
+    .select("message")
+    .eq("ai_call_id", run.ai_call_id)
+    .eq("user_id", run.user_id)
+    .eq("event_type", "log")
+    .eq("payload->>kind", "assistant_final")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (finalError) throw new Error("Failed to load final run report");
+  if (typeof final?.message === "string" && final.message.trim())
+    return final.message;
+  // Older and interrupted runs may only have streamed telemetry.
   const { data, error } = await supabaseAdmin
     .from("ai_call_events")
     .select("message, created_at, id")
