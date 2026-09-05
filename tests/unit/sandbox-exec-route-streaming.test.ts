@@ -14,9 +14,12 @@ import {
 } from "./sandbox-service-route-test-harness";
 
 test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", async () => {
-  const { createSandboxExecPostHandler } = await loadSandboxExecRouteModule();
+  const route = await loadSandboxExecRouteModule();
+  const { createSandboxExecPostHandler } = route;
+  assert.equal((route as { maxDuration?: number }).maxDuration, 1800);
 
   let detachedRequested = false;
+  const leases: number[] = [];
 
   const handler = createSandboxExecPostHandler({
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
@@ -29,7 +32,10 @@ test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", a
     recordLimitDecision: async () => {},
     releaseSandboxExecLock: async () => {},
     touchSandboxLastActive: async () => {},
-    renewSandboxActivityLease: async () => 0,
+    renewSandboxActivityLease: async (_sandbox, _now, leaseMs) => {
+      leases.push(leaseMs ?? 0);
+      return 0;
+    },
     resolveSandboxAiAccess: async () =>
       buildSandboxServiceAiAccess({
         aiBillingSource: "user_ai_gateway",
@@ -87,6 +93,10 @@ test("POST /api/sandbox/[id]/exec streams SSE when Accept: text/event-stream", a
   assert.equal(response.headers.get("x-exec-cmd-id"), "cmd-xyz");
 
   const body = await response.text();
+  assert.ok(
+    leases[0] >= 1800 * 1000,
+    "reserve lifetime before quiet command starts"
+  );
   assert.ok(
     detachedRequested,
     "expected runCommand to be called with detached"

@@ -57,54 +57,55 @@ export async function startExecStream(
 
   const encoder = new TextEncoder();
   let killed = false;
+  let closed = false;
+  let keepalive: ReturnType<typeof setInterval> | undefined;
+  const clearKeepalive = () => {
+    if (keepalive) clearInterval(keepalive);
+    keepalive = undefined;
+  };
 
   const stream = new ReadableStream({
     async start(controller) {
+      const send = (event: ExecStreamEvent) => {
+        if (!closed) controller.enqueue(encoder.encode(encode(event)));
+      };
       try {
-        controller.enqueue(
-          encoder.encode(encode({ type: "run", cmdId: detachedCmd.cmdId }))
-        );
+        send({ type: "run", cmdId: detachedCmd.cmdId });
+        // Transport-only heartbeat: no provider/DB reads, activity renewal or
+        // status polling. Quiet HTTP/1.1 connections otherwise expire.
+        keepalive = setInterval(() => {
+          if (!closed) controller.enqueue(encoder.encode(": keepalive\n\n"));
+        }, 15_000);
+        keepalive.unref?.();
 
         const exitCode = await streamCommandLogsWithResume({
           command: detachedCmd,
           onLog: async (log) => {
             if (onActivity) await onActivity();
-            controller.enqueue(
-              encoder.encode(
-                encode({
-                  type: "log",
-                  stream: log.stream,
-                  data: redactSecretsInText(log.data),
-                })
-              )
-            );
+            send({
+              type: "log",
+              stream: log.stream,
+              data: redactSecretsInText(log.data),
+            });
           },
         });
 
         const exit = { exitCode };
 
         if (killed) {
-          controller.enqueue(encoder.encode(encode({ type: "cancelled" })));
+          send({ type: "cancelled" });
         } else {
-          controller.enqueue(
-            encoder.encode(
-              encode({
-                type: "done",
-                exitCode: exit.exitCode,
-                cwd: reportedCwd,
-              })
-            )
-          );
+          send({ type: "done", exitCode: exit.exitCode, cwd: reportedCwd });
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "stream error";
-        controller.enqueue(
-          encoder.encode(
-            encode({ type: "error", data: redactSecretsInText(message) })
-          )
-        );
+        send({ type: "error", data: redactSecretsInText(message) });
       } finally {
-        controller.close();
+        clearKeepalive();
+        if (!closed) {
+          closed = true;
+          controller.close();
+        }
         if (onComplete) {
           try {
             await onComplete();
@@ -116,6 +117,8 @@ export async function startExecStream(
     },
     async cancel() {
       killed = true;
+      closed = true;
+      clearKeepalive();
       try {
         await detachedCmd.kill();
       } catch {

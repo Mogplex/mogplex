@@ -3,6 +3,10 @@
 import { useCallback, useRef } from "react";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { readTerminalExecImmediateResponse } from "@/lib/sandbox/terminal-exec-response";
+import {
+  consumeTerminalExecStream,
+  TerminalExecStreamInterruptedError,
+} from "@/lib/sandbox/terminal-exec-stream";
 import { ANSI } from "@/lib/terminal/styles";
 
 type ExecRefs = {
@@ -69,58 +73,29 @@ export function useTerminalExec(refs: ExecRefs, callbacks: WriteCallbacks) {
           return;
         }
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          let boundary = buffer.indexOf("\n\n");
-          while (boundary !== -1) {
-            const frame = buffer.slice(0, boundary);
-            buffer = buffer.slice(boundary + 2);
-            boundary = buffer.indexOf("\n\n");
-
-            if (!frame.startsWith("data: ")) continue;
-            const payload = frame.slice(6);
-            let event: {
-              type: string;
-              stream?: "stdout" | "stderr";
-              data?: string;
-              cmdId?: string;
-              exitCode?: number | null;
-              cwd?: string;
-            };
-            try {
-              event = JSON.parse(payload);
-            } catch {
-              continue;
+        await consumeTerminalExecStream(res, (event) => {
+          if (event.type === "run" && event.cmdId) {
+            currentCmdIdRef.current = event.cmdId;
+          } else if (event.type === "log" && event.data) {
+            const text = event.data.replace(/\n/g, "\r\n");
+            if (event.stream === "stderr") {
+              write(`${ANSI.RED}${text}${ANSI.RESET}`);
+            } else {
+              write(text);
             }
-
-            if (event.type === "run" && event.cmdId) {
-              currentCmdIdRef.current = event.cmdId;
-            } else if (event.type === "log" && event.data) {
-              const text = event.data.replace(/\n/g, "\r\n");
-              if (event.stream === "stderr") {
-                write(`${ANSI.RED}${text}${ANSI.RESET}`);
-              } else {
-                write(text);
-              }
-            } else if (event.type === "done") {
-              if (event.cwd) cwdRef.current = event.cwd;
-            } else if (event.type === "cancelled") {
-              writeln(`\r\n${ANSI.YELLOW}^C${ANSI.RESET}`);
-            } else if (event.type === "error" && event.data) {
-              writeln(`${ANSI.RED}${event.data}${ANSI.RESET}`);
-            }
+          } else if (event.type === "done") {
+            if (event.cwd) cwdRef.current = event.cwd;
+          } else if (event.type === "cancelled") {
+            writeln(`\r\n${ANSI.YELLOW}^C${ANSI.RESET}`);
+          } else if (event.type === "error" && event.data) {
+            writeln(`${ANSI.RED}${event.data}${ANSI.RESET}`);
           }
-        }
+        });
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
           writeln(`\r\n${ANSI.YELLOW}^C${ANSI.RESET}`);
+        } else if (err instanceof TerminalExecStreamInterruptedError) {
+          writeln(`${ANSI.RED}${err.message}${ANSI.RESET}`);
         } else {
           writeln(`${ANSI.RED}Execution failed${ANSI.RESET}`);
         }
