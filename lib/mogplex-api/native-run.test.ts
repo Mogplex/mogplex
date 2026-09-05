@@ -61,7 +61,8 @@ async function exercise(
       { recordId: "sandbox-record-1", sandboxId: "sbx_123" },
       {
         loadCall: async () => call,
-        ensureExecutionLease: async () => {
+        ensureExecutionLease: async (_run, _sandbox, teamId) => {
+          assert.equal(teamId, "team-1");
           if (mode === "lease_failure") throw new Error("Lease refused");
           executionLeaseAcquired = true;
         },
@@ -77,7 +78,7 @@ async function exercise(
             repoBranch: "fix/header",
             repoBaseBranch: "main",
             sandboxId: "sandbox-record-1",
-            teamId: null,
+            teamId: "team-1",
             conversationId: null,
             workspaceSessionId: null,
             surface: "chat",

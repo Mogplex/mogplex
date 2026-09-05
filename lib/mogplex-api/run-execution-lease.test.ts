@@ -34,6 +34,7 @@ function fixture(
     working_branch: run.working_branch,
     sandbox_id: "sbx_123",
     status: "running",
+    product_team_id: null,
     ...overrides,
   };
   return { run, sandbox, record, extensions, timeout: () => timeout };
@@ -44,6 +45,7 @@ it("resolves authorized record credentials and reserves the execution window", a
   await ensureNativeRunExecutionLease(
     f.run,
     { recordId: f.record.id, sandboxId: "sbx_123" },
+    null,
     {
       loadContext: async (request, id, options) => {
         expect(request.headers.get("X-Delegated-User-Id")).toBe(f.run.user_id);
@@ -66,12 +68,14 @@ it.each([
   { working_branch: "other-branch" },
   { sandbox_id: "other-provider-vm" },
   { status: "stopped" },
+  { product_team_id: "other-team" },
 ])("never leases a mismatched or stopped record: %s", async (overrides) => {
   const f = fixture(overrides);
   await expect(
     ensureNativeRunExecutionLease(
       f.run,
       { recordId: "sandbox-record-1", sandboxId: "sbx_123" },
+      null,
       {
         loadContext: async () => ({
           ok: true,
@@ -91,6 +95,7 @@ it("does not auto-resume a stopped provider VM based on a stale running DB row",
     ensureNativeRunExecutionLease(
       f.run,
       { recordId: f.record.id, sandboxId: "sbx_123" },
+      null,
       {
         loadContext: async () => ({
           ok: true,
@@ -110,6 +115,7 @@ it("propagates authorization failures without extending the VM", async () => {
     ensureNativeRunExecutionLease(
       f.run,
       { recordId: f.record.id, sandboxId: "sbx_123" },
+      null,
       {
         loadContext: async () => ({
           ok: false,
@@ -121,4 +127,26 @@ it("propagates authorization failures without extending the VM", async () => {
     )
   ).rejects.toThrow("Forbidden");
   expect(f.extensions).toEqual([]);
+});
+
+it("uses the team's capability context for a team-owned sandbox", async () => {
+  const f = fixture({ product_team_id: "team-1" });
+  await ensureNativeRunExecutionLease(
+    f.run,
+    { recordId: f.record.id, sandboxId: "sbx_123" },
+    "team-1",
+    {
+      loadContext: async (request) => {
+        if (request.headers.get("x-mogplex-team-id") !== "team-1")
+          return {
+            ok: false,
+            status: 403,
+            error: "Personal capability denied",
+          };
+        return { ok: true, record: f.record, sandbox: f.sandbox };
+      },
+      renewLease: renewSandboxActivityLease,
+    }
+  );
+  expect(f.timeout()).toBeGreaterThanOrEqual(SANDBOX_AGENT_EXECUTION_LEASE_MS);
 });

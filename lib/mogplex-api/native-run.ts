@@ -125,7 +125,7 @@ export async function runNativeMogplexAgent(
     control = await deps.createControl(run.user_id, call.id);
     control.signal.throwIfAborted();
     const context = await deps.loadContext(run, sandbox);
-    await deps.ensureExecutionLease(run, sandbox);
+    await deps.ensureExecutionLease(run, sandbox, context.teamId);
     const resolvedModel = await deps.resolveModel(run.user_id);
     const uiMessages = await deps.buildMessages(run);
     control.signal.throwIfAborted();

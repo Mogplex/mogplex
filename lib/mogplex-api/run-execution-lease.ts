@@ -31,11 +31,12 @@ const defaultDeps: LeaseDeps = {
 export async function ensureNativeRunExecutionLease(
   run: ExternalAgentRunRow,
   sandbox: SandboxRef,
+  teamId: string | null,
   deps = defaultDeps
 ): Promise<void> {
   const loaded = await deps.loadContext(
     new Request("https://internal.mogplex/api/sandbox/execution-lease", {
-      headers: buildInternalApiHeaders(run.user_id),
+      headers: buildInternalApiHeaders(run.user_id, { teamId }),
     }),
     sandbox.recordId,
     {
@@ -52,6 +53,7 @@ export async function ensureNativeRunExecutionLease(
     loaded.record.status !== "running" ||
     loaded.record.user_id !== run.user_id ||
     loaded.record.repo_id !== run.repo_id ||
+    (loaded.record.product_team_id ?? null) !== teamId ||
     loaded.record.working_branch !== run.working_branch ||
     loaded.record.sandbox_id !== sandbox.sandboxId ||
     loaded.sandbox.status !== "running"
