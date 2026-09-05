@@ -1,13 +1,12 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { loadTerminalBridgeSource } from "@/lib/sandbox/terminal-bridge-source";
 import { TERMINAL_PTY_PORT } from "@/lib/sandbox/terminal-pty-config";
+import { TERMINAL_BRIDGE_BOOTSTRAP } from "@/lib/sandbox/terminal-bridge-bootstrap";
 
 export const TERMINAL_BRIDGE_SCRIPT_PATH =
   "/vercel/sandbox/.mogplex/terminal-bridge.mjs";
 export const TERMINAL_BRIDGE_LOG_PATH = "/tmp/mogplex-terminal-bridge.log";
 
-const HEALTH_PROBE_ATTEMPTS = 40;
-const HEALTH_PROBE_DELAY_MS = 250;
 const BRIDGE_ENV_NAME_PATTERN = /^[A-Za-z_]\w*$/;
 const RESERVED_BRIDGE_ENV_NAMES = new Set([
   "HOME",
@@ -50,10 +49,6 @@ export type SandboxLike = {
     args: string[];
   }) => Promise<SandboxRunResult>;
 };
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function shellQuote(value: string) {
   // The bridge token is base64url (A-Z a-z 0-9 - _) so single-quote escaping
@@ -116,27 +111,25 @@ async function healthProbe(
   sandbox: SandboxLike,
   port: number
 ): Promise<{ ok: true } | { ok: false; lastError: string }> {
-  let lastError = "unreachable";
-  for (let attempt = 0; attempt < HEALTH_PROBE_ATTEMPTS; attempt += 1) {
-    try {
-      const result = await sandbox.runCommand({
-        cmd: "sh",
-        args: [
-          "-lc",
-          `curl -sS --max-time 1 http://127.0.0.1:${port}/health || true`,
-        ],
-      });
-      const stdout = await result.stdout();
-      if (stdout.includes('"ok":true')) {
-        return { ok: true };
-      }
-      lastError = stdout.trim() || "empty response";
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+  try {
+    const result = await sandbox.runCommand({
+      cmd: "sh",
+      args: [
+        "-lc",
+        `curl -sS --max-time 1 http://127.0.0.1:${port}/health || true`,
+      ],
+    });
+    const stdout = await result.stdout();
+    if (stdout.includes('"ok":true')) {
+      return { ok: true };
     }
-    await wait(HEALTH_PROBE_DELAY_MS);
+    return { ok: false, lastError: stdout.trim() || "empty response" };
+  } catch (error) {
+    return {
+      ok: false,
+      lastError: error instanceof Error ? error.message : String(error),
+    };
   }
-  return { ok: false, lastError };
 }
 
 // Writes the runtime .mjs into the sandbox, kills any prior bridge, starts a
@@ -171,11 +164,22 @@ export async function installTerminalBridgeOnce(
   });
   const startScript = [
     `mkdir -p $(dirname ${TERMINAL_BRIDGE_LOG_PATH})`,
-    `pkill -f '${TERMINAL_BRIDGE_SCRIPT_PATH}' 2>/dev/null || true`,
-    `${bridgeEnv} nohup node ${TERMINAL_BRIDGE_SCRIPT_PATH} > ${TERMINAL_BRIDGE_LOG_PATH} 2>&1 & disown`,
+    // Match only the bridge process, never the shell whose arguments contain
+    // this cleanup command. Linux pkill otherwise kills its own launcher.
+    `(pkill -f '^([^ ]*/)?node /vercel/sandbox/\\.mogplex/terminal-bridge\\.mjs$' 2>/dev/null || true)`,
+    `${bridgeEnv} node -e ${shellQuote(TERMINAL_BRIDGE_BOOTSTRAP)} ${shellQuote(TERMINAL_BRIDGE_SCRIPT_PATH)} ${shellQuote(TERMINAL_BRIDGE_LOG_PATH)}`,
   ].join(" && ");
 
-  await sandbox.runCommand({ cmd: "sh", args: ["-lc", startScript] });
+  const started = await sandbox.runCommand({
+    cmd: "sh",
+    args: ["-lc", startScript],
+  });
+  if (
+    started.exitCode !== 0 ||
+    !(await started.stdout()).includes("MOGPLEX_TERMINAL_BRIDGE_READY")
+  ) {
+    throw new Error("terminal bridge startup failed before readiness");
+  }
 
   const health = await healthProbe(sandbox, port);
   if (!health.ok) {
