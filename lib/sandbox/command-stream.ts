@@ -61,9 +61,9 @@ const DEFAULT_DEADLINE_MS = 40 * 60 * 1000;
  * detached command is only reliably reported by wait(). Output is
  * de-duplicated by position, because each connection replays from the start.
  *
- * Retries continue until the command finishes or the wall-clock deadline is
- * reached, so a run legitimately longer than the request cap is never
- * abandoned.
+ * A failed reattachment without new output is surfaced, rather than spinning
+ * through fresh SDK retry cycles during an outage. A quiet command can still
+ * reconnect once; further recovery requires evidence of progress.
  */
 export async function streamCommandLogsWithResume(
   options: StreamCommandLogsOptions,
@@ -76,6 +76,7 @@ export async function streamCommandLogsWithResume(
 
   let emitted = 0;
   let attempts = 0;
+  let lastReconnectPosition = -1;
 
   const flushLogs = async () => {
     const iterator = command.logs()[Symbol.asyncIterator]();
@@ -114,6 +115,11 @@ export async function streamCommandLogsWithResume(
     } catch (error) {
       if (!isResumableCommandStreamError(error)) throw error;
       if (now() - startedAt >= deadlineMs) throw error;
+      // The SDK already retries connection failures with backoff. Permit one
+      // reattachment per observed output position, but never spin on repeated
+      // failures against the same replayed snapshot (including no output).
+      if (emitted === lastReconnectPosition) throw error;
+      lastReconnectPosition = emitted;
       attempts += 1;
       if (options.onReconnect) {
         await options.onReconnect({ attempt: attempts, error });

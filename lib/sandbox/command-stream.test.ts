@@ -113,6 +113,38 @@ describe("isResumableCommandStreamError", () => {
 });
 
 describe("streamCommandLogsWithResume", () => {
+  it.each(["fetch failed", "ECONNRESET", "socket hang up", "terminated"])(
+    "stops repeated %s failures when reattachment makes no progress",
+    async (message) => {
+      const failure = new Error(message);
+      const { command, waitCalls, logsCalls } = makeCommand(
+        [{ upto: 0 }],
+        [],
+        [{ throwError: failure }]
+      );
+      let clock = 0;
+      await expect(
+        streamCommandLogsWithResume(
+          { command, onLog: () => {}, deadlineMs: 10_000 },
+          { now: () => (clock += 1000) }
+        )
+      ).rejects.toBe(failure);
+      expect(waitCalls()).toBe(2);
+      expect(logsCalls()).toBe(2);
+    }
+  );
+
+  it("can reattach a quiet command once and receive its authoritative exit", async () => {
+    const { command, waitCalls } = makeCommand(
+      [{ upto: 0 }],
+      [],
+      [{ throwError: new Error("terminated") }, { exitCode: 0 }]
+    );
+    await expect(
+      streamCommandLogsWithResume({ command, onLog: () => {} })
+    ).resolves.toBe(0);
+    expect(waitCalls()).toBe(2);
+  });
   it("surfaces rate limiting once without issuing further log or wait requests", async () => {
     const error = new APIError(
       new Response(null, { status: 429, headers: { "Retry-After": "60" } }),
