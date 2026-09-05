@@ -195,6 +195,8 @@ function sanitizeStringValue(
   parentKey?: string,
   failureContext = false
 ) {
+  // A blank diagnostic carries no error or secret to redact.
+  if (!value.trim()) return value;
   if (
     parentKey &&
     /(?:^|_)(?:code|error_code)(?:$|_)/i.test(parentKey) &&
