@@ -22,7 +22,7 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
         },
         harness: {
           type: "string",
-          enum: ["codex", "claude-code"],
+          enum: ["mogplex", "codex", "claude-code"],
           description: "Agent harness to run. Defaults to codex.",
         },
         baseBranch: {

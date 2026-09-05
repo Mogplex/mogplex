@@ -5,7 +5,11 @@
  * helper modules. Keeping these in a separate file avoids circular imports.
  */
 
-export const MOGPLEX_API_RUN_HARNESSES = ["codex", "claude-code"] as const;
+export const MOGPLEX_API_RUN_HARNESSES = [
+  "mogplex",
+  "codex",
+  "claude-code",
+] as const;
 export type MogplexApiRunHarness = (typeof MOGPLEX_API_RUN_HARNESSES)[number];
 
 export const MOGPLEX_API_RUN_STATUSES = [

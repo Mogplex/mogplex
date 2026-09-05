@@ -34,6 +34,7 @@ export const PREPARED_HARNESS_STALE_THRESHOLD_MS = 2 * 60 * 1000;
 type AiCallUpdate = Partial<
   Pick<
     AiCall,
+    | "model"
     | "status"
     | "error"
     | "cancel_requested_at"
@@ -195,7 +196,7 @@ export async function requestAiCallCancellationIfActive(
   );
 }
 
-export async function finalizeAiCallIfNotCancelled(
+export async function updateAiCallIfActive(
   aiCallId: string,
   update: AiCallUpdate
 ) {
@@ -204,6 +205,8 @@ export async function finalizeAiCallIfNotCancelled(
     expectedControlStates: ["active"],
   });
 }
+
+export const finalizeAiCallIfNotCancelled = updateAiCallIfActive;
 
 export async function finalizeAiCallAsCancelledIfActive(
   aiCallId: string,

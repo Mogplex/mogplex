@@ -1,4 +1,5 @@
 import { buildAppUrl } from "@/lib/app-url";
+import { parseCommand, type ParsedCommand } from "./command-parse";
 import { listMogplexApiRunEvents } from "@/lib/mogplex-api/run-control";
 import {
   listMogplexApiRepos,
@@ -38,6 +39,14 @@ import {
 import { handleSlackModelCommand } from "@/lib/slack/model-command";
 import { getSlackModelPreference } from "@/lib/slack/model-preferences";
 import { postSlackResponse } from "@/lib/slack/response";
+import {
+  slackHarnessCommandText,
+  type SlackHarnessCommandDeps,
+} from "./harness-command";
+import {
+  getSlackHarnessPreference,
+  upsertSlackHarnessPreference,
+} from "./harness-preferences";
 
 export type SlackCommandPayload = {
   command: string;
@@ -49,7 +58,7 @@ export type SlackCommandPayload = {
   triggerId?: string;
 };
 
-type SlackCommandDeps = {
+type SlackCommandDeps = SlackHarnessCommandDeps & {
   getInstallation: typeof getSlackInstallationByTeamId;
   getUserMapping: typeof getSlackUserMapping;
   getChannelLink: typeof getSlackChannelLink;
@@ -76,6 +85,8 @@ type SlackCommandUser = {
 };
 
 const defaultDeps: SlackCommandDeps = {
+  getHarnessPreference: getSlackHarnessPreference,
+  saveHarnessPreference: upsertSlackHarnessPreference,
   getInstallation: getSlackInstallationByTeamId,
   getUserMapping: getSlackUserMapping,
   getChannelLink: getSlackChannelLink,
@@ -146,28 +157,6 @@ async function respond(
     text,
     ...(blocks ? { blocks } : {}),
   });
-}
-
-type ParsedCommand = { name: string; argument: string };
-
-function parseCommand(payload: SlackCommandPayload): ParsedCommand | null {
-  const command = payload.command.trim().toLowerCase();
-  if (command === "/model") {
-    return { name: "model", argument: payload.text.trim() };
-  }
-  if (command !== "/mogplex") return null;
-  const [rawName = "help", ...rest] = payload.text
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  const name = rawName.toLowerCase();
-  const aliases: Record<string, string> = {
-    issue: "issues",
-    pr: "prs",
-    repository: "repo",
-    runs: "status",
-  };
-  return { name: aliases[name] ?? name, argument: rest.join(" ") };
 }
 
 async function loadRepoContext(input: {
@@ -382,11 +371,26 @@ async function handleAuthorizedCommand(input: {
 }) {
   const { deps, payload, user, command } = input;
   switch (command.name) {
+    case "harness":
+      await respond(
+        deps,
+        payload,
+        await slackHarnessCommandText(
+          deps,
+          {
+            installationId: user.installation.id,
+            channelId: payload.channelId,
+            slackUserId: payload.slackUserId,
+          },
+          command.argument
+        )
+      );
+      return;
     case "help":
       await respond(
         deps,
         payload,
-        "Mogplex commands: status, repo, prs, issues, usage, and model.",
+        "Mogplex commands: status, repo, prs, issues, usage, model, and harness.",
         buildSlackCommandHubBlocks()
       );
       return;

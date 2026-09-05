@@ -84,6 +84,33 @@ describe("Slack command action routing", () => {
     });
   });
 
+  it("dispatches the harness command from the hub picker", async () => {
+    const dispatchCommand = vi.fn(async () => undefined);
+    await expect(
+      handleSlackBlockActions(
+        {
+          ...payload,
+          actions: [
+            {
+              action_id: "mogplex_select_command",
+              selected_option: { value: "harness" },
+            },
+          ],
+        },
+        { dispatchCommand }
+      )
+    ).resolves.toEqual({ outcome: "command_dispatched", command: "harness" });
+    expect(dispatchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "/mogplex",
+        text: "harness",
+        teamId: "T1",
+        channelId: "C1",
+        slackUserId: "U1",
+      })
+    );
+  });
+
   it("routes confirmed PR merges through the protected action handler", async () => {
     const mergePullRequest = vi.fn(async () => ({
       outcome: "pull_request_queued" as const,

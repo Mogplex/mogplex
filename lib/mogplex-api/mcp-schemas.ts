@@ -137,7 +137,7 @@ export const startAgentRunArgsSchema = z
   .object({
     repoId: z.string().trim().min(1),
     prompt: z.string().trim().min(1).max(100_000),
-    harness: z.enum(["codex", "claude-code"]).optional(),
+    harness: z.enum(["mogplex", "codex", "claude-code"]).optional(),
     baseBranch: z.string().trim().min(1).optional(),
     workingBranch: z.string().trim().min(1).optional(),
     createBranch: z.boolean().optional(),

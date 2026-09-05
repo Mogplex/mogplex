@@ -54,6 +54,8 @@ function setup(overrides: Record<string, unknown> = {}) {
     listUsableModels: async () => ["openai/gpt-5.4"],
     resolveDefaultModel: async () => "openai/gpt-5.4",
     getModelPreference: async () => null,
+    getHarnessPreference: async () => null,
+    saveHarnessPreference: async () => undefined,
     loadUsage: async () => ({
       plan: "pro",
       status: "active",
@@ -81,6 +83,58 @@ function firstBody(mock: ReturnType<typeof vi.fn>) {
 }
 
 describe("Slack command hub", () => {
+  it("shows Mogplex by default through /harness", async () => {
+    const { handler, postResponse } = setup();
+    await handler({ ...payload, command: "/harness" });
+    expect(firstBody(postResponse).text).toContain("Current harness: mogplex");
+    expect(firstBody(postResponse).response_type).toBe("ephemeral");
+  });
+
+  it.each(["mogplex", "codex", "claude-code"])(
+    "saves %s only for the caller in this channel",
+    async (harness) => {
+      const saveHarnessPreference = vi.fn(async () => undefined);
+      const { handler, postResponse } = setup({ saveHarnessPreference });
+      await handler({ ...payload, text: `harness ${harness}` });
+      expect(saveHarnessPreference).toHaveBeenCalledWith({
+        installationId: "installation-1",
+        channelId: "C1",
+        slackUserId: "U1",
+        harness,
+      });
+      expect(firstBody(postResponse).text).toContain(
+        "Existing runs are unchanged"
+      );
+    }
+  );
+
+  it("reads saved harness and rejects unknown names without changing it", async () => {
+    const saveHarnessPreference = vi.fn(async () => undefined);
+    const { handler, postResponse } = setup({
+      getHarnessPreference: async () => "codex",
+      saveHarnessPreference,
+    });
+    await handler({ ...payload, command: "/harness" });
+    expect(firstBody(postResponse).text).toContain("Current harness: codex");
+    postResponse.mockClear();
+    await handler({ ...payload, command: "/harness", text: "unknown" });
+    expect(saveHarnessPreference).not.toHaveBeenCalled();
+    expect(firstBody(postResponse).text).toContain("Usage:");
+  });
+
+  it("does not let an unlinked Slack identity change a harness", async () => {
+    const saveHarnessPreference = vi.fn(async () => undefined);
+    const { handler, postResponse } = setup({ saveHarnessPreference });
+    await handler({
+      ...payload,
+      command: "/harness",
+      text: "codex",
+      slackUserId: "UNLINKED",
+    });
+    expect(saveHarnessPreference).not.toHaveBeenCalled();
+    expect(firstBody(postResponse).text).toContain("Link your Slack identity");
+  });
+
   it("opens the interactive hub for bare /mogplex", async () => {
     const { handler, postResponse } = setup();
     await handler(payload);

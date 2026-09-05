@@ -125,13 +125,31 @@ export function normalizeStartRequest(input: {
   }
 
   const harness = assertValidHarness(input.body.harness);
+  if (harness === "mogplex" && normalizeOptionalString(input.body.mode)) {
+    throw new MogplexApiRunError(
+      "BAD_REQUEST",
+      "CLI execution modes are not supported by the Mogplex harness",
+      400
+    );
+  }
+  if (harness === "mogplex" && normalizeOptionalString(input.body.worktreeId)) {
+    throw new MogplexApiRunError(
+      "BAD_REQUEST",
+      "Mogplex runs do not yet support assigned worktrees. Use a repository sandbox or a CLI harness.",
+      400
+    );
+  }
   const baseBranch =
     normalizeOptionalString(input.body.baseBranch) ??
     normalizeOptionalString(input.repo.default_branch) ??
     DEFAULT_BRANCH;
   validateBranch(baseBranch, "base branch");
 
-  const createBranch = input.body.createBranch === true;
+  const createBranch =
+    input.body.createBranch === true ||
+    (harness === "mogplex" &&
+      input.body.createBranch === undefined &&
+      !normalizeOptionalString(input.body.workingBranch));
   const preliminary = {
     repoId,
     prompt,
@@ -162,6 +180,13 @@ export function normalizeStartRequest(input: {
     throw new MogplexApiRunError(
       "BAD_REQUEST",
       "Working branch must differ from base branch when createBranch is true",
+      400
+    );
+  }
+  if (harness === "mogplex" && workingBranch === baseBranch) {
+    throw new MogplexApiRunError(
+      "BAD_REQUEST",
+      "Mogplex runs require an isolated working branch",
       400
     );
   }

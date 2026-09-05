@@ -78,6 +78,10 @@ export async function runHarnessViaRoute(
   run: ExternalAgentRunRow,
   sandbox: SandboxRef
 ): Promise<HarnessRunResult> {
+  if (run.harness === "mogplex") {
+    const { runNativeMogplexAgent } = await import("./native-run");
+    return runNativeMogplexAgent(run, sandbox);
+  }
   const { createSandboxHarnessPostHandler } =
     await import("@/app/api/sandbox/[id]/harness/route");
   const response = await createSandboxHarnessPostHandler()(
