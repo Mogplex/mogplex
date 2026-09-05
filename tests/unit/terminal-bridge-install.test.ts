@@ -44,7 +44,7 @@ function buildSandboxMock(
         };
       }
       return {
-        stdout: async () => "",
+        stdout: async () => "MOGPLEX_TERMINAL_BRIDGE_READY",
         stderr: async () => "",
         exitCode: 0,
       };
@@ -74,15 +74,35 @@ test("installTerminalBridgeOnce writes the runtime and starts the bridge", async
   assert.equal(sandbox.writes.length, 1);
   assert.equal(sandbox.writes[0][0].path, TERMINAL_BRIDGE_SCRIPT_PATH);
   assert.ok(
-    sandbox.commands.some((c) =>
-      c.includes(`nohup node ${TERMINAL_BRIDGE_SCRIPT_PATH}`)
+    sandbox.commands.some(
+      (c) => c.includes("node -e") && c.includes(TERMINAL_BRIDGE_SCRIPT_PATH)
     ),
-    "expected nohup start command"
+    "expected event-driven bridge launcher"
   );
   assert.ok(
     sandbox.commands.some((c) => c.includes("pkill")),
     "expected pkill of any prior bridge"
   );
+});
+
+test("bridge cleanup cannot terminate its own Linux startup shell", async () => {
+  const sandbox = buildSandboxMock();
+  const runCommand = sandbox.runCommand.bind(sandbox);
+  sandbox.runCommand = async (input) => {
+    const script = input.args.at(-1) ?? "";
+    const cleanupPattern = script.match(/pkill -f '([^']+)'/)?.[1];
+    // Linux pkill matches a process's full command line, including the
+    // ancestor shell executing this script. macOS excludes ancestors.
+    if (cleanupPattern && new RegExp(cleanupPattern).test(`sh -lc ${script}`)) {
+      throw new Error("startup shell terminated by its own cleanup (SIGTERM)");
+    }
+    return runCommand(input);
+  };
+
+  const installation = await installTerminalBridgeOnce(sandbox, {
+    source: "/* stub bridge */",
+  });
+  assert.equal(installation.sandboxRuntimeId, sandbox.name);
 });
 
 test("installTerminalBridgeOnce injects sanitized bridge env into the start command", async () => {
@@ -97,7 +117,7 @@ test("installTerminalBridgeOnce injects sanitized bridge env into the start comm
   });
 
   const startCommand = sandbox.commands.find((command) =>
-    command.includes(`nohup node ${TERMINAL_BRIDGE_SCRIPT_PATH}`)
+    command.includes("node -e")
   );
   assert.ok(startCommand, "expected bridge start command");
   assert.match(startCommand, /OPENAI_API_KEY='sk-test'/);
@@ -114,6 +134,29 @@ test("installTerminalBridgeOnce throws when health probe never succeeds", async 
     installTerminalBridgeOnce(sandbox, { source: "/* stub */" }),
     /failed to become ready/
   );
+  assert.equal(
+    sandbox.commands.filter((command) => command.includes("/health")).length,
+    1
+  );
+});
+
+test("bridge startup failure is reported immediately without probing or leaking output", async () => {
+  let commands = 0;
+  const sandbox = {
+    name: "failed-start",
+    writeFiles: async () => {},
+    runCommand: async () => {
+      commands += 1;
+      return { exitCode: 143, stdout: async () => "private child output" };
+    },
+  };
+  await assert.rejects(
+    installTerminalBridgeOnce(sandbox, { source: "/* stub */" }),
+    {
+      message: "terminal bridge startup failed before readiness",
+    }
+  );
+  assert.equal(commands, 1);
 });
 
 test("ensureTerminalBridgeInstalled caches per sandbox runtime id", async () => {
