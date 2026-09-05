@@ -142,7 +142,6 @@ async function queueExternalAgentRun(input: {
     {
       idempotencyKey: `external-agent-run:${input.runId}:${input.requestHash}`,
       concurrencyKey: `external-agent-run:${input.runId}`,
-      maxAttempts: 1,
       tags: [
         `user:${input.userId}`,
         `repo:${input.repoId}`,
