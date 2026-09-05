@@ -18,6 +18,7 @@ import {
 } from "./messaging";
 import { evaluateSlackRepoAgentPolicy } from "./policy";
 import { releaseSlackRepoAgentQuotaReservationBestEffort } from "./quota";
+import { progressText } from "@/lib/slack/run-progress-state";
 
 export type SlackRepoAgentLaunchResult =
   | {
@@ -101,13 +102,14 @@ export async function launchSlackRepoAgentRun(input: {
       postThreadTs,
       eventId: payload.eventId,
       metadataKey: "slackRepoAgentPlaceholder",
-      text: ":robot_face: Starting repo agent run...",
+      text: `Preparing your task: ${progressText(input.prompt.split("\n")[0], 140)}`,
     });
 
     runStart = await deps.startRepoAgentRun({
       mogplexUserId,
       repoId: input.repoId,
       prompt: input.prompt,
+      taskTitle: progressText(input.prompt.split("\n")[0], 140),
       // Slack `event_id` is unique per delivery - reuse so retries dedupe.
       idempotencyKey: `slack:${payload.eventId}`,
       slackContext: {
@@ -123,6 +125,7 @@ export async function launchSlackRepoAgentRun(input: {
         teamId: payload.teamId,
         channelId: payload.channelId,
         messageTs: placeholder.ts,
+        threadTs: postThreadTs ?? placeholder.ts,
       },
       slackAttachments: attachments.files,
       slackAttachmentDroppedCount: attachments.droppedCount,
@@ -163,6 +166,10 @@ export async function launchSlackRepoAgentRun(input: {
   }
 
   const runUrl = deps.buildRunUrl(runStart.runId);
+  // The durable writer owns this message once the run has been accepted.
+  // A slow launch acknowledgement must never replace newer progress or a result.
+  if (runStart.statusCardManaged)
+    return { ok: true, runId: runStart.runId, runUrl, placeholder };
   const startedText = buildRepoAgentRunStartedText(runStart.runId, runUrl);
   await deps.updateMessage(botToken, {
     channel: payload.channelId,
@@ -170,10 +177,7 @@ export async function launchSlackRepoAgentRun(input: {
     text: startedText,
     blocks: [
       { type: "section", text: { type: "mrkdwn", text: startedText } },
-      // This block is stripped either reactively (the interactivity handler,
-      // when the button is clicked on a finished run / once a cancel is in
-      // flight - see `removeCancelButton` in lib/slack/interactivity.ts) or
-      // proactively by the run-completion hook in lib/mogplex-api/run-execution.ts.
+      // Legacy/custom starters retain the existing fallback card contract.
       buildCancelRunActionsBlock(runStart.runId),
     ],
   });

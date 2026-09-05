@@ -104,13 +104,13 @@ test("stripSlackRunControlsForTerminalRun sends a non-empty blocks array", async
   assert.equal(updates[0]?.botToken, "xoxb-token");
   assert.equal(updates[0]?.input.channel, "C1");
   assert.equal(updates[0]?.input.ts, "1700000000.0001");
-  assert.match(updates[0]?.input.text ?? "", /Run `run-1` finished/);
-  assert.deepEqual(updates[0]?.input.blocks, [
-    {
-      type: "section",
-      text: { type: "mrkdwn", text: updates[0]?.input.text },
-    },
-  ]);
+  assert.match(updates[0]?.input.text ?? "", /Run finished/);
+  assert.equal(updates[0]?.input.blocks?.[0].type, "header");
+  assert.ok(
+    !JSON.stringify(updates[0]?.input.blocks).includes(
+      SLACK_CANCEL_RUN_ACTION_ID
+    )
+  );
 });
 
 test("readSlackRunControlsMetadata only accepts complete coordinates", () => {
@@ -174,6 +174,20 @@ test("stripSlackRunControlsForTerminalRun links the pull request from a successf
         updateSlackMessage: async (_botToken, input) => {
           updates.push(input);
         },
+        loadEvidence: async () => ({
+          github: {
+            checked: true,
+            branch: null,
+            pullRequests: [
+              {
+                number: 7,
+                state: "open",
+                url: "https://github.com/acme/widgets/pull/7",
+              },
+            ],
+          },
+          workspace: null,
+        }),
         loadRunOutput: async (run) => {
           assert.equal(run.ai_call_id, "call-2");
           return "Fixed it and opened https://github.com/acme/widgets/pull/7 for review.";
@@ -189,10 +203,10 @@ test("stripSlackRunControlsForTerminalRun links the pull request from a successf
   }
 
   assert.equal(updates.length, 1);
-  assert.match(updates[0].text, /Run `run-2` finished/);
+  assert.match(updates[0].text, /Run finished/);
   assert.match(
     updates[0].text,
-    /\*Pull request:\* <https:\/\/github\.com\/acme\/widgets\/pull\/7\|acme\/widgets#7>/
+    /PR #7 · open\nhttps:\/\/github\.com\/acme\/widgets\/pull\/7/
   );
   assert.match(updates[0].text, /Fixed it and opened/);
   assert.equal(updates[0].channel, "D1");
@@ -237,5 +251,5 @@ test("stripSlackRunControlsForTerminalRun ignores output loading failures", asyn
   }
 
   assert.equal(updates.length, 1);
-  assert.match(updates[0].text, /Run `run-3` finished/);
+  assert.match(updates[0].text, /Run finished/);
 });

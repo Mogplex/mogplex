@@ -19,6 +19,14 @@ import { resolveSlackTurnModel } from "@/lib/slack/turn-model-resolve";
 import { dispatchSlackMentionWorkflows } from "@/lib/flows/trigger-dispatch";
 import { defaultResolveSlackRepoContext } from "./slack-event-lib/repo-context";
 import {
+  findSlackGuidanceRuns,
+  submitSlackRunGuidance,
+} from "@/lib/slack/run-guidance-store";
+import {
+  handleSlackRunGuidance,
+  resolveGuidanceBeforeWorkflow,
+} from "./slack-event-lib/guidance";
+import {
   type SlackEventTaskDeps,
   type SlackEventTaskPayload,
   type SlackEventTaskResult,
@@ -75,6 +83,8 @@ export { SlackConversationPersistConflictError } from "./slack-event-lib/convers
 export { formatSlackConversationalReply } from "./slack-event-lib/system";
 
 const defaultDeps: SlackEventTaskDeps = {
+  findGuidanceRuns: findSlackGuidanceRuns,
+  submitGuidance: submitSlackRunGuidance,
   getInstallation: (teamId) => getSlackInstallationByTeamId(teamId),
   getBotToken: (teamId) => getSlackBotToken(teamId),
   resolveSlackAttribution: defaultResolveSlackAttribution,
@@ -213,9 +223,8 @@ export async function runSlackEventTask(
     installation,
     payload,
   });
-  if (boundGroupConversation === null) {
+  if (boundGroupConversation === null && payload.threadTs === payload.messageTs)
     return { outcome: "ignored_uninvoked_group_message" };
-  }
 
   const botToken = await deps.getBotToken(payload.teamId);
   if (!botToken) return { outcome: "unknown_workspace" };
@@ -227,6 +236,8 @@ export async function runSlackEventTask(
   );
   const mogplexUserId = attribution.mogplexUserId;
   if (!mogplexUserId) {
+    if (boundGroupConversation === null)
+      return { outcome: "ignored_uninvoked_group_message" };
     await sendSlackAccountLinkNotice({
       deps,
       installation,
@@ -238,6 +249,19 @@ export async function runSlackEventTask(
       outcome: "ignored_no_mogplex_user",
       mogplexUserId: null,
     };
+  }
+
+  const guidance = await handleSlackRunGuidance({
+    deps,
+    payload,
+    installation,
+    botToken,
+    userId: mogplexUserId,
+    userText,
+  });
+  if (guidance) return guidance;
+  if (boundGroupConversation === null) {
+    return { outcome: "ignored_uninvoked_group_message" };
   }
 
   const channelLink = await resolveRepoAgentChannelLink({
@@ -304,6 +328,22 @@ export const handleSlackEventTask = task({
     const canDispatchWorkflow =
       !Array.isArray(allowedSlackUsers) ||
       allowedSlackUsers.includes(payload.slackUserId);
+    if (workflowInstallation) {
+      const guidance = await resolveGuidanceBeforeWorkflow(
+        payload,
+        workflowInstallation,
+        defaultDeps
+      );
+      if (guidance)
+        return runSlackEventTask(payload, {
+          getInstallation: async () => workflowInstallation,
+          getBotToken: async () => guidance.botToken,
+          resolveSlackAttribution: async () => guidance.attribution,
+          // Preserve the target across a completion race; submit then reports
+          // not-applied rather than falling through to a fresh workflow/run.
+          findGuidanceRuns: async () => guidance.runs,
+        });
+    }
     if (
       payload.eventType === "app_mention" &&
       canDispatchWorkflow &&

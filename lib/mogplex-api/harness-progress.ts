@@ -8,8 +8,21 @@ type AppendEvent = typeof safeAppendAiCallEvent;
 /** A live action from the running agent, for surfacing outside the event log. */
 export type HarnessProgressUpdate =
   | { kind: "assistant_text"; text: string }
-  | { kind: "tool_started"; toolName: string }
-  | { kind: "tool_finished"; toolName: string; state: string };
+  | { kind: "assistant_text_end" }
+  | { kind: "phase"; phase: string; summary: string; next?: string }
+  | {
+      kind: "tool_started";
+      toolName: string;
+      toolCallId?: string;
+      input?: unknown;
+    }
+  | {
+      kind: "tool_finished";
+      toolName: string;
+      toolCallId?: string;
+      state: string;
+      output?: unknown;
+    };
 
 type OnProgress = (update: HarnessProgressUpdate) => void | Promise<void>;
 
@@ -101,6 +114,8 @@ async function persistRenderedProgress(input: {
       await emitProgress(input.onProgress, {
         kind: "tool_started",
         toolName: tool.name,
+        toolCallId: tool.id,
+        input: tool.input,
       });
       continue;
     }
@@ -117,6 +132,8 @@ async function persistRenderedProgress(input: {
         kind: "tool_finished",
         toolName: tool.name,
         state: tool.state,
+        toolCallId: tool.id,
+        output: tool.output,
       });
     }
   }

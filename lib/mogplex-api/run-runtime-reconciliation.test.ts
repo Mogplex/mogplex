@@ -200,9 +200,7 @@ it("replaces the Slack message with a failed result and no Cancel action", async
   expect(slackMessage).toMatchObject({ channel: "D_TEST", ts: "123.456" });
   expect(slackMessage?.text).toMatch(/failed/i);
   expect(JSON.stringify(slackMessage?.blocks)).not.toContain("Cancel run");
-  expect(slackMessage?.blocks?.some((block) => block.type === "actions")).toBe(
-    false
-  );
+  expect(JSON.stringify(slackMessage?.blocks)).toContain("View run details");
 });
 
 it("fails closed when the call is missing or remains active after a competing update", async () => {

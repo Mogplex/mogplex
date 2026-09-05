@@ -10,6 +10,10 @@ import type {
   SlackInstallationRow,
 } from "@/lib/slack/installations";
 import type { SlackRunImageAttachment } from "@/lib/slack/run-attachments";
+import type {
+  findSlackGuidanceRuns,
+  submitSlackRunGuidance,
+} from "@/lib/slack/run-guidance-store";
 import type { runChatAgent } from "@/lib/agents/run-chat-agent";
 import type {
   RunChatAgentContentPart,
@@ -48,6 +52,9 @@ export type SlackEventTaskResult = {
     | "repo_agent_monthly_limit_reached"
     | "conversational_reply"
     | "repo_agent_run_started"
+    | "run_guidance_received"
+    | "run_guidance_not_applied"
+    | "run_guidance_unavailable"
     | "workflow_runs_started"
     | "workflow_mention_handled"
     | "ignored_unbound_thread_message"
@@ -110,6 +117,7 @@ export type SlackRepoContext = {
 };
 
 export type StartRepoAgentRunInput = {
+  taskTitle?: string;
   mogplexUserId: string;
   repoId: string;
   prompt: string;
@@ -122,14 +130,26 @@ export type StartRepoAgentRunInput = {
    * run so a completion hook can `chat.update` it (strip the button, update the
    * text) once the run reaches a terminal state - see issue #398.
    */
-  slackMessage?: { teamId: string; channelId: string; messageTs: string };
+  slackMessage?: {
+    teamId: string;
+    channelId: string;
+    messageTs: string;
+    threadTs?: string;
+  };
 };
 
 export type StartRepoAgentRunResult = {
   runId: string;
+  statusCardManaged?: boolean;
 };
 
 export type SlackEventTaskDeps = {
+  queueRunDelivery?: (input: {
+    runId: string;
+    userId: string;
+  }) => Promise<void>;
+  findGuidanceRuns: typeof findSlackGuidanceRuns;
+  submitGuidance: typeof submitSlackRunGuidance;
   getInstallation: (teamId: string) => Promise<SlackInstallationRow | null>;
   getBotToken: (teamId: string) => Promise<string | null>;
   resolveSlackAttribution: (

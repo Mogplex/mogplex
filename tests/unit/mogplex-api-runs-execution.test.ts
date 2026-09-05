@@ -56,10 +56,17 @@ test("executeExternalAgentRun launches the sandbox, runs the harness, and mirror
   });
   const updates: Array<Partial<ExternalAgentRunRow>> = [];
   let harnessRan = false;
+  const phases: string[] = [];
 
   const result = await executeExternalAgentRun(
     { runId: "run-1", userId: "user-123" },
     {
+      createProgress: () => ({
+        report: async (update) => {
+          if (update.kind === "phase") phases.push(update.phase);
+        },
+        flush: async () => {},
+      }),
       loadRun: async () => currentRun,
       updateRun: async (userId, _runId, update) => {
         assert.equal(userId, "user-123");
@@ -68,10 +75,12 @@ test("executeExternalAgentRun launches the sandbox, runs the harness, and mirror
         return currentRun;
       },
       launchSandbox: async (run) => {
+        assert.deepEqual(phases, ["Preparing workspace"]);
         assert.equal(run.create_branch, true);
         return { recordId: "sandbox-record-1", sandboxId: "sbx_123" };
       },
       runHarness: async (run, sandbox) => {
+        assert.deepEqual(phases, ["Preparing workspace", "Investigating"]);
         assert.equal(run.status, "streaming");
         assert.equal(sandbox.recordId, "sandbox-record-1");
         harnessRan = true;

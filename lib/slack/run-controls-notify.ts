@@ -1,19 +1,16 @@
-import { buildAppUrl } from "@/lib/app-url";
-import {
-  buildRepoAgentRunFinishedText,
-  buildTextSectionBlocks,
-  readSlackRunControlsMetadata,
-} from "@/lib/slack/run-controls";
-import { buildRepoAgentRunResultText } from "@/lib/slack/run-output-summary";
+import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
 import type { MogplexApiRunStatus } from "@/lib/mogplex-api/runs";
 import type { UpdateSlackMessageInput } from "@/lib/slack/client";
+import type { RunGuidance } from "./run-guidance-store";
+import { buildRunResultMessage } from "./run-result-presentation";
+import {
+  emptyRunResultEvidence,
+  loadRunResultEvidence,
+  type RunResultContext,
+  type RunResultEvidence,
+} from "./run-result-evidence";
 
-type SlackNotifiableRun = {
-  id: string;
-  metadata: unknown;
-  ai_call_id?: string | null;
-  user_id?: string | null;
-};
+type SlackNotifiableRun = RunResultContext;
 
 type SlackRunControlsNotifyDeps = {
   getSlackBotToken: (teamId: string) => Promise<string | null>;
@@ -23,6 +20,8 @@ type SlackRunControlsNotifyDeps = {
   ) => Promise<unknown>;
   /** The agent's own streamed output for the run, oldest first, or null. */
   loadRunOutput?: (run: SlackNotifiableRun) => Promise<string | null>;
+  loadGuidance?: (run: SlackNotifiableRun) => Promise<RunGuidance[]>;
+  loadEvidence?: (run: SlackNotifiableRun) => Promise<RunResultEvidence>;
 };
 
 // Assistant output is persisted as one event per streamed chunk. The Slack
@@ -32,7 +31,30 @@ const RUN_OUTPUT_EVENT_LIMIT = 400;
 async function loadSlackRunControlsNotifyDeps(): Promise<SlackRunControlsNotifyDeps> {
   const { getSlackBotToken, updateSlackMessage } =
     await import("@/lib/slack/client");
-  return { getSlackBotToken, updateSlackMessage, loadRunOutput };
+  return {
+    getSlackBotToken,
+    updateSlackMessage,
+    loadRunOutput,
+    loadEvidence: loadRunResultEvidence,
+    loadGuidance: async (run) => {
+      const metadata =
+        run.metadata && typeof run.metadata === "object"
+          ? (run.metadata as Record<string, unknown>)
+          : {};
+      if (
+        metadata.slack_guidance_enabled !== true ||
+        !run.user_id ||
+        !run.ai_call_id
+      )
+        return [];
+      const { loadRunGuidanceReceipts } = await import("./run-guidance-store");
+      return loadRunGuidanceReceipts({
+        id: run.id,
+        user_id: run.user_id,
+        ai_call_id: run.ai_call_id,
+      });
+    },
+  };
 }
 
 async function loadRunOutput(run: SlackNotifiableRun): Promise<string | null> {
@@ -92,24 +114,23 @@ export async function stripSlackRunControlsForTerminalRun(
   const slackDeps = deps ?? (await loadSlackRunControlsNotifyDeps());
   const botToken = await slackDeps.getSlackBotToken(slack.teamId);
   if (!botToken) return false;
-  const runUrl = buildAppUrl(`/runs/${run.id}`).toString();
-  const statusLine = buildRepoAgentRunFinishedText(run.id, runUrl, status);
-  const text = buildRepoAgentRunResultText({
-    statusLine,
-    output:
-      status === "success"
-        ? await loadRunOutputBestEffort(run, slackDeps)
-        : null,
+  const [output, guidance, evidence] = await Promise.all([
+    loadRunOutputBestEffort(run, slackDeps),
+    slackDeps.loadGuidance?.(run) ?? [],
+    slackDeps.loadEvidence?.(run).catch(() => emptyRunResultEvidence()) ??
+      emptyRunResultEvidence(),
+  ]);
+  const message = buildRunResultMessage({
+    run,
+    status,
+    output,
+    guidance,
+    evidence,
   });
-  const blocks = buildTextSectionBlocks(text);
-  if (!blocks) {
-    throw new Error("Terminal Slack run-controls text unexpectedly empty");
-  }
   await slackDeps.updateSlackMessage(botToken, {
     channel: slack.channelId,
     ts: slack.messageTs,
-    text,
-    blocks,
+    ...message,
   });
   return true;
 }

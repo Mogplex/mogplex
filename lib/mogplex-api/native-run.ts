@@ -16,6 +16,12 @@ import {
   EMPTY_CAPTURED_USAGE,
 } from "@/lib/observability/usage";
 import { createSlackRunProgressReporter } from "@/lib/slack/run-progress-notify";
+import { createRunGuidanceSession } from "@/lib/slack/run-guidance-session";
+import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
+import {
+  createRunProgressTool,
+  SLACK_RUN_PROGRESS_INSTRUCTIONS,
+} from "@/lib/slack/run-progress-tool";
 import { createNativeRunControl } from "./native-run-control";
 import { createNativeSandboxExecution } from "./native-sandbox-execution";
 import { ensureNativeRunExecutionLease } from "./run-execution-lease";
@@ -35,6 +41,7 @@ const defaultDeps = {
   createControl: createNativeRunControl,
   createSandboxExecution: createNativeSandboxExecution,
   createProgress: createSlackRunProgressReporter,
+  createGuidance: createRunGuidanceSession,
   loadCall: loadOwnedAiCall,
   updateCall: updateAiCallIfActive,
   appendEvent: safeAppendAiCallEvent,
@@ -56,6 +63,11 @@ export async function runNativeMogplexAgent(
   let control: Awaited<ReturnType<typeof createNativeRunControl>> | undefined;
   let stream: Awaited<ReturnType<typeof createChatModelStream>> | undefined;
   const progress = deps.createProgress(run);
+  const guidance =
+    run.metadata.slack_guidance_enabled === true &&
+    readSlackRunControlsMetadata(run.metadata)
+      ? deps.createGuidance(run)
+      : null;
   let usage = EMPTY_CAPTURED_USAGE;
   let output = "";
   let pendingText = "";
@@ -145,6 +157,24 @@ export async function runNativeMogplexAgent(
       payload: { harness_id: "mogplex", model: resolvedModel },
     });
     stream = await deps.createStream({
+      ...(readSlackRunControlsMetadata(run.metadata)
+        ? {
+            additionalTools: {
+              report_progress: createRunProgressTool(async (update) => {
+                await event({
+                  eventType: "log",
+                  message:
+                    update.kind === "phase"
+                      ? update.summary
+                      : "Progress updated",
+                  payload: { kind: "run_progress", progress: update },
+                });
+                await progress.report(update);
+              }),
+            },
+            systemSuffix: SLACK_RUN_PROGRESS_INSTRUCTIONS,
+          }
+        : {}),
       context: {
         ...context,
         sandboxExecution: deps.createSandboxExecution(
@@ -154,13 +184,15 @@ export async function runNativeMogplexAgent(
       },
       resolvedModel,
       uiMessages,
+      prepareMessages: guidance?.prepare,
       abortSignal: control.signal,
       hooks: {
-        onStepFinish(step) {
+        async onStepFinish(step) {
           usage = mergeUsage(
             usage,
             captureUsage(step.usage, step.providerMetadata)
           );
+          await guidance?.stepFinished();
         },
         async experimental_onToolCallStart({ toolCall }) {
           toolCount += 1;
@@ -174,9 +206,15 @@ export async function runNativeMogplexAgent(
           await progress.report({
             kind: "tool_started",
             toolName: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            input: toolCall.input,
           });
         },
-        async experimental_onToolCallFinish({ toolCall, success }) {
+        async experimental_onToolCallFinish({
+          toolCall,
+          success,
+          output: toolOutput,
+        }) {
           await event({
             eventType: "tool_finished",
             toolName: toolCall.toolName,
@@ -190,6 +228,8 @@ export async function runNativeMogplexAgent(
             kind: "tool_finished",
             toolName: toolCall.toolName,
             state: success ? "success" : "error",
+            toolCallId: toolCall.toolCallId,
+            output: toolOutput,
           });
         },
       },
@@ -198,6 +238,8 @@ export async function runNativeMogplexAgent(
     for await (const part of stream.result.fullStream) {
       control.signal.throwIfAborted();
       if (part.type === "error") throw part.error;
+      if (part.type === "text-end")
+        await progress.report({ kind: "assistant_text_end" });
       if (part.type === "text-delta") {
         output += part.text;
         pendingText += part.text;

@@ -122,7 +122,7 @@ test("DM chat agent can start a full repo-agent run for the resolved repository"
   const runPost = calls.find(
     (c) =>
       c.op === "post" &&
-      (c.input as { text: string }).text.includes("Starting repo agent run")
+      (c.input as { text: string }).text.includes("Preparing your task:")
   ) as { input: { channel: string; thread_ts?: string } };
   assert.ok(runPost);
   assert.equal(runPost.input.channel, "D1");
@@ -299,7 +299,7 @@ test("repo-agent tool serializes concurrent calls from one model step into a sin
     },
     buildRunUrl: (runId) => `https://example.test/runs/${runId}`,
     postMessage: async (_token, input) => {
-      if (input.text.includes("Starting repo agent run")) placeholders += 1;
+      if (input.text.includes("Preparing your task:")) placeholders += 1;
       await new Promise((resolve) => setTimeout(resolve, 5));
       return { channel: input.channel, ts: "1700000000.000999" };
     },
