@@ -94,7 +94,10 @@ async function fetchSlackAttachmentDataUrl(input: {
 export async function prepareSlackAttachments(input: {
   deps: Pick<SlackEventTaskDeps, "fetchAttachment">;
   botToken: string;
-  payload: SlackEventTaskPayload;
+  payload: Pick<
+    SlackEventTaskPayload,
+    "attachments" | "attachmentNotices" | "attachmentDroppedCount"
+  >;
 }): Promise<PreparedSlackAttachments> {
   const contentParts: PreparedSlackAttachments["contentParts"] = [];
   const notices = buildSlackAttachmentPayloadNotices(

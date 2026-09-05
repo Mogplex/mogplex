@@ -5,7 +5,8 @@ import { SLACK_RUN_IMAGE_ATTACHMENTS_METADATA_KEY } from "@/lib/slack/run-attach
 import type { StartRepoAgentRunInput, StartRepoAgentRunResult } from "./types";
 
 export async function defaultStartRepoAgentRun(
-  input: StartRepoAgentRunInput
+  input: StartRepoAgentRunInput,
+  startRun = startMogplexApiRun
 ): Promise<StartRepoAgentRunResult> {
   const extraMetadata: Record<string, unknown> = {
     slack: input.slackContext,
@@ -28,7 +29,7 @@ export async function defaultStartRepoAgentRun(
     };
   }
 
-  const result = await startMogplexApiRun({
+  const result = await startRun({
     user: {
       userId: input.mogplexUserId,
       keyId: "slack-bot",
@@ -38,7 +39,8 @@ export async function defaultStartRepoAgentRun(
     body: {
       repoId: input.repoId,
       prompt: input.prompt,
-      harness: "claude-code",
+      harness: "mogplex",
+      createBranch: true,
     },
     origin: "slack",
     extraMetadata,

@@ -164,6 +164,9 @@ export async function readExternalHarnessProgress(input: {
   onProgress?: OnProgress;
 }): Promise<{ output: string }> {
   if (!input.response.body) return { output: "" };
+  if (input.run.harness === "mogplex") {
+    throw new Error("Native Mogplex runs do not emit CLI harness output");
+  }
 
   const appendEvent = input.appendEvent ?? safeAppendAiCallEvent;
   const renderer = createHarnessOutputRenderer(input.run.harness);
