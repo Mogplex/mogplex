@@ -18,8 +18,9 @@ export function isResumableCommandStreamError(error: unknown): boolean {
     error instanceof APIError
       ? error.response.status
       : Number(/status code (\d{3}) is not ok/i.exec(message)?.[1]);
-  if (Number.isFinite(status))
-    return [408, 429, 500, 502, 503, 504].includes(status);
+  // The SDK already retries HTTP 429/5xx with backoff and Retry-After. Once
+  // those attempts are exhausted, do not start another retry cycle here.
+  if (Number.isFinite(status)) return false;
   return /stream (?:closed|ended)|socket hang up|other side closed|econnreset|epipe|etimedout|terminated|premature close|network (?:error|timeout)|fetch failed/i.test(
     message
   );

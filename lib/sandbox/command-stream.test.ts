@@ -48,6 +48,18 @@ function makeCommand(
 }
 
 describe("isResumableCommandStreamError", () => {
+  it.each([408, 429, 500, 502, 503, 504])(
+    "does not restart SDK HTTP retries after status %i is surfaced",
+    (status) => {
+      expect(
+        isResumableCommandStreamError(
+          new APIError(new Response(null, { status }), {
+            message: `Status code ${status} is not ok`,
+          })
+        )
+      ).toBe(false);
+    }
+  );
   it.each([400, 401, 403, 404, 410, 422])(
     "should reject terminal HTTP %i even when the message resembles a stream failure",
     (status) => {
@@ -78,7 +90,13 @@ describe("isResumableCommandStreamError", () => {
   });
   it("should treat a capped or dropped sandbox request as resumable", () => {
     expect(
-      isResumableCommandStreamError(new Error("Status code 504 is not ok"))
+      isResumableCommandStreamError(
+        new StreamError(
+          "stream_ended_early",
+          "Stream ended before command finished",
+          "sbx_test"
+        )
+      )
     ).toBe(true);
     expect(isResumableCommandStreamError(new Error("terminated"))).toBe(true);
     expect(isResumableCommandStreamError(new Error("socket hang up"))).toBe(
@@ -95,6 +113,26 @@ describe("isResumableCommandStreamError", () => {
 });
 
 describe("streamCommandLogsWithResume", () => {
+  it("surfaces rate limiting once without issuing further log or wait requests", async () => {
+    const error = new APIError(
+      new Response(null, { status: 429, headers: { "Retry-After": "60" } }),
+      { message: "Status code 429 is not ok" }
+    );
+    const { command, waitCalls, logsCalls } = makeCommand(
+      [{ upto: 0 }],
+      [],
+      [{ throwError: error }]
+    );
+    let clock = 0;
+    await expect(
+      streamCommandLogsWithResume(
+        { command, onLog: () => {}, deadlineMs: 1000 },
+        { now: () => (clock += 500) }
+      )
+    ).rejects.toBe(error);
+    expect(waitCalls()).toBe(1);
+    expect(logsCalls()).toBe(1);
+  });
   it("should fail immediately when the sandbox is gone without reconnecting", async () => {
     const gone = new Error("Status code 410 is not ok");
     const { command, waitCalls, logsCalls } = makeCommand(
@@ -170,10 +208,7 @@ describe("streamCommandLogsWithResume", () => {
     // Live stream sends 3 lines then the request is capped; wait() reports the
     // command finished, and the flush after wait picks up the rest.
     const { command } = makeCommand(
-      [
-        { upto: 3, throwError: new Error("Status code 504 is not ok") },
-        { upto: 5 },
-      ],
+      [{ upto: 3, throwError: new Error("terminated") }, { upto: 5 }],
       allLines,
       [{ exitCode: 0 }]
     );
@@ -219,15 +254,15 @@ describe("streamCommandLogsWithResume", () => {
     // (capped) twice, each retry flushing more snapshot output, then it exits.
     const { command, waitCalls } = makeCommand(
       [
-        { upto: 1, throwError: new Error("Status code 504 is not ok") },
+        { upto: 1, throwError: new Error("terminated") },
         { upto: 2 },
         { upto: 3 },
         { upto: 3 },
       ],
       lines,
       [
-        { throwError: new Error("Status code 504 is not ok") },
-        { throwError: new Error("Status code 504 is not ok") },
+        { throwError: new Error("terminated") },
+        { throwError: new Error("terminated") },
         { exitCode: 0 },
       ]
     );
@@ -278,7 +313,7 @@ describe("streamCommandLogsWithResume", () => {
     const { command } = makeCommand(
       [{ upto: 0 }],
       [],
-      [{ throwError: new Error("Status code 504 is not ok") }]
+      [{ throwError: new Error("terminated") }]
     );
     let clock = 0;
 
@@ -296,6 +331,6 @@ describe("streamCommandLogsWithResume", () => {
           },
         }
       )
-    ).rejects.toThrow("Status code 504 is not ok");
+    ).rejects.toThrow("terminated");
   });
 });
