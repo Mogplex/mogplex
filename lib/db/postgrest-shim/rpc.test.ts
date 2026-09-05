@@ -30,6 +30,40 @@ function scalarFunction(
 }
 
 describe("executeRpc", () => {
+  it.each([
+    "vector",
+    "extensions.vector",
+    '"extensions".vector',
+    "vector(1536)",
+  ])(
+    "serializes numeric arrays for %s without changing SQL array arguments",
+    async (argumentType) => {
+      const { calls, db } = createDb(
+        scalarFunction(
+          ["embedding", "weights"],
+          [argumentType, "double precision[]"]
+        )
+      );
+      const result = await executeRpc(db, new Map(), "vector_search", {
+        embedding: [0.1, -0.2],
+        weights: [1, 2],
+      });
+      expect(result.error).toBeNull();
+      expect(calls[1].values).toEqual(["[0.1,-0.2]", [1, 2]]);
+    }
+  );
+
+  it.each([null, "[0.1,0.2]"])(
+    "preserves an already scalar vector parameter %s",
+    async (embedding) => {
+      const { calls, db } = createDb(scalarFunction(["embedding"], ["vector"]));
+      const result = await executeRpc(db, new Map(), "vector_search", {
+        embedding,
+      });
+      expect(result.error).toBeNull();
+      expect(calls[1].values).toEqual([embedding]);
+    }
+  );
   it("serializes jsonb arrays while preserving native Postgres arrays", async () => {
     const { calls, db } = createDb(
       scalarFunction(["p_constraints", "p_tasks"], ["text[]", "jsonb"])

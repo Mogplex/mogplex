@@ -3,6 +3,15 @@ import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
+import { executeRpc } from "@/lib/db/postgrest-shim/rpc";
+import { createPostgrestShim, type Queryable } from "@/lib/db/postgrest-shim";
+
+// Exercise node-postgres's real wire serializer as well as the real SQL.
+// Passing arrays straight to PGlite bypasses the production pg boundary.
+const { prepareValue } = createRequire(import.meta.url)("pg/lib/utils") as {
+  prepareValue: (value: unknown) => unknown;
+};
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MEMORIES_MIGRATION =
@@ -46,6 +55,16 @@ type MatchRow = {
 };
 
 let db: PGlite;
+
+const pgBoundary: Queryable = {
+  query: async (text, values) => {
+    const result = await db.query(
+      text,
+      values?.map((value) => prepareValue(value))
+    );
+    return { rows: result.rows as Record<string, unknown>[] };
+  },
+};
 
 async function insertMemory(input: {
   userId: string;
@@ -125,6 +144,62 @@ async function matchMemories(input: {
 }
 
 describe("match_memories RPC (memories migration on fresh Postgres + pgvector)", () => {
+  it.each(["insert", "update", "upsert"] as const)(
+    "persists numeric embeddings through %s and the pg wire boundary",
+    async (operation) => {
+      const id = "00000000-0000-4000-8000-00000000000c";
+      const shim = createPostgrestShim(pgBoundary);
+      const memory = {
+        id,
+        user_id: USER_B,
+        lane: "semantic",
+        content: "write probe",
+        embedding: JSON.parse(unitVector(0)) as number[],
+      };
+      try {
+        if (operation !== "insert") {
+          await db.query(
+            "insert into memories (id, user_id, lane, content) values ($1, $2, $3, $4)",
+            [id, USER_B, memory.lane, memory.content]
+          );
+        }
+        const table = shim.from("memories");
+        const result =
+          operation === "update"
+            ? await table
+                .update({ embedding: memory.embedding })
+                .eq("id", id)
+                .eq("user_id", USER_B)
+            : operation === "upsert"
+              ? await table.upsert(memory, { onConflict: "id" })
+              : await table.insert(memory);
+        expect(result.error).toBeNull();
+        const saved = await db.query<{ embedding: string }>(
+          "select embedding::text from memories where id = $1",
+          [id]
+        );
+        expect(saved.rows[0].embedding).toBe(unitVector(0));
+      } finally {
+        await db.query("delete from memories where id = $1", [id]);
+      }
+    }
+  );
+  it("accepts numeric embeddings through the production RPC and pg serialization boundary", async () => {
+    const result = await executeRpc(pgBoundary, new Map(), "match_memories", {
+      query_embedding: JSON.parse(unitVector(0)),
+      match_user_id: USER_A,
+      match_lane: "semantic",
+      match_count: 5,
+    });
+    expect(result.error).toBeNull();
+    const rows = result.data as MatchRow[];
+    expect(rows.map((row) => row.content)).toEqual([
+      "exact match",
+      "diagonal match",
+    ]);
+    expect(rows[0].similarity).toBeCloseTo(1, 5);
+    expect(rows.map((row) => row.content)).not.toContain("other user");
+  });
   it("should rank results by cosine similarity, best first", async () => {
     const rows = await matchMemories({ lane: "semantic" });
     expect(rows.map((row) => row.content)).toEqual([
