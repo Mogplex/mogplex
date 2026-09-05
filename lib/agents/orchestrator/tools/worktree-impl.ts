@@ -116,7 +116,9 @@ export function createListWorktreesTool(
           includePruned,
         });
         const workers = ctx.missionId
-          ? await deps.loadWorkers(ctx.userId, ctx.missionId)
+          ? await deps.loadWorkers(ctx.userId, ctx.missionId, undefined, {
+              includeEvents: false,
+            })
           : null;
         return {
           status: "ok" as const,
