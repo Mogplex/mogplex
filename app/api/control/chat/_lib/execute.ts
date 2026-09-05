@@ -4,6 +4,8 @@ import {
   createUIMessageStreamResponse,
   stepCountIs,
 } from "ai";
+import { controlMessageMetadata } from "@/lib/control/context-usage";
+import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
 import { createAiCall } from "@/lib/interactive-runs";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { promoteMemoriesForConversation } from "@/lib/agents/memory-promotion-runner";
@@ -167,7 +169,9 @@ export async function executeControlChatRequest(input: {
     const tools =
       input.body.enableTools === false
         ? undefined
-        : wrapToolsWithPolicy(rawTools, toolContext);
+        : serializeSandboxCommandTools(
+            wrapToolsWithPolicy(rawTools, toolContext)
+          );
 
     // Build system prompt
     const systemPrompt = buildOrchestratorSystemPrompt({
@@ -373,7 +377,8 @@ export async function executeControlChatRequest(input: {
     });
 
     const uiStream = result.toUIMessageStream({
-      messageMetadata: () => ({ ai_call_id: activeCall.id }),
+      messageMetadata: ({ part }) =>
+        controlMessageMetadata(activeCall.id, input.resolvedModel, part),
       onError: (error) =>
         sanitizeAgentUserFacingError(
           error instanceof Error ? error.message : "The request failed.",

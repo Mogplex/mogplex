@@ -1,4 +1,5 @@
 import { getHarnessConfig } from "./config";
+import { codexProviderArgs } from "./codex-provider";
 import { installHarnessPackage, isHarnessInstalled } from "./install";
 import type { HarnessId } from "./config";
 import type { Sandbox, Command } from "@vercel/sandbox";
@@ -90,7 +91,7 @@ export async function runHarness(
   await throwIfCancelled(opts?.shouldCancel, { installed, installLogs });
   const command = await sandbox.runCommand({
     cmd,
-    args,
+    args: harnessId === "codex" ? [...codexProviderArgs(env), ...args] : args,
     detached: true,
     cwd: opts?.cwd,
     env,

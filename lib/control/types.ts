@@ -162,6 +162,7 @@ export type AssistantEvent = BaseTimelineEvent & {
 
 export type ProgressEvent = BaseTimelineEvent & {
   kind: "progress";
+  state?: "running" | "done" | "failed";
 };
 
 export type PlanEvent = BaseTimelineEvent & {

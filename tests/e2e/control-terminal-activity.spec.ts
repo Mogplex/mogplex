@@ -25,9 +25,9 @@ test("control shows sandbox launch and command output above the composer", async
       input: { repoId: "repo-1" },
     },
     {
-      type: "tool-output-error",
+      type: "tool-output-available",
       toolCallId: "failed-sandbox-call",
-      errorText: "Sandbox capacity unavailable",
+      output: { status: "error", error: "Sandbox capacity unavailable" },
     },
     {
       type: "tool-input-available",

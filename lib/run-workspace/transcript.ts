@@ -42,22 +42,31 @@ export function projectRunTranscript(
         toolName: event.toolName ?? "tool",
         toolCallId: id,
         state: "input-available",
-        input: {},
+        input: event.payload.input ?? {},
       };
       tools.set(id, tool);
       parts.push(tool);
     }
+    if (event.payload.input !== undefined) tool.input = event.payload.input;
     if (event.type === "tool_finished")
       Object.assign(
         tool,
         event.payload.state === "error" || event.payload.state === "denied"
           ? {
               state: "output-error",
-              errorText: "Tool failed. See run details for diagnostics.",
+              errorText:
+                typeof event.payload.output === "string"
+                  ? event.payload.output
+                  : JSON.stringify(
+                      event.payload.output ??
+                        "Tool failed. See run details for diagnostics."
+                    ),
             }
           : {
               state: "output-available",
-              output: "Command finished. Detailed output was not recorded.",
+              output:
+                event.payload.output ??
+                "Command finished. Detailed output was not recorded.",
             }
       );
   }

@@ -16,6 +16,7 @@ import {
   Rocket,
   HelpCircle,
   Check,
+  RefreshDouble,
 } from "iconoir-react"
 import type { TimelineEvent, Worktree, PlanEvent, DelegateEvent, DiffEvent, FailEvent, CompareEvent, ApprovalEvent } from "@/lib/control/types"
 
@@ -188,7 +189,8 @@ function ToolApprovalCard({
 
 export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onToolApprovalResponse }: Props) {
   const style = KIND_STYLES[event.kind] || KIND_STYLES.tool
-  const Icon = style.icon
+  const inProgress = event.kind === "progress" && event.state === "running"
+  const Icon = inProgress ? RefreshDouble : style.icon
   const isSubdued = event.kind === "tool" || event.kind === "delegate"
   const isUser = event.kind === "user"
 
@@ -197,7 +199,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onTool
       {/* Header */}
       <div className={`flex items-center gap-2 ${isUser ? "px-0 pb-1" : "border-b border-ink-800 px-4 py-3"}`}>
         <div className={`flex size-7 items-center justify-center rounded-full ${isUser ? "bg-ink-800" : style.bg}`}>
-          <Icon className={`size-3.5 ${style.fg}`} strokeWidth={1.8} />
+          <Icon className={`size-3.5 ${style.fg} ${inProgress ? "motion-safe:animate-spin" : ""}`} strokeWidth={1.8} />
         </div>
         <span className={`text-[13px] font-semibold ${isUser ? "text-ink-100" : style.labelColor}`}>
           {event.label}

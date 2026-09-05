@@ -56,6 +56,7 @@ function TerminalRow({ entry }: { entry: TerminalActivityEntry }) {
 
   return (
     <div className="min-w-0 py-2.5 first:pt-0 last:pb-0">
+      {entry.workerBranch && <p className="text-ink-500 mb-1 break-all font-mono text-[10px]">{entry.workerBranch}</p>}
       <div className="flex min-w-0 items-center gap-2 font-mono text-[11px]">
         <span aria-hidden="true" className="text-ink-500">
           {entry.kind === "command" ? "$" : "#"}
@@ -121,7 +122,13 @@ export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
             READ ONLY
           </span>
         </div>
-        <div className="divide-ink-900 divide-y px-4 py-3">
+        <div className="divide-ink-900 max-h-64 overflow-y-auto divide-y px-4 py-3">
+          {entries.length > 3 && <details className="text-ink-400 mb-3 text-xs">
+            <summary className="cursor-pointer py-1">Show {entries.length - 3} earlier commands</summary>
+            <div className="mt-2 max-h-64 overflow-auto">
+              {entries.slice(0, -3).map((entry) => <TerminalRow key={entry.id} entry={entry} />)}
+            </div>
+          </details>}
           {visibleEntries.map((entry) => (
             <TerminalRow key={entry.id} entry={entry} />
           ))}

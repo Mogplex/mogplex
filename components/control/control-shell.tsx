@@ -25,7 +25,7 @@ import { ArtifactSidePanel } from "./artifact-side-panel";
 import { SessionList } from "./session-list";
 import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
-import { useSessionUsage } from "./use-session-usage";
+import { latestControlContext } from "@/lib/control/context-usage";
 import { useControlSessionContext } from "./use-control-session-context";
 import { useControlSessionUrl } from "./use-control-session-url";
 import { canonicalizeControlSessionProjects } from "@/lib/control/session-project";
@@ -39,6 +39,8 @@ import { TerminalActivity } from "./terminal-activity";
 import { useControlSessionActions } from "./use-control-session-actions";
 import { useControlSandboxStart } from "./use-control-sandbox-start";
 import { useControlComposerActions } from "./use-control-composer-actions";
+import { useControlWorkers } from "./use-control-workers";
+import { MissionWorkers } from "./mission-workers";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
@@ -112,6 +114,8 @@ function ControlShellInner({
   const getActiveChatError = useCallback(() => activeChat.error, [activeChat]);
   const chatPending = status === "streaming" || status === "submitted";
   const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
+  const controlWorkers = useControlWorkers(sessionId, chatPending);
+  const terminalMessages = useMemo(() => [...messages, ...controlWorkers.messages], [messages, controlWorkers.messages]);
   const { loading: sandboxesLoading } = useSandboxSync();
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
   const allSandboxes = useMemo(
@@ -265,8 +269,7 @@ function ControlShellInner({
     ]
   );
 
-  const sessionUsage = useSessionUsage(messages, chatPending);
-  const usageTokens = sessionUsage.inputTokens + sessionUsage.outputTokens;
+  const contextUsage = latestControlContext(messages);
   const combinedTimeline = buildCombinedTimeline(mission?.timeline, messages);
 
   const hasChanges = useMemo(
@@ -451,9 +454,10 @@ function ControlShellInner({
                   onToolApprovalResponse={handleToolApprovalResponse}
                   pending={chatPending}
                   trailing={
-                    !chatPending && hasChanges ? (
-                      <ChangedFilesCard messages={messages} />
-                    ) : null
+                    <>
+                      {!chatPending && hasChanges && <ChangedFilesCard messages={messages} />}
+                      <MissionWorkers workers={controlWorkers.workers} error={controlWorkers.error} loading={controlWorkers.loading} onRefresh={controlWorkers.refresh} />
+                    </>
                   }
                 />
                 {chatError && (
@@ -463,7 +467,7 @@ function ControlShellInner({
                     </div>
                   </div>
                 )}
-                <TerminalActivity messages={messages} />
+                <TerminalActivity messages={terminalMessages} />
                 <Composer
                   key={`composer-${activeChatId}`}
                   value={composerInput}
@@ -473,7 +477,7 @@ function ControlShellInner({
                   onStop={stop}
                   initialModelId={activeSession?.model_id ?? null}
                   onModelSelect={selectModel}
-                  usageTokens={usageTokens}
+                  contextUsage={contextUsage}
                 />
               </div>
               <ArtifactSidePanel messages={messages} />

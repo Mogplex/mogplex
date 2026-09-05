@@ -109,7 +109,12 @@ async function persistRenderedProgress(input: {
         eventType: "tool_started",
         toolName: tool.name,
         message: `${tool.name} started`,
-        payload: { kind: "tool", toolCallId: tool.id, state: tool.state },
+        payload: {
+          kind: "tool",
+          toolCallId: tool.id,
+          state: tool.state,
+          input: tool.input,
+        },
       });
       await emitProgress(input.onProgress, {
         kind: "tool_started",
@@ -126,7 +131,13 @@ async function persistRenderedProgress(input: {
         eventType: "tool_finished",
         toolName: tool.name,
         message: toolFinishedMessage(tool.name, tool.state),
-        payload: { kind: "tool", toolCallId: tool.id, state: tool.state },
+        payload: {
+          kind: "tool",
+          toolCallId: tool.id,
+          state: tool.state,
+          input: tool.input,
+          output: tool.output,
+        },
       });
       await emitProgress(input.onProgress, {
         kind: "tool_finished",
