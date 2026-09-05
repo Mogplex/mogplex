@@ -29,6 +29,7 @@ export async function prepareControlRequestHistory(
       messages,
       continuationMessageId: undefined,
       claimedApprovalIds: [] as string[],
+      complete: undefined,
     };
   const expected = input.savedMessages.find(
     (message) => message.id === submitted!.id
@@ -51,7 +52,7 @@ export async function prepareControlRequestHistory(
     ) ?? [];
   const conflict = () =>
     new Error(
-      "This approval was already submitted or changed. Reload the conversation to check its result; do not replay it."
+      "This approval was already submitted or changed, or another action in this message is still finishing. Reload the conversation to check its result; do not replay it."
     );
   if (!expected || approvalIds.length !== decisions.length) throw conflict();
   const { data, error } = await client.rpc("control_claim_approvals", {
@@ -71,6 +72,21 @@ export async function prepareControlRequestHistory(
     messages,
     continuationMessageId: submitted!.id,
     claimedApprovalIds: approvalIds,
+    complete: async () => {
+      const { data: finished, error: finishError } = await client.rpc(
+        "control_finish_approval_continuation",
+        {
+          p_user_id: input.userId,
+          p_session_id: input.sessionId,
+          p_message_id: submitted!.id,
+          p_ai_call_id: input.aiCallId,
+        }
+      );
+      if (finishError || finished !== true)
+        throw new Error(
+          "Could not finish the approval continuation. Reload the conversation to inspect its saved result."
+        );
+    },
   };
 }
 
@@ -81,9 +97,8 @@ export function controlMessagesForModel(
   claimedApprovalIds: string[] = []
 ): UIMessage[] {
   const claimed = new Set(claimedApprovalIds);
-  return messages.map((message) => ({
-    ...message,
-    parts: message.parts.map((part) => {
+  return messages.map((message) => {
+    const parts = message.parts.map((part) => {
       if (
         isToolOrDynamicToolUIPart(part) &&
         (part.state === "approval-requested" ||
@@ -95,8 +110,28 @@ export function controlMessagesForModel(
           text: `Tool call ${part.toolCallId} has no recorded result. Its approval is pending or was already submitted. Do not replay it; inspect the existing run for status.`,
         };
       return part;
-    }),
-  }));
+    });
+    const decisions = parts.filter(
+      (part) =>
+        isToolOrDynamicToolUIPart(part) &&
+        part.state === "approval-responded" &&
+        claimed.has(part.approval.id)
+    );
+    // The SDK executes approvals only from the last model tool message.
+    // A newly claimed older-step decision must follow any later commentary.
+    // Move it in inference only; preserve the original durable/UI ordering.
+    return {
+      ...message,
+      parts:
+        decisions.length > 0
+          ? [
+              ...parts.filter((part) => !decisions.includes(part)),
+              { type: "step-start" as const },
+              ...decisions,
+            ]
+          : parts,
+    };
+  });
 }
 
 /** Saved evidence is authoritative; only explicit responses to pending approvals

@@ -68,9 +68,30 @@ it("requires a successful database claim before returning an executable approval
       global: { fetch: async () => Response.json(body, { status }) },
     });
   const result = await prepareControlRequestHistory(input, database(true));
-  expect(
-    controlMessagesForModel(result.messages, result.claimedApprovalIds)
-  ).toEqual(result.messages);
+  await expect(result.complete!()).resolves.toBeUndefined();
+  let databaseResponse = true;
+  let databaseStatus = 200;
+  const changingDatabase = createClient("https://db.example.test", "fixture", {
+    auth: { persistSession: false },
+    global: {
+      fetch: async () =>
+        Response.json(databaseResponse, { status: databaseStatus }),
+    },
+  });
+  const releasable = await prepareControlRequestHistory(
+    input,
+    changingDatabase
+  );
+  databaseResponse = false;
+  await expect(releasable.complete!()).rejects.toThrow("Could not finish");
+  databaseStatus = 500;
+  await expect(releasable.complete!()).rejects.toThrow("Could not finish");
+  const modelMessages = controlMessagesForModel(
+    result.messages,
+    result.claimedApprovalIds
+  );
+  expect(modelMessages[1].parts.at(-1)).toEqual(result.messages[1].parts[0]);
+  expect(modelMessages[1].parts[0]).toEqual({ type: "step-start" });
   expect(JSON.stringify(controlMessagesForModel(result.messages))).toContain(
     "no recorded result"
   );

@@ -269,6 +269,7 @@ export async function executeControlChatRequest(input: {
     let uiMessages = await validateControlChatMessages(input.body.messages);
     let continuationMessageId: string | undefined;
     let claimedApprovalIds: string[] = [];
+    let completeApproval: (() => Promise<void>) | undefined;
     let expectedMessages = uiMessages;
     if (scope.missionId) {
       const saved = await saveControlTranscript({
@@ -287,6 +288,7 @@ export async function executeControlChatRequest(input: {
       uiMessages = await validateControlChatMessages(prepared.messages);
       continuationMessageId = prepared.continuationMessageId;
       claimedApprovalIds = prepared.claimedApprovalIds;
+      completeApproval = prepared.complete;
     } else if (
       uiMessages.some((message) =>
         message.parts.some(
@@ -442,6 +444,7 @@ export async function executeControlChatRequest(input: {
           expectedMessages,
           messageId: `control-${activeCall.id}`,
           continuationMessageId,
+          onComplete: completeApproval,
           save: (messages, previous) =>
             saveControlTranscript({
               userId: input.userId,

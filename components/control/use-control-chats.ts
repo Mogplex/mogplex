@@ -2,11 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Chat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-  type UIMessage,
-} from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import { createControlApprovalSubmission } from "@/lib/control/approval-submission";
 
 function isRunning(chat: Chat<UIMessage>) {
   return chat.status === "submitted" || chat.status === "streaming";
@@ -79,15 +76,20 @@ export class ControlChatRegistry {
     const existing = this.chats.get(sessionId);
     if (existing) return existing;
 
+    const approvals = createControlApprovalSubmission();
     const chat = new Chat<UIMessage>({
       id: `control-${sessionId}`,
       transport: this.transport,
-      sendAutomaticallyWhen:
-        lastAssistantMessageIsCompleteWithApprovalResponses,
+      sendAutomaticallyWhen: approvals.shouldSubmit,
       onFinish: ({ messages }) => {
         void this.persistFinishedMessages(sessionId, messages);
       },
     });
+    const addApproval = chat.addToolApprovalResponse;
+    chat.addToolApprovalResponse = async (response) => {
+      approvals.request(chat.messages, response.id);
+      await addApproval(response);
+    };
     this.chats.set(sessionId, chat);
     // The public useChat hook owns one Chat at a time, so this registry uses
     // the installed @ai-sdk/react Chat store callbacks to observe N retained

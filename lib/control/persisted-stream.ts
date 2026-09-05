@@ -18,6 +18,7 @@ export async function persistedControlStream(input: {
     expectedMessages: UIMessage[]
   ) => ReturnType<typeof saveControlTranscript>;
   onError: (error: unknown) => string;
+  onComplete?: () => Promise<void>;
 }) {
   let expected = input.expectedMessages;
   // Reserve identity before any chunks reach the browser. Its onFinish save
@@ -64,7 +65,7 @@ export async function persistedControlStream(input: {
     onError: (error) => {
       throw error;
     },
-  });
+  }).then(input.onComplete);
   // Attach a handler immediately; after() also observes the original promise.
   void completion.catch(input.onError);
   return { stream, completion };

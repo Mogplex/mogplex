@@ -210,6 +210,7 @@ it("updates only the explicitly approved message and preserves its original evid
 });
 
 it("rejects completion when the final checkpoint fails after a successful reservation", async () => {
+  let released = false;
   const durable = await persistedControlStream({
     stream: new ReadableStream({
       start(c) {
@@ -224,6 +225,9 @@ it("rejects completion when the final checkpoint fails after a successful reserv
     messages: [],
     expectedMessages: [],
     messageId: "failed-save",
+    onComplete: async () => {
+      released = true;
+    },
     save: async (messages) => {
       if (messages[0].parts.length > 0)
         throw new Error("Checkpoint unavailable");
@@ -232,4 +236,5 @@ it("rejects completion when the final checkpoint fails after a successful reserv
     onError: () => "Save failed",
   });
   await expect(durable.completion).rejects.toThrow("Checkpoint unavailable");
+  expect(released).toBe(false);
 });
