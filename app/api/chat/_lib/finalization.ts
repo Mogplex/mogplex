@@ -4,7 +4,7 @@ import {
   safeAppendAiCallEvent,
   updateAiCall,
 } from "@/lib/interactive-runs";
-import { captureUsage } from "@/lib/observability/usage";
+import { captureUsage, type CapturedUsage } from "@/lib/observability/usage";
 import type { LanguageModelUsage, ProviderMetadata } from "ai";
 import type { ActiveChatCall, ChatRunScope } from "./types";
 import { summarizeToolCalls } from "./events";
@@ -89,6 +89,7 @@ export async function finalizeFinishedChatRun(input: {
     outputTokens?: number | null;
   } | null;
   providerMetadata?: ProviderMetadata;
+  capturedUsage?: CapturedUsage;
   steps: Array<{
     toolCalls?: Array<{ toolName: string; input?: unknown }>;
     toolResults?: unknown[];
@@ -98,10 +99,12 @@ export async function finalizeFinishedChatRun(input: {
 
   const toolCalls = summarizeToolCalls(input.steps);
   const completion = getChatRunFinishState(input.finishReason);
-  const usage = captureUsage(
-    input.totalUsage as LanguageModelUsage | undefined,
-    input.providerMetadata
-  );
+  const usage =
+    input.capturedUsage ??
+    captureUsage(
+      input.totalUsage as LanguageModelUsage | undefined,
+      input.providerMetadata
+    );
 
   await updateAiCall(
     input.activeCall.id,

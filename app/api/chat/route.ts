@@ -20,6 +20,10 @@ import {
 } from "./_lib/session-context";
 import { ChatValidationError, normalizeChatMessages } from "./_lib/messages";
 
+// Match the existing 30-minute agent execution window. Keep chat stale-run
+// detection aligned with this platform deadline (pinned by the route test).
+export const maxDuration = 1800;
+
 // Re-export test helpers from memory module
 export {
   buildMemoryQueryFromMessages,

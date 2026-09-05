@@ -8,6 +8,21 @@ import {
   isStaleLiveInteractiveCall,
 } from "../../lib/interactive-runs";
 
+test("a chat performing a quiet command beyond five minutes remains live", () => {
+  const now = Date.now();
+  assert.equal(
+    isStaleLiveInteractiveCall(
+      {
+        type: "chat",
+        status: "streaming",
+        started_at: new Date(now - 330_000).toISOString(),
+      },
+      now
+    ),
+    false
+  );
+});
+
 test("buildAiCallCompletionUpdate finalizes summary status and tool call rollups", () => {
   const startedAt = new Date(Date.now() - 5_000).toISOString();
   const toolCalls = [

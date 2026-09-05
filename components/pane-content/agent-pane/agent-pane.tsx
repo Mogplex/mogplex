@@ -3,7 +3,6 @@ import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import type { PaneNode } from "@/hooks/use-split-panes";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { useSessionsStore } from "@/hooks/use-sessions";
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import {
   useAiCallEvents,
   useConversationRuns,
@@ -14,8 +13,8 @@ import { CommandInput } from "@/components/command-input";
 import type { CommandInputAttachment as Attachment } from "@/components/command-input-types";
 import { parseSlashCommand, buildBuiltinCommands } from "@/lib/slash-commands";
 import { useModels } from "@/hooks/use-models";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { useWorkspaceChat } from "./use-workspace-chat";
+import { CHAT_INTERRUPTED_MESSAGE } from "@/lib/agents/chat-stream";
 import { usePreviewFeedbackStore } from "@/hooks/use-preview-feedback";
 import { buildChatRequestBody } from "@/lib/agents/chat-request-body";
 import type { Repo } from "@/lib/types";
@@ -101,19 +100,7 @@ export function AgentPane({
     sandboxId: activeSandbox?.id ?? null,
   });
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        headers: () => getActiveTeamRequestHeaders(),
-      }),
-    []
-  );
-  const { messages, sendMessage, status, setMessages, stop } = useChat({
-    transport,
-    id: pane.id,
-    messages: initialMessages,
-  });
+  const { messages, sendMessage, status, setMessages, stop, error } = useWorkspaceChat(pane.id, initialMessages);
   const { calls: conversationRuns } = useConversationRuns(activeConversationId);
   const liveConversationRuns = useMemo(
     () =>
@@ -457,6 +444,7 @@ export function AgentPane({
             activeCallEvents={activeCallEvents}
             isAgentRunning={isAgentRunning}
           />
+          {error && <div role="alert" className="px-2 py-1 text-accent-red">{CHAT_INTERRUPTED_MESSAGE}</div>}
           <CommandInput
             onSubmit={handleSubmit}
             isRunning={isAgentRunning}

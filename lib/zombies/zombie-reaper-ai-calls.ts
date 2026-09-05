@@ -28,7 +28,7 @@ type AiCallZombieRow = {
 /**
  * Two scoped queries instead of one big union:
  *
- *   - chat:        type='chat',     started_at < now() - 5 min
+ *   - chat:        type='chat',     started_at < now() - 30 min
  *   - interactive: type != 'chat',  started_at < now() - 6 hr
  *
  * Doing it this way means a flood of long-running agent runs (5m–6h old
@@ -42,7 +42,10 @@ type AiCallSelectResult =
   | { ok: true; rows: AiCallZombieRow[] }
   | { ok: false; error: string };
 
-async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
+async function selectAiCallZombies(
+  now: number,
+  client: typeof supabaseAdmin
+): Promise<AiCallSelectResult> {
   const chatCutoffIso = new Date(
     now - ACTIVE_CHAT_STALE_THRESHOLD_MS
   ).toISOString();
@@ -57,7 +60,7 @@ async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
     "id, type, status, started_at, user_id, conversation_id, repo_id, metadata";
 
   const [chatResult, interactiveResult, preparedResult] = await Promise.all([
-    supabaseAdmin
+    client
       .from("ai_calls")
       .select(selection)
       .eq("type", "chat")
@@ -65,7 +68,7 @@ async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
       .lt("started_at", chatCutoffIso)
       .order("started_at", { ascending: true })
       .limit(AI_CALL_CHAT_PAGE_LIMIT),
-    supabaseAdmin
+    client
       .from("ai_calls")
       .select(selection)
       .neq("type", "chat")
@@ -73,7 +76,7 @@ async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
       .lt("started_at", interactiveCutoffIso)
       .order("started_at", { ascending: true })
       .limit(AI_CALL_INTERACTIVE_PAGE_LIMIT),
-    supabaseAdmin
+    client
       .from("ai_calls")
       .select(selection)
       .in("status", ["pending", "streaming"])
@@ -104,7 +107,9 @@ async function selectAiCallZombies(now: number): Promise<AiCallSelectResult> {
   };
 }
 
-export async function reapStaleAiCalls(): Promise<ZombieReaperTableSummary> {
+export async function reapStaleAiCalls(
+  client = supabaseAdmin
+): Promise<ZombieReaperTableSummary> {
   const summary: ZombieReaperTableSummary = {
     table: "ai_calls",
     scanned: 0,
@@ -114,7 +119,7 @@ export async function reapStaleAiCalls(): Promise<ZombieReaperTableSummary> {
   };
 
   const now = Date.now();
-  const candidatesResult = await selectAiCallZombies(now);
+  const candidatesResult = await selectAiCallZombies(now, client);
   if (!candidatesResult.ok) {
     summary.error = candidatesResult.error;
     return summary;
@@ -141,7 +146,7 @@ export async function reapStaleAiCalls(): Promise<ZombieReaperTableSummary> {
     const ageMs = safeAgeMs(row.started_at, now);
     const completedAt = new Date(now).toISOString();
 
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await client
       .from("ai_calls")
       .update({
         status: "failed",
@@ -161,17 +166,15 @@ export async function reapStaleAiCalls(): Promise<ZombieReaperTableSummary> {
 
     // Best-effort terminal event so the observability pane shows the
     // reap explicitly rather than a silent status flip.
-    const { error: eventError } = await supabaseAdmin
-      .from("ai_call_events")
-      .insert({
-        ai_call_id: row.id,
-        user_id: row.user_id,
-        conversation_id: row.conversation_id,
-        repo_id: row.repo_id,
-        event_type: "failed",
-        message: ZOMBIE_REAPED_ERROR_MESSAGE,
-        payload: { age_ms: ageMs, source: "zombie-row-reaper" },
-      });
+    const { error: eventError } = await client.from("ai_call_events").insert({
+      ai_call_id: row.id,
+      user_id: row.user_id,
+      conversation_id: row.conversation_id,
+      repo_id: row.repo_id,
+      event_type: "failed",
+      message: ZOMBIE_REAPED_ERROR_MESSAGE,
+      payload: { age_ms: ageMs, source: "zombie-row-reaper" },
+    });
 
     if (eventError) {
       console.error("[zombie-reaper] failed to append ai_call_events row", {
