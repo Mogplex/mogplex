@@ -1,6 +1,7 @@
 // RPC (remote procedure call) support for the PostgREST shim.
 
 import { quoteIdent, SqlBuilder, type Queryable } from "../sql";
+import { serializeVectorValue } from "../vector";
 import type { ShimResult } from "./types";
 import { toShimError } from "./types";
 
@@ -97,7 +98,11 @@ function addRpcArgument(
   }
   // Dates must stay scalar: a JSON cast prevents Postgres from resolving
   // functions with timestamptz parameters.
-  return sql.add(value instanceof Date ? value.toISOString() : value);
+  return sql.add(
+    value instanceof Date
+      ? value.toISOString()
+      : serializeVectorValue(value, argumentType)
+  );
 }
 
 function rpcData(
