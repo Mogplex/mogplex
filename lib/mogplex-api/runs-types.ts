@@ -62,6 +62,8 @@ export type ExternalAgentRunRow = {
   runtime_run_id: string | null;
   error: string | null;
   metadata: Record<string, unknown>;
+  /** Optional during the schema-first rollout; identifies a delivered Slack result. */
+  slack_terminal_notification_key?: string | null;
   created_at: string;
   updated_at: string;
 };
