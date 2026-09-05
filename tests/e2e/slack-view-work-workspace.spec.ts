@@ -203,3 +203,85 @@ test("an inaccessible run does not fall through to another workspace", async ({
   ).toBeVisible();
   await expect(page.getByText("Live Preview", { exact: true })).toHaveCount(0);
 });
+
+test("continuing a completed run waits for its delayed recorded history", async ({
+  page,
+}) => {
+  await initializeTrackedEvents(page);
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page, { initialRepos: [syncedRepo] });
+  const runId = "00000000-0000-4000-8000-000000000903";
+  await page.route("**/api/runs/*/workspace", (route) =>
+    fulfillJson(route, {
+      runId,
+      aiCallId: "call-delayed",
+      prompt: "Fix mobile controls",
+      status: "success",
+      sandboxRecordId: null,
+      workingBranch: "fix/mobile",
+      canGuide: false,
+      repo: {
+        ...syncedRepo,
+        user_id: "user-1",
+        created_at: "2026-09-05T00:00:00Z",
+      },
+    })
+  );
+  let releaseReplay = () => {};
+  const replayGate = new Promise<void>((resolve) => {
+    releaseReplay = resolve;
+  });
+  let savedConversation:
+    | { messages?: { parts: { type: string; text?: string }[] }[] }
+    | undefined;
+  await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === "PUT")
+      savedConversation = route.request().postDataJSON();
+    await route.fallback();
+  });
+  await page.route("**/api/runs/*/stream", async (route) => {
+    await replayGate;
+    const event = (id: string, type: string, message: string, payload = {}) =>
+      `id: ${id}\nevent: ${type}\ndata: ${JSON.stringify({ id, type, message, payload, toolName: null, createdAt: "2026-09-05T00:00:00Z" })}\n\n`;
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        'event: run\ndata: {"status":"success"}\n\n' +
+        event(
+          "report",
+          "log",
+          "Fixed the mobile overlap and verified desktop.",
+          { kind: "assistant_final" }
+        ) +
+        // The production stream closes at the terminal event without replay_complete.
+        event("done", "finished", "Completed"),
+    });
+  });
+  try {
+    await page.goto(scopedPath(`projects/workspace?run=${runId}`));
+    await expect(page.getByText("Run complete", { exact: true })).toBeVisible();
+    const continueButton = page.getByRole("button", {
+      name: "Continue in workspace chat",
+    });
+    await expect(continueButton).toBeDisabled();
+    expect(savedConversation).toBeUndefined();
+    releaseReplay();
+    await expect(
+      page.getByText("Fixed the mobile overlap and verified desktop.", {
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(continueButton).toBeEnabled();
+    await continueButton.click();
+    await expect(
+      page.getByRole("textbox", {
+        name: "Ask the agent what to build, fix, or explain. Type / for commands or drop files here.",
+      })
+    ).toBeVisible();
+    expect(JSON.stringify(savedConversation)).toContain(
+      "Fixed the mobile overlap and verified desktop."
+    );
+  } finally {
+    releaseReplay();
+  }
+});

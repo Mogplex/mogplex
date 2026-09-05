@@ -13,6 +13,7 @@ import {
 export function useExternalRun(runId: string) {
   const [context, setContext] = useState<RunWorkspaceContext | null>(null);
   const [events, setEvents] = useState<RunWorkspaceEvent[]>([]);
+  const [replayedRunId, setReplayedRunId] = useState<string | null>(null);
   const [connection, setConnection] = useState("Connecting to run…");
   const [error, setError] = useState<string | null>(null);
   const requestVersion = useRef(0);
@@ -75,12 +76,14 @@ export function useExternalRun(runId: string) {
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/stream`);
     let active = true;
+    let readable = true;
     source.addEventListener("open", () => setConnection("Connected"));
     source.addEventListener("run", (event) => {
       try {
         const data = JSON.parse(event.data);
         active = isRunActive(String(data.status));
       } catch {
+        readable = false;
         setConnection("Could not read run status");
       }
     });
@@ -88,8 +91,17 @@ export function useExternalRun(runId: string) {
       // Replayed events do not include sandbox assignment or saved guidance.
       // Reconcile the owned snapshot even if no table event follows the gap.
       void reload();
-      setConnection(active ? "Live" : "History loaded");
-      if (!active) source.close();
+      setConnection(
+        readable
+          ? active
+            ? "Live"
+            : "History loaded"
+          : "Could not read saved history. Reload to reconnect."
+      );
+      if (!active) {
+        if (readable) setReplayedRunId(runId);
+        source.close();
+      }
     });
     const receive = (event: MessageEvent) => {
       try {
@@ -102,10 +114,17 @@ export function useExternalRun(runId: string) {
         setConnection("Live");
         if (["finished", "failed", "cancelled"].includes(data.type)) {
           source.close();
-          setConnection("History loaded");
+          setConnection(
+            readable
+              ? "History loaded"
+              : "Could not read saved history. Reload to reconnect."
+          );
+          if (readable) setReplayedRunId(runId);
           void reload();
         }
       } catch {
+        readable = false;
+        setReplayedRunId(null);
         setConnection("Could not read a run update. Reload to reconnect.");
       }
     };
@@ -133,5 +152,16 @@ export function useExternalRun(runId: string) {
       ? "success"
       : terminal.type
     : (context?.status ?? "pending");
-  return { context, events, status, connection, error, reload };
+  return {
+    context,
+    events,
+    status,
+    connection,
+    error,
+    reload,
+    historyReady:
+      replayedRunId === runId &&
+      context !== null &&
+      ["success", "failed", "cancelled"].includes(context.status),
+  };
 }

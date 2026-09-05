@@ -20,7 +20,7 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
 }) {
   const { scope } = useParams<{ scope: string }>();
   const { user } = useUser();
-  const { context, events, status, connection, error, reload } = useExternalRun(pane.externalRunId);
+  const { context, events, status, connection, error, reload, historyReady } = useExternalRun(pane.externalRunId);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [receipt, setReceipt] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
   }
 
   async function continueChat() {
-    if (!context || !user || sending) return;
+    if (!context || !user || sending || !historyReady) return;
     setSending(true);
     const store = useConversationsStore.getState();
     store.setUserId(user.id);
@@ -81,7 +81,8 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
       <Textarea aria-label="Guide this run" placeholder="Add guidance for this run…" value={text} onChange={event => setText(event.target.value)} />
       <Button type="submit" size="sm" disabled={sending || !text.trim()}>{sending ? "Sending…" : "Send guidance"}</Button>
     </form> : !running && status !== "awaiting_input" && context ? <div className="border-border border-t p-2">
-      <Button size="sm" onClick={() => void continueChat()} disabled={sending || !user}>Continue in workspace chat</Button>
+      {!historyReady && <p role="status" className="text-muted-foreground mb-2 text-xs">Loading run history before continuing…</p>}
+      <Button size="sm" onClick={() => void continueChat()} disabled={sending || !user || !historyReady}>Continue in workspace chat</Button>
     </div> : <p className="text-muted-foreground p-2 text-xs">{status === "awaiting_input" ? "Open run details to review the checkpoint." : "Watching this run. Open run details for controls."}</p>}
   </>;
 }
