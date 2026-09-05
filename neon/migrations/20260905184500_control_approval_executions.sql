@@ -40,6 +40,9 @@ begin
   select * into session_row from public.control_sessions
     where id = p_session_id and user_id = p_user_id and archived = false for update;
   if not found then return false; end if;
+  -- A newer turn supersedes this approval continuation. Check under the same
+  -- row lock as the claim, not only against a request's earlier snapshot.
+  if session_row.messages->-1->>'id' is distinct from p_message_id then return false; end if;
   select m into saved_message from jsonb_array_elements(session_row.messages) m
     where m->>'id' = p_message_id and m->>'role' = 'assistant';
   if saved_message is null or saved_message is distinct from p_expected_message then return false; end if;

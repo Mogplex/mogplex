@@ -121,6 +121,18 @@ it("requires a successful database claim before returning an executable approval
   ).rejects.toThrow("already submitted");
   await expect(
     prepareControlRequestHistory(
+      {
+        ...input,
+        savedMessages: [
+          ...input.savedMessages,
+          { ...user, id: "newer-user-turn" },
+        ],
+      },
+      database(true)
+    )
+  ).rejects.toThrow("already submitted");
+  await expect(
+    prepareControlRequestHistory(
       { ...input, savedMessages: [submitted] },
       database(true)
     )

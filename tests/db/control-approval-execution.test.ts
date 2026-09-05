@@ -37,6 +37,59 @@ const approved: UIMessage = {
 };
 
 it.each(["neon", "supabase"])(
+  "%s rejects an older approval after another tab appends a newer turn",
+  async (root) => {
+    const fixture = await controlTranscriptDatabase();
+    try {
+      await fixture.db.exec(
+        await readFile(
+          join(
+            process.cwd(),
+            root,
+            "migrations/20260905184500_control_approval_executions.sql"
+          ),
+          "utf8"
+        )
+      );
+      await fixture.save([pending]);
+      await fixture.save([
+        {
+          id: "newer-turn",
+          role: "user",
+          parts: [
+            { type: "text", text: "Stop that action; just report status." },
+          ],
+        },
+      ]);
+      // The browser and even the request's initial DB snapshot predate the append.
+      // Only the precondition under the SQL row lock closes this race.
+      await expect(
+        prepareControlRequestHistory(
+          {
+            userId: fixture.owner,
+            sessionId: fixture.sessionId,
+            aiCallId: "00000000-0000-4000-8000-000000000050",
+            savedMessages: [pending],
+            incomingMessages: [approved],
+          },
+          fixture.client
+        )
+      ).rejects.toThrow("already submitted");
+      expect(
+        (
+          await fixture.db.query(
+            "select count(*)::int as n from control_approval_executions"
+          )
+        ).rows
+      ).toEqual([{ n: 0 }]);
+      expect((await fixture.save([])).messages[0]).toEqual(pending);
+    } finally {
+      await fixture.db.close();
+    }
+  }
+);
+
+it.each(["neon", "supabase"])(
   "%s claims an approval before the real SDK tool executes, once across concurrent submissions",
   async (root) => {
     const fixture = await controlTranscriptDatabase();

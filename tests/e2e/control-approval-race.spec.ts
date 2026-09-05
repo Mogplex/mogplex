@@ -23,11 +23,9 @@ import {
   mockControlSessionBootstrap,
 } from "./helpers/automation-control-plane-fixtures";
 
-for (const differentApprovals of [false, true]) {
-  test(`two tabs approving ${differentApprovals ? "different actions preserve both results" : "the same action execute it once"}`, async ({
-    page,
-    context,
-  }) => {
+for (const scenario of ["same", "different", "superseded"] as const) {
+  const differentApprovals = scenario === "different";
+  test(`two-tab approvals: ${scenario}`, async ({ page, context }) => {
     const fixture = await controlTranscriptDatabase();
     const second = await context.newPage();
     try {
@@ -185,6 +183,31 @@ for (const differentApprovals of [false, true]) {
         await expect(
           tab.getByRole("button", { name: "Approve", exact: true })
         ).toBeVisible();
+      }
+      if (scenario === "superseded") {
+        await fixture.save([
+          {
+            id: "newer-user-turn",
+            role: "user",
+            parts: [
+              { type: "text", text: "Stop that action; only report status." },
+            ],
+          },
+        ]);
+        release();
+        const rejected = page.waitForResponse("**/api/control/chat");
+        await page
+          .getByRole("button", { name: "Approve", exact: true })
+          .click();
+        expect((await rejected).status()).toBe(409);
+        expect(counts.executions).toBe(0);
+        await page.reload();
+        await expect(
+          page.getByText("Stop that action; only report status.", {
+            exact: true,
+          })
+        ).toBeVisible();
+        return;
       }
       const responses = [
         page.waitForResponse("**/api/control/chat"),

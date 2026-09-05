@@ -54,7 +54,12 @@ export async function prepareControlRequestHistory(
     new Error(
       "This approval was already submitted or changed, or another action in this message is still finishing. Reload the conversation to check its result; do not replay it."
     );
-  if (!expected || approvalIds.length !== decisions.length) throw conflict();
+  if (
+    !expected ||
+    expected.id !== input.savedMessages.at(-1)?.id ||
+    approvalIds.length !== decisions.length
+  )
+    throw conflict();
   const { data, error } = await client.rpc("control_claim_approvals", {
     p_user_id: input.userId,
     p_session_id: input.sessionId,
