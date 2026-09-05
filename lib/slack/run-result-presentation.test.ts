@@ -8,6 +8,42 @@ import { buildRunResultMessage } from "./run-result-presentation";
 
 process.env.NEXT_PUBLIC_APP_URL ||= "https://mogplex.com";
 
+it("starts a long report at its beginning and labels a word-bounded excerpt", () => {
+  const message = buildRunResultMessage({
+    run,
+    status: "success",
+    output:
+      "The requested fix is complete. " + "Verification passed. ".repeat(150),
+    evidence: emptyRunResultEvidence(),
+    guidance: [],
+  });
+  expect(message.text).toContain(
+    "Agent’s closing report (excerpt)\nThe requested fix is complete."
+  );
+  const report = message.blocks.find(
+    (block) =>
+      block.type === "section" &&
+      JSON.stringify(block).includes("Agent’s closing report")
+  );
+  expect(JSON.stringify(report)).toMatch(/(?:Verification|passed\.)…/);
+});
+
+it("uses the latest durable update for an interrupted run instead of its early activity log", () => {
+  const state = createRunProgressState(1000);
+  state.summary = "The build failed; verification is unfinished.";
+  const message = buildRunResultMessage({
+    run: { ...run, slack_progress: serializeRunProgress(state) },
+    status: "failed",
+    output: "I will inspect the repository.",
+    evidence: emptyRunResultEvidence(),
+    guidance: [],
+  });
+  expect(message.text).toContain(
+    "Last agent update\nThe build failed; verification is unfinished."
+  );
+  expect(message.text).not.toContain("I will inspect the repository.");
+});
+
 it("redacts complete output before taking its tail so truncation cannot expose a partial credential", () => {
   const output = "Token: sk-" + "secret-fixture".repeat(160) + " Finished.";
   const message = buildRunResultMessage({

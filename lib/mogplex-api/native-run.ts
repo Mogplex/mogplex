@@ -250,6 +250,14 @@ export async function runNativeMogplexAgent(
     control.signal.throwIfAborted();
     const reason = await stream.result.finishReason;
     if (reason !== "stop") throw new Error(`Mogplex run stopped: ${reason}`);
+    // Keep the final model response distinct from the interleaved progress
+    // transcript so Slack can show a readable report, not an arbitrary log tail.
+    if (readSlackRunControlsMetadata(run.metadata))
+      await event({
+        eventType: "log",
+        message: await stream.result.text,
+        payload: { kind: "assistant_final" },
+      });
     const completed = await finish("success", null);
     // A cancel may win the database CAS after the last stream event.
     if (!completed) await finish("cancelled", null);

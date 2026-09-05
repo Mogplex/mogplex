@@ -198,6 +198,8 @@ test("a Slack thread reply reaches the next agent step once and survives termina
       },
     });
     let step = 0;
+    const finalReport =
+      "Desktop controls preserved. " + "Inspected the layout. ".repeat(100);
     const model = new MockLanguageModelV3({
       doStream: async () => ({
         stream: new ReadableStream({
@@ -214,7 +216,7 @@ test("a Slack thread reply reaches the next agent step once and survives termina
               sink.enqueue({
                 type: "text-delta",
                 id: "result",
-                delta: "Desktop controls preserved.",
+                delta: finalReport,
               });
               sink.enqueue({ type: "text-end", id: "result" });
             }
@@ -263,7 +265,7 @@ test("a Slack thread reply reaches the next agent step once and survives termina
       },
     });
     await result.consumeStream();
-    expect(await result.text).toBe("Desktop controls preserved.");
+    expect(await result.text).toBe(finalReport);
     expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain(
       "Keep the desktop header unchanged."
     );
@@ -297,6 +299,9 @@ test("a Slack thread reply reaches the next agent step once and survives termina
       }
     );
     expect(messages[0].text).toContain("Supplied to agent step 2");
+    expect(messages[0].text).toContain(
+      "Agent’s closing report (excerpt)\nDesktop controls preserved."
+    );
     expect(JSON.stringify(messages[0].blocks)).not.toContain(
       "mogplex-cancel-run"
     );

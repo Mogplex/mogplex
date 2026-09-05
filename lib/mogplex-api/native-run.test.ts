@@ -45,6 +45,7 @@ async function exercise(
   let modelStep = 0;
   const controller = new AbortController();
   const events: string[] = [];
+  const finalReports: string[] = [];
   let cleaned = false;
   let closed = false;
   let executionLeaseAcquired = false;
@@ -258,6 +259,8 @@ async function exercise(
         },
         appendEvent: async (event) => {
           events.push(event.eventType);
+          if (event.payload?.kind === "assistant_final")
+            finalReports.push(event.message ?? "");
           return null;
         },
       }
@@ -270,6 +273,7 @@ async function exercise(
     result,
     caught,
     events,
+    finalReports,
     cleaned,
     closed,
     model,
@@ -340,6 +344,15 @@ test("native runner consumes real SDK output and records usage on the existing c
   assert.equal(result.events.filter((event) => event === "log").length, 1);
   assert.ok(result.events.includes("finished"));
   assert.ok(result.cleaned && result.closed);
+});
+
+test("Slack runs preserve the complete final SDK response separately from streamed telemetry", async () => {
+  const response =
+    "Final report starts here. " +
+    "Verified behavior. ".repeat(150) +
+    "Report complete.";
+  const result = await exercise("tool_progress", response);
+  assert.deepEqual(result.finalReports, [response]);
 });
 
 test("native runner bounds telemetry writes for a long token-sized stream", async () => {
