@@ -9,7 +9,7 @@ import type {
   loadOwnedSandboxRouteRecord,
   resolveLoadedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
-import type { SandboxRecord } from "@/lib/types";
+import type { SandboxRecord, SandboxLifecycleStatus } from "@/lib/types";
 import type {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
@@ -27,7 +27,7 @@ export type SandboxStatusRecord = {
   dev_log?: string | null;
   runtime?: string | null;
   terminal_cwd?: string | null;
-  status: string;
+  status: SandboxLifecycleStatus;
   stop_reason?: SandboxRecord["stop_reason"];
   persistent?: boolean | null;
   preview_url?: string | null;

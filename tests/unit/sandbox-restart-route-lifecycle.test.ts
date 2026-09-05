@@ -27,13 +27,18 @@ test("POST /api/sandbox/[id]/restart falls back to legacy restart when the store
       _id: string,
       options?: { select?: string }
     ) => {
-      if (options?.select === "id, sandbox_id, persistent") {
+      if (options?.select === "id, sandbox_id, persistent, status") {
         return {
           ok: true as const,
           auth: { userId: "user-1" },
           repo: null,
           rootDirectory: undefined,
-          record: { id: "sandbox-1", sandbox_id: "vm_123", persistent: true },
+          record: {
+            id: "sandbox-1",
+            sandbox_id: "vm_123",
+            persistent: true,
+            status: "paused",
+          },
         };
       }
       return buildLoadedSandboxRestartRecord() as never;
@@ -123,7 +128,7 @@ test("POST /api/sandbox/[id]/restart logs when non-persistent demotion loses the
         _id: string,
         options?: { select?: string }
       ) => {
-        if (options?.select === "id, sandbox_id, persistent") {
+        if (options?.select === "id, sandbox_id, persistent, status") {
           return {
             ok: true as const,
             auth: { userId: "user-1" },
@@ -133,6 +138,7 @@ test("POST /api/sandbox/[id]/restart logs when non-persistent demotion loses the
               id: "sandbox-1",
               sandbox_id: "vm_123",
               persistent: true,
+              status: "paused",
             },
           };
         }
@@ -338,13 +344,18 @@ test("POST /api/sandbox/[id]/restart relaunches through legacy restart when Verc
       _id: string,
       options?: { select?: string }
     ) => {
-      if (options?.select === "id, sandbox_id, persistent") {
+      if (options?.select === "id, sandbox_id, persistent, status") {
         return {
           ok: true as const,
           auth: { userId: "user-1" },
           repo: null,
           rootDirectory: undefined,
-          record: { id: "sandbox-1", sandbox_id: "vm_123", persistent: true },
+          record: {
+            id: "sandbox-1",
+            sandbox_id: "vm_123",
+            persistent: true,
+            status: "stopped",
+          },
         };
       }
       return buildLoadedSandboxRestartRecord() as never;

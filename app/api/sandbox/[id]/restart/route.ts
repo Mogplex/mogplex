@@ -56,6 +56,11 @@ async function handlePersistentRestart(
   if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
   const { record, auth, context } = loaded;
+  if (record.status === "pausing") {
+    return buildLifecycleConflictResponse(
+      "Sandbox is pausing. Wait for pause to finish before restarting."
+    );
+  }
   if (!record.repo) {
     return NextResponse.json(
       { error: "Sandbox repo not found" },
@@ -442,11 +447,17 @@ export function createSandboxRestartHandler(
       id: string;
       sandbox_id: string;
       persistent?: boolean | null;
+      status: string;
     }>(request, id, {
-      select: "id, sandbox_id, persistent",
+      select: "id, sandbox_id, persistent, status",
       notFoundMessage: "Sandbox not found",
     });
     if (!probe.ok) return buildSandboxRouteErrorResponse(probe);
+    if (probe.record.status === "pausing") {
+      return buildLifecycleConflictResponse(
+        "Sandbox is pausing. Wait for pause to finish before restarting."
+      );
+    }
 
     if (probe.record.persistent) {
       return handlePersistentRestart(request, id, deps);

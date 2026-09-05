@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildSandboxRouteErrorResponse } from "@/lib/sandbox/route-context";
+import { buildLifecycleConflictResponse } from "@/lib/sandbox/lifecycle-conflict";
 import type { RestartSandboxRecord, SandboxRestartDeps } from "./types";
 
 /**
@@ -25,6 +26,11 @@ export async function handleLegacyRestart(
   );
   if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
   const { record } = loaded;
+  if (record.status === "pausing") {
+    return buildLifecycleConflictResponse(
+      "Sandbox is pausing. Wait for pause to finish before restarting."
+    );
+  }
   if (!record.repo_id)
     return NextResponse.json({ error: "Sandbox not found" }, { status: 404 });
 

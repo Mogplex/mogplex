@@ -7,6 +7,7 @@ import {
   resolveLoadedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
+import type { StopReason } from "@/lib/types";
 import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
@@ -20,6 +21,8 @@ type SandboxPauseRecord = {
   base_branch: string;
   working_branch: string;
   status: string;
+  health_status?: string | null;
+  stop_reason?: StopReason | null;
   persistent?: boolean | null;
   billing_source?: string | null;
   billing_team_id?: string | null;
@@ -89,6 +92,26 @@ export function createSandboxPauseHandler(
     });
     if (!resolved.ok) return buildSandboxRouteErrorResponse(resolved);
 
+    const claimed = await deps.updateSandboxRecord(
+      record.id,
+      {
+        status: "pausing",
+        health_status: "pausing",
+        stop_reason: "manual",
+        last_active_at: new Date().toISOString(),
+      },
+      { expectedSandboxId: record.sandbox_id, fromStatuses: "running" }
+    );
+    if (!claimed) {
+      return NextResponse.json(
+        {
+          error:
+            "Sandbox changed before pause could start. Refresh its status.",
+        },
+        { status: 409 }
+      );
+    }
+
     let snapshotId: string | null;
     let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
       null;
@@ -118,6 +141,22 @@ export function createSandboxPauseHandler(
         providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
       snapshotId = sandbox.currentSnapshotId ?? null;
     } catch (error) {
+      await deps
+        .updateSandboxRecord(
+          record.id,
+          {
+            status: "running",
+            health_status: record.health_status ?? "running",
+            stop_reason: record.stop_reason ?? null,
+          },
+          { expectedSandboxId: record.sandbox_id, fromStatuses: "pausing" }
+        )
+        .catch((restoreError) => {
+          console.warn(
+            `[sandbox/pause] Could not restore state for ${record.id}:`,
+            restoreError
+          );
+        });
       const message =
         error instanceof Error ? error.message : "Failed to pause sandbox";
       return NextResponse.json({ error: message }, { status: 500 });
@@ -157,10 +196,19 @@ export function createSandboxPauseHandler(
         record.vercel_team_id ?? record.billing_team_id ?? null;
     }
 
-    await deps.updateSandboxRecord(record.id, updates, {
+    const finalized = await deps.updateSandboxRecord(record.id, updates, {
       expectedSandboxId: record.sandbox_id,
-      fromStatuses: "running",
+      fromStatuses: "pausing",
     });
+    if (!finalized) {
+      return NextResponse.json(
+        {
+          error:
+            "Pause was superseded by another sandbox action. Refresh its status.",
+        },
+        { status: 409 }
+      );
+    }
 
     const refreshed =
       await deps.loadOwnedSandboxRouteRecord<SandboxPauseRecord>(request, id, {
@@ -168,6 +216,15 @@ export function createSandboxPauseHandler(
         notFoundMessage: "Sandbox not found",
       });
     if (!refreshed.ok) return buildSandboxRouteErrorResponse(refreshed);
+    if (refreshed.record.status !== "paused") {
+      return NextResponse.json(
+        {
+          error:
+            "Sandbox state changed after pause completed. Refresh its status.",
+        },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({
       sandbox: toSandboxClientRecord(refreshed.record),

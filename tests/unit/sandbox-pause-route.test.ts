@@ -51,12 +51,57 @@ test("POST /api/sandbox/[id]/pause stops the VM (auto-snapshot) and marks record
 
   assert.equal(response.status, 200);
   assert.equal(stopCount, 1);
-  assert.equal(updateCalls.length, 1);
-  assert.equal(updateCalls[0].status, "paused");
-  assert.equal(updateCalls[0].health_status, "paused");
-  assert.equal(updateCalls[0].snapshot_id, "snap_abc");
+  assert.equal(updateCalls.length, 2);
+  assert.equal(updateCalls[0].status, "pausing");
+  assert.equal(updateCalls[1].status, "paused");
+  assert.equal(updateCalls[1].health_status, "paused");
+  assert.equal(updateCalls[1].snapshot_id, "snap_abc");
   const payload = await response.json();
   assert.equal(payload.sandbox.runtime_summary.status, "paused");
+});
+
+test("pause does not stop the provider when the running-state claim is lost", async () => {
+  const { createSandboxPauseHandler } = await loadSandboxPauseRouteModule();
+  let providerCalls = 0;
+  const handler = createSandboxPauseHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxStopRecord({ status: "running" })) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    updateSandboxRecord: async () => null,
+    getSandbox: async () => {
+      providerCalls += 1;
+      throw new Error("must not reach provider");
+    },
+  });
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "POST", suffix: "/pause" }),
+    buildSandboxRouteParams()
+  );
+  assert.equal(response.status, 409);
+  assert.equal(providerCalls, 0);
+});
+
+test("pause preserves the authentication gate before claiming or stopping", async () => {
+  const { createSandboxPauseHandler } = await loadSandboxPauseRouteModule();
+  const handler = createSandboxPauseHandler({
+    loadOwnedSandboxRouteRecord: async () =>
+      buildSandboxRouteContextFailure({
+        status: 401,
+        error: "Unauthorized",
+      }) as never,
+    updateSandboxRecord: async () => {
+      throw new Error("must not claim");
+    },
+    getSandbox: async () => {
+      throw new Error("must not stop");
+    },
+  });
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "POST", suffix: "/pause" }),
+    buildSandboxRouteParams()
+  );
+  assert.equal(response.status, 401);
 });
 
 test("POST /api/sandbox/[id]/pause rejects when sandbox is not running", async () => {
