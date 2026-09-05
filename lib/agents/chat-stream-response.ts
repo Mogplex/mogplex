@@ -10,30 +10,43 @@ export function withChatStreamKeepalive(response: Response): Response {
     timer = undefined;
   };
   const body = new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(controller) {
       timer = setInterval(() => {
-        if (!closed) controller.enqueue(encoder.encode(": keepalive\n\n"));
+        if (!closed && (controller.desiredSize ?? 0) > 0) {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        }
       }, 15_000);
       timer.unref?.();
+    },
+    async pull(controller) {
       try {
-        for (;;) {
-          const chunk = await reader.read();
-          if (chunk.done || closed) break;
+        const chunk = await reader.read();
+        if (closed) return;
+        if (!chunk.done) {
           controller.enqueue(chunk.value);
+          return;
         }
-        if (!closed) controller.close();
-      } catch (error) {
-        if (!closed) controller.error(error);
-      } finally {
         closed = true;
         clear();
         reader.releaseLock();
+        controller.close();
+      } catch (error) {
+        if (closed) return;
+        closed = true;
+        clear();
+        reader.releaseLock();
+        controller.error(error);
       }
     },
     async cancel(reason) {
+      if (closed) return;
       closed = true;
       clear();
-      await reader.cancel(reason);
+      try {
+        await reader.cancel(reason);
+      } finally {
+        reader.releaseLock();
+      }
     },
   });
   const headers = new Headers(response.headers);
