@@ -198,7 +198,8 @@ it("reserves a response before publishing its stream so a browser cannot win the
     messages: [],
     expectedMessages: [],
     messageId: "reserved",
-    save: async (messages) => {
+    save: async (messages, expected) => {
+      expect(expected).toEqual([]);
       stored.push(...messages);
       return record(stored);
     },
@@ -206,6 +207,7 @@ it("reserves a response before publishing its stream so a browser cannot win the
   });
   expect(stored).toEqual([{ id: "reserved", role: "assistant", parts: [] }]);
   await durable.completion;
+  expect(stored).toEqual([{ id: "reserved", role: "assistant", parts: [] }]);
 });
 
 it("updates only the explicitly approved message and preserves its original evidence", async () => {
@@ -222,6 +224,11 @@ it("updates only the explicitly approved message and preserves its original evid
       },
     ],
   };
+  const unrelated: UIMessage = {
+    id: "concurrent-reply",
+    role: "assistant",
+    parts: [{ type: "text", text: "Another coordinator reply" }],
+  };
   let saved: UIMessage[] = [];
   const durable = await persistedControlStream({
     stream: new ReadableStream({
@@ -236,8 +243,8 @@ it("updates only the explicitly approved message and preserves its original evid
         c.close();
       },
     }),
-    messages: [pending],
-    expectedMessages: [pending],
+    messages: [pending, unrelated],
+    expectedMessages: [pending, unrelated],
     messageId: "unused-new-id",
     continuationMessageId: pending.id,
     save: async (messages, expected) => {

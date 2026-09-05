@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  controlContinuationSummary,
   presentControlContinuation,
   type ControlContinuationSummary,
 } from "./continuation-presentation";
@@ -42,8 +43,88 @@ it("distinguishes waiting, queued and active follow-up without claiming mission 
     attention: true,
   });
   expect(
-    presentControlContinuation({ ...ticket, status: "running" }).label
-  ).toBe("Coordinator is reviewing the results");
+    presentControlContinuation({ ...ticket, status: "running" })
+  ).toMatchObject({
+    label: "Coordinator is reviewing the results",
+    cancelable: true,
+    retryable: false,
+    attention: false,
+  });
+});
+
+it.each([
+  ["waiting", "Waiting for workers", /resume here automatically/, false],
+  ["ready", "Coordinator follow-up queued", /No new prompt is needed/, false],
+  [
+    "running",
+    "Coordinator is reviewing the results",
+    /as they are saved/,
+    false,
+  ],
+  [
+    "finished",
+    "Coordinator reply saved",
+    /does not mean the mission is complete/,
+    false,
+  ],
+  [
+    "needs_input",
+    "Your approval is needed",
+    /Review the requested action/,
+    true,
+  ],
+  [
+    "failed",
+    "Coordinator follow-up stopped",
+    /saved conversation and worker output remain available/,
+    true,
+  ],
+  [
+    "cancelled",
+    "Coordinator follow-up cancelled",
+    /Workers and sandbox are unchanged/,
+    false,
+  ],
+] as const)(
+  "explains %s without losing its recovery guidance",
+  (status, label, description, attention) => {
+    const presentation = presentControlContinuation({ ...ticket, status });
+    expect(presentation.label).toBe(label);
+    expect(presentation.description).toMatch(description);
+    expect(presentation.attention).toBe(attention);
+  }
+);
+
+it.each([
+  "waiting",
+  "running",
+  "finished",
+  "needs_input",
+  "failed",
+  "cancelled",
+] as const)(
+  "never offers delivery retry for %s even when an error is recorded",
+  (status) => {
+    expect(
+      presentControlContinuation({
+        ...ticket,
+        status,
+        error: "Saved failure detail",
+      })
+    ).toMatchObject({
+      description: "Saved failure detail",
+      attention: true,
+      retryable: false,
+    });
+  }
+);
+
+it("returns only public summary fields, not the coordinator request context", () => {
+  const stored = {
+    ...ticket,
+    request_context: { messages: ["Private request context"] },
+  };
+  expect(controlContinuationSummary(stored)).toEqual(ticket);
 });
 it("does not offer replay for failed or completed execution", () => {
   for (const status of [
