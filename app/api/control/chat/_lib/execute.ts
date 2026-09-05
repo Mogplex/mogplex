@@ -6,7 +6,10 @@ import {
   isToolOrDynamicToolUIPart,
 } from "ai";
 import { controlMessageMetadata } from "@/lib/control/context-usage";
-import { controlRequestHistory } from "@/lib/control/request-history";
+import {
+  prepareControlRequestHistory,
+  controlMessagesForModel,
+} from "@/lib/control/request-history";
 import { saveControlTranscript } from "@/lib/control/transcript-store";
 import { persistedControlStream } from "@/lib/control/persisted-stream";
 import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
@@ -264,7 +267,8 @@ export async function executeControlChatRequest(input: {
     // Convert messages to model format. Clients send AI SDK UIMessages
     // (`parts`); a plain `content` string/array is also accepted.
     let uiMessages = await validateControlChatMessages(input.body.messages);
-    const lastSubmitted = uiMessages.at(-1);
+    let continuationMessageId: string | undefined;
+    let claimedApprovalIds: string[] = [];
     let expectedMessages = uiMessages;
     if (scope.missionId) {
       const saved = await saveControlTranscript({
@@ -273,21 +277,27 @@ export async function executeControlChatRequest(input: {
         messages: uiMessages,
       });
       expectedMessages = saved.messages;
-      uiMessages = await validateControlChatMessages(
-        controlRequestHistory(saved.messages, uiMessages)
-      );
-    }
-    const submittedMessage = uiMessages.find(
-      (message) => message.id === lastSubmitted?.id
-    );
-    const continuationMessageId =
-      submittedMessage?.role === "assistant" &&
-      submittedMessage.parts.some(
-        (part) =>
-          isToolOrDynamicToolUIPart(part) && part.state === "approval-responded"
+      const prepared = await prepareControlRequestHistory({
+        userId: input.userId,
+        sessionId: scope.missionId,
+        aiCallId: activeCall.id,
+        savedMessages: saved.messages,
+        incomingMessages: uiMessages,
+      });
+      uiMessages = await validateControlChatMessages(prepared.messages);
+      continuationMessageId = prepared.continuationMessageId;
+      claimedApprovalIds = prepared.claimedApprovalIds;
+    } else if (
+      uiMessages.some((message) =>
+        message.parts.some(
+          (part) =>
+            isToolOrDynamicToolUIPart(part) &&
+            part.state === "approval-responded"
+        )
       )
-        ? submittedMessage.id
-        : undefined;
+    ) {
+      throw new Error("Approve actions from a saved Control conversation.");
+    }
 
     // Compact oversized histories into a checkpoint handoff (same adapter as
     // /api/chat: validated checkpoint, prefix reuse, ai_call_events audit).
@@ -324,9 +334,12 @@ export async function executeControlChatRequest(input: {
       model,
       providerOptions,
       system: withGatewaySystemCaching(systemPrompt, gatewayContext),
-      messages: await convertToModelMessages(modelMessages, {
-        ignoreIncompleteToolCalls: true,
-      }),
+      messages: await convertToModelMessages(
+        controlMessagesForModel(modelMessages, claimedApprovalIds),
+        {
+          ignoreIncompleteToolCalls: true,
+        }
+      ),
       abortSignal: input.req.signal,
       tools,
       stopWhen: ORCHESTRATOR_STOP_WHEN,

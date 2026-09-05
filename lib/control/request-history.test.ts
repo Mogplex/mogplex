@@ -1,6 +1,11 @@
 import type { UIMessage } from "ai";
+import { createClient } from "@supabase/supabase-js";
 import { expect, it } from "vitest";
-import { controlRequestHistory } from "./request-history";
+import {
+  controlRequestHistory,
+  prepareControlRequestHistory,
+  controlMessagesForModel,
+} from "./request-history";
 import { mergePersistedControlMessages } from "./transcript-store";
 
 const user: UIMessage = {
@@ -35,6 +40,81 @@ it("older browser snapshots cannot drop or replace saved replies", () => {
   expect(merged).toEqual([user, assistant, newer, { ...user, id: "followup" }]);
   expect(mergePersistedControlMessages(merged, [])).toEqual(merged);
   expect(mergePersistedControlMessages(merged, [user, user])).toEqual(merged);
+});
+
+it("requires a successful database claim before returning an executable approval response", async () => {
+  const submitted: UIMessage = {
+    ...assistant,
+    parts: [
+      {
+        type: "tool-git_push",
+        toolCallId: "call",
+        state: "approval-responded",
+        input: { branch: "main" },
+        approval: { id: "approval", approved: false },
+      },
+    ],
+  };
+  const input = {
+    userId: "owner",
+    sessionId: "session",
+    aiCallId: "call",
+    savedMessages: [user, assistant],
+    incomingMessages: [user, submitted],
+  };
+  const database = (body: unknown, status = 200) =>
+    createClient("https://db.example.test", "fixture", {
+      auth: { persistSession: false },
+      global: { fetch: async () => Response.json(body, { status }) },
+    });
+  const result = await prepareControlRequestHistory(input, database(true));
+  expect(
+    controlMessagesForModel(result.messages, result.claimedApprovalIds)
+  ).toEqual(result.messages);
+  expect(JSON.stringify(controlMessagesForModel(result.messages))).toContain(
+    "no recorded result"
+  );
+  expect(JSON.stringify(controlMessagesForModel([assistant]))).toContain(
+    "no recorded result"
+  );
+  expect(assistant.parts[0].type).toBe("tool-git_push");
+  expect(result.continuationMessageId).toBe(assistant.id);
+  expect(result.messages[1].parts[0]).toMatchObject({
+    input: { branch: "feature" },
+    approval: { approved: false },
+  });
+  await expect(
+    prepareControlRequestHistory(input, database(false))
+  ).rejects.toThrow("already submitted");
+  await expect(
+    prepareControlRequestHistory(
+      input,
+      database({ message: "Private database diagnostic" }, 500)
+    )
+  ).rejects.toThrow("No approved action was started");
+  await expect(
+    prepareControlRequestHistory(
+      { ...input, savedMessages: [] },
+      database(true)
+    )
+  ).rejects.toThrow("already submitted");
+  await expect(
+    prepareControlRequestHistory(
+      { ...input, savedMessages: [submitted] },
+      database(true)
+    )
+  ).rejects.toThrow("already submitted");
+  expect(
+    (
+      await prepareControlRequestHistory(
+        { ...input, incomingMessages: [user] },
+        database(false)
+      )
+    ).continuationMessageId
+  ).toBeUndefined();
+  expect(controlRequestHistory([assistant], [submitted, user])).toEqual([
+    assistant,
+  ]);
 });
 
 it("accepts the matching approval decision without trusting edited tool inputs", () => {

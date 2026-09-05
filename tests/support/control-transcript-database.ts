@@ -39,6 +39,8 @@ export async function controlTranscriptDatabase() {
   }) as unknown as Parameters<typeof saveControlTranscript>[1];
   return {
     db,
+    owner,
+    client,
     sessionId,
     save: (messages: UIMessage[], expectedMessages?: UIMessage[]) =>
       saveControlTranscript(
