@@ -26,6 +26,7 @@ export type ReaperSandboxRecord = {
   health_status: string;
   exec_lock_token: string | null;
   created_at: string;
+  last_boot_started_at?: string | null;
   last_active_at: string | null;
   billing_source?: string | null;
   billing_team_id?: string | null;
