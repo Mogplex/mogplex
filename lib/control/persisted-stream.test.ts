@@ -15,6 +15,58 @@ const record = (messages: UIMessage[]): ControlSessionRecord => ({
   messages,
 });
 
+it.each(["stop", "error", "abort"] as const)(
+  "reports %s only after the final durable checkpoint",
+  async (ending) => {
+    let finalSaved = false;
+    let completion: unknown;
+    const durable = await persistedControlStream({
+      stream: new ReadableStream<UIMessageChunk>({
+        start(c) {
+          c.enqueue({
+            type: "start",
+            messageMetadata: { ai_call_id: "parent" },
+          });
+          c.enqueue({ type: "text-start", id: "t" });
+          c.enqueue({
+            type: "text-delta",
+            id: "t",
+            delta: "Waiting for workers",
+          });
+          c.enqueue({ type: "text-end", id: "t" });
+          c.enqueue(
+            ending === "abort"
+              ? { type: "abort" }
+              : { type: "finish", finishReason: ending }
+          );
+          c.close();
+        },
+      }),
+      messages: [],
+      expectedMessages: [],
+      messageId: "parent-reply",
+      save: async (messages) => {
+        finalSaved = messages[0].parts.length > 0;
+        return record(messages);
+      },
+      onError: () => "Failed",
+      onComplete: async (event) => {
+        expect(finalSaved).toBe(true);
+        completion = event;
+      },
+    });
+    await durable.completion;
+    expect(completion).toMatchObject({
+      isAborted: ending === "abort",
+      finishReason: ending === "abort" ? undefined : ending,
+      responseMessage: {
+        id: "parent-reply",
+        metadata: { ai_call_id: "parent" },
+      },
+    });
+  }
+);
+
 it("checkpoints command evidence while running and saves completion after the browser disconnects", async () => {
   let controller!: ReadableStreamDefaultController<UIMessageChunk>;
   let checkpointed!: () => void;

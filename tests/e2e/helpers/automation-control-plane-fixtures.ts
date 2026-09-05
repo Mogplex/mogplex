@@ -25,6 +25,9 @@ export async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 export async function mockBaseChrome(page: Page) {
+  await page.route("**/api/control/continuations**", (route) =>
+    fulfillJson(route, { continuations: [] })
+  );
   await page.route("**/api/control/workers**", (route) =>
     fulfillJson(route, { workers: [] })
   );

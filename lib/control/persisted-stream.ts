@@ -3,8 +3,13 @@ import {
   createUIMessageStream,
   type UIMessage,
   type UIMessageChunk,
+  type UIMessageStreamOnFinishCallback,
 } from "ai";
 import type { saveControlTranscript } from "./transcript-store";
+
+export type ControlStreamCompletion = Parameters<
+  UIMessageStreamOnFinishCallback<UIMessage>
+>[0];
 
 /** Server-side, identity-fenced checkpoints independent of the browser reader. */
 export async function persistedControlStream(input: {
@@ -18,9 +23,10 @@ export async function persistedControlStream(input: {
     expectedMessages: UIMessage[]
   ) => ReturnType<typeof saveControlTranscript>;
   onError: (error: unknown) => string;
-  onComplete?: () => Promise<void>;
+  onComplete?: (event: ControlStreamCompletion) => Promise<void>;
 }) {
   let expected = input.expectedMessages;
+  let finished: ControlStreamCompletion | undefined;
   // Reserve identity before any chunks reach the browser. Its onFinish save
   // may otherwise insert a partial copy before our final checkpoint arrives.
   if (!input.continuationMessageId) {
@@ -54,7 +60,10 @@ export async function persistedControlStream(input: {
     generateId: () => input.messageId,
     execute: ({ writer }) => writer.merge(input.stream),
     onStepFinish: checkpoint,
-    onFinish: checkpoint,
+    onFinish: async (event) => {
+      await checkpoint(event);
+      finished = event;
+    },
     onError: input.onError,
   });
   const [stream, durable] = persisted.tee();
@@ -65,7 +74,9 @@ export async function persistedControlStream(input: {
     onError: (error) => {
       throw error;
     },
-  }).then(input.onComplete);
+  }).then(async () => {
+    if (finished) await input.onComplete?.(finished);
+  });
   // Attach a handler immediately; after() also observes the original promise.
   void completion.catch(input.onError);
   return { stream, completion };

@@ -3,13 +3,15 @@ import {
   convertToModelMessages,
   createUIMessageStreamResponse,
   stepCountIs,
-  isToolOrDynamicToolUIPart,
 } from "ai";
 import { controlMessageMetadata } from "@/lib/control/context-usage";
+import { controlMessagesForModel } from "@/lib/control/request-history";
+import { prepareControlWorkerHandoff } from "./worker-handoff";
+import { prepareControlExecutionHistory } from "./execution-history";
 import {
-  prepareControlRequestHistory,
-  controlMessagesForModel,
-} from "@/lib/control/request-history";
+  guardControlBackgroundTools,
+  type ControlBackgroundExecution,
+} from "@/lib/control/background-context";
 import { saveControlTranscript } from "@/lib/control/transcript-store";
 import { persistedControlStream } from "@/lib/control/persisted-stream";
 import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
@@ -52,7 +54,6 @@ import {
   getControlStreamTerminalFailure,
   updateSandboxStartTerminalFailure,
 } from "./lifecycle";
-import { validateControlChatMessages } from "./messages";
 import { wrapControlResponseLifecycle } from "./stream-lifecycle";
 import { createControlFinalizationGuard } from "./finalization-guard";
 import {
@@ -65,14 +66,8 @@ import type {
   ControlStartupFailure,
 } from "./types";
 
-/**
- * Stop condition for the orchestrator - allow more steps for complex planning.
- */
 export const ORCHESTRATOR_STOP_WHEN = stepCountIs(150);
 
-/**
- * Execute the Control chat request and return the streaming response.
- */
 export async function executeControlChatRequest(input: {
   req: Request;
   userId: string;
@@ -82,12 +77,14 @@ export async function executeControlChatRequest(input: {
   callStartedAt: string;
   infrastructureDiagnosticScope: InfrastructureDiagnosticScope;
   latestUserText: string;
+  background?: ControlBackgroundExecution;
 }) {
   let scope = getControlChatRunScope(input.body);
   const teamId = readActiveTeamIdHeader(input.req);
   let aiCall: ActiveControlCall | null = null;
 
   try {
+    await input.background?.assertCurrent();
     aiCall = await createAiCall({
       userId: input.userId,
       type: "agent",
@@ -100,6 +97,7 @@ export async function executeControlChatRequest(input: {
       metadata: buildControlChatRunMetadata(input.body, teamId),
     });
     const activeCall = aiCall;
+    await input.background?.onAiCallStarted(activeCall.id);
 
     // Build orchestrator context
     const [githubToken, sandboxContext, worktreeContext] = await Promise.all([
@@ -134,6 +132,27 @@ export async function executeControlChatRequest(input: {
       worktreeContext,
     });
 
+    const {
+      uiMessages,
+      expectedMessages,
+      continuationMessageId,
+      claimedApprovalIds,
+      completeApproval,
+    } = await prepareControlExecutionHistory({
+      userId: input.userId,
+      sessionId: scope.missionId,
+      aiCallId: activeCall.id,
+      messages: input.body.messages,
+    });
+    const handoff = prepareControlWorkerHandoff(
+      input,
+      scope,
+      activeCall.id,
+      uiMessages,
+      teamId,
+      sandboxBinding
+    );
+
     const toolContext: OrchestratorToolContext = {
       userId: input.userId,
       sandboxBinding,
@@ -151,6 +170,8 @@ export async function executeControlChatRequest(input: {
       aiCallId: activeCall.id,
       controlMode: input.body.mode ?? null,
       controlPermissions: input.body.permissions ?? null,
+      workerHandoffTool: handoff?.tool,
+      sandboxExecution: input.background?.sandboxExecution,
     };
 
     const promptContext: OrchestratorPromptContext = {
@@ -177,7 +198,10 @@ export async function executeControlChatRequest(input: {
       input.body.enableTools === false
         ? undefined
         : serializeSandboxCommandTools(
-            wrapToolsWithPolicy(rawTools, toolContext)
+            guardControlBackgroundTools(
+              wrapToolsWithPolicy(rawTools, toolContext),
+              input.background?.assertCurrent
+            )
           );
 
     // Build system prompt
@@ -264,43 +288,6 @@ export async function executeControlChatRequest(input: {
       });
     };
 
-    // Convert messages to model format. Clients send AI SDK UIMessages
-    // (`parts`); a plain `content` string/array is also accepted.
-    let uiMessages = await validateControlChatMessages(input.body.messages);
-    let continuationMessageId: string | undefined;
-    let claimedApprovalIds: string[] = [];
-    let completeApproval: (() => Promise<void>) | undefined;
-    let expectedMessages = uiMessages;
-    if (scope.missionId) {
-      const saved = await saveControlTranscript({
-        userId: input.userId,
-        sessionId: scope.missionId,
-        messages: uiMessages,
-      });
-      expectedMessages = saved.messages;
-      const prepared = await prepareControlRequestHistory({
-        userId: input.userId,
-        sessionId: scope.missionId,
-        aiCallId: activeCall.id,
-        savedMessages: saved.messages,
-        incomingMessages: uiMessages,
-      });
-      uiMessages = await validateControlChatMessages(prepared.messages);
-      continuationMessageId = prepared.continuationMessageId;
-      claimedApprovalIds = prepared.claimedApprovalIds;
-      completeApproval = prepared.complete;
-    } else if (
-      uiMessages.some((message) =>
-        message.parts.some(
-          (part) =>
-            isToolOrDynamicToolUIPart(part) &&
-            part.state === "approval-responded"
-        )
-      )
-    ) {
-      throw new Error("Approve actions from a saved Control conversation.");
-    }
-
     // Compact oversized histories into a checkpoint handoff (same adapter as
     // /api/chat: validated checkpoint, prefix reuse, ai_call_events audit).
     // Degrades to the unmodified history on failure.
@@ -335,7 +322,10 @@ export async function executeControlChatRequest(input: {
     const result = streamText({
       model,
       providerOptions,
-      system: withGatewaySystemCaching(systemPrompt, gatewayContext),
+      system: withGatewaySystemCaching(
+        systemPrompt + (input.background?.systemContext ?? ""),
+        gatewayContext
+      ),
       messages: await convertToModelMessages(
         controlMessagesForModel(modelMessages, claimedApprovalIds),
         {
@@ -345,6 +335,12 @@ export async function executeControlChatRequest(input: {
       abortSignal: input.req.signal,
       tools,
       stopWhen: ORCHESTRATOR_STOP_WHEN,
+      prepareStep: input.background
+        ? async () => {
+            await input.background!.assertCurrent();
+            return {};
+          }
+        : undefined,
       experimental_transform: createAgentUserFacingOutputTransform({
         diagnosticScope: input.infrastructureDiagnosticScope,
         repoName: input.body.repoName,
@@ -444,7 +440,11 @@ export async function executeControlChatRequest(input: {
           expectedMessages,
           messageId: `control-${activeCall.id}`,
           continuationMessageId,
-          onComplete: completeApproval,
+          onComplete: async (event) => {
+            await completeApproval?.();
+            await handoff?.complete(event);
+            await input.background?.onTranscriptComplete(event);
+          },
           save: (messages, previous) =>
             saveControlTranscript({
               userId: input.userId,
@@ -466,13 +466,25 @@ export async function executeControlChatRequest(input: {
           },
         })
       : { stream: visibleStream, completion: null };
+    const completion =
+      durable.completion
+        ?.finally(async () => {
+          // AI SDK does not await onAbort; join terminal persistence before the
+          // background execution (or Next after lifetime) is allowed to end.
+          if (input.req.signal.aborted) await finalizeCancelled();
+        })
+        .catch(async (error) => {
+          await handoff?.fail();
+          throw error;
+        }) ?? null;
+    void completion?.catch(() => undefined);
     const response = createUIMessageStreamResponse({
       stream: durable.stream,
     });
 
     return {
       aiCall: activeCall,
-      completion: durable.completion,
+      completion,
       response: wrapControlResponseLifecycle(response, async (closure) => {
         if (closure === "cancelled") await finalizeCancelled();
         if (closure === "error") await finalizeStreamFailure();
