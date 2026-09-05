@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Command } from "@vercel/sandbox";
+import { APIError, StreamError } from "@vercel/sandbox";
 import {
   isResumableCommandStreamError,
   streamCommandLogsWithResume,
@@ -47,9 +48,37 @@ function makeCommand(
 }
 
 describe("isResumableCommandStreamError", () => {
+  it.each([400, 401, 403, 404, 410, 422])(
+    "should reject terminal HTTP %i even when the message resembles a stream failure",
+    (status) => {
+      expect(
+        isResumableCommandStreamError(
+          new Error(`Status code ${status} is not ok`)
+        )
+      ).toBe(false);
+      expect(
+        isResumableCommandStreamError(
+          new APIError(new Response(null, { status }), {
+            message: "stream closed",
+          })
+        )
+      ).toBe(false);
+    }
+  );
+
+  it("should reject a provider stopped-session event and explicit cancellation", () => {
+    expect(
+      isResumableCommandStreamError(
+        new StreamError("sandbox_stopped", "stream ended", "sbx_test")
+      )
+    ).toBe(false);
+    expect(
+      isResumableCommandStreamError(new DOMException("aborted", "AbortError"))
+    ).toBe(false);
+  });
   it("should treat a capped or dropped sandbox request as resumable", () => {
     expect(
-      isResumableCommandStreamError(new Error("Status code 400 is not ok"))
+      isResumableCommandStreamError(new Error("Status code 504 is not ok"))
     ).toBe(true);
     expect(isResumableCommandStreamError(new Error("terminated"))).toBe(true);
     expect(isResumableCommandStreamError(new Error("socket hang up"))).toBe(
@@ -66,6 +95,69 @@ describe("isResumableCommandStreamError", () => {
 });
 
 describe("streamCommandLogsWithResume", () => {
+  it("should fail immediately when the sandbox is gone without reconnecting", async () => {
+    const gone = new Error("Status code 410 is not ok");
+    const { command, waitCalls, logsCalls } = makeCommand(
+      [{ upto: 0 }],
+      [],
+      [{ throwError: gone }]
+    );
+    let reconnects = 0;
+    let clock = 0;
+    await expect(
+      streamCommandLogsWithResume(
+        {
+          command,
+          onLog: () => {},
+          onReconnect: () => {
+            reconnects += 1;
+          },
+          deadlineMs: 1000,
+        },
+        { now: () => (clock += 500) }
+      )
+    ).rejects.toBe(gone);
+    expect(waitCalls()).toBe(1);
+    expect(logsCalls()).toBe(1);
+    expect(reconnects).toBe(0);
+  });
+
+  it("should not swallow a log consumer failure as a provider connection error", async () => {
+    const failure = new Error("fetch failed");
+    const { command, waitCalls } = makeCommand(
+      [{ upto: 1 }],
+      [{ stream: "stdout", data: "work" }],
+      [{ exitCode: 0 }]
+    );
+    await expect(
+      streamCommandLogsWithResume({
+        command,
+        onLog: () => {
+          throw failure;
+        },
+      })
+    ).rejects.toBe(failure);
+    expect(waitCalls()).toBe(0);
+  });
+
+  it("should not retry a consumer failure during the final log drain", async () => {
+    const failure = new Error("socket hang up");
+    const { command, waitCalls } = makeCommand(
+      [{ upto: 0 }, { upto: 1 }],
+      [{ stream: "stdout", data: "work" }],
+      [{ exitCode: 0 }]
+    );
+    await expect(
+      streamCommandLogsWithResume({
+        command,
+        onLog: () => {
+          throw failure;
+        },
+        deadlineMs: 0,
+      })
+    ).rejects.toBe(failure);
+    expect(waitCalls()).toBe(1);
+  });
   const allLines: Line[] = [
     { stream: "stdout", data: "a" },
     { stream: "stdout", data: "b" },
@@ -79,7 +171,7 @@ describe("streamCommandLogsWithResume", () => {
     // command finished, and the flush after wait picks up the rest.
     const { command } = makeCommand(
       [
-        { upto: 3, throwError: new Error("Status code 400 is not ok") },
+        { upto: 3, throwError: new Error("Status code 504 is not ok") },
         { upto: 5 },
       ],
       allLines,
@@ -87,16 +179,12 @@ describe("streamCommandLogsWithResume", () => {
     );
     const seen: Line[] = [];
 
-    const exitCode = await streamCommandLogsWithResume(
-      {
-        command,
-        onLog: (log) => {
-          seen.push(log);
-        },
-        reconnectDelayMs: 0,
+    const exitCode = await streamCommandLogsWithResume({
+      command,
+      onLog: (log) => {
+        seen.push(log);
       },
-      { delay: async () => {} }
-    );
+    });
 
     expect(exitCode).toBe(0);
     expect(seen).toEqual(allLines);
@@ -109,16 +197,12 @@ describe("streamCommandLogsWithResume", () => {
     ]);
     const seen: Line[] = [];
 
-    const exitCode = await streamCommandLogsWithResume(
-      {
-        command,
-        onLog: (log) => {
-          seen.push(log);
-        },
-        reconnectDelayMs: 0,
+    const exitCode = await streamCommandLogsWithResume({
+      command,
+      onLog: (log) => {
+        seen.push(log);
       },
-      { delay: async () => {} }
-    );
+    });
 
     expect(exitCode).toBe(0);
     expect(seen).toEqual(only);
@@ -135,34 +219,30 @@ describe("streamCommandLogsWithResume", () => {
     // (capped) twice, each retry flushing more snapshot output, then it exits.
     const { command, waitCalls } = makeCommand(
       [
-        { upto: 1, throwError: new Error("Status code 400 is not ok") },
+        { upto: 1, throwError: new Error("Status code 504 is not ok") },
         { upto: 2 },
         { upto: 3 },
         { upto: 3 },
       ],
       lines,
       [
-        { throwError: new Error("Status code 400 is not ok") },
-        { throwError: new Error("Status code 400 is not ok") },
+        { throwError: new Error("Status code 504 is not ok") },
+        { throwError: new Error("Status code 504 is not ok") },
         { exitCode: 0 },
       ]
     );
     const seen: Line[] = [];
     const reconnects: number[] = [];
 
-    const exitCode = await streamCommandLogsWithResume(
-      {
-        command,
-        onLog: (log) => {
-          seen.push(log);
-        },
-        onReconnect: ({ attempt }) => {
-          reconnects.push(attempt);
-        },
-        reconnectDelayMs: 0,
+    const exitCode = await streamCommandLogsWithResume({
+      command,
+      onLog: (log) => {
+        seen.push(log);
       },
-      { delay: async () => {} }
-    );
+      onReconnect: ({ attempt }) => {
+        reconnects.push(attempt);
+      },
+    });
 
     expect(exitCode).toBe(0);
     expect(seen).toEqual(lines);
@@ -178,10 +258,7 @@ describe("streamCommandLogsWithResume", () => {
     );
 
     await expect(
-      streamCommandLogsWithResume(
-        { command, onLog: () => {}, reconnectDelayMs: 0 },
-        { delay: async () => {} }
-      )
+      streamCommandLogsWithResume({ command, onLog: () => {} })
     ).rejects.toThrow("prompt was rejected");
   });
 
@@ -193,10 +270,7 @@ describe("streamCommandLogsWithResume", () => {
     );
 
     await expect(
-      streamCommandLogsWithResume(
-        { command, onLog: () => {}, reconnectDelayMs: 0 },
-        { delay: async () => {} }
-      )
+      streamCommandLogsWithResume({ command, onLog: () => {} })
     ).rejects.toThrow("prompt was rejected");
   });
 
@@ -204,7 +278,7 @@ describe("streamCommandLogsWithResume", () => {
     const { command } = makeCommand(
       [{ upto: 0 }],
       [],
-      [{ throwError: new Error("Status code 400 is not ok") }]
+      [{ throwError: new Error("Status code 504 is not ok") }]
     );
     let clock = 0;
 
@@ -214,16 +288,14 @@ describe("streamCommandLogsWithResume", () => {
           command,
           onLog: () => {},
           deadlineMs: 1_000,
-          reconnectDelayMs: 0,
         },
         {
-          delay: async () => {},
           now: () => {
             clock += 600;
             return clock;
           },
         }
       )
-    ).rejects.toThrow("Status code 400 is not ok");
+    ).rejects.toThrow("Status code 504 is not ok");
   });
 });
