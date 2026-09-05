@@ -42,8 +42,6 @@ export {
   validateSandboxCreateRequest,
   persistentSandboxesDisabledByEnv,
   resolvePersistentSandboxOptions,
-  isPersistentSandboxPermissionError,
-  createWithPersistentFallback,
   SandboxBootstrapError,
   withTimeout,
 } from "./client-validation";

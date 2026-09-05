@@ -12,7 +12,7 @@ const nodeRequire = createRequire(import.meta.url);
  * Integration-level test: createSandboxForRepo / createSandboxFromSnapshot
  * must pass persistent + a sensible snapshotExpiration to the
  * underlying Sandbox.create call. The ENABLE/DISABLE env flags and
- * the 403 permission fallback interact with this plumbing, so exercise
+ * provider permission failures interact with this plumbing, so exercise
  * them here too.
  */
 
@@ -125,7 +125,7 @@ test("createSandboxForRepo ships persistent:false when ENABLE is unset (plan def
   );
 });
 
-test("createSandboxForRepo retries with persistent:false on a 403 permission error", async () => {
+test("createSandboxForRepo rejects a 403 without creating an ephemeral replacement", async () => {
   await withEnv(
     {
       ENABLE_PERSISTENT_SANDBOXES: "true",
@@ -148,18 +148,25 @@ test("createSandboxForRepo retries with persistent:false on a 403 permission err
       };
       const { client, restore } = await loadWithSdkMock(mockCreate);
       try {
-        await client.createSandboxForRepo({
-          vercelToken: "t",
-          vercelProjectId: "p",
-          githubToken: "g",
-          repoFullName: "owner/repo",
-        });
+        await assert.rejects(
+          () =>
+            client.createSandboxForRepo({
+              vercelToken: "t",
+              vercelProjectId: "p",
+              githubToken: "g",
+              repoFullName: "owner/repo",
+            }),
+          /Persistent sandboxes feature is not enabled/
+        );
       } finally {
         restore();
       }
-      assert.equal(received.length, 2, "expected one retry after 403");
+      assert.equal(
+        received.length,
+        1,
+        "must not downgrade required persistence"
+      );
       assert.equal(received[0].persistent, true);
-      assert.equal(received[1].persistent, false);
     }
   );
 });

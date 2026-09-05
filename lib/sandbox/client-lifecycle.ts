@@ -16,7 +16,6 @@ import type { CreateSandboxOpts, CreateFromSnapshotOpts } from "./client-types";
 import {
   validateSandboxCreateRequest,
   resolvePersistentSandboxOptions,
-  createWithPersistentFallback,
   withTimeout,
   BOOTSTRAP_STEP_TIMEOUT_MS,
 } from "./client-validation";
@@ -44,35 +43,30 @@ export async function createSandboxForRepo(opts: CreateSandboxOpts) {
   validateSandboxCreateRequest({ envVars, ports });
 
   const persistenceOpts = resolvePersistentSandboxOptions(opts);
-  return createWithPersistentFallback(
-    (persistent) =>
-      withTimeout(
-        Sandbox.create({
-          token: opts.vercelToken,
-          projectId: opts.vercelProjectId,
-          ...(opts.vercelTeamId ? { teamId: opts.vercelTeamId } : {}),
-          ...(opts.name ? { name: opts.name } : {}),
-          runtime,
-          source: {
-            type: "git",
-            url: `https://github.com/${opts.repoFullName}.git`,
-            username: "x-access-token",
-            password: opts.githubToken,
-            revision: opts.branch || "main",
-            depth: 1,
-          },
-          env: envVars,
-          ports: Array.from(ports),
-          timeout,
-          ...persistenceOpts,
-          persistent,
-          ...(opts.networkPolicy ? { networkPolicy: opts.networkPolicy } : {}),
-          ...(opts.onResume ? { onResume: opts.onResume } : {}),
-        }),
-        BOOTSTRAP_STEP_TIMEOUT_MS,
-        "Sandbox.create"
-      ),
-    persistenceOpts.persistent
+  return withTimeout(
+    Sandbox.create({
+      token: opts.vercelToken,
+      projectId: opts.vercelProjectId,
+      ...(opts.vercelTeamId ? { teamId: opts.vercelTeamId } : {}),
+      ...(opts.name ? { name: opts.name } : {}),
+      runtime,
+      source: {
+        type: "git",
+        url: `https://github.com/${opts.repoFullName}.git`,
+        username: "x-access-token",
+        password: opts.githubToken,
+        revision: opts.branch || "main",
+        depth: 1,
+      },
+      env: envVars,
+      ports: Array.from(ports),
+      timeout,
+      ...persistenceOpts,
+      ...(opts.networkPolicy ? { networkPolicy: opts.networkPolicy } : {}),
+      ...(opts.onResume ? { onResume: opts.onResume } : {}),
+    }),
+    BOOTSTRAP_STEP_TIMEOUT_MS,
+    "Sandbox.create"
   );
 }
 
@@ -129,30 +123,25 @@ export async function createSandboxFromSnapshot(opts: CreateFromSnapshotOpts) {
   validateSandboxCreateRequest({ envVars, ports });
 
   const persistenceOpts = resolvePersistentSandboxOptions(opts);
-  return createWithPersistentFallback(
-    (persistent) =>
-      withTimeout(
-        Sandbox.create({
-          token: opts.vercelToken,
-          projectId: opts.vercelProjectId,
-          ...(opts.vercelTeamId ? { teamId: opts.vercelTeamId } : {}),
-          ...(opts.name ? { name: opts.name } : {}),
-          source: {
-            type: "snapshot",
-            snapshotId: opts.snapshotId,
-          },
-          env: envVars,
-          ports: Array.from(ports),
-          timeout,
-          ...persistenceOpts,
-          persistent,
-          ...(opts.networkPolicy ? { networkPolicy: opts.networkPolicy } : {}),
-          ...(opts.onResume ? { onResume: opts.onResume } : {}),
-        }),
-        BOOTSTRAP_STEP_TIMEOUT_MS,
-        "Sandbox.create (snapshot)"
-      ),
-    persistenceOpts.persistent
+  return withTimeout(
+    Sandbox.create({
+      token: opts.vercelToken,
+      projectId: opts.vercelProjectId,
+      ...(opts.vercelTeamId ? { teamId: opts.vercelTeamId } : {}),
+      ...(opts.name ? { name: opts.name } : {}),
+      source: {
+        type: "snapshot",
+        snapshotId: opts.snapshotId,
+      },
+      env: envVars,
+      ports: Array.from(ports),
+      timeout,
+      ...persistenceOpts,
+      ...(opts.networkPolicy ? { networkPolicy: opts.networkPolicy } : {}),
+      ...(opts.onResume ? { onResume: opts.onResume } : {}),
+    }),
+    BOOTSTRAP_STEP_TIMEOUT_MS,
+    "Sandbox.create (snapshot)"
   );
 }
 
