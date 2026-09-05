@@ -1,4 +1,5 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import type { SandboxCommandExecution } from "@/lib/agents/tools/sandbox";
 import { buildTools } from "@/lib/agents/tools";
 import { selectChatTools } from "@/lib/agents/chat-surface-tools";
 import type { Tool } from "ai";
@@ -38,6 +39,8 @@ export type RunChatAgentMessage = {
  * cannot drift between the HTTP route and the in-process runner.
  */
 export type ChatAgentContext = {
+  /** Trusted server transport override; never accepted from model input. */
+  sandboxExecution?: SandboxCommandExecution;
   userId: string;
   repoId?: string | null;
   repoOwner?: string | null;
@@ -116,6 +119,7 @@ export async function resolveChatModelId(
 
 function buildToolsInput(context: ChatAgentContext) {
   return {
+    sandboxExecution: context.sandboxExecution,
     sandboxId: context.sandboxId ?? undefined,
     userId: context.userId,
     repoId: context.repoId ?? undefined,

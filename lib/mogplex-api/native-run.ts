@@ -17,6 +17,7 @@ import {
 } from "@/lib/observability/usage";
 import { createSlackRunProgressReporter } from "@/lib/slack/run-progress-notify";
 import { createNativeRunControl } from "./native-run-control";
+import { createNativeSandboxExecution } from "./native-sandbox-execution";
 import { ensureNativeRunExecutionLease } from "./run-execution-lease";
 import {
   loadNativeRunContext,
@@ -32,6 +33,7 @@ const defaultDeps = {
   resolveModel: resolveChatModelId,
   createStream: createChatModelStream,
   createControl: createNativeRunControl,
+  createSandboxExecution: createNativeSandboxExecution,
   createProgress: createSlackRunProgressReporter,
   loadCall: loadOwnedAiCall,
   updateCall: updateAiCallIfActive,
@@ -143,7 +145,13 @@ export async function runNativeMogplexAgent(
       payload: { harness_id: "mogplex", model: resolvedModel },
     });
     stream = await deps.createStream({
-      context,
+      context: {
+        ...context,
+        sandboxExecution: deps.createSandboxExecution(
+          run.user_id,
+          context.teamId
+        ),
+      },
       resolvedModel,
       uiMessages,
       abortSignal: control.signal,

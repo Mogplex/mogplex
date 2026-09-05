@@ -34,6 +34,11 @@ function postSandboxExec(
   });
 }
 
+export type SandboxCommandExecution = {
+  execute: typeof postSandboxExec;
+  retryOnSandboxLoss?: boolean;
+};
+
 /** Shape an exec response, truncating streams so tool output stays bounded. */
 function formatSandboxExecResult(
   data: { exitCode?: number; stdout?: string; stderr?: string },
@@ -89,6 +94,7 @@ async function retryExecAfterSandboxLoss(
     headers: HeadersInit;
     command: string;
     cwd?: string;
+    execute: typeof postSandboxExec;
   }
 ): Promise<{
   sandbox: SandboxResolution | null;
@@ -119,7 +125,7 @@ async function retryExecAfterSandboxLoss(
     };
   }
 
-  const retry = await postSandboxExec(resolution.sandboxId, ctx.headers, {
+  const retry = await ctx.execute(resolution.sandboxId, ctx.headers, {
     command: ctx.command,
     cwd: ctx.cwd,
   });
@@ -142,7 +148,8 @@ export function createTerminalExec(
   sandboxId?: string,
   userId?: string,
   repoId?: string,
-  sandboxBinding?: SandboxRuntimeBinding
+  sandboxBinding?: SandboxRuntimeBinding,
+  execution?: SandboxCommandExecution
 ) {
   let selectedSandboxId = sandboxBinding?.sandboxId ?? sandboxId;
   // Track the selected/resolved sandbox across calls within this tool instance.
@@ -211,7 +218,8 @@ export function createTerminalExec(
         };
       }
 
-      const res = await postSandboxExec(
+      const execute = execution?.execute ?? postSandboxExec;
+      const res = await execute(
         cachedSandbox.sandboxId,
         requestHeaders.headers,
         {
@@ -227,13 +235,17 @@ export function createTerminalExec(
         );
       }
 
-      const retried = await retryExecAfterSandboxLoss(res, {
-        userId,
-        repoId,
-        headers: requestHeaders.headers,
-        command,
-        cwd,
-      });
+      const retried =
+        execution?.retryOnSandboxLoss === false
+          ? null
+          : await retryExecAfterSandboxLoss(res, {
+              userId,
+              repoId,
+              headers: requestHeaders.headers,
+              command,
+              cwd,
+              execute,
+            });
       if (retried) {
         cachedSandbox = retried.sandbox;
         selectedSandboxId = retried.sandbox?.sandboxId;

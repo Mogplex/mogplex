@@ -103,6 +103,10 @@ async function exercise(
         },
         createStream: async (input) => {
           assert.equal(
+            input.context.sandboxExecution?.retryOnSandboxLoss,
+            false
+          );
+          assert.equal(
             executionLeaseAcquired,
             true,
             "reserve VM lifetime before starting the agent"
