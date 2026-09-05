@@ -17,6 +17,7 @@ import {
 } from "@/lib/observability/usage";
 import { createSlackRunProgressReporter } from "@/lib/slack/run-progress-notify";
 import { createNativeRunControl } from "./native-run-control";
+import { ensureNativeRunExecutionLease } from "./run-execution-lease";
 import {
   loadNativeRunContext,
   buildNativeRunMessages,
@@ -25,6 +26,7 @@ import type { ExternalAgentRunRow } from "./runs-types";
 import type { SandboxRef } from "./run-execution-launch";
 
 const defaultDeps = {
+  ensureExecutionLease: ensureNativeRunExecutionLease,
   loadContext: loadNativeRunContext,
   buildMessages: buildNativeRunMessages,
   resolveModel: resolveChatModelId,
@@ -123,6 +125,7 @@ export async function runNativeMogplexAgent(
     control = await deps.createControl(run.user_id, call.id);
     control.signal.throwIfAborted();
     const context = await deps.loadContext(run, sandbox);
+    await deps.ensureExecutionLease(run, sandbox);
     const resolvedModel = await deps.resolveModel(run.user_id);
     const uiMessages = await deps.buildMessages(run);
     control.signal.throwIfAborted();

@@ -80,6 +80,9 @@ export function resolveConfiguredDevPort(value: unknown, autoValue: unknown) {
 }
 
 export function normalizeSandboxTimeoutMs(value: unknown) {
+  if (value == null || (typeof value === "string" && !value.trim())) {
+    return DEFAULT_SANDBOX_TIMEOUT_MS;
+  }
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_SANDBOX_TIMEOUT_MS;
   return clamp(
@@ -94,7 +97,6 @@ export function normalizeOptionalSandboxTimeoutMs(value: unknown) {
   if (typeof value === "string" && value.trim().length === 0) return null;
   return normalizeSandboxTimeoutMs(value);
 }
-
 export function resolveEffectiveSandboxTimeoutMs(input: {
   repoTimeoutMs?: unknown;
   workspaceTimeoutMs?: unknown;
