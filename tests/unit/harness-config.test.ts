@@ -88,11 +88,23 @@ test("Codex buildCommand uses exec mode and resume subcommand", () => {
 
   assert.deepEqual(initial, {
     cmd: "codex",
-    args: ["exec", "--json", "fix the bug"],
+    args: [
+      "-c",
+      'sandbox_mode="workspace-write"',
+      "-c",
+      'approval_policy="never"',
+      "exec",
+      "--json",
+      "fix the bug",
+    ],
   });
   assert.deepEqual(resumed, {
     cmd: "codex",
     args: [
+      "-c",
+      'sandbox_mode="workspace-write"',
+      "-c",
+      'approval_policy="never"',
       "exec",
       "resume",
       "--json",
@@ -130,7 +142,15 @@ test("Codex buildCommand ignores mcpConfigPath (handled separately)", () => {
 
   assert.deepEqual(command, {
     cmd: "codex",
-    args: ["exec", "--json", "do it"],
+    args: [
+      "-c",
+      'sandbox_mode="workspace-write"',
+      "-c",
+      'approval_policy="never"',
+      "exec",
+      "--json",
+      "do it",
+    ],
   });
 });
 

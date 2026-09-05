@@ -1,5 +1,6 @@
 import { buildClaudePermissionArgs } from "@/lib/harness/claude-permissions";
 import type { HarnessExecutionMode } from "@/lib/harness/claude-permissions";
+import { buildCodexPermissionArgs } from "@/lib/harness/codex-permissions";
 import type { FlowAgentHarness } from "@/lib/types";
 
 export type HarnessId = Exclude<FlowAgentHarness, "mogplex">;
@@ -77,9 +78,12 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
     envVar: "CODEX_API_KEY",
     buildCommand: (prompt, opts) => ({
       cmd: "codex",
-      args: opts?.resumeSessionId?.trim()
-        ? ["exec", "resume", "--json", opts.resumeSessionId.trim(), prompt]
-        : ["exec", "--json", prompt],
+      args: [
+        ...buildCodexPermissionArgs(opts?.mode),
+        ...(opts?.resumeSessionId?.trim()
+          ? ["exec", "resume", "--json", opts.resumeSessionId.trim(), prompt]
+          : ["exec", "--json", prompt]),
+      ],
     }),
     timeoutMs: 5 * 60 * 1000,
   },
