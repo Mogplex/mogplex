@@ -16,6 +16,29 @@ const event = (
   createdAt: "",
 });
 
+it("restores worker commands and output after reconnecting", () => {
+  const messages = projectRunTranscript(
+    "r",
+    "Fix",
+    [
+      event("1", "tool_started", "", {
+        toolCallId: "t",
+        input: { command: "pnpm test" },
+      }),
+      event("2", "tool_finished", "", {
+        toolCallId: "t",
+        state: "done",
+        output: { output: "3 tests passed", exit_code: 0 },
+      }),
+    ],
+    "success"
+  );
+  expect(messages[1].parts[0]).toMatchObject({
+    input: { command: "pnpm test" },
+    output: { output: "3 tests passed", exit_code: 0 },
+  });
+});
+
 it("reconstructs ordered chat and tools without duplicate events or final text", () => {
   const start = event("2", "tool_started", "bash started", { toolCallId: "t" });
   const events = [

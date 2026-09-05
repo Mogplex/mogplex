@@ -178,4 +178,21 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
     OPENAI_API_KEY: "gateway-key",
     CODEX_API_KEY: "gateway-key",
   });
+  assert.ok(detachedCall.args?.includes('model_provider="mogplex_gateway"'));
+  assert.ok(
+    detachedCall.args?.includes(
+      'model_providers.mogplex_gateway.base_url="https://ai-gateway.vercel.sh/codex/v1"'
+    )
+  );
+  assert.ok(
+    detachedCall.args?.includes(
+      'model_providers.mogplex_gateway.env_key="CODEX_API_KEY"'
+    )
+  );
+  assert.ok(
+    detachedCall.args?.includes(
+      'model_providers.mogplex_gateway.wire_api="responses"'
+    )
+  );
+  assert.equal(detachedCall.args?.includes("gateway-key"), false);
 });

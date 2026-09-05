@@ -13,6 +13,7 @@ import {
 import { McpStatusButton } from "@/components/chat/mcp-status-button";
 import { ProviderIcon } from "@/components/provider-icon";
 import { useModels } from "@/hooks/use-models";
+import type { ControlContextUsage } from "@/lib/control/context-usage";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { MissionPermissions } from "@/lib/control/types";
 import {
@@ -42,8 +43,8 @@ type Props = {
   onStop: () => void;
   initialModelId: string | null;
   onModelSelect: (modelId: string) => Promise<boolean>;
-  /** Total tokens consumed by the active session (drives the context ring). */
-  usageTokens?: number;
+  /** Provider measurement for the latest model step, not cumulative billing. */
+  contextUsage?: ControlContextUsage | null;
 };
 
 const CHIP_CLASS =
@@ -57,31 +58,26 @@ function modelProvider(modelId: string) {
   return modelId.split("/")[0] ?? modelId;
 }
 
-function compactTokens(tokens: number) {
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
-  return String(tokens);
-}
-
 /** Circular context gauge: percent of the model's context window used. */
 function ContextRing({
   usageTokens,
   contextLimit,
 }: {
-  usageTokens: number;
+  usageTokens: number | null;
   contextLimit: number | undefined;
 }) {
-  const percent = contextLimit
+  const percent = contextLimit && usageTokens !== null
     ? Math.min(100, Math.round((usageTokens / contextLimit) * 100))
     : null;
   const circumference = 2 * Math.PI * 15.5;
   const offset =
-    percent === null ? 0 : circumference * (1 - Math.max(percent, 2) / 100);
-  const title = contextLimit
-    ? `Context: ${percent}% used (${usageTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens)`
-    : `Tokens used this session: ${usageTokens.toLocaleString()} (context window unknown)`;
+    percent === null ? circumference : circumference * (1 - Math.max(percent, 2) / 100);
+  const title = contextLimit && usageTokens !== null
+    ? `Last model step: ${percent}% (${usageTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens). Session spending is separate.`
+    : "Context usage is not measured yet for this model. Session token totals are not context usage.";
 
   return (
-    <div className="relative size-9 shrink-0" title={title}>
+    <div className="relative size-9 shrink-0" title={title} aria-label="Context usage">
       <svg viewBox="0 0 36 36" className="size-9 -rotate-90">
         <circle
           cx="18"
@@ -104,7 +100,7 @@ function ContextRing({
         />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-ink-300">
-        {percent !== null ? percent : compactTokens(usageTokens)}
+        {percent !== null ? percent : "?"}
       </span>
     </div>
   );
@@ -231,7 +227,7 @@ export function Composer({
   onStop,
   initialModelId,
   onModelSelect,
-  usageTokens = 0,
+  contextUsage = null,
 }: Props) {
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
@@ -451,7 +447,7 @@ export function Composer({
           </span>
           <div className="ml-auto flex items-center gap-3">
             <ContextRing
-              usageTokens={usageTokens}
+              usageTokens={contextUsage?.model === modelId ? contextUsage.inputTokens + contextUsage.outputTokens : null}
               contextLimit={modelId ? contextLimits[modelId] : undefined}
             />
             {pending ? (

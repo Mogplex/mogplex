@@ -9,6 +9,7 @@ import {
   sanitizeAgentUserFacingText,
 } from "@/lib/agents/user-facing-output";
 import type { TimelineEvent } from "@/lib/control/types";
+import { controlToolOutcome } from "@/lib/control/tool-outcome";
 import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from "ai";
 
 /**
@@ -223,7 +224,7 @@ export function buildCombinedTimeline(
           const toolInput = "input" in part ? part.input : undefined;
           const structuredError =
             typeof output?.error === "string" ? output.error : null;
-          if (output?.status === "error" || structuredError) {
+          if (controlToolOutcome(state, output) === "failed") {
             result.push({
               kind: "fail",
               label,
@@ -244,6 +245,7 @@ export function buildCombinedTimeline(
                   label,
                   time: "now",
                   body: progressBody,
+                  state: controlToolOutcome(state, output),
                 }
               : {
                   kind: "tool",

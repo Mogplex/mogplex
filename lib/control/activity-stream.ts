@@ -1,6 +1,7 @@
 import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
 import type { UIMessage } from "ai";
 import { redactSecretsInText } from "@/lib/ai-telemetry";
+import { controlToolOutcome } from "./tool-outcome";
 
 /**
  * CLI-style activity entries derived from the control chat's UI messages.
@@ -103,7 +104,7 @@ export function buildActivityEntries(messages: UIMessage[]): ActivityEntry[] {
             id,
             name,
             input: summarize("input" in part ? part.input : undefined),
-            state: "done",
+            state: controlToolOutcome(state, part.output),
             output: summarize("output" in part ? part.output : undefined),
           });
           continue;
@@ -139,13 +140,8 @@ export type TerminalActivityEntry = {
   sandboxId: string | null;
   state: "running" | "done" | "failed";
   lines: string[];
+  workerBranch?: string;
 };
-
-function terminalState(rawState: string): TerminalActivityEntry["state"] {
-  if (rawState === "output-error") return "failed";
-  if (rawState === "output-available") return "done";
-  return "running";
-}
 
 function terminalText(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -166,7 +162,7 @@ function boundedTerminalLines(values: unknown[]): string[] {
 }
 
 function isTerminalExecutionTool(name: string) {
-  return /(?:^|_)(?:bash|terminal_exec|run_command)(?:$|_)/.test(name);
+  return /(?:^|_)(?:bash|terminal_exec|run_command|command)(?:$|_)/i.test(name);
 }
 
 function isSandboxLaunchTool(name: string) {
@@ -191,7 +187,7 @@ function terminalEntryFromPart(
       ? (part.output as Record<string, unknown>)
       : {};
   const rawState = "state" in part ? String(part.state) : "";
-  const state = terminalState(rawState);
+  const state = controlToolOutcome(rawState, output);
   const command = terminalText(input.command) ?? null;
   const sandboxId =
     terminalText(output.sandboxId) ?? terminalText(input.sandboxId) ?? null;
@@ -207,6 +203,10 @@ function terminalEntryFromPart(
     cleanupRecoveryLine,
     output.stdout,
     output.stderr,
+    output.output,
+    "output" in part && typeof part.output === "string"
+      ? part.output
+      : undefined,
     output.error,
     "errorText" in part ? part.errorText : undefined,
   ]);
@@ -239,7 +239,13 @@ export function buildTerminalActivityEntries(
     for (const [index, part] of message.parts.entries()) {
       if (!isToolOrDynamicToolUIPart(part)) continue;
       const entry = terminalEntryFromPart(part, `${message.id}-${index}`);
-      if (entry) entries.push(entry);
+      if (entry) {
+        const metadata = message.metadata as
+          | { workerBranch?: unknown }
+          | undefined;
+        const branch = terminalText(metadata?.workerBranch);
+        entries.push(branch ? { ...entry, workerBranch: branch } : entry);
+      }
     }
   }
 
@@ -274,12 +280,10 @@ export function collectFileMutations(messages: UIMessage[]): FileMutation[] {
       const path =
         input.path ?? input.file_path ?? input.filePath ?? input.filename;
       const rawState = "state" in part ? String(part.state) : "";
-      const state =
-        rawState === "output-available"
-          ? "done"
-          : rawState === "output-error"
-            ? "failed"
-            : "running";
+      const state = controlToolOutcome(
+        rawState,
+        "output" in part ? part.output : undefined
+      );
 
       mutations.push({
         id: `${msg.id}-${index}`,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { loadControlWorkers } from "@/lib/control/workers-data";
 import type { Tool } from "ai";
 import {
   archiveWorktree,
@@ -93,21 +94,49 @@ export function createSpawnWorktreeToolWithDeps(
   });
 }
 
-export function createListWorktreesTool(ctx: OrchestratorToolContext): Tool {
+export function createListWorktreesTool(
+  ctx: OrchestratorToolContext,
+  overrides: Partial<{
+    listWorktrees: typeof listWorktrees;
+    loadWorkers: typeof loadControlWorkers;
+  }> = {}
+): Tool {
+  const deps = { listWorktrees, loadWorkers: loadControlWorkers, ...overrides };
   return defineTool({
     description:
-      "List real Git worktrees for the active mission. Sandbox records are not included.",
+      "List real Git worktrees and the latest worker status for the active mission. Worktree status active means the checkout exists, not that its worker is running. Inspect failed worker output before retrying. Sandbox records are not included.",
     inputSchema: listWorktreesSchema,
     execute: async ({ includePruned }: z.infer<typeof listWorktreesSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
       try {
-        const worktrees = await listWorktrees({
+        const worktrees = await deps.listWorktrees({
           userId: ctx.userId,
           runId: ctx.orchestrationRunId,
           repoId: ctx.repoId,
           includePruned,
         });
-        return { status: "ok" as const, worktrees };
+        const workers = ctx.missionId
+          ? await deps.loadWorkers(ctx.userId, ctx.missionId)
+          : null;
+        return {
+          status: "ok" as const,
+          worktrees: worktrees.map((worktree) => {
+            const worker = workers?.find(
+              (candidate) => candidate.worktreeId === worktree.id
+            );
+            return {
+              ...worktree,
+              worker: worker
+                ? {
+                    id: worker.id,
+                    status: worker.status,
+                    error: worker.error,
+                    updatedAt: worker.updatedAt,
+                  }
+                : null,
+            };
+          }),
+        };
       } catch (error) {
         return toolError(error);
       }

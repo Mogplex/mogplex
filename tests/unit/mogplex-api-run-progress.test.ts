@@ -78,13 +78,24 @@ test("external harness progress persists assistant deltas and tool transitions",
         type: "tool_started",
         toolName: "Command",
         message: "Command started",
-        payload: { kind: "tool", toolCallId: "command-1", state: "running" },
+        payload: {
+          kind: "tool",
+          toolCallId: "command-1",
+          state: "running",
+          input: { command: "pnpm test" },
+        },
       },
       {
         type: "tool_finished",
         toolName: "Command",
         message: "Command finished",
-        payload: { kind: "tool", toolCallId: "command-1", state: "done" },
+        payload: {
+          kind: "tool",
+          toolCallId: "command-1",
+          state: "done",
+          input: { command: "pnpm test" },
+          output: { output: "ok", exit_code: 0 },
+        },
       },
     ]
   );
