@@ -19,16 +19,18 @@ export type SessionGroup<T extends SessionGroupInput> = {
 export const GENERAL_GROUP_NAME = "General";
 
 const PROJECT_COLORS = [
-  "bg-accent-blue",
-  "bg-accent-green",
-  "bg-accent-amber",
-  "bg-accent-cyan",
-  "bg-accent-fuchsia",
-  "bg-primary",
+  "bg-project-blue",
+  "bg-project-amber",
+  "bg-project-green",
+  "bg-project-red",
+  "bg-project-teal",
+  "bg-project-purple",
+  "bg-project-pink",
 ] as const;
 
-/** Deterministic accent color for a project name (Conductor-style icon dot). */
+/** Stable categorical color, independent of sorting and runtime status. */
 export function projectColorClass(name: string): string {
+  if (name === GENERAL_GROUP_NAME) return "bg-project-neutral";
   let hash = 0;
   for (const char of name) {
     hash = (hash * 31 + char.codePointAt(0)!) % 997;

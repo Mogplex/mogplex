@@ -52,7 +52,7 @@ test("groupSessionsByProject treats blank projects as General", () => {
   assert.equal(groups[0].project, null);
 });
 
-test("projectColorClass is deterministic and uses the accent palette", () => {
+test("projectColorClass is deterministic and uses the project palette", () => {
   assert.equal(projectColorClass("t3chat"), projectColorClass("t3chat"));
-  assert.match(projectColorClass("t3chat"), /^bg-(accent-|primary)/);
+  assert.match(projectColorClass("t3chat"), /^bg-project-/);
 });
