@@ -51,15 +51,21 @@ export function useControlWorkers(
   const workers = data?.workers ?? EMPTY_WORKERS;
   const messages = useMemo(
     () =>
-      workers.flatMap((worker) =>
-        projectRunTranscript(worker.id, "", worker.events, worker.status)
-          .filter((message) => message.role === "assistant")
-          .map((message) => ({
-            ...message,
-            metadata: { workerBranch: worker.branch },
-          }))
-      ),
-    [workers]
+      workers
+        .filter(
+          (worker) =>
+            !chatPending ||
+            ["pending", "streaming", "awaiting_input"].includes(worker.status)
+        )
+        .flatMap((worker) =>
+          projectRunTranscript(worker.id, "", worker.events, worker.status)
+            .filter((message) => message.role === "assistant")
+            .map((message) => ({
+              ...message,
+              metadata: { workerBranch: worker.branch },
+            }))
+        ),
+    [workers, chatPending]
   );
   return {
     workers,

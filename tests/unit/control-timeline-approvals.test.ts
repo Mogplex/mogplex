@@ -133,7 +133,8 @@ test("buildCombinedTimeline still maps non-approval tool parts correctly", async
   const event = timeline[0];
   assert.equal(event.kind, "tool");
   assert.equal(event.label, "TOOL");
-  assert.ok(event.body.includes("read_file"));
+  assert.equal(event.body, "Reading file");
+  assert.equal(event.kind === "tool" && event.state, "done");
 });
 
 test("buildCombinedTimeline maps output-error to fail event", async () => {

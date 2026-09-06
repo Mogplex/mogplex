@@ -19,6 +19,8 @@ import { ControlTopBar } from "./control-top-bar";
 import { WorkspaceTabs, type ControlView } from "./workspace-tabs";
 import { SandboxesPanel } from "./sandboxes-panel";
 import { ChangedFilesCard } from "./changed-files-card";
+import { TurnProgress } from "./turn-progress";
+import { currentTurnMessages } from "@/lib/control/turn-progress";
 import { Timeline } from "./timeline";
 import { Composer } from "./composer";
 import { ArtifactSidePanel } from "./artifact-side-panel";
@@ -46,10 +48,7 @@ export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
 };
-function ControlShellInner({
-  initialData,
-  initialMissionId,
-}: ControlShellProps) {
+function ControlShellInner({ initialData, initialMissionId }: ControlShellProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { scope } = useParams<{ scope: string }>();
@@ -115,7 +114,7 @@ function ControlShellInner({
   const chatPending = status === "streaming" || status === "submitted";
   const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
   const controlWorkers = useControlWorkers(sessionId, chatPending);
-  const terminalMessages = useMemo(() => [...messages, ...controlWorkers.messages], [messages, controlWorkers.messages]);
+  const terminalMessages = useMemo(() => [...currentTurnMessages(messages), ...controlWorkers.messages], [messages, controlWorkers.messages]);
   const { loading: sandboxesLoading } = useSandboxSync();
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
   const allSandboxes = useMemo(
@@ -457,7 +456,7 @@ function ControlShellInner({
                   trailing={
                     <>
                       {!chatPending && hasChanges && <ChangedFilesCard messages={messages} />}
-                      <MissionExecutionStatus sessionId={sessionId} workers={controlWorkers.workers} error={controlWorkers.error} loading={controlWorkers.loading} onRefresh={controlWorkers.refresh} />
+                      <MissionExecutionStatus compact={chatPending} sessionId={sessionId} workers={controlWorkers.workers} error={controlWorkers.error} loading={controlWorkers.loading} onRefresh={controlWorkers.refresh} />
                     </>
                   }
                 />
@@ -468,6 +467,7 @@ function ControlShellInner({
                     </div>
                   </div>
                 )}
+                <TurnProgress messages={messages} status={status} />
                 <TerminalActivity messages={terminalMessages} />
                 <Composer
                   key={`composer-${activeChatId}`}

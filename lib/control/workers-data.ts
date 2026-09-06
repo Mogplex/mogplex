@@ -24,7 +24,9 @@ export async function loadControlWorkers(
   const { data, error } = await client.rpc("control_mission_workers", {
     p_user_id: userId,
     p_session_id: sessionId,
-    p_include_events: options.includeEvents !== false,
+    // Failure classification needs the recorded provider error even when the
+    // caller only wants a summary. The RPC bounds activity to 100 events.
+    p_include_events: true,
   });
   if (error) throw new Error("Could not load mission workers");
   if (data === null) return null;
@@ -37,7 +39,7 @@ export async function loadControlWorkers(
       status: row.status,
       error: workerFailureMessage(row.status, row.error, events),
       updatedAt: row.updated_at,
-      events,
+      events: options.includeEvents === false ? [] : events,
     };
   });
 }

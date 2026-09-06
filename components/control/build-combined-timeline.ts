@@ -9,6 +9,10 @@ import {
   sanitizeAgentUserFacingText,
 } from "@/lib/agents/user-facing-output";
 import type { TimelineEvent } from "@/lib/control/types";
+import {
+  toolActivityLabel,
+  toolActivityDetail,
+} from "@/lib/control/turn-progress";
 import { controlToolOutcome } from "@/lib/control/tool-outcome";
 import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from "ai";
 
@@ -251,8 +255,11 @@ export function buildCombinedTimeline(
                   kind: "tool",
                   label: "TOOL",
                   time: "now",
-                  body: `Using ${toolName}`,
-                  details: toolDetails(toolName, toolInput),
+                  body: toolActivityLabel(toolName),
+                  state: controlToolOutcome(state, output),
+                  details:
+                    toolActivityDetail(toolInput) ??
+                    toolDetails(toolName, toolInput),
                 }
           );
 

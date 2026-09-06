@@ -178,6 +178,7 @@ export type DelegateEvent = BaseTimelineEvent & {
 
 export type ToolEvent = BaseTimelineEvent & {
   kind: "tool";
+  state?: "running" | "done" | "failed";
   details?: string;
 };
 

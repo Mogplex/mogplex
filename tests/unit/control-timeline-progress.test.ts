@@ -233,7 +233,7 @@ test("assistant text preserves only requested diagnostics while redacting secret
   assert.match(serialized, /\[redacted\]/);
 });
 
-test("tool details expose argument names without raw values", () => {
+test("tool activity identifies the file without exposing its contents", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([
       {
@@ -253,9 +253,10 @@ test("tool details expose argument names without raw values", () => {
       kind: "tool",
       label: "TOOL",
       time: "now",
-      body: "Using write_file",
-      details: "write_file(path, content)",
+      body: "Editing file",
+      state: "running",
+      details: "private/path.ts",
     },
   ]);
-  assert.doesNotMatch(JSON.stringify(events), /private/);
+  assert.doesNotMatch(JSON.stringify(events), /private file contents/);
 });
