@@ -6,7 +6,7 @@ import {
   ArrowUp,
   Attachment,
   NavArrowDown,
-  PauseSolid,
+  Square,
   ShieldCheck,
   ShieldXmark,
 } from "iconoir-react";
@@ -455,9 +455,11 @@ export function Composer({
                 type="button"
                 aria-label="Stop"
                 onClick={onStop}
-                className="flex size-9 items-center justify-center rounded-full bg-accent-red text-primary-foreground transition-colors hover:bg-accent-red/90"
+                title="Stop the current response"
+                className="flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-muted px-3 text-sm text-foreground hover:bg-accent"
               >
-                <PauseSolid className="size-4" />
+                <Square className="size-3 fill-current" />
+                Stop
               </button>
             ) : (
               <button

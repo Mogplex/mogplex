@@ -225,17 +225,16 @@ test("control composers expose permissions, model, and MCP controls without a sp
     .fill("Ship the new onboarding flow");
   await page.getByRole("button", { name: "Start mission" }).click();
 
-  // The mission's first message behaves like chat: the agent's streamed reply
-  // and tool call render in the timeline, with no fake dispatch card and no
-  // budget line. (Scoped to the conversation log: the rail's terminal tab
-  // mirrors the same activity as raw text.)
+  // Streamed replies and tool status render in the conversation.
   const conversation = page.getByRole("log", { name: "Conversation" });
   await expect(
     conversation.getByText("I can plan, delegate, and ship.")
   ).toBeVisible();
-  await expect(conversation.getByText("Using list_worktrees")).toBeVisible();
-  await conversation.getByText("Tool details").click();
-  await expect(conversation.getByText(/list_worktrees\(/)).toBeVisible();
+  await expect(conversation.getByText("Checking workers")).toBeVisible();
+  await conversation.locator("summary").click();
+  await expect(
+    conversation.locator("pre").filter({ hasText: /list_worktrees\(/ })
+  ).toBeVisible();
   await expect(page.getByText(/Mogplex is planning/)).toHaveCount(0);
   await expect(page.getByText(/Budget: \$/)).toHaveCount(0);
   expect(chatRequests[0]).toMatchObject({

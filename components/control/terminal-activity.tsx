@@ -91,7 +91,7 @@ function TerminalRow({ entry }: { entry: TerminalActivityEntry }) {
 /** Read-only execution feedback, attached to the composer instead of a new tab. */
 export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
   const entries = useMemo(
-    () => buildTerminalActivityEntries(messages),
+    () => buildTerminalActivityEntries(messages).filter((entry) => entry.state !== "running" || entry.lines.length > 0),
     [messages]
   );
   if (entries.length === 0) return null;
@@ -122,7 +122,7 @@ export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
             READ ONLY
           </span>
         </div>
-        <div className="divide-ink-900 max-h-64 overflow-y-auto divide-y px-4 py-3">
+        <div className="divide-ink-900 max-h-36 overflow-y-auto sm:max-h-48 divide-y px-4 py-3">
           {entries.length > 3 && <details className="text-ink-400 mb-3 text-xs">
             <summary className="cursor-pointer py-1">Show {entries.length - 3} earlier commands</summary>
             <div className="mt-2 max-h-64 overflow-auto">

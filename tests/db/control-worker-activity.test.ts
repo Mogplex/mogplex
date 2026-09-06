@@ -92,7 +92,7 @@ it.each(["neon", "supabase"])(
       await db.query(
         `insert into ai_call_events (user_id,ai_call_id,event_type,tool_name,message,payload,created_at)
       values ($1,$2,'tool_started','Command','Start','{"toolCallId":"cmd","input":{"command":"pnpm test"}}','2026-09-05T01:00:00Z'),
-      ($1,$2,'tool_finished','Command','Failed','{"toolCallId":"cmd","state":"error","output":"3 tests failed"}','2026-09-05T01:00:01Z'),
+      ($1,$2,'tool_finished','Command','401 Unauthorized','{"toolCallId":"cmd","state":"error","output":"3 tests failed"}','2026-09-05T01:00:01Z'),
       ($3,$2,'message',null,'other user private output','{}','2026-09-05T01:00:02Z')`,
         [owner, call, other]
       );
@@ -135,7 +135,14 @@ it.each(["neon", "supabase"])(
         await loadControlWorkers(owner, session, boundary, {
           includeEvents: false,
         })
-      ).toMatchObject([{ status: "failed", events: [] }]);
+      ).toMatchObject([
+        {
+          status: "failed",
+          error:
+            "Worker could not authenticate. Check its AI connection before retrying.",
+          events: [],
+        },
+      ]);
       expect(queryCount - beforeStatusOnly).toBe(1);
       expect(
         (

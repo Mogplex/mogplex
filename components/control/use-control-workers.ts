@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 import type { ControlWorker } from "@/lib/control/workers";
+import {
+  updateWorkerTurnHistory,
+  workersForTurn,
+  type WorkerTurnHistory,
+} from "@/lib/control/worker-turn-history";
 import { projectRunTranscript } from "@/lib/run-workspace/transcript";
 
 const SPECS = [
@@ -26,7 +31,8 @@ async function fetchWorkers(
 
 export function useControlWorkers(
   sessionId: string | null,
-  chatPending: boolean
+  chatPending: boolean,
+  turnId: string | null
 ) {
   const [connection, setConnection] = useState<
     "connecting" | "connected" | "disconnected"
@@ -49,9 +55,21 @@ export function useControlWorkers(
     if (!chatPending) void mutate();
   }, [chatPending, mutate]);
   const workers = data?.workers ?? EMPTY_WORKERS;
+  const [turnHistory, setTurnHistory] = useState<
+    Record<string, WorkerTurnHistory>
+  >({});
+  let history = sessionId ? turnHistory[sessionId] : undefined;
+  if (chatPending && sessionId && turnId) {
+    const next = updateWorkerTurnHistory(history, turnId, workers);
+    if (next !== history) setTurnHistory({ ...turnHistory, [sessionId]: next });
+    history = next;
+  }
   const messages = useMemo(
     () =>
-      workers.flatMap((worker) =>
+      (chatPending && history
+        ? workersForTurn(workers, history)
+        : workers
+      ).flatMap((worker) =>
         projectRunTranscript(worker.id, "", worker.events, worker.status)
           .filter((message) => message.role === "assistant")
           .map((message) => ({
@@ -59,7 +77,7 @@ export function useControlWorkers(
             metadata: { workerBranch: worker.branch },
           }))
       ),
-    [workers]
+    [workers, chatPending, history]
   );
   return {
     workers,

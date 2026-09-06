@@ -29,6 +29,7 @@ export type ToolApprovalResponse = {
 
 type Props = {
   event: TimelineEvent
+  active?: boolean
   eventIndex: number
   getWorktree: (id: string) => Worktree | undefined
   onApprove: (eventIndex: number) => void
@@ -187,24 +188,42 @@ function ToolApprovalCard({
   )
 }
 
-export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onToolApprovalResponse }: Props) {
+export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onToolApprovalResponse, active = false }: Props) {
   const style = KIND_STYLES[event.kind] || KIND_STYLES.tool
-  const inProgress = event.kind === "progress" && event.state === "running"
+  const inProgress = active && event.kind === "progress" && event.state === "running"
   const Icon = inProgress ? RefreshDouble : style.icon
   const isSubdued = event.kind === "tool" || event.kind === "delegate"
   const isUser = event.kind === "user"
 
+  if (event.kind === "tool" || event.kind === "progress") {
+    const running = active && event.state === "running"
+    const ActivityIcon = running ? RefreshDouble : event.state === "running" ? XmarkCircle : Check
+    return <div className="flex min-w-0 items-start gap-3 py-1 text-sm" data-testid="tool-activity">
+      <ActivityIcon aria-hidden="true" className={`mt-0.5 size-4 shrink-0 ${running ? "text-accent-blue motion-safe:animate-spin" : "text-muted-foreground"}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-3">
+          <span className="text-foreground">{event.body}</span>
+          <span className="text-muted-foreground text-xs">{running ? "Running" : event.state === "done" ? "Complete" : event.state === "running" ? "Interrupted" : ""}</span>
+        </div>
+        {event.kind === "tool" && event.details && <details className="mt-1 text-muted-foreground text-xs">
+          <summary className="cursor-pointer truncate hover:text-foreground">{event.details}</summary>
+          <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs">{event.details}</pre>
+        </details>}
+      </div>
+    </div>
+  }
+
   return (
-    <div className={`${isUser ? "" : "rounded-xl border border-ink-800 bg-ink-900"} ${isSubdued ? "opacity-80" : ""}`}>
+    <div className={`${isUser || event.kind === "assistant" ? "" : "rounded-md border border-border bg-card"} ${isSubdued ? "opacity-80" : ""}`}>
       {/* Header */}
-      <div className={`flex items-center gap-2 ${isUser ? "px-0 pb-1" : "border-b border-ink-800 px-4 py-3"}`}>
+      <div className={`flex items-center gap-2 ${isUser || event.kind === "assistant" ? "px-0 pb-1" : "border-b border-ink-800 px-4 py-3"}`}>
         <div className={`flex size-7 items-center justify-center rounded-full ${isUser ? "bg-ink-800" : style.bg}`}>
           <Icon className={`size-3.5 ${style.fg} ${inProgress ? "motion-safe:animate-spin" : ""}`} strokeWidth={1.8} />
         </div>
         <span className={`text-[13px] font-semibold ${isUser ? "text-ink-100" : style.labelColor}`}>
           {event.label}
         </span>
-        <span className="text-xs text-ink-400">{event.time}</span>
+        {event.time !== "now" && <span className="text-xs text-ink-400">{event.time}</span>}
       </div>
 
       {/* Body */}
@@ -214,17 +233,6 @@ export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onTool
             {event.body}
           </MessageResponse>
         )}
-
-        {event.kind === "tool" && event.details ? (
-          <details className="mt-2 text-[11px] text-ink-400">
-            <summary className="hover:text-ink-200 cursor-pointer">
-              Tool details
-            </summary>
-            <pre className="border-ink-800 bg-ink-950 mt-2 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-5">
-              {event.details}
-            </pre>
-          </details>
-        ) : null}
 
         {/* Plan steps */}
         {event.kind === "plan" && (

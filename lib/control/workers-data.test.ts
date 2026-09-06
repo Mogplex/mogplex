@@ -95,15 +95,22 @@ it("loads an owned mission snapshot with one database request and sanitized acti
   expect(JSON.stringify(workers)).not.toContain("private-fixture");
 });
 
-it("keeps status-only reads free of activity queries and payloads", async () => {
+it("preserves the authentication diagnosis in status-only reads without returning activity", async () => {
   const { client, requests } = fixture();
   expect(
     await loadControlWorkers("owner", "session", client, {
       includeEvents: false,
     })
-  ).toMatchObject([{ status: "failed", events: [] }]);
+  ).toMatchObject([
+    {
+      status: "failed",
+      error:
+        "Worker could not authenticate. Check its AI connection before retrying.",
+      events: [],
+    },
+  ]);
   expect(requests).toHaveLength(1);
-  expect(requests[0].body.p_include_events).toBe(false);
+  expect(requests[0].body.p_include_events).toBe(true);
 });
 
 it("does not turn inaccessible sessions or empty missions into fabricated running workers", async () => {
