@@ -23,7 +23,8 @@ test("Neon invitations use the current profile and preserve email-mismatch confi
     ]);
     await pool.query(
       "insert into teams (id, name, slug, owner_user_id) values ($1, 'Neon test team', $2, $3)",
-      [teamId, `neon-test-${teamId}`, profileId]
+      // Keep the unique fixture slug within the schema's 39-character limit.
+      [teamId, `neon-${teamId.replaceAll("-", "")}`, profileId]
     );
     await pool.query(
       "insert into team_invites (id, token, team_id, email, role) values ($1, $2, $3, $4, 'viewer')",
