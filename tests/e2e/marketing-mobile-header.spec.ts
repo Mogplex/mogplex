@@ -87,12 +87,13 @@ test.describe("marketing header on mobile", () => {
     expect(Math.abs(submitBox.x - inputBox.x)).toBeLessThanOrEqual(1);
   });
 
-  test("leaves the waitlist submit button flush with its form", async ({
+  test("legacy login lands on the current mobile sign-in form", async ({
     page,
   }) => {
     await page.goto("/login/beta");
-    const input = page.getByTestId("waitlist-code-input");
-    const submit = page.getByTestId("login-github-button");
+    await expect(page).toHaveURL(/\/login\?next=%2F$/);
+    const input = page.getByTestId("signin-email");
+    const submit = page.getByTestId("signin-submit");
     await expect(submit).toBeVisible();
 
     const [inputBox, submitBox] = await Promise.all([

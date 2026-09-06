@@ -31,32 +31,32 @@ RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Client-side (inlined at build time). The placeholder defaults mirror
-# .github/workflows/ci.yml so the image builds without args, but an image
-# built with placeholders CANNOT talk to a real backend — pass your real
-# values as --build-arg (docker-compose.yml requires them from .env).
+# Client-side settings are inlined at build time. Neon needs no Supabase
+# credentials; legacy deployments must explicitly select their backend.
 ARG NEXT_PUBLIC_APP_URL
-ARG NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=build-placeholder-anon-key
+ARG NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 # Optional client-side integrations.
 ARG NEXT_PUBLIC_C15T_URL
 ARG NEXT_PUBLIC_SENTRY_DSN
 ARG NEXT_PUBLIC_VERCEL_APP_CLIENT_ID
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} \
+    MOGPLEX_DATA_BACKEND=${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND} \
+    NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND} \
     NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY} \
     NEXT_PUBLIC_C15T_URL=${NEXT_PUBLIC_C15T_URL} \
     NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} \
     NEXT_PUBLIC_VERCEL_APP_CLIENT_ID=${NEXT_PUBLIC_VERCEL_APP_CLIENT_ID}
 
-# The service-role placeholder exists only for this command: module-load
-# Supabase clients must construct during page-data collection (same as CI).
-# The real value comes from your runtime env file, never the image.
-RUN SUPABASE_SERVICE_ROLE_KEY=build-placeholder-service-role-key pnpm build
+# Runtime secrets come from the environment, never build-time placeholders.
+RUN pnpm build
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
+    MOGPLEX_DATA_BACKEND=neon \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0

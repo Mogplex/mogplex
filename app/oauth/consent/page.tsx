@@ -35,6 +35,11 @@ export default async function MogplexOAuthConsentPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+    return (
+      <ConsentError message="This authorization link is no longer supported. Start a new connection from your MCP client." />
+    );
+  }
   const params = await searchParams;
   const rawAuthorizationId = Array.isArray(params.authorization_id)
     ? params.authorization_id[0]

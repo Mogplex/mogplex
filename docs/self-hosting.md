@@ -12,7 +12,7 @@ There is no bundled database, no auth service, no job runner, no sandbox runtime
 
 | Service | What it does | Your options |
 | --- | --- | --- |
-| **Postgres + auth** | All application state and user accounts | A [Supabase](https://supabase.com) project (current), or Postgres such as [Neon](https://neon.tech) once the planned Neon + better-auth migration lands. Either way you provision it, apply every migration in `supabase/migrations/` yourself, and keep it patched. |
+| **Postgres + auth** | All application state and user accounts | [Neon](https://neon.tech) / Postgres with Better Auth. Set both backend flags to `neon`, configure the database connections and `BETTER_AUTH_SECRET`, and apply `neon/migrations/` to the initialized application schema. Supabase is a legacy compatibility backend, not a Neon requirement. |
 | **Trigger.dev** | Background jobs: automations, syncs, long-running agent runs | A [Trigger.dev cloud](https://trigger.dev) account with your own project (`TRIGGER_PROJECT_REF`, `TRIGGER_SECRET_KEY`), or [self-host the full Trigger.dev stack](https://trigger.dev/docs/self-hosting/overview) — webapp, Postgres, Redis, ClickHouse, object storage, container registry, and supervisor/worker nodes. Without it, everything Trigger-powered does not run. |
 | **Vercel (sandboxes)** | Agent sandboxes run on [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) | A Vercel account and token (`PLATFORM_VERCEL_TOKEN`, `PLATFORM_VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`). There is no local substitute; without it, sandbox features are dead. |
 | **AI providers** | Model inference, memory embeddings | [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key and/or OpenRouter + OpenAI keys. |
@@ -39,8 +39,7 @@ Or without compose:
 ```bash
 docker build \
   --build-arg NEXT_PUBLIC_APP_URL=https://mogplex.example.com \
-  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co \
-  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key \
+  --build-arg NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon \
   -t mogplex .
 
 docker run --env-file .env -p 3000:3000 mogplex
@@ -56,7 +55,7 @@ Register a Slack slash command named `/mogplex` with the request URL `https://<y
 
 ## What is still on you after it boots
 
-- **Migrations.** The image never touches your schema. Apply `supabase/migrations/` yourself (`supabase db push --db-url ...`) before first boot and after every upgrade.
+- **Migrations.** The image never touches your schema. Neon uses `DATABASE_URL=... pnpm exec tsx scripts/apply-neon-migrations.ts` against your initialized application schema before boot and after upgrades. Only explicitly selected legacy Supabase installations use `supabase/migrations/` and `supabase db push`.
 - **Trigger deploys.** Trigger.dev tasks in `trigger/` deploy separately (`pnpm trigger:deploy`) against _your_ Trigger project — the image does not do it for you.
 - **TLS, domains, OAuth callbacks.** Every OAuth integration (GitHub, Vercel, Slack, MCP clients) needs your deployment URL registered on your own apps, with exact-match redirect/resource URLs.
 - **Secrets.** `CRON_SECRET`, `INTERNAL_API_SECRET`, `CONNECTIONS_ENCRYPTION_KEY`, `EMAIL_UNSUBSCRIBE_SECRET` — you mint them, you store them, you rotate them.

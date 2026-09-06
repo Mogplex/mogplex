@@ -15,6 +15,16 @@ type ValidateResponse =
     };
 
 export async function POST(request: Request) {
+  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "legacy_login_retired",
+        message: "Sign in at /login.",
+      },
+      { status: 410 }
+    );
+  }
   let body: unknown;
   try {
     body = await request.json();

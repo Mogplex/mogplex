@@ -2,11 +2,11 @@ export const TEAM_ICONS_BUCKET = "team-icons";
 
 // Resolve a stored icon_path to a public URL. We never persist the URL in the
 // DB — computing it here from a trusted code path means the rendered <img src>
-// can only ever point at our Supabase Storage bucket, removing the
+// can only ever point at our public icon bucket, removing the
 // open-redirect/XSS class of bug that would exist if icon_url were a free-form
 // column written by callers.
 //
-// Built from env-only Supabase URL — no admin client — so this module is safe
+// Built from backend configuration — no admin client — so this module is safe
 // to import from anywhere without risking the service-role key landing in a
 // client bundle.
 //
@@ -24,6 +24,9 @@ const TEAM_ICON_PATH_PATTERN = /^[A-Za-z0-9_-]+\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export function teamIconUrlFromPath(iconPath: string | null): string | null {
   if (!iconPath) return null;
   if (!TEAM_ICON_PATH_PATTERN.test(iconPath)) return null;
+  if (process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon") {
+    return `/storage/v1/object/public/${TEAM_ICONS_BUCKET}/${iconPath}`;
+  }
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
   if (!base) return null;
   return `${base.replace(/\/$/, "")}/storage/v1/object/public/${TEAM_ICONS_BUCKET}/${iconPath}`;

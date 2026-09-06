@@ -277,7 +277,8 @@ jobs:
       # Run the whole e2e suite through the pg-backed PostgREST shim against
       # real Neon: every server-side supabaseAdmin call is continuously
       # integration-tested here instead of hitting the placeholder Supabase
-      # URL. Production keeps the Supabase backend until the data-copy flip.
+      # URL. Playwright clears legacy Supabase variables in both build and
+      # runtime, so accidental legacy clients fail instead of hiding here.
       MOGPLEX_DATA_BACKEND: neon
       NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: neon
     steps:

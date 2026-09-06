@@ -76,13 +76,19 @@ Start from [.env.example](./.env.example).
 
 At minimum, the app expects:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `MOGPLEX_DATA_BACKEND=neon`
+- `NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon` (set before building)
+- `DATABASE_URL` (Neon/Postgres; hosted deployments use the least-privilege `MOGPLEX_RUNTIME_DATABASE_URL`)
+- `DATABASE_URL_UNPOOLED` (direct connection for live events)
+- `BETTER_AUTH_SECRET`
 - `NEXT_PUBLIC_APP_URL`
 - `CRON_SECRET`
 - `INTERNAL_API_SECRET`
 - `CONNECTIONS_ENCRYPTION_KEY`
+
+Neon mode does not require Supabase credentials. Apply `neon/migrations/`
+against your initialized application database before starting; see
+[the runtime migration audit](docs/neon-runtime-audit.md) for compatibility paths.
 
 Boot the app shell:
 

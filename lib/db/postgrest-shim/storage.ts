@@ -15,6 +15,10 @@ export type StorageListResult = {
 };
 
 export type StorageBucket = {
+  remove: (paths: string[]) => Promise<{
+    data: { name: string }[] | null;
+    error: ShimError | null;
+  }>;
   upload: (
     path: string,
     body: ArrayBuffer | Uint8Array,
@@ -37,6 +41,21 @@ export function createStorageShim(db: Queryable): {
   return {
     from(bucket: string): StorageBucket {
       return {
+        async remove(paths) {
+          if (paths.length === 0) return { data: [], error: null };
+          try {
+            const { rows } = await db.query(
+              "delete from storage_objects where bucket = $1 and name = any($2::text[]) returning name",
+              [bucket, paths]
+            );
+            return {
+              data: rows.map((row) => ({ name: String(row.name) })),
+              error: null,
+            };
+          } catch (error) {
+            return { data: null, error: toShimError(error) };
+          }
+        },
         async upload(path, body, options = {}) {
           try {
             const bytes = Buffer.isBuffer(body)

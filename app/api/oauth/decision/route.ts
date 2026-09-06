@@ -49,6 +49,16 @@ export function createMogplexOAuthDecisionHandler(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+      return NextResponse.json(
+        {
+          error: "authorization_flow_retired",
+          message: "Start a new connection from your MCP client.",
+        },
+        { status: 410 }
+      );
+    }
+
     let form: FormData;
     try {
       form = await request.formData();

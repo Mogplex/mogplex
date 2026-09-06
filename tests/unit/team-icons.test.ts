@@ -6,6 +6,23 @@ import { teamIconUrlFromPath } from "../../lib/team-icons";
 const PUBLIC_URL = "https://example.supabase.co";
 const SERVER_URL = "https://server.supabase.co";
 
+test("team icons use same-origin Neon storage without legacy settings", () => {
+  withEnv(
+    {
+      NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: "neon",
+      NEXT_PUBLIC_SUPABASE_URL: undefined,
+      SUPABASE_URL: undefined,
+    },
+    () => {
+      assert.equal(
+        teamIconUrlFromPath("team-123/icon.png"),
+        "/storage/v1/object/public/team-icons/team-123/icon.png"
+      );
+      assert.equal(teamIconUrlFromPath("../escape.png"), null);
+    }
+  );
+});
+
 function withEnv(
   vars: Record<string, string | undefined>,
   fn: () => void
