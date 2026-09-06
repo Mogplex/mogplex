@@ -12,6 +12,12 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const next = normalizeAppRedirectPath(url.searchParams.get("next"));
 
+  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+    const loginUrl = buildAppUrl("/login", request);
+    loginUrl.searchParams.set("next", next);
+    return NextResponse.redirect(loginUrl);
+  }
+
   // Pre-launch waitlist gate. A successful POST to /api/auth/waitlist/validate
   // sets an HMAC-signed HttpOnly cookie. Without it, kick back to /login so
   // the user can enter a code before GitHub OAuth starts.

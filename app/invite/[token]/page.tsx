@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getProfileId } from "@/lib/auth";
 import { PRIVATE_NO_INDEX_ROBOTS } from "@/lib/seo";
 import { InviteAcceptForm } from "./invite-accept-form";
 
@@ -36,14 +36,12 @@ function isInviteExpired(expiresAt: string): boolean {
 }
 
 async function loadCurrentEmail(): Promise<string | null> {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  const authUserId = data.user?.id;
-  if (!authUserId) return null;
+  const profileId = await getProfileId();
+  if (!profileId) return null;
   const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("email")
-    .eq("auth_user_id", authUserId)
+    .eq("id", profileId)
     .maybeSingle();
   return (profile?.email as string | null) ?? null;
 }

@@ -174,6 +174,27 @@ describe("rpc", () => {
 });
 
 describe("storage + auth shims", () => {
+  it("removes only the requested paths in the selected bucket", async () => {
+    const bucket = db.storage.from("team-icons");
+    await bucket.upload("team-a/old.png", Buffer.from("old"));
+    await bucket.upload("team-a/new.png", Buffer.from("new"));
+    await db.storage
+      .from("other-icons")
+      .upload("team-a/old.png", Buffer.from("other"));
+    const result = await bucket.remove(["team-a/old.png", "missing.png"]);
+    expect(result.error).toBeNull();
+    expect(result.data).toEqual([{ name: "team-a/old.png" }]);
+    expect((await bucket.list()).data?.map((row) => row.name)).toEqual([
+      "team-a/new.png",
+    ]);
+    expect((await db.storage.from("other-icons").list()).data).toHaveLength(1);
+    expect(await bucket.remove([])).toEqual({ data: [], error: null });
+    expect(await bucket.remove(["team-a/old.png"])).toEqual({
+      data: [],
+      error: null,
+    });
+  });
+
   it("uploads with upsert, lists with pagination options, and builds public URLs", async () => {
     const bucket = db.storage.from("provider-icons");
     const uploaded = await bucket.upload(

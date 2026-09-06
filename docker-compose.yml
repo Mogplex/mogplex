@@ -14,8 +14,9 @@ services:
         # Inlined into the client bundle at build time — changing any of
         # these requires an image rebuild, not just a restart.
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?set in .env}
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set in .env}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set in .env}
+        NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: ${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND:-neon}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
         NEXT_PUBLIC_C15T_URL: ${NEXT_PUBLIC_C15T_URL:-}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_VERCEL_APP_CLIENT_ID: ${NEXT_PUBLIC_VERCEL_APP_CLIENT_ID:-}

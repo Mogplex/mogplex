@@ -47,7 +47,6 @@ export function useRealtimeRouteRefresh({
   ) => void;
 }) {
   const { user } = useUser();
-  const supabase = useMemo(() => createClient(), []);
   const invalidateRef = useRef(onInvalidate);
   const connectionRef = useRef(onConnectionChange);
   const scheduledRef = useRef(false);
@@ -104,6 +103,7 @@ export function useRealtimeRouteRefresh({
     // Skip when Neon backend is enabled or when disabled
     if (useNeonBackend || !enabled || resolvedSpecs.length === 0) return;
 
+    const supabase = createClient();
     const channel = supabase.channel(`${channelName}:${channelId}`);
     connectionRef.current?.("connecting");
     const scheduleInvalidate = () => {
@@ -157,5 +157,5 @@ export function useRealtimeRouteRefresh({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [channelId, channelName, enabled, resolvedSpecs, supabase]);
+  }, [channelId, channelName, enabled, resolvedSpecs]);
 }

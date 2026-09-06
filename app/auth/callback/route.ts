@@ -12,6 +12,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = normalizeAppRedirectPath(searchParams.get("next"));
+  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
+    // A code issued by the old provider cannot be exchanged by Better Auth.
+    const loginUrl = buildAppUrl("/login", request);
+    loginUrl.searchParams.set("next", next);
+    return NextResponse.redirect(loginUrl);
+  }
   const redirect = (path: string) =>
     NextResponse.redirect(buildAppUrl(path, request));
 

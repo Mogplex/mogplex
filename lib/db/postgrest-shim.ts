@@ -35,6 +35,10 @@ export type PostgrestShim = {
   };
   storage: {
     from: (bucket: string) => {
+      remove: (paths: string[]) => Promise<{
+        data: { name: string }[] | null;
+        error: ShimError | null;
+      }>;
       upload: (
         path: string,
         body: ArrayBuffer | Uint8Array,
