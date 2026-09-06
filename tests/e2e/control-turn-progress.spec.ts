@@ -140,6 +140,11 @@ test("a follow-up focuses the latest request and shows live command progress and
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(progress).toBeInViewport();
   await expect(
+    page
+      .getByRole("region", { name: "Latest request" })
+      .getByText("Fix the failing tests")
+  ).toBeInViewport();
+  await expect(
     page.getByRole("button", { name: "Stop", exact: true })
   ).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("follow-up-mobile.png") });
