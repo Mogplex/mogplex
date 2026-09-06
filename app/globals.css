@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@c15t/nextjs/styles.css";
+@import "./control-project-colors.css";
 
 /* Streamdown (ai-elements MessageResponse) renders Tailwind classes from
    inside node_modules, which Tailwind v4 does not scan by default. */

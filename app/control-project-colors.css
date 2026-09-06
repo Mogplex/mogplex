@@ -1,0 +1,35 @@
+/* Project identity, not runtime status. Geist icon shades (900), with
+   amber 700 in dark mode for a distinct yellow marker.
+   Source: https://vercel.com/geist/colors */
+:root {
+  --project-blue: oklch(53.18% 0.2399 256.99);
+  --project-amber: oklch(52.79% 0.1496 54.65);
+  --project-green: oklch(51.75% 0.1453 147.65);
+  --project-red: oklch(54.99% 0.232 25.29);
+  --project-teal: oklch(52.08% 0.1251 182.93);
+  --project-purple: oklch(47.18% 0.2579 304);
+  --project-pink: oklch(53.5% 0.2058 2.84);
+  --project-neutral: var(--neutral-5);
+}
+
+.dark {
+  --project-blue: oklch(71.7% 0.1648 250.794);
+  --project-amber: oklch(81.87% 0.1969 76.46);
+  --project-green: oklch(73.1% 0.2158 148.29);
+  --project-red: oklch(69.96% 0.2136 22.03);
+  --project-teal: oklch(74.56% 0.1765 182.8);
+  --project-purple: oklch(69.87% 0.2037 309.51);
+  --project-pink: oklch(69.36% 0.2223 3.91);
+  --project-neutral: var(--neutral-4);
+}
+
+@theme inline {
+  --color-project-blue: var(--project-blue);
+  --color-project-amber: var(--project-amber);
+  --color-project-green: var(--project-green);
+  --color-project-red: var(--project-red);
+  --color-project-teal: var(--project-teal);
+  --color-project-purple: var(--project-purple);
+  --color-project-pink: var(--project-pink);
+  --color-project-neutral: var(--project-neutral);
+}
