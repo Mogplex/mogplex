@@ -1,10 +1,48 @@
 import { expect, test } from "@playwright/test";
+import type { ControlWorker } from "@/lib/control/workers";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
   mockBaseChrome,
   mockControlSessionBootstrap,
 } from "./helpers/automation-control-plane-fixtures";
+
+function currentWorker(
+  id: string,
+  status: ControlWorker["status"],
+  output: string
+): ControlWorker {
+  return {
+    id,
+    worktreeId: id,
+    branch: `mogplex/task/current/${id}`,
+    status,
+    error: status === "failed" ? "Worker stopped before finishing." : null,
+    updatedAt: "2026-08-14T00:00:01Z",
+    events: [
+      {
+        id: `${id}-start`,
+        type: "tool_started",
+        toolName: "Command",
+        message: "Started",
+        payload: { toolCallId: id, input: { command: `check ${id}` } },
+        createdAt: "2026-08-14T00:00:00Z",
+      },
+      {
+        id: `${id}-end`,
+        type: "tool_finished",
+        toolName: "Command",
+        message: "Finished",
+        payload: {
+          toolCallId: id,
+          state: status === "failed" ? "error" : "done",
+          output,
+        },
+        createdAt: "2026-08-14T00:00:01Z",
+      },
+    ],
+  };
+}
 
 test("a follow-up focuses the latest request and shows live command progress and stop", async ({
   page,
@@ -14,10 +52,12 @@ test("a follow-up focuses the latest request and shows live command progress and
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
   await mockControlSessionBootstrap(page);
+  let currentWorkers: ControlWorker[] = [];
   await page.route("**/api/control/workers?*", (route) =>
     fulfillJson(route, {
-      workers: ["ci", "docs", "accessibility", "links", "cleanup"].map(
-        (task) => ({
+      workers: [
+        ...currentWorkers,
+        ...["ci", "docs", "accessibility", "links", "cleanup"].map((task) => ({
           id: `old-worker-${task}`,
           worktreeId: task,
           branch: `mogplex/task/old-request/${task}`,
@@ -47,14 +87,33 @@ test("a follow-up focuses the latest request and shows live command progress and
               createdAt: "2026-08-13T00:00:01Z",
             },
           ],
-        })
-      ),
+        })),
+      ],
     })
   );
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
   await page.addInitScript(() => {
+    class FixtureEventSource extends EventTarget {
+      private listener: (event: Event) => void;
+      constructor(url: string) {
+        super();
+        this.listener = (event: Event) => {
+          const detail = (event as CustomEvent<{ table: string }>).detail;
+          if (decodeURIComponent(url).includes(detail.table))
+            this.dispatchEvent(
+              new MessageEvent("message", { data: JSON.stringify(detail) })
+            );
+        };
+        window.addEventListener("fixture-table-event", this.listener);
+        queueMicrotask(() => this.dispatchEvent(new Event("open")));
+      }
+      close() {
+        window.removeEventListener("fixture-table-event", this.listener);
+      }
+    }
+    Object.defineProperty(window, "EventSource", { value: FixtureEventSource });
     const original = window.fetch.bind(window);
     let count = 0;
     window.fetch = async (input, init) => {
@@ -117,6 +176,9 @@ test("a follow-up focuses the latest request and shows live command progress and
   await expect(
     page.getByRole("button", { name: "Send", exact: true })
   ).toBeVisible();
+  await expect(page.getByTestId("control-terminal-activity")).toContainText(
+    "Previous batch output"
+  );
   await composer.fill("Fix the failing tests");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   const progress = page.getByRole("status", { name: "Current activity" });
@@ -148,6 +210,34 @@ test("a follow-up focuses the latest request and shows live command progress and
     page.getByRole("button", { name: "Stop", exact: true })
   ).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("follow-up-mobile.png") });
+  currentWorkers = [
+    currentWorker("tests", "streaming", "Current tests progress"),
+    currentWorker("lint", "streaming", "Current lint progress"),
+  ];
+  const refreshWorkers = () =>
+    page.evaluate(() =>
+      window.dispatchEvent(
+        new CustomEvent("fixture-table-event", {
+          detail: { table: "external_agent_runs", op: "UPDATE" },
+        })
+      )
+    );
+  await refreshWorkers();
+  const terminal = page.getByTestId("control-terminal-activity");
+  await expect(terminal).toContainText("Current tests progress");
+  await expect(terminal).toContainText("Current lint progress");
+  currentWorkers = [
+    currentWorker("tests", "success", "Current tests passed"),
+    currentWorker("lint", "failed", "Current lint failed"),
+  ];
+  await refreshWorkers();
+  await expect(workers).toContainText("6 workers failed");
+  await expect(terminal).toContainText("Current tests passed");
+  await expect(terminal).toContainText("Current lint failed");
+  await expect(terminal).not.toContainText("Previous batch output");
+  await expect(
+    page.getByRole("button", { name: "Stop", exact: true })
+  ).toBeVisible();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(progress).toHaveCount(0);
   await expect(page.getByTestId("tool-activity")).toContainText("Interrupted");

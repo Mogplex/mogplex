@@ -113,7 +113,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   const getActiveChatError = useCallback(() => activeChat.error, [activeChat]);
   const chatPending = status === "streaming" || status === "submitted";
   const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
-  const controlWorkers = useControlWorkers(sessionId, chatPending);
+  const controlWorkers = useControlWorkers(sessionId, chatPending, messages.findLast((message) => message.role === "user")?.id ?? null);
   const terminalMessages = useMemo(() => [...currentTurnMessages(messages), ...controlWorkers.messages], [messages, controlWorkers.messages]);
   const { loading: sandboxesLoading } = useSandboxSync();
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
