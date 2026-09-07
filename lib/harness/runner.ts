@@ -1,5 +1,5 @@
 import { getHarnessConfig } from "./config";
-import { codexProviderArgs } from "./codex-provider";
+import { codexProviderArgs, codexWorkerIsolationArgs } from "./codex-provider";
 import { installHarnessPackage, isHarnessInstalled } from "./install";
 import type { HarnessId } from "./config";
 import type { Sandbox, Command } from "@vercel/sandbox";
@@ -104,6 +104,7 @@ export async function runHarness(
             "--",
             cmd,
             ...codexProviderArgs(env),
+            ...codexWorkerIsolationArgs(),
             ...args,
           ]
         : args,

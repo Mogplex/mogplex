@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
+import { MAX_CONCURRENT_WORKERS_PER_SANDBOX } from "@/lib/control/worker-policy";
 import { ORCHESTRATOR_TOOLS } from "./registry";
 import {
   buildOrchestratorSystemPrompt,
   getToolImplementationSummary,
 } from "./system-prompt";
+
+describe("orchestrator worker policy prompt", () => {
+  it("forbids delegation inside worker prompts and states the per-sandbox cap", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+    });
+    expect(prompt).toContain(
+      "Never instruct a worker to delegate, spawn sub-agents, fan out, or coordinate other agents"
+    );
+    expect(prompt).toContain(
+      `A sandbox runs at most ${MAX_CONCURRENT_WORKERS_PER_SANDBOX} workers at once`
+    );
+    expect(prompt).toContain("quote its recorded failure text verbatim");
+  });
+});
 
 describe("orchestrator resource decision prompt", () => {
   it("treats the selected Control repository as the implicit request target", () => {

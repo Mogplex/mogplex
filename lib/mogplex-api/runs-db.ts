@@ -101,6 +101,32 @@ export async function loadRunByIdempotencyKey(
   return (data as ExternalAgentRunRow | null) ?? null;
 }
 
+/**
+ * Runs still holding a process in one sandbox. Pending runs count because
+ * their harness is about to start; a worktree's own run is excluded so a
+ * replayed launch is never refused by its earlier self.
+ */
+export async function countActiveRunsInSandbox(input: {
+  userId: string;
+  sandboxRecordId: string;
+  excludeWorktreeId?: string | null;
+}): Promise<number> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  let query = supabaseAdmin
+    .from("external_agent_runs")
+    .select("id, worktree_id")
+    .eq("user_id", input.userId)
+    .eq("sandbox_record_id", input.sandboxRecordId)
+    .in("status", ["pending", "streaming"]);
+  if (input.excludeWorktreeId)
+    query = query.neq("worktree_id", input.excludeWorktreeId);
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`Failed to count sandbox workers: ${error.message}`);
+  }
+  return data?.length ?? 0;
+}
+
 export async function loadRunById(userId: string, runId: string) {
   const supabaseAdmin = await getSupabaseAdmin();
   const { data, error } = await supabaseAdmin

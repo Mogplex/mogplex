@@ -1,3 +1,4 @@
+import { MAX_CONCURRENT_WORKERS_PER_SANDBOX } from "@/lib/control/worker-policy";
 import { ORCHESTRATOR_TOOLS, getToolsByCategory } from "./registry";
 import type { InfrastructureDiagnosticScope } from "../user-facing-output";
 
@@ -103,6 +104,12 @@ Each task spec should include:
 - Dependencies on other tasks
 - Validation commands to run when complete
 </planning>
+
+<worker-policy>
+- Every worker is a single agent in one checkout. Never instruct a worker to delegate, spawn sub-agents, fan out, or coordinate other agents; the platform appends that rule to every worker prompt.
+- A sandbox runs at most ${MAX_CONCURRENT_WORKERS_PER_SANDBOX} workers at once. spawn_subagent refuses further launches until one finishes. With more tasks than that, launch ${MAX_CONCURRENT_WORKERS_PER_SANDBOX}, register await_workers, and launch the rest when the coordinator resumes.
+- When reporting a worker that failed, quote its recorded failure text verbatim. Never infer a cause, such as authentication, that the recorded text does not state.
+</worker-policy>
 
 <integration>
 After worker agents complete their tasks:

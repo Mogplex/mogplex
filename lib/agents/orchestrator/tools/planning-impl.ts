@@ -9,6 +9,12 @@ import {
   findOwnedPathOverlaps,
 } from "@/lib/orchestrations/validation";
 import { startMogplexApiRun } from "@/lib/mogplex-api/runs";
+import { countActiveRunsInSandbox } from "@/lib/mogplex-api/runs-db";
+import {
+  MAX_CONCURRENT_WORKERS_PER_SANDBOX,
+  applyWorkerPromptPolicy,
+  sandboxWorkerLimitMessage,
+} from "@/lib/control/worker-policy";
 import { bindWorktreeAgent, loadOwnedWorktree } from "@/lib/worktrees/store";
 import { defineTool } from "../helpers";
 import type { HarnessExecutionMode } from "@/lib/harness/claude-permissions";
@@ -145,12 +151,14 @@ type SpawnSubagentDeps = {
   loadWorktree: typeof loadOwnedWorktree;
   startRun: typeof startMogplexApiRun;
   bindAgent: typeof bindWorktreeAgent;
+  countActiveSandboxWorkers: typeof countActiveRunsInSandbox;
 };
 
 const defaultSpawnSubagentDeps: SpawnSubagentDeps = {
   loadWorktree: loadOwnedWorktree,
   startRun: startMogplexApiRun,
   bindAgent: bindWorktreeAgent,
+  countActiveSandboxWorkers: countActiveRunsInSandbox,
 };
 
 export function createSpawnSubagentTool(
@@ -159,8 +167,7 @@ export function createSpawnSubagentTool(
 ): Tool {
   const deps = { ...defaultSpawnSubagentDeps, ...overrides };
   return defineTool({
-    description:
-      "Launch a worker only after an active persisted worktree exists. The worker uses that worktree's exact sandbox and checkout path and does not create a sandbox, checkout, or branch.",
+    description: `Launch a worker only after an active persisted worktree exists. The worker uses that worktree's exact sandbox and checkout path and does not create a sandbox, checkout, or branch. A sandbox runs at most ${MAX_CONCURRENT_WORKERS_PER_SANDBOX} workers at once; further launches fail until one finishes. Every worker runs alone: never tell it to delegate or spawn other agents.`,
     inputSchema: spawnSubagentSchema,
     execute: async ({
       worktreeId,
@@ -184,6 +191,20 @@ export function createSpawnSubagentTool(
             reason: "worktree_not_found" as const,
           };
         }
+        // Replaying an already-launched worker for this worktree is not a new
+        // process, so the worktree's own run never counts against the cap.
+        const activeWorkers = await deps.countActiveSandboxWorkers({
+          userId: ctx.userId,
+          sandboxRecordId: worktree.sandbox_id,
+          excludeWorktreeId: worktree.id,
+        });
+        if (activeWorkers >= MAX_CONCURRENT_WORKERS_PER_SANDBOX) {
+          return {
+            status: "error" as const,
+            error: sandboxWorkerLimitMessage(activeWorkers),
+            reason: "sandbox_worker_limit" as const,
+          };
+        }
         const promptHash = createHash("sha256")
           .update(taskPrompt)
           .digest("hex")
@@ -197,7 +218,7 @@ export function createSpawnSubagentTool(
           idempotencyKey: `control:${ctx.aiCallId ?? ctx.conversationId ?? "run"}:${worktree.id}:${promptHash}`,
           body: {
             repoId: ctx.repoId,
-            prompt: taskPrompt,
+            prompt: applyWorkerPromptPolicy(taskPrompt),
             harness: agentType,
             worktreeId: worktree.id,
             conversationId: ctx.conversationId,

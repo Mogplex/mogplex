@@ -195,4 +195,8 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
     )
   );
   assert.equal(detachedCall.args?.includes("gateway-key"), false);
+  assert.ok(
+    detachedCall.args?.includes("features.multi_agent=false"),
+    "Codex workers must not spawn sub-agents inside the shared sandbox"
+  );
 });

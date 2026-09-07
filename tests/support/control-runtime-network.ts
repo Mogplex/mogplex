@@ -8,7 +8,11 @@ import type {
 } from "../../lib/db/table-event-listener";
 
 /** HTTP/database-notification boundary fixture. All Control/SDK code runs normally. */
-export function controlRuntimeNetwork() {
+export function controlRuntimeNetwork(
+  options: {
+    workers?: Array<{ status: string; error: string | null }>;
+  } = {}
+) {
   const userId = randomUUID();
   const sessionId = randomUUID();
   const repoId = randomUUID();
@@ -212,13 +216,13 @@ export function controlRuntimeNetwork() {
         rows = [session];
         break;
       case "external_agent_runs":
-        rows = ticket.worker_run_ids.map((id) => ({
+        rows = ticket.worker_run_ids.map((id, index) => ({
           id,
           user_id: userId,
           repo_id: repoId,
-          status: "success",
+          status: options.workers?.[index]?.status ?? "success",
           worktree_id: randomUUID(),
-          error: null,
+          error: options.workers?.[index]?.error ?? null,
         }));
         break;
       case "repos":
