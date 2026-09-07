@@ -6,7 +6,11 @@ import { type Mission, type ControlSeedData } from "@/lib/control/types";
 import { NewMissionView } from "./new-mission-view";
 import { usePendingInitialMessage } from "./use-pending-initial-message";
 import type { ComposerSendOptions } from "./composer";
-import { CONTROL_VIEW_EVENT, generateMissionId } from "@/lib/control/utils";
+import {
+  CONTROL_VIEW_EVENT,
+  approveMissionEvent,
+  generateMissionId,
+} from "@/lib/control/utils";
 import { collectChangedFiles } from "@/lib/control/changed-files";
 import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
 import { scopedHref } from "@/lib/scoped-href";
@@ -30,7 +34,10 @@ import { useControlSend } from "./use-control-send";
 import { latestControlContext } from "@/lib/control/context-usage";
 import { useControlSessionContext } from "./use-control-session-context";
 import { useControlSessionUrl } from "./use-control-session-url";
-import { canonicalizeControlSessionProjects } from "@/lib/control/session-project";
+import {
+  canonicalizeControlSessionProjects,
+  resolveNewSessionRepoId,
+} from "@/lib/control/session-project";
 import { useControlWorktrees } from "./use-control-worktrees";
 import { WorktreesPanel } from "./worktrees-panel";
 import { downloadTextFile } from "./download-text-file";
@@ -150,6 +157,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   const {
     newMission,
     newSessionTarget,
+    newSessionRequest,
     startNewSession,
     closeNewSession,
     deleteChat,
@@ -158,6 +166,10 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     sessions: displaySessions,
     deleteSession,
   });
+  const newSessionRepoId = useMemo(
+    () => resolveNewSessionRepoId(newSessionTarget, activeSession, repos),
+    [activeSession, newSessionTarget, repos]
+  );
 
   const {
     activeRepo,
@@ -337,7 +349,8 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         onSelectSession={handleSelectSession}
         onNewSession={startNewSession}
         onDeleteSession={deleteChat}
-        initialRepoId={newSessionTarget?.repoId}
+        preferredRepoId={newSessionRepoId}
+        composerKey={newSessionRequest}
       />
     );
   }
@@ -429,27 +442,10 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                   worktrees={initialData.worktrees}
                   getWorktree={getWorktree}
                   onApprove={(idx) => {
-                    const event = combinedTimeline[idx];
-                    if (event?.kind === "approval") {
-                      setMissions((prev) =>
-                        prev.map((m) =>
-                          m.id === selectedMissionId
-                            ? {
-                                ...m,
-                                timeline: m.timeline.map((e, i) =>
-                                  i === idx && e.kind === "approval"
-                                    ? {
-                                        ...e,
-                                        resolved:
-                                          "Approved by you - merge unblocked",
-                                      }
-                                    : e
-                                ),
-                              }
-                            : m
-                        )
-                      );
-                    }
+                    if (combinedTimeline[idx]?.kind !== "approval") return;
+                    setMissions((prev) =>
+                      approveMissionEvent(prev, selectedMissionId, idx)
+                    );
                   }}
                   onToolApprovalResponse={handleToolApprovalResponse}
                   pending={chatPending}

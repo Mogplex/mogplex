@@ -23,7 +23,8 @@ export function NewMissionView({
   onSelectSession,
   onNewSession,
   onDeleteSession,
-  initialRepoId,
+  preferredRepoId,
+  composerKey,
 }: {
   repos: Repo[];
   sessions: ControlSessionSummary[];
@@ -41,7 +42,10 @@ export function NewMissionView({
   onSelectSession: (id: string) => void;
   onNewSession: (target?: NewSessionTarget) => void;
   onDeleteSession: (id: string) => Promise<boolean>;
-  initialRepoId?: string | null;
+  /** Repo the picker opens on until the user changes it; null = default. */
+  preferredRepoId: string | null;
+  /** Changes whenever a new session is requested, resetting the composer. */
+  composerKey: number;
 }) {
   return (
     <div className="app-control-shell flex h-full overflow-hidden">
@@ -69,9 +73,9 @@ export function NewMissionView({
           </span>
         </div>
         <NewMissionComposer
-          key={initialRepoId ?? "default-project"}
+          key={composerKey}
           repos={repos}
-          initialRepoId={initialRepoId}
+          preferredRepoId={preferredRepoId}
           onCancel={canCancel ? onCancel : undefined}
           onCreate={onCreate}
         />

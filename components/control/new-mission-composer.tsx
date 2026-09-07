@@ -37,7 +37,11 @@ const CREATABLE_AVAILABILITY = new Set(["available", "unverified"]);
 
 type Props = {
   repos: Repo[];
-  initialRepoId?: string | null;
+  /**
+   * Repo the picker follows until the user changes it. Reactive on purpose:
+   * repos load async, so the resolved id can arrive after first render.
+   */
+  preferredRepoId?: string | null;
   onCancel?: () => void;
   onCreate: (
     text: string,
@@ -50,14 +54,14 @@ type Props = {
 
 export function NewMissionComposer({
   repos,
-  initialRepoId,
+  preferredRepoId,
   onCancel,
   onCreate,
 }: Props) {
   const [text, setText] = useState("");
-  // null = untouched: follow the default (favorite/first repo, or "new" when
-  // no repos are connected). Repos load async, so the default resolves late.
-  const [choice, setChoice] = useState<string | null>(initialRepoId ?? null);
+  // null = untouched: follow the preferred repo, else the default (favorite/
+  // first repo, or "new" when no repos are connected).
+  const [choice, setChoice] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
   const [projectError, setProjectError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -80,7 +84,8 @@ export function NewMissionComposer({
   // the conversation composer.
   const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
 
-  const selectedRepoId = choice ?? defaultProjectChoice(repos);
+  const selectedRepoId =
+    choice ?? preferredRepoId ?? defaultProjectChoice(repos);
   const effectiveNewProjectName =
     newProjectName.trim() || deriveProjectName(text);
   const {
