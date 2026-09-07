@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   GENERAL_GROUP_NAME,
+  assignProjectColors,
   groupSessionsByProject,
   projectColorClass,
 } from "../../lib/control/session-groups";
@@ -55,4 +56,44 @@ test("groupSessionsByProject treats blank projects as General", () => {
 test("projectColorClass is deterministic and uses the project palette", () => {
   assert.equal(projectColorClass("t3chat"), projectColorClass("t3chat"));
   assert.match(projectColorClass("t3chat"), /^bg-project-/);
+});
+
+test("assignProjectColors gives colliding project names distinct colors", () => {
+  // Both names hash to the same palette slot.
+  const names = [
+    "webrenew/thinking-company-template",
+    "mogplex",
+    "Mogplex/mogplex",
+  ];
+  assert.equal(
+    projectColorClass(names[0]),
+    projectColorClass(names[1]),
+    "fixture must collide for this test to mean anything"
+  );
+
+  const colors = assignProjectColors([...names, GENERAL_GROUP_NAME]);
+
+  assert.equal(new Set(names.map((name) => colors.get(name))).size, 3);
+  assert.equal(colors.get(GENERAL_GROUP_NAME), "bg-project-neutral");
+  // The first claimant keeps its hashed color, so colors stay stable.
+  assert.equal(colors.get(names[1]), projectColorClass(names[1]));
+});
+
+test("assignProjectColors is independent of input order", () => {
+  const names = [
+    "webrenew/thinking-company-template",
+    "mogplex",
+    "Mogplex/mogplex",
+  ];
+  const forward = assignProjectColors(names);
+  const reversed = assignProjectColors([...names].reverse());
+  for (const name of names) assert.equal(forward.get(name), reversed.get(name));
+});
+
+test("assignProjectColors reuses the palette only once it is exhausted", () => {
+  const names = Array.from({ length: 9 }, (_, i) => `org/repo-${i}`);
+  const colors = assignProjectColors(names);
+  assert.equal(new Set(names.slice(0, 7).map((n) => colors.get(n))).size, 7);
+  for (const name of names)
+    assert.match(colors.get(name) ?? "", /^bg-project-/);
 });
