@@ -204,7 +204,7 @@ function SandboxChangedFilesBar({
     }),
     { additions: 0, deletions: 0 }
   );
-  if (files.length === 0 && !delivery && !error) return null;
+  if (files.length === 0 && changes.ahead === 0 && !delivery && !error) return null;
   const actionsDisabled = disabled || busy || loading;
 
   return (
@@ -335,7 +335,7 @@ function SandboxChangedFilesBar({
       ) : null}
       {committing ? (
         <CommitForm
-          initialMessage={defaultCommitMessage}
+          initialMessage={defaultCommitMessage || (files.length === 0 ? "Mogplex agent changes" : "")}
           busy={actionsDisabled}
           onCommit={(message, openPullRequest) =>
             void handleCommit(message, openPullRequest)

@@ -13,22 +13,32 @@ const STATUS_OUTPUT = [
   "MOGPLEX_BRANCH=mogplex/agent-abc123",
   "MOGPLEX_AHEAD_BEHIND=2\t1",
   "MOGPLEX_STATUS_BEGIN",
-  " M src/app.ts",
-  "A  src/new.ts",
-  " D docs/old.md",
-  "R  lib/a.ts -> lib/b.ts",
-  "?? scratch/notes.txt",
-  '?? "weird name.txt"',
+  Buffer.from(
+    [
+      " M src/app.ts",
+      "A  src/new.ts",
+      " D docs/old.md",
+      "R  lib/b.ts\0lib/a.ts",
+      "?? scratch/notes.txt",
+      "?? weird name.txt",
+      "",
+    ].join("\0")
+  ).toString("base64"),
   "MOGPLEX_NUMSTAT_BEGIN",
-  "3\t1\tsrc/app.ts",
-  "10\t0\tsrc/new.ts",
-  "0\t4\tdocs/old.md",
-  "1\t1\tlib/{a.ts => b.ts}",
-  "-\t-\tassets/logo.png",
+  Buffer.from(
+    [
+      "3\t1\tsrc/app.ts",
+      "10\t0\tsrc/new.ts",
+      "0\t4\tdocs/old.md",
+      "1\t1\t\0lib/a.ts\0lib/b.ts",
+      "-\t-\tassets/logo.png",
+      "",
+    ].join("\0")
+  ).toString("base64"),
   "MOGPLEX_UNTRACKED_BEGIN",
-  "7\tscratch/notes.txt",
-  "2\tweird name.txt",
-  "",
+  Buffer.from(
+    ["7\tscratch/notes.txt", "2\tweird name.txt", ""].join("\0")
+  ).toString("base64"),
 ].join("\n");
 
 describe("parseChangesOutput", () => {
@@ -84,7 +94,7 @@ describe("scripts", () => {
     const script = buildChangesStatusScript("main");
     expect(script).toContain("git status --porcelain=v1");
     expect(script).toContain(":(exclude).mogplex");
-    expect(script).toContain("origin/'main'");
+    expect(script).toContain("origin/");
   });
 
   it("rejects unsafe paths before they reach a shell", () => {

@@ -37,8 +37,16 @@ async function loadRouteModule() {
   return import("../../app/api/sandbox/[id]/changes/route");
 }
 
-const STATUS_STDOUT =
-  "MOGPLEX_BRANCH=mogplex/agent-1\nMOGPLEX_AHEAD_BEHIND=1\t0\nMOGPLEX_STATUS_BEGIN\n M src/app.ts\nMOGPLEX_NUMSTAT_BEGIN\n2\t1\tsrc/app.ts\nMOGPLEX_UNTRACKED_BEGIN\n";
+const STATUS_STDOUT = [
+  "MOGPLEX_BRANCH=mogplex/agent-1",
+  "MOGPLEX_AHEAD_BEHIND=1\t0",
+  "MOGPLEX_STATUS_BEGIN",
+  Buffer.from(" M src/app.ts\0").toString("base64"),
+  "MOGPLEX_NUMSTAT_BEGIN",
+  Buffer.from("2\t1\tsrc/app.ts\0").toString("base64"),
+  "MOGPLEX_UNTRACKED_BEGIN",
+  "",
+].join("\n");
 
 function loadedContext(sandbox: unknown, record: Record<string, unknown> = {}) {
   return async () =>

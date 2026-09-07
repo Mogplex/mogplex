@@ -66,18 +66,22 @@ export function buildChangesStatusScript(baseBranch: string | null): string {
     ? `counts="$(git rev-list --left-right --count HEAD...origin/${shellQuote(baseBranch)} 2>/dev/null || printf '0\\t0')"
 printf '${MARKERS.aheadBehind}%s\\n' "$counts"`
     : "";
-  return `set -eu
+  const script = `set -euo pipefail
 ${REPO_ROOT}
 printf '${MARKERS.branch}%s\\n' "$(git branch --show-current)"
 ${aheadBehind}
 echo ${MARKERS.status}
-git status --porcelain=v1 --untracked-files=no -- . ${RUNTIME_EXCLUDE}
+git status --porcelain=v1 -z --renames --untracked-files=no -- . ${RUNTIME_EXCLUDE} | base64
 echo ${MARKERS.numstat}
-git diff --numstat HEAD -- . ${RUNTIME_EXCLUDE}
+git diff --numstat -z --find-renames HEAD -- . ${RUNTIME_EXCLUDE} | base64
 echo ${MARKERS.untracked}
-git ls-files --others --exclude-standard -- . ${RUNTIME_EXCLUDE} | while IFS= read -r f; do
-  printf '%s\\t%s\\n' "$(wc -l < "$f" | tr -d ' ')" "$f"
-done`;
+git ls-files -z --others --exclude-standard -- . ${RUNTIME_EXCLUDE} | while IFS= read -r -d '' f; do
+  if [ -L "$f" ]; then count=1; else count="$(wc -l < "$f" | tr -d ' ')"; fi
+  printf '%s\\t%s\\0' "$count" "$f"
+done | base64`;
+  // Encode the NUL-delimited sections for text-only sandbox transports. Git
+  // filenames can contain newlines and even our section marker strings.
+  return `bash -c ${shellQuote(script)}`;
 }
 
 export function buildFileDiffScript(path: string): string {
@@ -85,10 +89,11 @@ export function buildFileDiffScript(path: string): string {
   return `set -eu
 ${REPO_ROOT}
 p=${quoted}
-if git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
+export GIT_LITERAL_PATHSPECS=1
+if git cat-file -e "HEAD:$p" 2>/dev/null || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
   git diff HEAD -- "$p"
 else
-  git diff --no-index -- /dev/null "$p" || true
+  git diff --no-index -- /dev/null "$p" || [ "$?" -eq 1 ]
 fi`;
 }
 
@@ -177,30 +182,11 @@ printf '${MARKERS.pullRequest}%s\\n' "$url"`
 }`;
 }
 
-function unquoteGitPath(raw: string): string {
-  if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
-    try {
-      return JSON.parse(raw) as string;
-    } catch {
-      return raw.slice(1, -1);
-    }
-  }
-  return raw;
-}
-
 function statusFromPorcelain(code: string): SandboxChangedFileStatus {
   if (code.includes("R")) return "renamed";
   if (code.includes("D")) return "deleted";
   if (code.includes("A")) return "added";
   return "modified";
-}
-
-/** `dir/{a => b}/f.ts` and `a.ts => b.ts` both name the new path. */
-function numstatNewPath(raw: string): string {
-  const braced = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(raw);
-  if (braced) return `${braced[1]}${braced[3]}${braced[4]}`;
-  const arrow = raw.indexOf(" => ");
-  return arrow === -1 ? raw : raw.slice(arrow + 4);
 }
 
 function readMarker(lines: string[], marker: string): string | null {
@@ -213,7 +199,13 @@ function section(lines: string[], start: string, end?: string): string[] {
   if (from === -1) return [];
   const tail = lines.slice(from + 1);
   const stop = end === undefined ? -1 : tail.indexOf(end);
-  return (stop === -1 ? tail : tail.slice(0, stop)).filter(Boolean);
+  return Buffer.from(
+    (stop === -1 ? tail : tail.slice(0, stop)).join(""),
+    "base64"
+  )
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean);
 }
 
 export function parseChangesOutput(
@@ -225,26 +217,32 @@ export function parseChangesOutput(
     readMarker(lines, MARKERS.aheadBehind) ?? ""
   ).split("\t");
   const counts = new Map<string, { additions: number; deletions: number }>();
-  for (const line of section(lines, MARKERS.numstat, MARKERS.untracked)) {
+  const stats = section(lines, MARKERS.numstat, MARKERS.untracked);
+  for (let index = 0; index < stats.length; index += 1) {
+    const line = stats[index];
     const [add, del, ...rest] = line.split("\t");
-    counts.set(numstatNewPath(unquoteGitPath(rest.join("\t"))), {
+    let path = rest.join("\t");
+    if (!path) {
+      // Renames have an empty header path, then source NUL destination NUL.
+      path = stats[index + 2];
+      index += 2;
+    }
+    counts.set(path, {
       additions: Number.parseInt(add ?? "0", 10) || 0,
       deletions: Number.parseInt(del ?? "0", 10) || 0,
     });
   }
   const files: SandboxChangedFile[] = [];
-  for (const line of section(lines, MARKERS.status, MARKERS.numstat)) {
+  const statuses = section(lines, MARKERS.status, MARKERS.numstat);
+  for (let index = 0; index < statuses.length; index += 1) {
+    const line = statuses[index];
     const code = line.slice(0, 2);
     // Untracked files are listed separately with their line counts.
     if (code === "??") continue;
-    const rawPath = line.slice(3);
+    const path = line.slice(3);
     const status = statusFromPorcelain(code);
-    const arrow = status === "renamed" ? rawPath.indexOf(" -> ") : -1;
-    const path = unquoteGitPath(
-      arrow === -1 ? rawPath : rawPath.slice(arrow + 4)
-    );
     const previousPath =
-      arrow === -1 ? undefined : unquoteGitPath(rawPath.slice(0, arrow));
+      code.includes("R") || code.includes("C") ? statuses[++index] : undefined;
     const count = counts.get(path) ?? { additions: 0, deletions: 0 };
     files.push({
       path,
@@ -258,7 +256,7 @@ export function parseChangesOutput(
     const tab = line.indexOf("\t");
     if (tab === -1) continue;
     files.push({
-      path: unquoteGitPath(line.slice(tab + 1)),
+      path: line.slice(tab + 1),
       status: "untracked",
       additions: Number.parseInt(line.slice(0, tab), 10) || 0,
       deletions: 0,

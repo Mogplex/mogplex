@@ -146,3 +146,56 @@ test("the agent pane lists sandbox changes with diff, revert, and commit actions
     openPullRequest: true,
   });
 });
+
+test("clean ahead branches retain push recovery after a failed delivery and remount", async ({
+  page,
+}) => {
+  await initializeTrackedEvents(page);
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page);
+  let changes: ChangesPayload = DIRTY;
+  let failPush = true;
+  await page.route(/\/api\/sandbox\/[^/]+\/changes$/, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: changes });
+      return;
+    }
+    changes = { ...DIRTY, files: [], ahead: 1 };
+    if (failPush) {
+      failPush = false;
+      await route.fulfill({ status: 500, json: { error: "Push failed" } });
+    } else {
+      changes = { ...changes, ahead: 0 };
+      await route.fulfill({
+        json: { committed: false, pushed: true, sha: "abc123", changes },
+      });
+    }
+  });
+  const openWorkspace = async () => {
+    await page.goto(scopedPath("projects/workspace"));
+    await page.getByTestId("home-sync-repos").click();
+    await page.getByTestId("home-open-workspace-repo-1").click();
+  };
+  await openWorkspace();
+  await page.getByTestId("changed-files-commit").click();
+  await page
+    .getByTestId("changed-files-commit-message")
+    .fill("Commit before push fails");
+  await page.getByTestId("changed-files-commit-push").click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Push failed" })
+  ).toBeVisible();
+  // Re-entering the workspace reconstructs state from Git, without a local
+  // delivery result or the old error keeping the panel visible.
+  await page.reload();
+  await expect(page.getByTestId("changed-files-bar")).toContainText(
+    "0 files changed"
+  );
+  await expect(page.getByTestId("changed-files-commit")).toHaveText("Push");
+  await page.getByTestId("changed-files-commit").click();
+  await expect(page.getByTestId("changed-files-commit-push")).toBeEnabled();
+  await page.getByTestId("changed-files-commit-push").click();
+  await expect(page.getByTestId("changed-files-delivery")).toContainText(
+    "Pushed"
+  );
+});
