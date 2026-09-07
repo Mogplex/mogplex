@@ -17,11 +17,28 @@ export function workerFailureMessage(
   events: RunWorkspaceEvent[]
 ): string | null {
   if (status !== "failed") return null;
+  if (
+    /development environment stopped|sandbox.*(?:stopped|gone)|session.*(?:stopped|gone)/i.test(
+      error ?? ""
+    )
+  )
+    return "The development environment stopped before the worker finished. Restart it and retry the worker.";
+  if (
+    /invalid request:.*duration|runtime.*(?:unavailable|failed)/i.test(
+      error ?? ""
+    )
+  )
+    return "The worker could not start because of a runtime error. Retry the worker.";
   const diagnostic = [error, ...events.map((event) => event.message)].join(
     "\n"
   );
   if (
-    /401|unauthorized|incorrect api key|authentication failed/i.test(diagnostic)
+    /\b(?:unauthorized|incorrect api key|authentication failed)\b/i.test(
+      diagnostic
+    ) ||
+    /\b(?:HTTP(?:\/[\d.]+)?|status(?:\s+code)?)\s*[:=]?\s*401\b/i.test(
+      diagnostic
+    )
   )
     return "Worker could not authenticate. Check its AI connection before retrying.";
   return "Worker stopped before finishing. Inspect its recorded output before retrying.";
@@ -32,11 +49,18 @@ export function workerSummary(workers: ControlWorker[]): string {
     workers.filter((worker) => worker.status === status).length;
   const label = (n: number, suffix: string) =>
     `${n} worker${n === 1 ? "" : "s"} ${suffix}`;
-  if (count("failed")) return label(count("failed"), "failed");
-  if (count("awaiting_input"))
-    return label(count("awaiting_input"), "need input");
-  if (count("streaming")) return label(count("streaming"), "running");
-  if (count("pending")) return label(count("pending"), "queued");
-  if (count("cancelled")) return label(count("cancelled"), "cancelled");
-  return "Workers finished. Integration and verification are separate.";
+  const states = [
+    ["streaming", "running"],
+    ["pending", "queued"],
+    ["awaiting_input", "need input"],
+    ["failed", "failed"],
+    ["cancelled", "cancelled"],
+  ] as const;
+  const summary = states
+    .filter(([status]) => count(status) > 0)
+    .map(([status, suffix]) => label(count(status), suffix));
+  return (
+    summary.join(" · ") ||
+    "Workers finished. Integration and verification are separate."
+  );
 }

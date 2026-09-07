@@ -467,8 +467,8 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                     </div>
                   </div>
                 )}
-                <TurnProgress messages={messages} status={status} />
-                <TerminalActivity messages={terminalMessages} />
+                <TurnProgress messages={messages} status={status} workers={controlWorkers.workers} />
+                <TerminalActivity key={messages.findLast((message) => message.role === "user")?.id ?? activeChatId} messages={terminalMessages} />
                 <Composer
                   key={`composer-${activeChatId}`}
                   value={composerInput}

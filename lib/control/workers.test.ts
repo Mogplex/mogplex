@@ -15,6 +15,55 @@ const worker = (status: ControlWorker["status"]): ControlWorker => ({
   events: [],
 });
 
+it("does not diagnose authentication from digits in a timestamp", () => {
+  expect(
+    workerFailureMessage(
+      "failed",
+      "The development environment stopped during this agent run. Start it again, then retry.",
+      [
+        {
+          id: "event",
+          type: "message",
+          toolName: null,
+          message:
+            "2026-01-01T00:00:08.644019Z ERROR agent thread limit reached",
+          payload: {},
+          createdAt: "2026-01-01",
+        },
+      ]
+    )
+  ).toBe(
+    "The development environment stopped before the worker finished. Restart it and retry the worker."
+  );
+});
+
+it("does not treat a timestamp containing 401 as an HTTP failure", () => {
+  expect(
+    workerFailureMessage("failed", "exit 1", [
+      {
+        id: "event",
+        type: "message",
+        toolName: null,
+        message: "2026-01-01T00:00:08.644019Z ERROR agent thread limit reached",
+        payload: {},
+        createdAt: "2026-01-01",
+      },
+    ])
+  ).toContain("Inspect its recorded output");
+});
+
+it("identifies an internal runtime setup failure without blaming the user's credentials", () => {
+  expect(
+    workerFailureMessage(
+      "failed",
+      "Invalid request: duration should be >= 1000.",
+      []
+    )
+  ).toBe(
+    "The worker could not start because of a runtime error. Retry the worker."
+  );
+});
+
 it("distinguishes failed, waiting and active workers from integration completion", () => {
   expect(workerSummary([worker("success"), worker("failed")])).toBe(
     "1 worker failed"
@@ -55,4 +104,10 @@ it("explains worker auth failures without exposing diagnostic credentials", () =
       },
     ])
   ).toContain("could not authenticate");
+});
+
+it("keeps running workers visible when another worker fails", () => {
+  expect(
+    workerSummary([worker("failed"), worker("streaming"), worker("pending")])
+  ).toBe("1 worker running · 1 worker queued · 1 worker failed");
 });

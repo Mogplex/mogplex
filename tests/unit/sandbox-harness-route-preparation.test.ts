@@ -158,100 +158,114 @@ test("POST /api/sandbox/[id]/harness clears the prepared marker when claiming a 
   );
 });
 
-test("POST /api/sandbox/[id]/harness sanitizes a closed sandbox stream", async (t) => {
-  const { createSandboxHarnessPostHandler } =
-    await loadSandboxHarnessRouteModule();
-  const aiCall = buildAiCall();
-  const rawError = "Sandbox stream was closed: internal session vm-secret";
-  let persistedError: string | null | undefined;
-  let stoppedRecordId: string | null = null;
-  const loggedErrors: unknown[][] = [];
-  t.mock.method(console, "error", (...args: unknown[]) => {
-    loggedErrors.push(args);
-  });
+for (const providerStatus of ["running", "stopped", "unavailable"] as const) {
+  test(`POST /api/sandbox/[id]/harness reconciles a closed stream when provider is ${providerStatus}`, async (t) => {
+    const { createSandboxHarnessPostHandler } =
+      await loadSandboxHarnessRouteModule();
+    const aiCall = buildAiCall();
+    const rawError = "Sandbox stream was closed: internal session vm-secret";
+    let persistedError: string | null | undefined;
+    let stoppedRecordId: string | null = null;
+    const loggedErrors: unknown[][] = [];
+    t.mock.method(console, "error", (...args: unknown[]) => {
+      loggedErrors.push(args);
+    });
 
-  const handler = createSandboxHarnessPostHandler({
-    ...buildHarnessGitDeliveryDeps(),
-    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
-    loadOwnedSandboxRecord: async () =>
-      buildOwnedSandboxServiceRecord({
-        repo: buildSandboxServiceRecordRepo({
-          github_installation_id: 123,
+    const handler = createSandboxHarnessPostHandler({
+      ...buildHarnessGitDeliveryDeps(),
+      getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+      loadOwnedSandboxRecord: async () =>
+        buildOwnedSandboxServiceRecord({
+          repo: buildSandboxServiceRecordRepo({
+            github_installation_id: 123,
+          }),
         }),
-      }),
-    resolveSandboxAiAccess: async () =>
-      buildSandboxServiceAiAccess({
-        aiBillingSource: "user_ai_gateway",
-        gatewayApiKey: "gateway-key",
-      }),
-    getSandbox: async () => ({}) as never,
-    runHarness: async () =>
-      ({
-        installed: false,
-        installLogs: "",
-        command: {
-          cmdId: "cmd-closed",
-          async *logs() {
-            yield { stream: "stdout" as const, data: "Starting agent\n" };
-            throw new Error(rawError);
-          },
-          wait: async () => ({ exitCode: 1 }),
-          kill: async () => {},
-        },
-      }) as never,
-    renewSandboxActivityLease: async () => 0,
-    stopSandboxRecord: async (recordId) => {
-      stoppedRecordId = recordId;
-      return null;
-    },
-    touchSandboxLastActive: async () => {},
-    resolveRepoSandboxEnv: async () => ({
-      envVars: {},
-      sync: { mode: "sandbox-only", source: "manual", warning: null },
-    }),
-    createAiCall: async () => aiCall,
-    loadOwnedAiCall: async () => aiCall,
-    mergeAiCallMetadata: async () => {
-      throw new Error("mergeAiCallMetadata should not be called");
-    },
-    updateAiCall: async () => {},
-    finalizeAiCallAsCancelledIfActive: async () => {
-      throw new Error("cancel finalization should not be called");
-    },
-    finalizeAiCallIfNotCancelled: async (_aiCallId, update) => {
-      persistedError = update.error;
-      return buildAiCall({ status: "failed", error: update.error ?? null });
-    },
-    safeAppendAiCallEvent: async () => null,
-    loadHarnessPromptWithMemoryContext: async (_userId, prompt) => prompt,
-    persistHarnessMemory: async () => {},
-  });
-
-  const response = await handler(
-    buildSandboxRouteRequest({
-      method: "POST",
-      suffix: "/harness",
-      init: {
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ harness: "codex", prompt: "Review this repo" }),
+      resolveSandboxAiAccess: async () =>
+        buildSandboxServiceAiAccess({
+          aiBillingSource: "user_ai_gateway",
+          gatewayApiKey: "gateway-key",
+        }),
+      getSandbox: async (_name, _credentials, options) => {
+        if (options?.resume === false && providerStatus === "unavailable")
+          throw new Error("Provider unavailable");
+        return { status: providerStatus } as never;
       },
-    }),
-    buildSandboxRouteParams()
-  );
+      runHarness: async () =>
+        ({
+          installed: false,
+          installLogs: "",
+          command: {
+            cmdId: "cmd-closed",
+            async *logs() {
+              yield { stream: "stdout" as const, data: "Starting agent\n" };
+              throw new Error(rawError);
+            },
+            wait: async () => ({ exitCode: 1 }),
+            kill: async () => {},
+          },
+        }) as never,
+      renewSandboxActivityLease: async () => 0,
+      stopSandboxRecord: async (recordId) => {
+        stoppedRecordId = recordId;
+        return null;
+      },
+      touchSandboxLastActive: async () => {},
+      resolveRepoSandboxEnv: async () => ({
+        envVars: {},
+        sync: { mode: "sandbox-only", source: "manual", warning: null },
+      }),
+      createAiCall: async () => aiCall,
+      loadOwnedAiCall: async () => aiCall,
+      mergeAiCallMetadata: async () => {
+        throw new Error("mergeAiCallMetadata should not be called");
+      },
+      updateAiCall: async () => {},
+      finalizeAiCallAsCancelledIfActive: async () => {
+        throw new Error("cancel finalization should not be called");
+      },
+      finalizeAiCallIfNotCancelled: async (_aiCallId, update) => {
+        persistedError = update.error;
+        return buildAiCall({ status: "failed", error: update.error ?? null });
+      },
+      safeAppendAiCallEvent: async () => null,
+      loadHarnessPromptWithMemoryContext: async (_userId, prompt) => prompt,
+      persistHarnessMemory: async () => {},
+    });
 
-  const events = parseSseEvents(await response.text());
-  const errorEvent = events.find((event) => event.type === "error");
-  const friendlyError =
-    "The development environment stopped during this agent run. Start it again, then retry.";
-  assert.equal(stoppedRecordId, "sandbox-1");
-  assert.equal(persistedError, friendlyError);
-  assert.deepEqual(errorEvent, { type: "error", data: friendlyError });
-  assert.doesNotMatch(JSON.stringify(events), /vm-secret/);
-  assert.equal(
-    loggedErrors.some((args) => JSON.stringify(args).includes(rawError)),
-    true
-  );
-});
+    const response = await handler(
+      buildSandboxRouteRequest({
+        method: "POST",
+        suffix: "/harness",
+        init: {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            harness: "codex",
+            prompt: "Review this repo",
+          }),
+        },
+      }),
+      buildSandboxRouteParams()
+    );
+
+    const events = parseSseEvents(await response.text());
+    const errorEvent = events.find((event) => event.type === "error");
+    const friendlyError =
+      providerStatus === "stopped"
+        ? "The development environment stopped during this agent run. Start it again, then retry."
+        : "The worker lost its command connection. Inspect its saved output before retrying.";
+    assert.equal(
+      stoppedRecordId,
+      providerStatus === "stopped" ? "sandbox-1" : null
+    );
+    assert.equal(persistedError, friendlyError);
+    assert.deepEqual(errorEvent, { type: "error", data: friendlyError });
+    assert.doesNotMatch(JSON.stringify(events), /vm-secret/);
+    assert.equal(
+      loggedErrors.some((args) => JSON.stringify(args).includes(rawError)),
+      true
+    );
+  });
+}
 
 test("POST /api/sandbox/[id]/harness fails clearly when neither gateway nor provider credentials exist", async () => {
   const { createSandboxHarnessPostHandler } =

@@ -1,3 +1,4 @@
+import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { createHarnessSessionParser } from "@/lib/harness/session-parser";
 import {
   appendHarnessFailureOutput,
@@ -26,6 +27,7 @@ export type StreamExecutionContext = {
   repoId: string | null;
   rootDirectory: string | null;
   sandboxId: string;
+  sandboxCredentials: Parameters<SandboxHarnessPostDeps["getSandbox"]>[1];
   aiCallId: string;
   aiCallStartedAt: string | null;
   aiCallMetadata: Record<string, unknown>;
@@ -54,6 +56,7 @@ export function createHarnessStreamBody(
     | "publishHarnessPullRequest"
     | "persistHarnessMemory"
     | "stopSandboxRecord"
+    | "getSandbox"
   >,
   sandbox: Sandbox,
   result: HarnessRunResult,
@@ -271,6 +274,7 @@ async function handleStreamError(
     | "finalizeAiCallIfNotCancelled"
     | "safeAppendAiCallEvent"
     | "stopSandboxRecord"
+    | "getSandbox"
   >,
   ctx: StreamExecutionContext,
   result: HarnessRunResult,
@@ -281,9 +285,25 @@ async function handleStreamError(
 ): Promise<void> {
   const rawErrorMsg = err instanceof Error ? err.message : "Stream error";
   const sandboxStreamClosed = isClosedSandboxStreamError(err);
-  const errorMsg = sandboxStreamClosed
+  let sandboxGone = false;
+  if (sandboxStreamClosed) {
+    try {
+      sandboxGone = ["stopped", "failed", "aborted"].includes(
+        (
+          await deps.getSandbox(ctx.sandboxId, ctx.sandboxCredentials, {
+            resume: false,
+          })
+        ).status
+      );
+    } catch (lookupError) {
+      sandboxGone = isNotFoundError(lookupError);
+    }
+  }
+  const errorMsg = sandboxGone
     ? "The development environment stopped during this agent run. Start it again, then retry."
-    : rawErrorMsg;
+    : sandboxStreamClosed
+      ? "The worker lost its command connection. Inspect its saved output before retrying."
+      : rawErrorMsg;
 
   console.error("[harness] command stream failed", {
     aiCallId: ctx.aiCallId,
@@ -292,10 +312,11 @@ async function handleStreamError(
     harnessId: ctx.harnessId,
     runtimeCommandId: result.command.cmdId,
     sandboxStreamClosed,
+    sandboxGone,
     error: rawErrorMsg,
   });
 
-  if (sandboxStreamClosed) {
+  if (sandboxGone) {
     await deps
       .stopSandboxRecord(ctx.id, {
         expectedSandboxId: ctx.sandboxId,

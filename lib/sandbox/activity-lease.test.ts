@@ -2,6 +2,25 @@ import { expect, it } from "vitest";
 import type { Sandbox } from "@vercel/sandbox";
 import { renewSandboxActivityLease } from "./activity-lease";
 
+it.each([1, 500, 999])(
+  "renews a nearly sufficient shared lease by a provider-valid duration (%i ms short)",
+  async (shortfall) => {
+    const now = 60_000;
+    const lease = 35 * 60_000;
+    let timeout = now + lease - shortfall;
+    const sandbox = {
+      currentSession: () => ({ createdAt: new Date(0), timeout }),
+      extendTimeout: async (duration: number) => {
+        if (duration < 1000) throw new Error("duration should be >= 1000");
+        timeout += duration;
+      },
+    } as unknown as Sandbox;
+    await renewSandboxActivityLease(sandbox, now, lease);
+    expect(timeout).toBeGreaterThanOrEqual(now + lease);
+    expect(timeout).toBeLessThan(now + lease + 1000);
+  }
+);
+
 it("reserves the whole execution window before a quiet command begins", async () => {
   const createdAt = new Date("2026-01-01T00:00:00Z");
   const now = createdAt.getTime() + 60_000;

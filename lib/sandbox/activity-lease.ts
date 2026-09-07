@@ -18,7 +18,10 @@ export function resolveSandboxActivityLeaseExtension(
   leaseMs = SANDBOX_ACTIVITY_LEASE_MS
 ) {
   const expiresAtMs = session.createdAt.getTime() + session.timeout;
-  return Math.max(0, nowMs + leaseMs - expiresAtMs);
+  const extensionMs = nowMs + leaseMs - expiresAtMs;
+  // Concurrent workers often arrive milliseconds after another worker renewed
+  // the same session. The provider accepts extensions of at least one second.
+  return extensionMs > 0 ? Math.max(1000, Math.ceil(extensionMs)) : 0;
 }
 
 /**

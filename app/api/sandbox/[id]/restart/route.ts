@@ -181,6 +181,11 @@ async function handlePersistentRestart(
         status: "installing",
         health_status: "starting",
         stop_reason: null,
+        stopped_at: null,
+        // A persistent name survives across provider sessions. The reaper
+        // must measure this boot, not the age of a previous stopped VM.
+        last_boot_started_at: new Date().toISOString(),
+        last_boot_completed_at: null,
         last_active_at: new Date().toISOString(),
       },
       {

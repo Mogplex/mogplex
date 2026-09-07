@@ -89,7 +89,14 @@ test("control shows sandbox launch and command output above the composer", async
   await expect(terminal).toContainText("READ ONLY");
   await expect(terminal).not.toContainText("sandbox-demo");
   await expect(terminal).toContainText("pnpm test");
-  await expect(terminal).toContainText("12 tests passed");
+  const output = terminal.getByText("12 tests passed", { exact: true });
+  await expect(output).toBeHidden();
+  expect((await terminal.boundingBox())!.height).toBeLessThan(65);
+  await terminal.getByRole("button", { name: "Show terminal output" }).click();
+  await expect(output).toBeVisible();
+  await expect(
+    terminal.getByRole("button", { name: "Hide terminal output" })
+  ).toHaveAttribute("aria-expanded", "true");
   await expect(terminal).toContainText("Sandbox failed");
   await expect(terminal).toContainText("Sandbox capacity unavailable");
   await expect(terminal).toContainText(

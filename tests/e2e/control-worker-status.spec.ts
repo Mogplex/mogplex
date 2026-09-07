@@ -108,6 +108,9 @@ test("a finished coordinator reply keeps worker failure and command output visib
   ).toBeVisible();
   const workers = page.getByRole("region", { name: "Mission workers" });
   await expect(workers).toContainText("1 worker queued");
+  await expect(
+    page.getByRole("status", { name: "Current activity" })
+  ).toHaveText("1 worker queued");
   failed = true;
   await page.evaluate(() =>
     window.dispatchEvent(

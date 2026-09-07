@@ -91,6 +91,14 @@ for (const outcome of [
         assert.equal(f.closed, true);
         return;
       }
+      assert.match(
+        JSON.stringify(f.providerRequests[0]),
+        /Recover interrupted workers within the original request/
+      );
+      assert.match(
+        JSON.stringify(f.providerRequests[0]),
+        /Never retry cancelled workers/
+      );
       assert.equal(result.status, "finished");
       assert.equal(f.ticket.status, "finished");
       assert.equal(f.calls[0]?.status, "success");

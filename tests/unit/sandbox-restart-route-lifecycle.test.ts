@@ -259,6 +259,8 @@ test("POST /api/sandbox/[id]/restart finalizes the old session before waking the
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   const stoppedAt = new Date("2026-08-05T11:10:00.000Z");
   const events: unknown[] = [];
+  const updatesSeen: Array<Record<string, unknown>> = [];
+  const restartStartedAt = Date.now();
 
   const handler = createSandboxRestartHandler({
     loadOwnedSandboxRouteRecord: (async () => ({
@@ -302,10 +304,12 @@ test("POST /api/sandbox/[id]/restart finalizes the old session before waking the
     updateSandboxRecord: (async (
       _id: string,
       updates: Record<string, unknown>
-    ) =>
-      buildPersistedPersistentRestartRecord(
+    ) => {
+      updatesSeen.push(updates);
+      return buildPersistedPersistentRestartRecord(
         updates as Partial<PersistentRestartRecord>
-      )) as never,
+      );
+    }) as never,
     resolveRepoSandboxEnv: (async () => ({
       envVars: {},
       sync: { mode: "sandbox-only" },
@@ -322,6 +326,14 @@ test("POST /api/sandbox/[id]/restart finalizes the old session before waking the
 
   assert.equal(response.status, 200);
   await readStreamBody(response);
+  const installing = updatesSeen.find(
+    (update) => update.status === "installing"
+  )!;
+  assert.ok(
+    Date.parse(String(installing.last_boot_started_at)) >= restartStartedAt
+  );
+  assert.equal(installing.last_boot_completed_at, null);
+  assert.equal(installing.stopped_at, null);
   assert.deepEqual(events.slice(0, 6), [
     ["get", false],
     ["prepare"],
