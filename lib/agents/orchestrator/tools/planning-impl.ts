@@ -11,6 +11,7 @@ import {
 import { startMogplexApiRun } from "@/lib/mogplex-api/runs";
 import { bindWorktreeAgent, loadOwnedWorktree } from "@/lib/worktrees/store";
 import { defineTool } from "../helpers";
+import type { HarnessExecutionMode } from "@/lib/harness/claude-permissions";
 import type { OrchestratorToolContext } from "../types";
 import { planMissionSchema, spawnSubagentSchema } from "./planning";
 
@@ -23,6 +24,18 @@ const defaultPlanMissionDeps: PlanMissionDeps = {
   getRunDetails: getOrchestrationRunDetails,
   createPlan: createOrchestrationPlan,
 };
+
+/**
+ * Workers have no approval channel, so the operator's Control preset decides
+ * their sandbox. Codex keeps Git metadata read-only in workspace-write mode,
+ * which makes commits (and therefore delivery) impossible; "Skip Permissions"
+ * grants full access inside the already-isolated sandbox.
+ */
+export function resolveWorkerExecutionMode(
+  ctx: Pick<OrchestratorToolContext, "controlPermissions">
+): HarnessExecutionMode {
+  return ctx.controlPermissions === "Skip Permissions" ? "YOLO" : "AUTO";
+}
 
 function missingRun() {
   return {
@@ -39,7 +52,7 @@ export function createPlanMissionTool(
   const deps = { ...defaultPlanMissionDeps, ...overrides };
   return defineTool({
     description:
-      "Persist mission tasks, including new follow-up tasks in an existing thread. Use new slugs for new work; unchanged tasks are replayed safely and earlier instructions are preserved. Call once per complete task set after constructing the full input; tasks must be a JSON array of task objects, never a serialized string. Each returned task ID can be assigned its own worktree.",
+      "Persist mission tasks. For a follow-up in an existing thread, send only the new tasks under new slugs: earlier tasks and their instructions are preserved automatically, and re-sending an existing slug with any difference fails the whole call. Call once per launch request after constructing the full input; tasks must be a JSON array of task objects, never a serialized string. Each returned task ID can be assigned its own worktree.",
     inputSchema: planMissionSchema,
     execute: async (input: z.infer<typeof planMissionSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
@@ -189,7 +202,7 @@ export function createSpawnSubagentTool(
             worktreeId: worktree.id,
             conversationId: ctx.conversationId,
             workspaceSessionId: ctx.workspaceSessionId,
-            mode: ctx.controlMode,
+            mode: resolveWorkerExecutionMode(ctx),
           },
           extraMetadata: {
             orchestrationRunId: ctx.orchestrationRunId,
