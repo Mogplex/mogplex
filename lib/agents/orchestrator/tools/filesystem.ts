@@ -10,23 +10,24 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
   {
     name: "read_file",
     category: "filesystem",
-    description: "Read a file from the repository via GitHub API",
+    description:
+      "Read a file from the live sandbox checkout, or from GitHub when no sandbox is running",
     access: "read",
     implemented: true,
   },
   {
     name: "write_file",
     category: "filesystem",
-    description: "Write content to a file in the sandbox",
+    description: "Write a whole file in the sandbox and return the diff",
     access: "mutation",
     implemented: true,
   },
   {
     name: "edit_file",
     category: "filesystem",
-    description: "Apply a targeted edit to a file (patch-style)",
+    description: "Replace exact text in a sandbox file and return the diff",
     access: "mutation",
-    implemented: false,
+    implemented: true,
   },
   {
     name: "search_repo",
@@ -38,7 +39,8 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
   {
     name: "list_files",
     category: "filesystem",
-    description: "List files in a repository directory",
+    description:
+      "List a directory in the live sandbox checkout, or on GitHub when no sandbox is running",
     access: "read",
     implemented: true,
   },
@@ -67,12 +69,6 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
 
 // --- Schemas ---
 
-export const editFileSchema = z.object({
-  path: z.string().describe("File path to edit"),
-  search: z.string().describe("Text to find"),
-  replace: z.string().describe("Replacement text"),
-});
-
 export const readRepoMapSchema = z.object({
   maxDepth: z.number().optional().describe("Maximum directory depth"),
   includePatterns: z
@@ -95,7 +91,6 @@ export const deleteFileSchema = z.object({
 // --- Schema map for stub tools ---
 
 export const FILESYSTEM_SCHEMAS: Record<string, z.ZodType> = {
-  edit_file: editFileSchema,
   read_repo_map: readRepoMapSchema,
   copy_files: copyFilesSchema,
   delete_file: deleteFileSchema,

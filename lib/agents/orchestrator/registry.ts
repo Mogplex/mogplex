@@ -6,8 +6,6 @@
  */
 import type { Tool } from "ai";
 import {
-  createReadFile,
-  createListFiles,
   createWriteFile,
   createStartSandbox,
   createStopSandbox,
@@ -29,7 +27,12 @@ import {
   createHandoffNoteTool,
   createSummarizeHistoryTool,
 } from "./tools/memory-impl";
+import { createEditFile } from "@/lib/agents/tools/sandbox-files";
 import { createRequestApprovalTool } from "./tools/governance-impl";
+import {
+  createControlListFiles,
+  createControlReadFile,
+} from "./tools/filesystem-impl";
 import {
   createPlanMissionTool,
   createSpawnSubagentTool,
@@ -122,15 +125,20 @@ function buildToolForDef(
   if (def.name === "await_workers") return ctx.workerHandoffTool ?? null;
 
   if (def.name === "read_file") {
-    return createReadFile(ctx.githubToken, repoDefaults);
+    return createControlReadFile(ctx, repoDefaults);
   }
   if (def.name === "list_files") {
-    return createListFiles(ctx.githubToken, repoDefaults);
+    return createControlListFiles(ctx, repoDefaults);
   }
   if (def.name === "write_file") {
     return ctx.sandboxSelectionRequired
       ? null
       : createWriteFile(ctx.userId, ctx.sandboxBinding);
+  }
+  if (def.name === "edit_file") {
+    return ctx.sandboxSelectionRequired
+      ? null
+      : createEditFile(ctx.userId, ctx.sandboxBinding);
   }
   if (def.name === "search_repo") {
     return ctx.githubToken

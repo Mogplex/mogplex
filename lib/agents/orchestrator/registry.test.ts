@@ -119,7 +119,77 @@ describe("buildOrchestratorTools", () => {
     expect(ambiguousSandbox.sandbox_start).toBeUndefined();
     expect(ambiguousSandbox.sandbox_stop).toBeUndefined();
     expect(ambiguousSandbox.write_file).toBeUndefined();
+    expect(ambiguousSandbox.edit_file).toBeUndefined();
     expect(ambiguousSandbox.spawn_worktree).toBeUndefined();
+    expect(ambiguousSandbox.read_file).toBeDefined();
+    expect(ambiguousSandbox.list_files).toBeDefined();
+  });
+
+  it("exposes edit_file against the server-selected sandbox", () => {
+    const schema = tools.edit_file.inputSchema as unknown as {
+      shape: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.shape).sort()).toEqual([
+      "new_string",
+      "old_string",
+      "path",
+      "replace_all",
+    ]);
+    expect(tools.edit_file.description).toMatch(/diff/i);
+  });
+
+  it("reads and lists through the sandbox binding and falls back to GitHub", async () => {
+    const calls: string[] = [];
+    const originalFetch = global.fetch;
+    const originalSecret = process.env.INTERNAL_API_SECRET;
+    process.env.INTERNAL_API_SECRET = "internal-secret";
+    global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      calls.push(`${init?.method ?? "GET"} ${url.host}${url.pathname}`);
+      if (url.pathname.endsWith("/files")) {
+        return init?.method === "POST"
+          ? Response.json({ path: ".", entries: [] })
+          : Response.json({ path: "README.md", content: "live\n" });
+      }
+      return Response.json(
+        { type: "file", content: btoa("committed\n"), encoding: "base64" },
+        { status: 200 }
+      );
+    }) as typeof fetch;
+    try {
+      const binding: NonNullable<OrchestratorToolContext["sandboxBinding"]> = {
+        sandboxId: null,
+        status: "unavailable",
+      };
+      const built = buildOrchestratorTools({
+        ...FULL_CONTEXT,
+        sandboxId: null,
+        sandboxBinding: binding,
+      });
+      const read = built.read_file as unknown as {
+        execute: (input: Record<string, unknown>) => Promise<unknown>;
+      };
+      const list = built.list_files as unknown as {
+        execute: (input: Record<string, unknown>) => Promise<unknown>;
+      };
+      await read.execute({ path: "README.md" });
+      expect(calls.at(-1)).toMatch(/api\.github\.com/);
+
+      binding.sandboxId = "sandbox-late";
+      binding.status = "running";
+      const live = (await read.execute({ path: "README.md" })) as {
+        content?: string;
+      };
+      expect(calls.at(-1)).toMatch(/\/api\/sandbox\/sandbox-late\/files$/);
+      expect(live.content).toContain("live");
+      await list.execute({ path: "" });
+      expect(calls.at(-1)).toMatch(
+        /^POST .*\/api\/sandbox\/sandbox-late\/files$/
+      );
+    } finally {
+      global.fetch = originalFetch;
+      process.env.INTERNAL_API_SECRET = originalSecret;
+    }
   });
 
   it("describes the sandbox and worktree decision contract consistently", () => {

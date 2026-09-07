@@ -42,12 +42,13 @@ test("orchestrator prompt keeps sandboxes and worktrees distinct", () => {
   assert.match(prompt, /sandbox_start immediately as the first tool/i);
   assert.match(prompt, /whole requested outcome.*MUST be the only tool/);
   assert.match(prompt, /run_command.*selected sandbox/i);
-  assert.match(prompt, /plan_mission.*task identities/i);
+  assert.match(prompt, /coding request is yours to do directly/i);
+  assert.match(prompt, /plan_mission.*task identities only when delegating/i);
   assert.match(prompt, /spawn_worktree.*planned task/i);
   assert.match(prompt, /spawn_subagent.*active persisted worktree/i);
   assert.match(
     prompt,
-    /Preview-only, inspection-only, and command-only work.*not.*worktree/i
+    /Preview-only, inspection-only, command-only, and direct coding work.*not.*worktree/i
   );
   assert.match(prompt, /Sandbox lifecycle.*never.*worktree lifecycle/i);
   assert.match(prompt, /Active worktrees:\n\(none\)/);

@@ -11,7 +11,6 @@ import {
   approveMissionEvent,
   generateMissionId,
 } from "@/lib/control/utils";
-import { collectChangedFiles } from "@/lib/control/changed-files";
 import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
 import { scopedHref } from "@/lib/scoped-href";
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
@@ -22,7 +21,7 @@ import { buildCombinedTimeline } from "./build-combined-timeline";
 import { ControlTopBar } from "./control-top-bar";
 import { WorkspaceTabs, type ControlView } from "./workspace-tabs";
 import { SandboxesPanel } from "./sandboxes-panel";
-import { ChangedFilesCard } from "./changed-files-card";
+import { TimelineTrailing } from "./timeline-trailing";
 import { TurnProgress } from "./turn-progress";
 import { currentTurnMessages } from "@/lib/control/turn-progress";
 import { Timeline } from "./timeline";
@@ -49,7 +48,6 @@ import { useControlSessionActions } from "./use-control-session-actions";
 import { useControlSandboxStart } from "./use-control-sandbox-start";
 import { useControlComposerActions } from "./use-control-composer-actions";
 import { useControlWorkers } from "./use-control-workers";
-import { MissionExecutionStatus } from "./coordinator-followup";
 
 export type ControlShellProps = {
   initialData: ControlSeedData;
@@ -284,11 +282,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   const contextUsage = latestControlContext(messages);
   const combinedTimeline = buildCombinedTimeline(mission?.timeline, messages);
 
-  const hasChanges = useMemo(
-    () => collectChangedFiles(messages).length > 0,
-    [messages]
-  );
-
   const previewUrl =
     activeSandbox?.runtime_summary.status === "running"
       ? (activeSandbox.runtime_summary.preview_url ?? null)
@@ -450,10 +443,17 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                   onToolApprovalResponse={handleToolApprovalResponse}
                   pending={chatPending}
                   trailing={
-                    <>
-                      {!chatPending && hasChanges && <ChangedFilesCard messages={messages} />}
-                      <MissionExecutionStatus compact={chatPending} sessionId={sessionId} workers={controlWorkers.workers} error={controlWorkers.error} loading={controlWorkers.loading} onRefresh={controlWorkers.refresh} />
-                    </>
+                    <TimelineTrailing
+                      messages={messages}
+                      chatPending={chatPending}
+                      sandboxId={
+                        activeSandbox?.runtime_summary.status === "running"
+                          ? activeSandbox.id
+                          : null
+                      }
+                      sessionId={sessionId}
+                      workers={controlWorkers}
+                    />
                   }
                 />
                 {chatError && (
