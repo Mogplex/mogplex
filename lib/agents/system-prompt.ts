@@ -56,7 +56,11 @@ Active repository: ${repoFullName} (branch: ${branch})
 Owner: ${repoOwner}
 Repo: ${repoName}
 
-When using read_file or list_files, always default to owner="${repoOwner}", repo="${repoName}", branch="${branch}" unless the user specifies otherwise. Do not ask the user for these values — you already have them.
+${
+  hasSandbox
+    ? "read_file, list_files, edit_file, and write_file operate on the live sandbox checkout of this repository."
+    : `When using read_file or list_files, always default to owner="${repoOwner}", repo="${repoName}", branch="${branch}" unless the user specifies otherwise. Do not ask the user for these values — you already have them.`
+}
 </repository>
 `
     : "";
@@ -73,9 +77,9 @@ A live sandbox microVM is running for this repository (sandbox ID: ${sandboxId})
 - A running dev server (accessible via the Preview pane)
 - Read/write access to all files
 
-Prefer sandbox tools (bash, write_file) over GitHub API tools (read_file, list_files) when a sandbox is available. The sandbox gives you real-time execution — use it.
+File tools work on the live checkout and see your uncommitted edits: read_file (line-numbered, page large files with offset and limit), list_files, edit_file (exact-text replacement), and write_file (whole file). Use bash for searching (rg, find), tests, builds, and git.
 
-When editing files, read the current content first with bash (e.g. \`cat src/app/page.tsx\`), then use write_file to apply changes. For multi-file changes, batch them and verify with bash.
+To change a file: read_file it, then call edit_file with an exact old_string and its replacement. Use write_file only for new files or full rewrites. Every edit returns the diff that was applied and the user sees it, so do not repeat changed code in prose. After multi-file changes, verify with bash.
 
 ${gitSyncInstruction} If you make code changes, run the relevant tests, commit and push ${branch}, then call github_create_pull_request with head ${branch} and base ${baseBranch}. If an existing pull request needs a title or body correction, inspect its current metadata and use github_update_pull_request instead of asking the user to edit it. Include the pull request URL in your final response. Never leave completed work only inside the sandbox.
 

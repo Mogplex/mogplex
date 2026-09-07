@@ -2,10 +2,15 @@ export { webFetch, webSearch, browseSkills, browseVercelDocs } from "./web";
 export {
   createTerminalExec,
   terminalExec,
-  createWriteFile,
   createStartSandbox,
   createStopSandbox,
 } from "./sandbox";
+export {
+  createEditFile,
+  createSandboxListFiles,
+  createSandboxReadFile,
+  createWriteFile,
+} from "./sandbox-files";
 export { createReadFile, createListFiles } from "./github-files";
 export {
   createGithubApi,

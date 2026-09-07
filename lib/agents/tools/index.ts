@@ -5,6 +5,7 @@ import {
   resolveMemberCapabilities as defaultResolveMemberCapabilities,
   type Capability,
 } from "@/lib/team-capabilities";
+import { filterToolsByCapability, TOOL_CAPABILITY } from "./tool-capabilities";
 import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
 import { wrapToolsWithSlackIdempotency } from "@/lib/agents/slack-tool-idempotency";
 import type { Connection } from "@/lib/types";
@@ -12,10 +13,15 @@ import { webFetch, webSearch, browseSkills, browseVercelDocs } from "./web";
 import {
   createTerminalExec,
   type SandboxCommandExecution,
-  createWriteFile,
   createStartSandbox,
   createStopSandbox,
 } from "./sandbox";
+import {
+  createEditFile,
+  createSandboxListFiles,
+  createSandboxReadFile,
+  createWriteFile,
+} from "./sandbox-files";
 import { createReadFile, createListFiles } from "./github-files";
 import {
   createGithubApi,
@@ -49,6 +55,7 @@ import {
 import type { RepoToolDefaults } from "./shared";
 
 export * from "./public";
+export { filterToolsByCapability, TOOL_CAPABILITY } from "./tool-capabilities";
 
 const EMPTY_GITHUB_REQUEST_AUTHORIZATIONS: GithubRequestMutationAuthorizations =
   {
@@ -56,75 +63,13 @@ const EMPTY_GITHUB_REQUEST_AUTHORIZATIONS: GithubRequestMutationAuthorizations =
     issueMutations: [],
   };
 
+/** Sandbox-backed reads are a bash-class capability, not a GitHub API one. */
+const SANDBOX_FILE_READ_TOOLS = new Set(["read_file", "list_files"]);
+
 function githubRequestAuthorizations(
   value: GithubRequestMutationAuthorizations | undefined
 ) {
   return value ?? EMPTY_GITHUB_REQUEST_AUTHORIZATIONS;
-}
-
-/**
- * Capability tag per static tool key. Connection (REST / MCP) tools share
- * the `connections.create` cap in v1 (issue #559 spec); per-connection
- * capabilities are deferred.
- */
-export const TOOL_CAPABILITY: Record<string, Capability> = {
-  virtual_exec: "tools.virtual_exec",
-  web_fetch: "tools.web_fetch",
-  web_search: "tools.web_search",
-  browse_skills: "tools.web_fetch",
-  browse_vercel_docs: "tools.web_fetch",
-  bash: "tools.bash",
-  read_file: "tools.github_api",
-  list_files: "tools.github_api",
-  start_sandbox: "tools.bash",
-  stop_sandbox: "tools.bash",
-  github_api: "tools.github_api",
-  // This is broader than the workspace-scoped github_api tool: it performs
-  // authenticated org/user/repo PR inventory using the user's own GitHub auth.
-  github_pr_search: "tools.github_api",
-  github_pull_request_status: "tools.github_api",
-  // Same authenticated-inventory class as github_pr_search: lists repos
-  // (including private) visible to the user's installations/OAuth.
-  github_list_repos: "tools.github_api",
-  github_create_issue: "tools.github_api",
-  github_update_issue: "tools.github_api",
-  github_comment_issue: "tools.github_api",
-  github_merge_pull_request: "tools.github_api",
-  github_create_pull_request: "tools.github_api",
-  github_update_pull_request: "tools.github_api",
-  write_file: "tools.write_file",
-  add_memory: "tools.memories",
-  search_memories: "tools.memories",
-  list_memories: "tools.memories",
-};
-
-/**
- * Drop tool entries the caller's capability set doesn't cover. Unknown keys
- * fail closed — adding a new tool requires registering its capability in
- * `TOOL_CAPABILITY` (or `DYNAMIC_CONNECTION_CAPABILITY` for connection
- * tools, matched by prefix in `buildTools`).
- */
-export function filterToolsByCapability<T extends Record<string, Tool>>(
-  tools: T,
-  caps: ReadonlySet<Capability>,
-  resolveRequired: (key: string) => Capability | undefined = (k) =>
-    TOOL_CAPABILITY[k],
-  onDenied?: (toolName: string, requiredCapability: Capability | null) => void
-): Partial<T> {
-  if (caps.has("*")) return tools;
-  const out: Record<string, Tool> = {};
-  for (const [key, value] of Object.entries(tools)) {
-    const required = resolveRequired(key);
-    if (!required) {
-      continue;
-    }
-    if (hasCapability(caps, required)) {
-      out[key] = value;
-    } else {
-      onDenied?.(key, required);
-    }
-  }
-  return out as Partial<T>;
 }
 
 export function buildStaticTools(
@@ -165,8 +110,17 @@ export function buildStaticTools(
       undefined,
       sandboxExecution
     ),
-    read_file: createReadFile(githubToken, repoDefaults),
-    list_files: createListFiles(githubToken, repoDefaults),
+    // With a sandbox, file reads come from the live checkout so the agent
+    // sees its own uncommitted edits; GitHub is the fallback without one.
+    ...(sandboxId
+      ? {
+          read_file: createSandboxReadFile(userId, sandboxId),
+          list_files: createSandboxListFiles(userId, sandboxId),
+        }
+      : {
+          read_file: createReadFile(githubToken, repoDefaults),
+          list_files: createListFiles(githubToken, repoDefaults),
+        }),
     stop_sandbox: createStopSandbox(userId),
     ...(repoId ? { start_sandbox: createStartSandbox(userId, repoId) } : {}),
     ...memoryTools,
@@ -211,12 +165,20 @@ export function buildStaticTools(
           ),
         }
       : {}),
-    ...(sandboxId ? { write_file: createWriteFile(userId, sandboxId) } : {}),
+    ...(sandboxId
+      ? {
+          write_file: createWriteFile(userId, sandboxId),
+          edit_file: createEditFile(userId, sandboxId),
+        }
+      : {}),
   };
   return filterToolsByCapability(
     all,
     capabilities,
-    (key) => TOOL_CAPABILITY[key],
+    (key) =>
+      sandboxId && SANDBOX_FILE_READ_TOOLS.has(key)
+        ? "tools.bash"
+        : TOOL_CAPABILITY[key],
     onDenied
   ) as typeof all;
 }

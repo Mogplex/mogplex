@@ -252,64 +252,8 @@ export function createTerminalExec(
 
 export const terminalExec = createTerminalExec();
 
-const writeFileParams = z.object({
-  path: z.string().describe("File path relative to sandbox root"),
-  content: z.string().describe("File content to write"),
-});
+export { createWriteFile } from "./sandbox-files";
 
-export function createWriteFile(
-  userId?: string,
-  sandboxSelection?: SandboxSelection
-) {
-  return defineTool({
-    description:
-      "Write content to a file in the current server-selected sandbox. The sandbox identity follows the session lifecycle and cannot be supplied by the model.",
-    inputSchema: writeFileParams,
-    execute: async ({ path, content }: z.infer<typeof writeFileParams>) => {
-      if (
-        typeof sandboxSelection === "object" &&
-        sandboxSelection.status === "pending"
-      ) {
-        return {
-          error: "Sandbox startup is still in progress.",
-          reason: "sandbox_pending" as const,
-        };
-      }
-      const sandboxId = readSelectedSandboxId(sandboxSelection);
-      if (!sandboxId) {
-        return {
-          error: "Select a sandbox first.",
-          reason: "sandbox_not_selected" as const,
-        };
-      }
-      const baseUrl = resolveAppBaseUrl();
-
-      const requestHeaders = getSandboxRequestHeaders(userId);
-      if ("error" in requestHeaders) {
-        return {
-          error: requestHeaders.error,
-          reason: requestHeaders.reason,
-        };
-      }
-
-      const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}/files`, {
-        method: "PUT",
-        headers: requestHeaders.headers,
-        body: JSON.stringify({ path, content }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        return {
-          error: (data.error as string) || "Write failed",
-          reason: "operation_failed" as const,
-        };
-      }
-
-      return { ok: true, path, sandboxId };
-    },
-  });
-}
 const stopSandboxParams = z.object({
   sandboxId: z.string().describe("The sandbox ID to stop"),
 });
