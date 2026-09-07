@@ -28,14 +28,46 @@ const PROJECT_COLORS = [
   "bg-project-pink",
 ] as const;
 
-/** Stable categorical color, independent of sorting and runtime status. */
-export function projectColorClass(name: string): string {
-  if (name === GENERAL_GROUP_NAME) return "bg-project-neutral";
+const NEUTRAL_COLOR = "bg-project-neutral";
+
+function projectColorSlot(name: string): number {
   let hash = 0;
   for (const char of name) {
-    hash = (hash * 31 + char.codePointAt(0)!) % 997;
+    hash = (hash * 31 + (char.codePointAt(0) ?? 0)) % 997;
   }
-  return PROJECT_COLORS[hash % PROJECT_COLORS.length];
+  return hash % PROJECT_COLORS.length;
+}
+
+/** Stable categorical color, independent of sorting and runtime status. */
+export function projectColorClass(name: string): string {
+  if (name === GENERAL_GROUP_NAME) return NEUTRAL_COLOR;
+  return PROJECT_COLORS[projectColorSlot(name)];
+}
+
+/**
+ * Colors for every project shown together. Each name prefers its hashed
+ * color, but a name whose color is already taken moves to the next free one,
+ * so projects on screen at the same time never share a dot until the palette
+ * runs out. Names are claimed in alphabetical order so the result does not
+ * depend on sidebar sorting or recency.
+ */
+export function assignProjectColors(names: string[]): Map<string, string> {
+  const colors = new Map<string, string>();
+  const taken = new Set<number>();
+  for (const name of [...new Set(names)].sort()) {
+    if (name === GENERAL_GROUP_NAME) {
+      colors.set(name, NEUTRAL_COLOR);
+      continue;
+    }
+    const preferred = projectColorSlot(name);
+    let slot = preferred;
+    if (taken.size < PROJECT_COLORS.length) {
+      while (taken.has(slot)) slot = (slot + 1) % PROJECT_COLORS.length;
+    }
+    taken.add(slot);
+    colors.set(name, PROJECT_COLORS[slot]);
+  }
+  return colors;
 }
 
 /**

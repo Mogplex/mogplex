@@ -13,8 +13,8 @@ import {
 } from "iconoir-react";
 import { useCommandPalette } from "@/components/command-palette-provider";
 import {
+  assignProjectColors,
   groupSessionsByProject,
-  projectColorClass,
   type SessionGroup,
 } from "@/lib/control/session-groups";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
@@ -109,6 +109,7 @@ function SessionRow({
 
 function ProjectGroupSection({
   group,
+  colorClass,
   selectedId,
   workingIds,
   onSelect,
@@ -116,6 +117,7 @@ function ProjectGroupSection({
   onDelete,
 }: {
   group: SessionGroup<ControlSessionSummary>;
+  colorClass: string;
   selectedId: string | null;
   workingIds: ReadonlySet<string>;
   onSelect: (id: string) => void;
@@ -153,7 +155,7 @@ function ProjectGroupSection({
           )}
           <span
             aria-hidden="true"
-            className={`size-3.5 shrink-0 rounded-full ${projectColorClass(group.name)}`}
+            className={`size-3.5 shrink-0 rounded-full ${colorClass}`}
           />
           <span className="min-w-0 truncate font-medium">{group.name}</span>
           <span className="ml-auto shrink-0 text-xs text-ink-400">
@@ -234,6 +236,10 @@ export function SessionList({
   const groups = useMemo(
     () => sortGroups(groupSessionsByProject(sessions), sortMode),
     [sessions, sortMode]
+  );
+  const projectColors = useMemo(
+    () => assignProjectColors(groups.map((group) => group.name)),
+    [groups]
   );
   const workingCount = workingIds.size;
 
@@ -376,6 +382,7 @@ export function SessionList({
             <ProjectGroupSection
               key={group.project ?? "__general__"}
               group={group}
+              colorClass={projectColors.get(group.name) ?? "bg-project-neutral"}
               selectedId={selectedId}
               workingIds={workingIds}
               onSelect={onSelect}
