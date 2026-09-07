@@ -94,6 +94,48 @@ describe("planning tools", () => {
     ]);
   });
 
+  it("runs workers with full sandbox access when the operator skipped permissions", async () => {
+    // Codex keeps Git metadata read-only in workspace-write mode, so a worker
+    // that cannot commit fails delivery with "untracked files remain".
+    const starts: Array<{ body: { mode?: string | null } }> = [];
+    const tool = createSpawnSubagentTool(
+      { ...ctx, controlPermissions: "Skip Permissions" },
+      {
+        loadWorktree: async () => buildWorktree(),
+        bindAgent: async () => buildWorktree(),
+        startRun: async (input) => {
+          starts.push(input as unknown as { body: { mode?: string | null } });
+          return {
+            replayed: false,
+            run: {
+              runId: "99999999-9999-4999-8999-999999999999",
+              aiCallId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              worktreeId: WORKTREE_ID,
+            },
+          } as Awaited<
+            ReturnType<
+              typeof import("@/lib/mogplex-api/runs").startMogplexApiRun
+            >
+          >;
+        },
+      }
+    ) as unknown as ExecutableTool;
+    await tool.execute({
+      worktreeId: WORKTREE_ID,
+      taskPrompt: "Implement the task",
+      agentType: "codex",
+    });
+    expect(starts[0]?.body.mode).toBe("YOLO");
+  });
+
+  it("tells the coordinator to send only new tasks for a follow-up", () => {
+    const tool = createPlanMissionTool(ctx) as unknown as {
+      description: string;
+    };
+    expect(tool.description).toMatch(/only the new tasks/i);
+    expect(tool.description).not.toMatch(/replayed/i);
+  });
+
   it("starts a worker with the exact active worktree binding", async () => {
     const starts: Array<Record<string, unknown>> = [];
     const bindings: Array<Record<string, unknown>> = [];
@@ -137,6 +179,7 @@ describe("planning tools", () => {
         worktreeId: WORKTREE_ID,
         prompt: "Implement the task",
         harness: "codex",
+        mode: "AUTO",
       },
       extraMetadata: {
         orchestrationRunId: RUN_ID,
