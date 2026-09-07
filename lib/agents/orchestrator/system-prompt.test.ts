@@ -134,7 +134,29 @@ describe("orchestrator resource decision prompt", () => {
     );
   });
 
-  it("plans clear parallel coding tasks before exploratory runtime work", () => {
+  it("tells the coordinator how to edit files and what the operator sees", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      activeSandboxes: [{ id: "sandbox-1", branch: "main", status: "running" }],
+    });
+
+    expect(prompt).toContain("Do the work yourself by default.");
+    expect(prompt).toContain(
+      "Never delegate a single task you could do yourself in the current turn."
+    );
+    expect(prompt).toContain(
+      "call edit_file with an exact old_string and its replacement"
+    );
+    expect(prompt).toContain(
+      "the operator sees it inline, so do not repeat changed code in prose"
+    );
+    expect(prompt).toContain("Do not commit or push unless the operator asks.");
+    expect(prompt).toContain(
+      "Direct edits land on the selected sandbox's working branch."
+    );
+  });
+
+  it("does coding work directly and reserves plan_mission for delegation", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",
       activeSandboxes: [{ id: "sandbox-1", branch: "main", status: "running" }],
@@ -150,13 +172,15 @@ describe("orchestrator resource decision prompt", () => {
       "call sandbox_start as directed above; it safely reuses the running sandbox rather than creating duplicate compute"
     );
     expect(prompt).toContain(
-      "The first emitted tool call MUST be plan_mission."
+      "A coding request is yours to do directly in the selected sandbox with read_file, edit_file, write_file, and run_command."
+    );
+    expect(prompt).not.toContain("MUST be plan_mission");
+    expect(prompt).not.toContain("You never edit repository code directly");
+    expect(prompt).toContain(
+      "Use plan_mission to create task identities only when delegating"
     );
     expect(prompt).toContain(
-      "Do not call summarize_history, list_files, read_file, search_repo, memory_search, run_command, or sandbox_start first."
-    );
-    expect(prompt).toContain(
-      "Call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string."
+      "When delegating, call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string."
     );
     expect(prompt).toContain(
       "If no running sandbox is selected after planning, call sandbox_start exactly once and wait for its event-driven result."
@@ -214,7 +238,7 @@ describe("orchestrator resource decision prompt", () => {
       "emit no tool call — not even list_worktrees or diff_worktree"
     );
     expect(prompt).toContain(
-      "Preview-only, inspection-only, and command-only work must not create a worktree"
+      "Preview-only, inspection-only, command-only, and direct coding work must not create a worktree"
     );
     expect(prompt).toContain(
       "spawn_subagent only after an active persisted worktree exists"

@@ -1,5 +1,12 @@
 "use client";
-import { useRef, useEffect, useState, useMemo, useCallback } from "react";
+import {
+  useRef,
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  useReducer,
+} from "react";
 import type { PaneNode } from "@/hooks/use-split-panes";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { useSessionsStore } from "@/hooks/use-sessions";
@@ -20,10 +27,12 @@ import { usePreviewFeedbackStore } from "@/hooks/use-preview-feedback";
 import { buildChatRequestBody } from "@/lib/agents/chat-request-body";
 import type { Repo } from "@/lib/types";
 import { useHarnessRun } from "./use-harness-run";
-import { EMPTY_LOCAL_MESSAGES, estimateTokens } from "../utils";
+import { EMPTY_LOCAL_MESSAGES } from "../utils";
 import { AgentHeader } from "./agent-header";
 import { ConversationHistory } from "./conversation-history";
 import { ChatMessageList } from "./chat-message-list";
+import { ChangedFilesBar } from "@/components/sandbox-changes/changed-files-bar";
+import { estimateConversationTokens, lastUserMessageText } from "@/lib/agents/ui-message-text";
 import { useAgentConversationLoader } from "./use-agent-conversation-loader";
 
 interface AgentPaneProps {
@@ -172,6 +181,11 @@ export function AgentPane({
     isStreaming || isHarnessRunning || Boolean(activeHarnessRun);
 
   const wasStreamingRef = useRef(false);
+  // The changed-files bar re-reads git status whenever a turn ends.
+  const [changesRefreshToken, bumpChangesRefresh] = useReducer(
+    (count: number) => count + 1,
+    0
+  );
 
   useEffect(() => {
     if (!loaded) return;
@@ -179,23 +193,20 @@ export function AgentPane({
     if (wasStreamingRef.current && !isAgentRunning) {
       void syncConversation(pane.id);
       void useSandboxStore.getState().refresh();
+      bumpChangesRefresh();
     }
 
     wasStreamingRef.current = isAgentRunning;
   }, [isAgentRunning, loaded, pane.id, syncConversation]);
+  const defaultCommitMessage = useMemo(
+    () => lastUserMessageText(messages),
+    [messages]
+  );
 
-  const usedTokens = useMemo(() => {
-    return messages.reduce((acc, m) => {
-      const text =
-        m.parts
-          ?.filter(
-            (p): p is { type: "text"; text: string } => p.type === "text"
-          )
-          .map((p) => p.text)
-          .join("") || "";
-      return acc + estimateTokens(text);
-    }, 0);
-  }, [messages]);
+  const usedTokens = useMemo(
+    () => estimateConversationTokens(messages),
+    [messages]
+  );
 
   const maxTokens = contextLimits[model] || 128000;
   const contextPct = Math.max(
@@ -451,6 +462,12 @@ export function AgentPane({
             liveConversationRuns={liveConversationRuns}
             activeCallEvents={activeCallEvents}
             isAgentRunning={isAgentRunning}
+          />
+          <ChangedFilesBar
+            sandboxId={activeSandbox?.id ?? null}
+            disabled={isAgentRunning}
+            refreshToken={changesRefreshToken}
+            defaultCommitMessage={defaultCommitMessage}
           />
           {error && <div role="alert" className="px-2 py-1 text-accent-red">{CHAT_INTERRUPTED_MESSAGE}</div>}
           <CommandInput
