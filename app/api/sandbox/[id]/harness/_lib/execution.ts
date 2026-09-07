@@ -1,4 +1,3 @@
-import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { createHarnessSessionParser } from "@/lib/harness/session-parser";
 import {
   appendHarnessFailureOutput,
@@ -295,15 +294,34 @@ async function handleStreamError(
           })
         ).status
       );
-    } catch (lookupError) {
-      sandboxGone = isNotFoundError(lookupError);
+    } catch {
+      // A lookup error can refer to credentials or project scope. Only a
+      // successful provider status response establishes that this VM stopped.
     }
   }
-  const errorMsg = sandboxGone
-    ? "The development environment stopped during this agent run. Start it again, then retry."
-    : sandboxStreamClosed
-      ? "The worker lost its command connection. Inspect its saved output before retrying."
-      : rawErrorMsg;
+  let commandStopped = sandboxGone;
+  if (!commandStopped) {
+    // A detached agent can outlive its logs connection. Stop this command,
+    // then establish completion before a continuation may replace its work.
+    try {
+      await result.command.kill("SIGKILL");
+    } catch {
+      /* It may already have exited. */
+    }
+    try {
+      await result.command.wait();
+      commandStopped = true;
+    } catch {
+      /* Preserve uncertainty when the provider cannot confirm exit. */
+    }
+  }
+  const errorMsg = commandStopped
+    ? sandboxGone
+      ? "The development environment stopped during this agent run. Start it again, then retry."
+      : sandboxStreamClosed
+        ? "The worker lost its command connection. Its command was stopped; inspect its saved output before retrying."
+        : rawErrorMsg
+    : "The worker lost its command connection and its command may still be running. Confirm it has stopped before retrying.";
 
   console.error("[harness] command stream failed", {
     aiCallId: ctx.aiCallId,
@@ -313,6 +331,7 @@ async function handleStreamError(
     runtimeCommandId: result.command.cmdId,
     sandboxStreamClosed,
     sandboxGone,
+    commandStopped,
     error: rawErrorMsg,
   });
 
@@ -354,7 +373,10 @@ async function handleStreamError(
       startedAt: ctx.aiCallStartedAt ?? new Date().toISOString(),
       status: "failed",
       error: errorMsg,
-      metadata: currentCall?.metadata ?? ctx.aiCallMetadata,
+      metadata: {
+        ...(currentCall?.metadata ?? ctx.aiCallMetadata),
+        command_termination_confirmed: commandStopped,
+      },
     })
   );
   if (finalizedCall) {
@@ -365,7 +387,7 @@ async function handleStreamError(
       repoId: ctx.repoId,
       eventType: "failed",
       message: "Harness stream failed",
-      payload: { error: errorMsg },
+      payload: { error: errorMsg, commandTerminationConfirmed: commandStopped },
     });
   }
 

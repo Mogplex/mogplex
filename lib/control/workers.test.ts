@@ -111,3 +111,15 @@ it("keeps running workers visible when another worker fails", () => {
     workerSummary([worker("failed"), worker("streaming"), worker("pending")])
   ).toBe("1 worker running · 1 worker queued · 1 worker failed");
 });
+
+it("surfaces indeterminate command execution instead of suggesting an immediate retry", () => {
+  expect(
+    workerFailureMessage(
+      "failed",
+      "The worker lost its command connection and its command may still be running. Confirm it has stopped before retrying.",
+      []
+    )
+  ).toBe(
+    "Worker connection lost. Its command may still be running. Confirm it has stopped before continuing."
+  );
+});

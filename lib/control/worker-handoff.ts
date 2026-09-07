@@ -46,7 +46,7 @@ export function createControlWorkerHandoff(
   return {
     tool: tool({
       description:
-        "Save an event-driven coordinator follow-up for this mission's running workers. Use only when the user requested an end-to-end result, not launch-only work. After waiting is saved, tell the user you will resume automatically and end this turn. If workers already finished, inspect their results and continue now. Never poll. An end-to-end execution request includes recovery of interrupted work within the same scope; it does not authorize retrying cancelled workers or bypassing approvals.",
+        "Save an event-driven coordinator follow-up for this mission's running workers. Use only when the user requested an end-to-end result, not launch-only work. After waiting is saved, tell the user you will resume automatically and end this turn. If workers already finished, inspect their results and continue now. Never poll. An end-to-end execution request includes recovery of interrupted work within the same scope; it does not authorize retrying cancelled workers, duplicating a command whose termination is unconfirmed, or bypassing approvals.",
       inputSchema: awaitWorkersSchema,
       execute: async (args) => {
         const parsed = awaitWorkersSchema.parse(args);

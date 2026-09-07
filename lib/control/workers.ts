@@ -17,6 +17,8 @@ export function workerFailureMessage(
   events: RunWorkspaceEvent[]
 ): string | null {
   if (status !== "failed") return null;
+  if (/command may still be running/i.test(error ?? ""))
+    return "Worker connection lost. Its command may still be running. Confirm it has stopped before continuing.";
   if (
     /development environment stopped|sandbox.*(?:stopped|gone)|session.*(?:stopped|gone)/i.test(
       error ?? ""

@@ -99,6 +99,10 @@ for (const outcome of [
         JSON.stringify(f.providerRequests[0]),
         /Never retry cancelled workers/
       );
+      assert.match(
+        JSON.stringify(f.providerRequests[0]),
+        /Never relaunch a worker whose command may still be running/
+      );
       assert.equal(result.status, "finished");
       assert.equal(f.ticket.status, "finished");
       assert.equal(f.calls[0]?.status, "success");

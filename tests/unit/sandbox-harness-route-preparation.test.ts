@@ -158,7 +158,14 @@ test("POST /api/sandbox/[id]/harness clears the prepared marker when claiming a 
   );
 });
 
-for (const providerStatus of ["running", "stopped", "unavailable"] as const) {
+for (const providerStatus of [
+  "running",
+  "stopped",
+  "unavailable",
+  "ambiguous-404",
+  "unrelated-not-found",
+  "command-unconfirmed",
+] as const) {
   test(`POST /api/sandbox/[id]/harness reconciles a closed stream when provider is ${providerStatus}`, async (t) => {
     const { createSandboxHarnessPostHandler } =
       await loadSandboxHarnessRouteModule();
@@ -166,6 +173,7 @@ for (const providerStatus of ["running", "stopped", "unavailable"] as const) {
     const rawError = "Sandbox stream was closed: internal session vm-secret";
     let persistedError: string | null | undefined;
     let stoppedRecordId: string | null = null;
+    const commandLifecycle: string[] = [];
     const loggedErrors: unknown[][] = [];
     t.mock.method(console, "error", (...args: unknown[]) => {
       loggedErrors.push(args);
@@ -188,7 +196,18 @@ for (const providerStatus of ["running", "stopped", "unavailable"] as const) {
       getSandbox: async (_name, _credentials, options) => {
         if (options?.resume === false && providerStatus === "unavailable")
           throw new Error("Provider unavailable");
-        return { status: providerStatus } as never;
+        if (options?.resume === false && providerStatus === "ambiguous-404")
+          throw Object.assign(new Error("Project lookup returned 404"), {
+            status: 404,
+          });
+        if (
+          options?.resume === false &&
+          providerStatus === "unrelated-not-found"
+        )
+          throw new Error("Credential scope not found");
+        return {
+          status: providerStatus === "stopped" ? "stopped" : "running",
+        } as never;
       },
       runHarness: async () =>
         ({
@@ -200,8 +219,19 @@ for (const providerStatus of ["running", "stopped", "unavailable"] as const) {
               yield { stream: "stdout" as const, data: "Starting agent\n" };
               throw new Error(rawError);
             },
-            wait: async () => ({ exitCode: 1 }),
-            kill: async () => {},
+            wait: async () => {
+              if (providerStatus === "command-unconfirmed") {
+                commandLifecycle.push("wait-unconfirmed");
+                throw new Error("Cannot confirm completion");
+              }
+              commandLifecycle.push("confirmed-stopped");
+              return { exitCode: 137 };
+            },
+            kill: async () => {
+              commandLifecycle.push("kill");
+              if (providerStatus === "command-unconfirmed")
+                throw new Error("Command connection unavailable");
+            },
           },
         }) as never,
       renewSandboxActivityLease: async () => 0,
@@ -224,6 +254,7 @@ for (const providerStatus of ["running", "stopped", "unavailable"] as const) {
         throw new Error("cancel finalization should not be called");
       },
       finalizeAiCallIfNotCancelled: async (_aiCallId, update) => {
+        commandLifecycle.push("finalize");
         persistedError = update.error;
         return buildAiCall({ status: "failed", error: update.error ?? null });
       },
@@ -252,10 +283,20 @@ for (const providerStatus of ["running", "stopped", "unavailable"] as const) {
     const friendlyError =
       providerStatus === "stopped"
         ? "The development environment stopped during this agent run. Start it again, then retry."
-        : "The worker lost its command connection. Inspect its saved output before retrying.";
+        : providerStatus === "command-unconfirmed"
+          ? "The worker lost its command connection and its command may still be running. Confirm it has stopped before retrying."
+          : "The worker lost its command connection. Its command was stopped; inspect its saved output before retrying.";
     assert.equal(
       stoppedRecordId,
       providerStatus === "stopped" ? "sandbox-1" : null
+    );
+    assert.deepEqual(
+      commandLifecycle,
+      providerStatus === "stopped"
+        ? ["finalize"]
+        : providerStatus === "command-unconfirmed"
+          ? ["kill", "wait-unconfirmed", "finalize"]
+          : ["kill", "confirmed-stopped", "finalize"]
     );
     assert.equal(persistedError, friendlyError);
     assert.deepEqual(errorEvent, { type: "error", data: friendlyError });
