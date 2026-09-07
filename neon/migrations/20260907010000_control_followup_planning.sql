@@ -65,6 +65,8 @@ declare
   v_spec_row public.orchestration_specs;
   v_created integer := 0;
   v_tasks jsonb := '[]'::jsonb;
+  v_plan jsonb := jsonb_build_object('objective', p_objective,
+    'context', coalesce(p_context, ''), 'constraints', coalesce(p_constraints, '{}'));
 begin
   select * into v_run
   from public.orchestration_runs
@@ -94,6 +96,7 @@ begin
         v_spec_row.title is distinct from v_task->>'title' or
         v_spec_row.prompt is distinct from v_task->>'prompt' or
         v_task_row.harness is distinct from v_task->>'harness' or
+        (v_task_row.metadata ? 'plan' and v_task_row.metadata->'plan' is distinct from v_plan) or
         v_spec_row.owned_paths is distinct from array(select jsonb_array_elements_text(v_task->'ownedPaths')) or
         v_spec_row.blocked_paths is distinct from array(select jsonb_array_elements_text(v_task->'blockedPaths')) or
         v_spec_row.depends_on is distinct from array(select jsonb_array_elements_text(v_task->'dependsOn')) or
@@ -121,10 +124,10 @@ begin
     returning id into v_spec_id;
 
     insert into public.orchestration_tasks
-      (run_id, spec_id, repo_id, harness, branch_name, base_branch)
+      (run_id, spec_id, repo_id, harness, branch_name, base_branch, metadata)
     values
       (v_run.id, v_spec_id, v_run.repo_id, v_task->>'harness',
-       v_task->>'branchName', v_run.base_branch)
+       v_task->>'branchName', v_run.base_branch, jsonb_build_object('plan', v_plan))
     returning * into v_task_row;
 
     v_tasks := v_tasks || jsonb_build_array(to_jsonb(v_task_row));
@@ -138,6 +141,7 @@ begin
     (v_run.id, v_run.repo_id, 'mission_planned',
      'Added ' || v_created || case when v_created = 1 then ' task' else ' tasks' end,
      jsonb_build_object(
+       'plan', v_plan,
        'taskIds',
        (select coalesce(jsonb_agg(task->>'id'), '[]'::jsonb)
         from jsonb_array_elements(v_tasks) task)
@@ -148,7 +152,64 @@ begin
 end;
 $$;
 
+-- Restoring and pruning an archived checkout both run sandbox commands
+-- between reading the row and writing its next status. A short lease keeps
+-- those two operations from interleaving on the same archived checkout.
+create or replace function public.claim_archived_worktree(
+  p_worktree_id uuid,
+  p_user_id uuid,
+  p_expected_updated_at timestamptz
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_token uuid := gen_random_uuid();
+begin
+  update public.orchestration_worktrees
+  set metadata = metadata || jsonb_build_object('archived_claim',
+    jsonb_build_object('token', v_token, 'claimed_at', now()))
+  where id = p_worktree_id
+    and user_id = p_user_id
+    and status = 'archived'
+    and updated_at = p_expected_updated_at
+    and (metadata->'archived_claim' is null or
+      (metadata->'archived_claim'->>'claimed_at')::timestamptz
+        < now() - interval '10 minutes');
+
+  if not found then
+    return null;
+  end if;
+  return v_token;
+end;
+$$;
+
+create or replace function public.release_archived_worktree(
+  p_worktree_id uuid,
+  p_user_id uuid,
+  p_token uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.orchestration_worktrees
+  set metadata = metadata - 'archived_claim'
+  where id = p_worktree_id
+    and user_id = p_user_id
+    and metadata->'archived_claim'->>'token' = p_token::text;
+end;
+$$;
+
 revoke all on function public.activate_orchestration_worktree(uuid,uuid,text) from public,anon,authenticated;
 grant execute on function public.activate_orchestration_worktree(uuid,uuid,text) to service_role;
 revoke all on function public.create_orchestration_plan(uuid,uuid,text,text,text[],jsonb) from public,anon,authenticated;
 grant execute on function public.create_orchestration_plan(uuid,uuid,text,text,text[],jsonb) to service_role;
+revoke all on function public.claim_archived_worktree(uuid,uuid,timestamptz) from public,anon,authenticated;
+grant execute on function public.claim_archived_worktree(uuid,uuid,timestamptz) to service_role;
+revoke all on function public.release_archived_worktree(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.release_archived_worktree(uuid,uuid,uuid) to service_role;

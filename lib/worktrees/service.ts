@@ -25,41 +25,20 @@ import {
 } from "./store";
 import { isStaleWorktreeReservation } from "./constants";
 import type { OrchestrationWorktreeDTO, WorktreeCommandResult } from "./types";
+import {
+  claimArchivedWorktree,
+  releaseArchivedWorktree,
+  withArchivedWorktreeClaim,
+} from "./archived-claim";
+import { WorktreeServiceError } from "./errors";
 import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 
-export class WorktreeServiceError extends Error {
-  readonly forceEligible: boolean;
-  readonly kind: "not_found" | "conflict";
-  readonly reason: WorktreeServiceRejectionReason;
-
-  constructor(
-    message: string,
-    options: {
-      forceEligible?: boolean;
-      kind?: "not_found" | "conflict";
-      reason?: WorktreeServiceRejectionReason;
-    } = {}
-  ) {
-    super(message);
-    this.name = "WorktreeServiceError";
-    this.forceEligible = options.forceEligible ?? false;
-    this.kind = options.kind ?? "conflict";
-    this.reason = options.reason ?? "operation_failed";
-  }
-}
-
-export type WorktreeServiceRejectionReason =
-  | "mission_mismatch"
-  | "operation_failed"
-  | "sandbox_inactive"
-  | "sandbox_mismatch"
-  | "sandbox_not_found"
-  | "stale_resource"
-  | "task_not_found"
-  | "worktree_invalid_state"
-  | "worktree_not_found";
+export { WorktreeServiceError } from "./errors";
+export type { WorktreeServiceRejectionReason } from "./errors";
 
 type WorktreeServiceDeps = {
+  claimArchived: typeof claimArchivedWorktree;
+  releaseArchived: typeof releaseArchivedWorktree;
   loadTask: typeof loadOwnedWorktreeTask;
   loadSandbox: typeof loadOwnedWorktreeSandbox;
   findLiveForTask: typeof findLiveWorktreeForTask;
@@ -77,6 +56,8 @@ type WorktreeServiceDeps = {
 };
 
 const defaultDeps: WorktreeServiceDeps = {
+  claimArchived: claimArchivedWorktree,
+  releaseArchived: releaseArchivedWorktree,
   loadTask: loadOwnedWorktreeTask,
   loadSandbox: loadOwnedWorktreeSandbox,
   findLiveForTask: findLiveWorktreeForTask,
@@ -160,28 +141,30 @@ export async function spawnWorktree(
   }
 
   if (existing?.status === "archived") {
-    // The create command verifies an existing checkout and leaves its branch
-    // and dirty files intact. Activation occurs only after that verification.
-    const result = await deps.execute({
-      userId: input.userId,
-      sandboxId: sandbox.id,
-      command: buildCreateWorktreeCommand({
+    return withArchivedWorktreeClaim(existing, deps, async () => {
+      // The create command verifies an existing checkout and leaves its branch
+      // and dirty files intact. Activation occurs only after that verification.
+      const result = await deps.execute({
+        userId: input.userId,
+        sandboxId: sandbox.id,
+        command: buildCreateWorktreeCommand({
+          worktreeId: existing.id,
+          branchName: existing.branch_name,
+          baseBranch: existing.base_branch,
+        }),
+      });
+      const failure = commandFailure(result);
+      if (failure) throw new WorktreeServiceError(failure);
+      const checkoutPath = parseCreatedWorktreePath(result.stdout, existing.id);
+      if (!checkoutPath)
+        throw new WorktreeServiceError(
+          "Git did not report the managed worktree path"
+        );
+      return deps.activate({
         worktreeId: existing.id,
-        branchName: existing.branch_name,
-        baseBranch: existing.base_branch,
-      }),
-    });
-    const failure = commandFailure(result);
-    if (failure) throw new WorktreeServiceError(failure);
-    const checkoutPath = parseCreatedWorktreePath(result.stdout, existing.id);
-    if (!checkoutPath)
-      throw new WorktreeServiceError(
-        "Git did not report the managed worktree path"
-      );
-    return deps.activate({
-      worktreeId: existing.id,
-      userId: input.userId,
-      checkoutPath,
+        userId: input.userId,
+        checkoutPath,
+      });
     });
   }
 
@@ -433,43 +416,45 @@ export async function pruneWorktree(
       reason: "worktree_invalid_state",
     });
   }
-  try {
-    // The reservation probe may resume a stopped sandbox so it can verify and
-    // remove a checkout created just before reservation persistence failed.
-    const command = isReservedCheckoutPath(worktree.checkout_path)
-      ? buildPruneReservedWorktreeCommand({ worktreeId: worktree.id })
-      : buildPruneWorktreeCommand({
-          checkoutPath: worktree.checkout_path,
-          // `force` retires a binding only after the executor confirms the
-          // sandbox is gone. It must never turn into `git worktree --force`.
-          force: false,
-        });
-    const result = await deps.execute({
-      userId: input.userId,
-      sandboxId: worktree.sandbox_id,
-      command,
-    });
-    const failure = commandFailure(result);
-    if (failure) throw new WorktreeServiceError(failure);
-  } catch (error) {
-    if (
-      error instanceof WorktreeExecutorError &&
-      error.status === 404 &&
-      error.code === "sandbox_not_found"
-    ) {
-      if (!input.force) {
-        throw new WorktreeServiceError(error.message, {
-          forceEligible: true,
-          reason: "sandbox_not_found",
-        });
-      }
-      console.warn("[worktrees] retiring binding for missing sandbox", {
-        worktreeId: worktree.id,
-        error: error.message,
+  return withArchivedWorktreeClaim(worktree, deps, async () => {
+    try {
+      // The reservation probe may resume a stopped sandbox so it can verify and
+      // remove a checkout created just before reservation persistence failed.
+      const command = isReservedCheckoutPath(worktree.checkout_path)
+        ? buildPruneReservedWorktreeCommand({ worktreeId: worktree.id })
+        : buildPruneWorktreeCommand({
+            checkoutPath: worktree.checkout_path,
+            // `force` retires a binding only after the executor confirms the
+            // sandbox is gone. It must never turn into `git worktree --force`.
+            force: false,
+          });
+      const result = await deps.execute({
+        userId: input.userId,
+        sandboxId: worktree.sandbox_id,
+        command,
       });
-    } else {
-      throw error;
+      const failure = commandFailure(result);
+      if (failure) throw new WorktreeServiceError(failure);
+    } catch (error) {
+      if (
+        error instanceof WorktreeExecutorError &&
+        error.status === 404 &&
+        error.code === "sandbox_not_found"
+      ) {
+        if (!input.force) {
+          throw new WorktreeServiceError(error.message, {
+            forceEligible: true,
+            reason: "sandbox_not_found",
+          });
+        }
+        console.warn("[worktrees] retiring binding for missing sandbox", {
+          worktreeId: worktree.id,
+          error: error.message,
+        });
+      } else {
+        throw error;
+      }
     }
-  }
-  return deps.markPruned(input);
+    return deps.markPruned(input);
+  });
 }

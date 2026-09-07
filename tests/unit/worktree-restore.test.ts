@@ -20,6 +20,7 @@ import {
   TASK_ID,
   REPO_ID,
   SANDBOX_ID,
+  ARCHIVED_LEASE,
 } from "./helpers/worktree-restore-fixtures";
 
 test("spawning an archived checkout reactivates it while preserving uncommitted work", async () => {
@@ -79,6 +80,7 @@ test("spawning an archived checkout reactivates it while preserving uncommitted 
         sandboxId: SANDBOX_ID,
       },
       {
+        ...ARCHIVED_LEASE,
         loadTask: async () => task,
         findLiveForTask: async () => archived,
         loadSandbox: async () => ({

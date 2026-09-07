@@ -9,6 +9,7 @@ import {
   WorktreeServiceError,
 } from "../../lib/worktrees/service";
 import { WorktreeExecutorError } from "../../lib/worktrees/executor";
+import { ARCHIVED_LEASE } from "./helpers/worktree-restore-fixtures";
 import type {
   OrchestrationWorktreeDTO,
   WorktreeTaskContext,
@@ -404,6 +405,7 @@ test("prune requires archive and removes only the persisted checkout", async () 
       force: true,
     },
     {
+      ...ARCHIVED_LEASE,
       load: async () => buildWorktree({ status: "archived" }),
       execute: async (input) => {
         command = input.command;
@@ -428,6 +430,7 @@ test("forced prune releases an archived binding when its sandbox is gone", async
       force: true,
     },
     {
+      ...ARCHIVED_LEASE,
       load: async () => buildWorktree({ status: "archived" }),
       execute: async () => {
         throw new WorktreeExecutorError(

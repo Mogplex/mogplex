@@ -169,6 +169,8 @@ describe("spawnWorktree reservation recovery", () => {
           repoId: IDS.repo,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => worktree("creating"),
           archive: async () => archived,
         }
@@ -187,6 +189,8 @@ describe("spawnWorktree reservation recovery", () => {
           repoId: IDS.repo,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => ({
             ...worktree("creating"),
             updated_at: new Date().toISOString(),
@@ -208,6 +212,8 @@ describe("spawnWorktree reservation recovery", () => {
           repoId: IDS.repo,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => worktree("active"),
           archive: async () => null,
         }
@@ -231,6 +237,8 @@ describe("spawnWorktree reservation recovery", () => {
           repoId: IDS.repo,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => archived,
           execute: async () => {
             throw new WorktreeExecutorError(
@@ -258,6 +266,8 @@ describe("spawnWorktree reservation recovery", () => {
           repoId: IDS.repo,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => worktree("archived"),
           execute: async () => ({
             exitCode: 1,
@@ -285,6 +295,8 @@ describe("spawnWorktree reservation recovery", () => {
           force: true,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => worktree("archived"),
           execute: async () => {
             throw new WorktreeExecutorError(
@@ -312,6 +324,8 @@ describe("spawnWorktree reservation recovery", () => {
           force: true,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => worktree("archived"),
           execute: async () => {
             throw new WorktreeExecutorError("Executor unavailable", 503);
@@ -339,6 +353,8 @@ describe("spawnWorktree reservation recovery", () => {
           repoId: IDS.repo,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => ({
             ...worktree("archived"),
             checkout_path: `/.reserved/.worktrees/${IDS.worktree}`,
@@ -371,6 +387,8 @@ describe("spawnWorktree reservation recovery", () => {
           force: true,
         },
         {
+          claimArchived: async () => "test-claim",
+          releaseArchived: async () => undefined,
           load: async () => worktree("archived"),
           execute: async () => {
             throw new WorktreeExecutorError("Route not found", 404);
