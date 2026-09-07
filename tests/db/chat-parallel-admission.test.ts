@@ -4,15 +4,21 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
-const MIGRATION =
-  "supabase/migrations/20260814193000_parallel_chat_admission.sql";
+// Both copies must define the same function: the Supabase file never reached
+// Neon after the cutover, so production ran the April serializing version
+// for three weeks before the Neon port below existed.
+const MIGRATIONS = [
+  "supabase/migrations/20260814193000_parallel_chat_admission.sql",
+  "neon/migrations/20260907170000_parallel_chat_admission.sql",
+];
 const USER_ID = "00000000-0000-4000-8000-000000000216";
 
 let db: PGlite;
 
-beforeAll(async () => {
-  db = new PGlite();
-  await db.exec(`
+describe.each(MIGRATIONS)("%s", (MIGRATION) => {
+  beforeAll(async () => {
+    db = new PGlite();
+    await db.exec(`
     create role anon;
     create role authenticated;
     create role service_role;
@@ -43,21 +49,21 @@ beforeAll(async () => {
       created_at timestamptz not null default now()
     );
   `);
-  const sql = await readFile(path.join(REPO_ROOT, MIGRATION), "utf8");
-  await db.exec(sql);
-});
+    const sql = await readFile(path.join(REPO_ROOT, MIGRATION), "utf8");
+    await db.exec(sql);
+  });
 
-afterAll(async () => {
-  await db.close();
-});
+  afterAll(async () => {
+    await db.close();
+  });
 
-describe("parallel chat admission", () => {
-  it("keeps the SECURITY DEFINER admission RPC service-role only", async () => {
-    const { rows } = await db.query<{
-      anon_can_execute: boolean;
-      authenticated_can_execute: boolean;
-      service_role_can_execute: boolean;
-    }>(`
+  describe("parallel chat admission", () => {
+    it("keeps the SECURITY DEFINER admission RPC service-role only", async () => {
+      const { rows } = await db.query<{
+        anon_can_execute: boolean;
+        authenticated_can_execute: boolean;
+        service_role_can_execute: boolean;
+      }>(`
       select
         has_function_privilege('anon', p.oid, 'EXECUTE') as anon_can_execute,
         has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated_can_execute,
@@ -68,39 +74,40 @@ describe("parallel chat admission", () => {
         and p.proname = 'claim_chat_limit_admission'
     `);
 
-    expect(rows[0]).toEqual({
-      anon_can_execute: false,
-      authenticated_can_execute: false,
-      service_role_can_execute: true,
+      expect(rows[0]).toEqual({
+        anon_can_execute: false,
+        authenticated_can_execute: false,
+        service_role_can_execute: true,
+      });
     });
-  });
 
-  it("admits another chat when multiple chats are already streaming", async () => {
-    await db.query(
-      `insert into public.ai_calls (user_id, type, status)
+    it("admits another chat when multiple chats are already streaming", async () => {
+      await db.query(
+        `insert into public.ai_calls (user_id, type, status)
        values ($1, 'chat', 'streaming'), ($1, 'chat', 'streaming'),
               ($1, 'chat', 'streaming')`,
-      [USER_ID]
-    );
+        [USER_ID]
+      );
 
-    const { rows } = await db.query<{
-      allowed: boolean;
-      claim_id: string | null;
-      reason: string | null;
-    }>(
-      `select allowed, claim_id, reason
+      const { rows } = await db.query<{
+        allowed: boolean;
+        claim_id: string | null;
+        reason: string | null;
+      }>(
+        `select allowed, claim_id, reason
        from public.claim_chat_limit_admission(
          p_user_id => $1,
          p_now => '2026-08-14T19:30:00.000Z'::timestamptz,
          p_concurrent_limit => 2
        )`,
-      [USER_ID]
-    );
+        [USER_ID]
+      );
 
-    expect(rows[0]).toMatchObject({
-      allowed: true,
-      reason: null,
+      expect(rows[0]).toMatchObject({
+        allowed: true,
+        reason: null,
+      });
+      expect(rows[0]?.claim_id).toBeTruthy();
     });
-    expect(rows[0]?.claim_id).toBeTruthy();
   });
 });
