@@ -389,6 +389,7 @@ export function createSandboxHarnessPostHandler(
           repoId: record.repo_id || null,
           rootDirectory: executionRoot,
           sandboxId: record.sandbox_id,
+          sandboxCredentials: context.credentials,
           aiCallId: aiCall.id,
           aiCallStartedAt: aiCall.started_at,
           aiCallMetadata: aiCall.metadata ?? {},

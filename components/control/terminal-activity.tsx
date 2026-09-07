@@ -1,7 +1,7 @@
 "use client";
 
-import { Terminal } from "iconoir-react";
-import { useMemo } from "react";
+import { NavArrowDown, Terminal } from "iconoir-react";
+import { useId, useMemo, useState } from "react";
 import type { UIMessage } from "ai";
 import {
   buildTerminalActivityEntries,
@@ -90,6 +90,8 @@ function TerminalRow({ entry }: { entry: TerminalActivityEntry }) {
 
 /** Read-only execution feedback, attached to the composer instead of a new tab. */
 export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const outputId = useId();
   const entries = useMemo(
     () => buildTerminalActivityEntries(messages).filter((entry) => entry.state !== "running" || entry.lines.length > 0),
     [messages]
@@ -97,6 +99,8 @@ export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
   if (entries.length === 0) return null;
 
   const visibleEntries = entries.slice(-3);
+  const latest = entries.at(-1)!;
+  const latestTitle = latest.kind === "sandbox" ? SANDBOX_TITLE[latest.state] : latest.command;
 
   return (
     <section
@@ -110,7 +114,7 @@ export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
         data-testid="control-terminal-surface"
         className="border-ink-800 bg-ink-950 overflow-hidden rounded-xl border shadow-sm shadow-black/20"
       >
-        <div className="border-ink-800 bg-ink-900/70 flex min-w-0 items-center gap-2 border-b px-4 py-2">
+        <button type="button" aria-label={expanded ? "Hide terminal output" : "Show terminal output"} aria-expanded={expanded} aria-controls={outputId} onClick={() => setExpanded(!expanded)} className="bg-ink-900/70 hover:bg-ink-900 focus-visible:outline-ring flex w-full min-w-0 items-center gap-2 px-4 py-2.5 text-left focus-visible:outline-2">
           <Terminal
             className="text-ink-300 size-3.5 shrink-0"
             aria-hidden="true"
@@ -118,11 +122,14 @@ export function TerminalActivity({ messages }: { messages: UIMessage[] }) {
           <span className="text-ink-300 text-[11px] font-semibold tracking-[0.12em] uppercase">
             Agent Terminal
           </span>
+          <span className="text-ink-400 min-w-0 flex-1 truncate font-mono text-xs">{latestTitle}</span>
+          <span className={`shrink-0 text-xs ${STATUS[latest.state].text}`}>{STATUS[latest.state].label}</span>
           <span className="text-accent-blue ml-auto shrink-0 text-[10px] font-medium tracking-wide uppercase">
             READ ONLY
           </span>
-        </div>
-        <div className="divide-ink-900 max-h-36 overflow-y-auto sm:max-h-48 divide-y px-4 py-3">
+          <NavArrowDown aria-hidden="true" className={`text-ink-400 size-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+        <div id={outputId} hidden={!expanded} className="border-ink-800 border-t divide-ink-900 max-h-36 overflow-y-auto sm:max-h-48 divide-y px-4 py-3">
           {entries.length > 3 && <details className="text-ink-400 mb-3 text-xs">
             <summary className="cursor-pointer py-1">Show {entries.length - 3} earlier commands</summary>
             <div className="mt-2 max-h-64 overflow-auto">

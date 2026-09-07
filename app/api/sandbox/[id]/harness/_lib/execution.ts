@@ -26,6 +26,7 @@ export type StreamExecutionContext = {
   repoId: string | null;
   rootDirectory: string | null;
   sandboxId: string;
+  sandboxCredentials: Parameters<SandboxHarnessPostDeps["getSandbox"]>[1];
   aiCallId: string;
   aiCallStartedAt: string | null;
   aiCallMetadata: Record<string, unknown>;
@@ -54,6 +55,7 @@ export function createHarnessStreamBody(
     | "publishHarnessPullRequest"
     | "persistHarnessMemory"
     | "stopSandboxRecord"
+    | "getSandbox"
   >,
   sandbox: Sandbox,
   result: HarnessRunResult,
@@ -271,6 +273,7 @@ async function handleStreamError(
     | "finalizeAiCallIfNotCancelled"
     | "safeAppendAiCallEvent"
     | "stopSandboxRecord"
+    | "getSandbox"
   >,
   ctx: StreamExecutionContext,
   result: HarnessRunResult,
@@ -281,9 +284,45 @@ async function handleStreamError(
 ): Promise<void> {
   const rawErrorMsg = err instanceof Error ? err.message : "Stream error";
   const sandboxStreamClosed = isClosedSandboxStreamError(err);
-  const errorMsg = sandboxStreamClosed
-    ? "The development environment stopped during this agent run. Start it again, then retry."
-    : rawErrorMsg;
+  let sandboxGone = false;
+  if (sandboxStreamClosed) {
+    try {
+      sandboxGone = ["stopped", "failed", "aborted"].includes(
+        (
+          await deps.getSandbox(ctx.sandboxId, ctx.sandboxCredentials, {
+            resume: false,
+          })
+        ).status
+      );
+    } catch {
+      // A lookup error can refer to credentials or project scope. Only a
+      // successful provider status response establishes that this VM stopped.
+    }
+  }
+  let commandStopped = sandboxGone;
+  if (!commandStopped) {
+    const confirmationSignal = AbortSignal.timeout(10_000);
+    // A detached agent can outlive its logs connection. Stop this command,
+    // then establish completion before a continuation may replace its work.
+    try {
+      await result.command.kill("SIGKILL", { abortSignal: confirmationSignal });
+    } catch {
+      /* It may already have exited. */
+    }
+    try {
+      await result.command.wait({ signal: confirmationSignal });
+      commandStopped = true;
+    } catch {
+      /* Preserve uncertainty when the provider cannot confirm exit. */
+    }
+  }
+  const errorMsg = commandStopped
+    ? sandboxGone
+      ? "The development environment stopped during this agent run. Start it again, then retry."
+      : sandboxStreamClosed
+        ? "The worker lost its command connection. Its command was stopped; inspect its saved output before retrying."
+        : rawErrorMsg
+    : "The worker lost its command connection and its command may still be running. Confirm it has stopped before retrying.";
 
   console.error("[harness] command stream failed", {
     aiCallId: ctx.aiCallId,
@@ -292,10 +331,12 @@ async function handleStreamError(
     harnessId: ctx.harnessId,
     runtimeCommandId: result.command.cmdId,
     sandboxStreamClosed,
+    sandboxGone,
+    commandStopped,
     error: rawErrorMsg,
   });
 
-  if (sandboxStreamClosed) {
+  if (sandboxGone) {
     await deps
       .stopSandboxRecord(ctx.id, {
         expectedSandboxId: ctx.sandboxId,
@@ -333,7 +374,10 @@ async function handleStreamError(
       startedAt: ctx.aiCallStartedAt ?? new Date().toISOString(),
       status: "failed",
       error: errorMsg,
-      metadata: currentCall?.metadata ?? ctx.aiCallMetadata,
+      metadata: {
+        ...(currentCall?.metadata ?? ctx.aiCallMetadata),
+        command_termination_confirmed: commandStopped,
+      },
     })
   );
   if (finalizedCall) {
@@ -344,7 +388,7 @@ async function handleStreamError(
       repoId: ctx.repoId,
       eventType: "failed",
       message: "Harness stream failed",
-      payload: { error: errorMsg },
+      payload: { error: errorMsg, commandTerminationConfirmed: commandStopped },
     });
   }
 

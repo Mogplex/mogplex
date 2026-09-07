@@ -15,6 +15,87 @@ const worker = (status: ControlWorker["status"]): ControlWorker => ({
   events: [],
 });
 
+it.each([
+  "HTTP 401",
+  "HTTP/1.1 401",
+  "status 401",
+  "status code: 401",
+  "status=401",
+  "hTtP:401",
+  "authentication failed",
+])("recognizes a bounded authentication error: %s", (error) => {
+  expect(workerFailureMessage("failed", error, [])).toContain(
+    "could not authenticate"
+  );
+});
+
+it.each(["HTTP 4017", "mystatus401", "status code 1401"])(
+  "does not infer authentication from unrelated digits: %s",
+  (error) => {
+    expect(workerFailureMessage("failed", error, [])).toContain(
+      "Inspect its recorded output"
+    );
+  }
+);
+
+it.each(["sandbox stopped", "sandbox gone", "session stopped", "session gone"])(
+  "identifies a lost environment before authentication diagnostics: %s",
+  (error) => {
+    expect(workerFailureMessage("failed", `${error}: HTTP 401`, [])).toContain(
+      "development environment stopped"
+    );
+  }
+);
+
+it("does not diagnose authentication from digits in a timestamp", () => {
+  expect(
+    workerFailureMessage(
+      "failed",
+      "The development environment stopped during this agent run. Start it again, then retry.",
+      [
+        {
+          id: "event",
+          type: "message",
+          toolName: null,
+          message:
+            "2026-01-01T00:00:08.644019Z ERROR agent thread limit reached",
+          payload: {},
+          createdAt: "2026-01-01",
+        },
+      ]
+    )
+  ).toBe(
+    "The development environment stopped before the worker finished. Restart it and retry the worker."
+  );
+});
+
+it("does not treat a timestamp containing 401 as an HTTP failure", () => {
+  expect(
+    workerFailureMessage("failed", "exit 1", [
+      {
+        id: "event",
+        type: "message",
+        toolName: null,
+        message: "2026-01-01T00:00:08.644019Z ERROR agent thread limit reached",
+        payload: {},
+        createdAt: "2026-01-01",
+      },
+    ])
+  ).toContain("Inspect its recorded output");
+});
+
+it("identifies an internal runtime setup failure without blaming the user's credentials", () => {
+  expect(
+    workerFailureMessage(
+      "failed",
+      "Invalid request: duration should be >= 1000.",
+      []
+    )
+  ).toBe(
+    "The worker could not start because of a runtime error. Retry the worker."
+  );
+});
+
 it("distinguishes failed, waiting and active workers from integration completion", () => {
   expect(workerSummary([worker("success"), worker("failed")])).toBe(
     "1 worker failed"
@@ -55,4 +136,22 @@ it("explains worker auth failures without exposing diagnostic credentials", () =
       },
     ])
   ).toContain("could not authenticate");
+});
+
+it("keeps running workers visible when another worker fails", () => {
+  expect(
+    workerSummary([worker("failed"), worker("streaming"), worker("pending")])
+  ).toBe("1 worker running · 1 worker queued · 1 worker failed");
+});
+
+it("surfaces indeterminate command execution instead of suggesting an immediate retry", () => {
+  expect(
+    workerFailureMessage(
+      "failed",
+      "The worker lost its command connection and its command may still be running. Confirm it has stopped before retrying.",
+      []
+    )
+  ).toBe(
+    "Worker connection lost. Its command may still be running. Confirm it has stopped before continuing."
+  );
 });
