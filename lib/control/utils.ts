@@ -1,4 +1,4 @@
-import type { ControlSeedData } from "./types";
+import type { ControlSeedData, Mission } from "./types";
 
 // Mission ids are client-generated until missions are DB-backed via
 // lib/orchestrations.
@@ -25,4 +25,26 @@ export function emptyControlData(): ControlSeedData {
     deployments: [],
     workspaces: [],
   };
+}
+
+/**
+ * Mark a mission timeline approval as approved by the user, leaving every
+ * other mission and event untouched.
+ */
+export function approveMissionEvent(
+  missions: Mission[],
+  missionId: string,
+  eventIndex: number
+): Mission[] {
+  return missions.map((mission) => {
+    if (mission.id !== missionId) return mission;
+    return {
+      ...mission,
+      timeline: mission.timeline.map((event, index) =>
+        index === eventIndex && event.kind === "approval"
+          ? { ...event, resolved: "Approved by you - merge unblocked" }
+          : event
+      ),
+    };
+  });
 }

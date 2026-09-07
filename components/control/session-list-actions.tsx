@@ -31,10 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 
-export type NewSessionTarget = {
-  project: string | null;
-  repoId: string | null;
-};
+export type { NewSessionTarget } from "@/lib/control/session-project";
 
 const ActionButton = forwardRef<
   HTMLButtonElement,

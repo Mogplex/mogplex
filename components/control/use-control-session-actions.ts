@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
-import type { NewSessionTarget } from "./session-list-actions";
+import type { NewSessionTarget } from "@/lib/control/session-project";
 
 export function useControlSessionActions({
   sessionId,
@@ -16,9 +16,13 @@ export function useControlSessionActions({
   const [newMission, setNewMission] = useState(false);
   const [newSessionTarget, setNewSessionTarget] =
     useState<NewSessionTarget | null>(null);
+  // Bumped on every "New" click so the composer starts fresh even when two
+  // clicks resolve to the same project.
+  const [newSessionRequest, setNewSessionRequest] = useState(0);
 
   const startNewSession = useCallback((target?: NewSessionTarget) => {
     setNewSessionTarget(target ?? null);
+    setNewSessionRequest((current) => current + 1);
     setNewMission(true);
   }, []);
 
@@ -41,6 +45,7 @@ export function useControlSessionActions({
               }
             : null
         );
+        setNewSessionRequest((current) => current + 1);
         setNewMission(true);
       }
       return deleted;
@@ -51,6 +56,7 @@ export function useControlSessionActions({
   return {
     newMission,
     newSessionTarget,
+    newSessionRequest,
     startNewSession,
     closeNewSession,
     deleteChat,

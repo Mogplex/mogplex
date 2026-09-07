@@ -102,3 +102,31 @@ export function deriveProjectName(text: string): string {
     .slice(0, 48);
   return slug || "new-project";
 }
+
+/** Where a "New session" click came from: a project group, or nothing. */
+export type NewSessionTarget = {
+  project: string | null;
+  repoId: string | null;
+};
+
+/**
+ * Repo the new-mission picker should open on. An explicit project group wins
+ * (by id, or by name for legacy groups that never stored one). With no target
+ * the user is starting a session from wherever they are, so the open
+ * session's repo carries over. Null lets the composer fall back to
+ * {@link defaultProjectChoice}.
+ */
+export function resolveNewSessionRepoId<T extends ProjectRepo>(
+  target: NewSessionTarget | null,
+  activeSession: { repo_id?: string | null; project?: string | null } | null,
+  repos: T[]
+): string | null {
+  if (!target)
+    return resolveControlSessionRepo(activeSession, repos)?.id ?? null;
+  if (target.repoId && repos.some((repo) => repo.id === target.repoId)) {
+    return target.repoId;
+  }
+  return (
+    resolveControlSessionRepo({ project: target.project }, repos)?.id ?? null
+  );
+}

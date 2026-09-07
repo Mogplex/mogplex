@@ -8,6 +8,7 @@ import {
   parseControlSessionRepoId,
   repoProjectName,
   resolveControlSessionRepo,
+  resolveNewSessionRepoId,
 } from "../../lib/control/session-project";
 
 test("repoProjectName uses the unambiguous full repository name", () => {
@@ -106,4 +107,62 @@ test("deriveProjectName slugs the first five words of the mission text", () => {
   assert.equal(deriveProjectName("   "), "new-project");
   assert.equal(deriveProjectName(""), "new-project");
   assert.ok(deriveProjectName("a".repeat(200)).length <= 48);
+});
+
+test("resolveNewSessionRepoId keeps the current project when New carries no target", () => {
+  const repos = [
+    { id: "r1", name: "cli", full_name: "acme/cli", is_favorite: true },
+    { id: "r2", name: "widgets", full_name: "acme/widgets" },
+  ];
+  const activeSession = { repo_id: "r2", project: "acme/widgets" };
+
+  // Header "+" / collapsed "+": no target, so the open session's repo wins.
+  assert.equal(resolveNewSessionRepoId(null, activeSession, repos), "r2");
+  // Nothing open: let the composer apply its own default.
+  assert.equal(resolveNewSessionRepoId(null, null, repos), null);
+});
+
+test("resolveNewSessionRepoId resolves a project group by id or by name", () => {
+  const repos = [
+    { id: "r1", name: "cli", full_name: "acme/cli", is_favorite: true },
+    { id: "r2", name: "widgets", full_name: "acme/widgets" },
+  ];
+  const activeSession = { repo_id: "r1", project: "acme/cli" };
+
+  assert.equal(
+    resolveNewSessionRepoId(
+      { project: "acme/widgets", repoId: "r2" },
+      activeSession,
+      repos
+    ),
+    "r2"
+  );
+  // Legacy groups only know the project name.
+  assert.equal(
+    resolveNewSessionRepoId(
+      { project: "acme/widgets", repoId: null },
+      activeSession,
+      repos
+    ),
+    "r2"
+  );
+  // A repo id that no longer exists must not leak into the picker.
+  assert.equal(
+    resolveNewSessionRepoId(
+      { project: "acme/widgets", repoId: "gone" },
+      activeSession,
+      repos
+    ),
+    "r2"
+  );
+  // The General group has no repo: an explicit target never inherits the
+  // open session's project.
+  assert.equal(
+    resolveNewSessionRepoId(
+      { project: null, repoId: null },
+      activeSession,
+      repos
+    ),
+    null
+  );
 });
