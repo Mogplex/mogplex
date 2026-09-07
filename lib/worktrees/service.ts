@@ -133,7 +133,7 @@ export async function spawnWorktree(
       { reason: "sandbox_mismatch" }
     );
   }
-  if (existing?.status === "active" || existing?.status === "archived") {
+  if (existing?.status === "active") {
     return existing;
   }
 
@@ -157,6 +157,32 @@ export async function spawnWorktree(
       "Resume the sandbox before creating a worktree",
       { reason: "sandbox_inactive" }
     );
+  }
+
+  if (existing?.status === "archived") {
+    // The create command verifies an existing checkout and leaves its branch
+    // and dirty files intact. Activation occurs only after that verification.
+    const result = await deps.execute({
+      userId: input.userId,
+      sandboxId: sandbox.id,
+      command: buildCreateWorktreeCommand({
+        worktreeId: existing.id,
+        branchName: existing.branch_name,
+        baseBranch: existing.base_branch,
+      }),
+    });
+    const failure = commandFailure(result);
+    if (failure) throw new WorktreeServiceError(failure);
+    const checkoutPath = parseCreatedWorktreePath(result.stdout, existing.id);
+    if (!checkoutPath)
+      throw new WorktreeServiceError(
+        "Git did not report the managed worktree path"
+      );
+    return deps.activate({
+      worktreeId: existing.id,
+      userId: input.userId,
+      checkoutPath,
+    });
   }
 
   let worktree = existing;

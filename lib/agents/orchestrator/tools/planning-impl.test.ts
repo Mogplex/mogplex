@@ -1,134 +1,21 @@
+import {
+  ctx,
+  buildRun,
+  buildSpec,
+  buildTask,
+  buildWorktree,
+  REPO_ID,
+  RUN_ID,
+  TASK_ID,
+  WORKTREE_ID,
+  type ExecutableTool,
+} from "../../../../tests/support/control-plan-fixtures";
 import { describe, expect, it } from "vitest";
-import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
-import type {
-  OrchestrationRunDTO,
-  OrchestrationSpecDTO,
-  OrchestrationTaskDTO,
-} from "@/lib/orchestrations/types";
-import type { OrchestratorToolContext } from "../types";
+import type { OrchestrationTaskDTO } from "@/lib/orchestrations/types";
 import {
   createPlanMissionTool,
   createSpawnSubagentTool,
 } from "./planning-impl";
-
-type ExecutableTool = {
-  execute: (input: Record<string, unknown>) => Promise<unknown>;
-};
-
-const RUN_ID = "11111111-2222-4333-8444-555555555555";
-const REPO_ID = "22222222-2222-4222-8222-222222222222";
-const TASK_ID = "33333333-3333-4333-8333-333333333333";
-const WORKTREE_ID = "44444444-4444-4444-8444-444444444444";
-
-const ctx: OrchestratorToolContext = {
-  userId: "user-1",
-  repoId: REPO_ID,
-  orchestrationRunId: RUN_ID,
-  conversationId: "conversation-1",
-  workspaceSessionId: "session-1",
-  aiCallId: "call-1",
-  controlMode: "run",
-};
-
-function buildRun(): OrchestrationRunDTO {
-  return {
-    id: RUN_ID,
-    user_id: "user-1",
-    workspace_id: null,
-    repo_id: REPO_ID,
-    title: "Separate worktrees",
-    slug: "separate-worktrees",
-    status: "drafting_master_spec",
-    request: "Separate worktrees from sandboxes",
-    base_branch: "main",
-    root_directory: null,
-    spec_branch: "mogplex/spec/separate-worktrees",
-    integration_branch: "mogplex/integrate/separate-worktrees",
-    approval_mode: "manual",
-    master_spec_path: null,
-    master_spec_blob_sha: null,
-    planner_sandbox_id: null,
-    integration_sandbox_id: null,
-    github_pr_number: null,
-    github_pr_url: null,
-    error: null,
-    metadata: {},
-    created_at: "2026-08-13T00:00:00.000Z",
-    updated_at: "2026-08-13T00:00:00.000Z",
-  };
-}
-
-function buildSpec(index: number, slug: string): OrchestrationSpecDTO {
-  return {
-    id: `55555555-5555-4555-8555-55555555555${index}`,
-    run_id: RUN_ID,
-    kind: "task",
-    order_index: index,
-    slug,
-    title: slug,
-    status: "draft",
-    file_path: `specs/separate-worktrees/tasks/${index}-${slug}.md`,
-    blob_sha: null,
-    branch_name: `mogplex/task/separate-worktrees/${slug}`,
-    owned_paths: [],
-    blocked_paths: [],
-    depends_on: [],
-    acceptance_criteria: [],
-    validation_commands: [],
-    prompt: null,
-    metadata: {},
-  };
-}
-
-function buildTask(
-  index: number,
-  spec: OrchestrationSpecDTO
-): OrchestrationTaskDTO {
-  return {
-    id: `66666666-6666-4666-8666-66666666666${index}`,
-    run_id: RUN_ID,
-    spec_id: spec.id,
-    repo_id: REPO_ID,
-    agent_id: null,
-    harness: "codex",
-    sandbox_id: null,
-    branch_name: spec.branch_name!,
-    base_branch: "main",
-    root_directory: null,
-    status: "planned",
-    latest_commit_sha: null,
-    pushed_at: null,
-    validation_status: null,
-    validation_summary: null,
-    error: null,
-    metadata: {},
-    created_at: "2026-08-13T00:00:00.000Z",
-    updated_at: "2026-08-13T00:00:00.000Z",
-  };
-}
-
-function buildWorktree(): OrchestrationWorktreeDTO {
-  return {
-    id: WORKTREE_ID,
-    user_id: "user-1",
-    run_id: RUN_ID,
-    task_id: TASK_ID,
-    repo_id: REPO_ID,
-    sandbox_id: "77777777-7777-4777-8777-777777777777",
-    agent_id: null,
-    branch_name: "mogplex/task/separate-worktrees/code",
-    base_branch: "main",
-    checkout_path: `/vercel/sandbox/.worktrees/${WORKTREE_ID}`,
-    status: "active",
-    latest_commit_sha: null,
-    error: null,
-    metadata: {},
-    created_at: "2026-08-13T00:00:00.000Z",
-    updated_at: "2026-08-13T00:00:00.000Z",
-    archived_at: null,
-    pruned_at: null,
-  };
-}
 
 describe("planning tools", () => {
   it("persists task specs and returns task IDs that can receive worktrees", async () => {
@@ -265,4 +152,45 @@ describe("planning tools", () => {
       },
     ]);
   });
+});
+
+it("persists new tasks in an existing thread instead of silently returning its original plan", async () => {
+  const spec = buildSpec(0, "old-review");
+  const oldTask = buildTask(0, spec);
+  const planned: Array<{ slug: string; orderIndex: number; filePath: string }> =
+    [];
+  const newTask = buildTask(1, buildSpec(1, "follow-up"));
+  const tool = createPlanMissionTool(ctx, {
+    getRunDetails: async () => ({
+      run: buildRun(),
+      specs: [spec],
+      tasks: [oldTask],
+      events: [],
+      mergeEvents: [],
+    }),
+    createPlan: async (input) => {
+      planned.push(...input.tasks);
+      return [newTask];
+    },
+  }) as unknown as ExecutableTool;
+  const result = await tool.execute({
+    objective: "Check the next change",
+    tasks: [
+      {
+        slug: "follow-up",
+        title: "Follow-up",
+        prompt: "Review the next change",
+        harness: "codex",
+        ownedPaths: ["docs"],
+      },
+    ],
+  });
+  expect(result).toMatchObject({ status: "ok", tasks: [newTask] });
+  expect(planned).toMatchObject([
+    {
+      slug: "follow-up",
+      orderIndex: 1,
+      filePath: "specs/separate-worktrees/tasks/1-follow-up.md",
+    },
+  ]);
 });
