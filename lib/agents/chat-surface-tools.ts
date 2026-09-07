@@ -11,6 +11,7 @@ export const SLACK_EXCLUDED_TOOL_NAMES: ReadonlySet<string> = new Set([
   "stop_sandbox",
   "bash",
   "write_file",
+  "edit_file",
 ]);
 
 export function selectChatTools(input: {

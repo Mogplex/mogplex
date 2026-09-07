@@ -180,8 +180,11 @@ test("write_file uses its server-selected sandbox without a model sandbox id", a
   await withEnv({ INTERNAL_API_SECRET: "internal-secret" }, async () => {
     let capturedUrl = "";
     await withPatchedFetch(
-      async (input) => {
+      async (input, init) => {
         capturedUrl = String(input);
+        // The tool reads the current content first to build a diff.
+        if ((init?.method ?? "GET") === "GET")
+          return Response.json({ error: "File not found" }, { status: 404 });
         return Response.json({ ok: true });
       },
       async () => {
@@ -201,14 +204,15 @@ test("write_file uses its server-selected sandbox without a model sandbox id", a
           "path",
           "content",
         ]);
-        assert.deepEqual(
-          await tool.execute({ path: "src/a.ts", content: "export {};" }),
-          {
-            ok: true,
-            path: "src/a.ts",
-            sandboxId: "sandbox-selected",
-          }
-        );
+        const result = (await tool.execute({
+          path: "src/a.ts",
+          content: "export {};",
+        })) as Record<string, unknown>;
+        assert.equal(result.ok, true);
+        assert.equal(result.path, "src/a.ts");
+        assert.equal(result.sandboxId, "sandbox-selected");
+        assert.equal(result.created, true);
+        assert.match(String(result.diff), /\+export \{\};/);
         assert.match(capturedUrl, /\/sandbox-selected\/files$/);
       }
     );

@@ -105,7 +105,7 @@ describe("Control launch sequence", () => {
     });
     const fetchSandbox = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith("/files")) return Response.json({ ok: true });
+      if (url.includes("/files")) return Response.json({ ok: true });
       if (url.endsWith("/exec")) {
         return Response.json({ exitCode: 0, stdout: "ok", stderr: "" });
       }
@@ -175,7 +175,7 @@ describe("Control launch sequence", () => {
     const write = tools.write_file as unknown as ExecutableTool;
     await expect(
       write.execute({ path: "src/control.ts", content: "export {};" })
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       ok: true,
       path: "src/control.ts",
       sandboxId: NEW_SANDBOX_ID,

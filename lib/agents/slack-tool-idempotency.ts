@@ -61,6 +61,7 @@ export const SLACK_STATIC_MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "stop_sandbox",
   "virtual_exec",
   "write_file",
+  "edit_file",
 ]);
 
 export const SLACK_STATIC_METHOD_CLASSIFIED_TOOL_NAMES: ReadonlySet<string> =

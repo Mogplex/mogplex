@@ -481,7 +481,7 @@ describe("sandbox write tool contract", () => {
     };
     await expect(
       boundTool.execute({ path: "src/a.ts", content: "export {};" })
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       ok: true,
       path: "src/a.ts",
       sandboxId: "sandbox-selected",
