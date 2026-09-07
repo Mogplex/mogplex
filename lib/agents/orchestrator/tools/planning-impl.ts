@@ -39,7 +39,7 @@ export function createPlanMissionTool(
   const deps = { ...defaultPlanMissionDeps, ...overrides };
   return defineTool({
     description:
-      "Persist one complete mission plan as orchestration specs and runnable tasks. Call once after constructing the full input; tasks must be a JSON array of task objects, never a serialized string. Each returned task ID can be assigned its own worktree.",
+      "Persist mission tasks, including new follow-up tasks in an existing thread. Use new slugs for new work; unchanged tasks are replayed safely and earlier instructions are preserved. Call once per complete task set after constructing the full input; tasks must be a JSON array of task objects, never a serialized string. Each returned task ID can be assigned its own worktree.",
     inputSchema: planMissionSchema,
     execute: async (input: z.infer<typeof planMissionSchema>) => {
       if (!ctx.orchestrationRunId) return missingRun();
@@ -51,13 +51,13 @@ export function createPlanMissionTool(
         if (!details || details.run.repo_id !== ctx.repoId) {
           return { status: "error" as const, error: "Mission not found." };
         }
-        if (details.tasks.length > 0) {
-          return {
-            status: "ok" as const,
-            reused: true,
-            tasks: details.tasks,
-          };
-        }
+        const firstOrderIndex =
+          Math.max(
+            -1,
+            ...details.specs
+              .filter((spec) => spec.kind === "task")
+              .map((spec) => spec.order_index ?? -1)
+          ) + 1;
 
         const taskSlugs = new Set(input.tasks.map((task) => task.slug));
         if (taskSlugs.size !== input.tasks.length) {
@@ -98,12 +98,12 @@ export function createPlanMissionTool(
           context: input.context,
           constraints: input.constraints,
           tasks: input.tasks.map((taskInput, index) => ({
-            orderIndex: index,
+            orderIndex: firstOrderIndex + index,
             slug: taskInput.slug,
             title: taskInput.title,
             filePath: buildTaskSpecPath(
               details.run.slug,
-              index,
+              firstOrderIndex + index,
               taskInput.slug
             ),
             branchName: buildTaskBranch(details.run.slug, taskInput.slug),
