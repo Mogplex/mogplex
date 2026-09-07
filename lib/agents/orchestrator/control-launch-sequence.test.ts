@@ -209,6 +209,7 @@ describe("Control launch sequence", () => {
       loadWorktree: async () => buildWorktree(),
       startRun: startRun as never,
       bindAgent: async () => buildWorktree(),
+      countActiveSandboxWorkers: async () => 0,
     }) as unknown as ExecutableTool;
     await expect(
       workerTool.execute({

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { codexProviderArgs } from "./codex-provider";
+import { codexProviderArgs, codexWorkerIsolationArgs } from "./codex-provider";
 
 it("uses the Codex gateway compatibility endpoint without putting secrets in arguments", () => {
   const args = codexProviderArgs({
@@ -31,4 +31,14 @@ it("does not override direct OpenAI or user-configured providers", () => {
   expect(
     codexProviderArgs({ OPENAI_BASE_URL: "https://user-provider.example/v1" })
   ).toEqual([]);
+});
+
+it("disables Codex multi-agent spawning for every worker", () => {
+  // Five workers in one VM each fanning out into collab sub-agents exhausted
+  // the sandbox (mission 43f98333). A Mogplex worker is exactly one agent.
+  const args = codexWorkerIsolationArgs();
+  expect(args).toContain("features.multi_agent=false");
+  expect(
+    args.filter((_, index) => index % 2 === 0).every((arg) => arg === "-c")
+  ).toBe(true);
 });

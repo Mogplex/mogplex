@@ -174,6 +174,7 @@ for (const providerStatus of [
     const rawError = "Sandbox stream was closed: internal session vm-secret";
     let persistedError: string | null | undefined;
     let stoppedRecordId: string | null = null;
+    const lifecycleEvents: Array<Record<string, unknown>> = [];
     const commandLifecycle: string[] = [];
     let terminationWaitAborted = false;
     let terminationDeadlineMs = 0;
@@ -269,6 +270,10 @@ for (const providerStatus of [
         stoppedRecordId = recordId;
         return null;
       },
+      recordSandboxLifecycleEvent: async (event) => {
+        lifecycleEvents.push(event);
+        return "event-1";
+      },
       touchSandboxLastActive: async () => {},
       resolveRepoSandboxEnv: async () => ({
         envVars: {},
@@ -320,6 +325,28 @@ for (const providerStatus of [
     assert.equal(
       stoppedRecordId,
       providerStatus === "stopped" ? "sandbox-1" : null
+    );
+    // A vanished VM must leave a row a human can find later; mission
+    // 43f98333 had to be reconstructed from three other systems.
+    assert.deepEqual(
+      lifecycleEvents,
+      providerStatus === "stopped"
+        ? [
+            {
+              sandboxRecordId: "sandbox-1",
+              userId: aiCall.user_id,
+              eventType: "worker_vm_gone",
+              workerRunId: aiCall.id,
+              payload: {
+                sandbox_id: "sandbox-runtime-123",
+                provider_status: "stopped",
+                harness: "codex",
+                runtime_command_id: "cmd-closed",
+                conversation_id: aiCall.conversation_id ?? null,
+              },
+            },
+          ]
+        : []
     );
     assert.deepEqual(
       commandLifecycle,

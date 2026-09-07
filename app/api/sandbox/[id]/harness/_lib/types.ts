@@ -1,5 +1,6 @@
 import type { getSandboxServiceCredentials } from "@/lib/sandbox/get-user-credentials";
 import type { getSandbox } from "@/lib/sandbox/client";
+import type { recordSandboxLifecycleEvent } from "@/lib/sandbox/auto-pause-presence";
 import type { runHarness } from "@/lib/harness/runner";
 import type { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import type { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
@@ -98,6 +99,7 @@ export type SandboxHarnessPostDeps = {
   injectClaudeMcpConfig: typeof injectClaudeMcpConfig;
   renewSandboxActivityLease: typeof renewSandboxActivityLease;
   stopSandboxRecord: typeof stopSandboxRecord;
+  recordSandboxLifecycleEvent: typeof recordSandboxLifecycleEvent;
   touchSandboxLastActive: typeof touchSandboxLastActive;
   resolveRepoSandboxEnv: typeof resolveRepoSandboxEnv;
   createAiCall: typeof createAiCall;

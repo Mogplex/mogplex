@@ -39,6 +39,17 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
  * running cap: candidates over the cap are skipped with
  * REPO_PENDING_LIMIT / INSTALLATION_PENDING_LIMIT and never enqueued, so
  * that work is dropped, not deferred.
+ *
+ * MAX_CONCURRENT_WORKERS_PER_SANDBOX (lib/control/worker-policy.ts) —
+ * ACTIVE safety backstop, added 2026-09-07 for issue #434 and awaiting
+ * Charles's sign-off on the value (2). Counts external_agent_runs in
+ * pending or streaming status bound to one sandbox record. Enforced by the
+ * Control spawn_subagent tool before it starts a run. When hit, the tool
+ * returns an error the coordinator relays ("Sandbox already runs N
+ * workers...") and the launch is deferred until a worker finishes or
+ * another sandbox is started; nothing is dropped. It exists because five
+ * Codex workers in one 2 vCPU / 4 GB sandbox exhausted the VM 56 s after
+ * resume and every worker died with no output.
  */
 export const AUTOMATION_LIMITS = {
   maxRunningPerInstallation: 8,

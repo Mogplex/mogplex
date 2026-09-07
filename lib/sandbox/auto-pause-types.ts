@@ -23,7 +23,8 @@ export type SandboxLifecycleEventType =
   | "start_waiting_cleanup"
   | "start_cleanup_recovered"
   | "start_cleanup_failed"
-  | "duplicate_start_joined";
+  | "duplicate_start_joined"
+  | "worker_vm_gone";
 
 export type SandboxAutoPauseDecisionCode =
   | "would_auto_pause"

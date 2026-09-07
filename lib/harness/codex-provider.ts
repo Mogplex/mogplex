@@ -14,3 +14,13 @@ export function codexProviderArgs(env: Record<string, string>): string[] {
     'model_providers.mogplex_gateway.wire_api="responses"',
   ].flatMap((value) => ["-c", value]);
 }
+
+/**
+ * A Mogplex worker is exactly one agent. Codex's `multi_agent` feature
+ * (stable and on by default in the pinned 0.146.1 and in 0.153.4) lets a
+ * worker spawn collaborator threads; five workers doing that in one 4 GB
+ * sandbox killed the VM in mission 43f98333.
+ */
+export function codexWorkerIsolationArgs(): string[] {
+  return ["-c", "features.multi_agent=false"];
+}

@@ -55,6 +55,7 @@ export function createHarnessStreamBody(
     | "publishHarnessPullRequest"
     | "persistHarnessMemory"
     | "stopSandboxRecord"
+    | "recordSandboxLifecycleEvent"
     | "getSandbox"
   >,
   sandbox: Sandbox,
@@ -273,6 +274,7 @@ async function handleStreamError(
     | "finalizeAiCallIfNotCancelled"
     | "safeAppendAiCallEvent"
     | "stopSandboxRecord"
+    | "recordSandboxLifecycleEvent"
     | "getSandbox"
   >,
   ctx: StreamExecutionContext,
@@ -285,15 +287,15 @@ async function handleStreamError(
   const rawErrorMsg = err instanceof Error ? err.message : "Stream error";
   const sandboxStreamClosed = isClosedSandboxStreamError(err);
   let sandboxGone = false;
+  let providerStatus: string | null = null;
   if (sandboxStreamClosed) {
     try {
-      sandboxGone = ["stopped", "failed", "aborted"].includes(
-        (
-          await deps.getSandbox(ctx.sandboxId, ctx.sandboxCredentials, {
-            resume: false,
-          })
-        ).status
-      );
+      providerStatus = (
+        await deps.getSandbox(ctx.sandboxId, ctx.sandboxCredentials, {
+          resume: false,
+        })
+      ).status;
+      sandboxGone = ["stopped", "failed", "aborted"].includes(providerStatus);
     } catch {
       // A lookup error can refer to credentials or project scope. Only a
       // successful provider status response establishes that this VM stopped.
@@ -337,6 +339,29 @@ async function handleStreamError(
   });
 
   if (sandboxGone) {
+    // The provider keeps no history once a named sandbox is deleted, so this
+    // row is the only durable record of why the worker's VM disappeared.
+    await deps
+      .recordSandboxLifecycleEvent({
+        sandboxRecordId: ctx.id,
+        userId: ctx.userId,
+        eventType: "worker_vm_gone",
+        workerRunId: ctx.aiCallId,
+        payload: {
+          sandbox_id: ctx.sandboxId,
+          provider_status: providerStatus,
+          harness: ctx.harnessId,
+          runtime_command_id: result.command.cmdId,
+          conversation_id: ctx.conversationId,
+        },
+      })
+      .catch((eventError) => {
+        console.error("[harness] failed to record worker VM loss", {
+          aiCallId: ctx.aiCallId,
+          sandboxRecordId: ctx.id,
+          error: eventError,
+        });
+      });
     await deps
       .stopSandboxRecord(ctx.id, {
         expectedSandboxId: ctx.sandboxId,

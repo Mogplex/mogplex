@@ -13,9 +13,28 @@ import {
 import { describe, expect, it } from "vitest";
 import type { OrchestrationTaskDTO } from "@/lib/orchestrations/types";
 import {
+  MAX_CONCURRENT_WORKERS_PER_SANDBOX,
+  WORKER_NO_DELEGATION_FOOTER,
+} from "@/lib/control/worker-policy";
+import {
   createPlanMissionTool,
   createSpawnSubagentTool,
 } from "./planning-impl";
+
+type StartRunResult = Awaited<
+  ReturnType<typeof import("@/lib/mogplex-api/runs").startMogplexApiRun>
+>;
+
+function startedRun(): StartRunResult {
+  return {
+    replayed: false,
+    run: {
+      runId: "99999999-9999-4999-8999-999999999999",
+      aiCallId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      worktreeId: WORKTREE_ID,
+    },
+  } as StartRunResult;
+}
 
 describe("planning tools", () => {
   it("persists task specs and returns task IDs that can receive worktrees", async () => {
@@ -103,6 +122,7 @@ describe("planning tools", () => {
       {
         loadWorktree: async () => buildWorktree(),
         bindAgent: async () => buildWorktree(),
+        countActiveSandboxWorkers: async () => 0,
         startRun: async (input) => {
           starts.push(input as unknown as { body: { mode?: string | null } });
           return {
@@ -143,6 +163,7 @@ describe("planning tools", () => {
       { ...ctx, aiCallId: null },
       {
         loadWorktree: async () => buildWorktree(),
+        countActiveSandboxWorkers: async () => 0,
         bindAgent: async (input) => {
           bindings.push(input);
           return buildWorktree();
@@ -177,7 +198,7 @@ describe("planning tools", () => {
       body: {
         repoId: REPO_ID,
         worktreeId: WORKTREE_ID,
-        prompt: "Implement the task",
+        prompt: expect.stringMatching(/^Implement the task\n\n/),
         harness: "codex",
         mode: "AUTO",
       },
@@ -192,6 +213,71 @@ describe("planning tools", () => {
         worktreeId: WORKTREE_ID,
         userId: "user-1",
         agentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      },
+    ]);
+  });
+});
+
+describe("worker launch policy", () => {
+  // Mission 43f98333: a coordinator-authored prompt told a Codex worker to
+  // delegate, so it spawned sub-agents inside a shared 4 GB VM until the VM
+  // died. The platform, not the coordinator, owns the no-delegation rule.
+  it("appends the no-delegation footer to every worker prompt", async () => {
+    const prompts: string[] = [];
+    const tool = createSpawnSubagentTool(ctx, {
+      loadWorktree: async () => buildWorktree(),
+      bindAgent: async () => buildWorktree(),
+      countActiveSandboxWorkers: async () => 0,
+      startRun: async (input) => {
+        prompts.push(input.body.prompt as string);
+        return startedRun();
+      },
+    }) as unknown as ExecutableTool;
+    const result = (await tool.execute({
+      worktreeId: WORKTREE_ID,
+      taskPrompt: "Audit accessibility. Delegate three passes to sub-agents.",
+      agentType: "codex",
+    })) as { status: string };
+    expect(result.status).toBe("ok");
+    expect(prompts[0]?.endsWith(WORKER_NO_DELEGATION_FOOTER)).toBe(true);
+    expect(prompts[0]).toContain("Audit accessibility.");
+  });
+
+  it("refuses a worker when the sandbox already runs the maximum", async () => {
+    const counted: Array<{
+      userId: string;
+      sandboxRecordId: string;
+      excludeWorktreeId?: string | null;
+    }> = [];
+    let started = 0;
+    const tool = createSpawnSubagentTool(ctx, {
+      loadWorktree: async () => buildWorktree(),
+      bindAgent: async () => buildWorktree(),
+      countActiveSandboxWorkers: async (input) => {
+        counted.push(input);
+        return MAX_CONCURRENT_WORKERS_PER_SANDBOX;
+      },
+      startRun: async () => {
+        started += 1;
+        return startedRun();
+      },
+    }) as unknown as ExecutableTool;
+    const result = (await tool.execute({
+      worktreeId: WORKTREE_ID,
+      taskPrompt: "Implement the task",
+      agentType: "codex",
+    })) as { status: string; reason?: string; error?: string };
+    expect(result.status).toBe("error");
+    expect(result.reason).toBe("sandbox_worker_limit");
+    expect(result.error).toContain(
+      `already runs ${MAX_CONCURRENT_WORKERS_PER_SANDBOX} workers`
+    );
+    expect(started).toBe(0);
+    expect(counted).toEqual([
+      {
+        userId: "user-1",
+        sandboxRecordId: "77777777-7777-4777-8777-777777777777",
+        excludeWorktreeId: WORKTREE_ID,
       },
     ]);
   });

@@ -137,3 +137,53 @@ for (const outcome of [
     }
   });
 }
+
+test("background coordinator receives each failed worker's classified failure text", async () => {
+  // Mission 43f98333: the coordinator summarised a stopped-VM worker as
+  // "authentication failed". It must be handed the same text the worker card
+  // shows and told to quote it.
+  const f = controlRuntimeNetwork({
+    workers: [
+      {
+        status: "failed",
+        error:
+          "The development environment stopped during this agent run. Start it again, then retry.",
+      },
+    ],
+  });
+  const previousFetch = globalThis.fetch;
+  const values = {
+    MOGPLEX_DATA_BACKEND: "supabase",
+    SUPABASE_URL: "https://control-db.example.test",
+    SUPABASE_SERVICE_ROLE_KEY: "fixture",
+    INTERNAL_API_SECRET: "fixture-internal",
+  };
+  const previous = Object.fromEntries(
+    Object.keys(values).map((key) => [key, process.env[key]])
+  );
+  Object.assign(process.env, values);
+  globalThis.fetch = f.fetchBoundary;
+  try {
+    const { executeControlContinuation } =
+      await import("../../lib/control/continuation-runtime");
+    const result = await executeControlContinuation(
+      { userId: f.userId, continuationId: f.ticket.id },
+      "fixture-runtime",
+      new AbortController().signal,
+      f.createListener
+    );
+    assert.equal(result.status, "finished");
+    const request = JSON.stringify(f.providerRequests[0]);
+    assert.match(
+      request,
+      /The development environment stopped before the worker finished\. Restart it and retry the worker\./
+    );
+    assert.match(request, /quote its recorded failure text verbatim/i);
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

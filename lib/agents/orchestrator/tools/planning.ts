@@ -153,7 +153,12 @@ export const pruneWorktreeSchema = z.object({
 
 export const spawnSubagentSchema = z.object({
   worktreeId: z.string().uuid().describe("Persisted worktree to use"),
-  taskPrompt: z.string().min(1).describe("Task instructions for the subagent"),
+  taskPrompt: z
+    .string()
+    .min(1)
+    .describe(
+      "Task instructions for this single worker. Never tell it to delegate or spawn other agents."
+    ),
   agentType: z.enum(["codex", "claude-code"]).default("codex"),
 });
 

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSandboxServiceCredentials } from "@/lib/sandbox/get-user-credentials";
 import { getSandbox } from "@/lib/sandbox/client";
+import { recordSandboxLifecycleEvent } from "@/lib/sandbox/auto-pause-presence";
 import { runHarness } from "@/lib/harness/runner";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
@@ -75,6 +76,7 @@ export const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   injectClaudeMcpConfig,
   renewSandboxActivityLease,
   stopSandboxRecord,
+  recordSandboxLifecycleEvent,
   touchSandboxLastActive,
   resolveRepoSandboxEnv,
   createAiCall,
