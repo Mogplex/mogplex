@@ -2,6 +2,24 @@ import { expect, it } from "vitest";
 import type { Sandbox } from "@vercel/sandbox";
 import { renewSandboxActivityLease } from "./activity-lease";
 
+it.each([0, 60_000])(
+  "does not call the provider when the lease already has %i ms to spare",
+  async (spare) => {
+    let called = false;
+    const sandbox = {
+      currentSession: () => ({
+        createdAt: new Date(0),
+        timeout: 120_000 + spare,
+      }),
+      extendTimeout: async () => {
+        called = true;
+      },
+    } as unknown as Sandbox;
+    expect(await renewSandboxActivityLease(sandbox, 60_000, 60_000)).toBe(0);
+    expect(called).toBe(false);
+  }
+);
+
 it.each([1, 500, 999])(
   "renews a nearly sufficient shared lease by a provider-valid duration (%i ms short)",
   async (shortfall) => {

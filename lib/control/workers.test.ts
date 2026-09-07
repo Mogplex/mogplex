@@ -15,6 +15,38 @@ const worker = (status: ControlWorker["status"]): ControlWorker => ({
   events: [],
 });
 
+it.each([
+  "HTTP 401",
+  "HTTP/1.1 401",
+  "status 401",
+  "status code: 401",
+  "status=401",
+  "hTtP:401",
+  "authentication failed",
+])("recognizes a bounded authentication error: %s", (error) => {
+  expect(workerFailureMessage("failed", error, [])).toContain(
+    "could not authenticate"
+  );
+});
+
+it.each(["HTTP 4017", "mystatus401", "status code 1401"])(
+  "does not infer authentication from unrelated digits: %s",
+  (error) => {
+    expect(workerFailureMessage("failed", error, [])).toContain(
+      "Inspect its recorded output"
+    );
+  }
+);
+
+it.each(["sandbox stopped", "sandbox gone", "session stopped", "session gone"])(
+  "identifies a lost environment before authentication diagnostics: %s",
+  (error) => {
+    expect(workerFailureMessage("failed", `${error}: HTTP 401`, [])).toContain(
+      "development environment stopped"
+    );
+  }
+);
+
 it("does not diagnose authentication from digits in a timestamp", () => {
   expect(
     workerFailureMessage(
