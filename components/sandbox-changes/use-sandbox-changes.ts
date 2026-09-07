@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import type {
   SandboxChanges,
@@ -27,42 +27,91 @@ export function useSandboxChanges(input: {
   refreshToken: number;
 }) {
   const { sandboxId, refreshToken } = input;
-  const [changes, setChanges] = useState<SandboxChanges | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const requestId = useRef(0);
+  const scope = useMemo(
+    () => ({
+      sandboxId,
+      active: false,
+      requestId: 0,
+      ready: false,
+      busy: false,
+    }),
+    [sandboxId]
+  );
+  const empty = {
+    changes: null,
+    loading: Boolean(sandboxId),
+    busy: false,
+    error: null,
+  };
+  const [state, setState] = useState<{
+    scope: typeof scope;
+    changes: SandboxChanges | null;
+    loading: boolean;
+    busy: boolean;
+    error: string | null;
+  }>({ scope, ...empty });
+  const { changes, loading, busy, error } =
+    state.scope === scope ? state : empty;
+  const update = useCallback(
+    (patch: Partial<Omit<typeof state, "scope">>) => {
+      if (!scope.active) return;
+      setState((previous) => ({
+        ...(previous.scope === scope
+          ? previous
+          : {
+              changes: null,
+              loading: Boolean(scope.sandboxId),
+              busy: false,
+              error: null,
+            }),
+        ...patch,
+        scope,
+      }));
+    },
+    [scope]
+  );
+
+  useEffect(() => {
+    scope.active = true;
+    return () => {
+      scope.active = false;
+      scope.requestId += 1;
+    };
+  }, [scope]);
 
   const endpoint = sandboxId
     ? `/api/sandbox/${encodeURIComponent(sandboxId)}/changes`
     : null;
 
   const refresh = useCallback(async () => {
-    if (!endpoint) {
-      setChanges(null);
-      return;
-    }
-    const id = ++requestId.current;
-    setLoading(true);
+    if (!endpoint || !scope.active || scope.busy) return;
+    const id = ++scope.requestId;
+    scope.ready = false;
+    update({ loading: true });
     try {
       const res = await fetch(endpoint, {
         headers: getActiveTeamRequestHeaders(),
       });
-      if (id !== requestId.current) return;
       if (!res.ok) {
-        setError(await readError(res, "Could not read changes"));
+        const message = await readError(res, "Could not read changes");
+        if (id === scope.requestId) update({ error: message, changes: null });
         return;
       }
-      setChanges((await res.json()) as SandboxChanges);
-      setError(null);
+      const payload = (await res.json()) as SandboxChanges;
+      if (!scope.active || id !== scope.requestId) return;
+      scope.ready = true;
+      update({ changes: payload, error: null });
     } catch (err) {
-      if (id === requestId.current) {
-        setError(err instanceof Error ? err.message : "Could not read changes");
+      if (id === scope.requestId) {
+        update({
+          changes: null,
+          error: err instanceof Error ? err.message : "Could not read changes",
+        });
       }
     } finally {
-      if (id === requestId.current) setLoading(false);
+      if (id === scope.requestId) update({ loading: false });
     }
-  }, [endpoint]);
+  }, [endpoint, scope, update]);
 
   useEffect(() => {
     void refresh();
@@ -70,24 +119,29 @@ export function useSandboxChanges(input: {
 
   const loadDiff = useCallback(
     async (path: string): Promise<string | null> => {
-      if (!endpoint) return null;
+      if (!endpoint || !scope.active || !scope.ready) return null;
+      const id = scope.requestId;
       const res = await fetch(`${endpoint}?path=${encodeURIComponent(path)}`, {
         headers: getActiveTeamRequestHeaders(),
       });
       if (!res.ok) {
-        setError(await readError(res, "Could not read the diff"));
+        const message = await readError(res, "Could not read the diff");
+        if (id === scope.requestId) update({ error: message });
         return null;
       }
       const body = (await res.json()) as { diff?: string };
+      if (!scope.active || id !== scope.requestId) return null;
       return body.diff ?? "";
     },
-    [endpoint]
+    [endpoint, scope, update]
   );
 
   const post = useCallback(
     async (body: Record<string, unknown>, fallback: string) => {
-      if (!endpoint) return null;
-      setBusy(true);
+      if (!endpoint || !scope.active || !scope.ready || scope.busy) return null;
+      const id = ++scope.requestId;
+      scope.busy = true;
+      update({ busy: true });
       try {
         const res = await fetch(endpoint, {
           method: "POST",
@@ -97,21 +151,29 @@ export function useSandboxChanges(input: {
           body: JSON.stringify(body),
         });
         if (!res.ok) {
-          setError(await readError(res, fallback));
+          const message = await readError(res, fallback);
+          if (id === scope.requestId) update({ error: message });
           return null;
         }
         const payload = (await res.json()) as { changes?: SandboxChanges };
-        if (payload.changes) setChanges(payload.changes);
-        setError(null);
+        if (!scope.active || id !== scope.requestId) return null;
+        update({
+          ...(payload.changes ? { changes: payload.changes } : {}),
+          error: null,
+        });
         return payload;
       } catch (err) {
-        setError(err instanceof Error ? err.message : fallback);
+        if (id === scope.requestId)
+          update({ error: err instanceof Error ? err.message : fallback });
         return null;
       } finally {
-        setBusy(false);
+        if (id === scope.requestId) {
+          scope.busy = false;
+          update({ busy: false });
+        }
       }
     },
-    [endpoint]
+    [endpoint, scope, update]
   );
 
   const revert = useCallback(

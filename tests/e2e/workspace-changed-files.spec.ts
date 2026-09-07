@@ -36,6 +36,7 @@ test("the agent pane lists sandbox changes with diff, revert, and commit actions
   await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
   let changes: ChangesPayload = DIRTY;
+  let delayedStatus: Promise<void> | null = null;
   const posts: Array<Record<string, unknown>> = [];
   await page.route(
     /\/api\/sandbox\/[^/]+\/changes(?:\?.*)?$/,
@@ -52,6 +53,7 @@ test("the agent pane lists sandbox changes with diff, revert, and commit actions
         return;
       }
       if (request.method() === "GET") {
+        if (delayedStatus) await delayedStatus;
         await route.fulfill({ json: changes });
         return;
       }
@@ -112,6 +114,24 @@ test("the agent pane lists sandbox changes with diff, revert, and commit actions
   await page.getByTestId("changed-files-commit").click();
   const message = page.getByTestId("changed-files-commit-message");
   await message.fill("Rename the constant");
+  let releaseStatus!: () => void;
+  delayedStatus = new Promise<void>((resolve) => {
+    releaseStatus = resolve;
+  });
+  const refreshRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "GET" && request.url().endsWith("/changes")
+  );
+  await page.getByRole("button", { name: "Refresh changes" }).click();
+  await refreshRequest;
+  try {
+    await expect(page.getByTestId("changed-files-revert-all")).toBeDisabled();
+    await expect(page.getByTestId("changed-files-commit-pr")).toBeDisabled();
+  } finally {
+    releaseStatus();
+    delayedStatus = null;
+  }
+  await expect(page.getByTestId("changed-files-commit-pr")).toBeEnabled();
   await page.getByTestId("changed-files-commit-pr").click();
   await expect(page.getByTestId("changed-files-delivery")).toContainText(
     "Pushed mogplex/agent-e2e"

@@ -94,16 +94,39 @@ fi`;
 
 export function buildRevertScript(paths: string[]): string {
   const quoted = paths.map((path) => assertSafePath(path));
-  return `set -eu
+  return `bash -s -- ${quoted.join(" ")} <<'MOGPLEX_REVERT'
+set -eu
 ${REPO_ROOT}
-for p in ${quoted.join(" ")}; do
+status_file="$(mktemp)"
+trap 'rm -f -- "$status_file"' EXIT
+git status --porcelain=v1 -z --untracked-files=no --renames > "$status_file"
+originals=()
+# In -z status, a rename is destination NUL source NUL. Read the whole
+# snapshot before changing the index so multiple selected renames stay valid.
+while IFS= read -r -d '' entry; do
+  code="\${entry:0:2}"
+  if [[ "$code" == *R* || "$code" == *C* ]]; then
+    IFS= read -r -d '' original
+    if [[ "$code" == *R* ]]; then
+      for p in "$@"; do
+        if [[ "$p" == "\${entry:3}" ]]; then originals+=("$original"); fi
+      done
+    fi
+  fi
+done < "$status_file"
+export GIT_LITERAL_PATHSPECS=1
+for p in "$@"; do
   if git cat-file -e "HEAD:$p" 2>/dev/null; then
     git checkout HEAD -- "$p"
   else
-    git rm -q --cached --ignore-unmatch -- "$p"
+    git rm -q -f --cached --ignore-unmatch -- "$p"
     rm -f -- "$p"
   fi
-done`;
+done
+if [ "\${#originals[@]}" -gt 0 ]; then
+  git checkout HEAD -- "\${originals[@]}"
+fi
+MOGPLEX_REVERT`;
 }
 
 function pullRequestTitle(message: string) {

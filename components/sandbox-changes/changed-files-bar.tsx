@@ -159,13 +159,17 @@ type Props = {
   defaultCommitMessage: string;
 };
 
-export function ChangedFilesBar({
+export function ChangedFilesBar(props: Props) {
+  return <SandboxChangedFilesBar key={props.sandboxId} {...props} />;
+}
+
+function SandboxChangedFilesBar({
   sandboxId,
   disabled,
   refreshToken,
   defaultCommitMessage,
 }: Props) {
-  const { changes, busy, error, refresh, loadDiff, revert, commit } =
+  const { changes, loading, busy, error, refresh, loadDiff, revert, commit } =
     useSandboxChanges({ sandboxId, refreshToken });
   const [expanded, setExpanded] = useState(false);
   const [committing, setCommitting] = useState(false);
@@ -201,7 +205,7 @@ export function ChangedFilesBar({
     { additions: 0, deletions: 0 }
   );
   if (files.length === 0 && !delivery && !error) return null;
-  const actionsDisabled = disabled || busy;
+  const actionsDisabled = disabled || busy || loading;
 
   return (
     <div
@@ -332,7 +336,7 @@ export function ChangedFilesBar({
       {committing ? (
         <CommitForm
           initialMessage={defaultCommitMessage}
-          busy={busy}
+          busy={actionsDisabled}
           onCommit={(message, openPullRequest) =>
             void handleCommit(message, openPullRequest)
           }
