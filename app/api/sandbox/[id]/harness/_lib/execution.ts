@@ -301,15 +301,16 @@ async function handleStreamError(
   }
   let commandStopped = sandboxGone;
   if (!commandStopped) {
+    const confirmationSignal = AbortSignal.timeout(10_000);
     // A detached agent can outlive its logs connection. Stop this command,
     // then establish completion before a continuation may replace its work.
     try {
-      await result.command.kill("SIGKILL");
+      await result.command.kill("SIGKILL", { abortSignal: confirmationSignal });
     } catch {
       /* It may already have exited. */
     }
     try {
-      await result.command.wait();
+      await result.command.wait({ signal: confirmationSignal });
       commandStopped = true;
     } catch {
       /* Preserve uncertainty when the provider cannot confirm exit. */
