@@ -26,6 +26,7 @@ import {
 import { Streamdown } from "streamdown";
 
 import { Shimmer } from "./shimmer";
+import { markdownLinkSafety } from "./link-safety";
 
 interface ReasoningContextValue {
   isStreaming: boolean;
@@ -216,7 +217,7 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
+      <Streamdown plugins={streamdownPlugins} linkSafety={markdownLinkSafety}>{children}</Streamdown>
     </CollapsibleContent>
   )
 );
