@@ -30,6 +30,7 @@ import {
 } from "react";
 import { Streamdown } from "streamdown";
 import { streamdownDiffRenderer } from "@/components/diffs/streamdown-diff-renderer";
+import { markdownLinkSafety } from "./link-safety";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -338,6 +339,7 @@ export const MessageResponse = memo(
         className
       )}
       plugins={streamdownPlugins}
+      linkSafety={markdownLinkSafety}
       {...props}
     />
   ),
