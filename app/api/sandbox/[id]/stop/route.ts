@@ -16,6 +16,13 @@ import {
 } from "@/lib/sandbox/route-context";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
+import { withSandboxMutationLock } from "@/lib/sandbox/mutation-lock";
+import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
+import {
+  UNCOMMITTED_CHANGES_COMMAND,
+  parseUncommittedChanges,
+  describeUncommittedChanges,
+} from "@/lib/agents/tools/sandbox-stop-guard";
 import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
@@ -42,6 +49,7 @@ type SandboxStopRecord = {
   base_branch: string;
   working_branch: string;
   status: string;
+  root_directory?: string | null;
   billing_source?: string | null;
   billing_team_id?: string | null;
   billing_project_id?: string | null;
@@ -57,6 +65,7 @@ type SandboxStopDeps = {
   updateSandboxRecord: typeof updateSandboxRecord;
   prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
   finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
+  withSandboxMutationLock: typeof withSandboxMutationLock;
 };
 
 const defaultSandboxStopDeps: SandboxStopDeps = {
@@ -67,6 +76,7 @@ const defaultSandboxStopDeps: SandboxStopDeps = {
   updateSandboxRecord,
   prepareSandboxBillingClose,
   finalizeSandboxBillingClose,
+  withSandboxMutationLock,
 };
 
 type RemoteStopOutcome = {
@@ -78,8 +88,12 @@ type RemoteStopOutcome = {
 
 async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
   loaded: LoadedSandboxRouteRecord<R>,
-  deps: Pick<SandboxStopDeps, "resolveLoadedSandboxRouteContext" | "getSandbox">
-): Promise<RemoteStopOutcome> {
+  deps: Pick<
+    SandboxStopDeps,
+    "resolveLoadedSandboxRouteContext" | "getSandbox"
+  >,
+  preserveChanges: boolean
+): Promise<RemoteStopOutcome | Response> {
   if (loaded.record.sandbox_id === "pending") {
     return {
       snapshotId: null,
@@ -117,6 +131,37 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
       // we don't need to resume first.
       { resume: false }
     );
+
+    if (preserveChanges) {
+      try {
+        const result = await sandbox.runCommand({
+          cmd: "sh",
+          args: ["-lc", UNCOMMITTED_CHANGES_COMMAND],
+          cwd: resolveSandboxWorkingDirectory(undefined, loaded.rootDirectory),
+        });
+        if (result.exitCode !== 0) throw new Error(await result.stderr());
+        const report = parseUncommittedChanges(await result.stdout());
+        if (report.status === "dirty") {
+          return NextResponse.json(
+            {
+              error: `The sandbox has ${describeUncommittedChanges(report)}. Commit and push first, or confirm discarding changes before stopping.`,
+              reason: "uncommitted_changes",
+              files: report.files,
+            },
+            { status: 409 }
+          );
+        }
+      } catch {
+        return NextResponse.json(
+          {
+            error:
+              "Could not inspect uncommitted changes. The sandbox was not stopped. Retry or confirm discarding changes.",
+            reason: "inspection_unavailable",
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     // Stop = explicit user destroy. sandbox.delete() removes the Vercel
     // sandbox + all its snapshots + sessions, freeing storage. This is
@@ -189,81 +234,94 @@ export function createSandboxStopHandler(
     );
     if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
-    let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
-      null;
-    try {
-      billingClose = await deps.prepareSandboxBillingClose(id);
-    } catch (billingError) {
-      console.warn(
-        `[sandbox/stop] Billing close preparation failed for ${id}; reconciliation will recover:`,
-        billingError
-      );
-    }
-    const { snapshotId, credentialFailure, confirmedStopped, endedAt } =
-      await stopRemoteSandboxBestEffort(loaded, deps);
-    const billingEndedAt =
-      endedAt ??
-      (confirmedStopped ? (billingClose?.meteredThroughAt ?? null) : null);
-    if (confirmedStopped && billingEndedAt) {
+    // Empty-body requests come from the explicit destructive Stop UI. Agent
+    // requests always send discardChanges and require the guarded path by default.
+    const body = await request.json().catch(() => null);
+    const preserveChanges = body?.discardChanges === false;
+    const stop = async () => {
+      let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
+        null;
       try {
-        await deps.finalizeSandboxBillingClose(billingClose, billingEndedAt);
+        billingClose = await deps.prepareSandboxBillingClose(id);
       } catch (billingError) {
         console.warn(
-          `[sandbox/stop] VM stopped but billing finalization failed for ${id}; reconciliation will retry:`,
+          `[sandbox/stop] Billing close preparation failed for ${id}; reconciliation will recover:`,
           billingError
         );
       }
-    }
-    if (confirmedStopped) {
-      const stopped = await deps.stopSandboxRecord(id, {
-        expectedSandboxId: loaded.record.sandbox_id,
-        healthStatus: "stopped",
-        fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-        stopReason: "manual",
-      });
-      if (!stopped) {
-        await deps.stopSandboxRecord(id, {
+      const outcome = await stopRemoteSandboxBestEffort(
+        loaded,
+        deps,
+        preserveChanges
+      );
+      if (outcome instanceof Response) return outcome;
+      const { snapshotId, credentialFailure, confirmedStopped, endedAt } =
+        outcome;
+      const billingEndedAt =
+        endedAt ??
+        (confirmedStopped ? (billingClose?.meteredThroughAt ?? null) : null);
+      if (confirmedStopped && billingEndedAt) {
+        try {
+          await deps.finalizeSandboxBillingClose(billingClose, billingEndedAt);
+        } catch (billingError) {
+          console.warn(
+            `[sandbox/stop] VM stopped but billing finalization failed for ${id}; reconciliation will retry:`,
+            billingError
+          );
+        }
+      }
+      if (confirmedStopped) {
+        const stopped = await deps.stopSandboxRecord(id, {
+          expectedSandboxId: loaded.record.sandbox_id,
           healthStatus: "stopped",
           fromStatuses: STOPPABLE_SANDBOX_STATUSES,
           stopReason: "manual",
         });
+        if (!stopped) {
+          await deps.stopSandboxRecord(id, {
+            healthStatus: "stopped",
+            fromStatuses: STOPPABLE_SANDBOX_STATUSES,
+            stopReason: "manual",
+          });
+        }
       }
-    }
 
-    const recordUpdates: Record<string, unknown> = {};
-    if (snapshotId) {
-      recordUpdates.snapshot_id = snapshotId;
-      recordUpdates.snapshot_billing_project_id =
-        loaded.record.vercel_project_id ?? loaded.record.billing_project_id;
-      recordUpdates.snapshot_billing_team_id =
-        loaded.record.vercel_team_id ?? loaded.record.billing_team_id;
-    }
-    if (credentialFailure) {
-      recordUpdates.error = `Remote VM ${loaded.record.sandbox_id} could not be stopped: credentials unresolvable. VM may continue running until the next reaper cycle.`;
-    } else if (!confirmedStopped) {
-      recordUpdates.error = `Remote VM ${loaded.record.sandbox_id} could not be confirmed stopped. The record remains active for reconciliation.`;
-    }
-    if (Object.keys(recordUpdates).length > 0) {
-      try {
-        await deps.updateSandboxRecord(id, recordUpdates);
-      } catch (error) {
-        console.error("[sandbox/stop] Failed to persist stop metadata:", error);
+      const recordUpdates: Record<string, unknown> = {};
+      if (snapshotId) {
+        recordUpdates.snapshot_id = snapshotId;
+        recordUpdates.snapshot_billing_project_id =
+          loaded.record.vercel_project_id ?? loaded.record.billing_project_id;
+        recordUpdates.snapshot_billing_team_id =
+          loaded.record.vercel_team_id ?? loaded.record.billing_team_id;
       }
-    }
-
-    const refreshed = await deps.loadOwnedSandboxRouteRecord<SandboxStopRecord>(
-      request,
-      id,
-      {
-        select: "*",
-        notFoundMessage: "Sandbox not found",
+      if (credentialFailure) {
+        recordUpdates.error = `Remote VM ${loaded.record.sandbox_id} could not be stopped: credentials unresolvable. VM may continue running until the next reaper cycle.`;
+      } else if (!confirmedStopped) {
+        recordUpdates.error = `Remote VM ${loaded.record.sandbox_id} could not be confirmed stopped. The record remains active for reconciliation.`;
       }
-    );
-    if (!refreshed.ok) return buildSandboxRouteErrorResponse(refreshed);
+      if (Object.keys(recordUpdates).length > 0) {
+        try {
+          await deps.updateSandboxRecord(id, recordUpdates);
+        } catch (error) {
+          console.error(
+            "[sandbox/stop] Failed to persist stop metadata:",
+            error
+          );
+        }
+      }
 
-    return NextResponse.json({
-      sandbox: toSandboxClientRecord(refreshed.record),
-    });
+      const refreshed =
+        await deps.loadOwnedSandboxRouteRecord<SandboxStopRecord>(request, id, {
+          select: "*",
+          notFoundMessage: "Sandbox not found",
+        });
+      if (!refreshed.ok) return buildSandboxRouteErrorResponse(refreshed);
+
+      return NextResponse.json({
+        sandbox: toSandboxClientRecord(refreshed.record),
+      });
+    };
+    return preserveChanges ? deps.withSandboxMutationLock(id, stop) : stop();
   };
 }
 

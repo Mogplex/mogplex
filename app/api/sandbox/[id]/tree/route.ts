@@ -8,6 +8,7 @@ import {
 import { resolveSandboxPath } from "@/lib/repo-settings";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
 import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
+import { withSandboxMutationLock } from "@/lib/sandbox/mutation-lock";
 import {
   buildSandboxRouteErrorResponse,
   type LoadedSandboxRouteContext,
@@ -34,12 +35,14 @@ type TreeRouteDeps = {
   loadOwnedSandboxRouteContext: typeof loadOwnedSandboxRouteContext;
   touchSandboxLastActive: typeof touchSandboxLastActive;
   renewSandboxActivityLease: typeof renewSandboxActivityLease;
+  withSandboxMutationLock: typeof withSandboxMutationLock;
 };
 
 const DEFAULT_DEPS: TreeRouteDeps = {
   loadOwnedSandboxRouteContext,
   touchSandboxLastActive,
   renewSandboxActivityLease,
+  withSandboxMutationLock,
 };
 
 type LoadedTreeSandboxData =
@@ -308,34 +311,36 @@ export function createSandboxTreePostHandler(
 
       const repoPath = normalizeTreePathInput(body?.path, kind);
 
-      const sandboxData = loaded.sandboxData;
-      await deps.renewSandboxActivityLease(sandboxData.sandbox);
-      const fsPath = toFilesystemPath(sandboxData.rootDirectory, repoPath);
+      return await deps.withSandboxMutationLock(id, async () => {
+        const sandboxData = loaded.sandboxData;
+        await deps.renewSandboxActivityLease(sandboxData.sandbox);
+        const fsPath = toFilesystemPath(sandboxData.rootDirectory, repoPath);
 
-      await ensurePathMissing(sandboxData.sandbox, fsPath);
-      await ensureParentDirectory(sandboxData.sandbox, fsPath);
+        await ensurePathMissing(sandboxData.sandbox, fsPath);
+        await ensureParentDirectory(sandboxData.sandbox, fsPath);
 
-      if (kind === "directory") {
-        const mkdir = await sandboxData.sandbox.runCommand({
-          cmd: "mkdir",
-          args: ["-p", fsPath],
-        });
+        if (kind === "directory") {
+          const mkdir = await sandboxData.sandbox.runCommand({
+            cmd: "mkdir",
+            args: ["-p", fsPath],
+          });
 
-        if (mkdir.exitCode !== 0) {
-          throw new Error(await mkdir.stderr());
+          if (mkdir.exitCode !== 0) {
+            throw new Error(await mkdir.stderr());
+          }
+        } else {
+          await sandboxData.sandbox.writeFiles([
+            {
+              path: fsPath,
+              content: Buffer.from(""),
+            },
+          ]);
         }
-      } else {
-        await sandboxData.sandbox.writeFiles([
-          {
-            path: fsPath,
-            content: Buffer.from(""),
-          },
-        ]);
-      }
 
-      await deps.touchSandboxLastActive(id);
+        await deps.touchSandboxLastActive(id);
 
-      return NextResponse.json({ ok: true, path: repoPath }, { status: 201 });
+        return NextResponse.json({ ok: true, path: repoPath }, { status: 201 });
+      });
     } catch (error) {
       return buildTreeErrorResponse(error);
     }
@@ -392,38 +397,40 @@ export function createSandboxTreePatchHandler(
         }
       );
 
-      const sandboxData = loaded.sandboxData;
-      await deps.renewSandboxActivityLease(sandboxData.sandbox);
+      return await deps.withSandboxMutationLock(id, async () => {
+        const sandboxData = loaded.sandboxData;
+        await deps.renewSandboxActivityLease(sandboxData.sandbox);
 
-      for (const move of moves) {
-        if (move.fromPath === move.toPath) continue;
+        for (const move of moves) {
+          if (move.fromPath === move.toPath) continue;
 
-        const fromFsPath = toFilesystemPath(
-          sandboxData.rootDirectory,
-          move.fromPath
-        );
-        const toFsPath = toFilesystemPath(
-          sandboxData.rootDirectory,
-          move.toPath
-        );
+          const fromFsPath = toFilesystemPath(
+            sandboxData.rootDirectory,
+            move.fromPath
+          );
+          const toFsPath = toFilesystemPath(
+            sandboxData.rootDirectory,
+            move.toPath
+          );
 
-        await ensurePathExists(sandboxData.sandbox, fromFsPath);
-        await ensurePathMissing(sandboxData.sandbox, toFsPath);
-        await ensureParentDirectory(sandboxData.sandbox, toFsPath);
+          await ensurePathExists(sandboxData.sandbox, fromFsPath);
+          await ensurePathMissing(sandboxData.sandbox, toFsPath);
+          await ensureParentDirectory(sandboxData.sandbox, toFsPath);
 
-        const result = await sandboxData.sandbox.runCommand({
-          cmd: "mv",
-          args: [fromFsPath, toFsPath],
-        });
+          const result = await sandboxData.sandbox.runCommand({
+            cmd: "mv",
+            args: [fromFsPath, toFsPath],
+          });
 
-        if (result.exitCode !== 0) {
-          throw new Error(await result.stderr());
+          if (result.exitCode !== 0) {
+            throw new Error(await result.stderr());
+          }
         }
-      }
 
-      await deps.touchSandboxLastActive(id);
+        await deps.touchSandboxLastActive(id);
 
-      return NextResponse.json({ ok: true, moves });
+        return NextResponse.json({ ok: true, moves });
+      });
     } catch (error) {
       return buildTreeErrorResponse(error);
     }
@@ -450,24 +457,26 @@ export function createSandboxTreeDeleteHandler(
       const body = await request.json();
       const repoPath = normalizeTreePathInput(body?.path, "either");
 
-      const sandboxData = loaded.sandboxData;
-      await deps.renewSandboxActivityLease(sandboxData.sandbox);
-      const fsPath = toFilesystemPath(sandboxData.rootDirectory, repoPath);
+      return await deps.withSandboxMutationLock(id, async () => {
+        const sandboxData = loaded.sandboxData;
+        await deps.renewSandboxActivityLease(sandboxData.sandbox);
+        const fsPath = toFilesystemPath(sandboxData.rootDirectory, repoPath);
 
-      await ensurePathExists(sandboxData.sandbox, fsPath);
+        await ensurePathExists(sandboxData.sandbox, fsPath);
 
-      const result = await sandboxData.sandbox.runCommand({
-        cmd: "rm",
-        args: [isDirectoryTreePath(repoPath) ? "-rf" : "-f", fsPath],
+        const result = await sandboxData.sandbox.runCommand({
+          cmd: "rm",
+          args: [isDirectoryTreePath(repoPath) ? "-rf" : "-f", fsPath],
+        });
+
+        if (result.exitCode !== 0) {
+          throw new Error(await result.stderr());
+        }
+
+        await deps.touchSandboxLastActive(id);
+
+        return NextResponse.json({ ok: true, path: repoPath });
       });
-
-      if (result.exitCode !== 0) {
-        throw new Error(await result.stderr());
-      }
-
-      await deps.touchSandboxLastActive(id);
-
-      return NextResponse.json({ ok: true, path: repoPath });
     } catch (error) {
       return buildTreeErrorResponse(error);
     }

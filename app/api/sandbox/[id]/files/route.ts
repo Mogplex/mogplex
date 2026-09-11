@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveSandboxPath } from "@/lib/repo-settings";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
 import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
+import { withSandboxMutationLock } from "@/lib/sandbox/mutation-lock";
 import {
   buildSandboxRouteErrorResponse,
   loadOwnedSandboxRouteContext,
@@ -49,49 +50,62 @@ export async function GET(
   }
 }
 
-/** Write a file to the sandbox */
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const { path, content } = await request.json();
-  if (!path || content === undefined) {
-    return NextResponse.json(
-      { error: "path and content required" },
-      { status: 400 }
-    );
-  }
+const defaultPutDeps = {
+  loadOwnedSandboxRouteContext,
+  renewSandboxActivityLease,
+  touchSandboxLastActive,
+  withSandboxMutationLock,
+};
 
-  try {
-    const sandboxData = await loadOwnedSandboxRouteContext(request, id, {
-      select: FILES_ROUTE_SELECT,
-      requireCapability: "tools.write_file",
-    });
-    if (!sandboxData.ok) return buildSandboxRouteErrorResponse(sandboxData);
-    if (!sandboxData.sandbox) {
+/** Write a file to the sandbox */
+export function createSandboxFilePutHandler(deps = defaultPutDeps) {
+  return async function PUT(
+    request: Request,
+    { params }: { params: Promise<{ id: string }> }
+  ) {
+    const { id } = await params;
+    const { path, content } = await request.json();
+    if (!path || content === undefined) {
       return NextResponse.json(
-        { error: "Sandbox is not ready" },
-        { status: 409 }
+        { error: "path and content required" },
+        { status: 400 }
       );
     }
-    await renewSandboxActivityLease(sandboxData.sandbox);
 
-    await sandboxData.sandbox.writeFiles([
-      {
-        path: resolveSandboxPath(sandboxData.rootDirectory, path),
-        content: Buffer.from(content),
-      },
-    ]);
+    try {
+      const sandboxData = await deps.loadOwnedSandboxRouteContext(request, id, {
+        select: FILES_ROUTE_SELECT,
+        requireCapability: "tools.write_file",
+      });
+      if (!sandboxData.ok) return buildSandboxRouteErrorResponse(sandboxData);
+      if (!sandboxData.sandbox) {
+        return NextResponse.json(
+          { error: "Sandbox is not ready" },
+          { status: 409 }
+        );
+      }
+      return await deps.withSandboxMutationLock(id, async () => {
+        await deps.renewSandboxActivityLease(sandboxData.sandbox!);
 
-    await touchSandboxLastActive(id);
+        await sandboxData.sandbox!.writeFiles([
+          {
+            path: resolveSandboxPath(sandboxData.rootDirectory, path),
+            content: Buffer.from(content),
+          },
+        ]);
 
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Write failed";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+        await deps.touchSandboxLastActive(id);
+
+        return NextResponse.json({ ok: true });
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Write failed";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  };
 }
+
+export const PUT = createSandboxFilePutHandler();
 
 /** List directory contents */
 export async function POST(

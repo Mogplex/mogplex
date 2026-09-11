@@ -6,6 +6,7 @@ import {
   buildTreeRouteParams,
   buildTreeRouteRequest,
   buildDefaultDeps,
+  unlockedMutation,
 } from "./helpers/sandbox-tree-route-fixtures";
 
 test("GET /api/sandbox/[id]/tree returns canonical repo-relative paths", async () => {
@@ -38,6 +39,7 @@ test("GET /api/sandbox/[id]/tree returns canonical repo-relative paths", async (
       touchedSandboxId = sandboxId;
     },
     renewSandboxActivityLease: async () => 0,
+    withSandboxMutationLock: unlockedMutation,
   });
 
   const response = await handler(
@@ -95,6 +97,7 @@ test("write /api/sandbox/[id]/tree methods require file-write capability", async
     },
     touchSandboxLastActive: async () => {},
     renewSandboxActivityLease: async () => 0,
+    withSandboxMutationLock: unlockedMutation,
   };
 
   await createSandboxTreePostHandler(deps as never)(
@@ -152,6 +155,7 @@ test("POST /api/sandbox/[id]/tree creates files under the repo root", async () =
       touchedSandboxId = sandboxId;
     },
     renewSandboxActivityLease: async () => 0,
+    withSandboxMutationLock: unlockedMutation,
   });
 
   const response = await handler(
@@ -206,6 +210,7 @@ test("PATCH /api/sandbox/[id]/tree moves files without overwriting destinations"
       touchedSandboxId = sandboxId;
     },
     renewSandboxActivityLease: async () => 0,
+    withSandboxMutationLock: unlockedMutation,
   });
 
   const response = await handler(
@@ -349,6 +354,7 @@ test("DELETE /api/sandbox/[id]/tree removes directories recursively", async () =
       touchedSandboxId = sandboxId;
     },
     renewSandboxActivityLease: async () => 0,
+    withSandboxMutationLock: unlockedMutation,
   });
 
   const response = await handler(

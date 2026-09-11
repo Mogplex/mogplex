@@ -273,6 +273,8 @@ const stopSandboxParams = z.object({
     ),
 });
 type SandboxStopApiResponse = {
+  reason?: string;
+  files?: string[];
   error?: unknown;
   sandbox?: {
     id?: unknown;
@@ -373,6 +375,7 @@ export function createStopSandbox(
       const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}/stop`, {
         method: "POST",
         headers: requestHeaders.headers,
+        body: JSON.stringify({ discardChanges: discardChanges === true }),
       });
       const data = (await res
         .json()
@@ -386,10 +389,15 @@ export function createStopSandbox(
         }
         return {
           error: readStopResponseString(data.error) ?? "Failed to stop sandbox",
+          ...(data.files ? { files: data.files } : {}),
           reason:
-            res.status === 404 || res.status === 410
-              ? ("sandbox_not_found" as const)
-              : ("sandbox_unavailable" as const),
+            data.reason === "uncommitted_changes" ||
+            data.reason === "inspection_unavailable" ||
+            data.reason === "sandbox_busy"
+              ? data.reason
+              : res.status === 404 || res.status === 410
+                ? ("sandbox_not_found" as const)
+                : ("sandbox_unavailable" as const),
         };
       }
       const result = formatSandboxStopResult(data, sandboxId);
