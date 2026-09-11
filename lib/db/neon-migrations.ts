@@ -132,7 +132,16 @@ async function bootstrapFromBaseline(
 
   try {
     await db.query("begin");
+    const { rows } = await db.query("show search_path");
+    const [{ search_path: searchPath }] = rows as Array<{
+      search_path: string;
+    }>;
     await db.exec(baseline.sql);
+    // pg_dump clears the session search_path; pending migrations must use
+    // the caller's original schema resolution, including custom schemas.
+    await db.query("select pg_catalog.set_config('search_path', $1, false)", [
+      searchPath,
+    ]);
     await db.query(
       `insert into neon_migrations.schema_migrations (version)
          select unnest($1::text[])

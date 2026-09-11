@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
@@ -6,7 +6,10 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { uuid_ossp } from "@electric-sql/pglite/contrib/uuid_ossp";
 import { vector } from "@electric-sql/pglite/vector";
 import { describe, expect, it } from "vitest";
-import { migrationVersion } from "@/lib/db/neon-baseline";
+import {
+  migrationVersion,
+  parseBaselineThroughVersion,
+} from "@/lib/db/neon-baseline";
 import { applyNeonMigrations } from "@/lib/db/neon-migrations";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -70,7 +73,15 @@ describe("fresh-install bootstrap", () => {
 
       const first = await apply();
       expect(first).toMatchObject({ ok: true, baseline: "applied" });
-      expect(first.applied).toEqual([]);
+      const through = parseBaselineThroughVersion(
+        await readFile(baselinePath, "utf8")
+      );
+      expect(through).not.toBeNull();
+      const pending = (await readdir(migrationsDir)).filter((fileName) => {
+        const version = migrationVersion(fileName);
+        return version !== null && Number(version) > Number(through);
+      });
+      expect(first.applied).toEqual(pending.sort());
       expect(await ledgerVersions(db)).toEqual(await migrationVersionsOnDisk());
 
       const { rows: tables } = await db.query<{ found: boolean }>(
