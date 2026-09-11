@@ -1,7 +1,7 @@
 {
   "name": "mogplex",
   "version": "0.1.0",
-  "description": "Browser-native workspace for running AI agents against real repositories",
+  "description": "Open-source platform for agent-native software development: coding agents plan, build, test, review, and ship in isolated sandboxes",
   "private": true,
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",
@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/webrenew/mogplex.git"
+    "url": "https://github.com/Mogplex/mogplex.git"
   },
   "scripts": {
     "dev": "next dev",
@@ -69,7 +69,7 @@
       "js-yaml": "4.3.1",
       "lodash": "4.18.0",
       "lodash-es": "4.18.0",
-      "next": "16.2.11",
+      "next": "16.3.3",
       "picomatch": "4.0.4",
       "postcss": "8.5.23",
       "protobufjs": "7.6.5",
@@ -170,7 +170,7 @@
     "monaco-editor": "^0.56.0",
     "motion": "^13.0.0",
     "nanoid": "^6.0.1",
-    "next": "16.2.11",
+    "next": "16.3.3",
     "next-themes": "^0.4.6",
     "pg": "^8.22.0",
     "radix-ui": "^1.6.7",
