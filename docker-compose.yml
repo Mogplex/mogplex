@@ -1,10 +1,9 @@
-# Self-hosted Mogplex — web app container ONLY.
+# Self-hosted Mogplex: the web app container.
 #
-# This compose file deliberately does not bundle a database, an auth service,
-# Trigger.dev, or sandbox infrastructure. Self-hosting Mogplex means running
-# or paying for every backing service yourself; read docs/self-hosting.md
-# for the full list before you start. The hosted product at
-# https://mogplex.com is the supported way to use Mogplex.
+# The database (Neon/Postgres), Trigger.dev, and Vercel Sandbox are external
+# services, the same ones the Vercel deployment uses, so they are not bundled
+# here. docs/self-hosting.md lists each one, what it unlocks, and the env
+# vars it needs. Questions: https://github.com/Mogplex/mogplex/discussions
 
 services:
   app:

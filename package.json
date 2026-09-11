@@ -1,7 +1,7 @@
 {
   "name": "mogplex",
   "version": "0.1.0",
-  "description": "Browser-native workspace for running AI agents against real repositories",
+  "description": "Open-source platform for agent-native software development: coding agents plan, build, test, review, and ship in isolated sandboxes",
   "private": true,
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",
@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/webrenew/mogplex.git"
+    "url": "https://github.com/Mogplex/mogplex.git"
   },
   "scripts": {
     "dev": "next dev",
