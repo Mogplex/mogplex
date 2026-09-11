@@ -44,7 +44,7 @@ describe("pinned package dev ports", () => {
     ['cross-env PORT="5051" next dev', 5051],
     ["PORT=5050 next dev --port 3015", 3015],
     ["npm run serve", 4123],
-    ["pnpm run serve -- --port 4201", 4201],
+    ["pnpm run serve --port 4201", 4201],
     ["npm run serve --port 0", 4123],
     ["next dev --port 65536", null],
     ["next dev", null],
@@ -387,3 +387,37 @@ it.each([
     );
   }
 );
+
+it("preserves pnpm's forwarded end-of-options delimiter", async () => {
+  const files = repository("pnpm run serve -- --port 4201", undefined, {
+    "package.json": JSON.stringify({
+      scripts: {
+        dev: "pnpm run serve -- --port 4201",
+        serve: "vite --port 3015",
+      },
+    }),
+  });
+  expect(await resolvePackageDevPort(files, {})).toBe(3015);
+});
+
+it("stops executable port extraction at the end-of-options delimiter", async () => {
+  expect(
+    await resolvePackageDevPort(
+      repository("vite --port 3015 -- --port 4201"),
+      {}
+    )
+  ).toBe(3015);
+  expect(
+    await resolvePackageDevPort(
+      repository("PORT=3015 npm run serve -- -- --port 4201", undefined, {
+        "package.json": JSON.stringify({
+          scripts: {
+            dev: "PORT=3015 npm run serve -- -- --port 4201",
+            serve: "vite",
+          },
+        }),
+      }),
+      {}
+    )
+  ).toBe(3015);
+});

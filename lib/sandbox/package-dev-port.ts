@@ -185,7 +185,11 @@ export async function resolvePackageDevPort(
     }
     const manager = tokens.shift();
     if (!["npm", "pnpm", "yarn", "bun"].includes(manager ?? "")) {
-      const flags = option(tokens, ["--port", "-p"]);
+      const endOfOptions = tokens.indexOf("--");
+      const flags = option(
+        endOfOptions === -1 ? tokens : tokens.slice(0, endOfOptions),
+        ["--port", "-p"]
+      );
       return flags.length > 0 ? portNumber(flags.at(-1)) : envPort;
     }
     // Reinterpret forwarded arguments at each alias: another npm invocation
@@ -295,7 +299,6 @@ export async function resolvePackageDevPort(
           ? []
           : tokens.slice(separator + 1)
         : invocation.slice(script.index + 1);
-    if (args[0] === "--") args.shift();
     return resolveScript(root, script.token, envPort, args);
   };
 
