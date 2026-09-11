@@ -8,6 +8,8 @@ type Package = {
   workspaces?: string[] | { packages?: string[] };
 };
 const IGNORED_DIRECTORIES = new Set(["node_modules", ".git", ".mogplex"]);
+// Bound HTTP fan-out per lookup, without limiting the number of workspaces.
+const WORKSPACE_READ_CONCURRENCY = 4;
 
 function repoPath(base: string, relative: string): string | null {
   if (
@@ -151,27 +153,29 @@ export async function resolvePackageDevPort(
   const resolveScript = async (
     root: string,
     script: string,
-    envPort: number | null
+    envPort: number | null,
+    forwarded: string[] = []
   ): Promise<number | null> => {
     const key = `${root}:${script}`;
     if (seen.has(key)) return null;
     seen.add(key);
     const command = (await readPackage(root))?.scripts?.[script];
     return typeof command === "string"
-      ? resolveCommand(root, command, envPort)
+      ? resolveCommand(root, command, envPort, forwarded)
       : null;
   };
 
   const resolveCommand = async (
     commandRoot: string,
     command: string,
-    inheritedPort: number | null
+    inheritedPort: number | null,
+    forwarded: string[] = []
   ): Promise<number | null> => {
     let root = commandRoot;
-    const tokens = words(command);
-    if (!tokens?.length) return null;
-    const flags = option(tokens, ["--port", "-p"]);
-    if (flags.length > 0) return portNumber(flags.at(-1));
+    const parsed = words(command);
+    if (!parsed) return null;
+    const tokens = [...parsed, ...forwarded];
+    if (tokens.length === 0) return null;
     let envPort = inheritedPort;
     if (["env", "cross-env"].includes(tokens[0])) tokens.shift();
     while (tokens[0]?.includes("=")) {
@@ -180,10 +184,16 @@ export async function resolvePackageDevPort(
         envPort = portNumber(assignment.slice(5));
     }
     const manager = tokens.shift();
-    if (!["npm", "pnpm", "yarn", "bun"].includes(manager ?? "")) return envPort;
-
-    const dirs = option(tokens, ["--dir", "--cwd", "--prefix", "-C"]);
-    const selectors = option(tokens, [
+    if (!["npm", "pnpm", "yarn", "bun"].includes(manager ?? "")) {
+      const flags = option(tokens, ["--port", "-p"]);
+      return flags.length > 0 ? portNumber(flags.at(-1)) : envPort;
+    }
+    // Reinterpret forwarded arguments at each alias: another npm invocation
+    // can consume them before they ever reach the server.
+    const separator = manager === "npm" ? tokens.indexOf("--") : -1;
+    const invocation = separator < 0 ? tokens : tokens.slice(0, separator);
+    const dirs = option(invocation, ["--dir", "--cwd", "--prefix", "-C"]);
+    const selectors = option(invocation, [
       "--filter",
       "-F",
       "--workspace",
@@ -204,18 +214,39 @@ export async function resolvePackageDevPort(
     if (selectors.length > 0) {
       const selector = selectors[0];
       if (/[*![\]{}]|\.\.\./.test(selector)) return null;
-      const candidates = await Promise.all(
-        (await workspaces()).map(async (path) => ({
-          path,
-          pkg: await readPackage(path),
-        }))
-      );
-      const matches = candidates.filter(
-        ({ path, pkg }) =>
-          pkg?.name === selector || path === repoPath("", selector)
-      );
+      const paths = await workspaces();
+      const selectorPath = repoPath("", selector);
+      const exactPath =
+        (manager === "npm" || selector.startsWith("./")) &&
+        !selector.startsWith("@") &&
+        selectorPath !== null &&
+        paths.includes(selectorPath);
+      const matches: string[] = [];
+      if (exactPath) {
+        if (await readPackage(selectorPath)) matches.push(selectorPath);
+      } else {
+        for (
+          let offset = 0;
+          offset < paths.length;
+          offset += WORKSPACE_READ_CONCURRENCY
+        ) {
+          const candidates = await Promise.all(
+            paths
+              .slice(offset, offset + WORKSPACE_READ_CONCURRENCY)
+              .map(async (path) => ({ path, pkg: await readPackage(path) }))
+          );
+          matches.push(
+            ...candidates
+              .filter(
+                ({ path, pkg }) =>
+                  pkg?.name === selector || path === selectorPath
+              )
+              .map(({ path }) => path)
+          );
+        }
+      }
       if (matches.length !== 1) return null;
-      root = matches[0].path;
+      root = matches[0];
     }
     const names = new Set([
       "--dir",
@@ -227,27 +258,45 @@ export async function resolvePackageDevPort(
       "--workspace",
       "-w",
       "workspace",
+      ...(manager === "npm" ? ["--port", "-p", "--package"] : []),
     ]);
-    const positional = tokens.filter(
-      (token, index) =>
-        !names.has(token) &&
-        !names.has(tokens[index - 1]) &&
-        !token.startsWith("-")
+    const positional = invocation.flatMap((token, index) =>
+      !names.has(token) &&
+      !names.has(invocation[index - 1]) &&
+      !token.startsWith("-")
+        ? [{ token, index }]
+        : []
     );
-    // These commands launch an executable, not a package script. Its static
-    // PORT environment survives; explicit port flags were resolved above.
-    // Keep `run exec` on the alias path so a script named exec still works.
+    const verb = positional[0];
+    if (!verb) return null;
+    // Executables inherit PORT, but may override it with their own static
+    // environment or flags. Explicit `run exec` remains a script alias.
     if (
-      ["exec", "dlx"].includes(positional[0]) ||
-      (manager === "bun" && positional[0] === "x")
+      ["exec", "dlx"].includes(verb.token) ||
+      (manager === "bun" && verb.token === "x")
     ) {
-      return envPort;
+      const args =
+        manager === "npm"
+          ? separator >= 0
+            ? tokens.slice(separator + 1)
+            : positional.slice(1).map(({ token }) => token)
+          : invocation.slice(verb.index + 1);
+      if (args[0] === "--") args.shift();
+      return resolveCommand(root, "", envPort, args);
     }
     const script =
-      positional[0] === "run" || positional[0] === "run-script"
+      verb.token === "run" || verb.token === "run-script"
         ? positional[1]
-        : positional[0];
-    return script ? resolveScript(root, script, envPort) : null;
+        : verb;
+    if (!script) return null;
+    const args =
+      manager === "npm"
+        ? separator < 0
+          ? []
+          : tokens.slice(separator + 1)
+        : invocation.slice(script.index + 1);
+    if (args[0] === "--") args.shift();
+    return resolveScript(root, script.token, envPort, args);
   };
 
   const root = repoPath("", input.rootDirectory ?? "");

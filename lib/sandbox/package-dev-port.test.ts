@@ -45,7 +45,7 @@ describe("pinned package dev ports", () => {
     ["PORT=5050 next dev --port 3015", 3015],
     ["npm run serve", 4123],
     ["pnpm run serve -- --port 4201", 4201],
-    ["npm run serve --port 0", null],
+    ["npm run serve --port 0", 4123],
     ["next dev --port 65536", null],
     ["next dev", null],
     ["node ./start.js", null],
@@ -171,6 +171,7 @@ it.each(["/outside", "..", "../outside", "apps\\web", "apps\0web"])(
 
 it.each([
   ["next dev --port 65535", 65535],
+  ["next dev --port 0", null],
   ["next dev --port x3015", null],
   ["next dev --port 3015x", null],
   ["next dev --port '3015", null],
@@ -264,3 +265,125 @@ it("does not confuse an explicit script named exec with an executable invocation
   });
   expect(await resolvePackageDevPort(files, {})).toBe(4111);
 });
+
+it("reads only the selected manifest for an exact workspace directory", async () => {
+  const files = repository("npm -w apps/web run dev");
+  const reads: string[] = [];
+  const port = await resolvePackageDevPort(
+    {
+      ...files,
+      readText: async (path) => {
+        reads.push(path);
+        if (path === "apps/admin/package.json")
+          throw new Error("Unrelated workspace must not be fetched");
+        return files.readText(path);
+      },
+    },
+    {}
+  );
+  expect(port).toBe(3015);
+  expect(reads).toContain("apps/web/package.json");
+  expect(reads).not.toContain("apps/admin/package.json");
+});
+
+it("bounds concurrent manifest reads for a package-name selector", async () => {
+  const extra = Object.fromEntries(
+    Array.from({ length: 20 }, (_, index) => [
+      `apps/package-${index}/package.json`,
+      JSON.stringify({
+        name: `@acme/package-${index}`,
+        scripts: { dev: "next dev -p 4099" },
+      }),
+    ])
+  );
+  const files = repository(
+    "pnpm --filter @acme/package-19 dev",
+    undefined,
+    extra
+  );
+  let active = 0;
+  let peak = 0;
+  const port = await resolvePackageDevPort(
+    {
+      ...files,
+      readText: async (path) => {
+        if (!path.startsWith("apps/")) return files.readText(path);
+        active += 1;
+        peak = Math.max(peak, active);
+        try {
+          await Promise.resolve();
+          return await files.readText(path);
+        } finally {
+          active -= 1;
+        }
+      },
+    },
+    {}
+  );
+  expect(port).toBe(4099);
+  expect(peak).toBeGreaterThan(0);
+  expect(peak).toBeLessThanOrEqual(4);
+});
+
+it.each([
+  ["npm run serve --port 4222", null],
+  ["npm run serve -- --port 4222", 4222],
+  ["npm run serve -p 4222", null],
+  ["npm run serve -- -p 4222", 4222],
+])(
+  "distinguishes npm options from forwarded flags: %s",
+  async (command, port) => {
+    for (const dev of [command, "npm run start"]) {
+      const files = repository("", undefined, {
+        "package.json": JSON.stringify({
+          scripts: { dev, start: command, serve: "next dev" },
+        }),
+      });
+      expect(await resolvePackageDevPort(files, {})).toBe(port);
+    }
+  }
+);
+
+it("retains a script's own pin when npm consumes an option", async () => {
+  expect(
+    await resolvePackageDevPort(repository("npm run serve --port 4222"), {})
+  ).toBe(4123);
+});
+
+it("interprets forwarded flags again when an alias launches another npm command", async () => {
+  expect(
+    await resolvePackageDevPort(
+      repository("", undefined, {
+        "package.json": JSON.stringify({
+          scripts: {
+            dev: "npm run start -- --port 4222",
+            start: "npm run serve",
+            serve: "next dev",
+          },
+        }),
+      }),
+      {}
+    )
+  ).toBeNull();
+});
+
+it("preserves environment precedence inside executed commands", async () => {
+  expect(
+    await resolvePackageDevPort(
+      repository("PORT=3015 pnpm exec env PORT=4111 next dev"),
+      {}
+    )
+  ).toBe(4111);
+});
+
+it.each([
+  ["PORT=3015 npm exec next dev --port 4222", 3015],
+  ["PORT=3015 npm exec -- next dev --port 4222", 4222],
+])(
+  "keeps npm exec options separate from server flags: %s",
+  async (command, port) => {
+    expect(await resolvePackageDevPort(repository(command as string), {})).toBe(
+      port
+    );
+  }
+);
