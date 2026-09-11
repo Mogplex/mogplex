@@ -107,7 +107,7 @@ test("group archive includes hidden chats, supports Undo, and restores after rel
   await expect(page).toHaveURL(/\/control$/);
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(
-    sidebar.getByRole("button", { name: "Actions for acme/widgets" })
+    sidebar.getByRole("button", { name: /acme\/widgets.*7/ })
   ).toBeVisible();
   expect(sessions.filter((s) => s.archived)).toHaveLength(0);
   await archive();
