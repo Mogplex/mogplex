@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { createPostgrestShim } from "@/lib/db/postgrest-shim";
 import { SHIM_TYPE_PARSERS } from "@/lib/db/pool";
+import { loadControlSessionList } from "@/components/control/session-list-data";
 import {
   createControlSessionsGetHandler,
   createControlSessionsPutHandler,
@@ -13,6 +14,9 @@ const owner = "00000000-0000-4000-8000-000000000001";
 const other = "00000000-0000-4000-8000-000000000002";
 let db: PGlite;
 let client: SupabaseClient;
+beforeEach(async () => {
+  await db.exec("truncate control_sessions cascade; truncate ai_calls;");
+});
 beforeAll(async () => {
   db = new PGlite({
     parsers: Object.fromEntries(
@@ -53,6 +57,44 @@ afterAll(async () => {
   await db.close();
 });
 
+it.each([false, true])(
+  "keeps every chat when activity crosses a page boundary (delete earlier row: %s)",
+  async (deleteReadRow) => {
+    await db.query(
+      `insert into control_sessions (id, user_id, title, updated_at)
+      select ('10000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+        $1, 'Chat ' || n, '2026-09-11T12:00:00Z'::timestamptz - n * interval '1 second'
+      from generate_series(1, 201) n`,
+      [owner]
+    );
+    const get = createControlSessionsGetHandler({
+      client,
+      requireUserId: async () => owner,
+    });
+    let requests = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      if (requests++ === 1) {
+        await db.query(
+          "update control_sessions set pinned = true, updated_at = '2099-01-01T00:00:00Z' where title = 'Chat 201'"
+        );
+        if (deleteReadRow)
+          await db.query("delete from control_sessions where title = 'Chat 1'");
+      }
+      return get(new Request(new URL(String(input), "https://app.test")));
+    };
+    try {
+      const sessions = await loadControlSessionList();
+      expect(requests).toBe(2);
+      expect(sessions).toHaveLength(201);
+      expect(new Set(sessions.map((session) => session.id)).size).toBe(201);
+      expect(sessions[0]).toMatchObject({ title: "Chat 201", pinned: true });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+);
+
 it("lists and restores only the owner's archives across page boundaries without deleting transcripts", async () => {
   await db.query(
     'insert into control_sessions (user_id, title, archived, messages) select $1, \'Archived \' || n, true, \'[{"role":"user","parts":[]}]\'::jsonb from generate_series(1, 201) n',
@@ -72,8 +114,8 @@ it("lists and restores only the owner's archives across page boundaries without 
     ).json();
   const active = await list();
   expect(active.map((row: { title: string }) => row.title)).toEqual(["Active"]);
-  const first = await list("?archived=true");
-  const second = await list("?archived=true&offset=200");
+  const first = await list("?archived=true&order=id");
+  const second = await list(`?archived=true&order=id&after=${first.at(-1).id}`);
   expect(first).toHaveLength(200);
   expect(second).toHaveLength(1);
   expect(new Set([...first, ...second].map((row) => row.id)).size).toBe(201);
@@ -106,7 +148,9 @@ it("lists and restores only the owner's archives across page boundaries without 
   ).json();
   expect(record.archived).toBe(false);
   expect(record.messages).toEqual([{ role: "user", parts: [] }]);
-  expect(await list("?archived=true&offset=200")).toEqual([]);
+  expect(
+    await list(`?archived=true&order=id&after=${second.at(-1).id}`)
+  ).toEqual([]);
   const archivedRevision = record.updated_at;
   const archive = () =>
     put(

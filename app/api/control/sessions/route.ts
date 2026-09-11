@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
+import { isUuid } from "@/lib/uuid";
 import { validateControlSessionRepoAccess } from "@/lib/control/session-repo-access";
 import { pickControlSessionUpdateFields } from "@/lib/control/session-update";
 import { createOrchestrationRun } from "@/lib/orchestrations/store";
@@ -51,26 +52,33 @@ export function createControlSessionsGetHandler(deps = defaultGetDeps) {
     }
 
     const archived = searchParams.get("archived");
-    const offset = Number(searchParams.get("offset") ?? 0);
+    const order = searchParams.get("order") ?? "recent";
+    const after = searchParams.get("after");
     if (
       (archived !== null && archived !== "true" && archived !== "false") ||
-      !Number.isSafeInteger(offset) ||
-      offset < 0
+      (order !== "recent" && order !== "id") ||
+      (after !== null && (order !== "id" || !isUuid(after)))
     ) {
       return NextResponse.json(
         { error: "Invalid list options" },
         { status: 400 }
       );
     }
-    const { data, error } = await deps.client
+    let query = deps.client
       .from("control_sessions")
       .select(LIST_COLUMNS)
       .eq("user_id", userId)
-      .eq("archived", archived === "true")
-      .order("pinned", { ascending: false })
-      .order("updated_at", { ascending: false })
-      .order("id", { ascending: true })
-      .range(offset, offset + 199);
+      .eq("archived", archived === "true");
+    if (order === "id") {
+      query = query.order("id", { ascending: true });
+      if (after) query = query.gt("id", after);
+    } else {
+      query = query
+        .order("pinned", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: true });
+    }
+    const { data, error } = await query.limit(200);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -88,14 +88,16 @@ export async function setupControlSidebar(
         if (snapshot) await gates?.selected?.(snapshot);
         return fulfillJson(route, snapshot);
       }
-      const offset = Number(url.searchParams.get("offset") ?? 0);
+      const after = url.searchParams.get("after");
       return fulfillJson(
         route,
         sessions
           .filter(
             (s) => s.archived === (url.searchParams.get("archived") === "true")
           )
-          .slice(offset, offset + 200)
+          .filter((s) => !after || s.id.localeCompare(after) > 0)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, 200)
       );
     }
     return route.fallback();

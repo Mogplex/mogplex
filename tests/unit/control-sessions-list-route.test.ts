@@ -66,9 +66,9 @@ test("session lists reject unauthorized access and invalid archive or page optio
   );
   for (const query of [
     "archived=all",
-    "offset=-1",
-    "offset=1.5",
-    "offset=nope",
+    "order=nope",
+    "order=id&after=nope",
+    "after=00000000-0000-4000-8000-000000000001",
   ]) {
     assert.equal(
       (

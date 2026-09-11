@@ -62,7 +62,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
   }> = [];
   const sessionUpdates: Array<Record<string, unknown>> = [];
   let sessionRecord: Record<string, unknown> | null = null;
-  await page.route("**/api/control/sessions", (route) => {
+  await page.route("**/api/control/sessions**", (route) => {
     const request = route.request();
     if (request.method() === "PUT" && sessionRecord) {
       const body = request.postDataJSON() as Record<string, unknown>;
