@@ -1,18 +1,25 @@
 # Self-Hosting Mogplex
 
-> **The supported way to use Mogplex is the hosted product at [mogplex.com](https://mogplex.com).** The Apache-2.0 software has no license fee. You need significant time and skill to self-host Mogplex. Mogplex does not support self-hosted deployments or offer an SLA. You must provision, secure, and pay each infrastructure provider directly.
+Mogplex is built to be self-hosted. The code in this repository is exactly what runs [mogplex.com](https://mogplex.com); the hosted product is a convenience, not a different edition. The Apache-2.0 license has no fee, no seat limit, and no gated features.
+
+Two deployment shapes are supported:
+
+1. **Vercel (recommended).** Fork the repo, import it into your own Vercel team, point it at your own Neon project and Trigger.dev project, and set the environment variables below. This is the path we test in production every day.
+2. **Docker.** Build the image in this repo and run it anywhere that can run a container. You provision the backing services yourself.
+
+Self-hosting is community-supported. There is no SLA, but questions in [GitHub Discussions](https://github.com/Mogplex/mogplex/discussions) and bugs filed as [issues](https://github.com/Mogplex/mogplex/issues) are welcome, and friction in the self-hosting path is treated as a bug worth fixing.
 
 ## What the Docker image contains
 
-The Next.js web application. Nothing else.
+The Next.js web application. The database, auth, job runner, and sandbox runtime are external services (the same ones the Vercel deployment uses), so `docker compose up` gives you a web server that needs the services below configured before it is useful.
 
-There is no bundled database, no auth service, no job runner, no sandbox runtime, and no migration tooling in the image. `docker compose up` gives you a web server that will fail loudly until you wire in every backing service below.
+## What you need to provide
 
-## What you must bring
+Each row is independent. Mogplex boots with only the first row configured; every other row unlocks a feature area when you add it.
 
 | Service | What it does | Your options |
 | --- | --- | --- |
-| **Postgres + auth** | All application state and user accounts | [Neon](https://neon.tech) / Postgres with Better Auth. Set both backend flags to `neon`, configure the database connections and `BETTER_AUTH_SECRET`, and apply `neon/migrations/` to the initialized application schema. Supabase is a legacy compatibility backend, not a Neon requirement. |
+| **Postgres + auth** (required) | All application state and user accounts | [Neon](https://neon.tech) or any Postgres 15+, with Better Auth. Set both backend flags to `neon`, configure `DATABASE_URL` / `DATABASE_URL_UNPOOLED` and `BETTER_AUTH_SECRET`, add at least one sign-in provider (`AUTH_GITHUB_*`, `AUTH_GOOGLE_*`, or email), and apply `neon/migrations/`. |
 | **Trigger.dev** | Background jobs: automations, syncs, long-running agent runs | A [Trigger.dev cloud](https://trigger.dev) account with your own project (`TRIGGER_PROJECT_REF`, `TRIGGER_SECRET_KEY`), or [self-host the full Trigger.dev stack](https://trigger.dev/docs/self-hosting/overview) — webapp, Postgres, Redis, ClickHouse, object storage, container registry, and supervisor/worker nodes. Without it, everything Trigger-powered does not run. |
 | **Vercel (sandboxes)** | Agent sandboxes run on [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) | A Vercel account and token (`PLATFORM_VERCEL_TOKEN`, `PLATFORM_VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`). There is no local substitute; without it, sandbox features are dead. |
 | **AI providers** | Model inference, memory embeddings | [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key and/or OpenRouter + OpenAI keys. |
@@ -21,7 +28,7 @@ There is no bundled database, no auth service, no job runner, no sandbox runtime
 | **Sentry** (optional) | Error tracking | Your own Sentry org/project. |
 | **Slack app** (optional) | Slack integration | Your own multi-workspace Slack app. |
 
-Every one of these has its own signup, billing, credential rotation, and failure modes. That is the real cost of self-hosting Mogplex.
+Every one of these has its own signup, billing, and credential rotation. Budget an afternoon for a full setup; the app shell alone takes a few minutes.
 
 ## Build
 
@@ -53,16 +60,16 @@ Set the Slack OAuth redirect URL to `https://<your-domain>/api/integrations/slac
 
 Register a Slack slash command named `/mogplex` with the request URL `https://<your-domain>/api/webhooks/slack`, and grant the bot the `commands` OAuth scope. Existing workspace installations must reconnect after this scope is added. Linked users can run `/mogplex model` to see their current and available models, or `/mogplex model <model-id>` to change the model used for their next eligible response. The selection applies only to that Slack user in that channel, including its threads; it does not change another participant's selection. A run already in progress keeps the model it started with. If a saved model later becomes unavailable to that user or team, Mogplex falls back to the conversation or account default instead of attempting the unavailable model.
 
-## What is still on you after it boots
+## Operating it
 
-- **Migrations.** The image never touches your schema. Neon uses `DATABASE_URL=... pnpm exec tsx scripts/apply-neon-migrations.ts` against your initialized application schema before boot and after upgrades. Only explicitly selected legacy Supabase installations use `supabase/migrations/` and `supabase db push`.
-- **Trigger deploys.** Trigger.dev tasks in `trigger/` deploy separately (`pnpm trigger:deploy`) against _your_ Trigger project — the image does not do it for you.
+- **Migrations.** The image never touches your schema. Run `pnpm exec tsx scripts/apply-neon-migrations.ts` with `DATABASE_URL` set before first boot and after each upgrade. It applies pending files from `neon/migrations/` and records what ran. (Legacy Supabase installations use `supabase/migrations/` instead.)
+- **Trigger deploys.** Trigger.dev tasks in `trigger/` deploy separately with `pnpm trigger:deploy` against your own Trigger project.
 - **TLS, domains, OAuth callbacks.** Every OAuth integration (GitHub, Vercel, Slack, MCP clients) needs your deployment URL registered on your own apps, with exact-match redirect/resource URLs.
-- **Secrets.** `CRON_SECRET`, `INTERNAL_API_SECRET`, `CONNECTIONS_ENCRYPTION_KEY`, `EMAIL_UNSUBSCRIBE_SECRET` — you mint them, you store them, you rotate them.
-- **Upgrades.** No migration notes are published for self-hosters. Read the diff.
+- **Secrets.** Generate random values for `CRON_SECRET`, `INTERNAL_API_SECRET`, `CONNECTIONS_ENCRYPTION_KEY`, and `EMAIL_UNSUBSCRIBE_SECRET`, and store them in your platform secret store.
+- **Upgrades.** Pull `main` or a tagged release, apply migrations, redeploy. Release notes on the [releases page](https://github.com/Mogplex/mogplex/releases) call out breaking env or migration changes.
 
 ## Known constraints
 
 - The sandbox terminal bridge reads `lib/sandbox/terminal-bridge-runtime.mjs` from disk at runtime; standalone output tracing normally carries it, but the sandbox feature set as a whole requires Vercel Sandbox regardless.
 - Cron routes (`vercel.json`) are scheduled by Vercel. Self-hosting means scheduling them yourself (curl + your `CRON_SECRET` from your own cron).
-- No support channel exists for self-hosted deployments. Issues that cannot be reproduced on the hosted product may be closed.
+- Sandboxes require Vercel Sandbox today. A pluggable sandbox backend is a natural contribution if you need to run compute elsewhere; open a discussion before starting so the interface lands in one piece.

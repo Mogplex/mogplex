@@ -6,6 +6,7 @@ This guide is for people sending code, docs, design, test, or infrastructure cha
 
 ## Before You Start
 
+- Not sure where something belongs, or want to talk through an idea first? Use [GitHub Discussions](https://github.com/Mogplex/mogplex/discussions).
 - Small bug fixes, docs fixes, and targeted cleanup can go straight to a pull request.
 - For larger features, architecture changes, or workflow changes, open an issue first so scope and direction are clear before implementation starts.
 - If you believe you found a security issue, do **not** file a public issue. Use [SECURITY.md](./SECURITY.md).
@@ -16,11 +17,12 @@ This guide is for people sending code, docs, design, test, or infrastructure cha
 
 - Node.js `20+`
 - `pnpm`
-- A Supabase project for auth and data-backed flows
-- Optional but recommended for full product work:
-  - GitHub OAuth configured in Supabase
-  - GitHub App credentials
-  - Vercel access for sandbox and preview work
+- A Postgres database. [Neon](https://neon.tech) is what CI and production use; any local Postgres 15+ works for development.
+- Optional, depending on what you are working on:
+  - GitHub OAuth app credentials for sign-in (Google or email sign-in also work)
+  - GitHub App credentials for repo import and webhooks
+  - A Vercel token for sandbox and preview work
+  - An AI Gateway or provider key for model calls
   - Trigger.dev access for background job development
 
 ### Install
@@ -44,23 +46,26 @@ vercel env pull
 
 The minimum env set for a normal app boot is:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `MOGPLEX_DATA_BACKEND=neon` and `NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon`
+- `DATABASE_URL` and `DATABASE_URL_UNPOOLED`
+- `BETTER_AUTH_SECRET`
+- `AUTH_GITHUB_CLIENT_ID` and `AUTH_GITHUB_CLIENT_SECRET` (or another sign-in provider)
 - `NEXT_PUBLIC_APP_URL`
 - `CRON_SECRET`
 - `INTERNAL_API_SECRET`
 - `CONNECTIONS_ENCRYPTION_KEY`
 
-The optional sections in [.env.example](./.env.example) cover GitHub App, Vercel sandbox, Trigger.dev, memories, and platform AI flows.
+The optional sections in [.env.example](./.env.example) cover GitHub App, Vercel sandbox, AI providers, Trigger.dev, Slack, billing, and observability.
 
 ### Apply database migrations
 
-If you are using a fresh Supabase project, apply the checked-in migrations before testing auth, repos, workspaces, or automations:
+Apply the checked-in migrations before testing auth, repos, workspaces, or automations:
 
 ```bash
-supabase db push
+pnpm exec tsx scripts/apply-neon-migrations.ts
 ```
+
+Schema changes go in `neon/migrations/` as timestamped `.sql` files. The `supabase/` directory is a legacy backend kept for existing installations; do not add new migrations there.
 
 ### Start the app
 
@@ -97,9 +102,7 @@ pnpm exec playwright install --with-deps chromium
 
 ## Verification Expectations
 
-Run the checks that match the surface you changed. [TESTING.md](./TESTING.md)
-defines which tests a change is required to bring with it and what counts as
-adequate coverage.
+Run the checks that match the surface you changed. [TESTING.md](./TESTING.md) defines which tests a change is required to bring with it and what counts as adequate coverage.
 
 ### Typical baseline
 
@@ -162,7 +165,7 @@ That command returns you to `main`, fast-forwards it, deletes the merged local b
 Mogplex deploys production schema before the new application version goes live. That means:
 
 - migrations merged to `main` must remain backward-compatible with the currently deployed app until the production workflow finishes
-- schema changes touching auth, RLS, repo access, or shared workflow data should come with targeted regression coverage
+- schema changes touching auth, access control, repo access, or shared workflow data should come with targeted regression coverage
 - if a migration changes contributor setup, update `.env.example`, `README.md`, or this guide in the same PR
 
 ## Pull Request Checklist
