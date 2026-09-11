@@ -1887,18 +1887,13 @@ path.mpx-dag-line,
 }
 
 .mpx-cap.is-zdr {
-  background: var(--dark);
-  color: var(--neutral-0);
+  background: var(--surface-2);
+  color: var(--ink);
   grid-column: span 7;
 }
 
-.mpx-cap.is-zdr .mpx-cap-icon {
-  border-color: rgb(255 255 255 / 10%);
-  background: rgb(255 255 255 / 4%);
-}
-
 .mpx-cap.is-zdr .mpx-cap-kicker {
-  color: var(--neutral-5);
+  color: var(--ink-soft);
 }
 
 .mpx-cap.is-zdr h3 {
@@ -1913,14 +1908,14 @@ path.mpx-dag-line,
 }
 
 .mpx-cap.is-zdr .mpx-cap-description {
-  color: var(--neutral-4);
+  color: var(--ink-soft);
 }
 
 .mpx-orbit {
   position: absolute;
   top: 0;
   right: 0;
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid var(--border);
   border-radius: 50%;
 }
 
@@ -1933,7 +1928,7 @@ path.mpx-dag-line,
 .mpx-orbit.is-far {
   width: 256px;
   height: 256px;
-  border-color: rgb(255 255 255 / 5%);
+  border-color: var(--border-soft);
   transform: translate(80px, -80px);
 }
 
@@ -1942,7 +1937,7 @@ path.mpx-dag-line,
   border: 1px solid rgb(255 75 0 / 40%);
   border-radius: 99px;
   background: rgb(255 75 0 / 10%);
-  color: #ff7a43;
+  color: color-mix(in oklch, var(--accent) 60%, var(--ink));
   font: 8px/1.4 var(--font-mono);
   letter-spacing: 0.2em;
 }
@@ -1951,17 +1946,17 @@ path.mpx-dag-line,
   position: relative;
   display: grid;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid var(--border);
   border-radius: 8px;
   margin-top: 32px;
-  background: rgb(255 255 255 / 10%);
+  background: var(--border);
   gap: 1px;
   grid-template-columns: repeat(3, 1fr);
 }
 
 .mpx-zdr-flow > div {
   padding: 16px;
-  background: var(--neutral-9);
+  background: var(--surface);
 }
 
 .mpx-zdr-flow small,
@@ -1971,21 +1966,21 @@ path.mpx-dag-line,
 }
 
 .mpx-zdr-flow small {
-  color: var(--neutral-5);
+  color: var(--ink-soft);
   font: 8px/1.3 var(--font-mono);
   letter-spacing: 0.18em;
 }
 
 .mpx-zdr-flow b {
   margin-top: 8px;
-  color: var(--neutral-2);
+  color: var(--ink);
   font-size: 12px;
   font-weight: 500;
 }
 
 .mpx-zdr-flow span {
   margin-top: 4px;
-  color: var(--neutral-5);
+  color: var(--ink-soft);
   font-size: 10px;
 }
 
