@@ -71,7 +71,7 @@ export function ObservabilitySummary({
   const healthState = HEALTH_STATES[healthStatus];
   const healthSummary =
     healthStatus === "needs_attention"
-      ? `Some runs need review in ${rangeLabel}. Past start attempts and prevented runs are listed separately.`
+      ? `This view includes failed or delayed runs in ${rangeLabel}. Approval and input requests appear under Needs attention.`
       : runSuccessRate === null
         ? `No automation runs reached a verdict in ${rangeLabel}. Check Needs attention for requests waiting on you.`
         : "No failed or stuck automation runs were found in this view. Check Needs attention for approval and input requests.";

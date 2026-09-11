@@ -353,7 +353,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
     page.getByRole("heading", { name: "Automation health" })
   ).toBeVisible();
   await expect(
-    page.getByLabel("Automation health").getByText("Needs attention")
+    page.getByLabel("Automation health").getByText("Issues recorded")
   ).toBeVisible();
   await expect(page.getByText("Run success")).toBeVisible();
   await expect(page.getByText("66.7%", { exact: true })).toBeVisible();
@@ -362,9 +362,9 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
   await expect(page.getByText("2 events not run")).toBeVisible();
   await expect(page.getByText("1 start attempt retried")).toBeVisible();
   await expect(page.getByText("1 failed start attempt")).toBeVisible();
-  await expect(page.getByText("Action required")).toBeVisible();
+  await expect(page.getByText("Run history", { exact: true })).toBeVisible();
   await expect(page.getByText("1 run remains failed")).toBeVisible();
-  await expect(page.getByText("1 pending run needs recovery")).toBeVisible();
+  await expect(page.getByText("1 delayed run", { exact: true })).toBeVisible();
 
   const recoveryRequestPromise = page.waitForRequest((request) => {
     const url = new URL(request.url());
@@ -374,7 +374,7 @@ test("observability centers runtime runs and exposes repair/requeue actions", as
       url.searchParams.get("only_repairable") === "true"
     );
   });
-  await page.getByText("1 pending run needs recovery").click();
+  await page.getByText("1 delayed run", { exact: true }).click();
   const recoveryRequest = new URL((await recoveryRequestPromise).url());
   expect(recoveryRequest.searchParams.get("from")).toBeNull();
   expect(recoveryRequest.searchParams.get("to")).toBeNull();

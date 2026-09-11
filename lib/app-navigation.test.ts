@@ -13,7 +13,7 @@ describe("app navigation", () => {
       ["control", "Command Center", "/control"],
       ["workspaces", "Repositories", "/projects/repositories"],
       ["automations", "Automations", "/automations"],
-      ["sandboxes", "Sandboxes", "/projects/repositories/sandboxes"],
+      ["sandboxes", "Sandboxes", "/sandboxes"],
       ["delivery", "Delivery", "/delivery"],
       ["observe", "Observe", "/observability"],
       ["settings", "Settings", "/settings"],
@@ -61,5 +61,21 @@ describe("app navigation", () => {
         "/acme/projects/repositories"
       )
     ).toBe(true);
+  });
+
+  it("selects only the destination that owns repositories or sandboxes", () => {
+    const items = buildAppNavItems("acme");
+    for (const [path, id] of [
+      ["/acme/projects/repositories", "workspaces"],
+      ["/acme/projects/workspace", "workspaces"],
+      ["/acme/sandboxes", "sandboxes"],
+      ["/acme/sandboxes/record-1", "sandboxes"],
+    ]) {
+      expect(
+        items
+          .filter((item) => isAppNavItemActive(path, item.match))
+          .map((item) => item.id)
+      ).toEqual([id]);
+    }
   });
 });

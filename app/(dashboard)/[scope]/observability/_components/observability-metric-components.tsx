@@ -21,9 +21,8 @@ export const HEALTH_STATES: Record<AutomationHealthStatus, HealthState> = {
       "border-[var(--accent-green)]/20 bg-[var(--accent-green)]/5 text-[var(--accent-green)]",
   },
   needs_attention: {
-    label: "Needs attention",
-    className:
-      "border-[var(--accent-red)]/20 bg-[var(--accent-red)]/5 text-[var(--accent-red)]",
+    label: "Issues recorded",
+    className: "border-border bg-secondary/40 text-muted-foreground",
   },
   no_activity: {
     label: "No activity yet",

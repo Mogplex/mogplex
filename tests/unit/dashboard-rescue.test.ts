@@ -17,6 +17,7 @@ test("isDashboardScopedFirstSegment recognises known dashboard segments", () => 
     "primitives",
     "projects",
     "runs",
+    "sandboxes",
     "settings",
     "triggers",
     "workflows",
