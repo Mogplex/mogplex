@@ -95,6 +95,66 @@ it.each([false, true])(
   }
 );
 
+it("archive summary responses omit transcripts on success and conflict without changing stored messages", async () => {
+  const messages = [
+    {
+      id: "saved",
+      role: "user",
+      parts: [{ type: "text", text: "Saved history ".repeat(1000) }],
+    },
+  ];
+  const {
+    rows: [target],
+  } = await db.query<{ id: string; updated_at: string }>(
+    "insert into control_sessions (user_id, title, messages) values ($1, 'History', $2) returning id, updated_at",
+    [owner, JSON.stringify(messages)]
+  );
+  const put = createControlSessionsPutHandler({
+    client,
+    requireUserId: async () => owner,
+  });
+  const update = (archived: boolean, revision: string, summary = true) =>
+    put(
+      new Request(
+        `https://app.test/api/control/sessions${summary ? "?summary=true" : ""}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            id: target.id,
+            archived,
+            expected_updated_at: revision,
+          }),
+        }
+      )
+    );
+  const conflict = await update(true, "2000-01-01T00:00:00Z");
+  expect(conflict.status).toBe(409);
+  expect((await conflict.json()).session).not.toHaveProperty("messages");
+  let revision = target.updated_at;
+  for (const archived of [true, false]) {
+    const response = await update(archived, revision);
+    expect(response.status).toBe(200);
+    const { session } = await response.json();
+    expect(session).toMatchObject({
+      id: target.id,
+      title: "History",
+      archived,
+    });
+    expect(session).not.toHaveProperty("messages");
+    revision = session.updated_at;
+  }
+  const full = await update(true, revision, false);
+  expect(full.status).toBe(200);
+  expect((await full.json()).session.messages).toEqual(messages);
+  const {
+    rows: [saved],
+  } = await db.query<{ messages: unknown }>(
+    "select messages from control_sessions where id = $1",
+    [target.id]
+  );
+  expect(saved.messages).toEqual(messages);
+});
+
 it("lists and restores only the owner's archives across page boundaries without deleting transcripts", async () => {
   await db.query(
     'insert into control_sessions (user_id, title, archived, messages) select $1, \'Archived \' || n, true, \'[{"role":"user","parts":[]}]\'::jsonb from generate_series(1, 201) n',

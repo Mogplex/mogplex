@@ -269,6 +269,12 @@ export function createControlSessionsPutHandler(deps = defaultPutDeps) {
     }
 
     const fields = pickControlSessionUpdateFields(body);
+    // Transcript writes keep their full-record reconciliation contract.
+    const responseColumns =
+      new URL(req.url).searchParams.get("summary") === "true" &&
+      !Object.hasOwn(fields, "messages")
+        ? LIST_COLUMNS
+        : "*";
     if (
       Object.hasOwn(fields, "archived") &&
       typeof fields.archived !== "boolean"
@@ -328,7 +334,7 @@ export function createControlSessionsPutHandler(deps = defaultPutDeps) {
       .eq("id", id)
       .eq("user_id", userId)
       .eq("updated_at", expectedUpdatedAt)
-      .select("*")
+      .select(responseColumns)
       .maybeSingle();
 
     if (error) {
@@ -336,7 +342,17 @@ export function createControlSessionsPutHandler(deps = defaultPutDeps) {
     }
 
     if (!data) {
-      const current = await getSessionRecord(id, userId, deps.client);
+      const { data: current, error: currentError } = await deps.client
+        .from("control_sessions")
+        .select(responseColumns)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (currentError)
+        return NextResponse.json(
+          { error: currentError.message },
+          { status: 500 }
+        );
       return NextResponse.json(
         { error: "CONFLICT", session: current },
         { status: 409 }

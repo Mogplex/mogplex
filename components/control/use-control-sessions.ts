@@ -350,7 +350,7 @@ export function useControlSessions({
       target: ControlSessionSummary,
       archived: boolean
     ): Promise<ControlSessionSummary | null> => {
-      const response = await fetch("/api/control/sessions", {
+      const response = await fetch("/api/control/sessions?summary=true", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -364,7 +364,7 @@ export function useControlSessions({
         return null;
       }
       const { session } = (await response.json()) as {
-        session: ControlSessionRecord;
+        session: ControlSessionSummary;
       };
       mutationRevisionRef.current++;
       updatedAtBySessionRef.current.set(target.id, session.updated_at);

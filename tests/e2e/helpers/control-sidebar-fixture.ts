@@ -79,7 +79,13 @@ export async function setupControlSidebar(
       if (!target) return fulfillJson(route, { error: "Not found" }, 404);
       Object.assign(target, body, { updated_at: new Date().toISOString() });
       if (typeof body.archived === "boolean") await gates?.updated?.(target);
-      return fulfillJson(route, { ok: true, session: target });
+      const session =
+        url.searchParams.get("summary") === "true"
+          ? Object.fromEntries(
+              Object.entries(target).filter(([key]) => key !== "messages")
+            )
+          : target;
+      return fulfillJson(route, { ok: true, session });
     }
     if (request.method() === "GET") {
       const id = url.searchParams.get("id");
