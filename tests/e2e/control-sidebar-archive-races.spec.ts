@@ -163,6 +163,54 @@ for (const mutation of ["archive", "restore"] as const) {
   });
 }
 
+test("Undo preserves older archives while the archived list is loading", async ({
+  page,
+}) => {
+  const requested = deferred();
+  const response = deferred();
+  let archiveLoads = 0;
+  const { sidebar, sessions } = await setupControlSidebar(page, {
+    listed: async (archived) => {
+      if (archived && archiveLoads++ === 0) {
+        requested.resolve();
+        await response.promise;
+      }
+    },
+  });
+  sessions.push({
+    ...sessions[0],
+    id: "older",
+    title: "Older archived chat",
+    archived: true,
+  });
+  try {
+    await archiveSelected(page);
+    await expect(
+      page.getByText("1 chat archived", { exact: true })
+    ).toBeVisible();
+    await sidebar
+      .getByRole("button", { name: "Archived chats", exact: true })
+      .click();
+    await requested.promise;
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    const older = sidebar.getByRole("button", {
+      name: "Restore Older archived chat",
+    });
+    await expect(older).toBeVisible();
+    await expect(
+      sidebar.getByRole("button", { name: "Restore Zebra investigation" })
+    ).toHaveCount(0);
+    const initialLoad = page.waitForResponse((result) =>
+      result.url().includes("archived=true")
+    );
+    response.resolve();
+    await initialLoad;
+    await expect(older).toBeVisible();
+  } finally {
+    response.resolve();
+  }
+});
+
 test("a late selection response cannot reopen a chat that was archived", async ({
   page,
 }) => {

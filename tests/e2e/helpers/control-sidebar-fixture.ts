@@ -14,6 +14,7 @@ export async function setupControlSidebar(
     beforeUpdate?: () => Promise<void>;
     updated?: (session: Session) => Promise<void>;
     selected?: (session: Session) => Promise<void>;
+    listed?: (archived: boolean) => Promise<void>;
   }
 ) {
   await enableScopedE2EAuth(page);
@@ -95,6 +96,7 @@ export async function setupControlSidebar(
         return fulfillJson(route, snapshot);
       }
       const after = url.searchParams.get("after");
+      await gates?.listed?.(url.searchParams.get("archived") === "true");
       return fulfillJson(
         route,
         sessions

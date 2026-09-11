@@ -20,10 +20,12 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const loadRevision = useRef(0);
+  const viewingRef = useRef(false);
   const reserveArchiveRef = useRef(reserveArchiveSession);
   useLayoutEffect(() => { reserveArchiveRef.current = reserveArchiveSession; }, [reserveArchiveSession]);
 
   const show = useCallback(async () => {
+    viewingRef.current = true;
     setViewing(true);
     setLoading(true);
     setError(null);
@@ -68,6 +70,9 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
       setSessions(current => archived
         ? [...changed, ...current.filter(session => !ids.has(session.id))]
         : current.filter(session => !ids.has(session.id)));
+      // A mutation can finish while show() is still fetching older archives.
+      // Replace the invalidated load so recovery always includes those chats.
+      if (viewingRef.current) await show();
       if (failed) {
         const message = `Could not ${archived ? "archive" : "restore"} ${failed} ${failed === 1 ? "chat" : "chats"}. Try again.`;
         setError(message);
@@ -80,7 +85,7 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
       pending.current = false;
       setBusy(false);
     }
-  }, [setSessionArchived]);
+  }, [setSessionArchived, show]);
 
   const archive = useCallback(async (targets: ControlSessionSummary[]) => {
     const { changed, failed, skipped } = await change(targets, true);
@@ -94,7 +99,7 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
 
   return {
     viewing, sessions, loading, busy, archivingId, error, show, archive,
-    back: () => { loadRevision.current++; setLoading(false); setViewing(false); setError(null); },
+    back: () => { viewingRef.current = false; loadRevision.current++; setLoading(false); setViewing(false); setError(null); },
     restore: (session: ControlSessionSummary) => change([session], false),
   };
 }
