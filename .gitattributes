@@ -1,0 +1,2 @@
+# Generated schema snapshot; regenerate with scripts/build-neon-baseline.ts.
+neon/baseline.sql linguist-generated=true

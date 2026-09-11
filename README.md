@@ -58,7 +58,7 @@ flowchart LR
 ### Prerequisites
 
 - Node.js `20+` and `pnpm`
-- A Postgres database. [Neon](https://neon.tech) is what we use and test against; any Postgres 15+ works for local development.
+- A Postgres 17 database with the `vector` and `pg_trgm` extensions available. [Neon](https://neon.tech) ships both and is what production runs on; locally, the `pgvector/pgvector:pg17` Docker image works.
 - Optional, for the full product: a GitHub App, a Vercel token for sandboxes, an AI Gateway or provider key, and a Trigger.dev project. Each unlocks a feature area; none is needed to boot the app shell.
 
 ### 1. Install dependencies
@@ -89,10 +89,10 @@ Every optional integration is documented inline in [`.env.example`](./.env.examp
 ### 3. Apply migrations
 
 ```bash
-pnpm exec tsx scripts/apply-neon-migrations.ts
+pnpm exec tsx --env-file=.env.local scripts/apply-neon-migrations.ts
 ```
 
-This applies [`neon/migrations/*.sql`](./neon/migrations) in order against `DATABASE_URL` and records what ran. Add `--dry-run` to preview.
+On an empty database this first applies [`neon/baseline.sql`](./neon/baseline.sql), a schema snapshot generated from a fully migrated database, and records every migration it covers as applied. Then, and on every later run, it applies pending [`neon/migrations/*.sql`](./neon/migrations) in order against `DATABASE_URL` and records what ran. Add `--dry-run` to preview. The `--env-file` flag is what lets the script see `.env.local`; in CI and production the variable is exported instead.
 
 ### 4. Run
 
@@ -153,7 +153,7 @@ Relevant files: [`ci.yml`](./.github/workflows/ci.yml), [`deploy-production.yml`
 - [`hooks/`](./hooks) - Client hooks and Zustand stores
 - [`lib/`](./lib) - Domain logic, agent harness, integrations
 - [`trigger/`](./trigger) - Trigger.dev tasks
-- [`neon/migrations/`](./neon/migrations) - Source of truth for schema changes
+- [`neon/migrations/`](./neon/migrations) - Source of truth for schema changes; [`neon/baseline.sql`](./neon/baseline.sql) bootstraps empty databases
 - [`docs/`](./docs) - Design docs, audits, and the self-hosting guide
 - [`tests/`](./tests) - Unit, database, and end-to-end tests
 

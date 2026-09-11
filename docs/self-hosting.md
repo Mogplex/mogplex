@@ -19,7 +19,7 @@ Each row is independent. Mogplex boots with only the first row configured; every
 
 | Service | What it does | Your options |
 | --- | --- | --- |
-| **Postgres + auth** (required) | All application state and user accounts | [Neon](https://neon.tech) or any Postgres 15+, with Better Auth. Set both backend flags to `neon`, configure `DATABASE_URL` / `DATABASE_URL_UNPOOLED` and `BETTER_AUTH_SECRET`, add at least one sign-in provider (`AUTH_GITHUB_*`, `AUTH_GOOGLE_*`, or email), and apply `neon/migrations/`. |
+| **Postgres + auth** (required) | All application state and user accounts | [Neon](https://neon.tech) or any Postgres 17 with the `vector` and `pg_trgm` extensions available, with Better Auth. Set both backend flags to `neon`, configure `DATABASE_URL` / `DATABASE_URL_UNPOOLED` and `BETTER_AUTH_SECRET`, add at least one sign-in provider (`AUTH_GITHUB_*`, `AUTH_GOOGLE_*`, or email), and run the migration script below. It bootstraps an empty database from `neon/baseline.sql` and then applies `neon/migrations/`. |
 | **Trigger.dev** | Background jobs: automations, syncs, long-running agent runs | A [Trigger.dev cloud](https://trigger.dev) account with your own project (`TRIGGER_PROJECT_REF`, `TRIGGER_SECRET_KEY`), or [self-host the full Trigger.dev stack](https://trigger.dev/docs/self-hosting/overview) — webapp, Postgres, Redis, ClickHouse, object storage, container registry, and supervisor/worker nodes. Without it, everything Trigger-powered does not run. |
 | **Vercel (sandboxes)** | Agent sandboxes run on [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) | A Vercel account and token (`PLATFORM_VERCEL_TOKEN`, `PLATFORM_VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`). There is no local substitute; without it, sandbox features are dead. |
 | **AI providers** | Model inference, memory embeddings | [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key and/or OpenRouter + OpenAI keys. |
@@ -62,7 +62,7 @@ Register a Slack slash command named `/mogplex` with the request URL `https://<y
 
 ## Operating it
 
-- **Migrations.** The image never touches your schema. Run `pnpm exec tsx scripts/apply-neon-migrations.ts` with `DATABASE_URL` set before first boot and after each upgrade. It applies pending files from `neon/migrations/` and records what ran. (Legacy Supabase installations use `supabase/migrations/` instead.)
+- **Migrations.** The image never touches your schema. Run `pnpm exec tsx scripts/apply-neon-migrations.ts` with `DATABASE_URL` exported (or pass `--env-file=.env`) before first boot and after each upgrade. On an empty database it applies `neon/baseline.sql` first, then any pending files from `neon/migrations/`, and records what ran. Run it as the database owner: it creates schemas, the `vector` and `pg_trgm` extensions, and the `service_role` and `supabase_auth_admin` roles that the row-level-security policies reference. (Legacy Supabase installations use `supabase/migrations/` instead.)
 - **Trigger deploys.** Trigger.dev tasks in `trigger/` deploy separately with `pnpm trigger:deploy` against your own Trigger project.
 - **TLS, domains, OAuth callbacks.** Every OAuth integration (GitHub, Vercel, Slack, MCP clients) needs your deployment URL registered on your own apps, with exact-match redirect/resource URLs.
 - **Secrets.** Generate random values for `CRON_SECRET`, `INTERNAL_API_SECRET`, `CONNECTIONS_ENCRYPTION_KEY`, and `EMAIL_UNSUBSCRIBE_SECRET`, and store them in your platform secret store.

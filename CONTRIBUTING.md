@@ -62,10 +62,12 @@ The optional sections in [.env.example](./.env.example) cover GitHub App, Vercel
 Apply the checked-in migrations before testing auth, repos, workspaces, or automations:
 
 ```bash
-pnpm exec tsx scripts/apply-neon-migrations.ts
+pnpm exec tsx --env-file=.env.local scripts/apply-neon-migrations.ts
 ```
 
-Schema changes go in `neon/migrations/` as timestamped `.sql` files. The `supabase/` directory is a legacy backend kept for existing installations; do not add new migrations there.
+On an empty database the script first applies `neon/baseline.sql`, a snapshot of a fully migrated schema, and records the migrations it covers. Then, and on every later run, it applies anything newer from `neon/migrations/`. The `--env-file` flag is how the script reads `.env.local`; Next.js loads that file on its own, this script does not.
+
+Schema changes go in `neon/migrations/` as timestamped `.sql` files. You do not touch `neon/baseline.sql` when adding a migration; it is regenerated occasionally, as described in `neon/README.md`. The `supabase/` directory is a legacy backend kept for existing installations; do not add new migrations there.
 
 ### Start the app
 
