@@ -288,8 +288,7 @@ const SANDBOX_STOPPED_MESSAGE =
 
 function formatSandboxStopResult(
   data: SandboxStopApiResponse,
-  requestedSandboxId: string,
-  warning?: string
+  requestedSandboxId: string
 ) {
   const stoppedSandbox = data.sandbox;
   const sandboxId =
@@ -312,7 +311,6 @@ function formatSandboxStopResult(
     sandboxId,
     status,
     message: SANDBOX_STOPPED_MESSAGE,
-    ...(warning ? { warning } : {}),
   };
 }
 export function createStopSandbox(
@@ -352,7 +350,6 @@ export function createStopSandbox(
           reason: requestHeaders.reason,
         };
       }
-      let warning: string | undefined;
       if (!discardChanges) {
         const changes = await inspectUncommittedChanges(
           sandboxId,
@@ -367,7 +364,10 @@ export function createStopSandbox(
           };
         }
         if (changes.status === "unknown") {
-          warning = `Could not verify uncommitted changes before stopping (${changes.error}).`;
+          return {
+            error: `Could not verify uncommitted changes (${changes.error}). The sandbox was not stopped. Retry the inspection, or ask the operator whether to discard any changes and call again with discardChanges: true.`,
+            reason: "inspection_unavailable" as const,
+          };
         }
       }
       const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}/stop`, {
@@ -392,7 +392,7 @@ export function createStopSandbox(
               : ("sandbox_unavailable" as const),
         };
       }
-      const result = formatSandboxStopResult(data, sandboxId, warning);
+      const result = formatSandboxStopResult(data, sandboxId);
       if ("ok" in result && typeof serverSelectedSandbox === "object") {
         updateSandboxBinding(serverSelectedSandbox, null);
       }

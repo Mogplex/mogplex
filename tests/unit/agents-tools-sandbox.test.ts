@@ -449,7 +449,10 @@ test("sandbox_stop does not report success when Stop remains unconfirmed", async
         }),
       async () => {
         const { createStopSandbox } = await loadToolsModule();
-        const tool = createStopSandbox("user-123") as unknown as {
+        const tool = createStopSandbox("user-123", undefined, {
+          execute: async () =>
+            Response.json({ exitCode: 0, stdout: "", stderr: "" }),
+        }) as unknown as {
           execute: (input: { sandboxId: string }) => Promise<unknown>;
         };
 
@@ -475,7 +478,10 @@ test("sandbox_stop classifies stale or client-invented record identifiers", asyn
         Response.json({ error: "Sandbox not found" }, { status: 404 }),
       async () => {
         const { createStopSandbox } = await loadToolsModule();
-        const tool = createStopSandbox("user-123") as unknown as {
+        const tool = createStopSandbox("user-123", undefined, {
+          execute: async () =>
+            Response.json({ exitCode: 0, stdout: "", stderr: "" }),
+        }) as unknown as {
           execute: (input: { sandboxId: string }) => Promise<unknown>;
         };
 

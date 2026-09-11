@@ -151,7 +151,13 @@ describe("orchestrator resource decision prompt", () => {
       "the operator sees it inline, so do not repeat changed code in prose"
     );
     expect(prompt).toContain("Do not commit or push unless the operator asks.");
-    expect(prompt).toContain("run_command runs from the repository root.");
+    expect(prompt).toContain(
+      "run_command defaults to the sandbox launch directory"
+    );
+    expect(prompt).toContain(
+      "Relative cwd values resolve from that launch directory"
+    );
+    expect(prompt).toContain("git rev-parse --show-toplevel");
     expect(prompt).toContain("ripgrep is not installed");
     expect(prompt).toContain(
       "Stopping the sandbox discards uncommitted edits."
