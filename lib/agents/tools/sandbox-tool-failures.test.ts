@@ -133,3 +133,86 @@ describe("sandbox tool failure telemetry", () => {
     });
   });
 });
+
+describe("sandbox stop guard", () => {
+  const stopResponse = () =>
+    Response.json({
+      sandbox: {
+        id: "sandbox-selected",
+        runtime_summary: { status: "stopped" },
+      },
+    });
+
+  it("refuses to stop a sandbox with uncommitted changes", async () => {
+    let stopRequested = false;
+    global.fetch = async () => {
+      stopRequested = true;
+      return stopResponse();
+    };
+    const tool = createStopSandbox("user-1", undefined, {
+      execute: async () =>
+        Response.json({
+          exitCode: 0,
+          stdout:
+            " M components/control/composer.tsx\n?? tests/unit/paste.test.ts\n",
+          stderr: "",
+        }),
+    }) as unknown as {
+      execute: (input: {
+        sandboxId: string;
+        discardChanges?: boolean;
+      }) => Promise<unknown>;
+    };
+
+    await expect(
+      tool.execute({ sandboxId: "sandbox-selected" })
+    ).resolves.toMatchObject({
+      reason: "uncommitted_changes",
+      files: ["components/control/composer.tsx", "tests/unit/paste.test.ts"],
+    });
+    expect(stopRequested).toBe(false);
+  });
+
+  it("stops a dirty sandbox once the operator agreed to discard changes", async () => {
+    let inspected = false;
+    global.fetch = async () => stopResponse();
+    const tool = createStopSandbox("user-1", undefined, {
+      execute: async () => {
+        inspected = true;
+        return Response.json({ exitCode: 0, stdout: " M a.ts\n", stderr: "" });
+      },
+    }) as unknown as {
+      execute: (input: {
+        sandboxId: string;
+        discardChanges?: boolean;
+      }) => Promise<unknown>;
+    };
+
+    await expect(
+      tool.execute({ sandboxId: "sandbox-selected", discardChanges: true })
+    ).resolves.toMatchObject({ ok: true, status: "stopped" });
+    expect(inspected).toBe(false);
+  });
+
+  it("stops with a warning when the working tree cannot be inspected", async () => {
+    global.fetch = async () => stopResponse();
+    const tool = createStopSandbox("user-1", undefined, {
+      execute: async () =>
+        Response.json(
+          { error: "Another sandbox command is already running" },
+          { status: 429 }
+        ),
+    }) as unknown as {
+      execute: (input: { sandboxId: string }) => Promise<unknown>;
+    };
+
+    await expect(
+      tool.execute({ sandboxId: "sandbox-selected" })
+    ).resolves.toMatchObject({
+      ok: true,
+      warning: expect.stringContaining(
+        "Another sandbox command is already running"
+      ),
+    });
+  });
+});

@@ -101,7 +101,7 @@ test("GET /api/sandbox/[id]/changes returns parsed working-tree changes from the
       { path: "src/app.ts", status: "modified", additions: 2, deletions: 1 },
     ],
   });
-  assert.equal(commands[0]?.cwd, "apps/web");
+  assert.equal(commands[0]?.cwd, "/vercel/sandbox/apps/web");
   assert.match(commands[0]?.script ?? "", /git status --porcelain=v1/);
   assert.deepEqual(touched, ["sandbox-record-1"]);
 });

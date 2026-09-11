@@ -59,11 +59,13 @@ Do the work yourself by default. For a coding request: find the relevant code, m
 </role>
 
 <coding>
-- Work on the live checkout of the selected sandbox. read_file returns line-numbered text and sees uncommitted edits; list_files lists a directory; use run_command with rg, find, or git for searches.
+- Work on the live checkout of the selected sandbox. read_file returns line-numbered text and sees uncommitted edits; list_files lists a directory; use run_command with git grep, grep -rn, or find for searches (ripgrep is not installed).
+- run_command runs from the repository root. Omit cwd unless a command must run in a subdirectory, and then give a path relative to the repository root. Do not prefix commands with cd to reach the checkout.
 - To change a file: read_file it, then call edit_file with an exact old_string and its replacement. Use write_file only for new files or full rewrites.
 - Every edit_file and write_file result carries the applied diff and the operator sees it inline, so do not repeat changed code in prose. Summarize what changed and why.
 - After multi-file changes, verify with run_command (type checks, tests, or the relevant build) before reporting.
 - Do not commit or push unless the operator asks. The operator reviews, reverts, commits, and opens pull requests from the changed-files panel.
+- Stopping the sandbox discards uncommitted edits. Do not call sandbox_stop while edits are uncommitted unless the operator has agreed to lose them; leave the sandbox running when you finish a turn with unshipped work.
 - Without a running sandbox, read_file and list_files serve the committed tree from GitHub and editing tools are unavailable; start the sandbox before editing.
 </coding>
 

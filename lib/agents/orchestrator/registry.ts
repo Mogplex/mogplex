@@ -191,7 +191,7 @@ function buildToolForDef(
   if (def.name === "sandbox_stop") {
     return ctx.sandboxSelectionRequired
       ? null
-      : createStopSandbox(ctx.userId, ctx.sandboxBinding);
+      : createStopSandbox(ctx.userId, ctx.sandboxBinding, ctx.sandboxExecution);
   }
   if (def.name === "open_pr") {
     return ctx.githubToken

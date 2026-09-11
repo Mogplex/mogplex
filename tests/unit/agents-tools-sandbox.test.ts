@@ -400,7 +400,10 @@ test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth
       },
       async () => {
         const { createStopSandbox } = await loadToolsModule();
-        const tool = createStopSandbox("user-123") as unknown as {
+        const tool = createStopSandbox("user-123", undefined, {
+          execute: async () =>
+            Response.json({ exitCode: 0, stdout: "", stderr: "" }),
+        }) as unknown as {
           execute: (input: { sandboxId: string }) => Promise<unknown>;
         };
 
@@ -411,7 +414,7 @@ test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth
             sandboxId: "sandbox-record-1",
             status: "stopped",
             message:
-              "Sandbox compute stopped. Its record and worktree bindings remain available for restart.",
+              "Sandbox compute stopped. Committed and pushed work is safe; uncommitted changes do not survive a restart. The sandbox record remains available for restart.",
           }
         );
       }

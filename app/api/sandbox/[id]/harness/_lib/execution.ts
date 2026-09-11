@@ -1,3 +1,4 @@
+import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import { createHarnessSessionParser } from "@/lib/harness/session-parser";
 import {
   appendHarnessFailureOutput,
@@ -133,7 +134,7 @@ export function createHarnessStreamBody(
               prompt: ctx.trimmedPrompt,
               baseBranch: gitWorkspace.baseBranch,
               workingBranch: gitWorkspace.workingBranch,
-              cwd: ctx.rootDirectory || undefined,
+              cwd: resolveSandboxWorkingDirectory(undefined, ctx.rootDirectory),
               env: ctx.runtimeEnv,
             });
             pullRequestUrl = delivery.pullRequestUrl;

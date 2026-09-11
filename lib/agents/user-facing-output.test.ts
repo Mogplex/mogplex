@@ -185,7 +185,7 @@ describe("agent user-facing output", () => {
     expect(text).toMatch(/src\/app\.ts/);
   });
 
-  it("sanitizes tool failures and result errors before stream serialization", async () => {
+  it("sanitizes tool failures and results but keeps the paths the model must act on", async () => {
     const transform = createAgentUserFacingOutputTransform<ToolSet>();
     const source = new ReadableStream<TextStreamPart<ToolSet>>({
       start(controller) {
@@ -206,6 +206,7 @@ describe("agent user-facing output", () => {
           output: {
             status: "error",
             error: "https://192.168.20.4:8080 failed from /app/main.py",
+            stdout: "/vercel/sandbox\n M src/app.ts\n2>/dev/null",
           },
           dynamic: true,
         });
@@ -225,8 +226,41 @@ describe("agent user-facing output", () => {
 
     const serialized = JSON.stringify(chunks);
     expect(serialized).not.toMatch(
-      /Vercel Sandbox|\/opt\/runtime|OPENAI_API_KEY|tool-secret|192\.168\.20\.4|\/app\/main\.py/
+      /Vercel Sandbox|tool-secret|192\.168\.20\.4/
     );
     expect(serialized).toMatch(/development environment|internal service/);
+    // Paths stay verbatim: the model reads these results back next turn and
+    // must be able to `cd` to or `cat` what a command printed.
+    expect(serialized).toMatch(/\/opt\/runtime\/app\.ts/);
+    expect(serialized).toMatch(/\/app\/main\.py/);
+    expect(serialized).toMatch(/\/vercel\/sandbox/);
+    expect(serialized).toMatch(/2>\/dev\/null/);
+    expect(serialized).not.toMatch(/the repository workspace/);
+  });
+
+  it("still hides filesystem paths in assistant prose", async () => {
+    const transform = createAgentUserFacingOutputTransform<ToolSet>();
+    const source = new ReadableStream<TextStreamPart<ToolSet>>({
+      start(controller) {
+        controller.enqueue({
+          type: "text-delta",
+          id: "text-1",
+          text: "The checkout lives at /vercel/sandbox and logs go to /var/log/app.log.",
+        });
+        controller.close();
+      },
+    });
+    const chunks: TextStreamPart<ToolSet>[] = [];
+    const reader = source
+      .pipeThrough(transform({ tools: {}, stopStream: () => undefined }))
+      .getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const serialized = JSON.stringify(chunks);
+    expect(serialized).not.toMatch(/\/var\/log\/app\.log/);
+    expect(serialized).toMatch(/the repository workspace/);
   });
 });

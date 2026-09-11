@@ -36,7 +36,13 @@ import {
 import { detectInteractiveInvocation } from "@/lib/sandbox/interactive-guard";
 import { startExecStream } from "@/lib/sandbox/exec-stream";
 import { syncTerminalRuntimeAuth } from "@/lib/sandbox/dev-tools";
-import { escapeShell, immediateExecJson } from "./_lib/shell-helpers";
+import { extractVercelApiErrorDetail } from "@/lib/sandbox/api-error";
+import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
+import {
+  escapeShell,
+  immediateExecJson,
+  parseStandaloneChangeDirectory,
+} from "./_lib/shell-helpers";
 import {
   BINARY_TO_HARNESS,
   commandMayNeedGithubAuth,
@@ -253,10 +259,12 @@ export function createSandboxExecPostHandler(
       // Shared bash history across terminal panes within the same sandbox
       if (!envVars.HISTFILE) envVars.HISTFILE = "/tmp/.mogplex_bash_history";
 
-      const commandCwd =
-        typeof cwd === "string" && cwd.trim()
-          ? cwd
-          : repoRootDirectory || undefined;
+      // The provider resolves a relative cwd against `/` and rejects a missing
+      // one with a 400, so always hand it an absolute path under the checkout.
+      const commandCwd = resolveSandboxWorkingDirectory(
+        typeof cwd === "string" ? cwd : undefined,
+        repoRootDirectory
+      );
 
       const trimmed = String(command).trim();
       const repoRecord = Array.isArray(sandboxData.record.repo)
@@ -307,10 +315,10 @@ export function createSandboxExecPostHandler(
       } else if (context.ai.aiBillingSource) {
         envVars.MOGPLEX_AI_BILLING_SOURCE = context.ai.aiBillingSource;
       }
-      const cdMatch = /^cd(?:\s+(.+))?$/.exec(trimmed);
+      const standaloneCd = parseStandaloneChangeDirectory(trimmed);
 
-      if (cdMatch) {
-        const cdTarget = (cdMatch[1] || ".").trim();
+      if (standaloneCd) {
+        const cdTarget = standaloneCd.target;
         const cdResult = await sandbox.runCommand({
           cmd: "sh",
           args: ["-lc", `cd '${escapeShell(cdTarget)}' && pwd`],
@@ -323,8 +331,7 @@ export function createSandboxExecPostHandler(
         ]);
 
         if (cdResult.exitCode === 0) {
-          const nextCwd =
-            stdout.trim() || commandCwd || repoRootDirectory || ".";
+          const nextCwd = stdout.trim() || commandCwd;
           try {
             await deps.touchSandboxLastActive(id);
           } catch (error) {
@@ -346,7 +353,7 @@ export function createSandboxExecPostHandler(
           exitCode: cdResult.exitCode,
           stdout,
           stderr,
-          cwd: commandCwd || repoRootDirectory || ".",
+          cwd: commandCwd,
         });
       }
 
@@ -356,7 +363,7 @@ export function createSandboxExecPostHandler(
           exitCode: 1,
           stdout: "",
           stderr: interactive.message,
-          cwd: commandCwd || repoRootDirectory || ".",
+          cwd: commandCwd,
         });
       }
 
@@ -367,7 +374,7 @@ export function createSandboxExecPostHandler(
           exitCode: 1,
           stdout: "",
           stderr: installError,
-          cwd: commandCwd || repoRootDirectory || ".",
+          cwd: commandCwd,
         });
       }
 
@@ -379,15 +386,14 @@ export function createSandboxExecPostHandler(
         const sandboxId = id;
         const releaseLock = deps.releaseSandboxExecLock;
         const touchActive = deps.touchSandboxLastActive;
-        lockReleaseHandedOff = true;
-        return await startExecStream({
+        const streamResponse = await startExecStream({
           sandbox,
           run: args
             ? { kind: "raw", cmd: trimmed, args }
             : { kind: "shell", command: trimmed },
           cwd: commandCwd,
           env: envVars,
-          reportedCwd: commandCwd || repoRootDirectory || ".",
+          reportedCwd: commandCwd,
           onActivity: async () => {
             await deps.renewSandboxActivityLease(sandbox);
           },
@@ -410,6 +416,11 @@ export function createSandboxExecPostHandler(
             }
           },
         });
+        // Only once the detached command exists does the stream own the lock.
+        // If starting it threw (a rejected cwd, a stopped VM), `finally`
+        // below must still release, or the sandbox stays locked for hours.
+        lockReleaseHandedOff = true;
+        return streamResponse;
       }
 
       const result = args
@@ -444,13 +455,20 @@ export function createSandboxExecPostHandler(
         exitCode: result.exitCode,
         stdout,
         stderr,
-        cwd: commandCwd || repoRootDirectory || ".",
+        cwd: commandCwd,
       });
     } catch (err) {
       const billingError = presentSandboxBillingAdmissionError(err);
+      const baseMessage =
+        err instanceof Error ? err.message : "Execution failed";
+      // Surface the provider's envelope ("chdir apps: no such file or
+      // directory") instead of the bare "Status code 400 is not ok".
+      const detail = extractVercelApiErrorDetail(err);
       const message =
         billingError?.message ??
-        (err instanceof Error ? err.message : "Execution failed");
+        (detail && !baseMessage.includes(detail)
+          ? `${baseMessage}: ${detail}`
+          : baseMessage);
       return NextResponse.json(
         { error: message },
         { status: billingError?.status ?? 500 }

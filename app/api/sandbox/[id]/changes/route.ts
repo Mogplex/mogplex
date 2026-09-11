@@ -5,6 +5,7 @@
  * GitHub credentials are injected the same way as any terminal push.
  */
 import { NextResponse } from "next/server";
+import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import type { Sandbox } from "@vercel/sandbox";
 import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
@@ -171,7 +172,7 @@ async function loadChangesContext(
   return {
     ok: true as const,
     sandbox: loaded.sandbox,
-    cwd: loaded.rootDirectory || undefined,
+    cwd: resolveSandboxWorkingDirectory(undefined, loaded.rootDirectory),
     baseBranch: resolveBaseBranch(loaded.record),
   };
 }
