@@ -218,7 +218,7 @@ it("renders verified artifact navigation and guidance in the Slack blocks", () =
       {
         type: "button",
         text: { type: "plain_text", text: "Inspect workspaces" },
-        url: `${process.env.NEXT_PUBLIC_APP_URL}/projects/repositories/sandboxes`,
+        url: `${process.env.NEXT_PUBLIC_APP_URL}/sandboxes`,
         action_id: "mogplex-view-workspaces",
       },
     ],

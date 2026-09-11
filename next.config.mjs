@@ -109,7 +109,17 @@ const nextConfig = {
       },
       {
         source: "/spaces/sandboxes",
-        destination: "/projects/repositories/sandboxes",
+        destination: "/sandboxes",
+        permanent: true,
+      },
+      {
+        source: "/projects/repositories/sandboxes",
+        destination: "/sandboxes",
+        permanent: true,
+      },
+      {
+        source: "/:scope/projects/repositories/sandboxes",
+        destination: "/:scope/sandboxes",
         permanent: true,
       },
     ];

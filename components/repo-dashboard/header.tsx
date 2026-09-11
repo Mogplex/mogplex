@@ -215,7 +215,7 @@ export function RepoDashboardHeader({
               className="text-muted-foreground hover:bg-accent hover:text-foreground h-8 rounded-lg text-xs"
             >
               <Link
-                href={scopedHref(scope, "/projects/repositories/sandboxes")}
+                href={scopedHref(scope, "/sandboxes")}
               >
                 Manage sandboxes
               </Link>

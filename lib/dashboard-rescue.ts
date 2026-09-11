@@ -15,6 +15,7 @@ export const DASHBOARD_SCOPED_FIRST_SEGMENTS: ReadonlySet<string> = new Set([
   "primitives",
   "projects",
   "runs",
+  "sandboxes",
   "settings",
   "triggers",
   "workflows",

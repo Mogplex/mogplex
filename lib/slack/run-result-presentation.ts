@@ -126,7 +126,7 @@ export function buildRunResultMessage(input: {
         ? [
             button(
               "Inspect workspaces",
-              buildAppUrl("/projects/repositories/sandboxes").toString(),
+              buildAppUrl("/sandboxes").toString(),
               "mogplex-view-workspaces"
             ),
           ]

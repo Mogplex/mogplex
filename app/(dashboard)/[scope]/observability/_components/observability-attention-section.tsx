@@ -73,7 +73,7 @@ export function CurrentAttention({
     <div className="border-border bg-secondary/10 border-t px-4 py-3">
       <div className="grid gap-2 lg:grid-cols-[9rem_minmax(0,1fr)] lg:items-start">
         <div className="text-foreground pt-1.5 text-xs font-medium">
-          Action required
+          Run history
         </div>
         <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
           {failedInRange > 0 ? (
@@ -90,7 +90,7 @@ export function CurrentAttention({
                 )}
               </span>
               <span className="text-muted-foreground mt-0.5 block text-[11px]">
-                Inspect the run, owner, and latest automation outcome.
+                View the run and its latest result.
               </span>
             </button>
           ) : null}
@@ -103,8 +103,8 @@ export function CurrentAttention({
               <span className="block text-xs font-medium text-[var(--accent-amber)]">
                 {countLabel(
                   stalePending,
-                  "pending run needs recovery",
-                  "pending runs need recovery"
+                  "delayed run",
+                  "delayed runs"
                 )}
               </span>
               <span className="text-muted-foreground mt-0.5 block text-[11px]">
@@ -119,7 +119,7 @@ export function CurrentAttention({
               onClick={() => onInspectRuns("failed")}
             >
               <span className="block text-xs font-medium text-[var(--accent-red)]">
-                Run success needs review
+                Some runs did not succeed
               </span>
               <span className="text-muted-foreground mt-0.5 block text-[11px]">
                 Inspect failed verdicts in the selected range.
@@ -129,14 +129,14 @@ export function CurrentAttention({
           {!hasAttentionItem ? (
             <div className="rounded-sm px-2 py-1.5">
               <span className="block text-xs font-medium text-[var(--accent-green)]">
-                No action needed
+                No failed or delayed runs
               </span>
               <span className="text-muted-foreground mt-0.5 block text-[11px]">
                 {deferredInRange > 0
-                  ? `${countLabel(deferredInRange, "delayed start attempt")} retried automatically; no failed or stale runs need attention.`
+                  ? `${countLabel(deferredInRange, "delayed start attempt")} retried automatically.`
                   : startFailedInRange > 0
-                    ? "No failed or stale runs need action. Recent start failures remain available in operational history."
-                    : "No failed or stale pending runs need action."}
+                    ? "Past start failures remain available in operational history."
+                    : "No failed or delayed runs appear in this view."}
               </span>
             </div>
           ) : null}

@@ -65,7 +65,7 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
   { path: "/projects/workspace", value: "go to projects workspace", label: "Workspace" },
   { path: "/projects/repositories", value: "go to projects repositories", label: "Repositories" },
   {
-    path: "/projects/repositories/sandboxes",
+    path: "/sandboxes",
     value: "go to sandboxes manage running previews",
     label: "Sandboxes",
   },
