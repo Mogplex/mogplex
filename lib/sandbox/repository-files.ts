@@ -35,21 +35,44 @@ export function githubRepositoryFiles(input: {
   ref: string;
 }): RepositoryFiles {
   const cache = new Map<string, Promise<Response>>();
+  // All discovery paths share these slots, including monorepo auto-selection.
+  // Transfer a slot directly to the next read; no polling or workspace limit.
+  let activeReads = 0;
+  const waitingReads: Array<() => void> = [];
+  const readWithSlot = async (read: () => Promise<Response>) => {
+    await new Promise<void>((resolve) => {
+      if (activeReads < 4) {
+        activeReads += 1;
+        resolve();
+      } else {
+        waitingReads.push(resolve);
+      }
+    });
+    try {
+      return await read();
+    } finally {
+      const resumeRead = waitingReads.shift();
+      if (resumeRead) resumeRead();
+      else activeReads -= 1;
+    }
+  };
   const get = async (path: string, raw: boolean) => {
     const key = `${raw}:${path}`;
     let pending = cache.get(key);
     if (!pending) {
       const encoded = path.split("/").map(encodeURIComponent).join("/");
       const url = `https://api.github.com/repos/${input.repoFullName}/contents/${encoded}?ref=${encodeURIComponent(input.ref)}`;
-      pending = fetch(url, {
-        headers: {
-          Authorization: `Bearer ${input.githubToken}`,
-          Accept: raw
-            ? "application/vnd.github.raw+json"
-            : "application/vnd.github+json",
-        },
-        signal: AbortSignal.timeout(15_000),
-      });
+      pending = readWithSlot(() =>
+        fetch(url, {
+          headers: {
+            Authorization: `Bearer ${input.githubToken}`,
+            Accept: raw
+              ? "application/vnd.github.raw+json"
+              : "application/vnd.github+json",
+          },
+          signal: AbortSignal.timeout(15_000),
+        })
+      );
       cache.set(key, pending);
     }
     const response = (await pending).clone();

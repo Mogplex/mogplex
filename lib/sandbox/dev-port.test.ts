@@ -252,3 +252,50 @@ it("ignores non-directory and malformed GitHub directory entries", async () => {
     await githubRepositoryFiles(repoInput).listDirectories("apps")
   ).toEqual([]);
 });
+
+it("bounds GitHub request concurrency during automatic workspace discovery", async () => {
+  const extra: Record<string, string> = {
+    "package.json": JSON.stringify({ workspaces: ["clients/*"] }),
+    "pnpm-workspace.yaml": "packages:\n  - clients/*\n",
+    "apps/web/package.json": "{}",
+    "apps/admin/package.json": "{}",
+  };
+  for (let index = 0; index < 40; index += 1) {
+    extra[`clients/site-${index}/package.json`] = JSON.stringify(
+      index === 39
+        ? { dependencies: { next: "16" }, scripts: { dev: "next dev -p 4777" } }
+        : {}
+    );
+  }
+  const fetch = mockRepository(extra);
+  const respond = fetch.getMockImplementation()!;
+  let active = 0;
+  let peak = 0;
+  fetch.mockImplementation(async (...args) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    try {
+      await Promise.resolve();
+      return await respond(...args);
+    } finally {
+      active -= 1;
+    }
+  });
+  expect(await detectGithubDevPort(repoInput)).toBe(4777);
+  expect(peak).toBeGreaterThan(1);
+  expect(peak).toBeLessThanOrEqual(4);
+});
+
+it("releases queued read slots when GitHub requests reject", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("offline"));
+  const files = githubRepositoryFiles(repoInput);
+  const results = await Promise.allSettled(
+    Array.from({ length: 10 }, (_, index) =>
+      files.readText(`app-${index}/package.json`)
+    )
+  );
+  expect(fetch).toHaveBeenCalledTimes(10);
+  expect(results.every((result) => result.status === "rejected")).toBe(true);
+});
