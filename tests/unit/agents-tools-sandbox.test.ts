@@ -400,7 +400,10 @@ test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth
       },
       async () => {
         const { createStopSandbox } = await loadToolsModule();
-        const tool = createStopSandbox("user-123") as unknown as {
+        const tool = createStopSandbox("user-123", undefined, {
+          execute: async () =>
+            Response.json({ exitCode: 0, stdout: "", stderr: "" }),
+        }) as unknown as {
           execute: (input: { sandboxId: string }) => Promise<unknown>;
         };
 
@@ -411,7 +414,7 @@ test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth
             sandboxId: "sandbox-record-1",
             status: "stopped",
             message:
-              "Sandbox compute stopped. Its record and worktree bindings remain available for restart.",
+              "Sandbox compute stopped. Committed and pushed work is safe; uncommitted changes do not survive a restart. The sandbox record remains available for restart.",
           }
         );
       }
@@ -422,7 +425,9 @@ test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth
       "http://localhost:3000/api/sandbox/sandbox-record-1/stop"
     );
     assert.equal(capturedInit?.method, "POST");
-    assert.equal(capturedInit?.body, undefined);
+    assert.deepEqual(JSON.parse(String(capturedInit?.body)), {
+      discardChanges: false,
+    });
     const headers = new Headers(capturedInit?.headers);
     assert.equal(headers.get("authorization"), "Bearer internal-secret");
     assert.equal(headers.get("x-delegated-user-id"), "user-123");
@@ -446,7 +451,10 @@ test("sandbox_stop does not report success when Stop remains unconfirmed", async
         }),
       async () => {
         const { createStopSandbox } = await loadToolsModule();
-        const tool = createStopSandbox("user-123") as unknown as {
+        const tool = createStopSandbox("user-123", undefined, {
+          execute: async () =>
+            Response.json({ exitCode: 0, stdout: "", stderr: "" }),
+        }) as unknown as {
           execute: (input: { sandboxId: string }) => Promise<unknown>;
         };
 
@@ -472,7 +480,10 @@ test("sandbox_stop classifies stale or client-invented record identifiers", asyn
         Response.json({ error: "Sandbox not found" }, { status: 404 }),
       async () => {
         const { createStopSandbox } = await loadToolsModule();
-        const tool = createStopSandbox("user-123") as unknown as {
+        const tool = createStopSandbox("user-123", undefined, {
+          execute: async () =>
+            Response.json({ exitCode: 0, stdout: "", stderr: "" }),
+        }) as unknown as {
           execute: (input: { sandboxId: string }) => Promise<unknown>;
         };
 

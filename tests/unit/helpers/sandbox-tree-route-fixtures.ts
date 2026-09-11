@@ -1,3 +1,8 @@
+export const unlockedMutation = async (
+  _id: string,
+  operation: () => Promise<Response>
+) => operation();
+
 export async function loadSandboxTreeRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
@@ -62,5 +67,6 @@ export function buildDefaultDeps(contextOverride?: SandboxContext) {
       contextOverride ?? buildBaseSandboxContext(),
     touchSandboxLastActive: async () => {},
     renewSandboxActivityLease: async () => 0,
+    withSandboxMutationLock: unlockedMutation,
   };
 }

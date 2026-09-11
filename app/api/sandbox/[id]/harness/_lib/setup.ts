@@ -1,3 +1,4 @@
+import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import {
   appendSlackAttachmentPromptSection,
@@ -140,7 +141,7 @@ export async function setupGitWorkspace(
     aiCallId: ctx.aiCallId,
     baseBranch: ctx.baseBranch,
     workingBranch: ctx.workingBranch,
-    cwd: ctx.rootDirectory || undefined,
+    cwd: resolveSandboxWorkingDirectory(undefined, ctx.rootDirectory),
     env: runtimeEnv,
   });
 

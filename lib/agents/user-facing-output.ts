@@ -314,7 +314,9 @@ export function sanitizeAgentUserFacingText(
         )
       )
       .replace(
-        /\bVercel\b(?=.{0,30}\b(?:deployment|runtime|sandbox|provider|region|project)\b)/gi,
+        // The lookbehind keeps `/vercel/sandbox/...` paths intact; only the
+        // provider name in prose is replaced.
+        /(?<!\/)\bVercel\b(?=.{0,30}\b(?:deployment|runtime|sandbox|provider|region|project)\b)/gi,
         (match) =>
           replaceUnrequestedProvider(
             match,
@@ -347,6 +349,29 @@ function isPassThroughPayload(
   );
 }
 
+/**
+ * Tool results and errors are working data, not prose: the persisted
+ * transcript feeds them back to the model on the next turn, which then has to
+ * act on paths it printed (`git rev-parse --show-toplevel`, `pwd`, file
+ * listings). Rewriting them into "the repository workspace" left the model
+ * unable to name its own working directory, so payloads keep filesystem paths
+ * while secrets, internal URLs, identifiers, and provider names are still
+ * sanitized.
+ */
+const TOOL_PAYLOAD_DISCLOSURE: InfrastructureDiagnosticScope = [
+  "filesystem-path",
+];
+
+function sanitizeToolPayloadText(
+  text: string,
+  options: Pick<AgentUserFacingOutputOptions, "repoName">
+) {
+  return sanitizeAgentUserFacingText(text, {
+    repoName: options.repoName,
+    diagnosticScope: TOOL_PAYLOAD_DISCLOSURE,
+  });
+}
+
 function sanitizeAgentUserFacingPayload(
   value: unknown,
   options: Pick<AgentUserFacingOutputOptions, "repoName">,
@@ -354,11 +379,11 @@ function sanitizeAgentUserFacingPayload(
 ): unknown {
   if (depth >= 20) return "[redacted]";
   if (typeof value === "string") {
-    return sanitizeAgentUserFacingError(value, options);
+    return sanitizeToolPayloadText(value, options);
   }
   if (isPassThroughPayload(value)) return value;
   if (value instanceof Error) {
-    return sanitizeAgentUserFacingError(value.message, options);
+    return sanitizeToolPayloadText(value.message, options);
   }
   if (Array.isArray(value)) {
     return value.map((entry) =>
@@ -375,7 +400,7 @@ function sanitizeAgentUserFacingPayload(
       ])
     );
   }
-  return sanitizeAgentUserFacingError(String(value), options);
+  return sanitizeToolPayloadText(String(value), options);
 }
 
 /**

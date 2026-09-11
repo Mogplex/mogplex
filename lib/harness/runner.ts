@@ -1,3 +1,4 @@
+import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import { getHarnessConfig } from "./config";
 import { codexProviderArgs, codexWorkerIsolationArgs } from "./codex-provider";
 import { installHarnessPackage, isHarnessInstalled } from "./install";
@@ -109,7 +110,9 @@ export async function runHarness(
           ]
         : args,
     detached: true,
-    cwd: opts?.cwd,
+    // The provider resolves a relative cwd against `/`; anchor it under the
+    // checkout so a monorepo root directory such as `apps/web` works.
+    cwd: resolveSandboxWorkingDirectory(opts?.cwd),
     env,
   });
 

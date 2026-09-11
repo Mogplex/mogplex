@@ -8,6 +8,9 @@ import {
 const originalFetch = global.fetch;
 const originalSecret = process.env.INTERNAL_API_SECRET;
 const REPO_ID = "00000000-0000-4000-8000-000000000001";
+const cleanInspection = {
+  execute: async () => Response.json({ exitCode: 0, stdout: "", stderr: "" }),
+};
 
 beforeEach(() => {
   process.env.INTERNAL_API_SECRET = "internal-secret";
@@ -51,7 +54,11 @@ describe("sandbox tool failure telemetry", () => {
     process.env.INTERNAL_API_SECRET = "internal-secret";
     global.fetch = async () =>
       Response.json({ error: "Sandbox not found" }, { status: 404 });
-    const stale = createStopSandbox("user-1") as unknown as {
+    const stale = createStopSandbox(
+      "user-1",
+      undefined,
+      cleanInspection
+    ) as unknown as {
       execute: (input: { sandboxId: string }) => Promise<unknown>;
     };
     await expect(
@@ -94,7 +101,11 @@ describe("sandbox tool failure telemetry", () => {
           runtime_summary: { status: "stopped" },
         },
       });
-    const tool = createStopSandbox("user-1", binding) as unknown as {
+    const tool = createStopSandbox(
+      "user-1",
+      binding,
+      cleanInspection
+    ) as unknown as {
       execute: (input: { sandboxId: string }) => Promise<unknown>;
     };
 
@@ -132,4 +143,95 @@ describe("sandbox tool failure telemetry", () => {
       reason: "operation_failed",
     });
   });
+});
+
+describe("sandbox stop guard", () => {
+  const stopResponse = () =>
+    Response.json({
+      sandbox: {
+        id: "sandbox-selected",
+        runtime_summary: { status: "stopped" },
+      },
+    });
+
+  it("refuses to stop a sandbox with uncommitted changes", async () => {
+    let stopRequested = false;
+    global.fetch = async () => {
+      stopRequested = true;
+      return stopResponse();
+    };
+    const tool = createStopSandbox("user-1", undefined, {
+      execute: async () =>
+        Response.json({
+          exitCode: 0,
+          stdout:
+            " M components/control/composer.tsx\n?? tests/unit/paste.test.ts\n",
+          stderr: "",
+        }),
+    }) as unknown as {
+      execute: (input: {
+        sandboxId: string;
+        discardChanges?: boolean;
+      }) => Promise<unknown>;
+    };
+
+    await expect(
+      tool.execute({ sandboxId: "sandbox-selected" })
+    ).resolves.toMatchObject({
+      reason: "uncommitted_changes",
+      files: ["components/control/composer.tsx", "tests/unit/paste.test.ts"],
+    });
+    expect(stopRequested).toBe(false);
+  });
+
+  it("stops a dirty sandbox once the operator agreed to discard changes", async () => {
+    let inspected = false;
+    global.fetch = async () => stopResponse();
+    const tool = createStopSandbox("user-1", undefined, {
+      execute: async () => {
+        inspected = true;
+        return Response.json({ exitCode: 0, stdout: " M a.ts\n", stderr: "" });
+      },
+    }) as unknown as {
+      execute: (input: {
+        sandboxId: string;
+        discardChanges?: boolean;
+      }) => Promise<unknown>;
+    };
+
+    await expect(
+      tool.execute({ sandboxId: "sandbox-selected", discardChanges: true })
+    ).resolves.toMatchObject({ ok: true, status: "stopped" });
+    expect(inspected).toBe(false);
+  });
+
+  it.each([429, 500, 404])(
+    "preserves the sandbox when inspection fails with %s",
+    async (status) => {
+      let stopRequested = false;
+      global.fetch = async () => {
+        stopRequested = true;
+        return stopResponse();
+      };
+      const tool = createStopSandbox("user-1", undefined, {
+        execute: async () =>
+          Response.json(
+            { error: "Another sandbox command is already running" },
+            { status }
+          ),
+      }) as unknown as {
+        execute: (input: { sandboxId: string }) => Promise<unknown>;
+      };
+
+      await expect(
+        tool.execute({ sandboxId: "sandbox-selected" })
+      ).resolves.toMatchObject({
+        reason: "inspection_unavailable",
+        error: expect.stringContaining(
+          "Another sandbox command is already running"
+        ),
+      });
+      expect(stopRequested).toBe(false);
+    }
+  );
 });

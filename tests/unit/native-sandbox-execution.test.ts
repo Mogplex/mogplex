@@ -75,7 +75,7 @@ test("native commands execute through the authorized route in-process, not the 3
       exitCode: 0,
       stdout: "quiet-command-done",
       stderr: "",
-      cwd: ".",
+      cwd: "/vercel/sandbox",
     });
     assert.equal(f.commands.length, 1);
     assert.match(f.commands[0], /sleep 330/);

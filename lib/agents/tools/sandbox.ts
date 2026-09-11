@@ -19,6 +19,10 @@ import {
   EXEC_STDOUT_LIMIT,
   EXEC_STDERR_LIMIT,
 } from "./sandbox-http-execution";
+import {
+  describeUncommittedChanges,
+  inspectUncommittedChanges,
+} from "./sandbox-stop-guard";
 
 export { getBlockedAgentShellCommand } from "./shell-command-guard";
 
@@ -132,7 +136,12 @@ async function retryExecAfterSandboxLoss(
 
 const terminalParams = z.object({
   command: z.string().describe("Shell command to run"),
-  cwd: z.string().optional().describe("Working directory"),
+  cwd: z
+    .string()
+    .optional()
+    .describe(
+      "Optional working directory. Commands default to the sandbox launch directory, which may be a repository subdirectory. Relative paths resolve from that launch directory; absolute paths are used as given. Omit cwd to stay there. Run git rev-parse --show-toplevel to find the checkout root, then use that absolute path as cwd for repository-wide commands."
+    ),
 });
 
 export function createTerminalExec(
@@ -256,8 +265,16 @@ export { createWriteFile } from "./sandbox-files";
 
 const stopSandboxParams = z.object({
   sandboxId: z.string().describe("The sandbox ID to stop"),
+  discardChanges: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set true only after the operator has agreed to lose the sandbox's uncommitted changes. Without it, a sandbox with uncommitted work is not stopped."
+    ),
 });
 type SandboxStopApiResponse = {
+  reason?: string;
+  files?: string[];
   error?: unknown;
   sandbox?: {
     id?: unknown;
@@ -268,6 +285,9 @@ type SandboxStopApiResponse = {
 function readStopResponseString(value: unknown) {
   return typeof value === "string" ? value : null;
 }
+const SANDBOX_STOPPED_MESSAGE =
+  "Sandbox compute stopped. Committed and pushed work is safe; uncommitted changes do not survive a restart. The sandbox record remains available for restart.";
+
 function formatSandboxStopResult(
   data: SandboxStopApiResponse,
   requestedSandboxId: string
@@ -292,19 +312,22 @@ function formatSandboxStopResult(
     ok: true,
     sandboxId,
     status,
-    message:
-      "Sandbox compute stopped. Its record and worktree bindings remain available for restart.",
+    message: SANDBOX_STOPPED_MESSAGE,
   };
 }
 export function createStopSandbox(
   userId?: string,
-  serverSelectedSandbox?: SandboxSelection
+  serverSelectedSandbox?: SandboxSelection,
+  execution?: SandboxCommandExecution
 ) {
   return defineTool({
     description:
-      "Stop sandbox compute while preserving its sandbox record and worktree bindings for restart. Use this when the user asks to stop or shut down the preview. This does not delete the sandbox record.",
+      "Stop sandbox compute. Stopping discards the sandbox filesystem, so uncommitted edits are lost; commit and push them first. A sandbox with uncommitted changes is not stopped unless discardChanges is true after the operator agreed. Use this when the user asks to stop or shut down the preview. This does not delete the sandbox record, which remains available for restart.",
     inputSchema: stopSandboxParams,
-    execute: async ({ sandboxId }: z.infer<typeof stopSandboxParams>) => {
+    execute: async ({
+      sandboxId,
+      discardChanges,
+    }: z.infer<typeof stopSandboxParams>) => {
       const serverSelectedSandboxId = readSelectedSandboxId(
         serverSelectedSandbox
       );
@@ -329,9 +352,30 @@ export function createStopSandbox(
           reason: requestHeaders.reason,
         };
       }
+      if (!discardChanges) {
+        const changes = await inspectUncommittedChanges(
+          sandboxId,
+          requestHeaders.headers,
+          execution?.execute ?? postSandboxExec
+        );
+        if (changes.status === "dirty") {
+          return {
+            error: `The sandbox has ${describeUncommittedChanges(changes)}. Stopping discards them. Commit and push first, or ask the operator whether to discard them and call again with discardChanges: true.`,
+            reason: "uncommitted_changes" as const,
+            files: changes.files,
+          };
+        }
+        if (changes.status === "unknown") {
+          return {
+            error: `Could not verify uncommitted changes (${changes.error}). The sandbox was not stopped. Retry the inspection, or ask the operator whether to discard any changes and call again with discardChanges: true.`,
+            reason: "inspection_unavailable" as const,
+          };
+        }
+      }
       const res = await fetch(`${baseUrl}/api/sandbox/${sandboxId}/stop`, {
         method: "POST",
         headers: requestHeaders.headers,
+        body: JSON.stringify({ discardChanges: discardChanges === true }),
       });
       const data = (await res
         .json()
@@ -345,10 +389,15 @@ export function createStopSandbox(
         }
         return {
           error: readStopResponseString(data.error) ?? "Failed to stop sandbox",
+          ...(data.files ? { files: data.files } : {}),
           reason:
-            res.status === 404 || res.status === 410
-              ? ("sandbox_not_found" as const)
-              : ("sandbox_unavailable" as const),
+            data.reason === "uncommitted_changes" ||
+            data.reason === "inspection_unavailable" ||
+            data.reason === "sandbox_busy"
+              ? data.reason
+              : res.status === 404 || res.status === 410
+                ? ("sandbox_not_found" as const)
+                : ("sandbox_unavailable" as const),
         };
       }
       const result = formatSandboxStopResult(data, sandboxId);

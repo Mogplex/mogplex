@@ -17,5 +17,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/db/**/*.test.ts"],
+    // Cases boot WASM Postgres and apply real migrations before assertions.
+    // Allow CI contention; this tier checks correctness, not query latency.
+    testTimeout: 30_000,
   },
 });
