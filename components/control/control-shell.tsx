@@ -93,7 +93,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     clearError: clearActiveChatError,
     activeChat,
     runningSessionIds,
-    canArchiveSession,
+    reserveArchiveSession,
     setSessionMessages,
     removeSession,
     addToolApprovalResponse,
@@ -148,7 +148,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     deepLinkTarget: searchParams.get("mission"),
     chatPending,
   });
-  const archive = useSessionArchive({ setSessionArchived, canArchiveSession });
+  const archive = useSessionArchive({ setSessionArchived, reserveArchiveSession });
   const displaySessions = useMemo(
     () => canonicalizeControlSessionProjects(sessions, repos),
     [repos, sessions]
@@ -475,7 +475,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                   value={composerInput}
                   onChange={setComposerInput}
                   onSend={handleSend}
-                  pending={chatPending}
+                  pending={chatPending} archiving={archive.archivingId === activeChatId}
                   onStop={stop}
                   initialModelId={activeSession?.model_id ?? null}
                   onModelSelect={selectModel}

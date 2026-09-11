@@ -52,6 +52,10 @@ export function useControlSessions({
   const mutationRevisionRef = useRef(0);
   const removedSessionIdsRef = useRef(new Set<string>());
   const selectionRevisionRef = useRef(0);
+  const selectedIdRef = useRef(sessionId);
+  useLayoutEffect(() => {
+    selectedIdRef.current = sessionId;
+  }, [sessionId]);
   const restoredSelectionRef = useRef(false);
   const refreshRevisionRef = useRef(0);
 
@@ -126,11 +130,16 @@ export function useControlSessions({
       const res = await fetch(`/api/control/sessions?id=${id}`);
       if (!res.ok) return;
       const record = (await res.json()) as ControlSessionRecord;
+      if (
+        revision !== selectionRevisionRef.current ||
+        removedSessionIdsRef.current.has(id)
+      )
+        return;
       const hydrated = setSessionMessages(record.id, record.messages ?? []);
       if (hydrated) {
         updatedAtBySessionRef.current.set(record.id, record.updated_at);
       }
-      if (revision !== selectionRevisionRef.current) return;
+      selectedIdRef.current = record.id;
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
     },
@@ -336,10 +345,6 @@ export function useControlSessions({
     [removeSessionMessages, sessionId, setSessionId]
   );
 
-  const selectedIdRef = useRef(sessionId);
-  useLayoutEffect(() => {
-    selectedIdRef.current = sessionId;
-  }, [sessionId]);
   const setSessionArchived = useCallback(
     async (
       target: ControlSessionSummary,
@@ -362,7 +367,6 @@ export function useControlSessions({
         session: ControlSessionRecord;
       };
       mutationRevisionRef.current++;
-      selectionRevisionRef.current++;
       updatedAtBySessionRef.current.set(target.id, session.updated_at);
       if (archived) {
         removedSessionIdsRef.current.add(target.id);

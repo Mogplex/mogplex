@@ -7,6 +7,39 @@ function userMessage(id: string, text: string): UIMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
 }
 
+test("archive reservations reject submissions and approvals without changing chat state", async () => {
+  const registry = new ControlChatRegistry(
+    async () => {},
+    () => {},
+    () => {}
+  );
+  registry.hydrate("target", [userMessage("saved", "Keep this transcript")]);
+  const chat = registry.get("target");
+  const release = registry.reserveArchive("target");
+  assert.ok(release);
+  assert.equal(registry.reserveArchive("target"), null);
+  assert.equal(registry.canArchive("other"), true);
+  await assert.rejects(
+    chat.sendMessage({ text: "A concurrent reply" }),
+    /archive to finish/
+  );
+  await assert.rejects(async () => {
+    await chat.addToolApprovalResponse({ id: "approval", approved: true });
+  }, /archive to finish/);
+  assert.deepEqual(chat.messages, [
+    userMessage("saved", "Keep this transcript"),
+  ]);
+  assert.equal(chat.status, "ready");
+  release();
+  assert.equal(registry.canArchive("target"), true);
+  registry.remove("target");
+  await assert.rejects(
+    chat.sendMessage({ text: "A stale composer callback" }),
+    /no longer available/
+  );
+  registry.dispose();
+});
+
 async function flushMicrotasks() {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }

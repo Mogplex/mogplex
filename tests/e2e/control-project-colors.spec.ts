@@ -48,7 +48,9 @@ test("project identity colors stay distinct and stable across sorting and themes
   const dark = await colors();
   expect(new Set(dark).size).toBe(names.length);
   expect(dark).not.toContain("rgba(0, 0, 0, 0)");
-  await sidebar.getByRole("button", { name: /Sort/ }).click();
+  await sidebar.getByRole("button", { name: "Sidebar options" }).click();
+  await page.getByRole("menuitem", { name: "Sort chats by" }).hover();
+  await page.getByRole("menuitemradio", { name: "Name", exact: true }).click();
   expect(await colors()).toEqual(dark);
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
   const light = await colors();

@@ -8,19 +8,20 @@ import { loadControlSessionList } from "./session-list-data";
 
 export type SetSessionArchived = (session: ControlSessionSummary, archived: boolean) => Promise<ControlSessionSummary | null>;
 
-export function useSessionArchive({ setSessionArchived, canArchiveSession }: {
+export function useSessionArchive({ setSessionArchived, reserveArchiveSession }: {
   setSessionArchived: SetSessionArchived;
-  canArchiveSession: (id: string) => boolean;
+  reserveArchiveSession: (id: string) => (() => void) | null;
 }) {
   const [viewing, setViewing] = useState(false);
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const loadRevision = useRef(0);
-  const canArchiveRef = useRef(canArchiveSession);
-  useLayoutEffect(() => { canArchiveRef.current = canArchiveSession; }, [canArchiveSession]);
+  const reserveArchiveRef = useRef(reserveArchiveSession);
+  useLayoutEffect(() => { reserveArchiveRef.current = reserveArchiveSession; }, [reserveArchiveSession]);
 
   const show = useCallback(async () => {
     setViewing(true);
@@ -49,10 +50,17 @@ export function useSessionArchive({ setSessionArchived, canArchiveSession }: {
       // Each request uses the displayed revision. A chat that changed since
       // it was listed stays visible; do not rebase an archive over new work.
       for (const target of targets) {
-        if (archived && !canArchiveRef.current(target.id)) { skipped++; continue; }
-        const result = await setSessionArchived(target, archived).catch(() => null);
-        if (result) changed.push(result);
-        else failed++;
+        const release = archived ? reserveArchiveRef.current(target.id) : () => {};
+        if (!release) { skipped++; continue; }
+        if (archived) setArchivingId(target.id);
+        try {
+          const result = await setSessionArchived(target, archived).catch(() => null);
+          if (result) changed.push(result);
+          else failed++;
+        } finally {
+          release();
+          setArchivingId(null);
+        }
       }
       loadRevision.current++;
       setLoading(false);
@@ -85,7 +93,7 @@ export function useSessionArchive({ setSessionArchived, canArchiveSession }: {
   }, [change]);
 
   return {
-    viewing, sessions, loading, busy, error, show, archive,
+    viewing, sessions, loading, busy, archivingId, error, show, archive,
     back: () => { loadRevision.current++; setLoading(false); setViewing(false); setError(null); },
     restore: (session: ControlSessionSummary) => change([session], false),
   };
