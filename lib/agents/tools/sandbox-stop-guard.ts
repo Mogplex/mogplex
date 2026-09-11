@@ -2,17 +2,15 @@ import type { postSandboxExec } from "./sandbox-http-execution";
 
 /**
  * Stopping sandbox compute discards its filesystem, so uncommitted edits are
- * lost. Before the stop tool proceeds it asks Git what would be lost, ignoring
- * the artifacts sandbox boot writes itself (`.mogplex/` runtime files and the
- * preview patch in `next.config.*`), which are never the operator's work.
+ * lost. Inspect the entire checkout, including siblings of the launch folder.
+ * Only `.mogplex/` runtime artifacts are excluded. Configuration edits count
+ * as work because boot patches cannot be distinguished from operator edits.
  */
 export const UNCOMMITTED_CHANGES_COMMAND = [
-  "git status --porcelain=v1 --untracked-files=all --",
+  'git -C "$(git rev-parse --show-toplevel)" status --porcelain=v1 --untracked-files=all --',
   ".",
   "':(glob,exclude).mogplex/**'",
   "':(glob,exclude)**/.mogplex/**'",
-  "':(glob,exclude)next.config.*'",
-  "':(glob,exclude)**/next.config.*'",
 ].join(" ");
 
 const MAX_LISTED_FILES = 8;

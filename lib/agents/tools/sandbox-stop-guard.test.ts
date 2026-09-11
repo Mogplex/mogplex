@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  UNCOMMITTED_CHANGES_COMMAND,
   describeUncommittedChanges,
   parseUncommittedChanges,
 } from "./sandbox-stop-guard";
@@ -21,16 +20,6 @@ describe("parseUncommittedChanges", () => {
     expect(report.files[0]).toBe("src/file-0.ts");
     expect(describeUncommittedChanges(report)).toMatch(
       /^10 uncommitted change\(s\): src\/file-0\.ts.* and 2 more$/
-    );
-  });
-
-  it("excludes sandbox boot artifacts from the status query", () => {
-    expect(UNCOMMITTED_CHANGES_COMMAND).toContain("--untracked-files=all");
-    expect(UNCOMMITTED_CHANGES_COMMAND).toContain(
-      ":(glob,exclude)**/.mogplex/**"
-    );
-    expect(UNCOMMITTED_CHANGES_COMMAND).toContain(
-      ":(glob,exclude)**/next.config.*"
     );
   });
 });
