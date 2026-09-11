@@ -211,3 +211,56 @@ it("does not guess a workspace from an unsupported recursive glob", async () => 
     )
   ).toBeNull();
 });
+
+it.each([
+  "pnpm exec next dev",
+  "npm exec -- next dev",
+  "yarn exec next dev",
+  "bun exec next dev",
+  "pnpm dlx next dev",
+  "yarn dlx next dev",
+  "bun x next dev",
+])(
+  "preserves static PORT through executable invocation: %s",
+  async (executable) => {
+    const command = `PORT=3015 ${executable}`;
+    expect(await resolvePackageDevPort(repository(command), {})).toBe(3015);
+    expect(
+      await resolvePackageDevPort(repository("next dev"), {
+        devCommand: command,
+      })
+    ).toBe(3015);
+    expect(
+      await resolvePackageDevPort(
+        repository("pnpm run serve", undefined, {
+          "package.json": JSON.stringify({
+            scripts: { dev: "pnpm run serve", serve: command },
+          }),
+        }),
+        {}
+      )
+    ).toBe(3015);
+    expect(
+      await resolvePackageDevPort(
+        repository(`PORT=3015 pnpm run serve`, undefined, {
+          "package.json": JSON.stringify({
+            scripts: { dev: "PORT=3015 pnpm run serve", serve: executable },
+          }),
+        }),
+        {}
+      )
+    ).toBe(3015);
+    expect(
+      await resolvePackageDevPort(repository(`${command} --port 4111`), {})
+    ).toBe(4111);
+  }
+);
+
+it("does not confuse an explicit script named exec with an executable invocation", async () => {
+  const files = repository("PORT=3015 pnpm run exec", undefined, {
+    "package.json": JSON.stringify({
+      scripts: { dev: "PORT=3015 pnpm run exec", exec: "next dev --port 4111" },
+    }),
+  });
+  expect(await resolvePackageDevPort(files, {})).toBe(4111);
+});

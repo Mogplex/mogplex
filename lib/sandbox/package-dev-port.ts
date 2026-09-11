@@ -234,6 +234,15 @@ export async function resolvePackageDevPort(
         !names.has(tokens[index - 1]) &&
         !token.startsWith("-")
     );
+    // These commands launch an executable, not a package script. Its static
+    // PORT environment survives; explicit port flags were resolved above.
+    // Keep `run exec` on the alias path so a script named exec still works.
+    if (
+      ["exec", "dlx"].includes(positional[0]) ||
+      (manager === "bun" && positional[0] === "x")
+    ) {
+      return envPort;
+    }
     const script =
       positional[0] === "run" || positional[0] === "run-script"
         ? positional[1]
