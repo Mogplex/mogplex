@@ -190,9 +190,7 @@ export async function* bootstrapFromBaselineSnapshotStreaming(
   sandbox: Sandbox,
   opts: BaselineSnapshotBootstrapOpts
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
-  const context = await resolveBootstrapContext(sandbox, opts, {
-    extraPortHints: [opts.devCommand],
-  });
+  const context = await resolveBootstrapContext(sandbox, opts);
   if (context.monorepoAutoTargetMessage) {
     yield { type: "warning", message: context.monorepoAutoTargetMessage };
   }

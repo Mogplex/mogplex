@@ -4,6 +4,7 @@ import {
   type SandboxSource,
 } from "@/lib/sandbox/source-selection";
 import { resolveConfiguredDevPort } from "@/lib/repo-settings";
+import { detectGithubDevPort } from "@/lib/sandbox/dev-port";
 import { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
 import { detectRuntimeFromGithub } from "@/lib/sandbox/runtimes";
 import { previewAllowsRoot404 } from "@/lib/sandbox/client";
@@ -259,21 +260,37 @@ export async function provisionSandboxForLaunch(input: {
   sandboxName?: string;
   sandboxRecordId: string;
 }) {
-  const restored = await restoreSandboxFromSnapshotIfAvailable(input);
+  // Inspect only when creating a VM: reconnects and rejected launches must
+  // not depend on GitHub being available. Carry this port into bootstrap too.
+  const launch = {
+    ...input.launch,
+    configuredDevPort: await detectGithubDevPort({
+      repoFullName: input.launch.repo.full_name,
+      githubToken: input.launch.githubToken,
+      ref: input.launch.cloneRevision,
+      rootDirectory: input.launch.effectiveRootDirectory,
+      devCommand: input.launch.repo.dev_command,
+      devPort: input.launch.configuredDevPort,
+    }),
+  };
+  const restored = await restoreSandboxFromSnapshotIfAvailable({
+    ...input,
+    launch,
+  });
   if (restored.sandbox) {
-    return restored;
+    return { ...restored, devPort: launch.configuredDevPort };
   }
 
   const sandbox = await input.deps.createSandboxForRepo({
-    vercelToken: input.launch.createContext.credentials.vercelToken,
-    vercelTeamId: input.launch.createContext.credentials.vercelTeamId,
-    vercelProjectId: input.launch.createContext.credentials.vercelProjectId,
-    githubToken: input.launch.githubToken,
-    repoFullName: input.launch.repo.full_name,
-    branch: input.launch.cloneRevision,
-    runtime: input.launch.runtime,
-    devPort: input.launch.configuredDevPort,
-    timeoutMs: input.launch.effectiveSandboxTimeoutMs,
+    vercelToken: launch.createContext.credentials.vercelToken,
+    vercelTeamId: launch.createContext.credentials.vercelTeamId,
+    vercelProjectId: launch.createContext.credentials.vercelProjectId,
+    githubToken: launch.githubToken,
+    repoFullName: launch.repo.full_name,
+    branch: launch.cloneRevision,
+    runtime: launch.runtime,
+    devPort: launch.configuredDevPort,
+    timeoutMs: launch.effectiveSandboxTimeoutMs,
     envVars: input.environment.envResolution.envVars,
     networkPolicy: input.environment.networkPolicy,
     ...(input.sandboxName ? { name: input.sandboxName } : {}),
@@ -282,6 +299,7 @@ export async function provisionSandboxForLaunch(input: {
 
   return {
     sandbox,
+    devPort: launch.configuredDevPort,
     restoredFromSnapshot: false,
     restoredFromBaselineSnapshot: false,
     shouldQueueDeferredSnapshot: restored.shouldQueueDeferredSnapshot,

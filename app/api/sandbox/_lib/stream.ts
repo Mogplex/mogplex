@@ -130,7 +130,7 @@ export async function executeSandboxLaunchStream(input: {
     });
     await consumeSandboxBootstrapStream({
       state,
-      launch: input.launch,
+      launch: { ...input.launch, configuredDevPort: provisioned.devPort },
       deps: input.deps,
       environment,
       emit: input.emit,

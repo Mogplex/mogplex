@@ -74,6 +74,7 @@ test("buildRepoSnapshot persists lockfile hash and commit SHA", async () => {
     root_directory: null,
     runtime: "node22" as const,
     dev_port: 3000,
+    dev_port_auto: false,
     install_command: null,
     dev_command: null,
     snapshot_id: null,
