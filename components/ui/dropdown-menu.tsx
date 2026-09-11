@@ -122,8 +122,9 @@ function DropdownMenuRadioGroup({
 function DropdownMenuRadioItem({
   className,
   children,
+  indicator,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem> & { indicator?: React.ReactNode }) {
   return (
     <DropdownMenuPrimitive.RadioItem
       data-slot="dropdown-menu-radio-item"
@@ -135,9 +136,9 @@ function DropdownMenuRadioItem({
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <svg viewBox="0 0 24 24" fill="currentColor" className="size-2">
+          {indicator ?? <svg viewBox="0 0 24 24" fill="currentColor" className="size-2">
             <circle cx="12" cy="12" r="6" />
-          </svg>
+          </svg>}
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

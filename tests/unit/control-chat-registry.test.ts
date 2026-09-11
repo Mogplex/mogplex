@@ -70,10 +70,12 @@ test("ControlChatRegistry preserves local messages until persistence recovers", 
 
   assert.equal(registry.hydrate("session-a", local), true);
   const failedPersist = registry.persistFinishedMessages("session-a", local);
+  assert.equal(registry.canArchive("session-a"), false);
   assert.equal(registry.hydrate("session-a", stale), false);
   await flushMicrotasks();
   settlePersist?.("reject");
   await failedPersist;
+  assert.equal(registry.canArchive("session-a"), false);
 
   assert.equal(registry.hydrate("session-a", stale), false);
   assert.deepEqual(registry.get("session-a").messages, local);
@@ -84,6 +86,7 @@ test("ControlChatRegistry preserves local messages until persistence recovers", 
   await flushMicrotasks();
   settlePersist?.("resolve");
   await recoveredPersist;
+  assert.equal(registry.canArchive("session-a"), true);
   assert.equal(registry.hydrate("session-a", stale), true);
 
   registry.dispose();

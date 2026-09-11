@@ -32,36 +32,55 @@ async function getSessionRecord(
   return data;
 }
 
-export async function GET(req: Request) {
-  const userId = await requireUserId();
-  if (userId instanceof Response) return userId;
+const defaultGetDeps = { requireUserId, client: supabaseAdmin };
 
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get("id");
+export function createControlSessionsGetHandler(deps = defaultGetDeps) {
+  return async function GET(req: Request) {
+    const userId = await deps.requireUserId();
+    if (userId instanceof Response) return userId;
 
-  if (id) {
-    const data = await getSessionRecord(id, userId);
-    if (!data) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (id) {
+      const data = await getSessionRecord(id, userId, deps.client);
+      if (!data) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      return NextResponse.json(data);
     }
-    return NextResponse.json(data);
-  }
 
-  const { data, error } = await supabaseAdmin
-    .from("control_sessions")
-    .select(LIST_COLUMNS)
-    .eq("user_id", userId)
-    .eq("archived", false)
-    .order("pinned", { ascending: false })
-    .order("updated_at", { ascending: false })
-    .limit(200);
+    const archived = searchParams.get("archived");
+    const offset = Number(searchParams.get("offset") ?? 0);
+    if (
+      (archived !== null && archived !== "true" && archived !== "false") ||
+      !Number.isSafeInteger(offset) ||
+      offset < 0
+    ) {
+      return NextResponse.json(
+        { error: "Invalid list options" },
+        { status: 400 }
+      );
+    }
+    const { data, error } = await deps.client
+      .from("control_sessions")
+      .select(LIST_COLUMNS)
+      .eq("user_id", userId)
+      .eq("archived", archived === "true")
+      .order("pinned", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(offset, offset + 199);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
-  return NextResponse.json(data || []);
+    return NextResponse.json(data || []);
+  };
 }
+
+export const GET = createControlSessionsGetHandler();
 
 export async function POST(req: Request) {
   const userId = await requireUserId();
@@ -242,6 +261,35 @@ export function createControlSessionsPutHandler(deps = defaultPutDeps) {
     }
 
     const fields = pickControlSessionUpdateFields(body);
+    if (
+      Object.hasOwn(fields, "archived") &&
+      typeof fields.archived !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "Invalid archived value" },
+        { status: 400 }
+      );
+    }
+    if (fields.archived === true) {
+      // The sidebar knows its local streams; also preserve work in other tabs.
+      const { data: liveCalls, error: liveError } = await deps.client
+        .from("ai_calls")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("conversation_id", id)
+        .in("status", ["pending", "streaming"])
+        .limit(1);
+      if (liveError)
+        return NextResponse.json(
+          { error: "Could not check chat activity" },
+          { status: 500 }
+        );
+      if (liveCalls?.length)
+        return NextResponse.json(
+          { error: "Chat is still running" },
+          { status: 409 }
+        );
+    }
     if (Object.hasOwn(fields, "messages")) {
       const current = await getSessionRecord(id, userId, deps.client);
       if (!current || current.archived) {

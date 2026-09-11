@@ -126,6 +126,15 @@ export class ControlChatRegistry {
     return true;
   }
 
+  canArchive(sessionId: string) {
+    const chat = this.chats.get(sessionId);
+    return (
+      !(chat && isRunning(chat)) &&
+      !this.persisting.has(sessionId) &&
+      !this.persistFailed.has(sessionId)
+    );
+  }
+
   remove(sessionId: string) {
     const existing = this.chats.get(sessionId);
     if (existing) void existing.stop();
@@ -269,6 +278,7 @@ export function useControlChats({
     clearError: activeChat.clearError,
     addToolApprovalResponse: activeChat.addToolApprovalResponse,
     runningSessionIds,
+    canArchiveSession: (id: string) => registry.canArchive(id),
     setSessionMessages,
     removeSession,
   };

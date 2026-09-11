@@ -6,7 +6,7 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
-import { ChatPlusIn, MoreHoriz, Trash } from "iconoir-react";
+import { Archive, ChatPlusIn, MoreHoriz, Trash } from "iconoir-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,12 +21,14 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
@@ -58,23 +60,32 @@ export function ProjectRowActions({
   children,
   projectName,
   onNew,
+  onArchive,
+  archiveDisabled,
 }: {
   children: ReactNode;
   projectName: string;
   onNew: () => void;
+  onArchive: () => void;
+  archiveDisabled: boolean;
 }) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="group flex min-w-0 items-center">
           {children}
-          <ProjectActionButton projectName={projectName} onNew={onNew} />
+          <ProjectActionButton projectName={projectName} onNew={onNew} onArchive={onArchive} archiveDisabled={archiveDisabled} />
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent aria-label={`Actions for ${projectName}`}>
         <ContextMenuItem onSelect={onNew}>
           <ChatPlusIn aria-hidden="true" />
           New chat
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={onArchive} disabled={archiveDisabled}>
+          <Archive aria-hidden="true" />
+          Archive chats
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -84,9 +95,13 @@ export function ProjectRowActions({
 export function ProjectActionButton({
   projectName,
   onNew,
+  onArchive,
+  archiveDisabled,
 }: {
   projectName: string;
   onNew: () => void;
+  onArchive: () => void;
+  archiveDisabled: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -97,6 +112,11 @@ export function ProjectActionButton({
         <DropdownMenuItem onSelect={onNew}>
           <ChatPlusIn aria-hidden="true" />
           New chat
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onArchive} disabled={archiveDisabled}>
+          <Archive aria-hidden="true" />
+          Archive chats
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -48,7 +48,7 @@ import { useControlSessionActions } from "./use-control-session-actions";
 import { useControlSandboxStart } from "./use-control-sandbox-start";
 import { useControlComposerActions } from "./use-control-composer-actions";
 import { useControlWorkers } from "./use-control-workers";
-
+import { useSessionArchive } from "./use-session-archive";
 export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
@@ -93,6 +93,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     clearError: clearActiveChatError,
     activeChat,
     runningSessionIds,
+    canArchiveSession,
     setSessionMessages,
     removeSession,
     addToolApprovalResponse,
@@ -138,6 +139,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     updateSession,
     deleteSession,
     persistSession,
+    setSessionArchived,
   } = useControlSessions({
     sessionId,
     setSessionId,
@@ -146,6 +148,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     deepLinkTarget: searchParams.get("mission"),
     chatPending,
   });
+  const archive = useSessionArchive({ setSessionArchived, canArchiveSession });
   const displaySessions = useMemo(
     () => canonicalizeControlSessionProjects(sessions, repos),
     [repos, sessions]
@@ -342,6 +345,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         onSelectSession={handleSelectSession}
         onNewSession={startNewSession}
         onDeleteSession={deleteChat}
+        archive={archive}
         preferredRepoId={newSessionRepoId}
         composerKey={newSessionRequest}
       />
@@ -357,6 +361,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         onSelect={handleSelectSession}
         onNew={startNewSession}
         onDelete={deleteChat}
+        archive={archive}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <ControlTopBar
@@ -382,7 +387,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
             void updateSession({ title });
           }}
           onArchive={() => {
-            void updateSession({ archived: true });
+            if (activeSession) void archive.archive([activeSession]);
           }}
           onExportTranscript={handleExportTranscript}
           onCopyLink={handleCopyLink}
