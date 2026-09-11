@@ -566,7 +566,6 @@
 
 .mpx-button.is-primary {
   background: var(--accent);
-  box-shadow: 0 10px 22px -8px rgb(255 75 0 / 60%);
   color: var(--neutral-0);
 }
 
@@ -593,7 +592,6 @@
 
 .mpx-button.is-small {
   padding: 10px 20px;
-  box-shadow: 0 8px 18px -6px rgb(255 75 0 / 55%);
   font-size: 14px;
 }
 
@@ -2775,10 +2773,6 @@ path.mpx-dag-line,
   padding: 14px 24px;
   font-size: 14px;
   font-weight: 600;
-}
-
-.mpx-enterprise-actions .mpx-button.is-primary {
-  box-shadow: 0 10px 22px -8px rgb(255 75 0 / 55%);
 }
 
 .mpx-enterprise-tiles {
