@@ -18,7 +18,7 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
   const [busy, setBusy] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pending = useRef(false);
+  const mutationQueue = useRef<Promise<void>>(Promise.resolve());
   const loadRevision = useRef(0);
   const viewingRef = useRef(false);
   const reserveArchiveRef = useRef(reserveArchiveSession);
@@ -40,9 +40,7 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
     }
   }, []);
 
-  const change = useCallback(async (targets: ControlSessionSummary[], archived: boolean) => {
-    if (pending.current) return { changed: [], failed: 0, skipped: 0 };
-    pending.current = true;
+  const runChange = useCallback(async (targets: ControlSessionSummary[], archived: boolean) => {
     setBusy(true);
     setError(null);
     const changed: ControlSessionSummary[] = [];
@@ -82,10 +80,17 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
       }
       return { changed, failed, skipped };
     } finally {
-      pending.current = false;
       setBusy(false);
     }
   }, [setSessionArchived, show]);
+
+  const change = useCallback((targets: ControlSessionSummary[], archived: boolean) => {
+    // Toast Undo stays actionable while later operations are in flight.
+    // Serialize it behind those operations instead of dropping the request.
+    const result = mutationQueue.current.then(() => runChange(targets, archived));
+    mutationQueue.current = result.then(() => {}, () => {});
+    return result;
+  }, [runChange]);
 
   const archive = useCallback(async (targets: ControlSessionSummary[]) => {
     const { changed, failed, skipped } = await change(targets, true);

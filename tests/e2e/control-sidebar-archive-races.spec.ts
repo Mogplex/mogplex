@@ -163,6 +163,40 @@ for (const mutation of ["archive", "restore"] as const) {
   });
 }
 
+test("Undo waits for another archive instead of discarding the restore", async ({
+  page,
+}) => {
+  const archiving = deferred();
+  const response = deferred();
+  const { sidebar } = await setupControlSidebar(page, {
+    updated: async (session) => {
+      if (session.id === "chat-6" && session.archived) {
+        archiving.resolve();
+        await response.promise;
+      }
+    },
+  });
+  try {
+    await archiveSelected(page);
+    await expect(
+      page.getByText("1 chat archived", { exact: true })
+    ).toBeVisible();
+    await sidebar.getByRole("button", { name: /^Fix 6 / }).click();
+    await archiveSelected(page);
+    await archiving.promise;
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    response.resolve();
+    await expect(
+      sidebar.getByRole("button", { name: /^Zebra investigation/ })
+    ).toBeVisible();
+    await expect(sidebar.getByRole("button", { name: /^Fix 6 / })).toHaveCount(
+      0
+    );
+  } finally {
+    response.resolve();
+  }
+});
+
 test("Undo preserves older archives while the archived list is loading", async ({
   page,
 }) => {
