@@ -140,7 +140,7 @@ const terminalParams = z.object({
     .string()
     .optional()
     .describe(
-      "Optional working directory. Commands run from the repository root by default; a relative value resolves from there. Omit it unless the command must run in a subdirectory."
+      "Optional working directory. Commands default to the sandbox launch directory, which may be a repository subdirectory. Relative paths resolve from that launch directory; absolute paths are used as given. Omit cwd to stay there. Run git rev-parse --show-toplevel to find the checkout root, then use that absolute path as cwd for repository-wide commands."
     ),
 });
 

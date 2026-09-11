@@ -115,6 +115,32 @@ test("the launch subdirectory is the default working directory", async () => {
   assert.equal(seen[0]?.cwd, "/vercel/sandbox/apps/web");
 });
 
+test("explicit monorepo cwd values resolve from the launch folder or an absolute checkout path", async () => {
+  const seen: RunCommandInput[] = [];
+  const handler = await createHandler({
+    rootDirectory: "apps/web",
+    runCommand: async (input) => {
+      seen.push(input);
+      return immediateResult;
+    },
+  });
+
+  for (const [cwd, expected] of [
+    [".", "/vercel/sandbox/apps/web"],
+    ["src", "/vercel/sandbox/apps/web/src"],
+    ["../../packages/shared", "/vercel/sandbox/packages/shared"],
+    ["/vercel/sandbox", "/vercel/sandbox"],
+  ]) {
+    const response = await handler(
+      execRequest({ command: "pwd", cwd }),
+      buildSandboxRouteParams()
+    );
+    assert.equal(response.status, 200);
+    assert.equal(seen.at(-1)?.cwd, expected);
+    assert.equal((await response.json()).cwd, expected);
+  }
+});
+
 test("a compound command that starts with cd runs as a shell command", async () => {
   const seen: RunCommandInput[] = [];
   const handler = await createHandler({
