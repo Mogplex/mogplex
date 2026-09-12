@@ -59,6 +59,7 @@ export function startDataForEvent(
     labelName: _labelName,
     labelPrOnly: _labelPrOnly,
     tagPattern: _tagPattern,
+    dependabotAlertActions: _dependabotAlertActions,
     scheduleCron: _scheduleCron,
     scheduleTimezone: _scheduleTimezone,
     slackTeamId: _slackTeamId,
@@ -71,6 +72,9 @@ export function startDataForEvent(
     ...rest,
     event: nextEvent,
     label: EVENT_OPTIONS.find((option) => option.value === nextEvent)?.label || data.label,
+    ...(nextEvent === "dependabot_alert"
+      ? { dependabotAlertActions: ["created"] }
+      : {}),
     ...(nextEvent === "schedule"
       ? { scheduleCron: "0 9 * * 1-5", scheduleTimezone: "UTC" }
       : {}),

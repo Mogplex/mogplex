@@ -15,6 +15,7 @@ export const TRIGGER_EVENTS = [
   "ci_failure",
   "labeled",
   "tag_push",
+  "dependabot_alert",
   "schedule",
   "webhook",
   "slack_mention",

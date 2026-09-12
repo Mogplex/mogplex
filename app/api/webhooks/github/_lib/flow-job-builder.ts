@@ -1,3 +1,7 @@
+import {
+  isDependabotAlertAction,
+  normalizeDependabotAlertActions,
+} from "@/lib/dependabot";
 import crypto from "node:crypto";
 import { buildPrReviewHeadShaDedupKey } from "@/lib/automation-review";
 import {
@@ -135,6 +139,17 @@ function flowMatchesTriggerResult(
 
   if (start.event === "tag_push") {
     return doesTagPushResultMatchStart(start, result);
+  }
+
+  if (start.event === "dependabot_alert") {
+    const action =
+      typeof result.metadata.webhook_action === "string"
+        ? result.metadata.webhook_action
+        : null;
+    const actions = normalizeDependabotAlertActions(
+      start.dependabotAlertActions
+    );
+    return isDependabotAlertAction(action) && actions.includes(action);
   }
 
   if (start.event !== "mention") {

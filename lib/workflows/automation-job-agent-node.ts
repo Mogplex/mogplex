@@ -1,3 +1,4 @@
+import { fetchDependabotAlert } from "@/lib/agents/dependabot";
 /**
  * Agent node execution for executeResolvedFlow.
  *
@@ -295,6 +296,24 @@ export async function executeFlowAgentNode(
           ? nodeContext.metadata.base_repo_full_name
           : nodeContext.repo.full_name,
     });
+
+  if (nodeContext.assignmentType === "dependabot_alert" && harnessId) {
+    const alert = await fetchDependabotAlert({
+      githubToken,
+      repoFullName: nodeContext.repo.full_name,
+      alertNumber: nodeContext.metadata.alert_number,
+    });
+    if (nodeContext.metadata.webhook_action !== "created") {
+      return completeSkipped(
+        `Dependabot lifecycle reconciled; existing work is unchanged. Canonical alert: ${JSON.stringify(alert)}`
+      );
+    }
+    if (alert.alert_state !== "open" || !alert.first_patched_version) {
+      return completeSkipped(
+        `${alert.alert_state === "open" ? "No patched version is available. A human decision is needed." : "Dependabot alert is no longer open. No edit needed."} Canonical alert: ${JSON.stringify(alert)}`
+      );
+    }
+  }
 
   let result: AutomationAgentResult;
 

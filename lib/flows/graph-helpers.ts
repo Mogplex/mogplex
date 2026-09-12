@@ -107,6 +107,7 @@ export function getDefaultFlowAgentRole(
     case "mention":
     case "issue_opened":
     case "issue_comment":
+    case "dependabot_alert":
       return "triage";
     case "pr_opened":
     case "pr_comment":
@@ -139,6 +140,8 @@ export function eventLabel(event: TriggerEvent) {
       return "Label added";
     case "tag_push":
       return "Tag pushed";
+    case "dependabot_alert":
+      return "Dependabot alert";
     case "schedule":
       return "Schedule";
     case "webhook":

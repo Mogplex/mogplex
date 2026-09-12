@@ -87,6 +87,9 @@ export type FlowStartNodeData = {
   // `tag_push` event only: minimal glob over the tag name (`*` matches any run
   // of characters, everything else is literal; empty/absent = any tag).
   tagPattern?: string;
+  // `dependabot_alert` event only. Missing defaults to `created` so older
+  // or hand-authored flows cannot remediate closed alerts accidentally.
+  dependabotAlertActions?: import("@/lib/dependabot").DependabotAlertAction[];
   // `schedule` event only. Trigger.dev evaluates this five-field cron in the
   // selected IANA timezone and passes the scheduled timestamp into the flow.
   scheduleCron?: string;

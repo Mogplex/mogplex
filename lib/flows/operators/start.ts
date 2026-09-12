@@ -1,3 +1,4 @@
+import { normalizeDependabotAlertActions } from "@/lib/dependabot";
 import type {
   FlowNode,
   FlowStartAuthorFilter,
@@ -33,6 +34,7 @@ const VALID_TRIGGER_EVENTS: ReadonlySet<TriggerEvent> = new Set([
   "ci_failure",
   "labeled",
   "tag_push",
+  "dependabot_alert",
   "schedule",
   "webhook",
   "slack_mention",
@@ -169,6 +171,9 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       event === "tag_push" && typeof raw.tagPattern === "string"
         ? raw.tagPattern.trim()
         : "";
+    const dependabotAlertActions = normalizeDependabotAlertActions(
+      raw.dependabotAlertActions
+    );
     const scheduleCron =
       event === "schedule" && typeof raw.scheduleCron === "string"
         ? raw.scheduleCron.trim()
@@ -196,6 +201,11 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       ...(filter ? { filter } : {}),
       ...(labelName ? { labelName } : {}),
       ...(labelPrOnly ? { labelPrOnly: true } : {}),
+      ...(event === "dependabot_alert"
+        ? {
+            dependabotAlertActions,
+          }
+        : {}),
       ...(tagPattern ? { tagPattern } : {}),
       ...(scheduleCron ? { scheduleCron } : {}),
       ...(scheduleTimezone ? { scheduleTimezone } : {}),
@@ -210,6 +220,9 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       label: input.label?.trim() || eventLabel(event),
       event,
       isDefault: input.isDefault ?? event === "mention",
+      ...(event === "dependabot_alert"
+        ? { dependabotAlertActions: ["created"] }
+        : {}),
       ...(event === "schedule"
         ? { scheduleCron: "0 9 * * 1-5", scheduleTimezone: "UTC" }
         : {}),

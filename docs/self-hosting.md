@@ -52,6 +52,12 @@ docker build \
 docker run --env-file .env -p 3000:3000 mogplex
 ```
 
+## GitHub App setup
+
+Mogplex can create a remediation PR when GitHub reports a new Dependabot alert.
+GitHub continues to detect vulnerable dependencies.
+See [Dependabot remediation](./dependabot-remediation.md) for permissions, setup, and run behavior.
+
 ## Slack app setup
 
 Set the Slack OAuth redirect URL to `https://<your-domain>/api/integrations/slack/callback`. The bot OAuth flow requests these scopes: `app_mentions:read`, `channels:history`, `channels:read`, `chat:write`, `files:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `mpim:history`, `mpim:read`, `users:read`, and `users:read.email`.

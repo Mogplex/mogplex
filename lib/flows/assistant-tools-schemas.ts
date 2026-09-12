@@ -39,6 +39,21 @@ export const setStartParams = z.object({
     .describe(
       "For event 'tag_push' only: minimal glob over the tag name (* matches any run of characters). Empty or omitted matches any tag."
     ),
+  dependabotAlertActions: z
+    .array(
+      z.enum([
+        "created",
+        "dismissed",
+        "fixed",
+        "reopened",
+        "reintroduced",
+        "auto_dismissed",
+      ])
+    )
+    .optional()
+    .describe(
+      "For event 'dependabot_alert' only: lifecycle actions to match. Omitted matches created only. An empty array disables matching."
+    ),
   repos: z
     .array(z.string())
     .optional()

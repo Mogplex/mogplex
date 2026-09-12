@@ -113,13 +113,13 @@ test("POST /api/flows creates a validated workflow starter template", async ({
   );
   expect(payload.name).toBe("Dependabot autopilot");
   expect(payload.description).toBe(
-    "Review, repair, and merge safe Dependabot updates."
+    "Remediate newly created Dependabot vulnerability alerts."
   );
-  expect(startNode.data.event).toBe("pr_opened");
-  expect(startNode.data.filter.authorFilter).toBe("dependabot_only");
+  expect(startNode.data.event).toBe("dependabot_alert");
+  expect(startNode.data.dependabotAlertActions).toEqual(["created"]);
   expect(agentNode.data.agentId).toBe("agent-a");
-  expect(agentNode.data.autofixSandbox).toBe(true);
-  expect(agentNode.data.autoMerge).toBe(true);
+  expect(agentNode.data.role).toBe("triage");
+  expect(agentNode.data.autoMerge).not.toBe(true);
 });
 
 test("personal workflow templates are private, sanitized, and rebound on creation", async ({

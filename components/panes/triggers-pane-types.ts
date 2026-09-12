@@ -95,6 +95,7 @@ export const EVENT_BADGES: Record<
     label: "Label",
     color: "text-teal-400 border-teal-400/20 bg-teal-400/[0.06]",
   },
+  dependabot_alert: { label: "Dependabot alert", color: "text-amber-500" },
   tag_push: {
     label: "Tag",
     color: "text-sky-400 border-sky-400/20 bg-sky-400/[0.06]",

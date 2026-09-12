@@ -1,3 +1,5 @@
+import { buildDependabotTools } from "@/lib/agents/dependabot";
+import { createDependabotSandboxLoader } from "./automation-dependabot-sandbox";
 import { generateText } from "ai";
 import { buildPRFixTools, buildSandboxPRFixTools } from "@/lib/agents/pr-fixer";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
@@ -87,143 +89,152 @@ export function createAutomationAgentRunner(
     const baseBranch = context.repo.default_branch || "main";
 
     const tools =
-      assignmentType === "cron_refactor" || assignmentType === "cron"
-        ? buildRefactorTools({
-            skillId: context.skillId || "general-refactor",
+      assignmentType === "dependabot_alert"
+        ? buildDependabotTools({
             githubToken,
-            owner,
-            repo: repoName,
-            branch: baseBranch,
+            repoFullName: context.repo.full_name,
+            alertNumber: context.metadata.alert_number,
+            action: context.metadata.webhook_action,
+            loadSandbox: createDependabotSandboxLoader(context),
           })
-        : assignmentType === "pr_review"
-          ? (() => {
-              if (prReviewNumber == null) {
-                throw new Error(INVALID_PR_REVIEW_CONTEXT);
-              }
+        : assignmentType === "cron_refactor" || assignmentType === "cron"
+          ? buildRefactorTools({
+              skillId: context.skillId || "general-refactor",
+              githubToken,
+              owner,
+              repo: repoName,
+              branch: baseBranch,
+            })
+          : assignmentType === "pr_review"
+            ? (() => {
+                if (prReviewNumber == null) {
+                  throw new Error(INVALID_PR_REVIEW_CONTEXT);
+                }
 
-              return buildPRReviewTools({
-                githubToken,
-                owner,
-                repo: repoName,
-                headOwner: headRepoParts.owner,
-                headRepo: headRepoParts.repo,
-                prNumber: prReviewNumber,
-                defaultRef:
-                  typeof context.metadata.head_ref === "string"
-                    ? context.metadata.head_ref
-                    : undefined,
-                allowPostComment: false,
-                allowPrLifecycle: context.metadata.flow_auto_merge === true,
-              });
-            })()
-          : assignmentType === "push_review"
-            ? buildPRReviewTools({
-                githubToken,
-                owner,
-                repo: repoName,
-                headOwner: owner,
-                headRepo: repoName,
-                prNumber: 0,
-                allowPostComment: true,
-              })
-            : assignmentType === "tag_push"
-              ? // Tag runs get a dedicated toolset: PR tools would 404 on
-                // prNumber 0, and file reads must default to the tag ref, not
-                // a default branch that may have advanced past the tag.
-                buildTagPushTools({
+                return buildPRReviewTools({
                   githubToken,
                   owner,
                   repo: repoName,
-                  tagName:
-                    typeof context.metadata.tag_name === "string"
-                      ? context.metadata.tag_name
-                      : "",
+                  headOwner: headRepoParts.owner,
+                  headRepo: headRepoParts.repo,
+                  prNumber: prReviewNumber,
+                  defaultRef:
+                    typeof context.metadata.head_ref === "string"
+                      ? context.metadata.head_ref
+                      : undefined,
+                  allowPostComment: false,
+                  allowPrLifecycle: context.metadata.flow_auto_merge === true,
+                });
+              })()
+            : assignmentType === "push_review"
+              ? buildPRReviewTools({
+                  githubToken,
+                  owner,
+                  repo: repoName,
+                  headOwner: owner,
+                  headRepo: repoName,
+                  prNumber: 0,
+                  allowPostComment: true,
                 })
-              : assignmentType === "issue_triage"
-                ? buildIssueTools({
+              : assignmentType === "tag_push"
+                ? // Tag runs get a dedicated toolset: PR tools would 404 on
+                  // prNumber 0, and file reads must default to the tag ref, not
+                  // a default branch that may have advanced past the tag.
+                  buildTagPushTools({
                     githubToken,
                     owner,
                     repo: repoName,
-                    issueNumber: context.metadata.issue_number as number,
+                    tagName:
+                      typeof context.metadata.tag_name === "string"
+                        ? context.metadata.tag_name
+                        : "",
                   })
-                : assignmentType === "ci_failure"
-                  ? buildCITools({
+                : assignmentType === "issue_triage"
+                  ? buildIssueTools({
                       githubToken,
                       owner,
                       repo: repoName,
-                      revert:
-                        context.metadata.flow_auto_revert === true &&
-                        typeof context.metadata.head_sha === "string" &&
-                        context.metadata.head_sha.length > 0
-                          ? {
-                              failingSha: context.metadata.head_sha,
-                              // Revert against the branch the failing commit
-                              // was pushed to — CI failures fire for any ref,
-                              // not just the default branch. The tool's
-                              // head-sha check backstops the default-branch
-                              // fallback for older jobs missing head_branch.
-                              branch:
-                                typeof context.metadata.head_branch ===
-                                  "string" &&
-                                context.metadata.head_branch.length > 0
-                                  ? context.metadata.head_branch
-                                  : baseBranch,
-                            }
-                          : undefined,
+                      issueNumber: context.metadata.issue_number as number,
                     })
-                  : assignmentType === "labeled"
-                    ? (() => {
-                        // Label on a PR gets the PR review toolset (file access +
-                        // reportReview for structured findings + postComment);
-                        // label on an issue gets the triage toolset.
-                        const labeledPrNumber =
-                          context.metadata.is_pr === true
-                            ? resolvePullRequestNumber(context.metadata)
-                            : null;
-                        if (labeledPrNumber != null) {
-                          return buildPRReviewTools({
+                  : assignmentType === "ci_failure"
+                    ? buildCITools({
+                        githubToken,
+                        owner,
+                        repo: repoName,
+                        revert:
+                          context.metadata.flow_auto_revert === true &&
+                          typeof context.metadata.head_sha === "string" &&
+                          context.metadata.head_sha.length > 0
+                            ? {
+                                failingSha: context.metadata.head_sha,
+                                // Revert against the branch the failing commit
+                                // was pushed to — CI failures fire for any ref,
+                                // not just the default branch. The tool's
+                                // head-sha check backstops the default-branch
+                                // fallback for older jobs missing head_branch.
+                                branch:
+                                  typeof context.metadata.head_branch ===
+                                    "string" &&
+                                  context.metadata.head_branch.length > 0
+                                    ? context.metadata.head_branch
+                                    : baseBranch,
+                              }
+                            : undefined,
+                      })
+                    : assignmentType === "labeled"
+                      ? (() => {
+                          // Label on a PR gets the PR review toolset (file access +
+                          // reportReview for structured findings + postComment);
+                          // label on an issue gets the triage toolset.
+                          const labeledPrNumber =
+                            context.metadata.is_pr === true
+                              ? resolvePullRequestNumber(context.metadata)
+                              : null;
+                          if (labeledPrNumber != null) {
+                            return buildPRReviewTools({
+                              githubToken,
+                              owner,
+                              repo: repoName,
+                              headOwner: headRepoParts.owner,
+                              headRepo: headRepoParts.repo,
+                              prNumber: labeledPrNumber,
+                              defaultRef:
+                                typeof context.metadata.head_ref === "string"
+                                  ? context.metadata.head_ref
+                                  : undefined,
+                              allowPostComment: true,
+                            });
+                          }
+                          return buildIssueTools({
                             githubToken,
                             owner,
                             repo: repoName,
-                            headOwner: headRepoParts.owner,
-                            headRepo: headRepoParts.repo,
-                            prNumber: labeledPrNumber,
-                            defaultRef:
-                              typeof context.metadata.head_ref === "string"
-                                ? context.metadata.head_ref
-                                : undefined,
-                            allowPostComment: true,
+                            issueNumber: context.metadata
+                              .issue_number as number,
                           });
-                        }
-                        return buildIssueTools({
-                          githubToken,
-                          owner,
-                          repo: repoName,
-                          issueNumber: context.metadata.issue_number as number,
-                        });
-                      })()
-                    : (() => {
-                        const issueNumber = context.metadata.issue_number as
-                          | number
-                          | undefined;
-                        if (!issueNumber) {
-                          return buildPRReviewTools({
+                        })()
+                      : (() => {
+                          const issueNumber = context.metadata.issue_number as
+                            | number
+                            | undefined;
+                          if (!issueNumber) {
+                            return buildPRReviewTools({
+                              githubToken,
+                              owner,
+                              repo: repoName,
+                              headOwner: owner,
+                              headRepo: repoName,
+                              prNumber: 0,
+                              allowPostComment: true,
+                            });
+                          }
+                          return buildCommentTools({
                             githubToken,
                             owner,
                             repo: repoName,
-                            headOwner: owner,
-                            headRepo: repoName,
-                            prNumber: 0,
-                            allowPostComment: true,
+                            issueNumber,
                           });
-                        }
-                        return buildCommentTools({
-                          githubToken,
-                          owner,
-                          repo: repoName,
-                          issueNumber,
-                        });
-                      })();
+                        })();
 
     if (assignmentType === "pr_review") {
       if (prReviewNumber == null) {

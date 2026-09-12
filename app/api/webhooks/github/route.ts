@@ -47,6 +47,8 @@ export {
   handlePullRequest,
   handleTagPush,
   handleCIEvent,
+  handleDependabotAlert,
+  getWebhookEventResults,
   handleIssueComment,
   handlePRReviewComment,
   handleCommitComment,

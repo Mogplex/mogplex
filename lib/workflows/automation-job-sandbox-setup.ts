@@ -122,7 +122,10 @@ export async function launchAutofixSandbox(input: {
   return readSandboxStreamResponse(response);
 }
 
-export async function launchAutomationHarnessSandbox(context: JobContext) {
+export async function launchAutomationHarnessSandbox(
+  context: JobContext,
+  branch?: { workingBranch: string; createBranch: boolean }
+) {
   "use step";
 
   const { createSandboxPostHandler } = await import("@/app/api/sandbox/route");
@@ -134,8 +137,8 @@ export async function launchAutomationHarnessSandbox(context: JobContext) {
       body: JSON.stringify({
         repoId: context.repo.id,
         baseBranch,
-        workingBranch: baseBranch,
-        createBranch: false,
+        workingBranch: branch?.workingBranch ?? baseBranch,
+        createBranch: branch?.createBranch ?? false,
       }),
     })
   );
