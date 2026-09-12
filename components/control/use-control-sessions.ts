@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { UIMessage } from "ai";
 import { mergeControlSessionLists } from "@/lib/control/session-list-merge";
 import {
@@ -9,6 +15,7 @@ import {
 } from "@/lib/control/session-persistence";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
+import { loadControlSessionList } from "./session-list-data";
 
 const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
 const SESSION_EVENTS = [
@@ -45,6 +52,10 @@ export function useControlSessions({
   const mutationRevisionRef = useRef(0);
   const removedSessionIdsRef = useRef(new Set<string>());
   const selectionRevisionRef = useRef(0);
+  const selectedIdRef = useRef(sessionId);
+  useLayoutEffect(() => {
+    selectedIdRef.current = sessionId;
+  }, [sessionId]);
   const restoredSelectionRef = useRef(false);
   const refreshRevisionRef = useRef(0);
 
@@ -90,9 +101,8 @@ export function useControlSessions({
 
   const refreshList = useCallback(async () => {
     const revision = mutationRevisionRef.current;
-    const res = await fetch("/api/control/sessions");
-    if (!res.ok) return;
-    const fetched = (await res.json()) as ControlSessionSummary[];
+    const fetched = await loadControlSessionList().catch(() => null);
+    if (!fetched) return;
     setSessionsLoaded(true);
     for (const session of fetched) {
       if (!updatedAtBySessionRef.current.has(session.id)) {
@@ -120,11 +130,16 @@ export function useControlSessions({
       const res = await fetch(`/api/control/sessions?id=${id}`);
       if (!res.ok) return;
       const record = (await res.json()) as ControlSessionRecord;
+      if (
+        revision !== selectionRevisionRef.current ||
+        removedSessionIdsRef.current.has(id)
+      )
+        return;
       const hydrated = setSessionMessages(record.id, record.messages ?? []);
       if (hydrated) {
         updatedAtBySessionRef.current.set(record.id, record.updated_at);
       }
-      if (revision !== selectionRevisionRef.current) return;
+      selectedIdRef.current = record.id;
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
     },
@@ -330,7 +345,55 @@ export function useControlSessions({
     [removeSessionMessages, sessionId, setSessionId]
   );
 
+  const setSessionArchived = useCallback(
+    async (
+      target: ControlSessionSummary,
+      archived: boolean
+    ): Promise<ControlSessionSummary | null> => {
+      const response = await fetch("/api/control/sessions?summary=true", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: target.id,
+          archived,
+          expected_updated_at: target.updated_at,
+        }),
+      });
+      if (!response.ok) {
+        if (response.status === 409) await refreshList();
+        return null;
+      }
+      const { session } = (await response.json()) as {
+        session: ControlSessionSummary;
+      };
+      mutationRevisionRef.current++;
+      updatedAtBySessionRef.current.set(target.id, session.updated_at);
+      if (archived) {
+        removedSessionIdsRef.current.add(target.id);
+        setSessions((current) =>
+          current.filter((entry) => entry.id !== target.id)
+        );
+        removeSessionMessages(target.id);
+        if (selectedIdRef.current === target.id) setSessionId(null);
+        if (
+          window.localStorage.getItem(LAST_CONTROL_SESSION_KEY) === target.id
+        ) {
+          window.localStorage.removeItem(LAST_CONTROL_SESSION_KEY);
+        }
+      } else {
+        removedSessionIdsRef.current.delete(target.id);
+        setSessions((current) => [
+          session,
+          ...current.filter((entry) => entry.id !== target.id),
+        ]);
+      }
+      return session;
+    },
+    [refreshList, removeSessionMessages, setSessionId]
+  );
+
   return {
+    setSessionArchived,
     sessions,
     sessionsLoaded,
     selectSession,

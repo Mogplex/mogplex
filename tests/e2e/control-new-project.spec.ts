@@ -76,7 +76,7 @@ test("new mission validates and creates an org-scoped project before starting", 
     repo_id?: string | null;
   }> = [];
   let sessionAttempts = 0;
-  await page.route("**/api/control/sessions", (route) => {
+  await page.route("**/api/control/sessions**", (route) => {
     const request = route.request();
     if (request.method() !== "POST") return route.continue();
     sessionAttempts += 1;

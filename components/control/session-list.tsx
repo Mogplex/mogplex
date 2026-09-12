@@ -2,14 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Archive,
   NavArrowDown,
   NavArrowRight,
   Plus,
   Search,
   SidebarCollapse,
   SidebarExpand,
-  SortDown,
-  SortUp,
 } from "iconoir-react";
 import { useCommandPalette } from "@/components/command-palette-provider";
 import {
@@ -24,14 +23,18 @@ import {
   SessionRowActions,
   type NewSessionTarget,
 } from "./session-list-actions";
+import { SessionListOptions, type SessionGrouping, type SessionSort } from "./session-list-options";
+import { SessionArchiveList } from "./session-archive-list";
+import type { SessionArchiveControls } from "./use-session-archive";
 
 export type { ControlSessionSummary } from "@/lib/control/session-types";
 
-type SortMode = "recent" | "alpha";
+type SortMode = SessionSort;
 
 const COLLAPSED_KEY = "mogplex.sessionList.collapsed";
 const WIDTH_KEY = "mogplex.sessionList.width";
 const SORT_KEY = "mogplex.sessionList.sort";
+const GROUPING_KEY = "mogplex.sessionList.grouping";
 const DEFAULT_WIDTH = 288;
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 320;
@@ -72,6 +75,7 @@ function SessionRow({
   working,
   onSelect,
   onDelete,
+  showProject = false,
 }: {
   session: ControlSessionSummary;
   selected: boolean;
@@ -79,6 +83,7 @@ function SessionRow({
   working: boolean;
   onSelect: (id: string) => void;
   onDelete: (id: string) => Promise<boolean>;
+  showProject?: boolean;
 }) {
   return (
     <SessionRowActions session={session} onDelete={onDelete}>
@@ -98,7 +103,10 @@ function SessionRow({
         {working ? (
           <span className="shrink-0 text-sky-400">Working</span>
         ) : null}
-        <span className="min-w-0 truncate">{session.title}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{session.title}</span>
+          {showProject ? <span className="block truncate text-xs font-normal text-ink-400">{session.project ?? "General"}</span> : null}
+        </span>
         <span className="ml-auto shrink-0 text-xs text-ink-400">
           {formatAge(session.updated_at)}
         </span>
@@ -115,6 +123,7 @@ function ProjectGroupSection({
   onSelect,
   onNew,
   onDelete,
+  archive,
 }: {
   group: SessionGroup<ControlSessionSummary>;
   colorClass: string;
@@ -123,6 +132,7 @@ function ProjectGroupSection({
   onSelect: (id: string) => void;
   onNew: (target: NewSessionTarget) => void;
   onDelete: (id: string) => Promise<boolean>;
+  archive: SessionArchiveControls;
 }) {
   const [open, setOpen] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -141,6 +151,8 @@ function ProjectGroupSection({
       <ProjectRowActions
         projectName={group.name}
         onNew={() => onNew(newSessionTarget)}
+        onArchive={() => void archive.archive(group.sessions)}
+        archiveDisabled={archive.busy || group.sessions.every(session => workingIds.has(session.id))}
       >
         <button
           type="button"
@@ -202,6 +214,7 @@ export function SessionList({
   onSelect,
   onNew,
   onDelete,
+  archive,
 }: {
   sessions: ControlSessionSummary[];
   selectedId: string | null;
@@ -210,10 +223,12 @@ export function SessionList({
   onSelect: (id: string) => void;
   onNew: (target?: NewSessionTarget) => void;
   onDelete: (id: string) => Promise<boolean>;
+  archive: SessionArchiveControls;
 }) {
   const { open: openCommandPalette } = useCommandPalette();
   const [collapsed, setCollapsed] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("recent");
+  const [grouping, setGrouping] = useState<SessionGrouping>("project");
   const { width, resizing, panelRef, resizerProps } = usePanelWidth({
     storageKey: WIDTH_KEY,
     defaultWidth: DEFAULT_WIDTH,
@@ -229,6 +244,7 @@ export function SessionList({
       if (storedSort === "recent" || storedSort === "alpha") {
         setSortMode(storedSort);
       }
+      if (window.localStorage.getItem(GROUPING_KEY) === "list") setGrouping("list");
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -242,19 +258,14 @@ export function SessionList({
     [groups]
   );
   const workingCount = workingIds.size;
+  const sortedSessions = useMemo(() => [...sessions].sort((a, b) =>
+    sortMode === "alpha" ? a.title.localeCompare(b.title) : Date.parse(b.updated_at) - Date.parse(a.updated_at)
+  ), [sessions, sortMode]);
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
       const next = !current;
       window.localStorage.setItem(COLLAPSED_KEY, String(next));
-      return next;
-    });
-  };
-
-  const toggleSort = () => {
-    setSortMode((current) => {
-      const next = current === "recent" ? "alpha" : "recent";
-      window.localStorage.setItem(SORT_KEY, next);
       return next;
     });
   };
@@ -326,32 +337,16 @@ export function SessionList({
           <kbd className="font-sans text-xs text-ink-400">⌘K</kbd>
         </button>
       </div>
+      {archive.viewing ? <SessionArchiveList archive={archive} /> : <>
       <div className="flex items-center justify-between px-4 pb-1.5">
         <span className="text-[11px] font-semibold tracking-widest text-ink-400 uppercase">
-          Projects
+          {grouping === "project" ? "Projects" : "Chats"}
         </span>
         <div className="flex items-center gap-1 text-ink-400">
-          <button
-            type="button"
-            aria-label={
-              sortMode === "recent"
-                ? "Sort projects alphabetically"
-                : "Sort projects by recent activity"
-            }
-            title={
-              sortMode === "recent"
-                ? "Sort alphabetically"
-                : "Sort by recent activity"
-            }
-            onClick={toggleSort}
-            className="grid size-6 place-items-center rounded-md hover:bg-ink-800 hover:text-ink-200"
-          >
-            {sortMode === "recent" ? (
-              <SortDown className="size-3.5" strokeWidth={2} />
-            ) : (
-              <SortUp className="size-3.5" strokeWidth={2} />
-            )}
-          </button>
+          <SessionListOptions grouping={grouping} sort={sortMode}
+            onGroupingChange={value => { setGrouping(value); window.localStorage.setItem(GROUPING_KEY, value); }}
+            onSortChange={value => { setSortMode(value); window.localStorage.setItem(SORT_KEY, value); }}
+          />
           <button
             type="button"
             aria-label="New session"
@@ -372,12 +367,16 @@ export function SessionList({
           </button>
         </div>
       </div>
+      {archive.busy ? <p role="status" className="px-4 pb-2 text-xs text-ink-400">Updating chats…</p> : null}
       <nav className="flex-1 overflow-y-auto px-2 pb-3 text-[13px]">
         {sessions.length === 0 ? (
           <p className="px-2 py-6 text-center text-[11px] text-ink-400">
             No sessions yet. Start one from the composer.
           </p>
-        ) : (
+        ) : grouping === "list" ? sortedSessions.map(session => (
+          <SessionRow key={session.id} session={session} selected={session.id === selectedId}
+            working={workingIds.has(session.id)} onSelect={onSelect} onDelete={onDelete} showProject />
+        )) : (
           groups.map((group) => (
             <ProjectGroupSection
               key={group.project ?? "__general__"}
@@ -388,10 +387,16 @@ export function SessionList({
               onSelect={onSelect}
               onNew={onNew}
               onDelete={onDelete}
+              archive={archive}
             />
           ))
         )}
       </nav>
+      <button type="button" disabled={archive.busy} onClick={() => void archive.show()} className="mx-3 mb-3 flex items-center gap-2 rounded-md px-2 py-2 text-[13px] text-ink-400 hover:bg-ink-800 hover:text-ink-100 disabled:opacity-50">
+        <Archive className="size-4" aria-hidden="true" />
+        Archived chats
+      </button>
+      </>}
     </aside>
   );
 }

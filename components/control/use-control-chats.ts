@@ -16,6 +16,7 @@ export class ControlChatRegistry {
   private readonly hydrated = new Set<string>();
   private readonly persisting = new Set<string>();
   private readonly persistFailed = new Set<string>();
+  private readonly archiveReservations = new Set<string>();
   private readonly persistQueues = new Map<string, Promise<void>>();
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly transport = new DefaultChatTransport<UIMessage>({
@@ -85,8 +86,18 @@ export class ControlChatRegistry {
         void this.persistFinishedMessages(sessionId, messages);
       },
     });
+    const sendMessage = chat.sendMessage;
+    chat.sendMessage = async (...args) => {
+      this.assertNotArchiving(sessionId);
+      if (this.chats.get(sessionId) !== chat)
+        throw new Error("This chat is no longer available. Select it again.");
+      return sendMessage(...args);
+    };
     const addApproval = chat.addToolApprovalResponse;
     chat.addToolApprovalResponse = async (response) => {
+      this.assertNotArchiving(sessionId);
+      if (this.chats.get(sessionId) !== chat)
+        throw new Error("This chat is no longer available. Select it again.");
       approvals.request(chat.messages, response.id);
       await addApproval(response);
     };
@@ -124,6 +135,30 @@ export class ControlChatRegistry {
     chat.messages = messages;
     this.hydrated.add(sessionId);
     return true;
+  }
+
+  canArchive(sessionId: string) {
+    const chat = this.chats.get(sessionId);
+    return (
+      !this.archiveReservations.has(sessionId) &&
+      !(chat && isRunning(chat)) &&
+      !this.persisting.has(sessionId) &&
+      !this.persistFailed.has(sessionId)
+    );
+  }
+
+  private assertNotArchiving(sessionId: string) {
+    if (this.archiveReservations.has(sessionId)) {
+      throw new Error("Wait for the archive to finish.");
+    }
+  }
+
+  reserveArchive(sessionId: string) {
+    if (!this.canArchive(sessionId)) return null;
+    this.archiveReservations.add(sessionId);
+    return () => {
+      this.archiveReservations.delete(sessionId);
+    };
   }
 
   remove(sessionId: string) {
@@ -269,6 +304,7 @@ export function useControlChats({
     clearError: activeChat.clearError,
     addToolApprovalResponse: activeChat.addToolApprovalResponse,
     runningSessionIds,
+    reserveArchiveSession: (id: string) => registry.reserveArchive(id),
     setSessionMessages,
     removeSession,
   };

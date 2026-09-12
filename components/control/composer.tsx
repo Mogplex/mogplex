@@ -40,6 +40,7 @@ type Props = {
     options: ComposerSendOptions
   ) => Promise<boolean>;
   pending: boolean;
+  archiving?: boolean;
   onStop: () => void;
   initialModelId: string | null;
   onModelSelect: (modelId: string) => Promise<boolean>;
@@ -224,6 +225,7 @@ export function Composer({
   onChange,
   onSend,
   pending,
+  archiving = false,
   onStop,
   initialModelId,
   onModelSelect,
@@ -247,7 +249,7 @@ export function Composer({
     addFiles,
     dropZoneProps,
   } = useControlFileDrop({
-    disabled: pending,
+    disabled: pending || archiving,
     existingCount: files.length,
     onAttachments: useCallback(
       (attachments: ControlComposerFile[]) =>
@@ -286,7 +288,7 @@ export function Composer({
   );
 
   const handleSend = useCallback(async () => {
-    if ((value.trim() || files.length > 0) && !pending && !modelSaving) {
+    if ((value.trim() || files.length > 0) && !pending && !archiving && !modelSaving) {
       const draft = { text: value, files: [...files] };
       onChange("");
       setFiles([]);
@@ -314,6 +316,7 @@ export function Composer({
     value,
     files,
     pending,
+    archiving,
     modelSaving,
     modelId,
     permissionsIdx,
@@ -335,7 +338,8 @@ export function Composer({
     MISSION_PERMISSION_OPTIONS[permissionsIdx] === "Skip Permissions";
 
   return (
-    <div className="mx-auto w-full max-w-[67rem] shrink-0 px-4 pb-5 sm:px-6">
+    <fieldset disabled={archiving} className="mx-auto min-w-0 w-full max-w-[67rem] shrink-0 px-4 pb-5 sm:px-6">
+      {archiving ? <p role="status" className="pb-2 text-xs text-ink-400">Archive in progress</p> : null}
       <div
         data-testid="control-composer-dropzone"
         {...dropZoneProps}
@@ -481,6 +485,6 @@ export function Composer({
           </div>
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 }

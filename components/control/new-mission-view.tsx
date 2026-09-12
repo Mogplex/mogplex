@@ -7,6 +7,7 @@ import { NewMissionComposer } from "./new-mission-composer";
 import { SessionList } from "./session-list";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import type { NewSessionTarget } from "./session-list-actions";
+import type { SessionArchiveControls } from "./use-session-archive";
 
 /**
  * Standalone view shown when there is no mission selected (fresh load or the
@@ -25,6 +26,7 @@ export function NewMissionView({
   onDeleteSession,
   preferredRepoId,
   composerKey,
+  archive,
 }: {
   repos: Repo[];
   sessions: ControlSessionSummary[];
@@ -46,6 +48,7 @@ export function NewMissionView({
   preferredRepoId: string | null;
   /** Changes whenever a new session is requested, resetting the composer. */
   composerKey: number;
+  archive: SessionArchiveControls;
 }) {
   return (
     <div className="app-control-shell flex h-full overflow-hidden">
@@ -56,6 +59,7 @@ export function NewMissionView({
         onSelect={onSelectSession}
         onNew={onNewSession}
         onDelete={onDeleteSession}
+        archive={archive}
       />
       <main
         className="app-chat-column flex min-w-0 flex-1 flex-col"
