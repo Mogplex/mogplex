@@ -36,7 +36,7 @@ test("every workflow starter template builds a valid bound graph", () => {
   }
 });
 
-test("Dependabot autopilot is scoped and explicitly opts into repair and merge", () => {
+test("Dependabot autopilot is scoped and defaults to created-alert remediation", () => {
   const graph = bindFlowGraphToInstallation(
     buildFlowStarterTemplateGraph({
       templateId: "dependabot-autopilot",
@@ -48,13 +48,11 @@ test("Dependabot autopilot is scoped and explicitly opts into repair and merge",
   const start = graph.nodes.find((node) => node.type === "start");
   const agent = graph.nodes.find((node) => node.type === "agent");
 
-  assert.equal(start?.data.event, "pr_opened");
+  assert.equal(start?.data.event, "dependabot_alert");
   assert.deepEqual(start?.data.filter?.installationIds, [101]);
-  assert.equal(start?.data.filter?.authorFilter, "dependabot_only");
-  assert.equal(agent?.data.role, "review");
-  assert.equal(agent?.data.autofix, true);
-  assert.equal(agent?.data.autofixSandbox, true);
-  assert.equal(agent?.data.autoMerge, true);
+  assert.deepEqual(start?.data.dependabotAlertActions, ["created"]);
+  assert.equal(agent?.data.role, "triage");
+  assert.equal(agent?.data.autoMerge, undefined);
 });
 
 test("workflow starter template ids are validated at the API boundary", () => {

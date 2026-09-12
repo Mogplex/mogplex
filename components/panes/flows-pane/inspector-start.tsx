@@ -1,5 +1,6 @@
 "use client"
 
+import { DEPENDABOT_ALERT_ACTIONS, normalizeDependabotAlertActions } from "@/lib/dependabot"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -140,6 +141,35 @@ export function StartInspector({
             }), { mergeKey: `start-tag-pattern-${node.id}` })}
             placeholder="v*"
           />
+        </InspectorField>
+      )}
+      {node.data.event === "dependabot_alert" && (
+        <InspectorField label="Alert lifecycle actions">
+          <div className="space-y-2">
+            {DEPENDABOT_ALERT_ACTIONS.map((action) => {
+              const selected = normalizeDependabotAlertActions(node.data.dependabotAlertActions)
+              return (
+                <label key={action} className="flex items-center gap-2 text-xs text-foreground">
+                  <Checkbox
+                    checked={selected.includes(action)}
+                    onCheckedChange={(checked) => updateNodeData(node.id, (data) => {
+                      const current = normalizeDependabotAlertActions(data.dependabotAlertActions)
+                      return {
+                        ...data,
+                        dependabotAlertActions: checked === true
+                          ? [...new Set([...current, action])]
+                          : current.filter((value) => value !== action),
+                      }
+                    }, { mergeKey: `start-dependabot-action-${node.id}` })}
+                  />
+                  {action.replaceAll("_", " ")}
+                </label>
+              )
+            })}
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Created starts remediation. Other actions report alert status. No selection means this trigger will not run.
+          </p>
         </InspectorField>
       )}
       {node.data.event === "schedule" && (

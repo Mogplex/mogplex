@@ -51,6 +51,7 @@ export const EVENT_OPTIONS: Array<{ value: TriggerEvent; label: string }> = [
   { value: "ci_failure", label: "CI failure" },
   { value: "labeled", label: "Label added" },
   { value: "tag_push", label: "Tag pushed" },
+  { value: "dependabot_alert", label: "Dependabot alert" },
   { value: "schedule", label: "Schedule" },
   { value: "webhook", label: "Signed webhook" },
   { value: "slack_mention", label: "Slack mention" },

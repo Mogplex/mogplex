@@ -1,3 +1,4 @@
+import { normalizeDependabotAlertActions } from "@/lib/dependabot";
 import { tool } from "ai";
 import { z } from "zod";
 import type { FlowGraph, FlowNode, FlowNodeType } from "@/lib/types";
@@ -39,6 +40,7 @@ export function createSetStartTool(ctx: ToolContext) {
       labelName,
       labelPrOnly,
       tagPattern,
+      dependabotAlertActions,
       repos,
       authorFilter,
       scheduleCron,
@@ -70,6 +72,13 @@ export function createSetStartTool(ctx: ToolContext) {
             ? { labelPrOnly: true }
             : {}),
           ...(trimmedTagPattern ? { tagPattern: trimmedTagPattern } : {}),
+          ...(event === "dependabot_alert"
+            ? {
+                dependabotAlertActions: normalizeDependabotAlertActions(
+                  dependabotAlertActions
+                ),
+              }
+            : {}),
           ...(scopedRepos.length > 0 ||
           (event === "pr_opened" && authorFilter && authorFilter !== "any")
             ? {

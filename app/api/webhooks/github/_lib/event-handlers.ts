@@ -1,3 +1,4 @@
+import { handleDependabotAlert } from "@/lib/dependabot";
 import { isMogplexPrReviewCheckName } from "@/lib/github-check-runs";
 import { BOT_LOGIN, type EventResult } from "./types";
 import {
@@ -5,6 +6,8 @@ import {
   handlePRReviewComment,
   handleCommitComment,
 } from "./comment-handlers";
+
+export { handleDependabotAlert } from "@/lib/dependabot";
 
 // Re-export comment handlers
 export {
@@ -354,6 +357,7 @@ const eventHandlers: Record<
   issue_comment: (body) => handleIssueComment(body),
   pull_request_review_comment: (body) => handlePRReviewComment(body),
   commit_comment: (body) => handleCommitComment(body),
+  dependabot_alert: (body) => handleDependabotAlert(body),
 };
 
 export function getWebhookEventResults(

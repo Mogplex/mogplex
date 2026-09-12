@@ -38,8 +38,8 @@ export const FLOW_STARTER_TEMPLATES: readonly FlowStarterTemplate[] = [
   {
     id: "dependabot-autopilot",
     name: "Dependabot autopilot",
-    description: "Review, repair, and merge safe Dependabot updates.",
-    trigger: "Dependabot PR",
+    description: "Remediate newly created Dependabot vulnerability alerts.",
+    trigger: "Dependabot alert created",
   },
   {
     id: "issue-triage",
@@ -309,20 +309,15 @@ export function buildFlowStarterTemplateGraph(input: {
       });
     case "dependabot-autopilot":
       return createStarterGraph({
-        event: "pr_opened",
+        event: "dependabot_alert",
         startData: {
-          filter: {
-            scope: "all",
-            authorFilter: "dependabot_only",
-          },
+          dependabotAlertActions: ["created"],
         },
         agentId: input.agentId,
         agentName: input.agentName,
         modelId: input.modelId,
         agentData: {
-          autofix: true,
-          autofixSandbox: true,
-          autoMerge: true,
+          role: "triage",
         },
       });
     case "issue-triage":

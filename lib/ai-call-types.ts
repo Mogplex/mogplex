@@ -12,6 +12,7 @@ export const AI_CALL_TYPES = [
   "issue_comment",
   "labeled",
   "tag_push",
+  "dependabot_alert",
 ] as const;
 
 export type AiCallType = (typeof AI_CALL_TYPES)[number];

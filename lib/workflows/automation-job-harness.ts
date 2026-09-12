@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createHarnessOutputRenderer } from "@/lib/harness/output-renderer";
 import type { HarnessId } from "@/lib/harness/config";
@@ -212,7 +213,15 @@ export async function runAutomationHarnessAgent(input: {
           pullRequest: input.pullRequest,
           targetRepo: input.targetRepo,
         })
-      : await launchAutomationHarnessSandbox(input.context);
+      : await launchAutomationHarnessSandbox(
+          input.context,
+          input.context.assignmentType === "dependabot_alert"
+            ? {
+                workingBranch: `mogplex/dependabot-${input.context.metadata.alert_number}-${randomUUID()}`,
+                createBranch: true,
+              }
+            : undefined
+        );
   const prompt = buildAutomationHarnessPrompt(input);
   const { createSandboxHarnessPostHandler } =
     await import("@/app/api/sandbox/[id]/harness/route");

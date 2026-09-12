@@ -7,6 +7,7 @@ export {
   handlePullRequest,
   handleTagPush,
   handleCIEvent,
+  handleDependabotAlert,
   handleIssueComment,
   handlePRReviewComment,
   handleCommitComment,
