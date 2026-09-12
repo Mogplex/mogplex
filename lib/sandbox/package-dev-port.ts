@@ -4,6 +4,7 @@ import type { RepositoryFiles } from "./repository-files";
 
 type Package = {
   name?: string;
+  packageManager?: string;
   scripts?: Record<string, string>;
   workspaces?: string[] | { packages?: string[] };
 };
@@ -159,6 +160,22 @@ export async function resolvePackageDevPort(
       );
     })());
   const seen = new Set<string>();
+
+  const usesYarnClassic = async (directory: string): Promise<boolean> => {
+    const pkg = await readPackage(directory);
+    const version =
+      typeof pkg?.packageManager === "string"
+        ? /^yarn@(\d+)\./.exec(pkg.packageManager)
+        : null;
+    if (version) return Number(version[1]) === 1;
+    const config = await files.readText(posix.join(directory, ".yarnrc.yml"));
+    if (config !== null) return false;
+    const lock = await files.readText(posix.join(directory, "yarn.lock"));
+    if (lock && /^__metadata:/m.test(lock)) return false;
+    if (!directory) return true;
+    const parent = posix.dirname(directory);
+    return usesYarnClassic(parent === "." ? "" : parent);
+  };
 
   const resolveScript = async (
     root: string,
@@ -331,6 +348,10 @@ export async function resolvePackageDevPort(
           ? []
           : tokens.slice(separator + 1)
         : invocation.slice(script.index + 1);
+    // Classic consumes one forwarding delimiter; Yarn 2+ and pnpm pass it
+    // to the script as an end-of-options marker.
+    if (manager === "yarn" && args[0] === "--" && (await usesYarnClassic(root)))
+      args.shift();
     return resolveScript(root, script.token, envPort, args);
   };
 
