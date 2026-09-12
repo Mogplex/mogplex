@@ -177,8 +177,14 @@ export async function resolvePackageDevPort(
     const tokens = [...parsed, ...forwarded];
     if (tokens.length === 0) return null;
     let envPort = inheritedPort;
-    if (["env", "cross-env"].includes(tokens[0])) tokens.shift();
-    while (tokens[0]?.includes("=")) {
+    // Consume each prefix in order, including wrappers after assignments.
+    // Every iteration removes a token, so nested static wrappers terminate.
+    while (tokens.length > 0) {
+      if (["env", "cross-env"].includes(tokens[0])) {
+        tokens.shift();
+        continue;
+      }
+      if (!/^[A-Za-z_]\w*=/.test(tokens[0])) break;
       const assignment = tokens.shift()!;
       if (assignment.startsWith("PORT="))
         envPort = portNumber(assignment.slice(5));
@@ -281,9 +287,10 @@ export async function resolvePackageDevPort(
     ) {
       const args =
         manager === "npm"
-          ? separator >= 0
-            ? tokens.slice(separator + 1)
-            : positional.slice(1).map(({ token }) => token)
+          ? [
+              ...positional.slice(1).map(({ token }) => token),
+              ...(separator >= 0 ? tokens.slice(separator + 1) : []),
+            ]
           : invocation.slice(verb.index + 1);
       if (args[0] === "--") args.shift();
       return resolveCommand(root, "", envPort, args);

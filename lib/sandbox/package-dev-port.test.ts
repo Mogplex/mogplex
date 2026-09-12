@@ -421,3 +421,29 @@ it("stops executable port extraction at the end-of-options delimiter", async () 
     )
   ).toBe(3015);
 });
+
+it.each([
+  ["PORT=3015 npm exec next dev -- --port 4222", 4222],
+  ["PORT=3015 npm exec --package next next dev -- --port 4222", 4222],
+  ["PORT=3015 cross-env PORT=4111 next dev", 4111],
+  ["PORT=3015 env PORT=4111 next dev", 4111],
+  ["env PORT=3015 cross-env PORT=4111 env NODE_ENV=development next dev", 4111],
+  ["PORT=3015 cross-env PORT=4111 next dev --port 4222", 4222],
+])(
+  "preserves executable and environment prefixes: %s",
+  async (command, port) => {
+    expect(await resolvePackageDevPort(repository(command as string), {})).toBe(
+      port
+    );
+    expect(
+      await resolvePackageDevPort(
+        repository("", undefined, {
+          "package.json": JSON.stringify({
+            scripts: { dev: "pnpm run serve", serve: command },
+          }),
+        }),
+        {}
+      )
+    ).toBe(port);
+  }
+);
