@@ -50,6 +50,16 @@ function option(tokens: string[], names: string[]): string[] {
   });
 }
 
+function enabledFlag(tokens: string[], names: string[]): boolean {
+  return tokens.reduce((enabled, token) => {
+    const [name, value] = token.split("=", 2);
+    if (names.includes(name)) return value !== "false";
+    if (name.startsWith("--no-") && names.includes(`--${name.slice(5)}`))
+      return false;
+    return enabled;
+  }, false);
+}
+
 function globMatches(pattern: string, path: string): boolean {
   const escaped = pattern
     .split("*")
@@ -279,6 +289,21 @@ export async function resolvePackageDevPort(
     );
     const verb = positional[0];
     if (!verb) return null;
+    const scriptPosition =
+      verb.token === "run" || verb.token === "run-script"
+        ? (positional[1]?.index ?? invocation.length)
+        : verb.index;
+    if (
+      (manager === "npm" &&
+        enabledFlag(invocation, ["--workspaces", "--ws", "-ws"])) ||
+      (manager === "pnpm" &&
+        enabledFlag(invocation.slice(0, scriptPosition), [
+          "--recursive",
+          "-r",
+        ])) ||
+      (manager === "yarn" && verb.token === "workspaces")
+    )
+      return null;
     // Executables inherit PORT, but may override it with their own static
     // environment or flags. Explicit `run exec` remains a script alias.
     if (
