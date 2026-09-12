@@ -160,7 +160,7 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain("git rev-parse --show-toplevel");
     expect(prompt).toContain("ripgrep is not installed");
     expect(prompt).toContain(
-      "Stopping the sandbox discards uncommitted edits."
+      "Persistent workspaces retain files when compute stops."
     );
     expect(prompt).toContain(
       "Direct edits land on the selected sandbox's working branch."

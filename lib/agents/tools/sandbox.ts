@@ -286,7 +286,7 @@ function readStopResponseString(value: unknown) {
   return typeof value === "string" ? value : null;
 }
 const SANDBOX_STOPPED_MESSAGE =
-  "Sandbox compute stopped. Committed and pushed work is safe; uncommitted changes do not survive a restart. The sandbox record remains available for restart.";
+  "Sandbox compute stopped. Persistent workspace files remain available for resume. The sandbox record remains available.";
 
 function formatSandboxStopResult(
   data: SandboxStopApiResponse,
@@ -322,7 +322,7 @@ export function createStopSandbox(
 ) {
   return defineTool({
     description:
-      "Stop sandbox compute. Stopping discards the sandbox filesystem, so uncommitted edits are lost; commit and push them first. A sandbox with uncommitted changes is not stopped unless discardChanges is true after the operator agreed. Use this when the user asks to stop or shut down the preview. This does not delete the sandbox record, which remains available for restart.",
+      "Stop sandbox compute. Persistent workspaces retain their files. Legacy disposable workspaces lose uncommitted edits; commit and push them first. A sandbox with uncommitted changes is not stopped unless discardChanges is true after the operator agreed. Use this when the user asks to stop or shut down the preview. This does not delete the sandbox record, which remains available for restart.",
     inputSchema: stopSandboxParams,
     execute: async ({
       sandboxId,
@@ -360,7 +360,7 @@ export function createStopSandbox(
         );
         if (changes.status === "dirty") {
           return {
-            error: `The sandbox has ${describeUncommittedChanges(changes)}. Stopping discards them. Commit and push first, or ask the operator whether to discard them and call again with discardChanges: true.`,
+            error: `The sandbox has ${describeUncommittedChanges(changes)}. Legacy disposable sandboxes lose these files on stop. Commit and push first, or ask the operator whether to discard them and call again with discardChanges: true.`,
             reason: "uncommitted_changes" as const,
             files: changes.files,
           };

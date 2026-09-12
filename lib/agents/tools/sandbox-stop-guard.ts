@@ -1,8 +1,8 @@
 import type { postSandboxExec } from "./sandbox-http-execution";
 
 /**
- * Stopping sandbox compute discards its filesystem, so uncommitted edits are
- * lost. Inspect the entire checkout, including siblings of the launch folder.
+ * Legacy disposable sandboxes lose files on stop. Keep agent stop requests
+ * conservative, and inspect the entire checkout including launch-folder siblings.
  * Only `.mogplex/` runtime artifacts are excluded. Configuration edits count
  * as work because boot patches cannot be distinguished from operator edits.
  */
