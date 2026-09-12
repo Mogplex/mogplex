@@ -44,18 +44,21 @@ it("reuses a running owned workspace without rotating or recreating it", async (
   expect(urls[0].searchParams.get("repo_id")).toBe(`eq.${run.repo_id}`);
   expect(deps.resume).not.toHaveBeenCalled();
 });
-it("wakes a persistent checkpoint through an authenticated resume request", async () => {
-  const { run, deps } = fixture("paused");
-  expect(await resumeRunSandbox(run, deps)).toEqual({
-    recordId: "saved-record",
-    sandboxId: "saved-vm",
-  });
-  expect(deps.resume.mock.calls[0][1]).toBe("saved-record");
-  expect(deps.resume.mock.calls[0][0].headers.get("x-delegated-user-id")).toBe(
-    run.user_id
-  );
-});
-it.each(["stopped", "pausing", "error"])(
+it.each(["paused", "stopped"])(
+  "wakes a %s persistent checkpoint through an authenticated resume request",
+  async (status) => {
+    const { run, deps } = fixture(status);
+    expect(await resumeRunSandbox(run, deps)).toEqual({
+      recordId: "saved-record",
+      sandboxId: "saved-vm",
+    });
+    expect(deps.resume.mock.calls[0][1]).toBe("saved-record");
+    expect(
+      deps.resume.mock.calls[0][0].headers.get("x-delegated-user-id")
+    ).toBe(run.user_id);
+  }
+);
+it.each(["pausing", "error"])(
   "preserves an unavailable %s workspace rather than creating a fresh checkout",
   async (status) => {
     const { run, deps } = fixture(status);

@@ -47,7 +47,10 @@ export async function resumeRunSandbox(
     );
   if (record.status === "running")
     return { recordId: record.id, sandboxId: record.sandbox_id };
-  if (record.status !== "paused" || record.persistent !== true)
+  if (
+    (record.status !== "paused" && record.status !== "stopped") ||
+    record.persistent !== true
+  )
     throw new Error(
       "The saved workspace cannot resume yet. Check its status in Sandboxes."
     );
