@@ -238,10 +238,9 @@ export function createSandboxStopHandler(
     );
     if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
-    // Empty-body requests come from the explicit destructive Stop UI. Agent
-    // requests always send discardChanges and require the guarded path by default.
+    // A Stop request alone never authorizes discarding legacy workspace files.
     const body = await request.json().catch(() => null);
-    const preserveChanges = body?.discardChanges === false;
+    const preserveChanges = body?.discardChanges !== true;
     const stop = async () => {
       let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
         null;

@@ -34,6 +34,7 @@ export async function loadSandboxStopRouteModule() {
       overrides: Parameters<typeof routeModule.createSandboxStopHandler>[0] = {}
     ) =>
       routeModule.createSandboxStopHandler({
+        withSandboxMutationLock: async (_id, operation) => operation(),
         prepareSandboxBillingClose: async () => null,
         finalizeSandboxBillingClose: async () => ({
           finalized: false,

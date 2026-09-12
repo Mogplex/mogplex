@@ -61,3 +61,33 @@ for (const status of ["running", "stopped"]) {
     assert.equal(updates[0]?.snapshot_id, "saved-snapshot");
   });
 }
+
+test("an empty-body Stop request cannot discard a legacy workspace with edits", async () => {
+  const { createSandboxStopHandler } = await loadSandboxStopRouteModule();
+  let deleted = false;
+  const handler = createSandboxStopHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxStopRecord()) as never,
+    resolveLoadedSandboxRouteContext: (async () =>
+      buildResolvedSandboxRouteContext(
+        buildLoadedSandboxStopRecord()
+      )) as never,
+    getSandbox: (async () => ({
+      persistent: false,
+      runCommand: async () => ({
+        exitCode: 0,
+        stdout: async () => " M src/work.ts",
+      }),
+      delete: async () => {
+        deleted = true;
+      },
+    })) as never,
+  });
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "POST", suffix: "/stop" }),
+    buildSandboxRouteParams()
+  );
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).reason, "uncommitted_changes");
+  assert.equal(deleted, false);
+});
