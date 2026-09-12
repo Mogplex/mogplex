@@ -56,7 +56,6 @@ export type JobContext = {
     /** User-picked fallback model id from the node, if any. */
     fallback_model?: string | null;
     system_prompt: string | null;
-    max_steps?: number | null;
     timeout_ms?: number | null;
   };
   repo: {
@@ -75,7 +74,6 @@ export type FlowAgentConfig = {
   name: string | null;
   slug: string | null;
   system_prompt: string | null;
-  max_steps: number | null;
   timeout_ms: number | null;
 };
 

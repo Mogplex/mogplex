@@ -1,3 +1,4 @@
+import { loadSlackThreadRunContext } from "@/lib/slack/thread-run-context";
 import { metadata, task } from "@trigger.dev/sdk/v3";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
@@ -84,6 +85,7 @@ export { formatSlackConversationalReply } from "./slack-event-lib/system";
 
 const defaultDeps: SlackEventTaskDeps = {
   findGuidanceRuns: findSlackGuidanceRuns,
+  loadThreadRunContext: loadSlackThreadRunContext,
   submitGuidance: submitSlackRunGuidance,
   getInstallation: (teamId) => getSlackInstallationByTeamId(teamId),
   getBotToken: (teamId) => getSlackBotToken(teamId),

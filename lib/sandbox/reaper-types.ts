@@ -11,13 +11,6 @@ export const REAPER_ACTIVE_STOP_STATUSES = [
   "running",
 ] as const satisfies readonly SandboxLifecycleStatus[];
 
-/**
- * How long a paused persistent sandbox can linger before we destroy
- * it to release the auto-snapshot storage. Matches the 7-day
- * snapshotExpiration we pass at create time.
- */
-export const PAUSED_SANDBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
 export type ReaperSandboxRecord = {
   id: string;
   sandbox_id: string;
@@ -98,18 +91,6 @@ export class SandboxReaperRunError extends Error {
   }
 }
 
-export type AbandonedPausedSandboxRecord = {
-  id: string;
-  sandbox_id: string;
-  user_id: string;
-  last_active_at: string | null;
-  billing_source?: string | null;
-  billing_team_id?: string | null;
-  billing_project_id?: string | null;
-  vercel_team_id?: string | null;
-  vercel_project_id?: string | null;
-};
-
 export type ReaperSandboxDecision =
   | { handled: false }
   | { handled: true; result?: ReaperResult };
@@ -141,7 +122,6 @@ export function isReapedAction(action: string) {
     action === "stopped_idle" ||
     action === "paused_idle" ||
     action === "paused_max_lifetime" ||
-    action === "deleted_abandoned_paused" ||
     action === "finalized_stale_pausing" ||
     action === "paused_stale_pausing" ||
     action === "stopped_stale_pausing" ||

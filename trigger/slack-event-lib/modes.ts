@@ -193,13 +193,20 @@ export async function runConversationalMode(input: {
     repoName: string | null;
   };
   try {
-    const [attachments, slackThreadContext] = await Promise.all([
+    const [attachments, slackThreadContext, runContext] = await Promise.all([
       prepareSlackAttachments({ deps, botToken, payload }),
       buildSlackThreadContext({
         deps,
         botToken,
         payload,
         conversationMessages: conversation.messages,
+      }),
+      deps.loadThreadRunContext({
+        userId: mogplexUserId,
+        teamId: payload.teamId,
+        channelId: payload.channelId,
+        threadTs: payload.threadTs,
+        slackUserId: payload.slackUserId,
       }),
     ]);
 
@@ -258,10 +265,15 @@ export async function runConversationalMode(input: {
       additionalTools: {
         [SLACK_START_REPO_AGENT_RUN_TOOL_NAME]: repoAgentRun.tool,
       },
-      systemSuffix: buildSlackConversationalSystemSuffix({
-        channelLinkState: resolvedChannelLinkState,
-        attribution,
-      }),
+      systemSuffix: [
+        buildSlackConversationalSystemSuffix({
+          channelLinkState: resolvedChannelLinkState,
+          attribution,
+        }),
+        runContext,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
       abortSignal: AbortSignal.timeout(SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS),
       onProgress: createSlackAgentProgressHandler(progressUpdater, {
         repoName: agentInput.repoContext?.repoName ?? null,

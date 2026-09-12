@@ -19,7 +19,6 @@ import type {
   TriggerEvent,
 } from "@/lib/types"
 import type { FlowStarterTemplateId } from "@/lib/flows/templates"
-import { getEffectiveFlowAgentMaxSteps } from "@/lib/flows/agent-defaults"
 import { getEffectiveAutomationTimeoutMs } from "@/lib/workflows/automation-model-defaults"
 import { MogplexMark } from "@/components/brand/mogplex-mark"
 import { ClaudeFill, OpenaiFill } from "@/components/icons/harness-icons"
@@ -31,9 +30,7 @@ import type {
   FlowNodeLibraryItem,
 } from "./types"
 
-export const DEFAULT_AGENT_MAX_STEPS = getEffectiveFlowAgentMaxSteps(null)
 export const DEFAULT_AGENT_TIMEOUT_SECONDS = Math.round(getEffectiveAutomationTimeoutMs(null) / 1000)
-export const DEFAULT_AGENT_MAX_STEPS_PLACEHOLDER = `${DEFAULT_AGENT_MAX_STEPS} (default)`
 export const DEFAULT_AGENT_TIMEOUT_SECONDS_PLACEHOLDER = `${DEFAULT_AGENT_TIMEOUT_SECONDS} (default)`
 export const DEFAULT_AGENT_TIMEOUT_LABEL = `${DEFAULT_AGENT_TIMEOUT_SECONDS}s (default)`
 

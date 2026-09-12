@@ -14,8 +14,6 @@ import {
 } from "@/lib/sandbox/reaper-types";
 import type {
   ReaperSandboxRecord,
-  AbandonedPausedSandboxRecord,
-  ReaperResult,
   ReaperStopAction,
 } from "@/lib/sandbox/reaper-types";
 
@@ -145,65 +143,6 @@ export async function restoreStalePausingAsRunning(
   );
 
   return restored !== null;
-}
-
-const defaultDeleteAbandonedPausedDeps: Pick<
-  StopSandboxDeps,
-  | "getSandbox"
-  | "stopSandboxRecord"
-  | "prepareSandboxBillingClose"
-  | "finalizeSandboxBillingClose"
-> = {
-  getSandbox,
-  stopSandboxRecord,
-  prepareSandboxBillingClose,
-  finalizeSandboxBillingClose,
-};
-
-export async function deleteAbandonedPausedSandbox(
-  sandbox: AbandonedPausedSandboxRecord,
-  credentials: ReaperSandboxCredentials,
-  deps: Pick<
-    StopSandboxDeps,
-    | "getSandbox"
-    | "stopSandboxRecord"
-    | "prepareSandboxBillingClose"
-    | "finalizeSandboxBillingClose"
-  > = defaultDeleteAbandonedPausedDeps
-): Promise<ReaperResult> {
-  if (
-    credentials.ok &&
-    sandbox.sandbox_id &&
-    sandbox.sandbox_id !== "pending"
-  ) {
-    const billingClose = await deps.prepareSandboxBillingClose(sandbox.id);
-    try {
-      const vm = await deps.getSandbox(sandbox.sandbox_id, {
-        vercelToken: credentials.vercelToken,
-        vercelTeamId: credentials.vercelTeamId,
-        vercelProjectId: credentials.vercelProjectId,
-      });
-      await vm.delete();
-      await deps.finalizeSandboxBillingClose(billingClose, new Date());
-    } catch (err) {
-      console.warn(
-        `[sandbox-reaper] Failed to delete abandoned paused VM ${sandbox.sandbox_id}; keeping the record visible for retry:`,
-        err
-      );
-      return { id: sandbox.id, action: "skipped_delete_failed" };
-    }
-  } else if (sandbox.sandbox_id && sandbox.sandbox_id !== "pending") {
-    return { id: sandbox.id, action: "skipped_delete_failed" };
-  }
-
-  await deps.stopSandboxRecord(sandbox.id, {
-    expectedSandboxId: sandbox.sandbox_id,
-    fromStatuses: "paused",
-    healthStatus: "stopped",
-    stopReason: "lifetime_timeout",
-  });
-
-  return { id: sandbox.id, action: "deleted_abandoned_paused" };
 }
 
 export async function stopSandbox(

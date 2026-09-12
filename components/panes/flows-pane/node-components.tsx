@@ -95,7 +95,6 @@ export function AgentNodeCard(props: {
     harness?: FlowAgentHarness
     role?: FlowAgentNodeRole
     modelOverride?: string | null
-    maxStepsOverride?: number | null
     timeoutMsOverride?: number | null
   }
 }) {
@@ -127,9 +126,6 @@ export function AgentNodeCard(props: {
         </span>
         {props.data.modelOverride && (
           <FlowNodeChip>model</FlowNodeChip>
-        )}
-        {typeof props.data.maxStepsOverride === "number" && (
-          <FlowNodeChip>{props.data.maxStepsOverride} steps</FlowNodeChip>
         )}
         {typeof props.data.timeoutMsOverride === "number" && (
           <FlowNodeChip>{Math.round(props.data.timeoutMsOverride / 1000)}s timeout</FlowNodeChip>

@@ -35,7 +35,6 @@ test("createAutomationJobTask routes flow autofix through sandbox runner when op
           slug: "reviewer",
           model: "openai/gpt-5.4",
           system_prompt: null,
-          max_steps: null,
           timeout_ms: null,
         },
         repo: {
@@ -58,7 +57,6 @@ test("createAutomationJobTask routes flow autofix through sandbox runner when op
               slug: "reviewer",
               model: "openai/gpt-5.4",
               system_prompt: null,
-              max_steps: null,
               timeout_ms: null,
             },
           ],

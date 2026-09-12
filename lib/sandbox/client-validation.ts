@@ -1,10 +1,9 @@
 import type { RepoEnvVars } from "@/lib/repo-settings";
 import { SandboxCreateRequestValidationError } from "@/lib/sandbox/create-request-validation";
 
-// 7 days — long enough for a vacation, short enough to not leak
-// snapshot storage when a user abandons a workspace.
-export const DEFAULT_PERSISTENT_SNAPSHOT_EXPIRATION_MS =
-  7 * 24 * 60 * 60 * 1000;
+// Workspace files remain recoverable until the user deletes the workspace.
+// Vercel uses zero for snapshots that do not expire.
+export const DEFAULT_PERSISTENT_SNAPSHOT_EXPIRATION_MS = 0;
 
 // Observed Vercel Sandbox create failures reject env payloads above 4096 bytes
 // (`bad_request: env payload too large ... max 4096`). We measure the raw env
@@ -16,17 +15,6 @@ export const MAX_SANDBOX_ENV_PAYLOAD_BYTES = 4096;
 // ports like 8000 until the matching runtime defaults move with it.
 const RESERVED_SANDBOX_CREATE_PORTS = new Set([8080]);
 const SANDBOX_ENV_SUMMARY_LIMIT = 3;
-
-function isTruthyEnvValue(value: string | undefined): boolean {
-  if (typeof value !== "string") return false;
-  const normalized = value.trim().toLowerCase();
-  return (
-    normalized === "1" ||
-    normalized === "true" ||
-    normalized === "yes" ||
-    normalized === "on"
-  );
-}
 
 export function measureSandboxEnvPayloadBytes(envVars: RepoEnvVars): number {
   return Buffer.byteLength(JSON.stringify(envVars), "utf8");
@@ -73,43 +61,16 @@ export function validateSandboxCreateRequest(input: {
   );
 }
 
-/**
- * Feature flag: persistent sandboxes are OFF by default per the
- * migration plan, pending per-team Vercel permission confirmation
- * and real-VM QA. Two env vars control behaviour:
- *
- * - `ENABLE_PERSISTENT_SANDBOXES=true` — opt every new sandbox INTO
- *   persistence. Set this once the Vercel team permission is
- *   confirmed and you've verified the pause/resume UX end-to-end.
- * - `DISABLE_PERSISTENT_SANDBOXES=true` — hard off, kept as an
- *   alias / emergency rollback toggle that wins over ENABLE.
- *
- * When NEITHER is set, behaviour defaults to ephemeral (persistent:
- * false). This matches Phase 10 of the plan — the migration ships
- * in the repo but not the runtime until an operator opts in.
- *
- * Once enabled, persistence is required. A provider denial must fail the
- * launch rather than silently create a VM that loses work on expiry.
- */
-export function persistentSandboxesDisabledByEnv(): boolean {
-  // Explicit disable wins.
-  if (isTruthyEnvValue(process.env.DISABLE_PERSISTENT_SANDBOXES)) return true;
-  // Explicit enable opts in. Anything else (unset, empty, "false",
-  // "no", etc.) keeps the feature off per the plan's default-off
-  // Phase 10 requirement.
-  return !isTruthyEnvValue(process.env.ENABLE_PERSISTENT_SANDBOXES);
-}
-
 export function resolvePersistentSandboxOptions(opts: {
   persistent?: boolean;
   snapshotExpirationMs?: number;
 }): { persistent: boolean; snapshotExpiration: number } {
-  const persistent =
-    !persistentSandboxesDisabledByEnv() && (opts.persistent ?? true);
+  if (opts.persistent === false || (opts.snapshotExpirationMs ?? 0) !== 0) {
+    throw new Error("Workspace files must persist without automatic expiry");
+  }
   return {
-    persistent,
-    snapshotExpiration:
-      opts.snapshotExpirationMs ?? DEFAULT_PERSISTENT_SNAPSHOT_EXPIRATION_MS,
+    persistent: true,
+    snapshotExpiration: DEFAULT_PERSISTENT_SNAPSHOT_EXPIRATION_MS,
   };
 }
 

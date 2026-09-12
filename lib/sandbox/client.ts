@@ -40,7 +40,6 @@ export {
   BOOTSTRAP_STEP_TIMEOUT_MS,
   measureSandboxEnvPayloadBytes,
   validateSandboxCreateRequest,
-  persistentSandboxesDisabledByEnv,
   resolvePersistentSandboxOptions,
   SandboxBootstrapError,
   withTimeout,

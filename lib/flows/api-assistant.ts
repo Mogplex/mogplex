@@ -3,7 +3,6 @@ import {
   createUIMessageStreamResponse,
   convertToModelMessages,
   generateText,
-  stepCountIs,
   streamText,
 } from "ai";
 import { FlowServiceError } from "@/lib/flows/errors";
@@ -24,7 +23,6 @@ import {
 } from "@/lib/flows/test-store";
 import {
   FLOW_ASSISTANT_MODEL_ID,
-  FLOW_ASSISTANT_MAX_STEPS,
   FLOW_ASSISTANT_SYSTEM_PROMPT,
   FLOW_ASSISTANT_CHAT_SYSTEM_PROMPT,
   buildFlowAssistantResultData,
@@ -162,7 +160,7 @@ export async function streamFlowAssistantChat(input: {
     ].join("\n\n"),
     messages: await convertToModelMessages(input.messages),
     tools,
-    stopWhen: stepCountIs(FLOW_ASSISTANT_MAX_STEPS),
+    stopWhen: () => false,
     async onStepFinish(event) {
       observedStepUsages.push(
         captureUsage(event.usage, event.providerMetadata)
@@ -335,7 +333,7 @@ export async function generateFlowAssistantSuggestion(input: {
       "When the flow is correct and connected from start to end, call finalize with a short summary. Do not emit prose — call tools only.",
     ].join("\n\n"),
     tools,
-    stopWhen: stepCountIs(FLOW_ASSISTANT_MAX_STEPS),
+    stopWhen: () => false,
     onStepFinish(event) {
       observedStepUsages.push(
         captureUsage(event.usage, event.providerMetadata)
@@ -363,7 +361,7 @@ export async function generateFlowAssistantSuggestion(input: {
 
   const result = getResult();
   if (!result.done) {
-    throw flowAssistantIncompleteError(generation.steps?.length ?? 0);
+    throw flowAssistantIncompleteError();
   }
 
   const graph = coerceGraph(result.graph);

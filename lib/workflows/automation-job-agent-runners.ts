@@ -1,4 +1,4 @@
-import { generateText, stepCountIs } from "ai";
+import { generateText } from "ai";
 import { buildPRFixTools, buildSandboxPRFixTools } from "@/lib/agents/pr-fixer";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
 import { buildIssueTools } from "@/lib/agents/issue-tools";
@@ -7,7 +7,6 @@ import { buildTagPushTools } from "@/lib/agents/tag-tools";
 import { buildCommentTools } from "@/lib/agents/comment-tools";
 import { buildRefactorTools } from "@/lib/agents/refactor";
 import { loadOwnedSandboxRouteContext } from "@/lib/sandbox/route-context";
-import { getEffectiveFlowAgentMaxSteps } from "@/lib/flows/agent-defaults";
 import type { ReviewOutcome } from "@/lib/workflows/pr-review-harness";
 import { executeAutomationTextGeneration } from "@/lib/workflows/automation-model-execution";
 import {
@@ -267,9 +266,7 @@ export function createAutomationAgentRunner(
         system: buildAutomationSystem(runSpec.system, gatewayContext),
         tools: applyToolApprovalGate(tools, context, deps),
         prompt: runSpec.prompt,
-        stopWhen: stepCountIs(
-          getEffectiveFlowAgentMaxSteps(context.agent.max_steps)
-        ),
+        stopWhen: () => false,
       },
     });
 
@@ -306,9 +303,7 @@ async function runPRFixAgentWithTools(input: {
       tools: applyToolApprovalGate(input.tools, input.context, input.deps),
       system: buildAutomationSystem(undefined, gatewayContext),
       prompt: runSpec.prompt,
-      stopWhen: stepCountIs(
-        getEffectiveFlowAgentMaxSteps(input.context.agent.max_steps)
-      ),
+      stopWhen: () => false,
     },
   });
 

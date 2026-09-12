@@ -31,7 +31,7 @@ async function buildSandboxReaperHandler(
     requireMachineApiAuth: () => null,
     loadActiveSandboxes: async () => [] as never,
     loadStaleStoppedSandboxes: async () => [] as never,
-    loadAbandonedPausedSandboxes: async () => [] as never,
+
     loadBusySandboxIds: async () => new Set<string>(),
     getPlatformSandboxCredentials: () => buildPlatformSandboxCredentials(),
     loadUserVercelCredentials: async () => buildUserVercelCredentials(),
@@ -57,17 +57,13 @@ test("GET /api/cron/sandbox-reaper reuses one admin client for its loader batch"
       loaderClients.push(client);
       return [];
     },
-    loadAbandonedPausedSandboxes: async (client) => {
-      loaderClients.push(client);
-      return [];
-    },
   });
 
   const response = await handler(buildSandboxReaperRequest());
 
   assert.equal(response.status, 200);
   assert.equal(connectionRuns, 1);
-  assert.deepEqual(loaderClients, [adminClient, adminClient, adminClient]);
+  assert.deepEqual(loaderClients, [adminClient, adminClient]);
 });
 
 test("stopSandbox leaves user-billed sandboxes active when credentials cannot be resolved", async () => {

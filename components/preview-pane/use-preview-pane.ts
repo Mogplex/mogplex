@@ -197,7 +197,7 @@ export function usePreviewPane(props: PreviewPaneProps) {
     if (!sandboxRecordId) return;
     // eslint-disable-next-line no-alert -- intentional confirmation dialog
     const confirmed = window.confirm(
-      "Stop this development environment? Unsaved state will be lost."
+      "Stop this development environment? Running processes will end."
     );
     if (!confirmed) return;
     await stopSandbox(sandboxRecordId);

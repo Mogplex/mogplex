@@ -16,11 +16,6 @@ import type { LanguageModelUsage, ProviderMetadata } from "ai";
 // See scripts/016_seed_ai_models.sql for the mapping.
 export const FLOW_ASSISTANT_MODEL_ID = "anthropic/claude-sonnet-4.6";
 
-// A complex flow with 10+ nodes, conditions, and parallel branches typically
-// takes ~15-25 tool calls. 40 leaves headroom for finalize re-runs when the
-// first validation pass flags errors the model needs to fix.
-export const FLOW_ASSISTANT_MAX_STEPS = 40;
-
 export const FLOW_ASSISTANT_SYSTEM_PROMPT = [
   "You help users design deterministic repo automation workflows on a node canvas.",
   "Build the flow by calling tools that mutate a working graph. Do not emit prose — call tools only.",
@@ -132,13 +127,9 @@ export function mergeFlowAssistantUsage(
 }
 
 /** The tool loop must reach `finalize`; anything else is a failed suggestion. */
-export function flowAssistantIncompleteError(
-  stepsTaken: number
-): FlowServiceError {
+export function flowAssistantIncompleteError(): FlowServiceError {
   return new FlowServiceError(
     "FLOW_ASSISTANT_INVALID_GRAPH",
-    stepsTaken >= FLOW_ASSISTANT_MAX_STEPS
-      ? `Assistant ran out of steps (${stepsTaken}/${FLOW_ASSISTANT_MAX_STEPS}) before completing the flow. Try a simpler request or break it into smaller changes.`
-      : "Assistant stopped before finalizing a flow graph. Try rephrasing your request."
+    "Assistant stopped before finalizing a flow graph. Try rephrasing your request."
   );
 }

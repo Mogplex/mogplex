@@ -74,7 +74,7 @@ for (const [changedPath, shouldStop] of [
     assert.equal(stopRequested, shouldStop);
     if (shouldStop) return;
     assert.deepEqual(result, {
-      error: `The sandbox has 1 uncommitted change(s): ${changedPath}. Stopping discards them. Commit and push first, or ask the operator whether to discard them and call again with discardChanges: true.`,
+      error: `The sandbox has 1 uncommitted change(s): ${changedPath}. Legacy disposable sandboxes lose these files on stop. Commit and push first, or ask the operator whether to discard them and call again with discardChanges: true.`,
       reason: "uncommitted_changes",
       files: [changedPath],
     });

@@ -273,7 +273,6 @@ function createStarterGraph(input: {
           // caller's scope can actually invoke; the constant is the last resort
           // that keeps the graph publishable when nothing resolved.
           modelOverride: input.modelId?.trim() || DEFAULT_NEW_AGENT_MODEL_ID,
-          maxStepsOverride: null,
           timeoutMsOverride: null,
           systemPromptOverride: null,
           ...input.agentData,

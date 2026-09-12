@@ -12,84 +12,87 @@ import {
   buildPersistedResumeRecord,
 } from "./helpers/sandbox-resume-route-fixtures";
 
-test("POST /api/sandbox/[id]/resume transitions paused -> installing and streams a 'ready' event when bootstrap reports running", async () => {
-  const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();
-  const updateCalls: Array<Record<string, unknown>> = [];
-  const resumeRootDirectory = "apps/web";
-  const resumeTerminalCwd = "/workspace/apps/web";
-  const resumeStartedAt = Date.now();
+for (const savedStatus of ["paused", "stopped"]) {
+  test(`POST /api/sandbox/[id]/resume restores ${savedStatus} workspaces and streams ready`, async () => {
+    const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();
+    const updateCalls: Array<Record<string, unknown>> = [];
+    const resumeRootDirectory = "apps/web";
+    const resumeTerminalCwd = "/workspace/apps/web";
+    const resumeStartedAt = Date.now();
 
-  const handler = createSandboxResumeHandler({
-    loadOwnedSandboxRouteContext: (async () =>
-      buildLoadedResumeContext({
-        root_directory: resumeRootDirectory,
-        terminal_cwd: resumeTerminalCwd,
+    const handler = createSandboxResumeHandler({
+      loadOwnedSandboxRouteContext: (async () =>
+        buildLoadedResumeContext({
+          status: savedStatus,
+          root_directory: resumeRootDirectory,
+          terminal_cwd: resumeTerminalCwd,
+        })) as never,
+      enforceSandboxBootLimits: (async () => ({
+        allowed: true,
+        claimId: "claim-resume-1",
       })) as never,
-    enforceSandboxBootLimits: (async () => ({
-      allowed: true,
-      claimId: "claim-resume-1",
-    })) as never,
-    getSandbox: (async () => ({}) as never) as never,
-    updateSandboxRecord: (async (
-      _id: string,
-      updates: Record<string, unknown>
-    ) => {
-      updateCalls.push(updates);
-      return buildPersistedResumeRecord({
-        root_directory: resumeRootDirectory,
-        terminal_cwd: resumeTerminalCwd,
-        ...(updates as Partial<ResumeRecord>),
-      });
-    }) as never,
-    resolveRepoSandboxEnv: (async () => ({
-      envVars: {},
-      sync: { mode: "sandbox-only" },
-    })) as never,
-    bootstrapFromSnapshotStreaming: async function* bootstrapMock() {
-      yield { type: "preview_url", url: "https://preview.example.com" };
-      yield { type: "status", status: "running" };
-    } as never,
+      getSandbox: (async () => ({}) as never) as never,
+      updateSandboxRecord: (async (
+        _id: string,
+        updates: Record<string, unknown>
+      ) => {
+        updateCalls.push(updates);
+        return buildPersistedResumeRecord({
+          root_directory: resumeRootDirectory,
+          terminal_cwd: resumeTerminalCwd,
+          ...(updates as Partial<ResumeRecord>),
+        });
+      }) as never,
+      resolveRepoSandboxEnv: (async () => ({
+        envVars: {},
+        sync: { mode: "sandbox-only" },
+      })) as never,
+      bootstrapFromSnapshotStreaming: async function* bootstrapMock() {
+        yield { type: "preview_url", url: "https://preview.example.com" };
+        yield { type: "status", status: "running" };
+      } as never,
+    });
+
+    const response = await handler(
+      buildSandboxRouteRequest({ method: "POST", suffix: "/resume" }),
+      buildSandboxRouteParams()
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Content-Type"), "text/event-stream");
+
+    // Drain the SSE stream to confirm ready fires and paused->installing
+    // transition is written before bootstrap events.
+    const body = await readStreamBody(response);
+
+    assert.match(body, /"type":"sandbox_created"/);
+    assert.match(body, /"type":"preview_url"/);
+    assert.match(body, /"type":"status","status":"running"/);
+    assert.match(body, /"type":"ready"/);
+    assert.match(body, /"root_directory":"apps\/web"/);
+    assert.match(body, /"terminal_cwd":"\/workspace\/apps\/web"/);
+
+    // First update flips paused -> installing, last one flips to running.
+    assert.ok(
+      updateCalls.some(
+        (u) =>
+          u.status === "installing" &&
+          u.health_status === "starting" &&
+          u.limit_claim_id === "claim-resume-1"
+      ),
+      "expected a paused->installing update call"
+    );
+    assert.ok(
+      updateCalls.some(
+        (u) => u.status === "running" && u.health_status === "running"
+      ),
+      "expected an installing->running update call"
+    );
+    const bootStart = Date.parse(String(updateCalls[0].last_boot_started_at));
+    assert.ok(bootStart >= resumeStartedAt && bootStart <= Date.now());
+    assert.equal(updateCalls[0].last_boot_completed_at, null);
   });
-
-  const response = await handler(
-    buildSandboxRouteRequest({ method: "POST", suffix: "/resume" }),
-    buildSandboxRouteParams()
-  );
-
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("Content-Type"), "text/event-stream");
-
-  // Drain the SSE stream to confirm ready fires and paused->installing
-  // transition is written before bootstrap events.
-  const body = await readStreamBody(response);
-
-  assert.match(body, /"type":"sandbox_created"/);
-  assert.match(body, /"type":"preview_url"/);
-  assert.match(body, /"type":"status","status":"running"/);
-  assert.match(body, /"type":"ready"/);
-  assert.match(body, /"root_directory":"apps\/web"/);
-  assert.match(body, /"terminal_cwd":"\/workspace\/apps\/web"/);
-
-  // First update flips paused -> installing, last one flips to running.
-  assert.ok(
-    updateCalls.some(
-      (u) =>
-        u.status === "installing" &&
-        u.health_status === "starting" &&
-        u.limit_claim_id === "claim-resume-1"
-    ),
-    "expected a paused->installing update call"
-  );
-  assert.ok(
-    updateCalls.some(
-      (u) => u.status === "running" && u.health_status === "running"
-    ),
-    "expected an installing->running update call"
-  );
-  const bootStart = Date.parse(String(updateCalls[0].last_boot_started_at));
-  assert.ok(bootStart >= resumeStartedAt && bootStart <= Date.now());
-  assert.equal(updateCalls[0].last_boot_completed_at, null);
-});
+}
 
 test("POST /api/sandbox/[id]/resume records resume_after_auto_pause metric", async () => {
   const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();

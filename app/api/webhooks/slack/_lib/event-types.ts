@@ -303,7 +303,7 @@ export function buildSlackEventTaskPayload(
 export function buildSlackThreadConcurrencyKey(
   payload: Pick<
     SlackEventTaskPayload,
-    "teamId" | "channelId" | "threadTs" | "channelType"
+    "teamId" | "channelId" | "threadTs" | "messageTs" | "channelType"
   >
 ) {
   // Serialize runs per Mogplex conversation, so a DM channel (one shared

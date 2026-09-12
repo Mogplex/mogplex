@@ -1,3 +1,4 @@
+import { sanitizeTelemetryValue } from "@/lib/ai-telemetry";
 import {
   createChatModelStream,
   resolveChatModelId,
@@ -201,7 +202,10 @@ export async function runNativeMogplexAgent(
             eventType: "tool_started",
             toolName: toolCall.toolName,
             message: `${toolCall.toolName} started`,
-            payload: { toolCallId: toolCall.toolCallId },
+            payload: {
+              toolCallId: toolCall.toolCallId,
+              input: sanitizeTelemetryValue(toolCall.input),
+            },
           });
           await progress.report({
             kind: "tool_started",
@@ -222,6 +226,7 @@ export async function runNativeMogplexAgent(
             payload: {
               toolCallId: toolCall.toolCallId,
               state: success ? "success" : "error",
+              output: sanitizeTelemetryValue(toolOutput),
             },
           });
           await progress.report({

@@ -45,7 +45,6 @@ test("createAutomationAgentRunner uses generateText without mutating global fetc
         agent: {
           model: "minimax/minimax-m2.5",
           system_prompt: null,
-          max_steps: 42,
           timeout_ms: 18000,
         },
         repo: {
@@ -174,7 +173,6 @@ test("pr_review carries agent system_prompt + static instructions on a cacheable
           agent: {
             model: "anthropic/claude-sonnet-4.6",
             system_prompt: agentSystemPrompt,
-            max_steps: 5,
             timeout_ms: 18000,
           },
           repo: {
@@ -250,7 +248,6 @@ test("pr_review with no agent system_prompt still emits a cacheable system messa
         agent: {
           model: "anthropic/claude-sonnet-4.6",
           system_prompt: null,
-          max_steps: 5,
           timeout_ms: 18000,
         },
         repo: {

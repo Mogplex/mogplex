@@ -4,11 +4,6 @@ import { runPrReviewCandidate } from "@/lib/agents/pr-review-candidate";
 import { gatewayProviderOptions } from "@/lib/models/gateway-provider-routing";
 import { getAutomationModelFallbackIds } from "@/lib/workflows/automation-model-defaults";
 
-function positiveInteger(value: string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 async function main() {
   const apiKey = process.env.AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) throw new Error("AI_GATEWAY_API_KEY is required");
@@ -22,7 +17,6 @@ async function main() {
   const result = await runPrReviewCandidate(rawInput, {
     model: gateway(modelId),
     modelId,
-    maxSteps: positiveInteger(process.env.MOGPLEX_QUALITY_MAX_STEPS, 20),
     providerOptions: gatewayProviderOptions(
       modelId,
       {

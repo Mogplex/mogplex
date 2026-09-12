@@ -15,7 +15,7 @@ test("GET /api/cron/sandbox-reaper reports when stopped-row repair already conve
     loadActiveSandboxes: async () => [] as never,
     loadStaleStoppedSandboxes: async () =>
       [buildReaperStaleStoppedSandbox()] as never,
-    loadAbandonedPausedSandboxes: async () => [] as never,
+
     loadBusySandboxIds: async () => {
       throw new Error("loadBusySandboxIds should not be called");
     },

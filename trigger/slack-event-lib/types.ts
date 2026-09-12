@@ -1,3 +1,4 @@
+import type { loadSlackThreadRunContext } from "@/lib/slack/thread-run-context";
 import type {
   SlackThreadMessage,
   postSlackEphemeral,
@@ -149,6 +150,7 @@ export type SlackEventTaskDeps = {
     userId: string;
   }) => Promise<void>;
   findGuidanceRuns: typeof findSlackGuidanceRuns;
+  loadThreadRunContext: typeof loadSlackThreadRunContext;
   submitGuidance: typeof submitSlackRunGuidance;
   getInstallation: (teamId: string) => Promise<SlackInstallationRow | null>;
   getBotToken: (teamId: string) => Promise<string | null>;

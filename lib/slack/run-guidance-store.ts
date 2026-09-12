@@ -61,13 +61,27 @@ export async function findSlackGuidanceRuns(
       return [run as ExternalAgentRunRow];
     }
   }
-  const base = () =>
-    client
+  return findSlackThreadRuns(input, client, [
+    "pending",
+    "streaming",
+    "awaiting_input",
+  ]);
+}
+
+/** Resolve only runs owned by this sender in this exact Slack thread. */
+export async function findSlackThreadRuns(
+  input: GuidanceThread,
+  client: Pick<SupabaseClient, "from"> = supabaseAdmin,
+  statuses?: ExternalAgentRunRow["status"][]
+): Promise<ExternalAgentRunRow[]> {
+  const base = () => {
+    const query = client
       .from("external_agent_runs")
       .select("*")
       .eq("user_id", input.userId)
-      .eq("metadata->>slack_user_id", input.slackUserId)
-      .in("status", ["pending", "streaming", "awaiting_input"]);
+      .eq("metadata->>slack_user_id", input.slackUserId);
+    return statuses ? query.in("status", statuses) : query;
+  };
   const results = await Promise.all([
     base()
       .contains("metadata", {

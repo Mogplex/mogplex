@@ -93,7 +93,8 @@ export async function loadBoundSlackGroupConversation(input: {
 }
 
 export function getSlackReplyThreadTs(payload: SlackEventTaskPayload) {
-  if (payload.channelType === "im") return undefined;
+  if (payload.channelType === "im" && payload.threadTs === payload.messageTs)
+    return undefined;
   return payload.threadTs;
 }
 

@@ -62,9 +62,9 @@ export function createSandboxResumeHandler(
         { status: 409 }
       );
     }
-    if (record.status !== "paused") {
+    if (record.status !== "paused" && record.status !== "stopped") {
       return NextResponse.json(
-        { error: "Sandbox is not paused" },
+        { error: "Sandbox is not paused or stopped" },
         { status: 400 }
       );
     }
@@ -157,7 +157,7 @@ export function createSandboxResumeHandler(
         },
         {
           expectedSandboxId: record.sandbox_id,
-          fromStatuses: "paused",
+          fromStatuses: record.status,
           select: RESUME_SELECT,
         }
       )) as SandboxResumeRecord | null;

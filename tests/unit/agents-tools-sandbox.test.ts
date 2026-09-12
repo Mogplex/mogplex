@@ -414,7 +414,7 @@ test("sandbox_stop posts to the non-deleting lifecycle route with delegated auth
             sandboxId: "sandbox-record-1",
             status: "stopped",
             message:
-              "Sandbox compute stopped. Committed and pushed work is safe; uncommitted changes do not survive a restart. The sandbox record remains available for restart.",
+              "Sandbox compute stopped. Persistent workspace files remain available for resume. The sandbox record remains available.",
           }
         );
       }

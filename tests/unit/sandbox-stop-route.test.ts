@@ -104,6 +104,8 @@ test("POST /api/sandbox/[id]/stop best-effort stops the remote sandbox before up
       buildResolvedSandboxRouteContext(loaded) as never,
     getSandbox: async () =>
       ({
+        persistent: true,
+        currentSession: () => ({ stoppedAt: new Date() }),
         stop: async () => {
           remoteStopCount += 1;
         },
@@ -120,7 +122,7 @@ test("POST /api/sandbox/[id]/stop best-effort stops the remote sandbox before up
   assert.equal(remoteStopCount, 1);
 });
 
-test("POST /api/sandbox/[id]/stop deletes a paused sandbox's resources and marks record stopped", async () => {
+test("POST /api/sandbox/[id]/stop explicitly discards a legacy paused sandbox's resources and marks record stopped", async () => {
   const { createSandboxStopHandler } = await loadSandboxStopRouteModule();
   const stopCalls: Array<{
     id: string;
@@ -155,7 +157,11 @@ test("POST /api/sandbox/[id]/stop deletes a paused sandbox's resources and marks
   });
 
   const response = await handler(
-    buildSandboxRouteRequest({ method: "POST", suffix: "/stop" }),
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/stop",
+      init: { body: JSON.stringify({ discardChanges: true }) },
+    }),
     buildSandboxRouteParams()
   );
 
@@ -207,7 +213,11 @@ test("POST /api/sandbox/[id]/stop can operate while auto-pause is pausing", asyn
   });
 
   const response = await handler(
-    buildSandboxRouteRequest({ method: "POST", suffix: "/stop" }),
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/stop",
+      init: { body: JSON.stringify({ discardChanges: true }) },
+    }),
     buildSandboxRouteParams()
   );
 

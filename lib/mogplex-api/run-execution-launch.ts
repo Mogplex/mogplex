@@ -142,6 +142,12 @@ export async function launchSandboxViaRoute(run: ExternalAgentRunRow) {
     })
   );
 
+  return readSandboxLaunchResponse(response);
+}
+
+export async function readSandboxLaunchResponse(
+  response: Response
+): Promise<SandboxRef> {
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     return readJsonSandboxResponse(response);

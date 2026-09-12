@@ -120,7 +120,6 @@ export type FlowAgentNodeData = {
   // mid-run, AI Gateway routing retries on this model instead of the shared
   // env/default pool. Optional; the pool applies when unset.
   fallbackModelOverride?: string | null;
-  maxStepsOverride?: number | null;
   timeoutMsOverride?: number | null;
   systemPromptOverride?: string | null;
 };

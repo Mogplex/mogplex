@@ -32,10 +32,7 @@ import type {
   SandboxRouteRecordLike,
 } from "@/lib/sandbox/route-context";
 
-// Stop can transition from any non-terminal status, including 'pausing' and
-// 'paused'. Paused records still own a Vercel snapshot whose VM is already
-// stopped; Stop is the user's way to discard that and mark the record fully
-// stopped.
+// Stop compute without deleting persistent workspace files or snapshots.
 const STOPPABLE_SANDBOX_STATUSES = [
   ...ACTIVE_SANDBOX_STATUSES,
   "paused",
@@ -126,11 +123,20 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
         vercelTeamId: resolved.context.credentials.vercelTeamId,
         vercelProjectId: resolved.context.credentials.vercelProjectId,
       },
-      // Paused records have no running VM but still have auto-snapshots
-      // attached to the same sandbox name. delete() tears both down, so
-      // we don't need to resume first.
+      // Read provider persistence without waking a paused workspace.
       { resume: false }
     );
+
+    if (sandbox.persistent) {
+      if (sandbox.status !== "stopped") await sandbox.stop({ blocking: true });
+      const session = sandbox.currentSession();
+      return {
+        snapshotId: sandbox.currentSnapshotId ?? null,
+        credentialFailure: false,
+        confirmedStopped: true,
+        endedAt: session.stoppedAt ?? session.updatedAt ?? new Date(),
+      };
+    }
 
     if (preserveChanges) {
       try {
@@ -163,9 +169,7 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
       }
     }
 
-    // Stop = explicit user destroy. sandbox.delete() removes the Vercel
-    // sandbox + all its snapshots + sessions, freeing storage. This is
-    // the semantic the Stop button conveys ("I'm done with this").
+    // Legacy disposable workspaces require the work-loss guard above.
     try {
       await sandbox.delete();
       return {
@@ -234,10 +238,9 @@ export function createSandboxStopHandler(
     );
     if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
 
-    // Empty-body requests come from the explicit destructive Stop UI. Agent
-    // requests always send discardChanges and require the guarded path by default.
+    // A Stop request alone never authorizes discarding legacy workspace files.
     const body = await request.json().catch(() => null);
-    const preserveChanges = body?.discardChanges === false;
+    const preserveChanges = body?.discardChanges !== true;
     const stop = async () => {
       let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
         null;

@@ -170,7 +170,6 @@ export function createAddAgentNodeTool(ctx: ToolContext) {
           autoMerge,
           autoRevert,
           modelOverride: requestedModel || ctx.defaultModelId,
-          maxStepsOverride: null,
           timeoutMsOverride: null,
           systemPromptOverride: null,
         },

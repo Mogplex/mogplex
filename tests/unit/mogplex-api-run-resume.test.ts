@@ -32,7 +32,7 @@ test("buildResumeContinuePrompt reconciles the branch, carries the steer, and in
     "  make the header smaller  "
   );
   assert.match(prompt, /mogplex\/external\/feature/);
-  assert.match(prompt, /git fetch origin/);
+  assert.match(prompt, /git status --short/);
   assert.match(prompt, /make the header smaller/);
   // steer is trimmed
   assert.doesNotMatch(prompt, / {2}make the header smaller/);
@@ -69,12 +69,12 @@ test("resumeExternalAgentRun refuses a run that is not awaiting input", async ()
   assert.equal(created, false);
 });
 
-test("resumeExternalAgentRun runs a fresh segment from the committed branch", async () => {
+test("resumeExternalAgentRun keeps its saved workspace attached across resume segments", async () => {
   let currentRun = buildRunRow({
     status: "awaiting_input",
     ai_call_id: "call-1",
-    sandbox_record_id: "dead-record",
-    sandbox_id: "dead-sbx",
+    sandbox_record_id: "saved-record",
+    sandbox_id: "saved-sbx",
     create_branch: true,
   });
   const updates: Array<Partial<ExternalAgentRunRow>> = [];
@@ -119,15 +119,15 @@ test("resumeExternalAgentRun runs a fresh segment from the committed branch", as
   // Run is repointed at the new segment and the dead sandbox is cleared.
   const repoint = updates[0];
   assert.equal(repoint.ai_call_id, "call-2");
-  assert.equal(repoint.sandbox_record_id, null);
-  assert.equal(repoint.sandbox_id, null);
+  assert.equal(repoint.sandbox_record_id, undefined);
+  assert.equal(repoint.sandbox_id, undefined);
   assert.equal(repoint.status, "streaming");
 
   // The launch uses a fresh checkout of the existing working branch.
   assert.ok(launchedWith);
   assert.equal((launchedWith as LaunchArg).create_branch, false);
-  assert.equal((launchedWith as LaunchArg).sandbox_record_id, null);
-  assert.match((launchedWith as LaunchArg).prompt, /git fetch origin/);
+  assert.equal((launchedWith as LaunchArg).sandbox_record_id, "saved-record");
+  assert.match((launchedWith as LaunchArg).prompt, /git status --short/);
 
   // The harness runs against the segment's own ai_call and new sandbox.
   assert.ok(harnessRunWith);

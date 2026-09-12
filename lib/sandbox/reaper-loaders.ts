@@ -4,11 +4,9 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import {
   STALE_PAUSING_THRESHOLD_MS,
   SANDBOX_PAUSING_STATUS,
-  PAUSED_SANDBOX_TTL_MS,
 } from "@/lib/sandbox/reaper-types";
 import type {
   ReaperSandboxRecord,
-  AbandonedPausedSandboxRecord,
   FreshIdleState,
 } from "@/lib/sandbox/reaper-types";
 
@@ -132,25 +130,4 @@ export async function loadFreshIdleState(
   }
 
   return data as FreshIdleState | null;
-}
-
-export async function loadAbandonedPausedSandboxes(
-  client: SupabaseClient = supabaseAdmin
-): Promise<AbandonedPausedSandboxRecord[]> {
-  const cutoffIso = new Date(Date.now() - PAUSED_SANDBOX_TTL_MS).toISOString();
-  const { data, error } = await client
-    .from("sandboxes")
-    .select(
-      "id, sandbox_id, user_id, last_active_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id"
-    )
-    .eq("status", "paused")
-    .or(`last_active_at.is.null,last_active_at.lt.${cutoffIso}`)
-    .limit(50);
-
-  if (error) {
-    throw new Error(
-      `Failed to load abandoned paused sandboxes: ${error.message}`
-    );
-  }
-  return (data ?? []) as AbandonedPausedSandboxRecord[];
 }

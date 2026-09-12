@@ -122,9 +122,7 @@ export async function resumeSandboxByName(
  */
 
 /**
- * Create a persistent sandbox from a git source. Honors the
- * ENABLE/DISABLE_PERSISTENT_SANDBOXES kill switches and sets a 7-day
- * auto-snapshot expiration.
+ * Create a persistent workspace from a git source with no snapshot expiry.
  */
 
 /**

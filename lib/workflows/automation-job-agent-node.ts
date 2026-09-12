@@ -236,7 +236,6 @@ export async function executeFlowAgentNode(
           slug: harnessId,
           model: `harness:${harnessId}`,
           system_prompt: node.data.systemPromptOverride ?? null,
-          max_steps: null,
           timeout_ms: null,
         }
       : resolveFlowAgentOverrides(baseAgent!, node, nodeModelId!),

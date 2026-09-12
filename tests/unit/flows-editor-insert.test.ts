@@ -164,7 +164,6 @@ test("insertFlowDraftAgent appends a selected agent node at the requested positi
     requireApproval: false,
     modelOverride: null,
     fallbackModelOverride: null,
-    maxStepsOverride: null,
     timeoutMsOverride: null,
     systemPromptOverride: null,
   });
