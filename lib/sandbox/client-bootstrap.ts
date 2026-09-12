@@ -35,9 +35,7 @@ export async function* bootstrapFromSnapshotStreaming(
   sandbox: Sandbox,
   opts: BootstrapSandboxOpts = {}
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
-  const context = await resolveBootstrapContext(sandbox, opts, {
-    extraPortHints: [opts.devCommand],
-  });
+  const context = await resolveBootstrapContext(sandbox, opts);
   if (context.monorepoAutoTargetMessage) {
     yield { type: "warning", message: context.monorepoAutoTargetMessage };
   }
@@ -95,9 +93,7 @@ export async function bootstrapSandbox(
   sandbox: Sandbox,
   opts: BootstrapSandboxOpts = {}
 ) {
-  const context = await resolveBootstrapContext(sandbox, opts, {
-    extraPortHints: [opts.devCommand],
-  });
+  const context = await resolveBootstrapContext(sandbox, opts);
 
   if (context.monorepoAutoTargetMessage) {
     console.info("[sandbox/bootstrap]", context.monorepoAutoTargetMessage);
@@ -191,9 +187,7 @@ export async function* bootstrapSandboxStreaming(
   // ignoring it made us route the preview to 3000 while the server bound
   // somewhere else. Also forward the user's devCommand (if any) so an
   // explicit --port in repo settings wins over package.json.
-  const context = await resolveBootstrapContext(sandbox, opts, {
-    extraPortHints: [opts.devCommand],
-  });
+  const context = await resolveBootstrapContext(sandbox, opts);
   if (context.monorepoAutoTargetMessage) {
     yield { type: "warning", message: context.monorepoAutoTargetMessage };
   }

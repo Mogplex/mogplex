@@ -113,7 +113,7 @@ test("detectWorkspaceDependencies handles malformed package.json without throwin
 /**
  * Build a fake sandbox where each path returns a package.json or a workspace
  * marker file. Paths not in the map return null. `listedDirs` lets tests
- * simulate `find <dir> -maxdepth 1 -type d` output.
+ * simulate the directory listing returned by the SDK command.
  */
 function makeMonorepoSandbox(
   files: Record<string, object | string | null>,
@@ -133,14 +133,13 @@ function makeMonorepoSandbox(
       return Buffer.from(JSON.stringify(value));
     },
     runCommand: async ({ args }: { cmd: string; args: string[] }) => {
-      const script = args[args.length - 1] || "";
-      runCommandCalls.push(script);
-      // Parse the `find '<dir>' -maxdepth 1 -mindepth 1 -type d ...` command
-      const match = /find '([^']+)' -maxdepth 1/.exec(script);
-      const dir = match?.[1] || "";
+      const dir = args[args.length - 1] || "";
+      runCommandCalls.push(dir);
       const listing = listedDirs[dir] || [];
       return {
-        stdout: async () => listing.join("\n"),
+        exitCode: 0,
+        stdout: async () =>
+          JSON.stringify(listing.map((path) => path.slice(dir.length + 1))),
       };
     },
   };

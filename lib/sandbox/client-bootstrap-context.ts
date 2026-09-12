@@ -1,4 +1,6 @@
 import type { Sandbox } from "@vercel/sandbox";
+import { resolvePackageDevPort } from "./package-dev-port";
+import { sandboxRepositoryFiles } from "./repository-files";
 import {
   DEFAULT_ENV_SYNC_MODE,
   buildRuntimeSandboxEnv,
@@ -84,19 +86,6 @@ export async function readPackageDevScriptInfo(
   }
 }
 
-function resolveBootstrapPortHints(
-  packageDevScript: string | null,
-  config: {
-    extraPortHints?: Array<string | null | undefined>;
-    includePackageDevScriptForPort?: boolean;
-  }
-) {
-  return [
-    ...(config.extraPortHints ?? []),
-    config.includePackageDevScriptForPort === false ? null : packageDevScript,
-  ];
-}
-
 async function patchBootstrapConfigIfNeeded(
   sandbox: Sandbox,
   strategy: BootstrapStrategy,
@@ -160,11 +149,7 @@ async function detectSandboxBunUsage(sandbox: Sandbox): Promise<boolean> {
 
 export async function resolveBootstrapContext(
   sandbox: Sandbox,
-  opts: BootstrapSandboxOpts,
-  config: {
-    extraPortHints?: Array<string | null | undefined>;
-    includePackageDevScriptForPort?: boolean;
-  } = {}
+  opts: BootstrapSandboxOpts
 ): Promise<ResolvedBootstrapContext> {
   const userRoot = normalizeRootDirectory(opts.rootDirectory);
   // Auto-redirect to a web-app workspace when the caller didn't pin a
@@ -196,12 +181,13 @@ export async function resolveBootstrapContext(
     runtime: effectiveRuntime,
     framework,
   });
-  const devPort = resolveDevPort(
-    opts.devPort,
-    framework,
-    strategy,
-    ...resolveBootstrapPortHints(packageDevScript, config)
-  );
+  const pinnedPort =
+    opts.devPort ??
+    (await resolvePackageDevPort(sandboxRepositoryFiles(sandbox), {
+      rootDirectory: normalizedRoot,
+      devCommand: opts.devCommand,
+    }));
+  const devPort = resolveDevPort(pinnedPort, framework, strategy);
   const previewUrl = sandbox.domain(devPort);
   const runtimeEnv = buildRuntimeSandboxEnv(
     opts.envVars,

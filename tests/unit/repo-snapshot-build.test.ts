@@ -32,6 +32,7 @@ function createRepo(
     sandbox_billing_target: "personal",
     runtime: "node22",
     dev_port: 3000,
+    dev_port_auto: false,
     install_command: null,
     dev_command: null,
     sandbox_env_vars: null,
@@ -111,7 +112,16 @@ test("buildRepoSnapshot returns rate-limited result after acquiring and releasin
   assert.equal(releasedToken, "lock-token");
 });
 
-test("buildRepoSnapshot reuses a pre-acquired lock and persists the snapshot", async () => {
+test("buildRepoSnapshot reuses a pre-acquired lock and exposes the automatic dev port", async (t) => {
+  t.mock.method(globalThis, "fetch", async (input: unknown) => {
+    const path = new URL(String(input)).pathname;
+    return path.endsWith("/package.json")
+      ? Response.json({
+          dependencies: { next: "16" },
+          scripts: { dev: "next dev --port 3015" },
+        })
+      : new Response("missing", { status: 404 });
+  });
   const { createRepoSnapshotBuilder } = await loadRepoSnapshotBuildModule();
   let releasedToken: string | null = null;
   let persistedSnapshotId: string | null = null;
@@ -134,22 +144,26 @@ test("buildRepoSnapshot reuses a pre-acquired lock and persists the snapshot", a
         "acquireSnapshotBuildLock should not be called when a lock token is provided"
       );
     },
-    createSandboxForRepo: async () => {
+    createSandboxForRepo: async (options) => {
+      assert.equal(options.devPort, 3015);
       created += 1;
       return fakeSandbox;
     },
-    bootstrapSandbox: (async () => ({
-      previewUrl: "https://preview.test",
-      runtime: "node22",
-      packageManager: "pnpm",
-      framework: undefined,
-      installCommand: "pnpm install",
-      devCommand: "pnpm dev",
-      installLog: "",
-      devLog: "",
-      healthStatus: "running",
-      readiness: { ready: true },
-    })) as BootstrapSandboxFn,
+    bootstrapSandbox: (async (_sandbox, options) => {
+      assert.equal(options?.devPort, 3015);
+      return {
+        previewUrl: "https://preview.test",
+        runtime: "node22",
+        packageManager: "pnpm",
+        framework: undefined,
+        installCommand: "pnpm install",
+        devCommand: "pnpm dev",
+        installLog: "",
+        devLog: "",
+        healthStatus: "running",
+        readiness: { ready: true },
+      };
+    }) as BootstrapSandboxFn,
     cleanupPreparedSandboxVercelLink: (async () => ({
       removedFiles: [],
     })) as CleanupPreparedSandboxVercelLinkFn,
@@ -170,7 +184,7 @@ test("buildRepoSnapshot reuses a pre-acquired lock and persists the snapshot", a
   });
 
   const result = await buildRepoSnapshot({
-    repo: createRepo(),
+    repo: createRepo({ dev_port_auto: true }),
     sandboxCredentials: {
       userId: "user-123",
       vercelToken: "vercel-token",

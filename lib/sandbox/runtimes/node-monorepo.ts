@@ -1,10 +1,13 @@
 import { resolveSandboxPath } from "@/lib/repo-settings";
 import { parsePnpmWorkspaceGlobs } from "@/lib/monorepo-detection";
 import type { Sandbox } from "@vercel/sandbox";
+import {
+  sandboxRepositoryFiles,
+  type RepositoryFiles,
+} from "../repository-files";
 
-async function readTextFile(sandbox: Sandbox, path: string) {
-  const buffer = await sandbox.readFileToBuffer({ path });
-  return buffer ? buffer.toString("utf-8") : "";
+async function readTextFile(sandbox: RepositoryFiles, path: string) {
+  return (await sandbox.readText(path)) ?? "";
 }
 
 /** Common directory names where a web app lives inside a monorepo.
@@ -70,7 +73,7 @@ type WebPackageInfo = {
 };
 
 async function readPackageJsonInfo(
-  sandbox: Sandbox,
+  sandbox: RepositoryFiles,
   rootDir?: string | null
 ): Promise<WebPackageInfo | null> {
   const pkgPath = resolveSandboxPath(rootDir, "package.json");
@@ -150,7 +153,7 @@ function isViablePreviewTarget(info: WebPackageInfo | null): boolean {
  * - scanDirs: directories whose subdirectories should be listed (e.g. "packages")
  */
 async function resolveWorkspaceScanTargets(
-  sandbox: Sandbox
+  sandbox: RepositoryFiles
 ): Promise<{ directPaths: string[]; scanDirs: string[] }> {
   const directPaths: string[] = [];
   const scanDirs: string[] = [];
@@ -227,13 +230,13 @@ async function resolveWorkspaceScanTargets(
 
 /** Checks whether the repo root is the top of a monorepo (so we should
  * consider redirecting to a workspace member). */
-async function isMonorepoRoot(sandbox: Sandbox): Promise<boolean> {
+async function isMonorepoRoot(sandbox: RepositoryFiles): Promise<boolean> {
   const [pnpmWs, turboJson, lernaJson, nxJson, rushJson] = await Promise.all([
-    sandbox.readFile({ path: "pnpm-workspace.yaml" }),
-    sandbox.readFile({ path: "turbo.json" }),
-    sandbox.readFile({ path: "lerna.json" }),
-    sandbox.readFile({ path: "nx.json" }),
-    sandbox.readFile({ path: "rush.json" }),
+    sandbox.readText("pnpm-workspace.yaml").then((text) => text !== null),
+    sandbox.readText("turbo.json").then((text) => text !== null),
+    sandbox.readText("lerna.json").then((text) => text !== null),
+    sandbox.readText("nx.json").then((text) => text !== null),
+    sandbox.readText("rush.json").then((text) => text !== null),
   ]);
   if (pnpmWs || turboJson || lernaJson || nxJson || rushJson) return true;
   try {
@@ -246,32 +249,16 @@ async function isMonorepoRoot(sandbox: Sandbox): Promise<boolean> {
   }
 }
 
-/** Escape a path for use inside a single-quoted shell literal. */
-function escapeSingleQuoted(value: string) {
-  return value.replace(/'/g, String.raw`'\''`);
-}
-
-/** List immediate subdirectories via `find` (shell-safe, no glob expansion). */
+/** List immediate workspace directories through the repository boundary. */
 async function listSandboxSubdirs(
-  sandbox: Sandbox,
+  files: RepositoryFiles,
   dir: string
 ): Promise<string[]> {
-  try {
-    const cmd = await sandbox.runCommand({
-      cmd: "sh",
-      args: [
-        "-lc",
-        `find '${escapeSingleQuoted(dir)}' -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -50 || true`,
-      ],
-    });
-    const stdout = await cmd.stdout();
-    return stdout
-      .split("\n")
-      .map((l) => l.trim().replace(/^\.\//, ""))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  return (await files.listDirectories(dir)).map((name) => `${dir}/${name}`);
+}
+
+export function resolveMonorepoWebTarget(sandbox: Sandbox) {
+  return resolveMonorepoWebTargetFromFiles(sandboxRepositoryFiles(sandbox));
 }
 
 /**
@@ -290,16 +277,16 @@ async function listSandboxSubdirs(
  * Only workspaces with a recognised framework AND a `dev` script are eligible
  * so the sandbox can actually launch a preview server.
  */
-export async function resolveMonorepoWebTarget(
-  sandbox: Sandbox
+export async function resolveMonorepoWebTargetFromFiles(
+  sandbox: RepositoryFiles
 ): Promise<{ path: string; framework: string | null } | null> {
-  // Only activates for monorepos.
-  if (!(await isMonorepoRoot(sandbox))) return null;
-
   // If the repo root itself is a web app, don't redirect - the user's dev
   // server already lives at the root.
   const rootInfo = await readPackageJsonInfo(sandbox, null);
   if (isWebPackage(rootInfo)) return null;
+
+  // Only activates for monorepos.
+  if (!(await isMonorepoRoot(sandbox))) return null;
 
   // Phase 1: Probe well-known paths in parallel (fast path, deterministic order).
   const commonResults = await Promise.all(

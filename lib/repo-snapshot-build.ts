@@ -1,6 +1,7 @@
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { enforceSnapshotBuildLimits } from "@/lib/request-limits";
 import { resolveConfiguredDevPort } from "@/lib/repo-settings";
+import { detectGithubDevPort } from "@/lib/sandbox/dev-port";
 import {
   createSandboxForRepo,
   bootstrapSandbox,
@@ -191,10 +192,6 @@ export function createRepoSnapshotBuilder(
     const createContext = createContextResult.context;
     const sandboxCredentials = createContext.credentials;
 
-    const configuredDevPort = resolveConfiguredDevPort(
-      input.repo.dev_port,
-      input.repo.dev_port_auto
-    );
     const runtime: SandboxRuntime =
       input.repo.runtime ||
       (await deps.detectRuntimeFromGithub(
@@ -230,6 +227,18 @@ export function createRepoSnapshotBuilder(
           decision: limitDecision,
         };
       }
+
+      const configuredDevPort = await detectGithubDevPort({
+        repoFullName: input.repo.full_name,
+        githubToken,
+        ref: input.repo.default_branch || "main",
+        rootDirectory: input.repo.root_directory,
+        devCommand: input.repo.dev_command,
+        devPort: resolveConfiguredDevPort(
+          input.repo.dev_port,
+          input.repo.dev_port_auto
+        ),
+      });
 
       const envResolution = await resolveRepoSandboxEnv({
         repo: input.repo,
