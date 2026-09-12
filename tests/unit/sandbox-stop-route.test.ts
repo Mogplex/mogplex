@@ -105,7 +105,7 @@ test("POST /api/sandbox/[id]/stop best-effort stops the remote sandbox before up
     getSandbox: async () =>
       ({
         persistent: true,
-        currentSession: () => ({stoppedAt: new Date()}),
+        currentSession: () => ({ stoppedAt: new Date() }),
         stop: async () => {
           remoteStopCount += 1;
         },
