@@ -1,37 +1,12 @@
-/**
- * Resumes a run that paused at a checkpoint (status `awaiting_input`), given
- * the user's steering reply.
- *
- * Production sandboxes are non-persistent: after the idle window the reaper
- * hard-stops the VM and Vercel discards its filesystem, so a paused run cannot
- * be woken in place. Instead the checkpoint protocol requires the agent to
- * commit and push its work before pausing, and a resume runs a fresh *segment*:
- *
- *   1. Create a new pending ai_call and repoint the run at it. Each segment is
- *      billed on its own ai_call row; the run's `ai_call_id` always names the
- *      latest segment (latest-segment cost rollup).
- *   2. Launch a fresh sandbox from the committed working branch
- *      (`create_branch: false` checks out `working_branch`, which carries the
- *      checkpoint commits). Stale sandbox refs are cleared so the launch route
- *      is actually called rather than short-circuiting on the dead sandbox.
- *   3. Run the harness once with a continue-prompt (the user's steer plus the
- *      checkpoint protocol), then finalize exactly like an initial pass: pause
- *      again at the next checkpoint, ship the PR on approval, or fail.
- *
- * Dormant until the checkpoint protocol is activated on the initial prompt: no
- * run reaches `awaiting_input` until then, so `resumeExternalAgentRun` has
- * nothing to resume.
- */
+/** Resume a checkpoint in its saved workspace, preserving uncommitted files. */
 import { buildCheckpointProtocolInstructions } from "@/lib/harness/checkpoint";
 import {
   createAiCall,
   loadOwnedAiCall,
   safeAppendAiCallEvent,
 } from "@/lib/interactive-runs";
-import {
-  launchSandboxViaRoute,
-  type SandboxRef,
-} from "@/lib/mogplex-api/run-execution-launch";
+import type { SandboxRef } from "@/lib/mogplex-api/run-execution-launch";
+import { resumeRunSandbox } from "./run-resume-sandbox";
 import {
   loadRunForExecution,
   updateExternalAgentRun,
@@ -152,7 +127,7 @@ const defaultResumeDeps: ResumeExternalAgentRunDeps = {
   loadRun: loadRunForExecution,
   updateRun: updateExternalAgentRun,
   createAiCall,
-  launchSandbox: launchSandboxViaRoute,
+  launchSandbox: resumeRunSandbox,
   runHarness: runHarnessViaRoute,
   loadAiCall: loadOwnedAiCall,
   appendEvent: safeAppendAiCallEvent,
@@ -160,20 +135,16 @@ const defaultResumeDeps: ResumeExternalAgentRunDeps = {
   notifyRunCheckpoint: notifySlackRunCheckpoint,
 };
 
-/**
- * The prompt for a resumed segment: reconcile the fresh checkout against the
- * pushed branch, apply the user's steer, then follow the checkpoint protocol
- * (pause again or ship on approval).
- */
+/** Reconcile saved files and checkpoint evidence before applying the user's reply. */
 export function buildResumeContinuePrompt(
   run: ExternalAgentRunRow,
   steer: string
 ): string {
   const trimmedSteer = steer.trim();
   return [
-    `You are resuming a paused repo-agent run in a FRESH checkout of branch \`${run.working_branch}\`.`,
-    "Your earlier work was committed and pushed to that branch before the run paused.",
-    "First reconcile your working tree: run `git fetch origin` and `git log --oneline -5`, and confirm your previous checkpoint commit(s) are present on this branch. If your prior work is missing, STOP and report that the checkpoint was lost instead of silently redoing it.",
+    `You are resuming a paused repo-agent run in its saved workspace on branch \`${run.working_branch}\`.`,
+    "The workspace can contain uncommitted work. Preserve those files.",
+    "First inspect `git status --short`, `git diff`, and `git log --oneline -5`. Verify the saved work before continuing. Do not assume it was committed or pushed. If prior work is missing, stop and report it.",
     "",
     "The user reviewed your last checkpoint and replied:",
     trimmedSteer || "(no additional instructions — proceed)",
@@ -234,12 +205,9 @@ export async function resumeExternalAgentRun(
     },
   });
 
-  // Repoint the run at the new segment and clear the dead sandbox so the launch
-  // route runs a fresh checkout instead of short-circuiting on stale refs.
+  // Keep the saved workspace attached across segments, including failed resumes.
   const repointed = await deps.updateRun(run.user_id, run.id, {
     ai_call_id: segmentAiCall.id,
-    sandbox_record_id: null,
-    sandbox_id: null,
     status: "streaming",
     error: null,
   });

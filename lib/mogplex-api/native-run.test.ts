@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { streamText, stepCountIs, tool } from "ai";
+import { streamText, tool } from "ai";
 import { z } from "zod";
 import type { HarnessProgressUpdate } from "./harness-progress";
 import { MockLanguageModelV3 } from "ai/test";
@@ -46,6 +46,7 @@ async function exercise(
   const controller = new AbortController();
   const events: string[] = [];
   const finalReports: string[] = [];
+  const toolEvidence: unknown[] = [];
   let cleaned = false;
   let closed = false;
   let executionLeaseAcquired = false;
@@ -211,7 +212,7 @@ async function exercise(
                   },
                 }),
               },
-              stopWhen: stepCountIs(3),
+              stopWhen: () => false,
               ...input.hooks,
             }),
             connections: [],
@@ -259,6 +260,8 @@ async function exercise(
         },
         appendEvent: async (event) => {
           events.push(event.eventType);
+          if (event.toolName === "terminal_exec")
+            toolEvidence.push(event.payload);
           if (event.payload?.kind === "assistant_final")
             finalReports.push(event.message ?? "");
           return null;
@@ -274,6 +277,7 @@ async function exercise(
     caught,
     events,
     finalReports,
+    toolEvidence,
     cleaned,
     closed,
     model,
@@ -301,6 +305,8 @@ test("a real SDK run receives mid-command Slack guidance at its next model step 
 
 test("native SDK tool hooks retain identities, inputs, failed exits and complete text boundaries", async () => {
   const result = await exercise("tool_progress");
+  assert.ok(JSON.stringify(result.toolEvidence).includes("pnpm test"));
+  assert.ok(JSON.stringify(result.toolEvidence).includes("exitCode"));
   assert.equal(result.caught, undefined);
   assert.ok(
     result.progress.some(

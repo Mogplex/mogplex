@@ -1,6 +1,5 @@
-import { generateText, stepCountIs } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
-import { getEffectiveFlowAgentMaxSteps } from "@/lib/flows/agent-defaults";
 import { withGatewaySystemCaching } from "@/lib/models/gateway-provider-routing";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
 import { buildPrReviewRunSpec } from "@/lib/agents/pr-review-run-spec";
@@ -209,7 +208,6 @@ export async function runPrReviewCandidate(
     modelId: string;
     providerOptions?: CandidateProviderOptions;
     generateText?: typeof generateText;
-    maxSteps?: number;
     systemPrompt?: string;
     timeoutMs?: number;
   }
@@ -247,9 +245,7 @@ export async function runPrReviewCandidate(
       }),
       tools,
       prompt: runSpec.prompt,
-      stopWhen: stepCountIs(
-        getEffectiveFlowAgentMaxSteps(options.maxSteps ?? 20)
-      ),
+      stopWhen: () => false,
     },
   });
   const harnessResult = extractPrReviewHarnessResult({

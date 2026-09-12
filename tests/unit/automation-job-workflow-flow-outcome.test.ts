@@ -182,7 +182,6 @@ test("createAutomationJobTask fails standalone fix nodes for non-comment trigger
               slug: "nextjs-reviewer",
               model: "openai/gpt-5.4",
               system_prompt: null,
-              max_steps: null,
               timeout_ms: null,
             },
           ],

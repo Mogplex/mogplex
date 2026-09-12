@@ -65,7 +65,6 @@ export async function loadFlowDefinition(
           name: agent.name ?? null,
           slug: agent.slug ?? null,
           system_prompt: agent.system_prompt ?? null,
-          max_steps: null,
           timeout_ms: null,
         } satisfies FlowAgentConfig,
       ])
@@ -90,10 +89,6 @@ export function resolveFlowAgentOverrides(
     model: modelId,
     fallback_model: node.data.fallbackModelOverride ?? null,
     system_prompt: node.data.systemPromptOverride ?? agent.system_prompt,
-    max_steps:
-      typeof node.data.maxStepsOverride === "number"
-        ? node.data.maxStepsOverride
-        : agent.max_steps,
     timeout_ms:
       typeof node.data.timeoutMsOverride === "number"
         ? node.data.timeoutMsOverride

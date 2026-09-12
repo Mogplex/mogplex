@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import { streamText, convertToModelMessages } from "ai";
 import type { SandboxCommandExecution } from "@/lib/agents/tools/sandbox";
 import { buildTools } from "@/lib/agents/tools";
 import { selectChatTools } from "@/lib/agents/chat-surface-tools";
@@ -88,7 +88,9 @@ export type ChatModelStreamHooks = Partial<
   >
 >;
 
-export const CHAT_STOP_WHEN = stepCountIs(100);
+// Explicitly disable the SDK default step cap. Completion, cancellation and
+// provider errors still end the stream; a tool-call count never does.
+export const CHAT_STOP_WHEN = () => false;
 
 function buildChatGatewayContext(
   context: ChatAgentContext
@@ -286,7 +288,7 @@ export async function createChatModelStream(
       tools: context.enableTools === false ? undefined : tools,
       stopWhen: CHAT_STOP_WHEN,
       // Step-level context reduction: within a long tool loop, demote stale
-      // oversized tool outputs to typed references so a 100-step run cannot
+      // oversized tool outputs to typed references so a long run cannot
       // outgrow the window on dead payloads. Deterministic — no model call.
       prepareStep: async ({ messages, stepNumber }) => {
         const prepared = input.prepareMessages

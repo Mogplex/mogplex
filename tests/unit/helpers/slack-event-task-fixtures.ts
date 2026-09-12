@@ -23,6 +23,7 @@ export async function loadSlackEventTask() {
     ) =>
       task.runSlackEventTask(payload, {
         findGuidanceRuns: async () => [],
+        loadThreadRunContext: async () => null,
         ...overrides,
       }),
   };

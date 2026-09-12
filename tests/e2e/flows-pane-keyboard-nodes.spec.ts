@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { selectAppOption } from "./helpers/app-select";
-import { FLOW_AGENT_DEFAULT_MAX_STEPS } from "../../lib/flows/agent-defaults";
 import { AUTOMATION_MODEL_DEFAULT_TIMEOUT_MS } from "../../lib/workflows/automation-model-defaults";
 import {
   stubFlowsPage,
@@ -11,7 +10,6 @@ import type { FlowNode } from "../../lib/types";
 const defaultTimeoutSeconds = Math.round(
   AUTOMATION_MODEL_DEFAULT_TIMEOUT_MS / 1000
 );
-const defaultMaxStepsPlaceholder = `${FLOW_AGENT_DEFAULT_MAX_STEPS} (default)`;
 const defaultTimeoutPlaceholder = `${defaultTimeoutSeconds} (default)`;
 
 test("select all and escape only affect agent-node selection and preserve structural nodes", async ({
@@ -79,17 +77,15 @@ test("agent node overrides persist to the flow graph without mutating the base a
     page.getByLabel("Model", { exact: true }),
     "minimax/minimax-m2.5"
   );
-  const maxStepsOverride = page.getByLabel("Max steps override");
+  await expect(page.getByLabel("Max steps override")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/flow-agent-without-step-limit.png",
+  });
   const timeoutOverride = page.getByLabel("Timeout override (seconds)");
-  await expect(maxStepsOverride).toHaveAttribute(
-    "placeholder",
-    defaultMaxStepsPlaceholder
-  );
   await expect(timeoutOverride).toHaveAttribute(
     "placeholder",
     defaultTimeoutPlaceholder
   );
-  await maxStepsOverride.fill("42");
   await timeoutOverride.fill("18");
   await page
     .getByLabel("System prompt override")
@@ -108,7 +104,6 @@ test("agent node overrides persist to the flow graph without mutating the base a
       agentId: "agent-a",
       role: "edit",
       modelOverride: "minimax/minimax-m2.5",
-      maxStepsOverride: 42,
       timeoutMsOverride: 18000,
       systemPromptOverride:
         "Focus on correctness regressions before style issues.",

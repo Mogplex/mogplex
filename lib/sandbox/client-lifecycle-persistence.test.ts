@@ -50,21 +50,21 @@ it.each(sources)(
 );
 
 it.each(sources)(
-  "$name creation preserves an explicit operator disable",
+  "$name creation requires persistence despite obsolete rollout flags",
   async ({ create }) => {
     vi.stubEnv("ENABLE_PERSISTENT_SANDBOXES", "true");
     vi.stubEnv("DISABLE_PERSISTENT_SANDBOXES", "true");
-    const sandbox = { persistent: false } as Awaited<
+    const sandbox = { persistent: true } as Awaited<
       ReturnType<typeof Sandbox.create>
     >;
     const provider = vi.spyOn(Sandbox, "create").mockResolvedValueOnce(sandbox);
     expect(await create()).toBe(sandbox);
-    expect(provider.mock.calls[0][0]).toMatchObject({ persistent: false });
+    expect(provider.mock.calls[0][0]).toMatchObject({ persistent: true });
   }
 );
 
 it.each(sources)(
-  "$name creation requests the existing retention when enabled",
+  "$name creation keeps workspace snapshots without automatic expiry",
   async ({ create }) => {
     vi.stubEnv("ENABLE_PERSISTENT_SANDBOXES", "true");
     vi.stubEnv("DISABLE_PERSISTENT_SANDBOXES", "false");
@@ -75,7 +75,7 @@ it.each(sources)(
     expect(await create()).toBe(sandbox);
     expect(provider.mock.calls[0][0]).toMatchObject({
       persistent: true,
-      snapshotExpiration: 7 * 24 * 60 * 60 * 1000,
+      snapshotExpiration: 0,
     });
   }
 );

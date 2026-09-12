@@ -15,13 +15,9 @@ import type {
 } from "@/lib/billing/sandbox-usage";
 import type {
   ReaperSandboxRecord,
-  AbandonedPausedSandboxRecord,
   FreshIdleState,
 } from "@/lib/sandbox/reaper-types";
-import type {
-  stopSandbox,
-  deleteAbandonedPausedSandbox,
-} from "@/lib/sandbox/reaper-stop";
+import type { stopSandbox } from "@/lib/sandbox/reaper-stop";
 import type { withSupabaseAdminConnection } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -33,9 +29,6 @@ export type SandboxReaperRunnerDeps = {
   loadStaleStoppedSandboxes: (
     client?: SupabaseClient
   ) => Promise<StaleStoppedSandboxRecord[]>;
-  loadAbandonedPausedSandboxes: (
-    client?: SupabaseClient
-  ) => Promise<AbandonedPausedSandboxRecord[]>;
   loadBusySandboxIds: () => Promise<Set<string>>;
   getPlatformSandboxCredentials: typeof getPlatformSandboxCredentials;
   loadUserVercelCredentials: typeof loadUserVercelCredentials;
@@ -43,7 +36,6 @@ export type SandboxReaperRunnerDeps = {
   repairStoppedSandboxHealthStatus: typeof repairStoppedSandboxHealthStatus;
   stopSandbox: typeof stopSandbox;
   getSandbox: typeof getSandbox;
-  deleteAbandonedPausedSandbox: typeof deleteAbandonedPausedSandbox;
   updateSandboxRecord: typeof updateSandboxRecord;
   loadFreshIdleState: (sandboxId: string) => Promise<FreshIdleState | null>;
   prepareSandboxBillingClose: typeof prepareSandboxBillingClose;

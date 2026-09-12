@@ -96,7 +96,6 @@ export function createDefaultFlowGraph(input?: {
           harness: "mogplex",
           role: getDefaultFlowAgentRole(event),
           modelOverride: modelId,
-          maxStepsOverride: null,
           timeoutMsOverride: null,
           systemPromptOverride: null,
         } satisfies FlowAgentNodeData,

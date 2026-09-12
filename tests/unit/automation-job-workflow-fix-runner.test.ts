@@ -37,7 +37,6 @@ test("createPRFixAgentRunner honors configured automation timeouts above the flo
         agent: {
           model: "openai/gpt-5.4",
           system_prompt: null,
-          max_steps: 8,
           timeout_ms: 360_000,
         },
         repo: {
@@ -136,7 +135,6 @@ test("createPRFixAgentRunner includes structured findings in the fix prompt", as
         agent: {
           model: "openai/gpt-5.4",
           system_prompt: null,
-          max_steps: 8,
           timeout_ms: 360_000,
         },
         repo: {
@@ -235,7 +233,6 @@ test("createPRFixAgentRunner uses the shared automation timeout floor", async ()
         agent: {
           model: "openai/gpt-5.4",
           system_prompt: null,
-          max_steps: 8,
           timeout_ms: 30_000,
         },
         repo: {

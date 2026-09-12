@@ -48,7 +48,7 @@ it.each([
       withSupabaseAdminConnection: async (fn) => fn({} as never),
       loadActiveSandboxes: async () => [record],
       loadStaleStoppedSandboxes: async () => [],
-      loadAbandonedPausedSandboxes: async () => [],
+
       loadBusySandboxIds: async () => new Set([record.id]),
       getPlatformSandboxCredentials: () => buildPlatformSandboxCredentials(),
       resolveCrossUserActiveSandboxLivenessMap: async () =>

@@ -122,7 +122,6 @@ test("createAutomationJobTask defers safe merge actions until the review check i
               slug: "pr-review-agent",
               model: "openai/gpt-5.4",
               system_prompt: null,
-              max_steps: null,
               timeout_ms: null,
             },
           ],

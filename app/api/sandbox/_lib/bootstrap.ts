@@ -3,7 +3,6 @@ import {
   bootstrapFromBaselineSnapshotStreaming,
   bootstrapFromSnapshotStreaming,
   bootstrapSandboxStreaming,
-  persistentSandboxesDisabledByEnv,
 } from "@/lib/sandbox/client";
 import { checkSandboxHealth } from "@/lib/sandbox/health-status";
 import { updateSandboxRecord } from "@/lib/sandbox/records";
@@ -46,7 +45,7 @@ export function buildSandboxInstallingRecordUpdates(input: {
 }
 
 export function resolvePendingSandboxPersistenceFlag() {
-  return !persistentSandboxesDisabledByEnv();
+  return true;
 }
 
 export async function transitionSandboxRecordToInstalling(input: {

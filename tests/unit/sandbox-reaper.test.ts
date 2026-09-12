@@ -25,7 +25,7 @@ async function buildHandler(
     requireMachineApiAuth: () => null,
     loadActiveSandboxes: async () => [] as never,
     loadStaleStoppedSandboxes: async () => [] as never,
-    loadAbandonedPausedSandboxes: async () => [] as never,
+
     loadBusySandboxIds: async () => new Set<string>(),
     getPlatformSandboxCredentials: () => buildPlatformSandboxCredentials(),
     loadUserVercelCredentials: async () => buildUserVercelCredentials(),

@@ -223,7 +223,6 @@ test("createAutomationAgentRunner does not retry transient failures above the mo
             agent: {
               model: "minimax/minimax-m2.5",
               system_prompt: null,
-              max_steps: 42,
               timeout_ms: null,
             },
             repo: {

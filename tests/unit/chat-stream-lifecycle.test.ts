@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { streamText, stepCountIs, tool } from "ai";
+import { streamText, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { z } from "zod";
 import { createChatFinalizationHooks } from "@/app/api/chat/_lib/lifecycle";
@@ -141,7 +141,7 @@ for (const scenario of [
         model,
         prompt: "hello",
         maxRetries: 0,
-        stopWhen: stepCountIs(3),
+        stopWhen: () => false,
         tools: {
           bash: tool({
             inputSchema: z.object({}),

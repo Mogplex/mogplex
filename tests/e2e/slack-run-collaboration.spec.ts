@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { PGlite } from "@electric-sql/pglite";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { streamText, stepCountIs, tool } from "ai";
+import { streamText, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { z } from "zod";
 import { createPostgrestShim } from "../../lib/db/postgrest-shim";
@@ -244,7 +244,7 @@ test("a Slack thread reply reaches the next agent step once and survives termina
     const result = streamText({
       model,
       prompt: run.prompt,
-      stopWhen: stepCountIs(3),
+      stopWhen: () => false,
       prepareStep: async ({ messages, stepNumber }) => ({
         messages: await session.prepare(messages, stepNumber),
       }),

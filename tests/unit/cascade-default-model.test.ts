@@ -28,7 +28,6 @@ function graphWithModels(
         label: `Agent ${index + 1}`,
         agentId: null,
         modelOverride: model,
-        maxStepsOverride: null,
         timeoutMsOverride: null,
         systemPromptOverride: null,
       },

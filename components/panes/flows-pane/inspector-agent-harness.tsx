@@ -6,7 +6,6 @@ import { flowAgentHarnessLabel } from "@/lib/flows/graph"
 import type { FlowCanvasNode } from "@/lib/flows/editor"
 import type { FlowAgentHarness, FlowNode } from "@/lib/types"
 import {
-  DEFAULT_AGENT_MAX_STEPS_PLACEHOLDER,
   DEFAULT_AGENT_TIMEOUT_LABEL,
   FLOW_AGENT_ROLE_OPTIONS,
   FLOW_AGENT_HARNESS_OPTIONS,
@@ -286,11 +285,6 @@ export function EffectiveConfigSection({
         </div>
         {selectedAgentHarness === "mogplex" && (
           <div className="grid gap-3 @xs:grid-cols-2">
-            <InspectorSummaryItem label="Max steps">
-              {typeof node.data.maxStepsOverride === "number"
-                ? node.data.maxStepsOverride
-                : DEFAULT_AGENT_MAX_STEPS_PLACEHOLDER}
-            </InspectorSummaryItem>
             <InspectorSummaryItem label="Timeout">
               {typeof node.data.timeoutMsOverride === "number"
                 ? `${Math.round(node.data.timeoutMsOverride / 1000)}s`

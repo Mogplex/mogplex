@@ -196,7 +196,7 @@ test("degrades to empty context when Slack thread history is unavailable", async
   });
 });
 
-test("does not fetch Slack history for DMs or a thread root event", async () => {
+test("does not fetch Slack history for top-level messages", async () => {
   let fetchCount = 0;
   const deps = {
     getThreadMessages: async () => {

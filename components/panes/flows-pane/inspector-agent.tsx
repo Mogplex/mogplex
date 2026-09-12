@@ -13,7 +13,6 @@ import {
 import { draftToGraph, type FlowCanvasNode, type FlowDraftSnapshot } from "@/lib/flows/editor"
 import type { Agent, FlowAgentHarness, FlowNode, Repo, TriggerEvent } from "@/lib/types"
 import {
-  DEFAULT_AGENT_MAX_STEPS_PLACEHOLDER,
   DEFAULT_AGENT_TIMEOUT_SECONDS_PLACEHOLDER,
   FLOW_AGENT_ROLE_OPTIONS,
 } from "./constants"
@@ -261,20 +260,6 @@ export function AgentInspector({
 
       {selectedAgentHarness === "mogplex" && (
         <div className="grid gap-3 @xs:grid-cols-2">
-          <InspectorField label="Max steps override">
-            <Input
-              aria-label="Max steps override"
-              type="number"
-              min={1}
-              step={1}
-              placeholder={DEFAULT_AGENT_MAX_STEPS_PLACEHOLDER}
-              value={node.data.maxStepsOverride ?? ""}
-              onChange={(event) => updateNodeData(node.id, (data) => ({
-                ...data,
-                maxStepsOverride: event.target.value ? Number(event.target.value) : null,
-              }), { mergeKey: `agent-max-steps-${node.id}` })}
-            />
-          </InspectorField>
           <InspectorField label="Timeout override (seconds)">
             <Input
               aria-label="Timeout override (seconds)"
@@ -327,7 +312,6 @@ export function AgentInspector({
             onClick={() => updateNodeData(node.id, (data) => ({
               ...data,
               modelOverride: null,
-              maxStepsOverride: null,
               timeoutMsOverride: null,
               systemPromptOverride: null,
             }), { mergeKey: `agent-clear-overrides-${node.id}` })}

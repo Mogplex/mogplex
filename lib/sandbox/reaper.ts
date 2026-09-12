@@ -17,15 +17,10 @@ import {
   loadActiveSandboxes,
   loadBusySandboxIds,
   loadFreshIdleState,
-  loadAbandonedPausedSandboxes,
 } from "@/lib/sandbox/reaper-loaders";
-import {
-  stopSandbox,
-  deleteAbandonedPausedSandbox,
-} from "@/lib/sandbox/reaper-stop";
+import { stopSandbox } from "@/lib/sandbox/reaper-stop";
 import {
   loadReaperSandboxes,
-  processAbandonedPausedSandboxes,
   loadBusySandboxIdsForReaper,
   processStaleStoppedSandboxes,
   processActiveSandboxes,
@@ -42,7 +37,6 @@ export type {
   ReaperSandboxRecord,
   ReaperResult,
   SandboxReaperSummary,
-  AbandonedPausedSandboxRecord,
   ReaperStopAction,
 } from "@/lib/sandbox/reaper-types";
 
@@ -55,16 +49,12 @@ export {
 
 export type { SandboxReaperRunnerDeps } from "@/lib/sandbox/reaper-runner-deps";
 
-export {
-  deleteAbandonedPausedSandbox,
-  stopSandbox,
-} from "@/lib/sandbox/reaper-stop";
+export { stopSandbox } from "@/lib/sandbox/reaper-stop";
 
 const defaultSandboxReaperRunnerDeps: SandboxReaperRunnerDeps = {
   withSupabaseAdminConnection,
   loadActiveSandboxes,
   loadStaleStoppedSandboxes,
-  loadAbandonedPausedSandboxes,
   loadBusySandboxIds,
   getPlatformSandboxCredentials,
   loadUserVercelCredentials,
@@ -72,7 +62,6 @@ const defaultSandboxReaperRunnerDeps: SandboxReaperRunnerDeps = {
   repairStoppedSandboxHealthStatus,
   stopSandbox,
   getSandbox,
-  deleteAbandonedPausedSandbox,
   updateSandboxRecord,
   loadFreshIdleState,
   prepareSandboxBillingClose,
@@ -90,14 +79,10 @@ export function createSandboxReaperRunner(
 
   return async function runSandboxReaper() {
     const nowMs = deps.nowMs();
-    const { activeSandboxes, staleStoppedSandboxes, abandonedPausedSandboxes } =
+    const { activeSandboxes, staleStoppedSandboxes } =
       await loadReaperSandboxes(deps);
 
-    if (
-      activeSandboxes.length === 0 &&
-      staleStoppedSandboxes.length === 0 &&
-      abandonedPausedSandboxes.length === 0
-    ) {
+    if (activeSandboxes.length === 0 && staleStoppedSandboxes.length === 0) {
       return buildNoMaintenanceSummary();
     }
 
@@ -107,16 +92,11 @@ export function createSandboxReaperRunner(
     );
 
     const platformCredentials = deps.getPlatformSandboxCredentials();
-    const abandonedPausedResults = await processAbandonedPausedSandboxes(
-      abandonedPausedSandboxes,
-      platformCredentials,
-      deps
-    );
 
     if (activeSandboxes.length === 0) {
       return buildProcessedSandboxesSummary(
-        staleStoppedSandboxes.length + abandonedPausedSandboxes.length,
-        [...staleStoppedResults, ...abandonedPausedResults]
+        staleStoppedSandboxes.length,
+        staleStoppedResults
       );
     }
 
@@ -140,14 +120,8 @@ export function createSandboxReaperRunner(
     );
 
     return buildProcessedSandboxesSummary(
-      activeSandboxes.length +
-        staleStoppedSandboxes.length +
-        abandonedPausedSandboxes.length,
-      [
-        ...staleStoppedResults,
-        ...abandonedPausedResults,
-        ...activeSandboxResults,
-      ]
+      activeSandboxes.length + staleStoppedSandboxes.length,
+      [...staleStoppedResults, ...activeSandboxResults]
     );
   };
 }

@@ -2,6 +2,19 @@
 
 This is the single orientation guide for all coding agents working in `mogplex`. `CLAUDE.md` redirects here.
 
+## Agent execution policy
+
+Never configure a maximum agent step count in any runtime, workflow, review,
+quality runner, API, or editor. Disable the SDK's default step-count stop
+condition explicitly. End agent loops on model completion, user cancellation,
+or an actual execution error. Do not replace step caps with another artificial
+iteration budget.
+
+Workspace files must survive agent failure, cancellation, idle shutdown, and
+resume. Require provider persistence with no automatic snapshot expiry; never
+silently replace a saved workspace with a fresh checkout or delete paused work
+based on age.
+
 ## Baseline Coding Agent Behavior
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.

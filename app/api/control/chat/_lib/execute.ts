@@ -2,7 +2,6 @@ import {
   streamText,
   convertToModelMessages,
   createUIMessageStreamResponse,
-  stepCountIs,
 } from "ai";
 import { controlMessageMetadata } from "@/lib/control/context-usage";
 import { controlMessagesForModel } from "@/lib/control/request-history";
@@ -66,7 +65,7 @@ import type {
   ControlStartupFailure,
 } from "./types";
 
-export const ORCHESTRATOR_STOP_WHEN = stepCountIs(150);
+export const ORCHESTRATOR_STOP_WHEN = () => false;
 
 export async function executeControlChatRequest(input: {
   req: Request;

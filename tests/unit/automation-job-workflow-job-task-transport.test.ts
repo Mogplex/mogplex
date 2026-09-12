@@ -365,7 +365,6 @@ test("automation gateway caching can be disabled by env without changing routing
       agent: {
         model: "openai/gpt-5.4",
         system_prompt: null,
-        max_steps: 4,
         timeout_ms: null,
       },
       repo: {

@@ -255,13 +255,13 @@ test("resolvePendingSandboxPersistenceFlag mirrors the sandbox create persistenc
   try {
     delete process.env.ENABLE_PERSISTENT_SANDBOXES;
     delete process.env.DISABLE_PERSISTENT_SANDBOXES;
-    assert.equal(resolvePendingSandboxPersistenceFlag(), false);
+    assert.equal(resolvePendingSandboxPersistenceFlag(), true);
 
     process.env.ENABLE_PERSISTENT_SANDBOXES = "true";
     assert.equal(resolvePendingSandboxPersistenceFlag(), true);
 
     process.env.DISABLE_PERSISTENT_SANDBOXES = "true";
-    assert.equal(resolvePendingSandboxPersistenceFlag(), false);
+    assert.equal(resolvePendingSandboxPersistenceFlag(), true);
   } finally {
     if (previousEnable === undefined) {
       delete process.env.ENABLE_PERSISTENT_SANDBOXES;

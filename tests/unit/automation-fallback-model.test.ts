@@ -31,7 +31,6 @@ test("resolveFlowAgentOverrides carries the node's fallback model onto the run c
     name: "Reviewer",
     slug: "reviewer",
     system_prompt: "Review things.",
-    max_steps: 10,
     timeout_ms: 1000,
   };
   const baseNode = {

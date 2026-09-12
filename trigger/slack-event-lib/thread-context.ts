@@ -56,10 +56,7 @@ function knownConversationTexts(messages: RunChatAgentMessage[]) {
 }
 
 function shouldSkipThreadFetch(payload: SlackEventTaskPayload) {
-  // DMs already load their full persisted Mogplex conversation. Fetching the
-  // Slack thread again would duplicate that history and spend a rate-limited
-  // conversations.replies call without adding recovery context.
-  if (payload.channelType === "im") return true;
+  // Explicit DM threads need their Slack root just like channel threads.
   return payload.threadTs === payload.messageTs;
 }
 

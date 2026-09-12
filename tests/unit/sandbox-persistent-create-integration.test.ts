@@ -63,7 +63,7 @@ function withEnv<T>(
   return fn().finally(restore);
 }
 
-test("createSandboxForRepo passes persistent:true + 7d snapshotExpiration + name to Sandbox.create when ENABLE=true", async () => {
+test("createSandboxForRepo passes persistent:true + non-expiring snapshotExpiration + name to Sandbox.create when ENABLE=true", async () => {
   await withEnv(
     {
       ENABLE_PERSISTENT_SANDBOXES: "true",
@@ -90,13 +90,13 @@ test("createSandboxForRepo passes persistent:true + 7d snapshotExpiration + name
       assert.equal(received.length, 1);
       const first = received[0];
       assert.equal(first.persistent, true);
-      assert.equal(first.snapshotExpiration, 7 * 24 * 60 * 60 * 1000);
+      assert.equal(first.snapshotExpiration, 0);
       assert.equal(first.name, "mogplex-abc-main-def");
     }
   );
 });
 
-test("createSandboxForRepo ships persistent:false when ENABLE is unset (plan default)", async () => {
+test("createSandboxForRepo requires persistence when ENABLE is unset", async () => {
   await withEnv(
     {
       ENABLE_PERSISTENT_SANDBOXES: undefined,
@@ -120,7 +120,7 @@ test("createSandboxForRepo ships persistent:false when ENABLE is unset (plan def
         restore();
       }
       assert.equal(received.length, 1);
-      assert.equal(received[0].persistent, false);
+      assert.equal(received[0].persistent, true);
     }
   );
 });
