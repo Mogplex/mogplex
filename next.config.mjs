@@ -60,6 +60,11 @@ const allowedDevOrigins = process.env.MOGPLEX_ALLOWED_DEV_ORIGINS
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // GitHub Actions builds before Vercel assigns an ID. The CLI registers this
+  // custom ID from the prebuilt output so client requests stay on that release.
+  ...(process.env.MOGPLEX_DEPLOYMENT_ID
+    ? { deploymentId: process.env.MOGPLEX_DEPLOYMENT_ID }
+    : {}),
   ...(allowedDevOrigins ? { allowedDevOrigins } : {}),
   // Standalone output is only for the self-hosted Docker image (see
   // Dockerfile). Vercel builds must keep the default output mode, so this
