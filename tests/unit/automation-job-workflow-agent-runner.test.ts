@@ -76,6 +76,7 @@ test("createAutomationAgentRunner uses generateText without mutating global fetc
       [
         "Start by calling getPullRequest and listChangedFiles to inspect the actual PR metadata and diff.",
         "Read only the files you need from the PR head branch.",
+        "fetchFile returns chunks for large files. Follow its continuation offset with the same path and ref until you have inspected the relevant code; a chunk boundary is not a review limit. If an older tool output was demoted, fetch it again. Keep concise notes of evidence and remaining review work as you go.",
         "Always call reportReview exactly once before finishing. Mogplex will publish the canonical review result as a GitHub Check plus the best PR surface available from that structured report: a native GitHub review when possible, otherwise a PR timeline comment.",
         "When you find concrete issues, include structured findings with severity, title, body, and the exact file path. If hasIssues=true, you must include at least one structured finding. Add a line number only when the issue maps to a specific changed line in the PR diff.",
         "If there are no material issues, call reportReview with hasIssues=false.",
@@ -277,6 +278,7 @@ test("pr_review with no agent system_prompt still emits a cacheable system messa
       [
         "Start by calling getPullRequest and listChangedFiles to inspect the actual PR metadata and diff.",
         "Read only the files you need from the PR head branch.",
+        "fetchFile returns chunks for large files. Follow its continuation offset with the same path and ref until you have inspected the relevant code; a chunk boundary is not a review limit. If an older tool output was demoted, fetch it again. Keep concise notes of evidence and remaining review work as you go.",
         "Always call reportReview exactly once before finishing. Mogplex will publish the canonical review result as a GitHub Check plus the best PR surface available from that structured report: a native GitHub review when possible, otherwise a PR timeline comment.",
         "When you find concrete issues, include structured findings with severity, title, body, and the exact file path. If hasIssues=true, you must include at least one structured finding. Add a line number only when the issue maps to a specific changed line in the PR diff.",
         "If there are no material issues, call reportReview with hasIssues=false.",
