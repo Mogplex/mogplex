@@ -235,7 +235,10 @@ export class PostgrestShimBuilder implements PromiseLike<ShimResult> {
       if (schemaDrift) this.schema.clear();
       return {
         data: null,
-        error: toShimError(error),
+        error: await toShimError(error, {
+          operation: this.state.op,
+          target: this.state.table,
+        }),
         count: null,
         status: schemaDrift ? 503 : 500,
         statusText: schemaDrift

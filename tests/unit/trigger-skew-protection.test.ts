@@ -5,8 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { configure, tasks } from "@trigger.dev/sdk/v3";
+import * as Sentry from "@sentry/nextjs";
 import { parse } from "yaml";
-import { pinWorkerVersion, stopSchemaDriftRetries } from "../../trigger/init";
+import {
+  pinWorkerVersion,
+  stopSchemaDriftRetries,
+  schemaDriftTelemetry,
+} from "../../trigger/init";
+import { toShimError } from "../../lib/db/postgrest-shim/types";
+import { raiseSchemaDriftAlertCheck } from "../../trigger/schema-drift-alert-check";
 import { SCHEMA_DRIFT_MESSAGE } from "../../lib/schema-drift";
 
 type TriggerRequest = {
@@ -70,6 +77,72 @@ function workerInput(type: InitInput["ctx"]["environment"]["type"]): InitInput {
     },
   };
 }
+
+test("worker schema failures reach Sentry with the executing release and run before retries stop", async (t) => {
+  const events: Sentry.Event[] = [];
+  Sentry.init({
+    dsn: "https://public@sentry.test/1",
+    defaultIntegrations: false,
+    transport: () => ({
+      send: async (
+        envelope: Parameters<
+          NonNullable<
+            ReturnType<
+              NonNullable<ReturnType<typeof Sentry.getClient>>["getTransport"]
+            >
+          >["send"]
+        >[0]
+      ) => {
+        for (const [header, payload] of envelope[1]) {
+          if (header.type === "event") events.push(payload as Sentry.Event);
+        }
+        return { statusCode: 200 };
+      },
+      flush: async () => true,
+    }),
+  });
+  t.after(async () => {
+    await Sentry.close();
+  });
+  const input = workerInput("PRODUCTION");
+  input.ctx.deployment!.git = { commitSha: "worker-commit" };
+  const error = Object.assign(new Error("private database details"), {
+    code: "42703",
+  });
+  await schemaDriftTelemetry({
+    ...input,
+    next: async () => {
+      const safe = await toShimError(error, {
+        operation: "update",
+        target: "runs",
+      });
+      assert.equal(safe.message, SCHEMA_DRIFT_MESSAGE);
+      assert.deepEqual(await stopSchemaDriftRetries({ ...input, error }), {
+        skipRetrying: true,
+      });
+      await raiseSchemaDriftAlertCheck().catch(async (probeError: unknown) => {
+        assert.deepEqual(
+          await stopSchemaDriftRetries({ ...input, error: probeError }),
+          { skipRetrying: true }
+        );
+      });
+    },
+  });
+  assert.equal(events.length, 3);
+  for (const event of events) {
+    assert.equal(event.release, "worker-commit");
+    assert.equal(event.environment, "production");
+    assert.equal(event.tags?.worker_version, "20260914.2");
+    assert.equal(event.tags?.execution_runtime, "trigger");
+    assert.equal(event.tags?.task_id, "fixture");
+    assert.equal(event.contexts?.schema_drift?.run_id, "run_fixture");
+  }
+  assert.equal(events[0].tags?.operation, "update");
+  assert.equal(events[0].tags?.db_target, "runs");
+  assert.equal(events[1].tags?.operation, "task");
+  assert.equal(events[2].tags?.schema_code, "SCHEMA_DRIFT");
+  assert.ok(!JSON.stringify(events).includes("private"));
+});
 
 function deployedRuntimeEnv(commit: string) {
   const workflow = parse(
