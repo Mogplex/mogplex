@@ -9,6 +9,7 @@ async function loadPrReviewer() {
 type FetchFileExecutor = (input: {
   path: string;
   ref?: string;
+  offset?: number;
 }) => Promise<string>;
 
 type ListChangedFilesExecutor = (input: { limit: number }) => Promise<{
@@ -158,7 +159,7 @@ test("fetchFile identifies directory responses from GitHub", async () => {
   }
 });
 
-test("fetchFile bounds individual and aggregate text content", async () => {
+test("fetchFile bounds each response without exhausting later reads", async () => {
   const { buildPRReviewTools } = await loadPrReviewer();
   const originalFetch = globalThis.fetch;
   const largeText = "x".repeat(30_000);
@@ -185,19 +186,26 @@ test("fetchFile bounds individual and aggregate text content", async () => {
 
     for (const path of ["one.ts", "two.ts", "three.ts", "four.ts"]) {
       const result = await fetchFile({ path });
-      assert.match(result, new RegExp(`Truncated ${path.replace(".", "\\.")}`));
+      assert.match(result, /offset=20000/);
       assert.ok(result.length < largeText.length);
     }
 
-    const exhausted = await fetchFile({ path: "five.ts" });
-    assert.match(exhausted, /text-context budget .* exhausted/i);
-    assert.ok(exhausted.length < 500);
+    const fifth = await fetchFile({ path: "five.ts" });
+    assert.ok(fifth.startsWith("x".repeat(20_000)));
+    assert.match(fifth, /offset=20000/);
+    assert.equal(
+      await fetchFile({ path: "five.ts", offset: 20_000 }),
+      "x".repeat(10_000)
+    );
+    assert.ok(
+      (await fetchFile({ path: "one.ts" })).startsWith("x".repeat(20_000))
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("listChangedFiles reserves shared context for file content", async () => {
+test("listChangedFiles bounds patches per response without starving file reads", async () => {
   const { buildPRReviewTools } = await loadPrReviewer();
   const originalFetch = globalThis.fetch;
   const patch = `+${"x".repeat(3_999)}`;
@@ -238,20 +246,25 @@ test("listChangedFiles reserves shared context for file content", async () => {
     const fetchFile = getFetchFileExecutor(tools);
     const firstFile = await fetchFile({ path: "src/after-patches-1.ts" });
     const secondFile = await fetchFile({ path: "src/after-patches-2.ts" });
-    const exhaustedFile = await fetchFile({ path: "src/after-patches-3.ts" });
+    const thirdFile = await fetchFile({ path: "src/after-patches-3.ts" });
 
     assert.ok(result.files.slice(0, 10).every((file) => file.patch === patch));
     assert.match(
       result.files[10]?.patch ?? "",
-      /patch allocation .* exhausted.*reserved for file reads/i
+      /patch allocation .* exhausted.*fetchFile/i
     );
     assert.match(
       result.files.at(-1)?.patch ?? "",
       /patch allocation .* exhausted/i
     );
-    assert.match(firstFile, /Truncated src\/after-patches-1\.ts/);
-    assert.match(secondFile, /Truncated src\/after-patches-2\.ts/);
-    assert.match(exhaustedFile, /text-context budget .* exhausted/i);
+    for (const file of [firstFile, secondFile, thirdFile]) {
+      assert.ok(file.startsWith("y".repeat(20_000)));
+      assert.match(file, /offset=20000/);
+    }
+    assert.deepEqual(
+      await getListChangedFilesExecutor(tools)({ limit: 100 }),
+      result
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

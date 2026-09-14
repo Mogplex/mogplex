@@ -9,16 +9,13 @@ import {
   createTextContextBudget,
   encodeGitHubContentPath,
   GITHUB_FILE_CONTENT_CHAR_LIMIT,
-  GITHUB_TEXT_CONTEXT_CHAR_LIMIT,
   prepareGitHubTextFile,
-  type BoundedText,
   type GitHubFileContent,
 } from "@/lib/agents/github-file-content";
 
 const PR_REVIEW_FILE_CONTENT_CHAR_LIMIT = GITHUB_FILE_CONTENT_CHAR_LIMIT;
 const PR_REVIEW_PATCH_CHAR_LIMIT = 4_000;
 const PR_REVIEW_PATCH_CONTEXT_CHAR_LIMIT = 40_000;
-const PR_REVIEW_TEXT_CONTEXT_CHAR_LIMIT = GITHUB_TEXT_CONTEXT_CHAR_LIMIT;
 
 const encodePath = encodeGitHubContentPath;
 
@@ -27,6 +24,20 @@ function githubHeaders(token: string) {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
   };
+}
+
+function boundPatch(
+  path: string,
+  patch: string | undefined,
+  budget: ReturnType<typeof createTextContextBudget>
+) {
+  if (!patch) return null;
+  const bounded = budget.consume(patch, PR_REVIEW_PATCH_CHAR_LIMIT);
+  if (bounded.exhausted) {
+    return `[Patch omitted for ${path}: the ${PR_REVIEW_PATCH_CONTEXT_CHAR_LIMIT}-character patch allocation is exhausted for this response. Use fetchFile to inspect the source.]`;
+  }
+  if (!bounded.truncated) return bounded.content;
+  return `${bounded.content}\n[Patch truncated for ${path}: returned ${bounded.content.length} of ${bounded.originalLength} characters. Use fetchFile to inspect the source.]`;
 }
 
 export function buildPRReviewTools(config: {
@@ -47,35 +58,6 @@ export function buildPRReviewTools(config: {
   const request = config.fetch ?? fetch;
   const contentOwner = config.headOwner ?? config.owner;
   const contentRepo = config.headRepo ?? config.repo;
-  let returnedPatchContextCharacters = 0;
-  const textBudget = createTextContextBudget(PR_REVIEW_TEXT_CONTEXT_CHAR_LIMIT);
-  const consumeTextContext = (
-    content: string,
-    perItemLimit: number
-  ): BoundedText => textBudget.consume(content, perItemLimit);
-  const boundPatch = (path: string, patch?: string) => {
-    if (!patch) return null;
-
-    const remainingPatchContextCharacters = Math.max(
-      PR_REVIEW_PATCH_CONTEXT_CHAR_LIMIT - returnedPatchContextCharacters,
-      0
-    );
-    if (remainingPatchContextCharacters === 0) {
-      return `[Patch omitted for ${path}: the ${PR_REVIEW_PATCH_CONTEXT_CHAR_LIMIT}-character patch allocation is exhausted; remaining PR review text context is reserved for file reads.]`;
-    }
-
-    const bounded = consumeTextContext(
-      patch,
-      Math.min(PR_REVIEW_PATCH_CHAR_LIMIT, remainingPatchContextCharacters)
-    );
-    returnedPatchContextCharacters += bounded.content.length;
-    if (bounded.exhausted) {
-      return `[Patch omitted for ${path}: the ${PR_REVIEW_TEXT_CONTEXT_CHAR_LIMIT}-character PR review text-context budget is exhausted.]`;
-    }
-    if (!bounded.truncated) return bounded.content;
-
-    return `${bounded.content}\n[Patch truncated for ${path}: returned ${bounded.content.length} of ${bounded.originalLength} characters.]`;
-  };
   const reviewFindingSchema = z.object({
     severity: z.enum(["critical", "warning", "suggestion"]),
     title: z.string(),
@@ -164,6 +146,11 @@ export function buildPRReviewTools(config: {
           patch?: string;
         }>;
 
+        // Bound each response, not the run: stale tool outputs can be
+        // demoted by the runtime and must remain available to read again.
+        const patchBudget = createTextContextBudget(
+          PR_REVIEW_PATCH_CONTEXT_CHAR_LIMIT
+        );
         return {
           files: data.map((file) => ({
             path: file.filename,
@@ -171,19 +158,27 @@ export function buildPRReviewTools(config: {
             additions: file.additions,
             deletions: file.deletions,
             changes: file.changes,
-            patch: boundPatch(file.filename, file.patch),
+            patch: boundPatch(file.filename, file.patch, patchBudget),
           })),
         };
       },
     }),
     fetchFile: tool({
       description:
-        "Fetch bounded UTF-8 text file content from the repository, defaulting to the PR head ref when available. Binary files are described but never returned as text.",
+        "Fetch a chunk of UTF-8 text from the repository, defaulting to the PR head ref when available. Follow the returned continuation offset to read the rest of large files. Reads can be repeated. Binary files are described but never returned as text.",
       inputSchema: z.object({
         path: z.string(),
         ref: z.string().optional(),
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe(
+            "Zero-based character offset (defaults to 0); use the returned continuation offset to read the next chunk."
+          ),
       }),
-      execute: async ({ path, ref }) => {
+      execute: async ({ path, ref, offset = 0 }) => {
         const effectiveRef = ref || config.defaultRef;
         const query = effectiveRef
           ? `?ref=${encodeURIComponent(effectiveRef)}`
@@ -201,16 +196,17 @@ export function buildPRReviewTools(config: {
         );
         if (prepared.kind === "message") return prepared.content;
 
-        const bounded = consumeTextContext(
-          prepared.content,
-          PR_REVIEW_FILE_CONTENT_CHAR_LIMIT
-        );
-        if (bounded.exhausted) {
-          return `File content omitted from text review: the ${PR_REVIEW_TEXT_CONTEXT_CHAR_LIMIT}-character PR review text-context budget is exhausted.`;
+        if (offset > prepared.content.length) {
+          return `Offset ${offset} is beyond the end of ${path} (${prepared.content.length} characters).`;
         }
-        if (!bounded.truncated) return bounded.content;
+        const content = prepared.content.slice(
+          offset,
+          offset + PR_REVIEW_FILE_CONTENT_CHAR_LIMIT
+        );
+        const nextOffset = offset + content.length;
+        if (nextOffset === prepared.content.length) return content;
 
-        return `${bounded.content}\n\n[Truncated ${path}: returned ${bounded.content.length} of ${bounded.originalLength} characters. The PR review text-context budget is ${PR_REVIEW_TEXT_CONTEXT_CHAR_LIMIT} characters.]`;
+        return `${content}\n\n[More content in ${path}: returned characters ${offset}-${nextOffset - 1} of ${prepared.content.length}. Continue with fetchFile using the same path and ref and offset=${nextOffset}.]`;
       },
     }),
     reportReview: tool({
