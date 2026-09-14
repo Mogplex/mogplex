@@ -1,0 +1,31 @@
+{
+  "name": "Production database schema mismatch",
+  "environment": "production",
+  "actionMatch": "any",
+  "filterMatch": "all",
+  "frequency": 5,
+  "conditions": [
+    { "id": "sentry.rules.conditions.first_seen_event.FirstSeenEventCondition" },
+    { "id": "sentry.rules.conditions.regression_event.RegressionEventCondition" },
+    {
+      "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+      "value": 0,
+      "interval": "1m"
+    }
+  ],
+  "filters": [
+    {
+      "id": "sentry.rules.filters.tagged_event.TaggedEventFilter",
+      "key": "failure_kind",
+      "match": "eq",
+      "value": "schema_drift"
+    }
+  ],
+  "actions": [
+    {
+      "id": "sentry.mail.actions.NotifyEmailAction",
+      "targetType": "IssueOwners",
+      "fallthroughType": "ActiveMembers"
+    }
+  ]
+}

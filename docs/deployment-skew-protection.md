@@ -22,4 +22,16 @@ The browser shows a notice and returns a 503 response for recognized schema erro
 
 Trigger tasks stop automatic retries for recognized schema errors. After a repair, inspect earlier side effects before a task retry. No schema migration or automatic rollback runs in response to an error.
 
+## Schema failure alerts
+
+Schema failures emit a Sentry event tagged `failure_kind:schema_drift`. Events identify the database operation and table or function, SQLSTATE, release, and runtime. Worker events also include the task, run ID, and executing worker version. Worker commit metadata comes from Trigger's deployment context; synced Vercel variables may refer to a different release.
+
+Diagnostic events exclude SQL, parameter values, request breadcrumbs, and task payloads. The error path waits up to two seconds for Sentry delivery. Delivery failures leave the safe database response and task retry decision intact. Without a Sentry DSN, structured server logs remain available.
+
+The [Sentry rule configuration](./schema-drift-alert-rule.json) alerts on production schema events, including recurring unresolved incidents. It uses the project's issue owners with active members as fallback, and groups notifications per issue over five minutes. This notification interval does not delay application requests or tasks. The rule can be created through Sentry's project issue-rule API; Sentry also exposes equivalent monitors and alert workflows.
+
+On an alert, compare the event's release and worker version with the deployed app, task deployment, and migration ledger. Check earlier writes before retrying. Repair forward with a compatible committed migration; do not automatically replay mutations or roll back a database migration.
+
+To verify worker alert delivery after deployment, manually trigger `verify-schema-drift-alert` with an empty payload in the intended Trigger environment. It makes no database calls and intentionally fails once. Verify the Sentry event's `task_id`, `execution_runtime:trigger`, release, worker version, and run ID, then confirm the production alert fired. A failed run is the expected result of this check; it must not retry. This task is not scheduled.
+
 This handles explicit schema failures, not every semantic change to stored data. Keep migrations compatible with both old and new app and worker releases. Add new fields first, migrate data, then remove old fields after those releases retire.

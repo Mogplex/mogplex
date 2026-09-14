@@ -243,7 +243,7 @@ export async function executeRpc(
     if (schemaDrift) functionShapes.clear();
     return {
       data: null,
-      error: toShimError(error),
+      error: await toShimError(error, { operation: "rpc", target: name }),
       count: null,
       status: schemaDrift ? 503 : 500,
       statusText: schemaDrift ? "Service Unavailable" : "Internal Server Error",

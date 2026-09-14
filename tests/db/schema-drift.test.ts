@@ -1,13 +1,87 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { createPostgrestTestDb } from "./helpers/postgrest-shim-fixtures";
 import { SCHEMA_DRIFT_MESSAGE } from "@/lib/schema-drift";
+import * as Sentry from "@sentry/nextjs";
 
 let fixture: Awaited<ReturnType<typeof createPostgrestTestDb>>;
+const events: Sentry.Event[] = [];
 beforeAll(async () => {
+  Sentry.init({
+    dsn: "https://public@sentry.test/1",
+    defaultIntegrations: false,
+    skipOpenTelemetrySetup: true,
+    transport: () => ({
+      send: async (
+        envelope: Parameters<
+          NonNullable<
+            ReturnType<
+              NonNullable<ReturnType<typeof Sentry.getClient>>["getTransport"]
+            >
+          >["send"]
+        >[0]
+      ) => {
+        for (const [header, payload] of envelope[1]) {
+          if (header.type === "event") events.push(payload as Sentry.Event);
+        }
+        return { statusCode: 200 };
+      },
+      flush: async () => true,
+    }),
+  });
   fixture = await createPostgrestTestDb();
 });
 afterAll(async () => {
   await fixture.pglite.close();
+  await Sentry.close();
+});
+
+it("reports auth and storage schema failures without account or object data", async () => {
+  const { pglite, db } = fixture;
+  await pglite.exec('alter table "user" rename column email to removed_email');
+  const auth = await db.auth.admin.getUserById(
+    "00000000-0000-4000-8000-000000000001"
+  );
+  expect(auth.error?.message).toBe(SCHEMA_DRIFT_MESSAGE);
+  expect(events.at(-1)).toMatchObject({
+    tags: {
+      operation: "auth.getUserById",
+      db_target: "user",
+      schema_code: "42703",
+    },
+  });
+  expect(JSON.stringify(events.at(-1))).not.toContain(
+    "00000000-0000-4000-8000-000000000001"
+  );
+  await pglite.exec('alter table "user" rename column removed_email to email');
+
+  await pglite.exec(
+    "alter table storage_objects rename to removed_storage_objects"
+  );
+  const bucket = db.storage.from("private-bucket");
+  for (const [operation, result] of [
+    ["storage.remove", await bucket.remove(["private-object"])],
+    [
+      "storage.upload",
+      await bucket.upload("private-object", new Uint8Array([1, 2])),
+    ],
+    ["storage.list", await bucket.list("private-prefix")],
+  ] as const) {
+    expect(result.error?.message).toBe(SCHEMA_DRIFT_MESSAGE);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        tags: expect.objectContaining({
+          operation,
+          db_target: "storage_objects",
+          schema_code: "42P01",
+        }),
+      })
+    );
+  }
+  expect(JSON.stringify(events)).not.toContain("private-object");
+  expect(JSON.stringify(events)).not.toContain("private-bucket");
+  await pglite.exec(
+    "alter table removed_storage_objects rename to storage_objects"
+  );
 });
 
 it("fails a write safely when a column is missing, then refreshes metadata after schema repair", async () => {
@@ -17,6 +91,14 @@ it("fails a write safely when a column is missing, then refreshes metadata after
   const failed = await db
     .from("drift_items")
     .insert({ id: 2, payload: { draft: "keep" } });
+  expect(events.at(-1)).toMatchObject({
+    tags: {
+      operation: "insert",
+      db_target: "drift_items",
+      schema_code: "42703",
+    },
+  });
+  expect(JSON.stringify(events.at(-1))).not.toContain("keep");
   expect(failed).toMatchObject({
     data: null,
     status: 503,
@@ -53,6 +135,9 @@ it("clears cached RPC signatures after drift so a later request can use a repair
   );
   await pglite.exec("drop function drift_echo(text)");
   const failed = await db.rpc("drift_echo", { p_value: "draft" });
+  expect(events.at(-1)).toMatchObject({
+    tags: { operation: "rpc", db_target: "drift_echo", schema_code: "42883" },
+  });
   expect(failed).toMatchObject({
     data: null,
     status: 503,

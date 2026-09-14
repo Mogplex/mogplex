@@ -50,7 +50,13 @@ export function createAuthShim(db: Queryable): { admin: AuthAdmin } {
             error: null,
           };
         } catch (error) {
-          return { data: { user: null }, error: toShimError(error) };
+          return {
+            data: { user: null },
+            error: await toShimError(error, {
+              operation: "auth.getUserById",
+              target: "user",
+            }),
+          };
         }
       },
     },

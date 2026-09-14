@@ -53,7 +53,13 @@ export function createStorageShim(db: Queryable): {
               error: null,
             };
           } catch (error) {
-            return { data: null, error: toShimError(error) };
+            return {
+              data: null,
+              error: await toShimError(error, {
+                operation: "storage.remove",
+                target: "storage_objects",
+              }),
+            };
           }
         },
         async upload(path, body, options = {}) {
@@ -79,7 +85,13 @@ export function createStorageShim(db: Queryable): {
             );
             return { data: { path }, error: null };
           } catch (error) {
-            return { data: null, error: toShimError(error) };
+            return {
+              data: null,
+              error: await toShimError(error, {
+                operation: "storage.upload",
+                target: "storage_objects",
+              }),
+            };
           }
         },
         async list(prefix = "", options = {}) {
@@ -110,7 +122,13 @@ export function createStorageShim(db: Queryable): {
               error: null,
             };
           } catch (error) {
-            return { data: null, error: toShimError(error) };
+            return {
+              data: null,
+              error: await toShimError(error, {
+                operation: "storage.list",
+                target: "storage_objects",
+              }),
+            };
           }
         },
         getPublicUrl(path: string) {
