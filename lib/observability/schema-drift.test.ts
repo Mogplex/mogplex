@@ -12,9 +12,11 @@ import { reportSchemaDrift, withSchemaDriftContext } from "./schema-drift";
 
 let events: Sentry.Event[];
 let failDelivery = false;
+let failFlush = false;
 beforeEach(() => {
   events = [];
   failDelivery = false;
+  failFlush = false;
 });
 beforeAll(() => {
   Sentry.init({
@@ -36,11 +38,15 @@ beforeAll(() => {
         }
         return { statusCode: 200 };
       },
-      flush: async () => true,
+      flush: async () => {
+        if (failFlush) throw new Error("transport flush unavailable");
+        return true;
+      },
     }),
   });
 });
 afterAll(async () => {
+  failFlush = false;
   await Sentry.close();
 });
 afterEach(() => {
@@ -159,4 +165,34 @@ it("does not report ordinary failures and contains telemetry delivery failures",
   await expect(
     reportSchemaDrift(missingColumn, { operation: "insert", target: "repos" })
   ).resolves.toBeUndefined();
+});
+
+it("preserves graceful failure when the transport rejects its flush", async () => {
+  failFlush = true;
+  await expect(
+    reportSchemaDrift(missingColumn, { operation: "update", target: "repos" })
+  ).resolves.toBeUndefined();
+});
+
+it("uses deployment and Sentry release fallbacks for apps without an explicit task pin", async () => {
+  const { SCHEMA_DRIFT_MESSAGE } = await import("@/lib/schema-drift");
+  vi.stubEnv("TRIGGER_EXTERNAL_DEPLOYMENT_ID", "");
+  vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "vercel-commit");
+  vi.stubEnv("SENTRY_RELEASE", "sentry-release");
+  vi.stubEnv("SENTRY_ENVIRONMENT", "staging");
+  await reportSchemaDrift(SCHEMA_DRIFT_MESSAGE, {
+    operation: "rpc",
+    target: "save_run",
+  });
+  expect(events.at(-1)).toMatchObject({
+    release: "vercel-commit",
+    environment: "staging",
+    tags: { schema_code: "SCHEMA_DRIFT" },
+  });
+  vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
+  await reportSchemaDrift(
+    { error: SCHEMA_DRIFT_MESSAGE },
+    { operation: "rpc", target: "save_run" }
+  );
+  expect(events.at(-1)?.release).toBe("sentry-release");
 });
