@@ -59,11 +59,15 @@ it("clears cached RPC signatures after drift so a later request can use a repair
     error: { code: "42883", message: SCHEMA_DRIFT_MESSAGE },
   });
   await pglite.exec(
-    "create function drift_echo(p_value jsonb) returns jsonb language sql as $$ select p_value $$"
+    `create function drift_echo(p_value jsonb) returns setof jsonb language sql
+     as $$ select p_value union all select p_value || '{"recovered":true}'::jsonb $$`
   );
   const retried = await db.rpc("drift_echo", { p_value: { draft: "keep" } });
   expect(retried.error).toBeNull();
-  expect(retried.data).toEqual({ draft: "keep" });
+  expect(retried.data).toEqual([
+    { draft: "keep" },
+    { draft: "keep", recovered: true },
+  ]);
 });
 
 it("preserves missing-table codes for optional-schema callers while withholding database details", async () => {
