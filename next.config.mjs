@@ -60,6 +60,14 @@ const allowedDevOrigins = process.env.MOGPLEX_ALLOWED_DEV_ORIGINS
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: {
+    // Compile the serving release into browser code, so an old tab keeps its
+    // own ID after a deploy. Git builds use Vercel's ID; prebuilt builds use ours.
+    NEXT_PUBLIC_MOGPLEX_DEPLOYMENT_ID:
+      process.env.MOGPLEX_DEPLOYMENT_ID ||
+      process.env.VERCEL_DEPLOYMENT_ID ||
+      "",
+  },
   // GitHub Actions builds before Vercel assigns an ID. The CLI registers this
   // custom ID from the prebuilt output so client requests stay on that release.
   ...(process.env.MOGPLEX_DEPLOYMENT_ID

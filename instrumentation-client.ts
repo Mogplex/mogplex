@@ -1,5 +1,17 @@
 import * as Sentry from "@sentry/nextjs";
 import { SENTRY_DENY_URLS } from "@/lib/observability/sentry-deny-urls";
+import {
+  clientDeploymentId,
+  createDeploymentFetch,
+} from "@/lib/deployment-fetch";
+import { setDeploymentFailure } from "@/lib/deployment-failure-store";
+
+// Runs before hydration, including SDK transports and direct component fetches.
+window.fetch = createDeploymentFetch(window.fetch.bind(window), {
+  origin: window.location.origin,
+  deploymentId: clientDeploymentId,
+  onSchemaDrift: () => setDeploymentFailure(true),
+});
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 

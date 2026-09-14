@@ -8,6 +8,7 @@ const slackSigningFixture = getSlackSigningFixture();
 process.env.SLACK_SIGNING_SECRET = slackSigningFixture;
 const testServerEnv =
   `PLAYWRIGHT=1 PLAYWRIGHT_AUTH_BYPASS_SECRET=playwright-auth-bypass ` +
+  `MOGPLEX_DEPLOYMENT_ID=playwright-${port} ` +
   // Exercise the deployed Neon stack without legacy credentials masking
   // accidental Supabase initialization. Empty values override .env.local.
   `MOGPLEX_DATA_BACKEND=neon NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon ` +

@@ -141,8 +141,9 @@ Production deploys are schema-first.
 
 - Pushes to `main` run GitHub Actions, which apply pending [`neon/migrations/`](./neon/migrations) before deploying the app.
 - After deploy, the workflow hits [`/api/cron/production-smoke`](./app/api/cron/production-smoke/route.ts) with machine auth to catch schema drift on sensitive surfaces.
-- Branch previews use the Vercel Git integration.
-- Migrations merged to `main` must stay backward-compatible with the currently deployed app until the workflow finishes.
+- Automatic Vercel Git deployments are disabled in `vercel.json`.
+- Production task requests use the same commit as the app. See [deployment skew protection](./docs/deployment-skew-protection.md).
+- Migrations merged to `main` must support old app and worker releases until those releases retire, beyond the deployment workflow.
 
 Relevant files: [`ci.yml`](./.github/workflows/ci.yml), [`deploy-production.yml`](./.github/workflows/deploy-production.yml), [`vercel.json`](./vercel.json).
 

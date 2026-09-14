@@ -9,6 +9,7 @@ import {
 } from "../sql";
 import type { ShimResult } from "./types";
 import { toShimError } from "./types";
+import { isSchemaDriftError } from "@/lib/schema-drift";
 import { executeSelect } from "./builder-select";
 import { executeDelete, executeInsert, executeUpdate } from "./builder-write";
 
@@ -229,12 +230,17 @@ export class PostgrestShimBuilder implements PromiseLike<ShimResult> {
     try {
       return await this.executeUnsafe();
     } catch (error) {
+      const schemaDrift = isSchemaDriftError(error);
+      // Refresh metadata on the next request, never replay a failed mutation.
+      if (schemaDrift) this.schema.clear();
       return {
         data: null,
         error: toShimError(error),
         count: null,
-        status: 500,
-        statusText: "Internal Server Error",
+        status: schemaDrift ? 503 : 500,
+        statusText: schemaDrift
+          ? "Service Unavailable"
+          : "Internal Server Error",
       };
     }
   }

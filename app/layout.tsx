@@ -7,6 +7,7 @@ import { ConsentManager } from '@/components/consent-manager'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ThemeSettingsSync } from '@/components/theme-settings-sync'
 import { Toaster } from '@/components/ui/toaster'
+import { DeploymentFailureNotice } from '@/components/deployment-failure-notice'
 import {
   DEFAULT_DESCRIPTION,
   DEFAULT_TITLE,
@@ -78,6 +79,7 @@ export default async function RootLayout({
           <ThemeSettingsSync />
           <ConsentManager>{children}</ConsentManager>
           <Toaster />
+          <DeploymentFailureNotice />
         </ThemeProvider>
         <Analytics />
       </body>

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTableEvents } from "@/hooks/use-table-events";
+import { deploymentStreamUrl } from "@/lib/deployment-fetch";
 import { useSessionsStore } from "@/hooks/use-sessions";
 import {
   isRunActive,
@@ -83,7 +84,9 @@ export function useExternalRun(runId: string) {
       : "loading";
   useEffect(() => {
     if (streamPhase === "loading") return;
-    const source = new EventSource(`/api/runs/${runId}/stream`);
+    const source = new EventSource(
+      deploymentStreamUrl(`/api/runs/${runId}/stream`)
+    );
     let active = true;
     let readable = true;
     source.addEventListener("open", () => setConnection("Connected"));

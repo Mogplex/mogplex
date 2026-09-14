@@ -188,14 +188,22 @@ jobs:
       - name: Deploy production artifacts
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          TRIGGER_EXTERNAL_DEPLOYMENT_ID: ${{ github.sha }}
         run: |
-          DEPLOYMENT_URL="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
+          # Runtime overrides belong to this immutable Vercel deployment. Build
+          # env alone is insufficient: the Trigger SDK reads env dynamically.
+          # Clear legacy version pins, which take precedence over the commit ID.
+          DEPLOYMENT_URL="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" \
+            --env "TRIGGER_EXTERNAL_DEPLOYMENT_ID=${TRIGGER_EXTERNAL_DEPLOYMENT_ID:?}" \
+            --env "TRIGGER_VERSION=")"
           echo "PRODUCTION_DEPLOYMENT_URL=$DEPLOYMENT_URL" >> "$GITHUB_ENV"
           echo "Deployed production artifacts to $DEPLOYMENT_URL"
 
       # Trigger.dev tasks deploy via the Trigger GitHub integration on push
       # to main (org mogplex-ddb2), not from this workflow. Env for those
       # builds comes from the syncVercelEnvVars extension in trigger.config.ts.
+      # The integration tags every deployment with its commit SHA. Do not add
+      # task-only path filters: every app release needs a matching task release.
 
       - name: Load production smoke auth
         run: |

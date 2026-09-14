@@ -4,6 +4,7 @@ import { quoteIdent, SqlBuilder, type Queryable } from "../sql";
 import { serializeVectorValue } from "../vector";
 import type { ShimResult } from "./types";
 import { toShimError } from "./types";
+import { DatabaseSchemaError, isSchemaDriftError } from "@/lib/schema-drift";
 
 export type FunctionShape = {
   returnsSet: boolean;
@@ -160,15 +161,19 @@ export async function getFunctionShape(
     [name]
   );
   if (rows.length === 0) {
-    throw new Error(`postgrest-shim: unknown function ${JSON.stringify(name)}`);
+    throw new DatabaseSchemaError(
+      `postgrest-shim: unknown function ${JSON.stringify(name)}`,
+      "PGRST202"
+    );
   }
   const suppliedArgumentNames = new Set(argumentNames);
   const candidates = rows
     .map((row) => functionCandidate(name, row))
     .filter((candidate) => matchesArguments(candidate, suppliedArgumentNames));
   if (candidates.length === 0) {
-    throw new Error(
-      `postgrest-shim: no function ${JSON.stringify(name)} matches arguments ${JSON.stringify([...suppliedArgumentNames].sort())}`
+    throw new DatabaseSchemaError(
+      `postgrest-shim: no function ${JSON.stringify(name)} matches arguments ${JSON.stringify([...suppliedArgumentNames].sort())}`,
+      "PGRST202"
     );
   }
   if (candidates.length > 1) {
@@ -234,12 +239,14 @@ export async function executeRpc(
       statusText: "OK",
     };
   } catch (error) {
+    const schemaDrift = isSchemaDriftError(error);
+    if (schemaDrift) functionShapes.clear();
     return {
       data: null,
       error: toShimError(error),
       count: null,
-      status: 500,
-      statusText: "Internal Server Error",
+      status: schemaDrift ? 503 : 500,
+      statusText: schemaDrift ? "Service Unavailable" : "Internal Server Error",
     };
   }
 }

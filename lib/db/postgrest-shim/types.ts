@@ -1,4 +1,5 @@
 // Shared types and error helpers for the PostgREST shim.
+import { isSchemaDriftError, SCHEMA_DRIFT_MESSAGE } from "@/lib/schema-drift";
 
 export type ShimError = {
   message: string;
@@ -27,6 +28,20 @@ export type PgError = Error & {
 
 export function toShimError(error: unknown): ShimError {
   const pgError = error as PgError;
+  if (isSchemaDriftError(error)) {
+    // Keep diagnostics on the server, while retaining SQLSTATE for callers
+    // that deliberately support an optional table or an older schema.
+    console.error("[schema-drift] Database contract mismatch", {
+      code: pgError.code,
+      message: pgError.message,
+    });
+    return {
+      message: SCHEMA_DRIFT_MESSAGE,
+      code: pgError.code ?? "SCHEMA_DRIFT",
+      details: null,
+      hint: null,
+    };
+  }
   return {
     message: pgError.message ?? String(error),
     code: pgError.code ?? "SHIM_ERROR",
