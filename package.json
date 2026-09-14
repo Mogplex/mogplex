@@ -39,7 +39,8 @@
     "test:db": "vitest run -c vitest-db.config.ts",
     "test:all": "pnpm test && pnpm test:unit && pnpm test:db",
     "test:e2e": "playwright test",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:schema-compatibility": "node scripts/check-schema-compatibility.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

@@ -62,6 +62,22 @@ jobs:
         if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve currently deployed app commit
+        if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_SCOPE: ${{ vars.VERCEL_TEAM_SCOPE || 'webrenew' }}
+          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME || 'mogplex' }}
+        run: |
+          previous_commit=$(node scripts/resolve-deployed-commit.mjs)
+          echo "PREVIOUS_PRODUCTION_COMMIT=$previous_commit" >> "$GITHUB_ENV"
+
+      - name: Check deployed code before changing the database
+        if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
+        run: |
+          git fetch --no-tags origin "$PREVIOUS_PRODUCTION_COMMIT"
+          pnpm test:schema-compatibility "$PREVIOUS_PRODUCTION_COMMIT"
+
       - name: Apply Neon migrations
         if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
         env:
