@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { deploymentStreamUrl } from "@/lib/deployment-fetch";
 
 export type TableEvent = {
   table: string;
@@ -45,7 +46,7 @@ export function useTableEvents({
     if (!enabled || tables.length === 0) return;
 
     const url = `/api/realtime/events?tables=${encodeURIComponent(tablesKey)}`;
-    const eventSource = new EventSource(url);
+    const eventSource = new EventSource(deploymentStreamUrl(url));
     connectionRef.current?.("connecting");
     const handleOpen = () => connectionRef.current?.("connected");
 

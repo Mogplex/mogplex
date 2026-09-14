@@ -13,6 +13,7 @@ import {
 } from "../sql";
 import type { ShimResult } from "./types";
 import { buildWhere, shapeRows } from "./builder-select";
+import { DatabaseSchemaError } from "@/lib/schema-drift";
 
 export type WriteBuilderState = {
   table: string;
@@ -40,7 +41,10 @@ export async function castValue(
   const types = await schema.getColumnTypes(table);
   const udt = types.get(column);
   if (udt === undefined) {
-    throw new Error(`postgrest-shim: unknown column ${table}.${column}`);
+    throw new DatabaseSchemaError(
+      `postgrest-shim: unknown column ${table}.${column}`,
+      "42703"
+    );
   }
   if (value === null || value === undefined) return sql.add(null);
   if (udt === "json" || udt === "jsonb") {

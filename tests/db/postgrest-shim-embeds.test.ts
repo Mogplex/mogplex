@@ -154,7 +154,8 @@ describe("embedded resources", () => {
       .select("name, pipeline_versions!does_not_exist_fkey(label)")
       .eq("name", "deploy")
       .single();
-    expect(error?.message).toContain("no foreign key named");
+    expect(error?.code).toBe("PGRST200");
+    expect(error?.message).toContain("Keep this tab open");
   });
 
   it("embeds two levels deep", async () => {

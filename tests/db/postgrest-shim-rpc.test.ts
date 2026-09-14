@@ -169,7 +169,8 @@ describe("rpc", () => {
 
   it("errors cleanly on unknown functions", async () => {
     const { error } = await db.rpc("does_not_exist");
-    expect(error?.message).toContain("unknown function");
+    expect(error?.code).toBe("PGRST202");
+    expect(error?.message).toContain("Keep this tab open");
   });
 });
 

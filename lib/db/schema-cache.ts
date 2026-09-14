@@ -2,6 +2,7 @@
 // column types (for jsonb serialization on writes), primary keys (upsert
 // without onConflict), and FK relationships (embed cardinality + join cols).
 import { quoteIdent, type Queryable } from "./sql";
+import { DatabaseSchemaError } from "@/lib/schema-drift";
 
 export type Relationship = {
   kind: "many-to-one" | "one-to-many";
@@ -37,6 +38,12 @@ export class SchemaCache {
 
   constructor(private readonly db: Queryable) {}
 
+  clear() {
+    this.columnTypes.clear();
+    this.relationships.clear();
+    this.primaryKeys.clear();
+  }
+
   async getColumnTypes(table: string): Promise<Map<string, string>> {
     const cached = this.columnTypes.get(table);
     if (cached) return cached;
@@ -46,7 +53,10 @@ export class SchemaCache {
       [table]
     );
     if (rows.length === 0) {
-      throw new Error(`postgrest-shim: unknown table ${JSON.stringify(table)}`);
+      throw new DatabaseSchemaError(
+        `postgrest-shim: unknown table ${JSON.stringify(table)}`,
+        "42P01"
+      );
     }
     const types = new Map<string, string>(
       rows.map((row) => [String(row.column_name), String(row.udt_name)])
@@ -107,16 +117,18 @@ export class SchemaCache {
       [`public.${quoteIdent(parent)}`, `public.${quoteIdent(child)}`]
     );
     if (rows.length === 0) {
-      throw new Error(
-        `postgrest-shim: no foreign key between ${parent} and ${child}`
+      throw new DatabaseSchemaError(
+        `postgrest-shim: no foreign key between ${parent} and ${child}`,
+        "PGRST200"
       );
     }
     const row = fkHint
       ? rows.find((candidate) => String(candidate.constraint_name) === fkHint)
       : rows[0];
     if (!row) {
-      throw new Error(
-        `postgrest-shim: no foreign key named ${JSON.stringify(fkHint)} between ${parent} and ${child}`
+      throw new DatabaseSchemaError(
+        `postgrest-shim: no foreign key named ${JSON.stringify(fkHint)} between ${parent} and ${child}`,
+        "PGRST200"
       );
     }
     const constraintTable = String(row.from_table)
