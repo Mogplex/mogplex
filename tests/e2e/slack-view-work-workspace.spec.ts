@@ -54,7 +54,10 @@ for (const sandboxStatus of ["running", "paused", "stopped"]) {
         kind: "assistant_delta",
       }) +
       event("e2", "tool_started", "bash started", { toolCallId: "tool-1" });
-    await page.route("**/api/runs/*/stream", async (route) => {
+    await page.route("**/api/runs/*/stream?*", async (route) => {
+      expect(new URL(route.request().url()).searchParams.get("dpl")).toBe(
+        `playwright-${process.env.PLAYWRIGHT_PORT || 3000}`
+      );
       resumeId = route.request().headers()["last-event-id"];
       await route.fulfill({
         contentType: "text/event-stream",
@@ -239,7 +242,10 @@ test("continuing a completed run waits for its delayed recorded history", async 
       savedConversation = route.request().postDataJSON();
     await route.fallback();
   });
-  await page.route("**/api/runs/*/stream", async (route) => {
+  await page.route("**/api/runs/*/stream?*", async (route) => {
+    expect(new URL(route.request().url()).searchParams.get("dpl")).toBe(
+      `playwright-${process.env.PLAYWRIGHT_PORT || 3000}`
+    );
     await replayGate;
     const event = (id: string, type: string, message: string, payload = {}) =>
       `id: ${id}\nevent: ${type}\ndata: ${JSON.stringify({ id, type, message, payload, toolName: null, createdAt: "2026-09-05T00:00:00Z" })}\n\n`;

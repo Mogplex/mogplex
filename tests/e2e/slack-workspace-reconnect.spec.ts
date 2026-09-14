@@ -90,9 +90,12 @@ test("workspace reconnect reconciles status and sandbox without a new table even
   if (!address || typeof address === "string")
     throw new Error("No fixture address");
   try {
-    await page.route("**/api/runs/*/stream", (route) =>
-      route.continue({ url: `http://127.0.0.1:${address.port}/run` })
-    );
+    await page.route("**/api/runs/*/stream?*", (route) => {
+      expect(new URL(route.request().url()).searchParams.get("dpl")).toBe(
+        `playwright-${process.env.PLAYWRIGHT_PORT || 3000}`
+      );
+      return route.continue({ url: `http://127.0.0.1:${address.port}/run` });
+    });
     await page.route("**/api/realtime/events?*", (route) =>
       route.continue({ url: `http://127.0.0.1:${address.port}/tables` })
     );
@@ -217,9 +220,12 @@ test("an awaiting-input workspace resumes its stream without remounting", async 
   if (!address || typeof address === "string")
     throw new Error("No fixture address");
   try {
-    await page.route("**/api/runs/*/stream", (route) =>
-      route.continue({ url: `http://127.0.0.1:${address.port}/run` })
-    );
+    await page.route("**/api/runs/*/stream?*", (route) => {
+      expect(new URL(route.request().url()).searchParams.get("dpl")).toBe(
+        `playwright-${process.env.PLAYWRIGHT_PORT || 3000}`
+      );
+      return route.continue({ url: `http://127.0.0.1:${address.port}/run` });
+    });
     await page.route("**/api/realtime/events?*", (route) =>
       route.continue({ url: `http://127.0.0.1:${address.port}/tables` })
     );
