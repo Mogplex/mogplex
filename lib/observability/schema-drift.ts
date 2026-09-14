@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import * as Sentry from "@sentry/nextjs";
 import { isSchemaDriftError, SCHEMA_DRIFT_CODE } from "@/lib/schema-drift";
 
@@ -11,13 +10,14 @@ type WorkerContext = {
   environment: string;
 };
 
-const workerContext = new AsyncLocalStorage<WorkerContext>();
-
 export function withSchemaDriftContext<T>(
   context: WorkerContext,
   callback: () => T
 ): T {
-  return workerContext.run(context, callback);
+  return Sentry.withIsolationScope((scope) => {
+    scope.setContext("schema_drift_worker", context);
+    return callback();
+  });
 }
 
 export async function reportSchemaDrift(
@@ -25,7 +25,8 @@ export async function reportSchemaDrift(
   operation: SchemaDriftOperation
 ): Promise<void> {
   if (!isSchemaDriftError(error)) return;
-  const worker = workerContext.getStore();
+  const worker = Sentry.getIsolationScope().getScopeData().contexts
+    .schema_drift_worker as WorkerContext | undefined;
   const code =
     typeof error === "object" &&
     error &&

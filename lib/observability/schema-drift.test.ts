@@ -20,7 +20,6 @@ beforeAll(() => {
   Sentry.init({
     dsn: "https://public@sentry.test/1",
     defaultIntegrations: false,
-    skipOpenTelemetrySetup: true,
     transport: () => ({
       send: async (
         envelope: Parameters<

@@ -83,7 +83,6 @@ test("worker schema failures reach Sentry with the executing release and run bef
   Sentry.init({
     dsn: "https://public@sentry.test/1",
     defaultIntegrations: false,
-    skipOpenTelemetrySetup: true,
     transport: () => ({
       send: async (
         envelope: Parameters<
