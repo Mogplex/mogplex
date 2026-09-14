@@ -11,6 +11,8 @@ import { expect, it } from "vitest";
 
 // A cross-surface policy guard: runtime tests exercise completion/cancellation;
 // this prevents a separate runner or editor from quietly restoring a step cap.
+// Parsing every production source file needs room for coverage instrumentation
+// and shared CI CPU without skipping files or weakening the identifier checks.
 it("no production surface configures an agent step budget", () => {
   const forbidden = new Set([
     "stepCountIs",
@@ -57,4 +59,4 @@ it("no production surface configures an agent step budget", () => {
   for (const directory of ["lib", "app", "components", "trigger", "scripts"])
     visitDirectory(join(process.cwd(), directory));
   expect(violations).toEqual([]);
-});
+}, 30_000);
