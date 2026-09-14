@@ -173,7 +173,17 @@ jobs:
       - name: Build production artifacts
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel build --prod --token="$VERCEL_TOKEN"
+          # Unique across releases and retries; Vercel custom IDs must be <=32 chars.
+          MOGPLEX_DEPLOYMENT_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          vercel build --prod --token="$VERCEL_TOKEN"
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const output = JSON.parse(readFileSync('.vercel/output/config.json', 'utf8'));
+          assert.equal(output.deploymentId, process.env.MOGPLEX_DEPLOYMENT_ID,
+            'Prebuilt output must register the deployment ID for skew protection');
+          JS
 
       - name: Deploy production artifacts
         env:
