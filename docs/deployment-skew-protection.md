@@ -28,10 +28,20 @@ Schema failures emit a Sentry event tagged `failure_kind:schema_drift`. Events i
 
 Diagnostic events exclude SQL, parameter values, request breadcrumbs, and task payloads. The error path waits up to two seconds for Sentry delivery. Delivery failures leave the safe database response and task retry decision intact. Without a Sentry DSN, structured server logs remain available.
 
-The [Sentry rule configuration](./schema-drift-alert-rule.json) alerts on production schema events, including recurring unresolved incidents. It uses the project's issue owners with active members as fallback, and groups notifications per issue over five minutes. This notification interval does not delay application requests or tasks. The rule can be created through Sentry's project issue-rule API; Sentry also exposes equivalent monitors and alert workflows.
+The [Sentry rule configuration](./schema-drift-alert-rule.json) alerts on production schema events, including recurring unresolved incidents. It uses the project's issue owners with active members as fallback, and groups notifications per issue over five minutes. This notification interval does not delay application requests or tasks. Use Sentry's [organization workflows API](https://docs.sentry.io/api/monitors/create-an-alert-for-an-organization/) to create the alert. Replace `<issue-stream-monitor-id>` with the project's Issue Stream monitor ID from the organization detectors API. Read `lastTriggered` from the workflow API when verifying delivery; the legacy project rules endpoint can report an older timestamp.
 
 On an alert, compare the event's release and worker version with the deployed app, task deployment, and migration ledger. Check earlier writes before retrying. Repair forward with a compatible committed migration; do not automatically replay mutations or roll back a database migration.
 
 To verify worker alert delivery after deployment, manually trigger `verify-schema-drift-alert` with an empty payload in the intended Trigger environment. It makes no database calls and intentionally fails once. Verify the Sentry event's `task_id`, `execution_runtime:trigger`, release, worker version, and run ID, then confirm the production alert fired. A failed run is the expected result of this check; it must not retry. This task is not scheduled.
 
 This handles explicit schema failures, not every semantic change to stored data. Keep migrations compatible with both old and new app and worker releases. Add new fields first, migrate data, then remove old fields after those releases retire.
+
+## Migration compatibility checks
+
+Run `pnpm test:schema-compatibility <previous-commit>` before shipping a schema change. The command archives that Git commit and installs its frozen dependency lockfile without lifecycle scripts. It uses an isolated PGlite database and does not pass hosted database, provider, or telemetry credentials to the archived code.
+
+The check first creates the previous schema and writes fixture data with previous-release code. The candidate migration runner then applies the new migrations to that database. Finally, the previous code reads the existing data and exercises new writes and worker RPCs against the upgraded schema. Imports resolve inside the archived checkout, including its PostgREST adapter, production smoke checks, ownership helpers, workspace projection, and job start/claim functions.
+
+The required CI test job runs this check against the PR base, merge-group base, or previous main commit. Before production migrations, the deployment workflow resolves the commit currently serving production from Vercel and checks that exact release. A missing deployment, wrong repository link, failed lookup, failed migration, or incompatible old operation stops the workflow before production SQL runs. Configure `VERCEL_PROJECT_NAME` when the Vercel project is not named `mogplex`; `VERCEL_TEAM_SCOPE` selects the team.
+
+These checks cover representative application and worker database contracts. Extend the fixtures when a migration affects another contract. They do not prove compatibility for every query or semantic change, and they do not replace expand-and-contract migrations. Keep old fields and functions until all protected app releases and running workers that need them have retired.
