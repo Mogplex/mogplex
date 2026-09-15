@@ -482,7 +482,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
 
         <div className="border-t border-border/70 px-5 py-4">
           <div className="rounded-md border border-dashed border-border/70 bg-background/50 px-4 py-3 text-sm text-muted-foreground">
-            Enable or disable models here, then pick the default you want Mogplex to use for new agents and flows. Existing node or agent overrides still win over this default.
+            Enable or disable models here, then choose a default and the destinations that should receive it. Unchecked destinations keep their current models.
           </div>
         </div>
       </div>
