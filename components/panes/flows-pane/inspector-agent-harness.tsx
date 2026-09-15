@@ -12,12 +12,12 @@ import {
 } from "./constants"
 import type { AutomationHarnessesResponse } from "./types"
 import {
-  WorkflowSelect,
   InspectorField,
   InspectorCallout,
   InspectorSummaryItem,
 } from "./inspector-shared"
 import { FlowHarnessIcon } from "./node-shells"
+import { WorkflowModelSelect } from "./workflow-model-select"
 
 type AgentNodeData = Extract<FlowNode, { type: "agent" }>["data"]
 
@@ -118,14 +118,13 @@ export function MogplexModelSection({
         </InspectorCallout>
       )}
       <InspectorField label="Model">
-        <WorkflowSelect
+        <WorkflowModelSelect
           ariaLabel="Model"
           value={selectedAgentModelSelectValue}
           onValueChange={(value) => updateNodeData(node.id, (data) => ({
             ...data,
             modelOverride: value || null,
           }), { mergeKey: `agent-model-${node.id}` })}
-          contentClassName="min-w-[min(520px,calc(100vw-32px))]"
           options={[
             { value: "", label: "Select a model..." },
             ...availableModelOptions.map((model) => ({
@@ -136,14 +135,13 @@ export function MogplexModelSection({
         />
       </InspectorField>
       <InspectorField label="Fallback model">
-        <WorkflowSelect
+        <WorkflowModelSelect
           ariaLabel="Fallback model"
           value={node.data.fallbackModelOverride ?? ""}
           onValueChange={(value) => updateNodeData(node.id, (data) => ({
             ...data,
             fallbackModelOverride: value || null,
           }), { mergeKey: `agent-fallback-model-${node.id}` })}
-          contentClassName="min-w-[min(520px,calc(100vw-32px))]"
           options={[
             { value: "", label: "Default fallback pool" },
             ...availableModelOptions.map((model) => ({
