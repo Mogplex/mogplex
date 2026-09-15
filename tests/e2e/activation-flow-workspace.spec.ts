@@ -347,6 +347,8 @@ test("workspace chat conversation persists after reload", async ({ page }) => {
   await page.waitForLoadState("networkidle");
   await page.getByTestId("home-sync-repos").click();
   await page.getByTestId("home-open-workspace-repo-1").click();
+  // Let the conversation load and the terminal finish opening before sending.
+  await page.waitForLoadState("networkidle");
 
   const prompt = "remember this workspace message";
   const saveResponse = page.waitForResponse(
@@ -356,12 +358,11 @@ test("workspace chat conversation persists after reload", async ({ page }) => {
       (response.request().postData() || "").includes(prompt)
   );
 
-  await page
-    .getByRole("textbox", {
-      name: "Ask the agent what to build, fix, or explain. Type / for commands or drop files here.",
-    })
-    .fill(prompt);
-  await page.keyboard.press("Enter");
+  const chatInput = page.getByRole("textbox", {
+    name: "Ask the agent what to build, fix, or explain. Type / for commands or drop files here.",
+  });
+  await chatInput.fill(prompt);
+  await chatInput.press("Enter");
 
   await expect(page.getByText("Applied preview feedback.")).toBeVisible();
   await saveResponse;
