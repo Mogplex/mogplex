@@ -14,7 +14,7 @@ const INTERNAL_PROVIDER_PATTERN =
 const MOGPLEX_AI_CREDIT_REQUIRED_PATTERN =
   /^(?:Automation model configuration failed:\s*)?Hosted AI requires a positive billing balance\./i;
 const UPSTREAM_BILLING_PATTERN =
-  /\b(?:positive credit balance|insufficient (?:funds|credits)|add credits to your account)\b/i;
+  /\b(?:positive credit balance|insufficient (?:funds|credits)|add credits to your account)\b|\bvercel\.com\/(?!docs(?:\/|$))\S*(?:top(?:-|%2d)up|billing|credits)/i;
 const FAILURE_SIGNAL_PATTERN =
   /\b(?:error|failed|failure|exception|invalid|unavailable|denied|timeout|timed out|429|rate limit|cancelled|canceled|aborted)\b/i;
 const FAILURE_STATE_PATTERN =
