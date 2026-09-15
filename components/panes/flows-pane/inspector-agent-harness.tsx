@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import { LightBulb, WarningTriangle } from "iconoir-react"
 import { flowAgentHarnessLabel } from "@/lib/flows/graph"
+import { buildAgentModelOptions } from "@/lib/agents/model-options"
 import type { FlowCanvasNode } from "@/lib/flows/editor"
 import type { FlowAgentHarness, FlowNode } from "@/lib/types"
 import {
@@ -50,6 +51,11 @@ export function MogplexModelSection({
   quickReplaceFlowModelName,
   canQuickReplaceFlowModel,
 }: MogplexModelSectionProps) {
+  const fallbackModelOptions = [
+    ...buildAgentModelOptions([], node.data.fallbackModelOverride)
+      .filter((option) => !availableModelOptions.some((model) => model.id === option.id)),
+    ...availableModelOptions,
+  ]
   return (
     <>
       {selectedAgentOverrideUsesUnavailableModel && (
@@ -144,7 +150,7 @@ export function MogplexModelSection({
           }), { mergeKey: `agent-fallback-model-${node.id}` })}
           options={[
             { value: "", label: "Default fallback pool" },
-            ...availableModelOptions.map((model) => ({
+            ...fallbackModelOptions.map((model) => ({
               value: model.id,
               label: model.label,
             })),
