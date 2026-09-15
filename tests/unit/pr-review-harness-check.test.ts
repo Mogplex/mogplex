@@ -49,7 +49,7 @@ test("buildPrReviewCheckText prefers the summary over commentBody when structure
   assert.match(text, /Warnings\n- Guard nullable lookup \(src\/widget\.ts\)/);
 });
 
-test("buildPrReviewCheckText appends structured diagnostics for failed reviews", () => {
+test("buildPrReviewCheckText keeps failed-review diagnostics internal", () => {
   const text = buildPrReviewCheckText({
     harnessResult: null,
     fallbackText:
@@ -73,23 +73,12 @@ test("buildPrReviewCheckText appends structured diagnostics for failed reviews",
 
   assert.equal(
     text,
-    [
-      "AI provider timed out during PR review after 180s.",
-      "",
-      "Diagnostics",
-      "- Failure type: Automation infra failed",
-      "- Model failure: Timeout",
-      "- HTTP status: 408",
-      "- Timeout budget: 180s",
-      "- Attempts: 1",
-      "- Retry attempted: No",
-      "- Provider detail: Gateway request timed out: Cannot connect to API: Headers Timeout Error",
-    ].join("\n")
+    "The review timed out before it completed. Please rerun the review. If the problem continues, contact Mogplex support."
   );
   assert.doesNotMatch(text, /run_pr_review_28|Runtime:/);
 });
 
-test("buildPrReviewCheckSummary uses structured failure metadata when available", () => {
+test("buildPrReviewCheckSummary uses safe failure guidance", () => {
   assert.equal(
     buildPrReviewCheckSummary({
       harnessResult: null,
@@ -99,7 +88,7 @@ test("buildPrReviewCheckSummary uses structured failure metadata when available"
         modelFailureClass: "authentication",
       },
     }),
-    "Review failed: Authentication"
+    "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support."
   );
 
   assert.equal(
@@ -114,7 +103,7 @@ test("buildPrReviewCheckSummary uses structured failure metadata when available"
         modelFailureStatusCode: 408,
       },
     }),
-    "Automation infra failed: Timeout (HTTP 408)"
+    "The review timed out before it completed. Please rerun the review. If the problem continues, contact Mogplex support."
   );
 
   assert.equal(
@@ -130,7 +119,7 @@ test("buildPrReviewCheckSummary uses structured failure metadata when available"
         modelFailureStatusCode: 408,
       },
     }),
-    "Automation infra failed: Supabase unavailable (HTTP 408)"
+    "The review timed out before it completed. Please rerun the review. If the problem continues, contact Mogplex support."
   );
 });
 
@@ -165,7 +154,7 @@ test("buildPrReviewCheckText sanitizes HTML-like fallback text on failures", () 
       fallbackText,
       conclusion: "failure",
     }),
-    "Automation infrastructure returned an HTML error page."
+    "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support."
   );
 
   assert.equal(
@@ -174,7 +163,7 @@ test("buildPrReviewCheckText sanitizes HTML-like fallback text on failures", () 
       fallbackText,
       conclusion: "failure",
     }),
-    "Automation infrastructure returned an HTML error page."
+    "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support."
   );
 });
 
@@ -198,7 +187,7 @@ test("PR review failure rendering sanitizes Supabase HTML outage pages", () => {
           "Cloudflare 522 while reaching the Supabase origin",
       },
     }),
-    "Automation infra failed: Supabase unavailable"
+    "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support."
   );
 
   assert.equal(
@@ -214,13 +203,6 @@ test("PR review failure rendering sanitizes Supabase HTML outage pages", () => {
           "Cloudflare 522 while reaching the Supabase origin",
       },
     }),
-    [
-      "Supabase was unavailable while recording workflow state.",
-      "",
-      "Diagnostics",
-      "- Failure type: Automation infra failed",
-      "- Infra failure: Supabase unavailable",
-      "- Infra detail: Cloudflare 522 while reaching the Supabase origin",
-    ].join("\n")
+    "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support."
   );
 });

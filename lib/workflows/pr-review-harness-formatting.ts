@@ -1,8 +1,4 @@
 import type { ReviewFinding } from "@/lib/types";
-import {
-  formatAutomationInfrastructureFailureLabel,
-  sanitizeAutomationInfrastructureText,
-} from "@/lib/workflows/automation-infra-failures";
 import type {
   PrAutofixCommit,
   PrAutofixOutcome,
@@ -11,7 +7,6 @@ import type {
   PrReviewFailureDetails,
   PrReviewHarnessResult,
 } from "./pr-review-harness-types";
-import { toOptionalString } from "./pr-review-harness-utils";
 
 export function buildPrReviewContractNote(source: PrReviewContractSource) {
   switch (source) {
@@ -160,168 +155,16 @@ export function isInlinePublishableReviewFinding(finding: ReviewFinding) {
   return Boolean(finding.path) && finding.line != null;
 }
 
-function formatFailureClassLabel(value: string | null | undefined) {
-  switch (value) {
-    case "timeout":
-      return "Timeout";
-    case "rate_limited":
-      return "Rate limited";
-    case "provider_unavailable":
-      return "Provider unavailable";
-    case "dependency_unavailable":
-      return "Dependency unavailable";
-    case "authentication":
-      return "Authentication";
-    case "configuration":
-      return "Configuration";
-    case "unknown":
-      return "Unknown";
-    default:
-      return toOptionalString(value);
-  }
-}
-
-function formatDurationLabel(durationMs: number) {
-  if (durationMs % 1000 === 0) {
-    return `${durationMs / 1000}s`;
-  }
-
-  return `${durationMs}ms`;
-}
-
-function stripPublicRuntimeHandle(value: string | null | undefined) {
-  const text = toOptionalString(value);
-  if (!text) {
-    return null;
-  }
-
-  const stripped = text
-    .replace(/\s*Runtime:\s*(?:[a-z][\w-]*:\s*)?\S+\.?/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  return stripped.length > 0 ? stripped : null;
-}
-
-function sanitizePrReviewFailureText(value: string | null | undefined) {
-  return stripPublicRuntimeHandle(sanitizeAutomationInfrastructureText(value));
-}
-
-export function buildPrReviewFailureDiagnosticsSection(
+/** Public failure output is authored here, never copied from provider diagnostics.
+ * Raw messages and routing/billing metadata remain in the internal run record.
+ */
+export function buildPrReviewFailureMessage(
   failureDetails: PrReviewFailureDetails | null | undefined
 ) {
-  if (!failureDetails) {
-    return null;
+  if (failureDetails?.modelFailureClass === "timeout") {
+    return "The review timed out before it completed. Please rerun the review. If the problem continues, contact Mogplex support.";
   }
-
-  const lines: string[] = [];
-  const reasonLabel = toOptionalString(failureDetails.reasonLabel);
-  const infraFailureClass = formatAutomationInfrastructureFailureLabel(
-    failureDetails.infraFailureClass
-  );
-  const infraFailureDetail = toOptionalString(
-    failureDetails.infraFailureMessage
-  );
-  const failureClass = formatFailureClassLabel(
-    failureDetails.modelFailureClass
-  );
-  const errorMessage = sanitizePrReviewFailureText(failureDetails.error);
-  const providerDetail = stripPublicRuntimeHandle(
-    failureDetails.modelFailureMessage
-  );
-
-  if (reasonLabel) {
-    lines.push(`- Failure type: ${reasonLabel}`);
-  }
-
-  if (infraFailureClass) {
-    lines.push(`- Infra failure: ${infraFailureClass}`);
-  }
-
-  if (failureClass) {
-    lines.push(`- Model failure: ${failureClass}`);
-  }
-
-  if (
-    typeof failureDetails.modelFailureStatusCode === "number" &&
-    Number.isFinite(failureDetails.modelFailureStatusCode)
-  ) {
-    lines.push(`- HTTP status: ${failureDetails.modelFailureStatusCode}`);
-  }
-
-  if (
-    typeof failureDetails.modelEffectiveTimeoutMs === "number" &&
-    Number.isFinite(failureDetails.modelEffectiveTimeoutMs) &&
-    failureDetails.modelEffectiveTimeoutMs > 0
-  ) {
-    lines.push(
-      `- Timeout budget: ${formatDurationLabel(failureDetails.modelEffectiveTimeoutMs)}`
-    );
-  }
-
-  if (
-    typeof failureDetails.modelAttempts === "number" &&
-    Number.isFinite(failureDetails.modelAttempts) &&
-    failureDetails.modelAttempts > 0
-  ) {
-    lines.push(`- Attempts: ${failureDetails.modelAttempts}`);
-  }
-
-  if (typeof failureDetails.modelRetryAttempted === "boolean") {
-    lines.push(
-      `- Retry attempted: ${failureDetails.modelRetryAttempted ? "Yes" : "No"}`
-    );
-  }
-
-  if (
-    failureDetails.modelRetryAttempted === true &&
-    typeof failureDetails.modelRetryCount === "number" &&
-    Number.isFinite(failureDetails.modelRetryCount)
-  ) {
-    lines.push(`- Retry count: ${failureDetails.modelRetryCount}`);
-  }
-
-  if (
-    infraFailureDetail &&
-    infraFailureDetail !== errorMessage &&
-    !errorMessage?.includes(infraFailureDetail)
-  ) {
-    lines.push(`- Infra detail: ${infraFailureDetail}`);
-  }
-
-  if (
-    providerDetail &&
-    providerDetail !== errorMessage &&
-    !errorMessage?.includes(providerDetail)
-  ) {
-    lines.push(`- Provider detail: ${providerDetail}`);
-  }
-
-  if (lines.length === 0) {
-    return null;
-  }
-
-  return ["Diagnostics", ...lines].join("\n");
-}
-
-function shouldSanitizePrReviewFallbackText(input: {
-  conclusion: PrReviewConclusion;
-}) {
-  return input.conclusion === "failure";
-}
-
-export function resolvePrReviewFallbackText(input: {
-  fallbackText: string | null | undefined;
-  conclusion: PrReviewConclusion;
-}) {
-  const fallbackText = toOptionalString(input.fallbackText);
-  if (!fallbackText) {
-    return null;
-  }
-
-  return shouldSanitizePrReviewFallbackText(input)
-    ? sanitizePrReviewFailureText(fallbackText)
-    : fallbackText;
+  return "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support.";
 }
 
 export function buildPrReviewStatusHeading(input: {
@@ -348,36 +191,4 @@ export function buildPrReviewCheckTitle(input: {
   return input.harnessResult?.reviewOutcome.hasIssues
     ? "Review found issues"
     : "No issues found";
-}
-
-export function formatFailureClassLabelForSummary(
-  failureDetails: PrReviewFailureDetails | null | undefined
-) {
-  const infraFailureClass = formatAutomationInfrastructureFailureLabel(
-    failureDetails?.infraFailureClass
-  );
-  const failureClass = formatFailureClassLabel(
-    failureDetails?.modelFailureClass
-  );
-  const reasonLabel = toOptionalString(failureDetails?.reasonLabel);
-  const statusCode =
-    typeof failureDetails?.modelFailureStatusCode === "number" &&
-    Number.isFinite(failureDetails.modelFailureStatusCode)
-      ? failureDetails.modelFailureStatusCode
-      : null;
-
-  const summaryDetail = infraFailureClass ?? failureClass;
-  const summaryCore = summaryDetail
-    ? reasonLabel
-      ? `${reasonLabel}: ${summaryDetail}`
-      : `Review failed: ${summaryDetail}`
-    : reasonLabel;
-
-  if (summaryCore) {
-    return statusCode == null
-      ? summaryCore
-      : `${summaryCore} (HTTP ${statusCode})`;
-  }
-
-  return null;
 }

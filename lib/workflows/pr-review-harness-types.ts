@@ -44,6 +44,7 @@ export type PrReviewHarnessResult = {
 
 export type PrReviewConclusion = "success" | "neutral" | "failure";
 
+/** Internal diagnostics. Public review output must use authored guidance, never echo these fields. */
 export type PrReviewFailureDetails = {
   reasonLabel?: string | null;
   error?: string | null;

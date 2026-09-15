@@ -6,6 +6,37 @@ import {
   sanitizeObservabilityToolEntry,
 } from "./user-facing-errors";
 
+it("preserves ordinary provider documentation links", () => {
+  const event = {
+    id: "event-1",
+    event_type: "log",
+    message: "https://vercel.com/docs/pricing/billing",
+  };
+  expect(sanitizeObservabilityEvent(event)).toEqual(event);
+});
+
+it.each([
+  "A positive credit balance is required for all requests, including BYOK. Add credits at https://vercel.com/account/top-up.",
+  "Insufficient funds. Please add credits to your account.",
+  "https://vercel.com/account/top-up",
+  "https://vercel.com/d?to=%2Fteam%2Fai%3Fmodal%3Dtop-up",
+  "https://vercel.com/team/settings/billing",
+])(
+  "keeps upstream billing diagnostics private on logs and tool output",
+  (raw) => {
+    const event = { id: "event-1", event_type: "log", message: raw };
+    const tool = { id: "tool-1", output: raw, output_preview: raw };
+    const result = JSON.stringify([
+      sanitizeObservabilityEvent(event),
+      sanitizeObservabilityToolEntry(tool),
+    ]);
+    expect(result).not.toMatch(/vercel|BYOK|credit|funds|top-up/);
+    expect(result).toContain("internal service error");
+    expect(event.message).toBe(raw);
+    expect(tool.output).toBe(raw);
+  }
+);
+
 it.each(["", " \n\t"])(
   "preserves blank diagnostics %j without inventing a failure",
   (blank) => {

@@ -10,14 +10,12 @@ import { toOptionalString } from "./pr-review-harness-utils";
 import {
   buildAutofixSection,
   buildPrReviewContractNote,
-  buildPrReviewFailureDiagnosticsSection,
+  buildPrReviewFailureMessage,
   buildPrReviewStatusHeading,
   buildReviewFindingsSections,
   demoteAgentMarkdownHeadings,
-  formatFailureClassLabelForSummary,
   formatReviewFindingSeverityLabel,
   isInlinePublishableReviewFinding,
-  resolvePrReviewFallbackText,
 } from "./pr-review-harness-formatting";
 
 // Re-export types from split modules
@@ -74,13 +72,13 @@ export function buildPrReviewCheckText(input: {
   conclusion: PrReviewConclusion;
   failureDetails?: PrReviewFailureDetails | null;
 }) {
+  if (input.conclusion === "failure") {
+    return buildPrReviewFailureMessage(input.failureDetails);
+  }
   const parts: string[] = [];
   const reviewOutcome = input.harnessResult?.reviewOutcome ?? null;
-  const fallbackText = resolvePrReviewFallbackText({
-    fallbackText:
-      input.harnessResult?.fallbackText ?? toOptionalString(input.fallbackText),
-    conclusion: input.conclusion,
-  });
+  const fallbackText =
+    input.harnessResult?.fallbackText ?? toOptionalString(input.fallbackText);
   const contractNote = input.harnessResult
     ? buildPrReviewContractNote(input.harnessResult.source)
     : null;
@@ -123,13 +121,6 @@ export function buildPrReviewCheckText(input: {
     parts.push(autofixSection);
   }
 
-  const failureDiagnostics = buildPrReviewFailureDiagnosticsSection(
-    input.failureDetails
-  );
-  if (failureDiagnostics) {
-    parts.push(failureDiagnostics);
-  }
-
   return parts.join("\n\n").trim();
 }
 
@@ -139,28 +130,15 @@ export function buildPrReviewCheckSummary(input: {
   conclusion: PrReviewConclusion;
   failureDetails?: PrReviewFailureDetails | null;
 }) {
-  const fallbackText = resolvePrReviewFallbackText({
-    fallbackText:
-      input.harnessResult?.fallbackText ?? toOptionalString(input.fallbackText),
-    conclusion: input.conclusion,
-  });
-
-  if (input.conclusion !== "failure") {
-    return demoteAgentMarkdownHeadings(
-      input.harnessResult?.reviewOutcome.summary ??
-        fallbackText ??
-        "Mogplex completed the pull request review."
-    );
+  if (input.conclusion === "failure") {
+    return buildPrReviewFailureMessage(input.failureDetails);
   }
-
-  const formattedLabel = formatFailureClassLabelForSummary(
-    input.failureDetails
+  return demoteAgentMarkdownHeadings(
+    input.harnessResult?.reviewOutcome.summary ??
+      input.harnessResult?.fallbackText ??
+      toOptionalString(input.fallbackText) ??
+      "Mogplex completed the pull request review."
   );
-  if (formattedLabel) {
-    return formattedLabel;
-  }
-
-  return fallbackText ?? "Mogplex could not complete the pull request review.";
 }
 
 export function buildPrReviewTimelineCommentBody(input: {

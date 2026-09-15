@@ -13,6 +13,8 @@ const INTERNAL_PROVIDER_PATTERN =
 // Gateway balance error is a platform diagnostic and must remain internal.
 const MOGPLEX_AI_CREDIT_REQUIRED_PATTERN =
   /^(?:Automation model configuration failed:\s*)?Hosted AI requires a positive billing balance\./i;
+const UPSTREAM_BILLING_PATTERN =
+  /\b(?:positive credit balance|insufficient (?:funds|credits)|add credits to your account)\b|\bvercel\.com\/(?!docs(?:\/|$))\S*(?:top(?:-|%2d)up|billing|credits)/i;
 const FAILURE_SIGNAL_PATTERN =
   /\b(?:error|failed|failure|exception|invalid|unavailable|denied|timeout|timed out|429|rate limit|cancelled|canceled|aborted)\b/i;
 const FAILURE_STATE_PATTERN =
@@ -104,6 +106,9 @@ function classifyFailure(raw: string): FailureKind {
   if (MOGPLEX_AI_CREDIT_REQUIRED_PATTERN.test(raw)) {
     return "billing";
   }
+  if (UPSTREAM_BILLING_PATTERN.test(raw)) {
+    return "internal";
+  }
   if (/\b(?:cancelled|canceled|cancel requested|aborted)\b/i.test(raw)) {
     return "cancelled";
   }
@@ -153,6 +158,7 @@ export function presentObservabilityFailure(raw: unknown, incidentId: string) {
 
 function looksLikeInternalDiagnostic(value: string) {
   return (
+    UPSTREAM_BILLING_PATTERN.test(value) ||
     ENV_CONFIGURATION_PATTERN.test(value) ||
     STACK_TRACE_PATTERN.test(value) ||
     INTERNAL_URL_PATTERN.test(value) ||

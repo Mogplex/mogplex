@@ -179,44 +179,14 @@ test("createAutomationJobTask classifies transport timeouts from resolved gatewa
       result.error,
       "AI provider timed out during PR review after 360s."
     );
-    const resultError = result.error!;
-    assert.equal(
-      capturedCheckRunSummary,
-      "Automation infra failed: Timeout (HTTP 408)"
-    );
-    assert.notEqual(capturedCheckRunText, null);
-    const checkRunText = capturedCheckRunText ?? "";
-    assert.ok(checkRunText.startsWith(`${resultError}\n\nDiagnostics`));
-    assert.match(
-      checkRunText,
-      /Diagnostics\n- Failure type: Automation infra failed\n- Model failure: Timeout\n- HTTP status: 408\n- Timeout budget: 360s\n- Attempts: 2\n- Retry attempted: Yes\n- Retry count: 1/
-    );
-    assert.match(
-      checkRunText,
-      /Provider detail: Gateway request timed out: Cannot connect to API: Headers Timeout Error/
-    );
-    assert.match(checkRunText, /This is a client-side timeout/);
-    assert.ok(capturedTimelineCommentBody);
-    assert.match(
-      capturedTimelineCommentBody as string,
-      /\*\*Status:\*\* Review failed/
-    );
-    assert.match(
-      capturedTimelineCommentBody as string,
-      /Diagnostics\n- Failure type: Automation infra failed\n- Model failure: Timeout\n- HTTP status: 408\n- Timeout budget: 360s\n- Attempts: 2\n- Retry attempted: Yes\n- Retry count: 1/
-    );
-    assert.match(
-      capturedTimelineCommentBody as string,
-      /Provider detail: Gateway request timed out: Cannot connect to API: Headers Timeout Error/
-    );
-    assert.match(
-      capturedTimelineCommentBody as string,
-      /This is a client-side timeout/
-    );
-    assert.doesNotMatch(checkRunText, /run_pr_review_28|Runtime:/);
+    const safeMessage =
+      "The review timed out before it completed. Please rerun the review. If the problem continues, contact Mogplex support.";
+    assert.equal(capturedCheckRunSummary, safeMessage);
+    assert.equal(capturedCheckRunText, safeMessage);
+    assert.ok(String(capturedTimelineCommentBody).includes(safeMessage));
     assert.doesNotMatch(
-      capturedTimelineCommentBody as string,
-      /run_pr_review_28|Runtime:/
+      capturedTimelineCommentBody ?? "",
+      /Diagnostics|HTTP 408|Gateway|client-side timeout|run_pr_review_28|Runtime:/
     );
 
     assert.ok(controlDispatchEvent);

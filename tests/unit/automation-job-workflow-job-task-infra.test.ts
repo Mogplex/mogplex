@@ -308,18 +308,11 @@ test("createAutomationJobTask sanitizes Supabase HTML outages in PR review failu
   });
   assert.equal(
     capturedCheckRunSummary,
-    "Automation infra failed: Supabase unavailable"
+    "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support."
   );
   assert.equal(
     capturedCheckRunText,
-    [
-      "Supabase was unavailable while recording PR review workflow state.",
-      "",
-      "Diagnostics",
-      "- Failure type: Automation infra failed",
-      "- Infra failure: Supabase unavailable",
-      "- Infra detail: Cloudflare 522 while reaching the Supabase origin",
-    ].join("\n")
+    "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support."
   );
   assert.equal(
     capturedTimelineCommentBody,
@@ -328,12 +321,7 @@ test("createAutomationJobTask sanitizes Supabase HTML outages in PR review failu
       "",
       "**Status:** Review failed",
       "",
-      "Supabase was unavailable while recording PR review workflow state.",
-      "",
-      "Diagnostics",
-      "- Failure type: Automation infra failed",
-      "- Infra failure: Supabase unavailable",
-      "- Infra detail: Cloudflare 522 while reaching the Supabase origin",
+      "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support.",
       "",
       "[View check run](https://github.com/acme/widgets/runs/271)",
     ].join("\n")
