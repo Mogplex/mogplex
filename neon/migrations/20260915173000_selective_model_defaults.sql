@@ -22,6 +22,7 @@ declare
   v_published jsonb;
   v_version_id uuid;
   v_version_number integer;
+  v_selected integer := 0;
   v_drafts integer := 0;
   v_versions integer := 0;
 begin
@@ -51,6 +52,7 @@ begin
   -- Lock in a stable order. Draft and published graphs are rewritten separately:
   -- selecting a model must never publish unrelated draft edits.
   for v_flow in select * from public.flows where user_id = p_user_id and id = any(p_flow_ids) order by id for update loop
+    v_selected := v_selected + 1;
     select jsonb_set(v_flow.draft_graph, '{nodes}', coalesce(jsonb_agg(case
       when n ->> 'type' = 'agent' then jsonb_set(n, '{data,modelOverride}', to_jsonb(p_next_model)) else n end order by ord), '[]'))
       into v_graph from jsonb_array_elements(v_flow.draft_graph -> 'nodes') with ordinality as nodes(n, ord);
@@ -71,6 +73,9 @@ begin
       end if;
     end if;
   end loop;
+  if v_selected <> (select count(distinct id) from unnest(p_flow_ids) as selected(id)) then
+    raise exception 'Automation is unavailable' using errcode = '42501';
+  end if;
   return jsonb_build_object('drafts_updated', v_drafts, 'versions_published', v_versions);
 end;
 $$;

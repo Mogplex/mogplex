@@ -170,6 +170,28 @@ test("migration preserves unchecked surfaces and updates only selected owned aut
     ).rows[0].draft_graph.nodes[1].data.modelOverride
   ).toBe("new");
   await db.exec("drop trigger fail_publish on flow_versions;");
+  // Simulate an automation disappearing after validation but before it is locked.
+  await db.exec(`create function remove_selected_flow() returns trigger language plpgsql as $$ begin
+    delete from flows where id = '${untouched}'; return new; end $$;
+    create trigger remove_flow after update on profiles for each row execute function remove_selected_flow();`);
+  await expect(
+    db.query(
+      "select apply_model_defaults($1, 'raced', 'third', 'third', array['chat'], $2::uuid[], null)",
+      [user, [untouched]]
+    )
+  ).rejects.toThrow(/Automation is unavailable/);
+  expect(
+    (
+      await db.query<{ default_model: string }>(
+        "select default_model from profiles where id=$1",
+        [user]
+      )
+    ).rows[0].default_model
+  ).toBe("third");
+  expect(
+    (await db.query("select id from flows where id=$1", [untouched])).rows
+  ).toHaveLength(1);
+  await db.exec("drop trigger remove_flow on profiles;");
   const privileges = await db.query<{ allowed: boolean }>(
     "select has_function_privilege('authenticated', 'apply_model_defaults(uuid,text,text,text,text[],uuid[],text)', 'execute') as allowed"
   );
