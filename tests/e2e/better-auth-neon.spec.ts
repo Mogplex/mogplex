@@ -217,6 +217,18 @@ test.describe("better-auth against real Neon", () => {
       });
       expect(settingsRes.status(), await settingsRes.text()).toBe(200);
 
+      // Exercise the real destination query against the deployed schema;
+      // mocked settings dialogs cannot detect nonexistent flow columns.
+      const targetsRes = await page.request.get("/api/settings/model-targets", {
+        maxRedirects: 0,
+      });
+      expect(targetsRes.status(), await targetsRes.text()).toBe(200);
+      const targets = await targetsRes.json();
+      expect(targets.automations).toEqual([]);
+      expect(
+        targets.surfaces.map((surface: { id: string }) => surface.id)
+      ).toEqual(["chat", "slack", "cli", "control", "agents"]);
+
       const modelsRes = await request.get("/api/models?format=cli", {
         headers: cliHeaders,
         maxRedirects: 0,

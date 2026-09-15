@@ -17,7 +17,7 @@ test("runtime defaults use their own surface, and explicit selections still win"
   let preference: string | null = null;
   let failTable: string | null = null;
   let rpcError: string | null = null;
-  let visibleFlows = [{ id: "flow", name: "My automation", team_id: null }];
+  let visibleFlows = [{ id: "flow", name: "My automation" }];
   let reachable = true;
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -188,11 +188,11 @@ test("runtime defaults use their own surface, and explicit selections still win"
     );
     visibleFlows = [];
     await assert.rejects(applyModelDefaults(save), /no longer available/);
-    visibleFlows = [{ id: "flow", name: "My automation", team_id: null }];
+    visibleFlows = [{ id: "flow", name: "My automation" }];
     reachable = false;
     await assert.rejects(
       applyModelDefaults(save),
-      /unavailable for a selected/
+      /unavailable for your account/
     );
     reachable = true;
     for (const code of ["40001", "XX000"]) {
