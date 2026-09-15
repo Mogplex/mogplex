@@ -12,6 +12,10 @@ import {
 } from "@/lib/models/user-preferences";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
+  surfaceDefaultModel,
+  type ModelSurface,
+} from "@/lib/models/surface-defaults";
+import {
   teamAllowlistMatcher,
   hasCapability,
   modelAllowlistUnavailableError,
@@ -113,6 +117,7 @@ type ProfileModelSettings = {
   auto_enable_new_models: boolean;
   models_seen_at: string | null;
   default_model?: string | null;
+  surface_models?: unknown;
 };
 
 async function loadUserModelCatalogState(userId: string) {
@@ -130,7 +135,9 @@ async function loadUserModelCatalogState(userId: string) {
       .eq("user_id", userId),
     supabaseAdmin
       .from("profiles")
-      .select("auto_enable_new_models, models_seen_at, default_model")
+      .select(
+        "auto_enable_new_models, models_seen_at, default_model, surface_models"
+      )
       .eq("id", userId)
       .single(),
   ]);
@@ -153,17 +160,22 @@ async function loadUserModelCatalogState(userId: string) {
     policy: buildNewModelDefaultPolicy(profile as ProfileModelSettings | null),
     storedDefaultModel:
       (profile as ProfileModelSettings | null)?.default_model ?? null,
+    surfaceModels: (profile as ProfileModelSettings | null)?.surface_models,
   };
 }
 
 export async function resolveUserDefaultModelId(
   userId: string,
-  storedDefaultModel: string | null | undefined
+  storedDefaultModel: string | null | undefined,
+  surface?: ModelSurface
 ) {
-  const { catalog, preferences, policy } =
+  const { catalog, preferences, policy, surfaceModels } =
     await loadUserModelCatalogState(userId);
   return resolveUsableDefaultModelId(
-    storedDefaultModel,
+    surfaceDefaultModel(
+      { default_model: storedDefaultModel, surface_models: surfaceModels },
+      surface
+    ),
     catalog,
     preferences,
     policy
@@ -172,6 +184,7 @@ export async function resolveUserDefaultModelId(
 
 export type DefaultModelScope = {
   teamId?: string | null;
+  surface?: ModelSurface;
 };
 
 // Predicate for "can this scope actually invoke this model": provider
@@ -247,17 +260,25 @@ export async function resolveStoredUserDefaultModelId(
   scope: DefaultModelScope = {}
 ): Promise<string | null> {
   const teamId = scope.teamId ?? null;
-  const [{ catalog, preferences, policy, storedDefaultModel }, canInvoke] =
-    await Promise.all([
-      loadUserModelCatalogState(userId),
-      loadScopeInvocationPredicate(userId, teamId),
-    ]);
+  const [
+    { catalog, preferences, policy, storedDefaultModel, surfaceModels },
+    canInvoke,
+  ] = await Promise.all([
+    loadUserModelCatalogState(userId),
+    loadScopeInvocationPredicate(userId, teamId),
+  ]);
   const usableModelIds = listEnabledVisibleModelIds(
     catalog,
     preferences,
     policy
   ).filter(canInvoke);
-  return pickUsableDefaultModelId(storedDefaultModel, usableModelIds);
+  return pickUsableDefaultModelId(
+    surfaceDefaultModel(
+      { default_model: storedDefaultModel, surface_models: surfaceModels },
+      scope.surface
+    ),
+    usableModelIds
+  );
 }
 
 // Every model id this scope can actually invoke — enabled, visible, allowed by

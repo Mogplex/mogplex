@@ -29,7 +29,7 @@ type Props = {
 
 export function AgentCreatorDialog({ onClose, onCreated }: Props) {
   const { scope } = useParams<{ scope: string }>()
-  const { models, catalog, defaultModelId } = useModels()
+  const { models, catalog, defaultModelId } = useModels("agents")
   const hasEnabledModels = models.length > 0
 
   const [description, setDescription] = useState("")

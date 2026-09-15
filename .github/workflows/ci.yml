@@ -212,7 +212,7 @@ jobs:
     # cleanup job ever misses one, sweep branches with that prefix manually.
     name: neon-branch
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       branch_id: ${{ steps.create.outputs.branch_id }}
     env:
@@ -242,6 +242,59 @@ jobs:
           fi
           echo "Created Neon branch ${branch_name} (${branch_id})"
           echo "branch_id=${branch_id}" >> "$GITHUB_OUTPUT"
+
+      # The fork starts with production's schema. Apply candidate migrations
+      # once here, before any shard starts, and never to the shared fallback.
+      - name: Check out repository
+        if: steps.create.outputs.branch_id != ''
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        if: steps.create.outputs.branch_id != ''
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm via Corepack
+        if: steps.create.outputs.branch_id != ''
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Resolve isolated migration database
+        if: steps.create.outputs.branch_id != ''
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRANCH_ID: ${{ steps.create.outputs.branch_id }}
+        run: |
+          set -euo pipefail
+          stripped="${DATABASE_URL#*://}"
+          role_name="${stripped%%@*}"
+          role_name="${role_name%%:*}"
+          database_name="${stripped##*/}"
+          database_name="${database_name%%\?*}"
+          uri=$(curl -fsS -G \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            --data-urlencode "branch_id=${BRANCH_ID}" \
+            --data-urlencode "database_name=${database_name}" \
+            --data-urlencode "role_name=${role_name}" \
+            --data-urlencode "pooled=false" \
+            | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).uri || ""')
+          if [ -z "$uri" ] || [ "$uri" = "null" ]; then
+            echo "Failed to resolve a connection URI for branch ${BRANCH_ID}" >&2
+            exit 1
+          fi
+          echo "::add-mask::${uri}"
+          echo "DATABASE_URL=${uri}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        if: steps.create.outputs.branch_id != ''
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply candidate migrations to the isolated database
+        if: steps.create.outputs.branch_id != ''
+        run: pnpm exec tsx scripts/apply-neon-migrations.ts
 
   e2e-shard:
     # Sharded at the spec-file level to cut merge-queue cycle time: the suite

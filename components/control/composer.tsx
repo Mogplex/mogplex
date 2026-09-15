@@ -234,7 +234,7 @@ export function Composer({
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const { modelIds, defaultModelId, contextLimits } = useModels();
+  const { modelIds, defaultModelId, contextLimits } = useModels("control");
   const [selectedModel, setSelectedModel] = useState<string | null>(
     initialModelId
   );

@@ -2,21 +2,27 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import {
-  cascadeDefaultModelToAutomations,
-  type CascadeAutomationModelInput,
-  type CascadeAutomationModelResult,
-} from "@/lib/flows/cascade-default-model";
-import {
   canUserSetDefaultModel,
-  resolveStoredUserDefaultModelId,
   resolveUserDefaultModelId,
 } from "@/lib/models/default-model";
+import {
+  applyModelDefaults,
+  ModelSettingsError,
+} from "@/lib/models/settings-defaults";
+import {
+  isModelSurface,
+  surfaceDefaultModel,
+} from "@/lib/models/surface-defaults";
 import { THEME_COOKIE_NAME, isThemePreference } from "@/lib/theme-preferences";
 
 type SettingsGetDeps = {
   requireUserId: typeof requireUserId;
   loadProfile: (userId: string) => Promise<{
-    data: { default_model: string | null; theme: string | null } | null;
+    data: {
+      default_model: string | null;
+      theme: string | null;
+      surface_models?: unknown;
+    } | null;
     error: { code?: string; message: string } | null;
   }>;
   resolveUserDefaultModelId: typeof resolveUserDefaultModelId;
@@ -29,11 +35,7 @@ type SettingsPatchDeps = {
     userId: string,
     updates: Record<string, unknown>
   ) => Promise<{ error: { message: string } | null }>;
-  loadStoredDefaultModel: (userId: string) => Promise<string | null>;
-  resolveStoredUserDefaultModelId: typeof resolveStoredUserDefaultModelId;
-  cascadeAutomationModels: (
-    input: CascadeAutomationModelInput
-  ) => Promise<CascadeAutomationModelResult>;
+  applyModelDefaults: typeof applyModelDefaults;
 };
 
 const defaultSettingsGetDeps: SettingsGetDeps = {
@@ -41,7 +43,7 @@ const defaultSettingsGetDeps: SettingsGetDeps = {
   async loadProfile(userId) {
     const { data, error } = await supabaseAdmin
       .from("profiles")
-      .select("default_model, theme")
+      .select("default_model, theme, surface_models")
       .eq("id", userId)
       .single();
 
@@ -66,17 +68,7 @@ const defaultSettingsPatchDeps: SettingsPatchDeps = {
       error: error ? { message: error.message } : null,
     };
   },
-  async loadStoredDefaultModel(userId) {
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("default_model")
-      .eq("id", userId)
-      .single();
-    if (error) throw new Error(error.message);
-    return data?.default_model ?? null;
-  },
-  resolveStoredUserDefaultModelId,
-  cascadeAutomationModels: cascadeDefaultModelToAutomations,
+  applyModelDefaults,
 };
 
 export function createSettingsGetHandler(
@@ -87,7 +79,7 @@ export function createSettingsGetHandler(
     ...overrides,
   };
 
-  return async function GET() {
+  return async function GET(request?: Request) {
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
@@ -103,9 +95,19 @@ export function createSettingsGetHandler(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const requestedSurface = request
+      ? new URL(request.url).searchParams.get("surface")
+      : null;
+    // Released CLI clients bootstrap from this endpoint using bearer auth,
+    // then send the returned model explicitly on every inference request.
+    const surface = isModelSurface(requestedSurface)
+      ? requestedSurface
+      : request?.headers.get("authorization")?.startsWith("Bearer ")
+        ? "cli"
+        : undefined;
     const resolvedDefaultModel = await deps.resolveUserDefaultModelId(
       userId,
-      data?.default_model
+      surfaceDefaultModel(data, surface)
     );
     const payload = {
       ...data,
@@ -138,13 +140,44 @@ export function createSettingsPatchHandler(
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body = await request.json();
+    const body: unknown = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      return NextResponse.json({ error: "Invalid settings" }, { status: 400 });
+    const fields = body as Record<string, unknown>;
+    if (fields.update_automation_models === true) {
+      return NextResponse.json(
+        {
+          error:
+            "Reload settings to choose which automations receive this model.",
+        },
+        { status: 409 }
+      );
+    }
+    const surfaces = fields.apply_to_surfaces ?? [];
+    const flowIds = fields.automation_ids ?? [];
+    if (
+      !Array.isArray(surfaces) ||
+      !surfaces.every(isModelSurface) ||
+      !Array.isArray(flowIds) ||
+      !flowIds.every(
+        (id) =>
+          typeof id === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            id
+          )
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Invalid model destinations" },
+        { status: 400 }
+      );
+    }
     const updates: Record<string, unknown> = {};
 
-    if (typeof body.default_model === "string") {
+    if (typeof fields.default_model === "string") {
       const canSetDefaultModel = await deps.canUserSetDefaultModel(
         userId,
-        body.default_model
+        fields.default_model
       );
       if (!canSetDefaultModel) {
         return NextResponse.json(
@@ -152,73 +185,52 @@ export function createSettingsPatchHandler(
           { status: 400 }
         );
       }
-      updates.default_model = body.default_model;
+      updates.default_model = fields.default_model;
     }
-    if (isThemePreference(body.theme)) {
-      updates.theme = body.theme;
+    if (isThemePreference(fields.theme)) {
+      updates.theme = fields.theme;
     }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No valid fields" }, { status: 400 });
     }
 
-    // Opt-in cascade: when the default model changes, also move automations
-    // that were pinned to the old default onto the new one. The previous ids
-    // (raw stored value plus its resolved form — drafts were stamped with
-    // either) must be captured before the profile write.
-    const cascadeAutomations =
-      body.update_automation_models === true &&
-      typeof updates.default_model === "string";
-    let previousModelIds: string[] = [];
-    if (cascadeAutomations) {
-      const [storedDefault, resolvedDefault] = await Promise.all([
-        deps.loadStoredDefaultModel(userId),
-        deps.resolveStoredUserDefaultModelId(userId),
-      ]);
-      previousModelIds = [
-        ...new Set(
-          [storedDefault, resolvedDefault].flatMap((id) => (id ? [id] : []))
-        ),
-      ].filter((id) => id !== updates.default_model);
-    }
-
-    const { error } = await deps.updateProfile(userId, updates);
-
-    if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
-
-    let automations: CascadeAutomationModelResult | null = null;
-    let automationUpdateError: string | null = null;
-    if (cascadeAutomations) {
-      try {
-        automations = await deps.cascadeAutomationModels({
+    let automations:
+      | { drafts_updated: number; versions_published: number }
+      | undefined;
+    try {
+      if (typeof updates.default_model === "string") {
+        automations = await deps.applyModelDefaults({
           userId,
-          previousModelIds,
-          nextModelId: updates.default_model as string,
+          model: updates.default_model,
+          surfaces: [...new Set(surfaces)],
+          flowIds: [...new Set(flowIds)],
+          ...(typeof updates.theme === "string"
+            ? { theme: updates.theme }
+            : {}),
         });
-      } catch (cascadeError) {
-        // The default is already saved; report the cascade failure alongside
-        // the success instead of failing the whole request.
-        console.error("Automation model cascade failed", cascadeError);
-        automationUpdateError =
-          "Default model saved, but updating automations failed";
+      } else {
+        const { error } = await deps.updateProfile(userId, updates);
+        if (error)
+          return NextResponse.json(
+            { error: "Unable to save settings" },
+            { status: 500 }
+          );
       }
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof ModelSettingsError
+              ? error.message
+              : "Unable to save model settings. No changes were applied.",
+        },
+        { status: error instanceof ModelSettingsError ? error.status : 500 }
+      );
     }
-
     const response = NextResponse.json({
       ok: true,
-      ...(automations
-        ? {
-            automations: {
-              drafts_updated: automations.draftsUpdated,
-              versions_published: automations.versionsPublished,
-              failed: automations.failed,
-            },
-          }
-        : {}),
-      ...(automationUpdateError
-        ? { automation_update_error: automationUpdateError }
-        : {}),
+      ...(automations ? { automations } : {}),
     });
     if (isThemePreference(updates.theme)) {
       response.cookies.set(THEME_COOKIE_NAME, updates.theme, {

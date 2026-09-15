@@ -69,7 +69,7 @@ export function NewMissionComposer({
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { modelIds, defaultModelId } = useModels();
+  const { modelIds, defaultModelId } = useModels("control");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const { isDraggingFiles, addFiles, dropZoneProps } = useControlFileDrop({
     existingCount: files.length,

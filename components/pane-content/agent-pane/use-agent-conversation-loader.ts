@@ -39,7 +39,7 @@ export function useAgentConversationLoader(input: {
       try {
         const [authResponse, settingsResponse] = await Promise.all([
           fetch("/api/auth/user"),
-          fetch("/api/settings"),
+          fetch("/api/settings?surface=chat"),
         ]);
         if (settingsResponse.ok) {
           const settings = await settingsResponse.json();

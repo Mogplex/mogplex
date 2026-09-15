@@ -1,3 +1,4 @@
+import { surfaceDefaultModel } from "@/lib/models/surface-defaults";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { listUsableModelIdsForScope } from "@/lib/models/default-model";
 import { getSlackModelPreference } from "@/lib/slack/model-preferences";
@@ -9,13 +10,11 @@ import {
 async function loadStoredDefaultModel(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("default_model")
+    .select("default_model, surface_models")
     .eq("id", userId)
     .maybeSingle();
   if (error) throw new Error(`Failed to load profile: ${error.message}`);
-  return (
-    (data as { default_model?: string | null } | null)?.default_model ?? null
-  );
+  return surfaceDefaultModel(data, "slack");
 }
 
 /** Usable models with their capabilities, recommended models first. */

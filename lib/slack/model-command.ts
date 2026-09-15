@@ -46,7 +46,8 @@ const defaultDeps: SlackModelCommandDeps = {
   getInstallation: getSlackInstallationByTeamId,
   getUserMapping: getSlackUserMapping,
   listUsableModels: listUsableModelIdsForScope,
-  resolveDefaultModel: resolveStoredUserDefaultModelId,
+  resolveDefaultModel: (userId, scope) =>
+    resolveStoredUserDefaultModelId(userId, { ...scope, surface: "slack" }),
   getPreference: getSlackModelPreference,
   savePreference: upsertSlackModelPreference,
   postResponse: postSlackResponse,

@@ -63,7 +63,7 @@ export async function mockBaseApp(page: Page) {
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
   );
-  await page.route("**/api/settings", (route) =>
+  await page.route(/\/api\/settings(?:\?.*)?$/, (route) =>
     fulfillJson(route, { default_model: modelId, theme: "dark" })
   );
   await page.route("**/api/models", (route) =>

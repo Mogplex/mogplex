@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -59,133 +60,140 @@ test("PATCH /api/settings rejects disabled default models", async () => {
   assert.equal(updateCalls, 0);
 });
 
-test("PATCH /api/settings saves enabled default models", async () => {
+test("PATCH saves only the explicitly selected destinations", async () => {
   const { createSettingsPatchHandler } = await loadSettingsRoute();
-  const updates: Record<string, unknown>[] = [];
-
+  let saved: unknown;
   const handler = createSettingsPatchHandler({
     requireUserId: async () => "user-123",
     canUserSetDefaultModel: async () => true,
-    updateProfile: async (_userId, update) => {
-      updates.push(update);
-      return { error: null };
+    applyModelDefaults: async (input) => {
+      saved = input;
+      return { drafts_updated: 1, versions_published: 1 };
     },
   });
-
+  const id = "00000000-0000-4000-8000-000000000003";
   const response = await handler(
-    new Request("http://localhost/api/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ default_model: "minimax/minimax-m2.7" }),
+    request({
+      default_model: "openai/gpt-5.4",
+      apply_to_surfaces: ["cli", "slack"],
+      automation_ids: [id, id],
     })
   );
-
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
-  assert.deepEqual(updates, [{ default_model: "minimax/minimax-m2.7" }]);
-});
-
-test("PATCH /api/settings cascades the default-model change to automations when opted in", async () => {
-  const { createSettingsPatchHandler } = await loadSettingsRoute();
-  const cascadeCalls: Array<{
-    userId: string;
-    previousModelIds: string[];
-    nextModelId: string;
-  }> = [];
-
-  const handler = createSettingsPatchHandler({
-    requireUserId: async () => "user-123",
-    canUserSetDefaultModel: async () => true,
-    updateProfile: async () => ({ error: null }),
-    loadStoredDefaultModel: async () => "openai/gpt-5.4",
-    resolveStoredUserDefaultModelId: async () => "openai/gpt-5.4",
-    cascadeAutomationModels: async (input) => {
-      cascadeCalls.push(input);
-      return { draftsUpdated: 3, versionsPublished: 2, failed: 0 };
-    },
+  assert.deepEqual(saved, {
+    userId: "user-123",
+    model: "openai/gpt-5.4",
+    surfaces: ["cli", "slack"],
+    flowIds: [id],
   });
-
-  const response = await handler(
-    new Request("http://localhost/api/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        default_model: "minimax/minimax-m2.7",
-        update_automation_models: true,
-      }),
-    })
-  );
-
-  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     ok: true,
-    automations: { drafts_updated: 3, versions_published: 2, failed: 0 },
+    automations: { drafts_updated: 1, versions_published: 1 },
   });
-  assert.deepEqual(cascadeCalls, [
-    {
-      userId: "user-123",
-      previousModelIds: ["openai/gpt-5.4"],
-      nextModelId: "minimax/minimax-m2.7",
-    },
-  ]);
-});
-
-test("PATCH /api/settings reports a cascade failure without failing the saved default", async () => {
-  const { createSettingsPatchHandler } = await loadSettingsRoute();
-
-  const handler = createSettingsPatchHandler({
-    requireUserId: async () => "user-123",
-    canUserSetDefaultModel: async () => true,
-    updateProfile: async () => ({ error: null }),
-    loadStoredDefaultModel: async () => "openai/gpt-5.4",
-    resolveStoredUserDefaultModelId: async () => "openai/gpt-5.4",
-    cascadeAutomationModels: async () => {
-      throw new Error("db down");
-    },
-  });
-
-  const response = await handler(
-    new Request("http://localhost/api/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        default_model: "minimax/minimax-m2.7",
-        update_automation_models: true,
-      }),
-    })
-  );
-
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
-    ok: true,
-    automation_update_error:
-      "Default model saved, but updating automations failed",
+  await handler(request({ default_model: "openai/gpt-5.4" }));
+  assert.deepEqual(saved, {
+    userId: "user-123",
+    model: "openai/gpt-5.4",
+    surfaces: [],
+    flowIds: [],
   });
 });
 
-test("PATCH /api/settings ignores update_automation_models without a default model", async () => {
-  const { createSettingsPatchHandler } = await loadSettingsRoute();
-  let cascadeCalls = 0;
+function request(body: unknown) {
+  return new Request("http://localhost/api/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
 
+test("PATCH rejects invalid destinations before writing, and requires authentication", async () => {
+  const { createSettingsPatchHandler } = await loadSettingsRoute();
+  const handler = createSettingsPatchHandler({
+    requireUserId: async () => "user-123",
+    applyModelDefaults: async () => {
+      throw new Error("must not write");
+    },
+  });
+  for (const body of [
+    null,
+    [],
+    { apply_to_surfaces: ["unknown"] },
+    { automation_ids: ["bad"] },
+    { apply_to_surfaces: "cli" },
+  ]) {
+    assert.equal((await handler(request(body))).status, 400);
+  }
+  assert.equal(
+    (
+      await handler(
+        request({ default_model: "test", update_automation_models: true })
+      )
+    ).status,
+    409
+  );
+  const unauthorized = createSettingsPatchHandler({
+    requireUserId: async () =>
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+  });
+  assert.equal(
+    (await unauthorized(request({ default_model: "test" }))).status,
+    401
+  );
+});
+
+test("PATCH reports failure as a failed save, and preserves theme-only changes", async () => {
+  const { createSettingsPatchHandler } = await loadSettingsRoute();
   const handler = createSettingsPatchHandler({
     requireUserId: async () => "user-123",
     canUserSetDefaultModel: async () => true,
-    updateProfile: async () => ({ error: null }),
-    cascadeAutomationModels: async () => {
-      cascadeCalls += 1;
-      return { draftsUpdated: 0, versionsPublished: 0, failed: 0 };
+    applyModelDefaults: async () => {
+      throw new Error("storage failed");
     },
+    updateProfile: async () => ({ error: null }),
   });
+  const failed = await handler(request({ default_model: "test" }));
+  assert.equal(failed.status, 500);
+  assert.deepEqual(await failed.json(), {
+    error: "Unable to save model settings. No changes were applied.",
+  });
+  const theme = await handler(request({ theme: "light" }));
+  assert.equal(theme.status, 200);
+  assert.match(theme.headers.get("set-cookie") ?? "", /light/);
+});
 
-  const response = await handler(
-    new Request("http://localhost/api/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ update_automation_models: true }),
-    })
+test("model destinations route protects auth and surfaces loading failures", async () => {
+  const { createModelTargetsGetHandler } =
+    await import("../../app/api/settings/model-targets/route");
+  const targets = { surfaces: [], automations: [] };
+  assert.deepEqual(
+    await (
+      await createModelTargetsGetHandler({
+        requireUserId: async () => "u",
+        loadModelSettingsTargets: async () => targets,
+      })()
+    ).json(),
+    targets
   );
-
-  assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: "No valid fields" });
-  assert.equal(cascadeCalls, 0);
+  assert.equal(
+    (
+      await createModelTargetsGetHandler({
+        requireUserId: async () =>
+          NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+        loadModelSettingsTargets: async () => targets,
+      })()
+    ).status,
+    401
+  );
+  assert.equal(
+    (
+      await createModelTargetsGetHandler({
+        requireUserId: async () => "u",
+        loadModelSettingsTargets: async () => {
+          throw new Error("db");
+        },
+      })()
+    ).status,
+    500
+  );
 });

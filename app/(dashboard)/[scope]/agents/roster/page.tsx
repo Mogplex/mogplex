@@ -28,7 +28,7 @@ export default function AgentRosterPage() {
     models: enabledModels,
     catalog: modelCatalog,
     defaultModelId,
-  } = useModels();
+  } = useModels("agents");
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
 

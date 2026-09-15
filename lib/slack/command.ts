@@ -95,7 +95,8 @@ const defaultDeps: SlackCommandDeps = {
   loadLatestRun: loadLatestSlackRun,
   listRunEvents: listMogplexApiRunEvents,
   listUsableModels: listUsableModelIdsForScope,
-  resolveDefaultModel: resolveStoredUserDefaultModelId,
+  resolveDefaultModel: (userId, scope) =>
+    resolveStoredUserDefaultModelId(userId, { ...scope, surface: "slack" }),
   getModelPreference: getSlackModelPreference,
   loadUsage: loadSlackUsageSummary,
   listPullRequests: listSlackRepoPullRequests,

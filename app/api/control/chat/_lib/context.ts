@@ -349,7 +349,7 @@ export async function resolveControlChatModelId(
     .select("default_model")
     .eq("id", userId)
     .single();
-  return resolveUserDefaultModelId(userId, profile?.default_model);
+  return resolveUserDefaultModelId(userId, profile?.default_model, "control");
 }
 
 /**

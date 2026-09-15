@@ -26,7 +26,9 @@ export async function listMogplexApiAgents(
     // API is key-scoped to a user and carries no team header, so this is
     // personal-scope resolution. Display-only — fall back to the template
     // model if resolution fails.
-    resolveStoredUserDefaultModelId(userId).catch(() => null),
+    resolveStoredUserDefaultModelId(userId, { surface: "agents" }).catch(
+      () => null
+    ),
   ]);
   if (error) throw new Error(error.message);
 

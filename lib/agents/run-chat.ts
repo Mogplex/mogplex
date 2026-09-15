@@ -110,7 +110,8 @@ function buildChatGatewayContext(
 
 export async function resolveChatModelId(
   userId: string,
-  requestedModel?: string | null
+  requestedModel?: string | null,
+  surface: "chat" | "slack" = "chat"
 ): Promise<string> {
   if (requestedModel) return requestedModel;
   const { data: profile } = await supabaseAdmin
@@ -118,7 +119,7 @@ export async function resolveChatModelId(
     .select("default_model")
     .eq("id", userId)
     .single();
-  return resolveUserDefaultModelId(userId, profile?.default_model);
+  return resolveUserDefaultModelId(userId, profile?.default_model, surface);
 }
 
 function buildToolsInput(context: ChatAgentContext) {

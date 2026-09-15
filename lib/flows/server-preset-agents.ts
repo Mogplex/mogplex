@@ -33,6 +33,7 @@ export const defaultFlowPresetAgentResolverDeps: FlowPresetAgentResolverDeps = {
       // (no usable models in scope) passes through as "no override" — the
       // fork keeps the template model.
       const modelOverride = await resolveStoredUserDefaultModelId(userId, {
+        surface: "agents",
         teamId,
       });
       return await resolveAgentTemplateFork(userId, template, {
