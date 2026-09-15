@@ -219,8 +219,7 @@ test.describe("better-auth against real Neon", () => {
 
       // Exercise the real destination query against the deployed schema;
       // mocked settings dialogs cannot detect nonexistent flow columns.
-      const targetsRes = await request.get("/api/settings/model-targets", {
-        headers: cliHeaders,
+      const targetsRes = await page.request.get("/api/settings/model-targets", {
         maxRedirects: 0,
       });
       expect(targetsRes.status(), await targetsRes.text()).toBe(200);
