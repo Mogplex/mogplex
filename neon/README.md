@@ -1,11 +1,26 @@
 # Neon migrations
 
-Schema source of truth for the Neon Postgres database that replaces Supabase at cutover (Neon + better-auth).
+Schema source of truth for the application database (Neon Postgres + Better Auth).
 
 ## Layout
 
 - `migrations/` — ordered `YYYYMMDDHHMMSS_name.sql` files, applied sequentially. Applied versions are tracked in `neon_migrations.schema_migrations` on the target database.
 - `baseline.sql` — generated schema snapshot that bootstraps an empty database. See below.
+
+## Changing an existing schema
+
+Add a new migration file; do not rewrite applied migrations or edit the production
+ledger. Production migrations run through `deploy-production.yml`, after the
+currently deployed app passes the candidate schema compatibility check. Each
+migration runs in its own transaction, so statements such as `CREATE INDEX
+CONCURRENTLY` do not belong in these files.
+
+Run `pnpm test:db` and `pnpm test:schema-compatibility origin/main` after fetching
+the latest `main`. Extend the compatibility fixtures for affected old contracts.
+Keep old columns, functions, and data meanings usable until all dependent app
+releases and Trigger workers have retired; deployment completion is not that
+boundary. Follow the [contributor migration rules](../CONTRIBUTING.md#migration-rules)
+and [compatibility testing policy](../TESTING.md#schema-compatibility).
 
 ## Fresh databases
 

@@ -90,11 +90,11 @@ Mogplex is a Next.js 16 App Router application for running AI-agent workflows ag
 
 - multi-pane workspace UI for chat, files, editor, terminal, preview, and observability
 - GitHub and Vercel integrations for repo access, auth, and sandbox billing
-- Supabase for auth, Postgres, and server-side state
+- Better Auth for sign-in and Neon Postgres for server-side state; Supabase compatibility clients remain in the data layer
 - Vercel Sandbox for per-repo preview environments
 - Trigger.dev and internal cron/API fallback routes for background automation
-- GitHub Actions owns production deploys: `main` first applies Supabase migrations, then deploys to Vercel
-- Vercel Git deployments are disabled for `main`; branch previews still use the Git integration
+- GitHub Actions owns production deploys: `main` checks the serving app against candidate Neon migrations, applies them, then deploys to Vercel
+- Automatic Vercel Git deployments are disabled in `vercel.json`
 - Production deploys end with a machine-auth smoke check against the repo/workspace data surfaces most sensitive to schema drift
 
 ## Tech Stack
@@ -102,7 +102,7 @@ Mogplex is a Next.js 16 App Router application for running AI-agent workflows ag
 - **Next.js 16** (App Router) + **React 19** + **TypeScript** (strict mode)
 - **Tailwind CSS v4** (`@tailwindcss/postcss`, styles in `app/globals.css`)
 - **shadcn/ui** (new-york style, RSC enabled) — 57+ components in `components/ui/`
-- **Supabase** for auth (GitHub OAuth), database (Postgres + RLS), and edge functions
+- **Better Auth** for sign-in and **Neon Postgres** for database state; legacy Supabase paths remain for existing installations
 - **Vercel AI SDK** (`ai` v6) for streaming chat with multi-provider model support
 - **Zustand** for client state management
 - **Vercel Sandbox SDK** (`@vercel/sandbox`) for isolated microVM code execution per user
@@ -117,18 +117,18 @@ Mogplex is a Next.js 16 App Router application for running AI-agent workflows ag
 - `lib/` — domain logic; notable: `lib/sandbox`, `lib/observability`, `lib/activation`, `lib/flows`, `lib/supabase`
 - `tests/unit/` — 127+ test files using `tsx --test` (Node built-in runner)
 - `tests/e2e/` — 20+ Playwright specs (Chromium)
-- `supabase/migrations/` — source of truth for schema evolution
+- `neon/migrations/` — source of truth for schema evolution; `neon/baseline.sql` bootstraps empty databases; `supabase/migrations/` is frozen legacy history
 - `trigger/` — Trigger.dev jobs and scheduled maintenance tasks
 
 ## Auth
 
 Triple auth system:
 
-1. **Supabase Auth** (primary) — GitHub OAuth for user login
+1. **Better Auth** (Neon backend) — user sign-in and sessions; Supabase Auth remains for the legacy backend
 2. **GitHub App** (`mogplex`) — repo access, webhooks, agent operations (`lib/github-app.ts`)
 3. **Vercel OAuth** (secondary) — stores `vercel_token` in `profiles`
 
-`proxy.ts` refreshes Supabase sessions on all routes. Supabase clients: `lib/supabase/server.ts` (server), `lib/supabase/client.ts` (browser).
+`lib/auth.ts` selects the backend-aware session path; `proxy.ts` handles request auth and scope. Better Auth lives in `lib/better-auth/`. The compatibility clients remain in `lib/supabase/`.
 
 ## Pane System
 
@@ -149,7 +149,7 @@ Pricing, billing, packaging, and team cost attribution will be finalized over th
 
 ## Environment Variables
 
-Required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`, `CRON_SECRET`
+Use the current Neon/Better Auth setup in [CONTRIBUTING.md](./CONTRIBUTING.md#configure-envs) and [.env.example](./.env.example). Supabase credentials are for the legacy backend.
 
 GitHub App: `GITHUB_APP_ID`, `GITHUB_APP_NAME`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`
 
@@ -180,7 +180,7 @@ For cross-app memory portability (e.g. memories.sh cloud sync with the CLI / oth
 
 ## CI Pipeline
 
-GitHub Actions (`ci.yml`) runs **lint**, **typecheck**, **test** (`pnpm test:all`), **build**, and **e2e** on every PR, merge group, and push to `main`; `secret-scan.yml` adds **trufflehog** and `pr-protection.yml` adds **tests-accompany-features** (see TESTING.md). All seven are required checks on `main`. The **e2e** check is a fan-in over four `e2e-shard (n/4)` matrix jobs — the shards do the work; the `e2e` job only aggregates their results, and its name must not change (the ruleset requires that context). Production deploys (`deploy-production.yml`) run Supabase migrations before Vercel deploy, then smoke-check `/api/cron/production-smoke`.
+GitHub Actions (`ci.yml`) runs **lint**, **typecheck**, **test** (`pnpm test:all`), **build**, and **e2e** on every PR, merge group, and push to `main`; `secret-scan.yml` adds **trufflehog** and `pr-protection.yml` adds **tests-accompany-features** (see TESTING.md). All seven are required checks on `main`. The **e2e** check is a fan-in over four `e2e-shard (n/4)` matrix jobs — the shards do the work; the `e2e` job only aggregates their results, and its name must not change (the ruleset requires that context). The required `test` job also runs `pnpm test:schema-compatibility` against the PR base, merge-group base, or previous main commit. Production deploys (`deploy-production.yml`) check the actual Vercel serving commit against candidate Neon migrations before applying them, then deploy the app and smoke-check `/api/cron/production-smoke`.
 
 Two advisory (non-required) checks also run on PRs: **diff-coverage** (`pr-protection.yml`) fails when changed `lib/**` lines are under 80% covered by the vitest tier, and **mutation** (`mutation.yml`) runs incremental Stryker over changed `lib/**` files and reports the mutation score without failing on it. A red diff-coverage or a low mutation score means the accompanying tests probably don't pin the behavior — treat it as a TESTING.md "must go red" violation and fix the tests, don't ignore it because the merge isn't blocked.
 
@@ -200,15 +200,25 @@ Corollary that still applies: batch review fixes. If a reviewer leaves three fin
 
 ### Migrations: never apply schema changes out of band
 
-**Do NOT apply migrations to production via the Supabase MCP `apply_migration` tool, the Supabase dashboard SQL editor's migration feature, or any path that writes a row to `supabase_migrations.schema_migrations`.** The `deploy-production` workflow gates every deploy on `supabase db push --include-all`, which **aborts** ("Remote migration versions not found in local migrations directory") whenever the remote history contains a version with no matching file in `supabase/migrations/`. One orphaned version row freezes ALL production deploys — silently, since `main` does not auto-deploy — until the ledger is reconciled. (This happened Jun 2026: a migration applied via MCP as `20260617143344` vs. the committed `20260617120000_*.sql` blocked five merged PRs from shipping for four days.)
+Commit schema changes as timestamped files in `neon/migrations/` and let
+`deploy-production.yml` apply them through `scripts/apply-neon-migrations.ts`.
+The runner tracks applied versions in `neon_migrations.schema_migrations`.
+Do not apply production schema changes through a dashboard, MCP SQL tool, or
+manual migration command, and do not edit the ledger to bypass a failed gate.
+Do not rewrite applied migrations. The frozen Supabase history is not the
+source of new schema changes; the workflow retains an optional legacy Supabase
+step for installations with `SUPABASE_DB_URL`.
 
-To change the schema:
+- Each Neon migration runs in a transaction; do not include `CREATE INDEX CONCURRENTLY`.
+- Add DB regression coverage and extend the previous-release contract fixtures for affected reads, writes, RPCs, and stored-data meanings. Run `pnpm test:db` and `pnpm test:schema-compatibility origin/main` after fetching the current base.
+- Use expand-and-contract migrations. Preserve old contracts until all protected app releases and dependent Trigger workers retire, including queued or suspended runs. Finishing the deploy does not end the compatibility window.
+- Keep a matching Trigger deployment for every app commit. Preserve the app's commit pin and the executing worker's child-task version pin; do not add task-only deployment path filters.
+- On schema drift, preserve drafts, do not automatically replay mutations or retry tasks, and inspect prior side effects before a manual retry after repair.
 
-- **Always commit a file** to `supabase/migrations/` and let `deploy-production.yml` apply it via `supabase db push`. The repo is the source of truth — the migration ledger must only ever be advanced by that push.
-- For ad-hoc/one-off prod SQL (backfills, an `ALTER FUNCTION`, data fixes), use the MCP `execute_sql` tool, which does **not** record a version row. If the change is schema-shaped and should persist, also commit a migration file for it.
-- Keep migration files pipeline-compatible (no `CREATE INDEX CONCURRENTLY` — it cannot run in `db push`'s extended-query pipeline) and idempotent (`IF NOT EXISTS`, guarded `UPDATE`s).
-
-If deploys are already broken by an orphaned version, reconcile the ledger (repoint the row to the committed version preserving `name`/`statements`, or add the matching repo file) — never just `migration repair --status reverted` and forget it, since that drops tracking of a real applied change. Then re-run `deploy-production` (it accepts `workflow_dispatch`).
+Follow [CONTRIBUTING.md](./CONTRIBUTING.md#migration-rules),
+[TESTING.md](./TESTING.md#schema-compatibility), and the
+[deployment runbook](./docs/deployment-skew-protection.md) for contributor checks,
+release configuration, alert verification, and compatibility coverage limits.
 
 ## Hook and Check Setup
 
