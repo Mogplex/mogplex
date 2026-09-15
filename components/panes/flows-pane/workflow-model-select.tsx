@@ -46,13 +46,14 @@ export function WorkflowModelSelect({
       </PopoverTrigger>
       <PopoverContent aria-label={`${ariaLabel} options`} align="end" collisionPadding={16} className="w-[min(520px,calc(100vw-32px))] p-0">
         <Command
+          key={open ? "open" : "closed"}
           label={`${ariaLabel} options`}
           defaultValue={value || EMPTY_SELECT_VALUE}
           filter={(optionValue, search, keywords) =>
             `${optionValue} ${(keywords ?? []).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase()) ? 1 : 0
           }
         >
-          <CommandInput aria-label={`Search ${ariaLabel.toLowerCase()}`} placeholder="Search models..." />
+          <CommandInput autoFocus={open} aria-label={`Search ${ariaLabel.toLowerCase()}`} placeholder="Search models..." />
           <CommandList className="max-h-[min(288px,calc(var(--radix-popover-content-available-height)-48px))]">
             <CommandEmpty>No models found.</CommandEmpty>
             <CommandGroup>

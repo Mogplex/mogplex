@@ -245,12 +245,12 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   const paneGridRef = useRef<HTMLDivElement | null>(null)
   const editorToolbarRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const inspectorScrollRef = useRef<HTMLDivElement | null>(null)
   const reactFlowRef = useRef<ReactFlowInstance<FlowCanvasNode, FlowCanvasEdge> | null>(null)
   const fittedFlowIdRef = useRef<string | null>(null)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
   const canvasClipboardRef = useRef<FlowDraftClipboard | null>(null)
   const canvasPasteCountRef = useRef(0)
-
   const { updateDraft, handleFlowNameChange, onNodesChange, onEdgesChange, onConnect, onSelectionChange,
     updateNodeData, updateTriggerInstallation } = useFlowCanvasHandlers({
     setHistory, historyMergeRef, selectedFlow, reactFlowRef, fittedFlowIdRef, hydratedFlowIdRef,
@@ -278,10 +278,11 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
     webhookSecretGeneratingRef, setWebhookSecretGenerating, setGeneratedWebhookSecretState, setTriggerTestRunning,
     selectedFlow, activeTeamId, mutateFlows, mutateSelectedFlow, mutateFlowRuns,
   })
-
   // Effects
   useFlowToolbarHeight(editorToolbarRef, paneGridRef, Boolean(selectedFlow && draft))
-
+  useEffect(() => {
+    inspectorScrollRef.current?.scrollTo({ top: 0 })
+  }, [selectedFlow?.id, selectedNode?.id])
   useEffect(() => {
     if (selectedFlowId && visibleFlows.some((f) => f.id === selectedFlowId)) return
     setSelectedFlowId(visibleFlows[0]?.id ?? null)
@@ -468,8 +469,8 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
                 <div className="min-w-0 flex-1"><div className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{selectedNode.type} · {selectedNode.id}</div><div className="mt-0.5 truncate text-xs font-semibold text-foreground">{selectedNode.type === "agent" ? flowAgentRoleLabel(selectedAgentNode?.data.role || "review") : selectedNode.type === "action" ? FLOW_ACTION_OPTIONS.find((o) => o.value === selectedActionNode?.data.operation)?.label ?? "Action" : selectedNode.type === "condition" ? "If branch" : selectedNode.type === "parallel" ? "Parallel operator" : selectedNode.type === "join" ? "Merge operator" : selectedNode.type === "delay" ? "Wait operator" : selectedNode.type === "await_event" ? "Await event operator" : selectedNode.type === "set_variable" ? "Set variable operator" : selectedNode.type === "transform" ? "Transform operator" : selectedNode.type === "start" ? "Entry point" : "Exit point"}</div></div>
                 <button type="button" data-testid="flows-inspector-close" onClick={() => clearCanvasSelection()} className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground" aria-label="Close node sheet" title="Close"><Xmark className="size-4" /></button>
               </div>
-              <div key={`${selectedFlow.id}:${selectedNode.id}`} data-testid="flows-inspector-scroll" className="@container min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5">
-                <section className="space-y-3">
+              <div key={selectedFlow.id} ref={inspectorScrollRef} data-testid="flows-inspector-scroll" className="@container min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5">
+                <section key={selectedNode.id} className="space-y-3">
                   {selectedNode ? <div className="space-y-4 rounded-lg border border-border/80 bg-background/60 p-4 shadow-sm">
                     {selectedAgentNode && <AgentInspector node={selectedAgentNode} draft={draft} agents={agents ?? []} updateNodeData={updateNodeData} onDelete={deleteSelectedNode} selectedAgentDefinition={selectedAgentDefinition} availableModelOptions={availableModelOptions} enabledModelIds={enabledModelIds} quickReplaceFlowModelId={quickReplaceFlowModelId} quickReplaceFlowModelName={quickReplaceFlowModelName} canQuickReplaceFlowModel={canQuickReplaceFlowModel} harnessesResponse={harnessesResponse} harnessesLoading={harnessesLoading} harnessesError={harnessesError} apiKeysSettingsHref={apiKeysSettingsHref} sandboxTestRepoId={sandboxTestRepoId} onSandboxTestRepoIdChange={setSandboxTestRepoId} sandboxTestRepos={sandboxTestRepos} sandboxTestResult={sandboxTestResult} sandboxTestError={sandboxTestError} sandboxTestRunning={sandboxTestRunning} onRunSandboxTest={runAutomationSandboxTest} onClearSandboxTest={() => { setSandboxTestResult(null); setSandboxTestError(null) }} selectedStartConfig={selectedStartConfig} />}
                     {selectedStartNode && selectedFlow && <StartInspector node={selectedStartNode} selectedFlow={selectedFlow} updateNodeData={updateNodeData} installations={installations || []} effectiveInstallationId={effectiveInstallationId} updateTriggerInstallation={updateTriggerInstallation} slackInstallations={slackInstallations} slackChannels={slackChannels} slackChannelsLoading={slackChannelsLoading} slackChannelsLoadingMore={slackChannelsLoadingMore} slackChannelsHaveMore={slackChannelsHaveMore} slackChannelPageCount={slackChannelPageCount} setSlackChannelPageCount={setSlackChannelPageCount} slackConnectionsHref={slackConnectionsHref} selectedSlackTeamId={selectedSlackTeamId} generatedWebhookSecret={generatedWebhookSecret} webhookSecretGenerating={webhookSecretGenerating} generateWebhookSecret={generateWebhookSecret} copyWebhookValue={copyWebhookValue} dirty={dirty} triggerTestRunning={triggerTestRunning} runTriggerTest={runTriggerTest} />}

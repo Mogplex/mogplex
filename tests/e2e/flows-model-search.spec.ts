@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { FlowNode } from "../../lib/types";
 import {
   flowPayload,
   fulfillJson,
@@ -163,4 +164,104 @@ test("model search fits a narrow inspector and keeps long names readable", async
     path: testInfo.outputPath("mobile-model-selected.png"),
     animations: "disabled",
   });
+});
+
+test("changing nodes preserves the flow description and notes elements", async ({
+  page,
+}) => {
+  const description = page.getByLabel("Description", { exact: true });
+  const notes = page.getByPlaceholder(
+    "Capture intent, guardrails, and context for this flow."
+  );
+  await description.fill("Review changes carefully");
+  await notes.fill("Keep the draft notes");
+  const descriptionElement = await description.elementHandle();
+  const notesElement = await notes.elementHandle();
+  await page.getByTestId("rf__node-start").click();
+  // Keeping these DOM elements preserves their browser-owned editing state.
+  expect(await descriptionElement!.evaluate((el) => el.isConnected)).toBe(true);
+  expect(await notesElement!.evaluate((el) => el.isConnected)).toBe(true);
+  await expect(description).toHaveValue("Review changes carefully");
+  await expect(notes).toHaveValue("Keep the draft notes");
+  await page.getByTestId("rf__node-agent-1").click();
+  expect(await descriptionElement!.evaluate((el) => el.isConnected)).toBe(true);
+  expect(await notesElement!.evaluate((el) => el.isConnected)).toBe(true);
+  await expect(page.getByLabel("Model", { exact: true })).toBeInViewport();
+});
+
+test("retired fallback is labeled, searchable and removed after replacement", async ({
+  page,
+}) => {
+  const legacyId = "retired/old-fallback";
+  let currentFlow = {
+    ...structuredClone(flowPayload),
+    draft_graph: {
+      ...flowPayload.draft_graph,
+      nodes: (flowPayload.draft_graph.nodes as FlowNode[]).map((node) =>
+        node.type === "agent"
+          ? { ...node, data: { ...node.data, fallbackModelOverride: legacyId } }
+          : node
+      ),
+    },
+  };
+  await page.route("**/api/flows/flow-1", async (route) => {
+    if (route.request().method() === "PUT") {
+      currentFlow = {
+        ...currentFlow,
+        ...(route.request().postDataJSON() as Partial<typeof currentFlow>),
+      };
+    }
+    await fulfillJson(route, currentFlow);
+  });
+  await page.reload();
+  await page.getByTestId("rf__node-agent-1").click();
+  const fallback = page.getByLabel("Fallback model", { exact: true });
+  await expect(fallback).toHaveAccessibleDescription(`Legacy · ${legacyId}`);
+  await fallback.click();
+  const search = page.getByPlaceholder("Search models...");
+  await search.fill("Legacy");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await expect(page.getByRole("option")).toHaveText(`Legacy · ${legacyId}`);
+  await search.fill("GPT-5.4");
+  await page.getByRole("option").click();
+  await expect(fallback).toBeFocused();
+  await expect(fallback).toHaveAccessibleDescription(/OpenAI · GPT-5.4/);
+  await fallback.click();
+  await search.fill(legacyId);
+  await expect(page.getByText("No models found.")).toBeVisible();
+  await search.press("Escape");
+  await expect(page.getByTestId("flow-save-status")).toHaveText("Saved");
+  await page.reload();
+  await page.getByTestId("rf__node-agent-1").click();
+  await expect(fallback).toHaveAttribute("data-value", "openai/gpt-5.4");
+});
+
+test("reopening during the exit animation resets search and highlights the saved model", async ({
+  page,
+}) => {
+  // Stretch the existing exit animation so reopening deterministically happens
+  // while Radix still keeps the previous content mounted.
+  await page.addStyleTag({
+    content:
+      '[data-slot="popover-content"][data-state="closed"] { animation-duration: 10s !important; }',
+  });
+  const model = page.getByLabel("Model", { exact: true });
+  await model.click();
+  const search = page.getByPlaceholder("Search models...");
+  await search.fill("GPT-5.4");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await search.press("Escape");
+  await expect(page.locator('[data-slot="popover-content"]')).toHaveAttribute(
+    "data-state",
+    "closed"
+  );
+  await model.click();
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  await expect(page.getByRole("option")).toHaveCount(4);
+  await expect(
+    page.getByRole("option", { name: /MiniMax M3/ })
+  ).toHaveAttribute("aria-selected", "true");
+  await search.press("Enter");
+  await expect(model).toHaveAttribute("data-value", LONG_MODEL_ID);
 });
