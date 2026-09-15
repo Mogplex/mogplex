@@ -16,7 +16,8 @@
 ## Migration / Rollout Notes
 
 - [ ] No migration or rollout impact
-- [ ] Migration included and backward-compatible
+- [ ] Migration included and backward-compatible with retained app and Trigger releases
+- [ ] For schema changes: DB regression and `pnpm test:schema-compatibility <base-commit>` results included; affected old contracts and their retirement plan described
 - [ ] Secret or env setup changed
 
 ## Checklist
