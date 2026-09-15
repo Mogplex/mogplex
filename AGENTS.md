@@ -329,6 +329,16 @@ boundary. The rules agents most often need:
   thresholds, and baselines for the hosted service are private and never go
   here
 
+## Customer-facing failures
+
+Provider billing, credentials, and infrastructure diagnostics belong in internal
+run records, never in customer-facing errors or GitHub review comments/checks.
+Failed PR reviews use `buildPrReviewFailureMessage` and must not echo model prose,
+raw errors, provider details, HTTP status, or billing links. Observability sanitizes
+upstream billing failures even in plain logs/tool output. Only Mogplex's own
+account-balance check may tell a customer to fund their Mogplex account; an
+upstream provider's balance failure must not ask the customer to change settings.
+
 ## Working Style for Agents
 
 - Source files are capped at 500 lines — split by concern instead of growing a file. Enforced by the ESLint `max-lines` rule; pre-existing violators are grandfathered to warnings in a shrink-only list in `eslint.config.mjs` (remove entries as files get refactored down, never add new ones). Giant files also pin ESLint's per-file worker parallelism and break the Prettier CLI (see the flows-pane hazard below)
