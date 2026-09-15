@@ -82,7 +82,7 @@ pnpm dev
 pnpm build
 pnpm lint
 pnpm typecheck
-pnpm test:unit
+pnpm test:all
 pnpm test:e2e
 pnpm git:cleanup
 pnpm trigger:dev
@@ -117,7 +117,7 @@ pnpm typecheck
 
 ```bash
 pnpm build
-pnpm test:unit
+pnpm test:all
 pnpm test:e2e
 ```
 
@@ -132,7 +132,7 @@ Hooks and CI are safety nets, not the full bar:
 
 - pre-commit runs `lint-staged`
 - pre-push runs full `pnpm lint` and `pnpm typecheck`
-- CI runs `lint`, `typecheck`, `test:unit`, and `build`
+- CI runs `lint`, `typecheck`, the schema compatibility check, `test:all` (lib + unit + DB), `build`, and `e2e` on PRs, merge groups, and pushes to `main`
 
 ## Coding Conventions
 
@@ -164,11 +164,32 @@ That command returns you to `main`, fast-forwards it, deletes the merged local b
 
 ## Migration Rules
 
-Mogplex deploys production schema before the new application version goes live. That means:
+Mogplex deploys production schema before the new application version goes live. Older browser sessions, app deployments, and Trigger workers can continue using that database after deployment finishes.
 
-- migrations merged to `main` must remain backward-compatible with the currently deployed app until the production workflow finishes
-- schema changes touching auth, access control, repo access, or shared workflow data should come with targeted regression coverage
-- if a migration changes contributor setup, update `.env.example`, `README.md`, or this guide in the same PR
+- Add timestamped SQL files to `neon/migrations/`. Let the production workflow apply them and advance `neon_migrations.schema_migrations`; do not apply production schema changes or edit the ledger out of band.
+- Use expand-and-contract changes: add compatible fields or functions, migrate data and callers, then remove the old contract in a later release after every app and worker that needs it has retired. A completed deploy alone is not evidence of retirement.
+- Add a `tests/db/` regression for the changed SQL behavior. For affected old reads, writes, RPCs, or stored-data meanings, extend the [compatibility fixtures](./tests/support/schema-compatibility-contract.ts) and follow the [testing policy](./TESTING.md#schema-compatibility).
+- From the candidate checkout, run the checks below. The compatibility command uses isolated PGlite and does not need production credentials.
+
+```bash
+git fetch origin main
+pnpm test:db
+pnpm test:schema-compatibility origin/main
+```
+
+CI checks the PR or merge-group base. The production workflow also checks the exact commit currently serving on Vercel before applying Neon migrations. These representative checks do not cover every query or semantic data change. Explain the affected contracts and the retirement plan in the PR.
+
+If a migration changes contributor setup, update `.env.example`, `README.md`, or this guide in the same PR. See the [migration guide](./neon/README.md) and [deployment runbook](./docs/deployment-skew-protection.md).
+
+## Trigger Releases and Schema Failures
+
+Every app commit needs a matching Trigger deployment, even when no task files changed. Keep the GitHub integration free of task-only path filters. The app pins tasks by commit SHA; `trigger/init.ts` pins descendants, including fire-and-forget tasks, to their executing worker version. Use `pnpm trigger:dev` and `pnpm trigger:deploy`; manual and preview release setup is in the [deployment runbook](./docs/deployment-skew-protection.md).
+
+When changing requests or task execution, preserve these failure behaviors:
+
+- Browser API calls and EventSource connections retain the page's deployment ID. Schema errors show a safe notice and retain unsaved input without reloading or replaying a mutation.
+- Recognized schema errors stop automatic task retries. After a compatible repair, inspect earlier side effects before manually retrying.
+- Schema alerts identify the app or worker release and failed operation without SQL, parameter values, or task payloads. Follow the runbook for Sentry delivery verification.
 
 ## Pull Request Checklist
 
@@ -178,6 +199,7 @@ Before asking for review, make sure your PR:
 - stays focused on one concern
 - includes verification steps and any known gaps
 - notes migration, infra, or secret-setup impact
+- for schema changes, includes compatibility results, affected old app/worker contracts, and when those contracts can be retired
 - avoids shipping generated noise or unrelated refactors
 
 ## Security and Secrets

@@ -15,9 +15,10 @@ of how clean the diff looks.
 | E2E | `pnpm test:e2e` | `tests/e2e/` | Production build in a browser (Playwright, Chromium) |
 
 CI runs `lint`, `typecheck`, `test:all` (lib + unit + DB), `build`, and `e2e`
-on every PR. Green CI is necessary, not sufficient — CI only exercises the
-tests you wrote, so the policy below is about which tests a change must bring
-with it.
+on every PR, merge group, and push to `main`. The required `test` job also
+runs the schema compatibility check before `test:all`. Green CI is necessary,
+not sufficient — CI only exercises the tests you wrote, so the policy below is
+about which tests a change must bring with it.
 
 ## Required coverage by change class
 
@@ -43,6 +44,37 @@ each class carries its own requirement.
 A PR that changes behavior but touches no test files must say why in its
 description with a `No-tests:` line (see Enforcement below). "Covered by
 existing tests" is only valid with the suite named.
+
+## Schema compatibility
+
+For a schema change, run this from the candidate checkout after installing dependencies:
+
+```bash
+git fetch origin main
+pnpm test:db
+pnpm test:schema-compatibility origin/main
+```
+
+The compatibility command is separate from `test:all`. It installs the previous
+commit's frozen dependencies without lifecycle scripts, seeds an isolated
+PGlite database with previous-release code, applies candidate Neon migrations,
+and exercises previous-release reads, writes, and worker RPCs on the changed
+database. It also checks that existing fixture data retains its meaning. It
+does not require hosted database or provider credentials.
+
+Extend [schema-compatibility-contract.ts](./tests/support/schema-compatibility-contract.ts)
+when a migration affects another old contract. Its imports must resolve in the
+previous checkout: do not replace them with candidate implementations or import
+new APIs that did not exist in that release. Seed the old data before migration
+and assert its meaning and the old operations afterward. Add SQL behavior cases
+in `tests/db/`, and prove new assertions fail under a deliberately incompatible
+change before restoring the correct migration.
+
+CI supplies the PR base, merge-group base, or previous main commit. Before
+production SQL, the deployment workflow checks the commit actually serving on
+Vercel. A failed compatibility check blocks that migration step. Coverage is
+representative; keep expand-and-contract compatibility until all dependent old
+apps and workers retire. See the [deployment runbook](./docs/deployment-skew-protection.md).
 
 ## What counts as a test
 
