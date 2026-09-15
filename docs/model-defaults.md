@@ -31,7 +31,8 @@ an empty map inherit the account default until their first default change.
 The `apply_model_defaults` RPC captures unchecked defaults while changing the
 account default and publishing selected automation models atomically. It is
 restricted to the service role; the API authenticates the actor, validates
-destinations, and checks model access for selected automation workspaces.
+destinations, and checks account model access. Automations are user-owned;
+repository-specific team policy is resolved and enforced when they run.
 
 The matching Neon and Supabase migrations are additive and run through the
 production deployment workflow before the new application and worker code.

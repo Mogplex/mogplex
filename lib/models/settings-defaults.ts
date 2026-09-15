@@ -11,7 +11,7 @@ import {
 
 export type ModelSettingsTargets = {
   surfaces: { id: ModelSurface; model: string | null }[];
-  automations: { id: string; name: string; team_id: string | null }[];
+  automations: { id: string; name: string }[];
 };
 
 export async function loadModelSettingsTargets(
@@ -25,7 +25,7 @@ export async function loadModelSettingsTargets(
       .single(),
     supabaseAdmin
       .from("flows")
-      .select("id, name, team_id")
+      .select("id, name")
       .eq("user_id", userId)
       .order("name"),
   ]);
@@ -72,7 +72,7 @@ export async function applyModelDefaults(input: ApplyModelDefaultsInput) {
   if (input.flowIds.length > 0) {
     const { data: flows, error: flowError } = await supabaseAdmin
       .from("flows")
-      .select("id, team_id")
+      .select("id")
       .eq("user_id", input.userId)
       .in("id", input.flowIds);
     if (flowError)
@@ -82,14 +82,14 @@ export async function applyModelDefaults(input: ApplyModelDefaultsInput) {
         "An automation is no longer available. Reload and try again.",
         400
       );
-    for (const teamId of new Set(flows.map((flow) => flow.team_id))) {
-      const models = await listUsableModelIdsForScope(input.userId, { teamId });
-      if (!models.includes(input.model))
-        throw new ModelSettingsError(
-          "This model is unavailable for a selected automation's workspace.",
-          400
-        );
-    }
+    // Flows belong to a user, not a team. The executing repository supplies
+    // team scope at run time, where its invocation policy is enforced.
+    const models = await listUsableModelIdsForScope(input.userId);
+    if (!models.includes(input.model))
+      throw new ModelSettingsError(
+        "This model is unavailable for your account.",
+        400
+      );
   }
   const result = await supabaseAdmin.rpc("apply_model_defaults", {
     p_user_id: input.userId,

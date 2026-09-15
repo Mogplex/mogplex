@@ -54,7 +54,7 @@ export function DefaultModelDialog({ model, onClose, onSave }: {
               <legend className="text-sm font-medium">Automations</legend>
               <p className="pb-2 text-xs text-muted-foreground">Switch primary agent models in each selected automation, including its published version. Fallback models stay in place.</p>
               {data.automations.length === 0 ? <p className="text-sm text-muted-foreground">No automations yet.</p> : data.automations.map((flow) => <label key={flow.id} className="flex min-h-11 items-center justify-between gap-4 py-2 text-sm">
-                <span className="min-w-0 break-words">{flow.name}{flow.team_id && <span className="block text-xs text-muted-foreground">Team automation</span>}</span>
+                <span className="min-w-0 break-words">{flow.name}</span>
                 <Switch aria-label={`Apply to ${flow.name}`} checked={flowIds.includes(flow.id)} onCheckedChange={(checked) => setFlowIds((values) => checked ? [...values, flow.id] : values.filter((value) => value !== flow.id))} />
               </label>)}
             </fieldset>
