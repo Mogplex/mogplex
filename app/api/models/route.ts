@@ -1,3 +1,7 @@
+import {
+  MODEL_SURFACES,
+  surfaceDefaultModel,
+} from "@/lib/models/surface-defaults";
 import { NextResponse } from "next/server";
 import { getUserId, requireUserId } from "@/lib/auth";
 import { getDefaultNewAgentModel } from "@/lib/agents/model-options";
@@ -68,6 +72,7 @@ type ProfileModelSettings = {
   auto_enable_new_models: boolean;
   models_seen_at: string | null;
   default_model?: string | null;
+  surface_models?: unknown;
 };
 
 type ModelsGetDeps = {
@@ -147,7 +152,9 @@ const defaultModelsGetDeps: ModelsGetDeps = {
   async loadProfileModelSettings(userId) {
     const { data, error } = await supabaseAdmin
       .from("profiles")
-      .select("auto_enable_new_models, models_seen_at, default_model")
+      .select(
+        "auto_enable_new_models, models_seen_at, default_model, surface_models"
+      )
       .eq("id", userId)
       .single();
 
@@ -364,6 +371,15 @@ export function createModelsGetHandler(overrides: Partial<ModelsGetDeps> = {}) {
       models,
       catalog,
       default_model: defaultModel || null,
+      surface_models: Object.fromEntries(
+        MODEL_SURFACES.map((surface) => [
+          surface,
+          getDefaultNewAgentModel(
+            models as AIModel[],
+            surfaceDefaultModel(profileSettings, surface)
+          ) || null,
+        ])
+      ),
     });
   };
 }

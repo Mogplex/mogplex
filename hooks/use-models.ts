@@ -24,6 +24,9 @@ type ModelsResponse = {
   models: AIModel[];
   catalog: CatalogModel[];
   default_model?: string | null;
+  surface_models?: Partial<
+    Record<"chat" | "control" | "agents", string | null>
+  >;
 };
 
 type ModelsMutator = (
@@ -157,7 +160,9 @@ export async function toggleModelPreference({
   await revalidateModelsWithFeedback(mutate, toastFn, false);
 }
 
-export function useModels() {
+export function useModels(
+  surface: "chat" | "control" | "agents" | "automations" = "chat"
+) {
   const activeTeamId = useActiveTeamId();
   const { data, error, isLoading, mutate } = useSWR<ModelsResponse>(
     ["/api/models", activeTeamId ?? "personal"],
@@ -198,7 +203,10 @@ export function useModels() {
   return {
     models,
     catalog,
-    defaultModelId: data?.default_model ?? null,
+    defaultModelId:
+      (surface === "automations" ? null : data?.surface_models?.[surface]) ??
+      data?.default_model ??
+      null,
     hiddenModelIds,
     modelIds,
     contextLimits,

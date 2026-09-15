@@ -269,7 +269,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
           label="Current Default"
           value={formatDefaultLabel(defaultModel)}
           caption={currentDefault
-            ? `${currentDefault.provider} · used for new agents and flow nodes unless overridden.`
+            ? `${currentDefault.provider} · used for new automation nodes. Other destinations change only when selected.`
             : "Pick a default model directly from the catalog below."}
         />
         <SummaryCard
@@ -293,7 +293,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
               <div className="ui-section-title">Model Preferences</div>
               <div className="max-w-3xl ui-section-caption">
                 Global · applies to every space unless excluded in that space&apos;s settings.
-                {" "}Choose your default model here, then enable or disable the catalog you want available. The default model is used for new agents and flow nodes unless you override it later.
+                {" "}Choose your default model here, then enable or disable the catalog you want available. Choose which agent surfaces and automations also receive each default-model change.
               </div>
             </div>
             <div className="flex flex-col gap-3 xl:items-end">

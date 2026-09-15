@@ -237,7 +237,11 @@ async function consumeStreamWithCallback(
 export async function runChatAgent(
   input: RunChatAgentInput
 ): Promise<RunChatAgentResult> {
-  const resolvedModel = await resolveChatModelId(input.userId, input.model);
+  const resolvedModel = await resolveChatModelId(
+    input.userId,
+    input.model,
+    input.surface === "slack" ? "slack" : "chat"
+  );
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();
   // Capture step usage as samples so overlapping callbacks cannot drop a merge.

@@ -188,7 +188,8 @@ export function createAgentGeneratePostHandler(
     }
 
     const modelId =
-      generatorModel || (await deps.resolveUserDefaultModelId(userId, null));
+      generatorModel ||
+      (await deps.resolveUserDefaultModelId(userId, null, "agents"));
 
     const teamId = readActiveTeamIdHeader(req);
     let resolved;

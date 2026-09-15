@@ -21,7 +21,8 @@ export async function resolveCliModelId(
   }
   const fallback = await resolveUserDefaultModelId(
     userId,
-    profile?.default_model
+    profile?.default_model,
+    "cli"
   );
   if (!fallback) {
     throw new Error("No enabled model is configured for this account.");

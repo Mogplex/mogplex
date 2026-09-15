@@ -350,3 +350,39 @@ test("GET /api/models?format=cli withholds a new model when auto-enable is off",
     ["anthropic/old"]
   );
 });
+
+test("GET /api/models exposes independent usable defaults for each client surface", async () => {
+  const { createModelsGetHandler } = await loadModelsRoute();
+  const handler = createModelsGetHandler({
+    getUserId: async () => "user-123",
+    loadProfileModelSettings: async () => ({
+      data: {
+        auto_enable_new_models: true,
+        models_seen_at: null,
+        default_model: "openai/new",
+        surface_models: {
+          chat: "openai/old",
+          control: "openai/old",
+          agents: "retired/model",
+        },
+      },
+      error: null,
+    }),
+    listAvailableModels: async () => ({ data: [], error: null }),
+    listAllModels: async () => ({
+      data: [
+        catalogRow({ id: "openai/new" }),
+        catalogRow({ id: "openai/old" }),
+      ],
+      error: null,
+    }),
+    listUserModelPreferences: async () => ({ data: [], error: null }),
+    loadUserProviderAccess: allProviderAccess,
+  });
+  const payload = await (await handler()).json();
+  assert.equal(payload.default_model, "openai/new");
+  assert.equal(payload.surface_models.chat, "openai/old");
+  assert.equal(payload.surface_models.control, "openai/old");
+  assert.equal(payload.surface_models.cli, "openai/new");
+  assert.notEqual(payload.surface_models.agents, "retired/model");
+});

@@ -44,6 +44,7 @@ export async function GET(req: Request) {
     // what /api/models offers in the same scope. This is display-only data —
     // fall back to the template model if resolution fails.
     resolveStoredUserDefaultModelId(userId, {
+      surface: "agents",
       teamId: readActiveTeamIdHeader(req),
     }).catch(() => null),
   ]);

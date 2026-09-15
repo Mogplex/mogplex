@@ -136,7 +136,7 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   }>("/api/integrations/slack/installations", fetcher)
   const { agents } = useAgents()
   const { repos } = useRepos()
-  const { models, defaultModelId, hiddenModelIds, isLoading: modelsLoading } = useModels()
+  const { models, defaultModelId, hiddenModelIds, isLoading: modelsLoading } = useModels("automations")
   const isAutomationsPage = surface === "automations"
 
   // State hooks
