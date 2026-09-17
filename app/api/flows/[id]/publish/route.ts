@@ -5,7 +5,12 @@ import {
   isFlowServiceError,
 } from "@/lib/flows/errors";
 import { publishFlowDraft } from "@/lib/flows/api";
-import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
+import {
+  ALLOWLIST_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  isModelAllowlistUnavailableError,
+  MODEL_ALLOWLIST_UNAVAILABLE_ERROR,
+  readActiveTeamIdHeader,
+} from "@/lib/team-capabilities";
 
 type FlowPublishRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -40,6 +45,17 @@ export function createFlowPublishPostHandler(
       );
       return NextResponse.json(flow);
     } catch (error) {
+      if (isModelAllowlistUnavailableError(error)) {
+        return NextResponse.json(
+          { error: MODEL_ALLOWLIST_UNAVAILABLE_ERROR },
+          {
+            status: 503,
+            headers: {
+              "Retry-After": String(ALLOWLIST_UNAVAILABLE_RETRY_AFTER_SECONDS),
+            },
+          }
+        );
+      }
       const message =
         error instanceof Error ? error.message : "Failed to publish flow";
       if (isFlowServiceError(error)) {

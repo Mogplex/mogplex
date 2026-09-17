@@ -4,11 +4,28 @@ import {
 } from "@/lib/flows/errors";
 import { MogplexApiAutomationError } from "@/lib/mogplex-api/automations";
 import { mogplexApiError } from "@/lib/mogplex-api/response";
+import {
+  ALLOWLIST_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  isModelAllowlistUnavailableError,
+  MODEL_ALLOWLIST_UNAVAILABLE_ERROR,
+} from "@/lib/team-capabilities";
 
 export function mogplexAutomationErrorResponse(
   error: unknown,
   fallbackMessage: string
 ) {
+  if (isModelAllowlistUnavailableError(error)) {
+    return mogplexApiError(
+      "SERVICE_UNAVAILABLE",
+      MODEL_ALLOWLIST_UNAVAILABLE_ERROR,
+      503,
+      {
+        headers: {
+          "Retry-After": String(ALLOWLIST_UNAVAILABLE_RETRY_AFTER_SECONDS),
+        },
+      }
+    );
+  }
   if (error instanceof MogplexApiAutomationError) {
     const code =
       error.status === 404

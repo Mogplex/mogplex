@@ -1,5 +1,6 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
 import { validateFlowConfiguration } from "@/lib/flows/server-validation";
+import { mogplexAutomationErrorResponse } from "@/lib/mogplex-api/automation-response";
 import { coerceGraph } from "@/lib/flows/graph";
 import { validateAutomationArgsSchema } from "@/lib/mogplex-api/mcp-schemas";
 import {
@@ -45,14 +46,9 @@ export function createAutomationValidateHandler(
       );
       return mogplexApiSuccess({ validation });
     } catch (error) {
-      console.error(
-        "[mogplex-api/automations/validate] validation failed",
-        error
-      );
-      return mogplexApiError(
-        "INTERNAL_ERROR",
-        "Could not validate automation configuration",
-        500
+      return mogplexAutomationErrorResponse(
+        error,
+        "Could not validate automation configuration"
       );
     }
   };
