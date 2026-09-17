@@ -175,6 +175,13 @@ for (const sandboxStatus of ["running", "paused", "stopped"]) {
       fullPage: true,
     });
     if (sandboxStatus === "running") {
+      await page.route("**/api/models", (route) =>
+        fulfillJson(route, {
+          models: [],
+          catalog: [],
+          default_model: "openai/new-chat-default",
+        })
+      );
       await page.route(
         /\/api\/settings(?:\?.*)?$/,
         (route) =>
@@ -214,6 +221,13 @@ for (const sandboxStatus of ["running", "paused", "stopped"]) {
         })
       ).toBeVisible();
       expect(chats).toBe(0);
+      await page.getByRole("button", { name: "New chat", exact: true }).click();
+      await expect(
+        page.getByRole("button", {
+          name: "Model: new-chat-default",
+          exact: true,
+        })
+      ).toBeVisible();
     }
   });
 }

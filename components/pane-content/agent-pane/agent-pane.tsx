@@ -395,7 +395,7 @@ export function AgentPane({
       repoId: activeRepo?.id ?? null,
       workspaceSessionId: activeSessionId,
       sandboxId: activeSandbox?.id ?? null,
-    });
+    }, defaultModelId ?? storeDefaultModel);
     onUpdatePane?.({ conversationId });
     setMessages([]);
     setShowHistory(false);
@@ -407,6 +407,8 @@ export function AgentPane({
     pane.id,
     setMessages,
     startConversation,
+    defaultModelId,
+    storeDefaultModel,
   ]);
 
   const handleResumeConversation = useCallback(
