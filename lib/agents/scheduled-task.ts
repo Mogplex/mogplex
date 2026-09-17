@@ -15,7 +15,7 @@ export function buildScheduledTaskTools(config: {
         const { sandbox, cwd } = await config.loadSandbox();
         const result = await sandbox.runCommand({
           cmd: "sh",
-          args: ["-lc", command],
+          args: ["-lc", `export PATH="$HOME/.local/bin:$PATH"\n${command}`],
           cwd,
           env: {
             GH_TOKEN: config.githubToken,

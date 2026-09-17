@@ -94,7 +94,7 @@ export function createAutomationAgentRunner(
       context.metadata.flow_node_role === "task"
         ? buildScheduledTaskTools({
             githubToken,
-            loadSandbox: createTaskSandboxLoader(context),
+            loadSandbox: createTaskSandboxLoader(context, githubToken),
           })
         : assignmentType === "dependabot_alert"
           ? buildDependabotTools({
