@@ -8,7 +8,9 @@ import { useModels } from "@/hooks/use-models"
 import { useNewModels } from "@/hooks/use-new-models"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
-import { ModelFallbackSettings } from "./model-fallback-settings"
+import { ModelChainEditor, addFallback, chainIncludes, setChainPrimary } from "./model-chain-editor"
+import { useModelChain } from "./use-model-chain"
+import { ACCOUNT_FALLBACK_MODEL_MAX_COUNT } from "@/lib/models/fallback-limits"
 
 type SortKey = "provider" | "name" | "context_length" | "pricing_input" | "pricing_output" | "is_enabled" | "state"
 type SortDirection = "asc" | "desc"
@@ -118,12 +120,6 @@ function SortHeader({
   )
 }
 
-function formatDefaultLabel(modelId: string | null | undefined) {
-  if (!modelId) return "Not set"
-  const [, ...rest] = modelId.split("/")
-  return rest.join("/") || modelId
-}
-
 function timeAgo(dateStr: string | null | undefined) {
   if (!dateStr) return null
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -136,13 +132,9 @@ function timeAgo(dateStr: string | null | undefined) {
   return `${Math.floor(diff / day)}d ago`
 }
 
-type Props = {
-  defaultModel: string
-  onSetDefault: (modelId: string) => Promise<void>
-  savingDefault?: boolean
-}
-
-export function ModelsSection({ defaultModel, onSetDefault, savingDefault = false }: Props) {
+export function ModelsSection() {
+  const chain = useModelChain()
+  const defaultModel = chain.value.primary
   const { catalog, toggleModel } = useModels()
   const { autoEnable, setAutoEnable } = useNewModels()
   const [search, setSearch] = useState("")
@@ -228,7 +220,6 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
 
     return recommended[0] ?? null
   }, [visibleCatalog])
-  const currentDefault = catalog.find((model) => model.id === defaultModel)
 
   const handleSort = (nextKey: SortKey) => {
     if (sortKey === nextKey) {
@@ -240,21 +231,8 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
   }
 
   return (
-    <div className="space-y-5">
-      <div data-testid="model-routing-settings" className="grid gap-6 border-b border-border/70 pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-10">
-        <section data-testid="models-default-summary" aria-labelledby="default-model-heading" className="min-w-0">
-          <h2 id="default-model-heading" className="text-sm font-medium">Current default</h2>
-          <div className="mt-3 flex items-start gap-3">
-            {currentDefault && <ProviderIcon provider={currentDefault.provider} className="mt-0.5 size-5 shrink-0" />}
-            <div className="min-w-0">
-              <p className="break-words text-base font-semibold">{currentDefault?.name ?? formatDefaultLabel(defaultModel)}</p>
-              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{defaultModel}</p>
-            </div>
-          </div>
-          <p className="mt-3 max-w-sm text-xs leading-5 text-muted-foreground">Default for new automation nodes. Other destinations keep their selected models.</p>
-        </section>
-        <ModelFallbackSettings defaultModel={defaultModel} />
-      </div>
+    <div data-testid="models-content" className="w-full max-w-[1440px] min-w-0 space-y-5">
+      <ModelChainEditor {...chain} catalog={catalog} />
 
       <div>
         <div className="border-b border-border/70 pb-4">
@@ -299,7 +277,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
               data-testid="models-provider-filter"
               value={providerFilter}
               onChange={(event) => setProviderFilter(event.target.value)}
-              className="h-10 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none"
+              className="h-10 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="all">All providers</option>
               {providers.map((provider) => (
@@ -310,7 +288,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
               data-testid="models-enabled-filter"
               value={stateFilter}
               onChange={(event) => setStateFilter(event.target.value as ModelStateFilter)}
-              className="h-10 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none"
+              className="h-10 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="all">All states</option>
               <option value="default">Default</option>
@@ -321,7 +299,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
               data-testid="models-pricing-filter"
               value={pricingFilter}
               onChange={(event) => setPricingFilter(event.target.value as typeof pricingFilter)}
-              className="h-10 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none"
+              className="h-10 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="all">Any pricing</option>
               <option value="priced">Has pricing</option>
@@ -332,7 +310,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
                 data-testid="models-sort-key"
                 value={sortKey}
                 onChange={(event) => handleSort(event.target.value as SortKey)}
-                className="h-10 min-w-0 flex-1 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none"
+                className="h-10 min-w-0 flex-1 rounded-md border border-border/70 bg-background/70 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="provider">Sort: provider</option>
                 <option value="name">Sort: model</option>
@@ -371,8 +349,8 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
             </thead>
             <tbody>
               {sortedCatalog.map((model) => {
-                const isDefault = model.id === defaultModel
-                const canSetDefault = model.is_enabled && model.is_available
+                const inChain = chainIncludes(chain.value, model.id)
+                const canSelect = model.is_enabled && model.is_available && !chain.disabled
 
                 return (
                   <tr key={model.id} className="border-b border-border/50 hover:bg-secondary/20">
@@ -407,25 +385,21 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
-                        <button
-                          data-testid={`models-set-default-${model.id}`}
-                          onClick={() => void onSetDefault(model.id)}
-                          disabled={isDefault || savingDefault || !canSetDefault}
-                          className={cn(
-                            "rounded-md border px-3 py-1 text-[11px] font-medium transition-colors",
-                            isDefault
-                              ? "border-primary/40 bg-primary/10 text-primary"
-                              : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground",
-                            (savingDefault || !canSetDefault) && "opacity-60",
-                          )}
-                        >
-                          {isDefault ? "Selected" : "Set default"}
-                        </button>
+                        {!inChain && <>
+                          <Button size="sm" variant="ghost" className="h-7 whitespace-nowrap px-2 text-xs"
+                            data-testid={`models-set-default-${model.id}`} disabled={!canSelect}
+                            onClick={() => chain.onChange(setChainPrimary(chain.value, model.id))}>Use as primary</Button>
+                          <Button size="sm" variant="ghost" className="h-7 whitespace-nowrap px-2 text-xs"
+                            data-testid={`models-add-fallback-${model.id}`}
+                            disabled={!canSelect || model.id.startsWith("openrouter/") || chain.value.fallbacks.length >= ACCOUNT_FALLBACK_MODEL_MAX_COUNT}
+                            onClick={() => chain.onChange(addFallback(chain.value, model.id))}>Add as fallback</Button>
+                        </>}
                         <button
                           data-testid={`models-toggle-${model.id}`}
+                          disabled={chain.saving}
                           onClick={() => void toggleModel(model.id)}
                           className={cn(
-                            "rounded-md border px-3 py-1 text-[11px] font-medium transition-colors",
+                            "rounded-md border px-3 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
                             model.is_enabled
                               ? "border-primary/40 bg-primary/10 text-primary"
                               : "border-border text-muted-foreground hover:bg-secondary",
