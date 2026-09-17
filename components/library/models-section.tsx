@@ -85,29 +85,6 @@ function compareModelState(
   return compareStrings(left.name, right.name, "asc")
 }
 
-function SummaryCard({
-  label,
-  value,
-  caption,
-  dataTestId,
-}: {
-  label: string
-  value: string
-  caption: string
-  dataTestId?: string
-}) {
-  return (
-    <div
-      data-testid={dataTestId}
-      className="rounded-md border border-border/70 bg-card/70 px-4 py-3 shadow-app-card"
-    >
-      <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{label}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{value}</div>
-      <div className="mt-1 text-xs leading-5 text-muted-foreground">{caption}</div>
-    </div>
-  )
-}
-
 function SortHeader({
   label,
   sortKey,
@@ -264,38 +241,28 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
 
   return (
     <div className="space-y-5">
-      <ModelFallbackSettings defaultModel={defaultModel} />
-      <div className="grid gap-3 lg:grid-cols-3">
-        <SummaryCard
-          dataTestId="models-default-summary"
-          label="Current Default"
-          value={formatDefaultLabel(defaultModel)}
-          caption={currentDefault
-            ? `${currentDefault.provider} · used for new automation nodes. Other destinations change only when selected.`
-            : "Pick a default model directly from the catalog below."}
-        />
-        <SummaryCard
-          label="Enabled"
-          value={String(enabledCount)}
-          caption={`${visibleCatalog.length} models in the account catalog.`}
-        />
-        <SummaryCard
-          label="Providers"
-          value={String(providers.length)}
-          caption={recommendedCount
-            ? `${recommendedCount} models are currently recommended from the AI Gateway sync${latestRecommendationRefresh ? ` · refreshed ${timeAgo(latestRecommendationRefresh)}` : ""}.`
-            : "Compare providers, pricing, and context in one place."}
-        />
+      <div data-testid="model-routing-settings" className="grid gap-6 border-b border-border/70 pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-10">
+        <section data-testid="models-default-summary" aria-labelledby="default-model-heading" className="min-w-0">
+          <h2 id="default-model-heading" className="text-sm font-medium">Current default</h2>
+          <div className="mt-3 flex items-start gap-3">
+            {currentDefault && <ProviderIcon provider={currentDefault.provider} className="mt-0.5 size-5 shrink-0" />}
+            <div className="min-w-0">
+              <p className="break-words text-base font-semibold">{currentDefault?.name ?? formatDefaultLabel(defaultModel)}</p>
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{defaultModel}</p>
+            </div>
+          </div>
+          <p className="mt-3 max-w-sm text-xs leading-5 text-muted-foreground">Default for new automation nodes. Other destinations keep their selected models.</p>
+        </section>
+        <ModelFallbackSettings defaultModel={defaultModel} />
       </div>
 
-      <div className="rounded-md border border-border/70 bg-card/80 shadow-app-panel">
-        <div className="border-b border-border/70 px-5 py-4">
+      <div>
+        <div className="border-b border-border/70 pb-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-2">
-              <div className="ui-section-title">Model Preferences</div>
+              <h2 className="text-sm font-medium">Model catalog</h2>
               <div className="max-w-3xl ui-section-caption">
-                Global · applies to every space unless excluded in that space&apos;s settings.
-                {" "}Choose your default model here, then enable or disable the catalog you want available. Choose which agent surfaces and automations also receive each default-model change.
+                {enabledCount} enabled · {visibleCatalog.length} {visibleCatalog.length === 1 ? "model" : "models"} · {providers.length} {providers.length === 1 ? "provider" : "providers"}
               </div>
             </div>
             <div className="flex flex-col gap-3 xl:items-end">
@@ -320,7 +287,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2 xl:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,0.6fr))]">
+          <div className="mt-4 grid gap-2 xl:grid-cols-[minmax(12rem,2fr)_repeat(3,minmax(7rem,1fr))_minmax(9rem,1fr)_auto]">
             <Input
               data-testid="models-search"
               value={search}
@@ -482,11 +449,6 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
           </table>
         </div>
 
-        <div className="border-t border-border/70 px-5 py-4">
-          <div className="rounded-md border border-dashed border-border/70 bg-background/50 px-4 py-3 text-sm text-muted-foreground">
-            Enable or disable models here, then choose a default and the destinations that should receive it. Unchecked destinations keep their current models.
-          </div>
-        </div>
       </div>
     </div>
   )
