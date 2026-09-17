@@ -13,6 +13,7 @@ import { loadModelSettingsTargets } from "@/lib/models/settings-defaults";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createModelFallbackHandlers } from "@/app/api/settings/model-fallbacks/route";
 import { loadUsableFallbackModelIds } from "@/lib/models/fallback-preferences";
+import { resolveAutomationModel } from "@/lib/workflows/automation-job-model-resolution";
 
 const owner = "00000000-0000-4000-8000-000000000011";
 const other = "00000000-0000-4000-8000-000000000012";
@@ -78,6 +79,61 @@ afterAll(async () => {
     else Reflect.deleteProperty(supabaseAdmin, key);
   }
   await db?.close();
+});
+
+test("automations survive invalid account fallbacks and preserve default, disabled and explicit policies", async () => {
+  const previousKey = process.env.AI_GATEWAY_API_KEY;
+  const previousPool = process.env.AUTOMATION_GATEWAY_FALLBACK_MODELS;
+  process.env.AI_GATEWAY_API_KEY = "test-gateway-key";
+  process.env.AUTOMATION_GATEWAY_FALLBACK_MODELS = "openai/new";
+  try {
+    await db.query(
+      "update profiles set allow_platform_ai=true, allow_platform_sandbox=true where id=$1",
+      [owner]
+    );
+    // Valid SQL value, invalid application value: older/bad saved data must
+    // not prevent an otherwise authorized primary invocation.
+    await db.query(
+      "update profiles set fallback_model_ids=array['bad'] where id=$1",
+      [owner]
+    );
+    expect(
+      (await resolveAutomationModel(owner, "openai/old")).providerOptions
+        ?.gateway.models
+    ).toEqual(["openai/new"]);
+    expect(
+      (
+        await resolveAutomationModel(
+          owner,
+          "openai/old",
+          null,
+          undefined,
+          null,
+          "openai/explicit"
+        )
+      ).providerOptions?.gateway.models
+    ).toEqual(["openai/explicit", "openai/new"]);
+    await db.query(
+      "update profiles set fallback_model_ids=array[]::text[] where id=$1",
+      [owner]
+    );
+    expect(
+      (await resolveAutomationModel(owner, "openai/old")).providerOptions
+        ?.gateway.models
+    ).toBeUndefined();
+  } finally {
+    for (const [key, value] of Object.entries({
+      AI_GATEWAY_API_KEY: previousKey,
+      AUTOMATION_GATEWAY_FALLBACK_MODELS: previousPool,
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await db.query(
+      "update profiles set fallback_model_ids=null, allow_platform_ai=false, allow_platform_sandbox=false where id=$1",
+      [owner]
+    );
+  }
 });
 
 test("fallback settings persist order, isolate owners, reject unusable choices and honor disabling", async () => {

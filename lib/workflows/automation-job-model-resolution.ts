@@ -1,5 +1,4 @@
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
-import { loadUsableFallbackModelIds } from "@/lib/models/fallback-preferences";
 import type { GatewayCallContext } from "@/lib/models/gateway-provider-routing";
 import { resolveRuntimeModelId } from "@/lib/models/supersession-runtime";
 import {
@@ -57,15 +56,18 @@ export async function resolveAutomationModel(
     providerFetch: buildAutomationProviderFetch({ timeoutMs }),
     preferGatewayProviderObject: true,
     gatewayContext: gatewayContext ?? { userId },
-    gatewayFallbackModelIds:
-      (effectiveFallbackModelId
-        ? null
-        : await loadUsableFallbackModelIds(userId, teamId)) ??
-      getAutomationModelFallbackIdsWithOverride(
-        effectiveModelId,
-        effectiveFallbackModelId,
-        process.env[AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV]
-      ),
+    gatewayFallbackModelIds: effectiveFallbackModelId
+      ? getAutomationModelFallbackIdsWithOverride(
+          effectiveModelId,
+          effectiveFallbackModelId,
+          process.env[AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV]
+        )
+      : undefined,
+    defaultGatewayFallbackModelIds: getAutomationModelFallbackIdsWithOverride(
+      effectiveModelId,
+      null,
+      process.env[AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV]
+    ),
     teamId: teamId ?? null,
     allowlistState,
   });

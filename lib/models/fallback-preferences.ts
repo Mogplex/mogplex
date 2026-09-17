@@ -37,11 +37,14 @@ export async function loadFallbackModelPreference(
 // retired, or forbidden in the active team. Preserve the user's order.
 export async function loadUsableFallbackModelIds(
   userId: string,
-  teamId?: string | null
+  teamId?: string | null,
+  resolvedCanInvoke?: (modelId: string) => boolean
 ): Promise<string[] | null> {
   const ids = await loadFallbackModelPreference(userId);
   if (!ids?.length) return ids;
-  const usable = new Set(await listUsableModelIdsForScope(userId, { teamId }));
+  const usable = new Set(
+    await listUsableModelIdsForScope(userId, { teamId }, resolvedCanInvoke)
+  );
   return ids.filter((id) => usable.has(id));
 }
 

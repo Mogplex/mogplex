@@ -46,6 +46,8 @@ export type ResolveUserLanguageModelOptions = {
    * through the same team capability and allowlist policy as the primary.
    */
   gatewayFallbackModelIds?: readonly string[];
+  /** Used only when account fallbacks are unset or cannot be loaded. */
+  defaultGatewayFallbackModelIds?: readonly string[];
   /** Team scope, if the caller is acting inside a team. Null/undefined = solo. */
   teamId?: string | null;
   /**
@@ -325,7 +327,24 @@ export function createResolveUserLanguageModel(
       );
     const candidates = usesGateway
       ? (options?.gatewayFallbackModelIds ??
-        (await deps.loadUsableFallbackModelIds(userId, teamId)) ??
+        (await deps
+          .loadUsableFallbackModelIds(
+            userId,
+            teamId,
+            (candidate) =>
+              // Gateway access is already established; reuse this request's policy
+              // rather than reading credentials, capabilities and allowlist again.
+              !candidate.startsWith("openrouter/") &&
+              hasCapability(capabilities, modelCapability(candidate)) &&
+              (!teamId || allowlistPermitsModel(allowlistState, candidate))
+          )
+          .catch(() => {
+            console.warn(
+              "Unable to load account fallback models; using request defaults"
+            );
+            return null;
+          })) ??
+        options?.defaultGatewayFallbackModelIds ??
         [])
       : [];
     const approvedGatewayFallbackModelIds = filterGatewayFallbackModelIds({

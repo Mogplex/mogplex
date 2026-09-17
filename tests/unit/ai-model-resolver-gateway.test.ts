@@ -47,6 +47,53 @@ function expectModels(
   assert.deepEqual(result.providerOptions?.gateway.models, expected);
 }
 
+test("fallback read failures preserve the primary and the caller's default policy", async () => {
+  const { createResolveUserLanguageModel } = await loadAiModelResolver();
+  const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => {
+      throw new Error("database unavailable");
+    },
+    getProviderKey: async () => "gateway-key",
+    loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
+    resolveGatewayModel: () => "primary" as never,
+  });
+  const chat = await resolver("owner", "openai/primary");
+  assert.equal(chat.model, "primary");
+  expectModels(chat, undefined);
+  expectModels(
+    await resolver("owner", "openai/primary", {
+      defaultGatewayFallbackModelIds: ["xai/system"],
+    }),
+    ["xai/system"]
+  );
+});
+
+test("account fallbacks override defaults, including an explicitly empty list", async () => {
+  const { createResolveUserLanguageModel } = await loadAiModelResolver();
+  let saved: string[] | null = null;
+  const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => saved,
+    getProviderKey: async () => "gateway-key",
+    loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
+    resolveGatewayModel: () => "primary" as never,
+  });
+  const options = { defaultGatewayFallbackModelIds: ["xai/system"] };
+  expectModels(await resolver("owner", "openai/primary", options), [
+    "xai/system",
+  ]);
+  saved = [];
+  expectModels(await resolver("owner", "openai/primary", options), undefined);
+  saved = ["xai/account"];
+  expectModels(await resolver("owner", "openai/primary", options), saved);
+  expectModels(
+    await resolver("owner", "openai/primary", {
+      ...options,
+      gatewayFallbackModelIds: ["xai/explicit"],
+    }),
+    ["xai/explicit"]
+  );
+});
+
 test("resolveUserLanguageModel prefers a user AI Gateway key over the platform gateway key", async () => {
   const { createResolveUserLanguageModel } = await loadAiModelResolver();
   const originalGatewayApiKey = process.env.AI_GATEWAY_API_KEY;
