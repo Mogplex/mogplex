@@ -12,7 +12,7 @@ import { mergePersistedControlMessages } from "@/lib/control/transcript-store";
 import { validateControlChatMessages } from "../chat/_lib/messages";
 
 const LIST_COLUMNS =
-  "id, title, project, repo_id, model_id, orchestration_run_id, pinned, archived, created_at, updated_at";
+  "id, title, project, repo_id, model_id, orchestration_run_id, external_run_id, pinned, archived, created_at, updated_at";
 
 async function getSessionRecord(
   id: string,

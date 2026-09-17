@@ -11,6 +11,8 @@ export type ControlSessionSummary = {
   model_id: string | null;
   /** Server-owned orchestration run backing the mission and worktrees. */
   orchestration_run_id: string | null;
+  /** An existing Slack run shown in Control without launching a second agent. */
+  external_run_id?: string | null;
   pinned: boolean;
   updated_at: string;
 };

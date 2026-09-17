@@ -9,6 +9,20 @@ installation. They apply to future repository runs only, not conversational
 replies or existing runs. The default is `mogplex`. CLI runners retain their
 existing credential requirements. Selecting a runner does not configure credentials.
 
+## Find Slack runs in Control
+
+Repository tasks from Slack appear under their project in Control. Select a task
+to read its transcript and status. For active runs that support guidance, send
+instructions from that view.
+
+When a run ends, use **Continue in workspace chat** to open its saved workspace.
+This action does not start another agent.
+
+The `20260917172000_slack_control_sessions.sql` migration also adds Control entries
+for earlier Slack runs. It preserves saved titles, pins, and archive choices.
+Deploy it through the normal schema-first workflow. The trigger supports inserts
+from older Slack workers, so those workers can still accept runs.
+
 ## Deployment and Slack registration
 
 Apply the mirrored `20260905002500_slack_harness_preferences.sql` migration using

@@ -41,6 +41,18 @@ export async function checkSchemaCompatibility(
       .single();
     assert.equal(job.error, null, JSON.stringify(job.error));
     assert.deepEqual(job.data, completedJob);
+    const conversation = await client
+      .from("control_sessions")
+      .select("title,messages,pinned,archived")
+      .eq("id", BEFORE_USER)
+      .single();
+    assert.equal(conversation.error, null, JSON.stringify(conversation.error));
+    assert.deepEqual(conversation.data, {
+      title: "Existing conversation",
+      messages: [],
+      pinned: true,
+      archived: true,
+    });
   }
   const userId = phase === "seed" ? BEFORE_USER : AFTER_USER;
   const profile = await client.from("profiles").insert({
@@ -73,6 +85,39 @@ export async function checkSchemaCompatibility(
     .select("id,workspace_id")
     .single();
   assert.equal(repo.error, null, JSON.stringify(repo.error));
+  // Exercise the serving app's session writes and the old Slack worker's
+  // external-run insert without depending on any candidate-only columns.
+  const conversation = await client.from("control_sessions").insert({
+    id: userId,
+    user_id: userId,
+    repo_id: (repo.data as { id: string }).id,
+    title: "Existing conversation",
+    messages: [],
+    pinned: true,
+    archived: true,
+  });
+  assert.equal(conversation.error, null, JSON.stringify(conversation.error));
+  const call = await client.from("ai_calls").insert({
+    id: userId,
+    user_id: userId,
+    type: "agent",
+    model: "fixture",
+  });
+  assert.equal(call.error, null, JSON.stringify(call.error));
+  const externalRun = await client.from("external_agent_runs").insert({
+    user_id: userId,
+    repo_id: (repo.data as { id: string }).id,
+    ai_call_id: userId,
+    idempotency_key: `compatibility-${phase}`,
+    request_hash: "fixture",
+    harness: "mogplex",
+    status: "pending",
+    prompt: "Existing Slack request",
+    base_branch: "main",
+    working_branch: "fix/fixture",
+    metadata: { run_origin: "slack" },
+  });
+  assert.equal(externalRun.error, null, JSON.stringify(externalRun.error));
   const job = await client
     .from("job_runs")
     .insert({

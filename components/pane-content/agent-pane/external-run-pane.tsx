@@ -13,10 +13,11 @@ import { projectRunTranscript } from "@/lib/run-workspace/transcript";
 import { ChatMessageList } from "./chat-message-list";
 import { useExternalRun } from "./use-external-run";
 
-export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
+export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspaceHref }: {
   pane: PaneNode & { externalRunId: string };
   onStreamingChange: (value: boolean) => void;
   onUpdatePane?: (updates: Partial<PaneNode>) => void;
+  workspaceHref?: string;
 }) {
   const { scope } = useParams<{ scope: string }>();
   const { user } = useUser();
@@ -82,7 +83,7 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
       <Button type="submit" size="sm" disabled={sending || !text.trim()}>{sending ? "Sending…" : "Send guidance"}</Button>
     </form> : !running && status !== "awaiting_input" && context ? <div className="border-border border-t p-2">
       {!historyReady && <p role="status" className="text-muted-foreground mb-2 text-xs">Loading run history before continuing…</p>}
-      <Button size="sm" onClick={() => void continueChat()} disabled={sending || !user || !historyReady}>Continue in workspace chat</Button>
+      {workspaceHref ? <Button size="sm" asChild><a href={workspaceHref}>Continue in workspace chat</a></Button> : <Button size="sm" onClick={() => void continueChat()} disabled={sending || !user || !historyReady}>Continue in workspace chat</Button>}
     </div> : <p className="text-muted-foreground p-2 text-xs">{status === "awaiting_input" ? "Open run details to review the checkpoint." : "Watching this run. Open run details for controls."}</p>}
   </>;
 }

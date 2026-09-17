@@ -28,6 +28,7 @@ import { Timeline } from "./timeline";
 import { Composer } from "./composer";
 import { ArtifactSidePanel } from "./artifact-side-panel";
 import { SessionList } from "./session-list";
+import { ExternalRunConversation } from "./external-run-conversation";
 import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
 import { latestControlContext } from "@/lib/control/context-usage";
@@ -171,7 +172,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     () => resolveNewSessionRepoId(newSessionTarget, activeSession, repos),
     [activeSession, newSessionTarget, repos]
   );
-
   const {
     activeRepo,
     sandboxes,
@@ -363,7 +363,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         onDelete={deleteChat}
         archive={archive}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      {activeSession?.external_run_id ? <ExternalRunConversation session={{ ...activeSession, external_run_id: activeSession.external_run_id }} /> : <div className="flex min-w-0 flex-1 flex-col">
         <ControlTopBar
           projectName={
             activeSession?.project ??
@@ -486,7 +486,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
             </>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
