@@ -25,6 +25,7 @@ import type {
 import {
   createFlowNodeRunBestEffort,
   completeFlowNodeRunBestEffort,
+  completeFlowNodeRun,
 } from "@/lib/workflows/automation-job-flow-nodes";
 import { FAILURE_HANDLE_ID, getFailureEdges } from "@/lib/flows/graph";
 import { buildFlowConditionState } from "@/lib/workflows/automation-job-context-resolution";
@@ -89,6 +90,7 @@ export type NodeExecutionContext = {
   nodeRun: NodeRunHandle;
   completeNodeRun: (completion: {
     status: FlowNodeRunStatus;
+    requirePersistence?: boolean;
     output?: Record<string, unknown> | null;
     error?: string | null;
   }) => Promise<number>;
@@ -151,9 +153,19 @@ export async function createNodeExecutionContext(
 
   const completeNodeRun = async (completion: {
     status: FlowNodeRunStatus;
+    requirePersistence?: boolean;
     output?: Record<string, unknown> | null;
     error?: string | null;
   }): Promise<number> => {
+    if (completion.requirePersistence) {
+      if (!nodeRun.id) throw new Error("Flow report storage is unavailable");
+      return completeFlowNodeRun({
+        ...completion,
+        nodeRunId: nodeRun.id,
+        startedAt: nodeRun.startedAt,
+        requirePersistence: true,
+      });
+    }
     const result = await completeFlowNodeRunBestEffort({
       nodeRunId: nodeRun.id,
       jobRunId,

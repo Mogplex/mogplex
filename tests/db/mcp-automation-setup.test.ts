@@ -9,14 +9,18 @@ import { resolveJobContext } from "@/lib/workflows/automation-job-context-resolu
 import { createAutomationJobTask } from "@/lib/workflows/automation-job-workflow";
 import { buildAutomationHarnessPrompt } from "@/lib/workflows/automation-job-prompts";
 import type { FlowGraph } from "@/lib/types";
-import { createAutomationDb, REPO_ID } from "./helpers/mcp-automation-fixture";
+import {
+  createAutomationDb,
+  AGENT_ID,
+  REPO_ID,
+} from "./helpers/mcp-automation-fixture";
 
 const auth = async () => ({
   ok: true as const,
   auth: { userId: "owner", keyId: "test", scopes: ["read", "write"] },
 });
 
-it("MCP discovers, validates, creates, publishes and executes a scheduled task without a PR or stored agent", async () => {
+async function verifyScheduledSetup(harness: "claude-code" | "mogplex") {
   const db = await createAutomationDb();
   const schedules: string[] = [];
   const oldKey = process.env.TRIGGER_SECRET_KEY;
@@ -105,8 +109,8 @@ it("MCP discovers, validates, creates, publishes and executes a scheduled task w
       repos: ["acme/widgets"],
     };
     const task = graph.nodes.find((node) => node.type === "agent")!;
-    task.data.harness = "claude-code";
-    task.data.agentId = null;
+    task.data.harness = harness;
+    task.data.agentId = harness === "mogplex" ? AGENT_ID : null;
     task.data.modelOverride = null;
     const before = db.statements.length;
     const validation = await call("mogplex_validate_automation", {
@@ -188,10 +192,22 @@ it("MCP discovers, validates, creates, publishes and executes a scheduled task w
     const resolved = await resolveJobContext(job.id);
     expect("context" in resolved).toBe(true);
     if (!("context" in resolved)) throw new Error(JSON.stringify(resolved));
-    expect(resolved.context.agent.model).toBe("harness:claude-code");
+    expect(resolved.context.agent.model).toBe(
+      harness === "mogplex" ? "openai/test-model" : "harness:claude-code"
+    );
     const executions: string[] = [];
     const run = createAutomationJobTask({
       resolveGithubToken: async () => "fixture-token",
+      resolveAutomationModel: async (_userId, modelId) => ({
+        model: {} as never,
+        effectiveModelId: modelId,
+      }),
+      runAutomationAgent: async (context) => {
+        expect(context.agent.model).toBe("openai/test-model");
+        expect(context.metadata.flow_node_role).toBe("task");
+        executions.push(context.repo.full_name);
+        return { text: "NO_ACTION", steps: [], usage: null };
+      },
       runAutomationHarnessAgent: async (input) => {
         const prompt = buildAutomationHarnessPrompt(input);
         expect(input.context.metadata.flow_node_role).toBe("task");
@@ -241,4 +257,10 @@ it("MCP discovers, validates, creates, publishes and executes a scheduled task w
     else process.env.TRIGGER_SECRET_KEY = oldKey;
     await db.close();
   }
-}, 30_000);
+}
+
+it.each(["claude-code", "mogplex"] as const)(
+  "MCP discovers, validates, publishes and executes a scheduled %s task without an explicit model",
+  verifyScheduledSetup,
+  30_000
+);

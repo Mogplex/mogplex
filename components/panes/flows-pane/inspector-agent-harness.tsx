@@ -32,7 +32,6 @@ export interface MogplexModelSectionProps {
   node: FlowCanvasNode & { data: AgentNodeData }
   updateNodeData: UpdateNodeData
   selectedAgentOverrideUsesUnavailableModel: boolean
-  selectedAgentHasNoModel: boolean
   selectedAgentModelSelectValue: string
   availableModelOptions: Array<{ id: string; label: string }>
   quickReplaceFlowModelId: string
@@ -44,7 +43,6 @@ export function MogplexModelSection({
   node,
   updateNodeData,
   selectedAgentOverrideUsesUnavailableModel,
-  selectedAgentHasNoModel,
   selectedAgentModelSelectValue,
   availableModelOptions,
   quickReplaceFlowModelId,
@@ -91,38 +89,6 @@ export function MogplexModelSection({
           </div>
         </InspectorCallout>
       )}
-      {selectedAgentHasNoModel && (
-        <InspectorCallout
-          variant="warn"
-          icon={<WarningTriangle />}
-          testId="flows-missing-model-warning"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-amber-500/40 dark:border-amber-300/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-amber-700 dark:text-amber-200">
-              No model
-            </span>
-            <span>This step has no model selected and cannot run. Choose one below.</span>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              data-testid="flows-missing-model-replace"
-              onClick={() => {
-                if (!quickReplaceFlowModelId) return
-                updateNodeData(node.id, (data) => ({
-                  ...data,
-                  modelOverride: quickReplaceFlowModelId,
-                }), { mergeKey: `agent-model-replace-${node.id}` })
-              }}
-              disabled={!canQuickReplaceFlowModel}
-              className="rounded border border-amber-500/30 bg-amber-500/10 dark:border-amber-200/30 dark:bg-amber-100/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-100 disabled:opacity-50"
-            >
-              Use {quickReplaceFlowModelName || "an enabled model"}
-            </button>
-            <span className="text-[11px] text-amber-800 dark:text-amber-100/80">Or choose another enabled model from the selector.</span>
-          </div>
-        </InspectorCallout>
-      )}
       <InspectorField label="Model">
         <WorkflowModelSelect
           ariaLabel="Model"
@@ -132,7 +98,7 @@ export function MogplexModelSection({
             modelOverride: value || null,
           }), { mergeKey: `agent-model-${node.id}` })}
           options={[
-            { value: "", label: "Select a model..." },
+            { value: "", label: "Default from settings" },
             ...availableModelOptions.map((model) => ({
               value: model.id,
               label: model.label,

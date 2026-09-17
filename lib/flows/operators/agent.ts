@@ -67,18 +67,6 @@ export const agentOperator: FlowOperatorDefinition<AgentNode> = {
         `Agent node "${node.data.label}" must be assigned to an agent.`
       );
     }
-    // The node is the only source of truth for which model a step runs on, so
-    // a mogplex-harness node without one is unrunnable. Harness nodes are
-    // exempt: claude-code/codex invoke their own CLI, which picks its model.
-    if (
-      options.requireRunnableConfig &&
-      (node.data.harness ?? "mogplex") === "mogplex" &&
-      !node.data.modelOverride?.trim()
-    ) {
-      errors.push(
-        `Agent node "${node.data.label}" must have a model selected.`
-      );
-    }
     if (
       node.data.role === "edit" &&
       !hasUpstreamAgentRole(graph, node.id, "review") &&

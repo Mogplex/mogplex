@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { prepareHarnessFlowReports } from "./flow-report-sandbox";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createHarnessOutputRenderer } from "@/lib/harness/output-renderer";
 import type { HarnessId } from "@/lib/harness/config";
@@ -227,6 +228,7 @@ export async function runAutomationHarnessAgent(input: {
                 }
               : undefined
         );
+  await prepareHarnessFlowReports(input.context, sandbox);
   const prompt = buildAutomationHarnessPrompt(input);
   const { createSandboxHarnessPostHandler } =
     await import("@/app/api/sandbox/[id]/harness/route");

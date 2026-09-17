@@ -127,7 +127,7 @@ export const automationGraphSchema = {
             modelOverride: {
               ...nullableString,
               description:
-                "Required for Mogplex: enabled ID from mogplex_list_models. CLI harnesses choose their own model.",
+                "Optional. Omit or use null to inherit the current Agent/API/MCP default from settings. Set an enabled ID from mogplex_list_models only for an explicit override. CLI harnesses choose their own model.",
             },
             fallbackModelOverride: nullableString,
             systemPromptOverride: {
@@ -352,7 +352,7 @@ export const scheduledTaskExample: FlowGraph = {
         role: "task",
         harness: "mogplex",
         agentId: "REPLACE_WITH_AGENT_ID",
-        modelOverride: "REPLACE_WITH_MODEL_ID",
+        modelOverride: null,
         systemPromptOverride:
           "Inspect the repository for the requested maintenance. Check open PRs first. Apply only needed changes, run the repository checks, and open a PR for human review. If no change is needed, report NO_ACTION.",
         autoMerge: false,
@@ -379,8 +379,8 @@ export const automationSchemaGuide = {
   examples: { scheduledTask: scheduledTaskExample },
   instructions: [
     "Discover the repository with mogplex_list_repos. Replace owner/repo and installationIds in the example with its full_name and installation_id.",
-    "For Mogplex, use agentId from mogplex_list_agents and modelOverride from mogplex_list_models. preset: IDs work without a separate agent creation call.",
-    "Use the requested harness. Do not switch to Claude Code or Codex to avoid choosing a Mogplex agent or model. CLI harnesses use agentId: null and modelOverride: null.",
+    "For Mogplex, use agentId from mogplex_list_agents. preset: IDs work without a separate agent creation call. Leave modelOverride omitted or null to keep the configured Agent/API/MCP default; set an enabled ID only when an override is requested. Defaults resolve at run time; the graph stays unpinned.",
+    "Use the requested harness. Do not switch to Claude Code or Codex to avoid choosing a Mogplex agent. CLI harnesses use agentId: null and modelOverride: null.",
     "Task nodes run on a new branch from the default branch. They can run commands and open PRs without an upstream review node. They require a schedule trigger and systemPromptOverride.",
     "Edit nodes fix an existing PR and require an upstream review, except on mention and pr_comment triggers. They do not support schedule triggers.",
     "Call mogplex_validate_automation with installationId and graph. It does not save, publish, run a model, or create a sandbox.",

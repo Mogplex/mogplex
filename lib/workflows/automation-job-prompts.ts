@@ -18,6 +18,11 @@ import {
   toReviewFindings,
 } from "@/lib/workflows/automation-job-utils";
 import { isFlowAgentNodeRole } from "@/lib/flows/graph";
+import {
+  buildFlowReportContext,
+  FLOW_HANDOFF_INSTRUCTIONS,
+  FLOW_REPORT_CONTEXT_CHARS,
+} from "./flow-report-handoff";
 
 const AUTOMATION_HARNESS_REVIEW_PREFIX = "MOGPLEX_REVIEW_RESULT:";
 
@@ -44,15 +49,27 @@ export function buildPromptForJob(
         })
         .filter((entry) => entry.output.trim().length > 0)
     : [];
-  const flowContextBlock =
+  const legacyFlowContextBlock =
     flowPreviousOutputs.length > 0
       ? [
           "Upstream flow context:",
           ...flowPreviousOutputs.map(
             (entry, index) => `${index + 1}. ${entry.label}: ${entry.output}`
           ),
-        ].join("\n")
+        ]
+          .join("\n")
+          .slice(0, FLOW_REPORT_CONTEXT_CHARS)
       : null;
+  const flowContextBlock = [
+    Array.isArray(metadata.flow_reports)
+      ? buildFlowReportContext(metadata)
+      : legacyFlowContextBlock,
+    typeof metadata.flow_node_id === "string"
+      ? FLOW_HANDOFF_INSTRUCTIONS
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   if (metadata.flow_node_role === "task") {
     return {
@@ -239,10 +256,16 @@ export function buildPromptForJob(
         prompt: `${promptPrefix}The "${metadata.label_name}" label was added to issue #${metadata.issue_number}${labelTitle}${labelBy}. Fetch the issue with fetchIssue, then act on your instructions — add labels with addLabels or reply with postIssueComment as appropriate.`,
       };
     }
-    default:
+    default: {
+      const promptMetadata = { ...metadata };
+      // Reports already have a bounded context block; don't serialize them a
+      // second time through the generic metadata fallback.
+      delete promptMetadata.flow_reports;
+      delete promptMetadata.flow_previous_outputs;
       return {
-        prompt: `${promptPrefix}Process job with metadata: ${JSON.stringify(metadata)}`,
+        prompt: `${promptPrefix}Process job with metadata: ${JSON.stringify(promptMetadata)}`,
       };
+    }
   }
 }
 
@@ -258,6 +281,10 @@ export function buildPromptForPRFix(input: {
   return {
     prompt: [
       `${prefix}A prior PR review found issues in PR #${input.pullRequest.number} for ${input.context.repo.full_name}.`,
+      buildFlowReportContext(input.context.metadata),
+      typeof input.context.metadata.flow_node_id === "string"
+        ? FLOW_HANDOFF_INSTRUCTIONS
+        : null,
       input.pullRequest.title
         ? `PR title: "${input.pullRequest.title}".`
         : null,

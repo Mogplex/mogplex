@@ -98,6 +98,8 @@ export class MogplexApiAutomationError extends Error {
       | "AUTOMATION_NOT_PUBLISHED"
       | "AUTOMATION_NODE_NOT_FOUND"
       | "AUTOMATION_NODE_NOT_AGENT"
+      | "AUTOMATION_RUN_NOT_FOUND"
+      | "AUTOMATION_RUN_NOT_CANCELABLE"
       | "MODEL_NOT_AVAILABLE"
       | "REPO_NOT_FOUND"
       | "REPO_SCOPE_MISMATCH",

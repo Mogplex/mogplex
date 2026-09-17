@@ -106,9 +106,6 @@ export function AgentInspector({
     && node.data.modelOverride
     && !selectedAgentOverrideIsEnabled
   )
-  const selectedAgentHasNoModel = Boolean(
-    selectedAgentHarness === "mogplex" && !node.data.modelOverride,
-  )
   const selectedAgentRoleOption = FLOW_AGENT_ROLE_OPTIONS.find(
     (option) => option.value === (node.data.role || "review")
   ) || FLOW_AGENT_ROLE_OPTIONS[0]
@@ -122,7 +119,7 @@ export function AgentInspector({
     return !hasUpstreamAgentRole(draftToGraph(draft), node.id, "review")
   })()
   const selectedAgentEffectiveModel = selectedAgentHarness === "mogplex"
-    ? node.data.modelOverride || "No model selected"
+    ? node.data.modelOverride || "Default from settings"
     : flowAgentHarnessLabel(selectedAgentHarness)
   const selectedAgentEffectivePrompt = node.data.systemPromptOverride || selectedAgentDefinition?.system_prompt || null
 
@@ -140,7 +137,6 @@ export function AgentInspector({
           node={node}
           updateNodeData={updateNodeData}
           selectedAgentOverrideUsesUnavailableModel={selectedAgentOverrideUsesUnavailableModel}
-          selectedAgentHasNoModel={selectedAgentHasNoModel}
           selectedAgentModelSelectValue={selectedAgentModelSelectValue}
           availableModelOptions={availableModelOptions}
           quickReplaceFlowModelId={quickReplaceFlowModelId}

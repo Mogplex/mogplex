@@ -112,19 +112,9 @@ export function useFlowDerivedOptions(
         agentNode.data.label.length > 0
           ? agentNode.data.label
           : agentNode.id;
-      // Checked before the availability guard: that guard reports false for an
-      // empty id, which would otherwise let a model-less node pass. There is no
-      // agent fallback to consider any more — publish rejects this outright.
+      // Unset overrides inherit settings; only explicit pins can be legacy.
       const nodeModelId = agentNode.data.modelOverride?.trim() ?? "";
-      if (!nodeModelId) {
-        issues.push({
-          nodeId: agentNode.id,
-          label,
-          modelId: "",
-          source: "missing",
-        });
-        return issues;
-      }
+      if (!nodeModelId) return issues;
       if (isUnavailableModelId(nodeModelId)) {
         issues.push({
           nodeId: agentNode.id,

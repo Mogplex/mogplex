@@ -1,4 +1,6 @@
 import { fetchDependabotAlert } from "@/lib/agents/dependabot";
+import { buildFlowReportHandoff } from "./flow-report-handoff";
+import { collectAncestorReports } from "./flow-report-context";
 /**
  * Agent node execution for executeResolvedFlow.
  *
@@ -196,14 +198,13 @@ export async function executeFlowAgentNode(
 
   // Harness nodes run an external CLI that picks its own model, so a
   // model selection is meaningless for them and the editor hides it.
-  // Every other agent node must carry one: the node is the only source
-  // of truth, so "no model" is a config error, not a fallback.
+  // Native nodes use the current scoped default unless explicitly pinned.
   const nodeModelId = harnessId
     ? null
-    : node.data.modelOverride?.trim() || null;
+    : node.data.modelOverride?.trim() || resolvedFlow.defaultModelId || null;
 
   if (!harnessId && !nodeModelId) {
-    const message = `No model selected for node "${label}". Open the automation and choose a model for this step.`;
+    const message = `No enabled model is available for node "${label}". Enable a model in settings or choose an available override.`;
     await completeNodeRun({ status: "failed", error: message });
     const recovered = routeFailureOrNull(message);
     if (recovered) return recovered;
@@ -254,10 +255,15 @@ export async function executeFlowAgentNode(
       ...(nodeRole === "review" && node.data.autoMerge === true
         ? { flow_auto_merge: true }
         : {}),
-      // The agent runner needs the job run id to persist approval
-      // waits; it is only stamped when the node opted into gating.
+      // Report reads and optional approval waits are scoped to this job.
+      flow_job_run_id: jobRunId,
+      flow_reports: collectAncestorReports(
+        resolvedFlow.graph,
+        node.id,
+        state.outputs
+      ),
       ...(node.data.requireApproval === true
-        ? { flow_require_approval: true, flow_job_run_id: jobRunId }
+        ? { flow_require_approval: true }
         : {}),
       flow_previous_outputs: predecessorOutputs.map((entry) => ({
         label: entry.label,
@@ -313,6 +319,13 @@ export async function executeFlowAgentNode(
         `${alert.alert_state === "open" ? "No patched version is available. A human decision is needed." : "Dependabot alert is no longer open. No edit needed."} Canonical alert: ${JSON.stringify(alert)}`
       );
     }
+  }
+
+  if (!execCtx.nodeRun.id) {
+    return completeFailedNode(
+      "The full Flow report cannot be saved. Downstream nodes were not started.",
+      nodeContext
+    );
   }
 
   let result: AutomationAgentResult;
@@ -426,12 +439,16 @@ export async function executeFlowAgentNode(
     };
   }
 
+  const handoff = buildFlowReportHandoff(execCtx.nodeRun.id, result.text);
   const nodeDurationMs = await completeNodeRun({
+    requirePersistence: true,
     status: "success",
     output: {
       role: nodeRole,
       harness: nodeHarness,
-      text: summarizeNodeOutput(result.text),
+      text: result.text,
+      text_summary: summarizeNodeOutput(result.text),
+      handoff,
       review: reviewOutcome,
       tool_calls: toolCalls,
       // The merge itself runs after the review check run is
@@ -457,9 +474,9 @@ export async function executeFlowAgentNode(
     );
   }
 
-  const summary = summarizeNodeOutput(result.text);
-  state.outputs.set(node.id, { label, text: summary });
-  state.results.push(result);
+  const handoffText = JSON.stringify(handoff);
+  state.outputs.set(node.id, { label, text: handoffText, handoff });
+  state.results.push({ ...result, text: handoff.summary });
 
   return {
     ok: true as const,
@@ -467,11 +484,12 @@ export async function executeFlowAgentNode(
       resolvedFlow.graph,
       node.id,
       label,
-      summary,
+      handoffText,
       false,
       {
         role: nodeRole,
         review: reviewOutcome,
+        handoff,
       }
     ),
     failureContext: nodeContext,

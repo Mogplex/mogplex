@@ -17,6 +17,11 @@ it("preflight checks owned installations, repositories, agents and enabled model
     };
     const task = graph.nodes.find((node) => node.type === "agent")!;
     task.data.agentId = AGENT_ID;
+    task.data.modelOverride = null;
+    expect(await validateFlowConfiguration("owner", graph, 123)).toEqual({
+      valid: true,
+      errors: [],
+    });
     task.data.modelOverride = "openai/test-model";
     expect(await validateFlowConfiguration("owner", graph, 123)).toEqual({
       valid: true,
@@ -57,6 +62,10 @@ it("preflight checks owned installations, repositories, agents and enabled model
     await db.pg.exec(
       "insert into user_model_preferences values ('owner','openai/test-model',false)"
     );
+    task.data.modelOverride = null;
+    expect(
+      (await validateFlowConfiguration("owner", graph, 123)).errors.join(" ")
+    ).toMatch(/No enabled model is available/);
     expect((await validateFlowConfiguration("owner", graph, 123)).valid).toBe(
       false
     );

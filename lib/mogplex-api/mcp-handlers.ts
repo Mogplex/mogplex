@@ -289,6 +289,22 @@ export async function callMogplexTool(
           result
         );
       }
+      case "mogplex_cancel_automation_run": {
+        const input = parseArgs(
+          z
+            .object({
+              automationId: z.string().uuid(),
+              runId: z.string().uuid(),
+            })
+            .strict(),
+          args
+        );
+        const result = await context.client.cancelAutomationRun(input);
+        return textResult(
+          `Automation run ${result.runId} is ${result.status}.`,
+          result
+        );
+      }
       case "mogplex_start_agent_run": {
         const input = parseArgs(startAgentRunArgsSchema, args);
         const result = await context.client.startAgentRun({

@@ -70,9 +70,9 @@ const modelFixture = {
   is_hidden: false,
 };
 
-test("flows inspector saves a user-picked fallback model for upstream issues", async ({
+test("flows inspector saves a fallback and restores inherited model defaults", async ({
   page,
-}) => {
+}, testInfo) => {
   const pageErrors = capturePageErrors(page);
   // Width must be >= 1520 so the flows container (minus ~240px sidebar) exceeds
   // the 1280px dock-mode threshold.
@@ -203,4 +203,35 @@ test("flows inspector saves a user-picked fallback model for upstream issues", a
     })
     .toBe("openai/gpt-5.4");
   expect(pageErrors).toEqual([]);
+
+  await page.getByTestId("rf__node-agent-a").click();
+  const modelSelect = page.getByLabel("Model", { exact: true });
+  await modelSelect.click();
+  await page
+    .getByRole("option", { name: "Default from settings", exact: true })
+    .click();
+  await expect(modelSelect).toHaveAttribute("data-value", "");
+  await expect(page.getByTestId("flows-missing-model-warning")).toHaveCount(0);
+  await page.getByTestId("flows-inspector-close").click();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/flows/flow-1") &&
+      response.request().method() === "PUT"
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+  await saved;
+  expect(
+    (currentFlow.draft_graph.nodes as FlowNode[]).find(
+      (node) => node.type === "agent"
+    )?.data.modelOverride
+  ).toBeNull();
+  await page.reload();
+  await page.getByTestId("rf__node-agent-a").click();
+  await expect(page.getByLabel("Model", { exact: true })).toHaveText(
+    "Default from settings"
+  );
+  await expect(page.getByTestId("flows-missing-model-warning")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+  await expect(page.getByTestId("flows-legacy-model-banner")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("inherited-model.png") });
 });

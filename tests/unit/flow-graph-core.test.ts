@@ -112,7 +112,7 @@ test("validateFlowGraph still requires a binding for Mogplex agent nodes", () =>
   assert.match(validation.errors.join("\n"), /must be assigned to an agent/i);
 });
 
-test("validateFlowGraph rejects a Mogplex agent node with no model selected", () => {
+test("validateFlowGraph accepts a Mogplex agent node inheriting the default model", () => {
   const graph = createDefaultFlowGraph({
     event: "pr_opened",
     agentId: "agent-1",
@@ -123,8 +123,7 @@ test("validateFlowGraph rejects a Mogplex agent node with no model selected", ()
   agentNode.data.modelOverride = null;
 
   const validation = validateFlowGraph(graph);
-  assert.equal(validation.valid, false);
-  assert.match(validation.errors.join("\n"), /must have a model selected/i);
+  assert.deepEqual(validation, { valid: true, errors: [] });
 });
 
 test("validateFlowGraph treats a whitespace-only model as unset", () => {
@@ -138,8 +137,7 @@ test("validateFlowGraph treats a whitespace-only model as unset", () => {
   agentNode.data.modelOverride = "   ";
 
   const validation = validateFlowGraph(graph);
-  assert.equal(validation.valid, false);
-  assert.match(validation.errors.join("\n"), /must have a model selected/i);
+  assert.deepEqual(validation, { valid: true, errors: [] });
 });
 
 test("validateFlowGraph exempts CLI harness nodes from the model requirement", () => {
