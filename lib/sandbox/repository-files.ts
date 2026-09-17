@@ -79,7 +79,7 @@ export function githubRepositoryFiles(input: {
     if (response.status === 404) return null;
     if (!response.ok)
       throw new Error(
-        `Could not inspect repository dev port (GitHub ${response.status})`
+        `Could not inspect repository files (GitHub ${response.status})`
       );
     return response;
   };

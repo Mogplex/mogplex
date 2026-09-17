@@ -1,4 +1,5 @@
 import type { Sandbox } from "@vercel/sandbox";
+import { assertBaselineRuntime } from "./baseline-runtime";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { computeLockfileHashFromSandbox } from "@/lib/sandbox/lockfile-hash";
 import { BaselineSnapshotRestoreError } from "@/lib/sandbox/baseline-errors";
@@ -191,6 +192,7 @@ export async function* bootstrapFromBaselineSnapshotStreaming(
   opts: BaselineSnapshotBootstrapOpts
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
   const context = await resolveBootstrapContext(sandbox, opts);
+  await assertBaselineRuntime(sandbox, context.effectiveRuntime);
   if (context.monorepoAutoTargetMessage) {
     yield { type: "warning", message: context.monorepoAutoTargetMessage };
   }

@@ -2,6 +2,9 @@ import { nodeStrategy, node24Strategy } from "./node";
 import { pythonStrategy } from "./python";
 import type { Sandbox } from "@vercel/sandbox";
 import type { RuntimeStrategy, SandboxRuntime, DetectionResult } from "./types";
+import { githubRepositoryFiles } from "../repository-files";
+import { detectNodeRuntimeFromFiles } from "./node-version";
+import { resolveMonorepoWebTargetFromFiles } from "./node-monorepo";
 
 export {
   SUPPORTED_RUNTIMES,
@@ -32,7 +35,7 @@ export async function detectRuntime(
   sandbox: Sandbox,
   rootDir?: string | null
 ): Promise<DetectionResult> {
-  // node22 is the default for Node projects; node24 requires explicit opt-in via repo settings
+  // The VM runtime was selected before creation; detect package tooling here.
   const order: RuntimeStrategy[] = [nodeStrategy, pythonStrategy];
 
   for (const strategy of order) {
@@ -55,36 +58,26 @@ export async function detectRuntimeFromGithub(
   branch?: string,
   rootDirectory?: string | null
 ): Promise<SandboxRuntime> {
-  const ref = branch || "main";
-  const prefix = rootDirectory ? `${rootDirectory}/` : "";
-
-  const fileExists = async (path: string): Promise<boolean> => {
-    try {
-      const res = await fetch(
-        `https://api.github.com/repos/${repoFullName}/contents/${prefix}${path}?ref=${ref}`,
-        {
-          method: "HEAD",
-          headers: {
-            Authorization: `Bearer ${githubToken}`,
-            Accept: "application/vnd.github.v3+json",
-          },
-        }
-      );
-      return res.ok;
-    } catch {
-      return false;
-    }
-  };
-
-  const [hasPackageJson, hasRequirements, hasPyproject] = await Promise.all([
-    fileExists("package.json"),
-    fileExists("requirements.txt"),
-    fileExists("pyproject.toml"),
+  const files = githubRepositoryFiles({
+    repoFullName,
+    githubToken,
+    ref: branch || "main",
+  });
+  const prefix = rootDirectory ? `${rootDirectory.replace(/\/$/, "")}/` : "";
+  const [pkg, requirements, pyproject] = await Promise.all([
+    files.readText(`${prefix}package.json`),
+    files.readText(`${prefix}requirements.txt`),
+    files.readText(`${prefix}pyproject.toml`),
   ]);
 
   // If both exist, prefer Node (user can override in settings)
-  if (hasPackageJson) return "node22";
-  if (hasRequirements || hasPyproject) return "python3.13";
+  if (pkg !== null) {
+    const autoTarget = rootDirectory
+      ? null
+      : await resolveMonorepoWebTargetFromFiles(files);
+    return detectNodeRuntimeFromFiles(files, autoTarget?.path ?? rootDirectory);
+  }
+  if (requirements !== null || pyproject !== null) return "python3.13";
 
   return "node22";
 }
