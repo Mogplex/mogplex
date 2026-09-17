@@ -50,7 +50,7 @@ test("scheduled tasks return command output and nonzero check results from their
   assert.deepEqual(commands, [
     {
       cmd: "sh",
-      args: ["-lc", "pnpm test"],
+      args: ["-lc", 'export PATH="$HOME/.local/bin:$PATH"\npnpm test'],
       cwd: "/repo/app",
       env: { GH_TOKEN: "test-token", GITHUB_TOKEN: "test-token" },
     },

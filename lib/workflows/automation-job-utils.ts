@@ -152,6 +152,8 @@ export function toReviewFindings(value: unknown): ReviewFinding[] {
 
 export function normalizeAutomationAssignmentType(type: string) {
   switch (type) {
+    case "schedule":
+      return "cron";
     case "pr_opened":
       return "pr_review";
     case "issue_opened":

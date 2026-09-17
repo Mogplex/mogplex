@@ -22,12 +22,10 @@ export function getStandaloneNextConfigBlobId() {
 }
 
 /**
- * Shared agent branch synchronization state machine. Callers provide
- * MOGPLEX_BASE_BRANCH, MOGPLEX_WORKING_BRANCH, and MOGPLEX_CREATE_BRANCH in
- * the command environment; transport-specific code decides how to inject
- * them.
+ * Remove unchanged platform preview patches and ignore platform runtime files.
+ * Preserve every change that does not exactly match a boot artifact.
  */
-export function buildAgentGitSyncScript() {
+export function buildAgentWorkspaceCleanupScript() {
   const injectedLine = buildNextConfigInjectedLine();
   if (injectedLine.includes("'") || injectedLine.includes("\n")) {
     throw new Error(
@@ -37,12 +35,6 @@ export function buildAgentGitSyncScript() {
   const standaloneBlobId = getStandaloneNextConfigBlobId();
   return `
 set -eu
-git check-ref-format --branch "$MOGPLEX_BASE_BRANCH" >/dev/null
-git check-ref-format --branch "$MOGPLEX_WORKING_BRANCH" >/dev/null
-if [ -n "$MOGPLEX_FALLBACK_BRANCH" ]; then
-  git check-ref-format --branch "$MOGPLEX_FALLBACK_BRANCH" >/dev/null
-fi
-if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
   # Sandbox boot leaves platform-owned artifacts behind: runtime files under
   # .mogplex/ and the allowedDevOrigins preview patch in next.config.*. Neither
   # is the user's work, so neutralize both before judging whether the tree is
@@ -73,6 +65,20 @@ if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
       rm -f -- "$cfg"
     fi
   done
+`.trim();
+}
+
+/** Shared branch synchronization; callers supply MOGPLEX_* through the environment. */
+export function buildAgentGitSyncScript() {
+  return `
+set -eu
+git check-ref-format --branch "$MOGPLEX_BASE_BRANCH" >/dev/null
+git check-ref-format --branch "$MOGPLEX_WORKING_BRANCH" >/dev/null
+if [ -n "$MOGPLEX_FALLBACK_BRANCH" ]; then
+  git check-ref-format --branch "$MOGPLEX_FALLBACK_BRANCH" >/dev/null
+fi
+if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ]; then
+${buildAgentWorkspaceCleanupScript()}
 fi
 if [ "$MOGPLEX_REQUIRE_CLEAN" = 1 ] && [ -n "$(git status --porcelain)" ]; then
   echo "The sandbox workspace is not clean before the agent run. Commit, discard, or move the existing changes, then retry." >&2
