@@ -115,51 +115,17 @@ test("models catalog supports provider, state, pricing filters, and state sortin
 }) => {
   await enableScopedE2EAuth(page);
   let defaultModel = "minimax/minimax-m2.7";
-  const settingsPatches: Array<{
-    default_model?: string;
-    apply_to_surfaces?: string[];
-    automation_ids?: string[];
-  }> = [];
-  await page.route("**/api/settings/model-targets", (route) =>
-    fulfillJson(route, {
-      surfaces: ["chat", "slack", "cli", "control", "agents"].map((id) => ({
-        id,
-        model: defaultModel,
-      })),
-      automations: [
-        {
-          id: "00000000-0000-4000-8000-000000000003",
-          name: "PR Review",
-          team_id: null,
-        },
-        {
-          id: "00000000-0000-4000-8000-000000000004",
-          name: "Daily summary",
-          team_id: null,
-        },
-      ],
-    })
-  );
+  await page.route("**/api/settings/model-chain", async (route) => {
+    if (route.request().method() === "PATCH")
+      defaultModel = route.request().postDataJSON().primary;
+    await fulfillJson(route, { primary: defaultModel, fallbacks: [] });
+  });
   const catalogState = catalog.map((model) => ({ ...model }));
 
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
   );
   await page.route(/\/api\/settings(?:\?.*)?$/, async (route) => {
-    if (route.request().method() === "PATCH") {
-      const payload = JSON.parse(route.request().postData() || "{}") as {
-        default_model?: string;
-        apply_to_surfaces?: string[];
-        automation_ids?: string[];
-      };
-      settingsPatches.push(payload);
-      if (payload.default_model) {
-        defaultModel = payload.default_model;
-      }
-      await fulfillJson(route, { ok: true });
-      return;
-    }
-
     await fulfillJson(route, { default_model: defaultModel, theme: "dark" });
   });
   await page.route("**/api/models", async (route) => {
@@ -213,12 +179,11 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   await page.goto(scopedPath("settings?tab=models"));
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByTestId("models-default-summary")).toContainText(
-    "minimax-m2.7"
-  );
+  const primary = page.getByRole("button", { name: "Primary", exact: true });
+  await expect(primary).toContainText("Minimax M2.7");
   await expect(
     page.getByTestId("models-set-default-minimax/minimax-m2.7")
-  ).toContainText("Selected");
+  ).toHaveCount(0);
   await expect(
     page.getByTestId("models-recommendation-freshness")
   ).toContainText("Recommendations refreshed");
@@ -243,39 +208,12 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   ).toBeDisabled();
   await page.getByTestId("models-toggle-openai/gpt-oss-120b").click();
 
-  // Changing the default asks first; cancelling saves nothing.
   await page.getByTestId("models-set-default-openai/gpt-oss-120b").click();
-  await expect(page.getByTestId("models-default-dialog")).toBeVisible();
-  await expect(
-    page.getByRole("switch", { name: "Apply to PR Review", exact: true })
-  ).toHaveAttribute("data-state", "unchecked");
-  await page.getByTestId("models-default-cancel").click();
-  await expect(page.getByTestId("models-default-dialog")).toHaveCount(0);
-  expect(settingsPatches).toHaveLength(0);
-  await expect(page.getByTestId("models-default-summary")).toContainText(
-    "minimax-m2.7"
-  );
-
-  // Only deliberately selected destinations receive the new model.
-  await page.getByTestId("models-set-default-openai/gpt-oss-120b").click();
-  await page
-    .getByRole("switch", { name: "Apply to PR Review", exact: true })
-    .click();
-  await page.getByRole("switch", { name: "Slack agent", exact: true }).click();
-  await page.getByRole("switch", { name: "CLI", exact: true }).click();
-  await page.getByTestId("models-default-confirm").click();
-  await expect(page.getByTestId("models-default-summary")).toContainText(
-    "gpt-oss-120b"
-  );
-  await expect(
-    page.getByTestId("models-set-default-openai/gpt-oss-120b")
-  ).toContainText("Selected");
+  await expect(primary).toContainText("GPT-OSS 120B");
+  expect(defaultModel).toBe("minimax/minimax-m2.7");
+  await page.getByRole("button", { name: "Save chain" }).click();
+  await expect(page.getByRole("status")).toHaveText("Chain saved.");
   expect(defaultModel).toBe("openai/gpt-oss-120b");
-  expect(settingsPatches.at(-1)).toEqual({
-    default_model: "openai/gpt-oss-120b",
-    apply_to_surfaces: ["slack", "cli"],
-    automation_ids: ["00000000-0000-4000-8000-000000000003"],
-  });
 
   await expect(page.getByText("In $2.50")).toBeVisible();
   await expect(page.getByText("Out $75")).toBeVisible();
@@ -319,22 +257,8 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   visibleNames = await page.getByTestId("models-row-name").allTextContents();
   expect(visibleNames).toEqual(["Minimax M2.7"]);
 
-  // Reopening clears all choices. A default-only save touches no destinations.
   await page.getByTestId("models-set-default-minimax/minimax-m2.7").click();
-  await expect(page.getByTestId("models-default-dialog")).toBeVisible();
-  await expect(
-    page.getByRole("switch", { name: "Apply to PR Review", exact: true })
-  ).not.toBeChecked();
-  await expect(
-    page.getByRole("switch", { name: "Slack agent", exact: true })
-  ).not.toBeChecked();
-  await page.getByTestId("models-default-confirm").click();
-  await expect(page.getByTestId("models-default-summary")).toContainText(
-    "minimax-m2.7"
-  );
-  expect(settingsPatches.at(-1)).toEqual({
-    default_model: "minimax/minimax-m2.7",
-    apply_to_surfaces: [],
-    automation_ids: [],
-  });
+  await expect(primary).toContainText("Minimax M2.7");
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(primary).toContainText("GPT-OSS 120B");
 });

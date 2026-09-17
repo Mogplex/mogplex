@@ -14,6 +14,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createModelFallbackHandlers } from "@/app/api/settings/model-fallbacks/route";
 import { loadUsableFallbackModelIds } from "@/lib/models/fallback-preferences";
 import { resolveAutomationModel } from "@/lib/workflows/automation-job-model-resolution";
+import { createModelChainHandlers } from "@/app/api/settings/model-chain/route";
 
 const owner = "00000000-0000-4000-8000-000000000011";
 const other = "00000000-0000-4000-8000-000000000012";
@@ -271,4 +272,91 @@ test("settings API saves the selected automation and surfaces through real SQL",
       )
     ).rows[0].default_model
   ).toBe("openai/new");
+});
+
+test("model chains commit together, preserve destinations and roll back on database failure", async () => {
+  await db.query(
+    "update profiles set default_model='openai/old',fallback_model_ids=null,surface_models='{}' where id=$1",
+    [owner]
+  );
+  await db.query("update flows set draft_graph=$2 where id=$1", [
+    chosen,
+    graph,
+  ]);
+  const { GET, PATCH } = createModelChainHandlers({
+    requireUserId: async () => owner,
+  });
+  const patch = (primary: string, fallbacks: string[]) =>
+    PATCH(
+      new Request("http://localhost/api/settings/model-chain", {
+        method: "PATCH",
+        body: JSON.stringify({ primary, fallbacks }),
+      })
+    );
+  expect((await patch("openai/new", ["openai/old"])).status).toBe(200);
+  expect(await (await GET()).json()).toEqual({
+    primary: "openai/new",
+    fallbacks: ["openai/old"],
+  });
+  const profile = (
+    await db.query<{ surface_models: Record<string, string> }>(
+      "select surface_models from profiles where id=$1",
+      [owner]
+    )
+  ).rows[0];
+  expect(Object.values(profile.surface_models)).toEqual(
+    Array.from({ length: 5 }).fill("openai/old")
+  );
+  expect(
+    (
+      await db.query<{ draft_graph: typeof graph }>(
+        "select draft_graph from flows where id=$1",
+        [chosen]
+      )
+    ).rows[0].draft_graph
+  ).toEqual(graph);
+  expect(
+    await (
+      await createModelChainHandlers({ requireUserId: async () => other }).GET()
+    ).json()
+  ).toEqual({ primary: "openai/old", fallbacks: [] });
+  for (const [primary, fallbacks] of [
+    ["openai/old", ["openai/missing"]],
+    ["openai/new", ["openai/new"]],
+    ["openai/missing", []],
+  ] as const) {
+    expect((await patch(primary, [...fallbacks])).status).toBe(400);
+    expect(await (await GET()).json()).toEqual({
+      primary: "openai/new",
+      fallbacks: ["openai/old"],
+    });
+  }
+  await db.exec(
+    "create function reject_chain_test() returns trigger language plpgsql as $$ begin raise exception 'test storage failure'; end $$; create trigger reject_chain_test before update of fallback_model_ids on profiles for each row execute function reject_chain_test()"
+  );
+  try {
+    expect((await patch("openai/old", [])).status).toBe(500);
+    expect(await (await GET()).json()).toEqual({
+      primary: "openai/new",
+      fallbacks: ["openai/old"],
+    });
+  } finally {
+    await db.exec(
+      "drop trigger reject_chain_test on profiles; drop function reject_chain_test()"
+    );
+  }
+  await db.query(
+    "insert into user_model_preferences(user_id,model_id,is_enabled) values ($1,'openai/new',false)",
+    [owner]
+  );
+  expect((await patch("openai/new", [])).status).toBe(400);
+  // GET preserves a disabled saved primary so the editor can warn about it.
+  expect((await (await GET()).json()).primary).toBe("openai/new");
+  await db.query("delete from user_model_preferences where user_id=$1", [
+    owner,
+  ]);
+  await db.query(
+    "update profiles set default_model='openai/old',fallback_model_ids=null,surface_models='{}' where id=$1",
+    [owner]
+  );
 });

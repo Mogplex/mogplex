@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useCallback, useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import useSWR, { useSWRConfig } from "swr"
+import useSWR from "swr"
 import { useUser } from "@/hooks/use-user"
 import { fetchJsonArray, fetchJsonObject } from "@/lib/client-fetch"
 import { ModelsSection } from "@/components/library/models-section"
@@ -13,7 +13,6 @@ import { CliApiKeysSection } from "@/components/settings/cli-api-keys-section"
 import { SlackInstallToast } from "@/components/connections/slack-install-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { DefaultModelDialog, type DefaultModelSelection } from "@/components/settings/default-model-dialog"
 import { trackActivation } from "@/lib/activation-tracking"
 import type { ScopeContext } from "@/lib/scope-context"
 
@@ -41,7 +40,6 @@ export function SettingsPageClient({ scope }: { scope: ScopeContext }) {
 }
 
 function PersonalSettingsClient() {
-  const { mutate } = useSWRConfig()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -82,14 +80,7 @@ function PersonalSettingsClient() {
   }, [router, pathname])
 
   const { user, isLoading } = useUser()
-  const [defaultModel, setDefaultModel] = useState("")
-  const [saving, setSaving] = useState(false)
-  const [pendingDefaultModel, setPendingDefaultModel] = useState<string | null>(null)
-  const {
-    data: settingsData,
-    error: settingsError,
-    mutate: mutateSettings,
-  } = useSWR<SettingsView>(
+  const { error: settingsError } = useSWR<SettingsView>(
     "/api/settings",
     (url: string) => fetchJsonObject<SettingsView>(url, "Failed to load settings"),
   )
@@ -170,36 +161,8 @@ function PersonalSettingsClient() {
     }
   }, [user?.github_app_available])
 
-  useEffect(() => {
-    if (typeof settingsData?.default_model === "string") {
-      setDefaultModel(settingsData.default_model)
-    }
-  }, [settingsData])
-
-  const saveDefaultModel = useCallback(async (selection: DefaultModelSelection) => {
-    if (!pendingDefaultModel) return
-    setSaving(true)
-    try {
-      const response = await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ default_model: pendingDefaultModel, apply_to_surfaces: selection.surfaces, automation_ids: selection.flowIds }),
-      })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || "Unable to save model settings")
-      setDefaultModel(pendingDefaultModel)
-      await mutateSettings((current) => ({ ...(current ?? {}), default_model: pendingDefaultModel }), false)
-      void mutate((key) => Array.isArray(key) && key[0] === "/api/models")
-      void mutate("/api/settings/model-targets")
-    } finally { setSaving(false) }
-  }, [pendingDefaultModel, mutateSettings, mutate])
-
-  const requestDefaultModel = useCallback(async (modelId: string) => {
-    setPendingDefaultModel(modelId)
-  }, [])
-
   return (
-    <div className="min-h-full p-3 space-y-4 md:p-6 md:space-y-6">
+    <div className="min-h-full w-full max-w-[1488px] p-3 space-y-4 md:p-6 md:space-y-6">
       <SlackInstallToast />
       <div>
         <h1 className="ui-page-title">Settings</h1>
@@ -263,11 +226,7 @@ function PersonalSettingsClient() {
         </TabsContent>
 
         <TabsContent value="models" className="mt-0">
-          <ModelsSection
-            defaultModel={defaultModel}
-            onSetDefault={requestDefaultModel}
-            savingDefault={saving}
-          />
+          <ModelsSection />
         </TabsContent>
 
         <TabsContent value="agents" className="mt-0">
@@ -278,9 +237,6 @@ function PersonalSettingsClient() {
           <BillingSection embedded />
         </TabsContent>
       </Tabs>
-
-      {pendingDefaultModel && <DefaultModelDialog key={pendingDefaultModel} model={pendingDefaultModel}
-        onClose={() => setPendingDefaultModel(null)} onSave={saveDefaultModel} />}
     </div>
   )
 }
