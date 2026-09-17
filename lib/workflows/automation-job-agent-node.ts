@@ -1,4 +1,6 @@
 import { fetchDependabotAlert } from "@/lib/agents/dependabot";
+import { buildFlowReportHandoff } from "./flow-report-handoff";
+import { collectAncestorReports } from "./flow-report-context";
 /**
  * Agent node execution for executeResolvedFlow.
  *
@@ -253,10 +255,15 @@ export async function executeFlowAgentNode(
       ...(nodeRole === "review" && node.data.autoMerge === true
         ? { flow_auto_merge: true }
         : {}),
-      // The agent runner needs the job run id to persist approval
-      // waits; it is only stamped when the node opted into gating.
+      // Report reads and optional approval waits are scoped to this job.
+      flow_job_run_id: jobRunId,
+      flow_reports: collectAncestorReports(
+        resolvedFlow.graph,
+        node.id,
+        state.outputs
+      ),
       ...(node.data.requireApproval === true
-        ? { flow_require_approval: true, flow_job_run_id: jobRunId }
+        ? { flow_require_approval: true }
         : {}),
       flow_previous_outputs: predecessorOutputs.map((entry) => ({
         label: entry.label,
@@ -425,13 +432,22 @@ export async function executeFlowAgentNode(
     };
   }
 
+  if (!execCtx.nodeRun.id) {
+    return completeFailedNode(
+      "The full Flow report cannot be saved. Downstream nodes were not started.",
+      nodeContext
+    );
+  }
+  const handoff = buildFlowReportHandoff(execCtx.nodeRun.id, result.text);
   const nodeDurationMs = await completeNodeRun({
+    requirePersistence: true,
     status: "success",
     output: {
       role: nodeRole,
       harness: nodeHarness,
       text: result.text,
       text_summary: summarizeNodeOutput(result.text),
+      handoff,
       review: reviewOutcome,
       tool_calls: toolCalls,
       // The merge itself runs after the review check run is
@@ -457,10 +473,9 @@ export async function executeFlowAgentNode(
     );
   }
 
-  // Summaries are for display only; later nodes and conditions need the verdict
-  // and evidence even when they occur beyond the preview cutoff.
-  state.outputs.set(node.id, { label, text: result.text });
-  state.results.push(result);
+  const handoffText = JSON.stringify(handoff);
+  state.outputs.set(node.id, { label, text: handoffText, handoff });
+  state.results.push({ ...result, text: handoff.summary });
 
   return {
     ok: true as const,
@@ -468,11 +483,12 @@ export async function executeFlowAgentNode(
       resolvedFlow.graph,
       node.id,
       label,
-      result.text,
+      handoffText,
       false,
       {
         role: nodeRole,
         review: reviewOutcome,
+        handoff,
       }
     ),
     failureContext: nodeContext,

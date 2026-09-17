@@ -1,5 +1,6 @@
 import { buildDependabotTools } from "@/lib/agents/dependabot";
 import { buildScheduledTaskTools } from "@/lib/agents/scheduled-task";
+import { buildFlowReportTools } from "./flow-report-tools";
 import { createTaskSandboxLoader } from "./automation-task-sandbox";
 import { createDependabotSandboxLoader } from "./automation-dependabot-sandbox";
 import { generateText } from "ai";
@@ -281,7 +282,11 @@ export function createAutomationAgentRunner(
         model: resolvedModel.model,
         providerOptions: resolvedModel.providerOptions,
         system: buildAutomationSystem(runSpec.system, gatewayContext),
-        tools: applyToolApprovalGate(tools, context, deps),
+        tools: applyToolApprovalGate(
+          { ...tools, ...buildFlowReportTools(context) },
+          context,
+          deps
+        ),
         prompt: runSpec.prompt,
         stopWhen: () => false,
       },
@@ -317,7 +322,11 @@ async function runPRFixAgentWithTools(input: {
     request: {
       model: input.resolvedModel.model,
       providerOptions: input.resolvedModel.providerOptions,
-      tools: applyToolApprovalGate(input.tools, input.context, input.deps),
+      tools: applyToolApprovalGate(
+        { ...input.tools, ...buildFlowReportTools(input.context) },
+        input.context,
+        input.deps
+      ),
       system: buildAutomationSystem(undefined, gatewayContext),
       prompt: runSpec.prompt,
       stopWhen: () => false,

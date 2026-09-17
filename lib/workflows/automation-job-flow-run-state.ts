@@ -10,8 +10,13 @@
 import type { FlowGraph } from "@/lib/types";
 import type { FlowExecutionToken } from "@/lib/workflows/automation-job-types";
 import { getOutgoingEdges } from "@/lib/flows/graph";
+import type { FlowReportHandoff } from "./flow-report-handoff";
 
-export type FlowRunOutput = { label: string; text: string };
+export type FlowRunOutput = {
+  label: string;
+  text: string;
+  handoff?: FlowReportHandoff;
+};
 
 export type FlowEmission = {
   targetId: string;

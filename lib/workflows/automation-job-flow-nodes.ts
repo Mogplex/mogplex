@@ -66,6 +66,7 @@ export async function createFlowNodeRun(input: {
 
 export async function completeFlowNodeRun(input: {
   nodeRunId: string;
+  requirePersistence?: boolean;
   status: FlowNodeRunStatus;
   startedAt: string;
   output?: Record<string, unknown> | null;
@@ -92,6 +93,10 @@ export async function completeFlowNodeRun(input: {
   }
 
   if (!data) {
+    if (input.requirePersistence)
+      throw new Error(
+        "Flow report was not saved; the node was removed or cancelled"
+      );
     return durationMs;
   }
 

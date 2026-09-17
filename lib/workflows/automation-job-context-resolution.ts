@@ -6,6 +6,7 @@ import {
 } from "@/lib/workflows/automation-job-utils";
 import { coerceGraph, getStartConfig } from "@/lib/flows/graph";
 import type { FlowNode } from "@/lib/types";
+import type { FlowRunOutput } from "./automation-job-flow-run-state";
 import { resolveJobRunRuntimeDetails } from "@/lib/workflows/automation-job-metadata";
 import { startAutomationJobRun } from "@/lib/workflows/automation-job-start";
 import { releaseQueuedJobs as releaseQueuedJobsBase } from "@/lib/workflows/automation-job-persistence";
@@ -100,7 +101,7 @@ export function resolveFlowAgentOverrides(
 export function buildFlowConditionState(input: {
   context: JobContext;
   inboundTokens: FlowExecutionToken[];
-  outputs: Map<string, { label: string; text: string }>;
+  outputs: Map<string, FlowRunOutput>;
   flowState: Map<string, unknown>;
 }) {
   const outputsByNodeId = Object.fromEntries(
@@ -124,6 +125,11 @@ export function buildFlowConditionState(input: {
       default_branch: input.context.repo.default_branch ?? null,
     },
     outputs: outputsByNodeId,
+    decisions: Object.fromEntries(
+      [...input.outputs]
+        .filter(([, output]) => output.handoff)
+        .map(([id, output]) => [id, output.handoff!.decision])
+    ),
     outputs_by_label: outputsByLabel,
     previous_outputs: input.inboundTokens
       .filter((token) => !token.skipped && token.text.trim().length > 0)

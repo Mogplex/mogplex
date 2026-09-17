@@ -7,19 +7,40 @@ import {
   buildPromptForJob,
 } from "@/lib/workflows/automation-job-prompts";
 import type { JobContext } from "@/lib/workflows/automation-job-types";
+import { readFlowReports } from "@/lib/workflows/flow-report-handoff";
+import {
+  materializeFlowReports,
+  readFlowReportChunk,
+} from "@/lib/workflows/flow-report-tools";
 import {
   createAutomationDb,
   AGENT_ID,
   REPO_ID,
 } from "./helpers/mcp-automation-fixture";
 
-it.each(["mogplex", "claude-code"] as const)(
-  "%s passes a trailing verdict intact to the next node and stores full output",
-  async (harness) => {
+it.each([
+  ["mogplex", false],
+  ["claude-code", false],
+  ["codex", false],
+  ["mogplex", true],
+  ["claude-code", true],
+  ["codex", true],
+] as const)(
+  "%s preserves bounded handoffs and stops on report storage failure=%s",
+  async (harness, failStorage) => {
     const db = await createAutomationDb();
-    const analysis = `${"Detailed evidence. ".repeat(60_000)}\nDECISION: NO_ACTION`;
+    const analysis = `${"Detailed evidence. ".repeat(60_000)}\nMOGPLEX_FLOW_HANDOFF: {"decision":"NO_ACTION","summary":"Both changes already have open PRs."}`;
     expect(Buffer.byteLength(analysis)).toBeGreaterThan(1_000_000);
     try {
+      if (failStorage)
+        await db.pg.exec(`
+        create function reject_report() returns trigger language plpgsql as $$
+        begin
+          if length(new.output->>'text') > 1000000 then raise exception 'report storage unavailable'; end if;
+          return new;
+        end $$;
+        create trigger reject_report before update on flow_node_runs for each row execute function reject_report();
+      `);
       const graph = coerceGraph(structuredClone(scheduledTaskExample));
       const apply = graph.nodes.find((node) => node.type === "agent")!;
       apply.data.harness = harness;
@@ -58,14 +79,50 @@ it.each(["mogplex", "claude-code"] as const)(
         )
       ).rows[0].id;
       const prompts: string[] = [];
-      const resultFor = (context: JobContext, prompt: string) => {
+      const resultFor = async (context: JobContext, prompt: string) => {
         if (context.metadata.flow_node_id === "analyst")
           return { text: analysis, steps: [], usage: null };
         prompts.push(prompt);
-        expect(context.metadata.flow_previous_outputs).toEqual([
-          { label: "Analysis", output: analysis },
-        ]);
-        expect(prompt).toContain(analysis);
+        const [report] = readFlowReports(context.metadata);
+        expect(report.decision).toEqual({
+          status: "reported",
+          value: "NO_ACTION",
+        });
+        expect(prompt).toContain('"value":"NO_ACTION"');
+        expect(prompt).not.toContain(analysis);
+        expect(prompt.length).toBeLessThan(20_000);
+        expect(JSON.stringify(context.metadata).length).toBeLessThan(10_000);
+        let restored = "";
+        let offset: number | null = 0;
+        while (offset !== null) {
+          const chunk = await readFlowReportChunk(
+            context,
+            report.reportId,
+            offset
+          );
+          expect(chunk.text.length).toBeLessThanOrEqual(20_000);
+          restored += chunk.text;
+          offset = chunk.nextOffset;
+        }
+        expect(restored).toBe(analysis);
+        expect(
+          (await readFlowReportChunk(context, report.reportId, 0)).text
+        ).toBe(analysis.slice(0, 20_000));
+        for (const deniedContext of [
+          { ...context, repo: { ...context.repo, user_id: "other" } },
+          {
+            ...context,
+            metadata: {
+              ...context.metadata,
+              flow_job_run_id: "99999999-9999-4999-8999-999999999999",
+            },
+          },
+          { ...context, metadata: { ...context.metadata, flow_reports: [] } },
+        ]) {
+          await expect(
+            readFlowReportChunk(deniedContext, report.reportId, 0)
+          ).rejects.toThrow();
+        }
         return {
           text: "NO_ACTION: skipped applying changes",
           steps: [],
@@ -87,8 +144,19 @@ it.each(["mogplex", "claude-code"] as const)(
               context.agent.system_prompt
             ).prompt
           ),
-        runAutomationHarnessAgent: async (input) =>
-          resultFor(input.context, buildAutomationHarnessPrompt(input)),
+        runAutomationHarnessAgent: async (input) => {
+          const files = new Map<string, string>();
+          await materializeFlowReports(input.context, async (path, text) => {
+            files.set(path, text);
+          });
+          if (input.context.metadata.flow_node_id !== "analyst") {
+            expect([...files.values()]).toContain(analysis);
+            expect(
+              files.get(String(input.context.metadata.flow_report_manifest))
+            ).toContain('"value":"NO_ACTION"');
+          }
+          return resultFor(input.context, buildAutomationHarnessPrompt(input));
+        },
         getDurationMs: async () => 10,
         persistJobSuccess: async () => true,
         persistJobFailure: async () => true,
@@ -109,6 +177,18 @@ it.each(["mogplex", "claude-code"] as const)(
           installationId: 123,
         },
       });
+      if (failStorage) {
+        expect(outcome.success).toBe(false);
+        expect(prompts).toHaveLength(0);
+        expect(
+          (
+            await db.pg.query(
+              "select status from flow_node_runs where node_id='analyst'"
+            )
+          ).rows
+        ).toEqual([{ status: "failed" }]);
+        return;
+      }
       expect(outcome.success, JSON.stringify(outcome)).toBe(true);
       expect(prompts).toHaveLength(1);
       const stored = (

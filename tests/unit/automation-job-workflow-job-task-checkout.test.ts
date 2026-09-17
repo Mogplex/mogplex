@@ -7,7 +7,7 @@ import {
   makePersistedReviewFindingsResult,
 } from "./helpers/automation-job-fixtures";
 
-test("createAutomationJobTask resolves PR head checkouts when harness review bookkeeping degrades", async () => {
+test("createAutomationJobTask resolves PR head checkouts but fails when the report cannot be preserved", async () => {
   const { createAutomationJobTask } = await loadAutomationJobWorkflowModule();
 
   const originalFetch = globalThis.fetch;
@@ -176,7 +176,9 @@ test("createAutomationJobTask resolves PR head checkouts when harness review boo
       id: null,
       htmlUrl: null,
     }),
-    persistJobSuccess: async () => true,
+    persistJobSuccess: async () => {
+      throw new Error("Must not report success without a saved report");
+    },
     persistJobReviewFindings: async () => makePersistedReviewFindingsResult(0),
     getDurationMs: async () => 444,
     tryLogAiCall: async () => null,
@@ -190,9 +192,7 @@ test("createAutomationJobTask resolves PR head checkouts when harness review boo
     releaseQueuedJobs: async () => [],
     isJobRunCancellationRequested: async () => false,
     throwIfJobRunCancelled: async () => {},
-    persistJobFailure: async () => {
-      throw new Error("persistJobFailure should not be called");
-    },
+    persistJobFailure: async () => true,
   });
 
   globalThis.fetch = async (input, init) => {
@@ -265,48 +265,16 @@ test("createAutomationJobTask resolves PR head checkouts when harness review boo
       },
     });
 
-    assert.deepEqual(result, {
-      success: true,
-      output: "No material issues found.",
-      observabilityError:
-        "Flow node run bookkeeping degraded while updating: Supabase unavailable",
-    });
-    assert.equal(patchAttempts, 6);
-    assert.deepEqual(completedCheckRun, {
-      conclusion: "success",
-      summary: "No material issues found.",
-      text: "No material issues found.",
-    });
-    assert.deepEqual(controlDispatchEvent, {
-      outcome: "completed",
-      reason: "PR_REVIEW_NO_FINDINGS",
-      metadata: {
-        review_outcome: "PR_REVIEW_NO_FINDINGS",
-        review_outcome_label: "No findings",
-        review_summary: "No material issues found.",
-        review_has_issues: false,
-        review_affected_files: [],
-        review_comment_posted: false,
-        review_timeline_comment_posted: true,
-        review_timeline_comment_id: 5143,
-        review_timeline_comment_url:
-          "https://github.com/acme/widgets/pull/143#issuecomment-5143",
-        review_timeline_comment_error: null,
-        review_github_review_posted: false,
-        review_github_review_id: null,
-        review_github_review_url: null,
-        review_github_review_error: null,
-        review_github_inline_comments_count: 0,
-        review_check_run_id: 143,
-        review_check_run_url: "https://github.com/acme/widgets/runs/143",
-        review_check_run_completed: true,
-        review_check_run_conclusion: "success",
-        review_check_run_error: null,
-        review_findings_count: 0,
-        review_findings_persisted: true,
-        review_findings_persist_error: null,
-      },
-    });
+    assert.equal(result.success, false);
+    assert.equal(patchAttempts, 5);
+    assert.notEqual(
+      (completedCheckRun as { conclusion: string } | null)?.conclusion,
+      "success"
+    );
+    assert.notEqual(
+      (controlDispatchEvent as CapturedControlDispatchEvent | null)?.outcome,
+      "completed"
+    );
     assert.deepEqual(loadedPullRequestInput, {
       repoFullName: "acme/widgets",
       prNumber: 143,

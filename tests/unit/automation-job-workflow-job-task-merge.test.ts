@@ -256,7 +256,7 @@ test("createAutomationJobTask defers safe merge actions until the review check i
           );
         }
         if (method === "PATCH") {
-          return new Response(null, { status: 204 });
+          return Response.json({ id: "node-run-updated" });
         }
       }
 
