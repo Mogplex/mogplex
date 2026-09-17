@@ -44,7 +44,12 @@ export function getFailureEdges(graph: FlowGraph, nodeId: string) {
   );
 }
 
-export const FLOW_AGENT_ROLE_OPTIONS = ["review", "edit", "triage"] as const;
+export const FLOW_AGENT_ROLE_OPTIONS = [
+  "review",
+  "edit",
+  "triage",
+  "task",
+] as const;
 
 export function isFlowAgentNodeRole(
   value: unknown
@@ -76,6 +81,8 @@ export function flowAgentRoleLabel(role: FlowAgentNodeRole) {
       return "Fix";
     case "triage":
       return "Respond";
+    case "task":
+      return "Task";
   }
 }
 
@@ -104,6 +111,8 @@ export function getDefaultFlowAgentRole(
   event?: TriggerEvent
 ): FlowAgentNodeRole {
   switch (event) {
+    case "schedule":
+      return "task";
     case "mention":
     case "issue_opened":
     case "issue_comment":

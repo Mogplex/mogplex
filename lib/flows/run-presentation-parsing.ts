@@ -13,7 +13,10 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function readNodeRunRole(output: unknown): FlowAgentNodeRole | null {
   if (!isRecord(output)) return null;
   const role = output.role;
-  return role === "review" || role === "edit" || role === "triage"
+  return role === "review" ||
+    role === "edit" ||
+    role === "triage" ||
+    role === "task"
     ? role
     : null;
 }

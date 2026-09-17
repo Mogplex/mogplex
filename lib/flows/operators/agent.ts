@@ -14,6 +14,46 @@ export const agentOperator: FlowOperatorDefinition<AgentNode> = {
   canFail: true,
   validate: ({ node, graph, inbound, outbound, startNode, options }) => {
     const errors: string[] = [];
+    if (node.data.role === "task" && startNode.data.event !== "schedule") {
+      errors.push(
+        `Task node "${node.data.label}" requires a schedule trigger.`
+      );
+    }
+    if (
+      options.requireRunnableConfig &&
+      node.data.role === "task" &&
+      !node.data.systemPromptOverride?.trim()
+    ) {
+      errors.push(
+        `Task node "${node.data.label}" needs instructions in systemPromptOverride.`
+      );
+    }
+    if (
+      node.data.role === "edit" &&
+      !["pr_opened", "pr_comment", "mention", "labeled"].includes(
+        startNode.data.event
+      )
+    ) {
+      errors.push(
+        `Fix node "${node.data.label}" requires an existing pull request. For scheduled work that creates a PR, use role "task".`
+      );
+    }
+    if (
+      node.data.role === "task" &&
+      (node.data.autoMerge || node.data.autofix || node.data.autoRevert)
+    ) {
+      errors.push(
+        `Task node "${node.data.label}" cannot use PR review or merge options.`
+      );
+    }
+    if (
+      node.data.requireApproval &&
+      (node.data.harness ?? "mogplex") !== "mogplex"
+    ) {
+      errors.push(
+        `Agent "${node.data.label}" needs the Mogplex harness for per-tool approval.`
+      );
+    }
     if (inbound.length === 0)
       errors.push(`Agent "${node.data.label}" must have an incoming edge.`);
     if (outbound.length === 0)

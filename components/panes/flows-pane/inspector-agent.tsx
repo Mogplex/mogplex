@@ -28,7 +28,7 @@ import {
   HarnessSection,
   EffectiveConfigSection,
 } from "./inspector-agent-harness"
-import { ReviewOptionsSection } from "./inspector-agent-review"
+import { ReviewOptionsSection, ToolApprovalOption } from "./inspector-agent-review"
 
 type AgentNodeData = Extract<FlowNode, { type: "agent" }>["data"]
 
@@ -225,6 +225,12 @@ export function AgentInspector({
           onValueChange={(value) => updateNodeData(node.id, (data) => ({
             ...data,
             role: value,
+            ...(value === "task" ? {
+              autofix: false,
+              autofixSandbox: false,
+              autoMerge: false,
+              autoRevert: false,
+            } : {}),
           }), { mergeKey: `agent-role-${node.id}` })}
           options={FLOW_AGENT_ROLE_OPTIONS.map((option) => ({
             value: option.value,
@@ -256,6 +262,10 @@ export function AgentInspector({
           onRunSandboxTest={onRunSandboxTest}
           onClearSandboxTest={onClearSandboxTest}
         />
+      )}
+
+      {node.data.role === "task" && selectedAgentHarness === "mogplex" && (
+        <ToolApprovalOption node={node} updateNodeData={updateNodeData} />
       )}
 
       {selectedAgentHarness === "mogplex" && (

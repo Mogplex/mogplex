@@ -215,12 +215,17 @@ export async function runAutomationHarnessAgent(input: {
         })
       : await launchAutomationHarnessSandbox(
           input.context,
-          input.context.assignmentType === "dependabot_alert"
+          input.context.metadata.flow_node_role === "task"
             ? {
-                workingBranch: `mogplex/dependabot-${input.context.metadata.alert_number}-${randomUUID()}`,
+                workingBranch: `mogplex/task-${randomUUID()}`,
                 createBranch: true,
               }
-            : undefined
+            : input.context.assignmentType === "dependabot_alert"
+              ? {
+                  workingBranch: `mogplex/dependabot-${input.context.metadata.alert_number}-${randomUUID()}`,
+                  createBranch: true,
+                }
+              : undefined
         );
   const prompt = buildAutomationHarnessPrompt(input);
   const { createSandboxHarnessPostHandler } =

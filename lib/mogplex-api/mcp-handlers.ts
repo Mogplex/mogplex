@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { automationSchemaGuide } from "./automation-schema";
 import { z } from "zod";
 import { MogplexApiClientError } from "./client";
 import {
@@ -26,6 +27,7 @@ import {
   startAgentRunArgsSchema,
   triggerAutomationArgsSchema,
   updateAutomationArgsSchema,
+  validateAutomationArgsSchema,
 } from "./mcp-schemas";
 
 export function parseArgs<T extends z.ZodTypeAny>(
@@ -111,6 +113,24 @@ export async function callMogplexTool(
 ): Promise<McpToolResult> {
   try {
     switch (name) {
+      case "mogplex_get_automation_schema": {
+        parseArgs(z.object({}).strict(), args);
+        return textResult(
+          JSON.stringify(automationSchemaGuide),
+          automationSchemaGuide
+        );
+      }
+      case "mogplex_validate_automation": {
+        const input = parseArgs(validateAutomationArgsSchema, args);
+        const result = await context.client.validateAutomation(input);
+        return textResult(
+          result.validation.valid
+            ? "Configuration checks passed. The automation has not been saved or executed."
+            : `Configuration is invalid: ${result.validation.errors.join("; ")}`,
+          result,
+          !result.validation.valid
+        );
+      }
       case "mogplex_list_repos": {
         const input = parseArgs(listReposArgsSchema, args);
         const result = await context.client.listRepos(input);

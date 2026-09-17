@@ -122,7 +122,7 @@ function initializeResult() {
       version: MOGPLEX_MCP_SERVER_VERSION,
     },
     instructions:
-      "Use Mogplex tools to discover repos, agents, and models; manage env vars on a repo's linked Vercel project; build, publish, trigger, and inspect automations; rerun the Mogplex PR review on a pull request; create sandboxes and read their logs; or start and control one-off repo-bound agent runs.",
+      "Use Mogplex tools to discover repos, agents, and models. Before creating an automation, call mogplex_get_automation_schema for graph fields and examples, then mogplex_validate_automation. Scheduled work uses task nodes; edit nodes fix existing PRs. Agent IDs with preset: are provisioned on save, so a separate create-agent tool is not needed. Use the requested harness. Publish activates the schedule; trigger starts a real billed run, not a dry run. Verify runs through logs before reporting execution success. Tools also manage repo env vars, sandboxes, PR reviews, and one-off agent runs.",
   };
 }
 

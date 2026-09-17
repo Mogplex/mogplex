@@ -89,6 +89,13 @@ export const createAutomationArgsSchema = z
   })
   .strict();
 
+export const validateAutomationArgsSchema = z
+  .object({
+    installationId: z.number().int().positive().safe(),
+    graph: flowGraphPayloadSchema,
+  })
+  .strict();
+
 export const updateAutomationArgsSchema = z
   .object({
     automationId: z.string().trim().min(1),

@@ -92,6 +92,12 @@ export const addAgentNodeParams = z.object({
   label: z.string(),
   agentId: z.string(),
   role: z.enum(AGENT_ROLES).optional(),
+  systemPromptOverride: z
+    .string()
+    .optional()
+    .describe(
+      "Node-local task instructions. Required for scheduled task nodes."
+    ),
   autofix: z.boolean().optional(),
   autoMerge: z
     .boolean()

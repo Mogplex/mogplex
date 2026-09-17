@@ -1,10 +1,33 @@
 import type { McpToolDefinition } from "./mcp-types";
 import { objectSchema } from "./mcp-schemas";
+import { automationGraphSchema } from "./automation-schema";
 
 /**
  * Tool definitions for Mogplex Flow automations.
  */
 export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
+  {
+    name: "mogplex_get_automation_schema",
+    title: "Get Automation Schema",
+    description:
+      "Read graph fields, trigger and role requirements, and a complete scheduled-task recipe. Call this before creating an automation; no source-code access is needed.",
+    inputSchema: objectSchema({ properties: {} }),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: "mogplex_validate_automation",
+    title: "Validate Automation",
+    description:
+      "Check graph structure, trigger and role compatibility, repository scope, agents, and models. Does not save, activate, or execute the automation. This is configuration validation, not a dry run.",
+    inputSchema: objectSchema({
+      properties: {
+        installationId: { type: "integer", minimum: 1 },
+        graph: automationGraphSchema,
+      },
+      required: ["installationId", "graph"],
+    }),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
   {
     name: "mogplex_list_automations",
     title: "List Mogplex Automations",
@@ -70,12 +93,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
           type: ["string", "null"],
           description: "Optional internal notes.",
         },
-        graph: {
-          type: "object",
-          description:
-            "Optional complete Flow graph with nodes, edges, and viewport.",
-          additionalProperties: true,
-        },
+        graph: automationGraphSchema,
         publish: {
           type: "boolean",
           description:
@@ -110,11 +128,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
           minimum: 1,
           description: "Move the automation to another owned installation.",
         },
-        graph: {
-          type: "object",
-          description: "Complete replacement draft graph.",
-          additionalProperties: true,
-        },
+        graph: automationGraphSchema,
       },
       required: ["automationId"],
     }),
