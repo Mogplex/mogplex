@@ -115,19 +115,26 @@ test("omits optional gateway fields when no context requests them", () => {
   });
 });
 
-test("adds one normalized fallback model while excluding the primary", () => {
+test("preserves fallback order while excluding the primary and duplicates", () => {
   assert.deepEqual(
     gatewayProviderOptions(" XAI/Grok-4.5 ", { userId: "u" }, [
       " xai/grok-4.5 ",
       " zai/glm-5.2-fast ",
       "ZAI/GLM-5.2-FAST",
       "openai/gpt-5.4",
+      "anthropic/claude-sonnet-4.6",
+      "google/gemini-3.1-pro-preview",
     ]),
     {
       gateway: {
         user: "u",
         sort: "tps",
-        models: ["zai/glm-5.2-fast"],
+        models: [
+          "zai/glm-5.2-fast",
+          "openai/gpt-5.4",
+          "anthropic/claude-sonnet-4.6",
+          "google/gemini-3.1-pro-preview",
+        ],
       },
     }
   );

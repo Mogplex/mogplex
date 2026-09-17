@@ -288,11 +288,13 @@ export async function resolveStoredUserDefaultModelId(
 // runs on, so an unrecognised id publishes cleanly and fails at run time.
 export async function listUsableModelIdsForScope(
   userId: string,
-  scope: DefaultModelScope = {}
+  scope: DefaultModelScope = {},
+  resolvedCanInvoke?: (modelId: string) => boolean
 ): Promise<string[]> {
   const [{ catalog, preferences, policy }, canInvoke] = await Promise.all([
     loadUserModelCatalogState(userId),
-    loadScopeInvocationPredicate(userId, scope.teamId ?? null),
+    resolvedCanInvoke ??
+      loadScopeInvocationPredicate(userId, scope.teamId ?? null),
   ]);
   return listEnabledVisibleModelIds(catalog, preferences, policy).filter(
     canInvoke

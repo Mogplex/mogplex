@@ -15,6 +15,7 @@ import {
   type GatewayProviderOptions,
 } from "@/lib/models/gateway-provider-routing";
 import { applyOpenRouterNitro } from "@/lib/models/openrouter-variants";
+import { loadUsableFallbackModelIds } from "@/lib/models/fallback-preferences";
 import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
 import { getScopedProviderKey } from "@/lib/vault";
 import {
@@ -45,6 +46,8 @@ export type ResolveUserLanguageModelOptions = {
    * through the same team capability and allowlist policy as the primary.
    */
   gatewayFallbackModelIds?: readonly string[];
+  /** Used only when account fallbacks are unset or cannot be loaded. */
+  defaultGatewayFallbackModelIds?: readonly string[];
   /** Team scope, if the caller is acting inside a team. Null/undefined = solo. */
   teamId?: string | null;
   /**
@@ -92,6 +95,7 @@ function filterGatewayFallbackModelIds(input: {
 }
 
 type ResolveUserLanguageModelDeps = {
+  loadUsableFallbackModelIds: typeof loadUsableFallbackModelIds;
   /**
    * Scope-aware key lookup. When `teamId` is set, prefer `team_provider_keys`
    * and fall back to the user's personal key.
@@ -139,6 +143,7 @@ export function getOpenRouterAppUrl() {
 }
 
 const defaultResolveUserLanguageModelDeps: ResolveUserLanguageModelDeps = {
+  loadUsableFallbackModelIds,
   getProviderKey: getScopedProviderKey,
   loadUserPlatformAccess,
   resolveMemberCapabilities: defaultResolveMemberCapabilities,
@@ -309,19 +314,45 @@ export function createResolveUserLanguageModel(
       }
     }
 
-    const approvedGatewayFallbackModelIds = filterGatewayFallbackModelIds({
-      candidates: options?.gatewayFallbackModelIds ?? [],
-      capabilities,
-      teamId,
-      allowlistState,
-    });
-
     const [{ allowPlatformAi }, userGatewayKey] = await Promise.all([
       deps.loadUserPlatformAccess(userId, teamId).catch(() => ({
         allowPlatformAi: false,
       })),
       deps.getProviderKey(userId, "ai_gateway", teamId),
     ]);
+    const usesGateway =
+      !isOpenRouterModel &&
+      Boolean(
+        userGatewayKey || (process.env.AI_GATEWAY_API_KEY && allowPlatformAi)
+      );
+    const candidates = usesGateway
+      ? (options?.gatewayFallbackModelIds ??
+        (await deps
+          .loadUsableFallbackModelIds(
+            userId,
+            teamId,
+            (candidate) =>
+              // Gateway access is already established; reuse this request's policy
+              // rather than reading credentials, capabilities and allowlist again.
+              !candidate.startsWith("openrouter/") &&
+              hasCapability(capabilities, modelCapability(candidate)) &&
+              (!teamId || allowlistPermitsModel(allowlistState, candidate))
+          )
+          .catch(() => {
+            console.warn(
+              "Unable to load account fallback models; using request defaults"
+            );
+            return null;
+          })) ??
+        options?.defaultGatewayFallbackModelIds ??
+        [])
+      : [];
+    const approvedGatewayFallbackModelIds = filterGatewayFallbackModelIds({
+      candidates,
+      capabilities,
+      teamId,
+      allowlistState,
+    });
     if (userGatewayKey && !isOpenRouterModel) {
       return {
         model: deps.resolveGatewayModel(userGatewayKey, normalizedModel, {

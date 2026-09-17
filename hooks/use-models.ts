@@ -168,7 +168,7 @@ export function useModels(
     ["/api/models", activeTeamId ?? "personal"],
     ([url, teamKey]) =>
       fetcher(url, teamKey === "personal" ? null : String(teamKey)),
-    { revalidateOnFocus: false }
+    { revalidateOnFocus: false, refreshInterval: 0 }
   );
 
   const models = data?.models ?? [];

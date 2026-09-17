@@ -11,6 +11,7 @@ test("resolveUserLanguageModel can force a provider object for platform AI Gatew
 
   try {
     const resolver = createResolveUserLanguageModel({
+      loadUsableFallbackModelIds: async () => null,
       getProviderKey: async () => null,
       loadUserPlatformAccess: async () => ({
         allowPlatformAi: true,
@@ -57,6 +58,7 @@ test("resolveUserLanguageModel blocks platform AI Gateway fallback for non-allow
 
   try {
     const resolver = createResolveUserLanguageModel({
+      loadUsableFallbackModelIds: async () => null,
       getProviderKey: async () => null,
       loadUserPlatformAccess: async () => ({
         allowPlatformAi: false,
@@ -92,6 +94,7 @@ test("resolveUserLanguageModel pins moonshotai/* gateway calls to fireworks", as
 
   try {
     const resolver = createResolveUserLanguageModel({
+      loadUsableFallbackModelIds: async () => null,
       getProviderKey: async () => null,
       loadUserPlatformAccess: async () => ({ allowPlatformAi: true }),
       resolveGatewayModel: () => {

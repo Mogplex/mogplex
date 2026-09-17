@@ -56,9 +56,16 @@ export async function resolveAutomationModel(
     providerFetch: buildAutomationProviderFetch({ timeoutMs }),
     preferGatewayProviderObject: true,
     gatewayContext: gatewayContext ?? { userId },
-    gatewayFallbackModelIds: getAutomationModelFallbackIdsWithOverride(
+    gatewayFallbackModelIds: effectiveFallbackModelId
+      ? getAutomationModelFallbackIdsWithOverride(
+          effectiveModelId,
+          effectiveFallbackModelId,
+          process.env[AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV]
+        )
+      : undefined,
+    defaultGatewayFallbackModelIds: getAutomationModelFallbackIdsWithOverride(
       effectiveModelId,
-      effectiveFallbackModelId,
+      null,
       process.env[AUTOMATION_GATEWAY_FALLBACK_MODELS_ENV]
     ),
     teamId: teamId ?? null,

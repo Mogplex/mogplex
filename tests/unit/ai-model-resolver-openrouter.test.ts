@@ -9,6 +9,7 @@ test("resolveUserLanguageModel resolves OpenRouter models through OpenRouter key
 
   try {
     const resolver = createResolveUserLanguageModel({
+      loadUsableFallbackModelIds: async () => null,
       getProviderKey: async (_userId, provider) => {
         if (provider === "ai_gateway") return "user-gateway-key";
         if (provider === "openrouter") return "user-openrouter-key";
@@ -52,6 +53,7 @@ test("resolveUserLanguageModel requires an OpenRouter key for OpenRouter catalog
 
   try {
     const resolver = createResolveUserLanguageModel({
+      loadUsableFallbackModelIds: async () => null,
       getProviderKey: async (_userId, provider) =>
         provider === "ai_gateway" ? "user-gateway-key" : null,
       loadUserPlatformAccess: async () => ({
@@ -116,6 +118,7 @@ test("resolveUserLanguageModel applies :nitro to OpenRouter models without an ex
 
   try {
     const resolver = createResolveUserLanguageModel({
+      loadUsableFallbackModelIds: async () => null,
       getProviderKey: async (_userId, provider) =>
         provider === "openrouter" ? "user-openrouter-key" : null,
       loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
@@ -157,6 +160,7 @@ test("resolveUserLanguageModel respects an explicit OpenRouter variant", async (
 
   try {
     const resolver = createResolveUserLanguageModel({
+      loadUsableFallbackModelIds: async () => null,
       getProviderKey: async (_userId, provider) =>
         provider === "openrouter" ? "user-openrouter-key" : null,
       loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
