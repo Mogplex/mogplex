@@ -245,7 +245,15 @@ export async function resolveJobContext(
             firstAgentNode?.data.modelOverride?.trim() ||
             `harness:${firstAgentNode?.data.harness ?? "mogplex"}`,
         }
-      : null;
+      : firstAgentNode &&
+          (firstAgentNode.data.harness === "claude-code" ||
+            firstAgentNode.data.harness === "codex")
+        ? {
+            name: firstAgentNode.data.label,
+            model: `harness:${firstAgentNode.data.harness}`,
+            system_prompt: firstAgentNode.data.systemPromptOverride ?? null,
+          }
+        : null;
     const assignmentType =
       typeof metadata.source_type === "string"
         ? normalizeAutomationAssignmentType(metadata.source_type)

@@ -134,6 +134,9 @@ export function buildFakeMcpClient(
     }),
     getAutomation: async () => ({ automation }),
     createAutomation: async () => ({ automation }),
+    validateAutomation: async () => ({
+      validation: { valid: true, errors: [] },
+    }),
     updateAutomation: async () => ({ automation }),
     publishAutomation: async () => ({ automation }),
     setAutomationModel: async () => ({ automation }),

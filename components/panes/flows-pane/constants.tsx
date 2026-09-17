@@ -151,6 +151,11 @@ export const FLOW_AGENT_ROLE_OPTIONS: FlowAgentRoleOption[] = [
     label: "Respond",
     description: "Reply to @mogplex mentions, PR comments, issues, and other event context without pushing code changes.",
   },
+  {
+    value: "task",
+    label: "Task",
+    description: "Run scheduled work in a checkout from the default branch. Run checks and open a new PR when needed.",
+  },
 ]
 
 export const FLOW_AGENT_HARNESS_OPTIONS: FlowAgentHarnessOption[] = [

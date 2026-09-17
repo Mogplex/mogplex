@@ -25,6 +25,7 @@ export const AGENT_ROLES = [
   "review",
   "edit",
   "triage",
+  "task",
 ] as const satisfies ReadonlyArray<FlowAgentNodeRole>;
 
 export const CONDITION_OPERATORS = [

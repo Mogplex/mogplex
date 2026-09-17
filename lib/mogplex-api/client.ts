@@ -13,7 +13,8 @@ import type { PresentedAiCallEvent } from "./run-control";
 import type { MogplexApiRepo } from "./repos";
 import type { MogplexApiSandbox, MogplexApiSandboxLogs } from "./sandboxes";
 import type { MogplexApiRunDetail, StartMogplexApiRunRequest } from "./runs";
-import type { FlowRunDetail, FlowRunRecord } from "@/lib/types";
+import type { FlowRunDetail, FlowRunRecord, FlowGraph } from "@/lib/types";
+import type { FlowConfigurationValidation } from "@/lib/flows/server-validation";
 
 export { MogplexApiClientError } from "./client-error";
 
@@ -275,6 +276,13 @@ export class MogplexApiClient {
   createAutomation(input: CreateMogplexApiAutomationInput) {
     return this.request<{ automation: MogplexApiAutomation }>(
       "/api/v1/mogplex/automations",
+      { method: "POST", body: input }
+    );
+  }
+
+  validateAutomation(input: { installationId: number; graph: FlowGraph }) {
+    return this.request<{ validation: FlowConfigurationValidation }>(
+      "/api/v1/mogplex/automations/validate",
       { method: "POST", body: input }
     );
   }

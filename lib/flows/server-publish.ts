@@ -1,9 +1,6 @@
-import {
-  coerceGraph,
-  validateFlowGraph,
-  getStartConfig,
-} from "@/lib/flows/graph";
+import { coerceGraph, getStartConfig } from "@/lib/flows/graph";
 import { FlowServiceError } from "@/lib/flows/errors";
+import { validateFlowConfiguration } from "./server-validation";
 import { syncScheduledFlowActivation } from "@/lib/flows/activation-sync";
 import { runWithFlowActivationLock } from "@/lib/flows/activation-lock";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -60,7 +57,13 @@ export async function publishFlowDraft(
     defaultFlowPresetAgentResolverDeps,
     teamId
   );
-  const validation = validateFlowGraph(graph);
+  const scopedIds = getStartConfig(graph)?.filter?.installationIds ?? [];
+  const validation = await validateFlowConfiguration(
+    userId,
+    graph,
+    scopedIds.length === 1 ? scopedIds[0] : flow.installation_id,
+    teamId
+  );
   if (!validation.valid) {
     throw new FlowServiceError(
       "FLOW_GRAPH_INVALID",

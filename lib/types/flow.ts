@@ -129,7 +129,7 @@ export type FlowAgentNodeData = {
 
 export type FlowAgentHarness = "mogplex" | "claude-code" | "codex";
 
-export type FlowAgentNodeRole = "review" | "edit" | "triage";
+export type FlowAgentNodeRole = "review" | "edit" | "triage" | "task";
 
 export type FlowParallelNodeData = {
   label: string;

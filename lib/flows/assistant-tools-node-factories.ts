@@ -142,6 +142,7 @@ export function createAddAgentNodeTool(ctx: ToolContext) {
       label,
       agentId,
       role,
+      systemPromptOverride,
       autofix,
       autoMerge,
       autoRevert,
@@ -180,7 +181,7 @@ export function createAddAgentNodeTool(ctx: ToolContext) {
           autoRevert,
           modelOverride: requestedModel || ctx.defaultModelId,
           timeoutMsOverride: null,
-          systemPromptOverride: null,
+          systemPromptOverride: systemPromptOverride ?? null,
         },
       });
       return { id };

@@ -213,6 +213,9 @@ test("validateFlowGraph requires one repo and complete external trigger config",
     agentId: "agent-1",
     agentName: "Reviewer",
   });
+  const agent = graph.nodes.find((node) => node.type === "agent");
+  assert.ok(agent);
+  agent.data.role = "review";
   const start = graph.nodes.find((node) => node.type === "start");
   assert.ok(start);
   start.data = {
