@@ -1,8 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { listUsableModelIdsForScope } from "@/lib/models/default-model";
+import { ACCOUNT_FALLBACK_MODEL_MAX_COUNT } from "@/lib/models/fallback-limits";
 
 export function parseFallbackModelIds(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length > ACCOUNT_FALLBACK_MODEL_MAX_COUNT)
+    return null;
   if (
     !value.every(
       (id): id is string =>

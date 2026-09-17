@@ -4,6 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { useModels } from "@/hooks/use-models";
 import { fetchJsonObject } from "@/lib/client-fetch";
+import { ACCOUNT_FALLBACK_MODEL_MAX_COUNT } from "@/lib/models/fallback-limits";
 import { Button } from "@/components/ui/button";
 import { WorkflowModelSelect } from "@/components/panes/flows-pane/workflow-model-select";
 
@@ -48,7 +49,7 @@ export function ModelFallbackSettings({ defaultModel }: { defaultModel: string }
   return <section aria-labelledby="fallback-models-heading" className="space-y-3 border-b border-border/70 pb-5">
     <div>
       <h2 id="fallback-models-heading" className="text-sm font-medium">Fallback models</h2>
-      <p className="text-muted-foreground mt-1 max-w-prose text-xs">Continue work if a model is unavailable. Choose alternatives in order.</p>
+      <p className="text-muted-foreground mt-1 max-w-prose text-xs">Continue work if a model is unavailable. Choose up to {ACCOUNT_FALLBACK_MODEL_MAX_COUNT} alternatives in order.</p>
       <p className="text-muted-foreground mt-1 max-w-prose text-xs">These choices apply to requests through AI Gateway across your account. A fallback set in an automation takes priority. Each model uses its usual price.</p>
     </div>
     {isLoading ? <p role="status" className="text-xs text-muted-foreground">Loading fallback models…</p> : error ?
@@ -66,7 +67,7 @@ export function ModelFallbackSettings({ defaultModel }: { defaultModel: string }
           <Button type="button" size="sm" variant="ghost" aria-label={`Remove fallback ${index + 1}`}
             onClick={() => change(selected.filter((_, at) => at !== index))}>Remove</Button>
         </div>)}
-        {available.some(model => !selected.includes(model.id)) && <WorkflowModelSelect ariaLabel="Add fallback model" value=""
+        {selected.length < ACCOUNT_FALLBACK_MODEL_MAX_COUNT && available.some(model => !selected.includes(model.id)) && <WorkflowModelSelect ariaLabel="Add fallback model" value=""
           options={[{ value: "", label: "Add fallback model", disabled: true }, ...available.filter(model => !selected.includes(model.id)).map(model => ({ value: model.id, label: `${model.name} · ${model.provider}` }))]}
           onValueChange={value => change([...selected, value])} />}
         <div className="flex gap-2 pt-1">

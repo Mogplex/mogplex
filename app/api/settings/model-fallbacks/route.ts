@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
+import { ACCOUNT_FALLBACK_MODEL_MAX_COUNT } from "@/lib/models/fallback-limits";
 import { listUsableModelIdsForScope } from "@/lib/models/default-model";
 import {
   loadFallbackModelPreference,
@@ -37,6 +38,16 @@ export function createModelFallbackHandlers(
       const userId = await deps.requireUserId();
       if (userId instanceof Response) return userId;
       const body = await request.json().catch(() => null);
+      if (
+        Array.isArray(body?.fallback_model_ids) &&
+        body.fallback_model_ids.length > ACCOUNT_FALLBACK_MODEL_MAX_COUNT
+      )
+        return NextResponse.json(
+          {
+            error: `Choose up to ${ACCOUNT_FALLBACK_MODEL_MAX_COUNT} fallback models`,
+          },
+          { status: 400 }
+        );
       const ids = parseFallbackModelIds(body?.fallback_model_ids);
       if (!ids)
         return NextResponse.json(

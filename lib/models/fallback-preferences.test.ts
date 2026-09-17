@@ -3,6 +3,17 @@ import { parseFallbackModelIds } from "./fallback-preferences";
 import { gatewayProviderOptions } from "./gateway-provider-routing";
 
 describe("account fallback choices", () => {
+  it("rejects more than four account fallback models", () => {
+    expect(
+      parseFallbackModelIds([
+        "lab/one",
+        "lab/two",
+        "lab/three",
+        "lab/four",
+        "lab/five",
+      ])
+    ).toBeNull();
+  });
   it("keeps every choice in order and accepts explicitly turning fallbacks off", () => {
     const ids = ["lab/first", "lab/second", "lab/third", "lab/fourth"];
     expect(parseFallbackModelIds(ids)).toEqual(ids);
