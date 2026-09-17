@@ -8,6 +8,7 @@ import { useModels } from "@/hooks/use-models"
 import { useNewModels } from "@/hooks/use-new-models"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { ModelFallbackSettings } from "./model-fallback-settings"
 
 type SortKey = "provider" | "name" | "context_length" | "pricing_input" | "pricing_output" | "is_enabled" | "state"
 type SortDirection = "asc" | "desc"
@@ -263,6 +264,7 @@ export function ModelsSection({ defaultModel, onSetDefault, savingDefault = fals
 
   return (
     <div className="space-y-5">
+      <ModelFallbackSettings defaultModel={defaultModel} />
       <div className="grid gap-3 lg:grid-cols-3">
         <SummaryCard
           dataTestId="models-default-summary"

@@ -7,6 +7,7 @@ test("resolveUserLanguageModel denies a model when the team role lacks the capab
   delete process.env.AI_GATEWAY_API_KEY;
   const audits: unknown[] = [];
   const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => null,
     getProviderKey: async () => "irrelevant",
     loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
     resolveMemberCapabilities: async () => new Set(["tools.web_search"]),
@@ -50,6 +51,7 @@ test("resolveUserLanguageModel denies a model when the team allowlist cannot be 
   delete process.env.AI_GATEWAY_API_KEY;
   const audits: unknown[] = [];
   const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => null,
     getProviderKey: async () => "irrelevant",
     loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
     resolveMemberCapabilities: async () => new Set(["*"]),
@@ -114,6 +116,7 @@ test("resolveUserLanguageModel throttles repeated allowlist-unavailable audits",
 
   const audits: unknown[] = [];
   const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => null,
     getProviderKey: async () => "irrelevant",
     loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
     resolveMemberCapabilities: async () => new Set(["*"]),
@@ -155,6 +158,7 @@ test("resolveUserLanguageModel ignores an unreadable allowlist in solo scope", a
   const { createResolveUserLanguageModel } = await loadAiModelResolver();
   delete process.env.AI_GATEWAY_API_KEY;
   const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => null,
     getProviderKey: async (_userId, provider) =>
       provider === "openai" ? "personal-key" : null,
     loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
@@ -186,6 +190,7 @@ test("resolveUserLanguageModel denies a model when the team allowlist excludes i
   delete process.env.AI_GATEWAY_API_KEY;
   const audits: unknown[] = [];
   const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => null,
     getProviderKey: async () => "irrelevant",
     loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
     resolveMemberCapabilities: async () => new Set(["*"]),
@@ -231,6 +236,7 @@ test("resolveUserLanguageModel admits an allowlisted model under team scope", as
   const { createResolveUserLanguageModel } = await loadAiModelResolver();
   delete process.env.AI_GATEWAY_API_KEY;
   const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => null,
     getProviderKey: async (_userId, provider, teamId) => {
       // Test the scope-aware key wiring: the openai call gets teamId="team-1".
       if (provider === "openai" && teamId === "team-1") return "team-key";
@@ -263,6 +269,7 @@ test("resolveUserLanguageModel honors caller-supplied capabilities + allowlist (
   const { createResolveUserLanguageModel } = await loadAiModelResolver();
   delete process.env.AI_GATEWAY_API_KEY;
   const resolver = createResolveUserLanguageModel({
+    loadUsableFallbackModelIds: async () => null,
     getProviderKey: async (_userId, provider) =>
       provider === "openai" ? "k" : null,
     loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),

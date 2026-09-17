@@ -15,6 +15,7 @@ import {
   type GatewayProviderOptions,
 } from "@/lib/models/gateway-provider-routing";
 import { applyOpenRouterNitro } from "@/lib/models/openrouter-variants";
+import { loadUsableFallbackModelIds } from "@/lib/models/fallback-preferences";
 import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
 import { getScopedProviderKey } from "@/lib/vault";
 import {
@@ -92,6 +93,7 @@ function filterGatewayFallbackModelIds(input: {
 }
 
 type ResolveUserLanguageModelDeps = {
+  loadUsableFallbackModelIds: typeof loadUsableFallbackModelIds;
   /**
    * Scope-aware key lookup. When `teamId` is set, prefer `team_provider_keys`
    * and fall back to the user's personal key.
@@ -139,6 +141,7 @@ export function getOpenRouterAppUrl() {
 }
 
 const defaultResolveUserLanguageModelDeps: ResolveUserLanguageModelDeps = {
+  loadUsableFallbackModelIds,
   getProviderKey: getScopedProviderKey,
   loadUserPlatformAccess,
   resolveMemberCapabilities: defaultResolveMemberCapabilities,
@@ -309,19 +312,28 @@ export function createResolveUserLanguageModel(
       }
     }
 
-    const approvedGatewayFallbackModelIds = filterGatewayFallbackModelIds({
-      candidates: options?.gatewayFallbackModelIds ?? [],
-      capabilities,
-      teamId,
-      allowlistState,
-    });
-
     const [{ allowPlatformAi }, userGatewayKey] = await Promise.all([
       deps.loadUserPlatformAccess(userId, teamId).catch(() => ({
         allowPlatformAi: false,
       })),
       deps.getProviderKey(userId, "ai_gateway", teamId),
     ]);
+    const usesGateway =
+      !isOpenRouterModel &&
+      Boolean(
+        userGatewayKey || (process.env.AI_GATEWAY_API_KEY && allowPlatformAi)
+      );
+    const candidates = usesGateway
+      ? (options?.gatewayFallbackModelIds ??
+        (await deps.loadUsableFallbackModelIds(userId, teamId)) ??
+        [])
+      : [];
+    const approvedGatewayFallbackModelIds = filterGatewayFallbackModelIds({
+      candidates,
+      capabilities,
+      teamId,
+      allowlistState,
+    });
     if (userGatewayKey && !isOpenRouterModel) {
       return {
         model: deps.resolveGatewayModel(userGatewayKey, normalizedModel, {

@@ -21,6 +21,7 @@ interface Props {
   repoPath?: string
   repoId?: string
   model?: string
+  defaultModel?: string
   onModelSelect?: (model: string) => void
   isRunning?: boolean
   runningLabel?: string
@@ -42,6 +43,7 @@ export function CommandInput({
   repoPath,
   repoId,
   model,
+  defaultModel,
   onModelSelect,
   isRunning = false,
   runningLabel = "Agent is working",
@@ -257,6 +259,7 @@ export function CommandInput({
                 autoFocus
               />
               <div className="flex-1 overflow-auto">
+                {defaultModel && !modelFilter && <button type="button" className="w-full text-left px-2 py-2.5 text-xs hover:bg-secondary/50" onClick={() => { onModelSelect?.(defaultModel); setModelMenuOpen(false) }}>Use workspace default: {defaultModel.split("/").slice(1).join("/")}</button>}
                 {(!modelFilter || "claude code".includes(modelFilter.toLowerCase()) || "codex".includes(modelFilter.toLowerCase())) && (
                   <>
                     <div className="px-2 py-1 text-[11px] text-muted-foreground uppercase tracking-wider bg-secondary/50">CLI Harnesses</div>
@@ -309,6 +312,7 @@ export function CommandInput({
                 autoFocus
               />
               <div className="flex-1 overflow-auto">
+                {defaultModel && !modelFilter && <button type="button" className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-secondary/50" onClick={() => { onModelSelect?.(defaultModel); setModelMenuOpen(false) }}>Use workspace default: {defaultModel.split("/").slice(1).join("/")}</button>}
                 {(!modelFilter || "claude code".includes(modelFilter.toLowerCase()) || "codex".includes(modelFilter.toLowerCase())) && (
                   <>
                     <div className="px-2 py-1 text-[11px] text-muted-foreground uppercase tracking-wider bg-secondary/50">CLI Harnesses</div>

@@ -44,7 +44,11 @@ type ConversationsStore = {
     expectedRepoId?: string | null,
     signal?: AbortSignal
   ) => Promise<ConversationState | null>;
-  startConversation: (paneId: string, context: ConversationContext) => void;
+  startConversation: (
+    paneId: string,
+    context: ConversationContext,
+    model?: string
+  ) => void;
   setMessages: (paneId: string, messages: Message[]) => void;
   addLocalMsg: (paneId: string, msg: LocalMessage) => void;
   updateLocalMsg: (
@@ -132,8 +136,7 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
     }
     return null;
   },
-
-  startConversation: (paneId, context) => {
+  startConversation: (paneId, context, model) => {
     set((state) => {
       const current =
         state.conversations[paneId] ||
@@ -142,14 +145,17 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
         conversations: {
           ...state.conversations,
           [paneId]: {
-            ...createConversationState(current.model, context.id, context),
+            ...createConversationState(
+              model ?? current.model,
+              context.id,
+              context
+            ),
             mode: current.mode,
           },
         },
       };
     });
   },
-
   syncToSupabase: async (paneId) => {
     let succeeded = false;
     await queueConversationSync(paneId, async () => {
@@ -261,7 +267,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
     });
     return succeeded;
   },
-
   setMessages: (paneId, messages) => {
     let changed = false;
     set((state) => {
@@ -281,7 +286,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
     });
     if (!changed) return;
   },
-
   addLocalMsg: (paneId, msg) => {
     set((state) => {
       const conv =
@@ -296,7 +300,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
     });
     void get().syncToSupabase(paneId);
   },
-
   updateLocalMsg: (paneId, msgId, update) => {
     set((state) => {
       const conv = state.conversations[paneId];
@@ -323,7 +326,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       };
     });
   },
-
   retargetHarnessSandboxIds: (paneIds, previousSandboxId, nextSandboxId) => {
     const changedPaneIds: string[] = [];
 
@@ -373,7 +375,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       void get().syncToSupabase(paneId);
     }
   },
-
   setHarnessState: (paneId, harnessId, session) => {
     set((state) => {
       const conv =
@@ -396,7 +397,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
     });
     void get().syncToSupabase(paneId);
   },
-
   removeLocalMsg: (paneId, msgId) => {
     set((state) => {
       const conv = state.conversations[paneId];
@@ -412,7 +412,6 @@ export const useConversationsStore = create<ConversationsStore>((set, get) => ({
       };
     });
   },
-
   clearMessages: (paneId) => {
     set((state) => ({
       conversations: {

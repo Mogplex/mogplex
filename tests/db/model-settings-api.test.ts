@@ -11,6 +11,8 @@ import { SHIM_TYPE_PARSERS } from "@/lib/db/pool";
 import { createPostgrestShim } from "@/lib/db/postgrest-shim";
 import { loadModelSettingsTargets } from "@/lib/models/settings-defaults";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createModelFallbackHandlers } from "@/app/api/settings/model-fallbacks/route";
+import { loadUsableFallbackModelIds } from "@/lib/models/fallback-preferences";
 
 const owner = "00000000-0000-4000-8000-000000000011";
 const other = "00000000-0000-4000-8000-000000000012";
@@ -76,6 +78,66 @@ afterAll(async () => {
     else Reflect.deleteProperty(supabaseAdmin, key);
   }
   await db?.close();
+});
+
+test("fallback settings persist order, isolate owners, reject unusable choices and honor disabling", async () => {
+  const { GET, PATCH } = createModelFallbackHandlers({
+    requireUserId: async () => owner,
+  });
+  const patch = (ids: unknown) =>
+    PATCH(
+      new Request("http://localhost/api/settings/model-fallbacks", {
+        method: "PATCH",
+        body: JSON.stringify({ fallback_model_ids: ids }),
+      })
+    );
+  expect(await (await GET()).json()).toEqual({ fallback_model_ids: null });
+  const ids = ["openai/new", "openai/old"];
+  expect((await patch(ids)).status).toBe(200);
+  expect(await (await GET()).json()).toEqual({ fallback_model_ids: ids });
+  const otherGet = createModelFallbackHandlers({
+    requireUserId: async () => other,
+  }).GET;
+  expect(await (await otherGet()).json()).toEqual({ fallback_model_ids: null });
+  for (const invalid of [
+    ["openai/missing"],
+    ["openai/new", "openai/new"],
+    ["openrouter/model"],
+    [" openai/new"],
+    ["a/1", "a/2", "a/3", "a/4"],
+    null,
+  ]) {
+    expect((await patch(invalid)).status).toBe(400);
+    expect(await (await GET()).json()).toEqual({ fallback_model_ids: ids });
+  }
+  await db.query(
+    "insert into user_model_preferences(user_id,model_id,is_enabled) values ($1,'openai/old',false)",
+    [owner]
+  );
+  expect(await loadUsableFallbackModelIds(owner)).toEqual(["openai/new"]);
+  expect((await patch(ids)).status).toBe(400);
+  expect((await patch([])).status).toBe(200);
+  expect(await loadUsableFallbackModelIds(owner)).toEqual([]);
+  await db.query("delete from user_model_preferences where user_id=$1", [
+    owner,
+  ]);
+  await db.exec(
+    "insert into ai_models(id,provider,name) values ('openai/third','openai','Third'),('openai/fourth','openai','Fourth')"
+  );
+  const ordered = [...ids, "openai/third", "openai/fourth"];
+  expect((await patch(ordered)).status).toBe(200);
+  expect(await loadUsableFallbackModelIds(owner)).toEqual(ordered);
+  await expect(
+    db.query("update profiles set fallback_model_ids=array[''] where id=$1", [
+      owner,
+    ])
+  ).rejects.toThrow();
+  await expect(
+    db.query(
+      "update profiles set fallback_model_ids=array[null]::text[] where id=$1",
+      [owner]
+    )
+  ).rejects.toThrow();
 });
 
 test("destinations API lists only owned automations against the deployed schema", async () => {

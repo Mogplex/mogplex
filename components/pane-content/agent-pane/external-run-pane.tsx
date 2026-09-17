@@ -12,6 +12,8 @@ import { isRunActive } from "@/lib/run-workspace/types";
 import { projectRunTranscript } from "@/lib/run-workspace/transcript";
 import { ChatMessageList } from "./chat-message-list";
 import { useExternalRun } from "./use-external-run";
+import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { fetchJsonObject } from "@/lib/client-fetch";
 
 export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
   pane: PaneNode & { externalRunId: string };
@@ -53,11 +55,22 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
   async function continueChat() {
     if (!context || !user || sending || !historyReady) return;
     setSending(true);
+    setReceipt(null);
+    try {
+    // Resolve before creating or saving the conversation. The store may still
+    // contain a startup constant or another workspace's previous selection.
+    const settings = await fetchJsonObject<{ default_model?: string }>(
+      "/api/settings?surface=chat", "Could not load the workspace default model", {
+        headers: getActiveTeamRequestHeaders(),
+      }
+    );
+    if (!settings.default_model) throw new Error("No workspace default model is available");
     const store = useConversationsStore.getState();
     store.setUserId(user.id);
+    store.setDefaultModel(settings.default_model);
     const session = useSessionsStore.getState().sessions.find(item => item.externalRunId === pane.externalRunId);
     const id = crypto.randomUUID();
-    store.startConversation(pane.id, { id, repoId: context.repo.id, sandboxId: context.sandboxRecordId, workspaceSessionId: session?.id ?? null });
+    store.startConversation(pane.id, { id, repoId: context.repo.id, sandboxId: context.sandboxRecordId, workspaceSessionId: session?.id ?? null }, settings.default_model);
     // Tool telemetry is not a model transcript. Preserve its readable summary
     // without inventing tool inputs/results for the next agent turn.
     store.setMessages(pane.id, messages.map(message => ({ ...message, parts: message.parts.flatMap(part =>
@@ -65,7 +78,9 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane }: {
     ) })));
     if (await store.syncToSupabase(pane.id)) onUpdatePane?.({ externalRunId: undefined, conversationId: id });
     else setReceipt("Could not save the conversation. Try again.");
-    setSending(false);
+    } catch (cause) {
+      setReceipt(cause instanceof Error ? cause.message : "Could not start workspace chat");
+    } finally { setSending(false); }
   }
 
   return <>

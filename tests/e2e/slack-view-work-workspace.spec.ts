@@ -36,6 +36,9 @@ for (const sandboxStatus of ["running", "paused", "stopped"]) {
     let chats = 0;
     let guidance: unknown;
     let savedConversation: unknown;
+    await page.route(/\/api\/settings(?:\?.*)?$/, (route) =>
+      fulfillJson(route, { default_model: "openai/current-workspace-default" })
+    );
     await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
       if (route.request().method() === "PUT")
         savedConversation = route.request().postDataJSON();
@@ -172,6 +175,25 @@ for (const sandboxStatus of ["running", "paused", "stopped"]) {
       fullPage: true,
     });
     if (sandboxStatus === "running") {
+      await page.route(
+        /\/api\/settings(?:\?.*)?$/,
+        (route) =>
+          fulfillJson(
+            route,
+            { error: "Could not load the workspace default model" },
+            500
+          ),
+        { times: 1 }
+      );
+      await page
+        .getByRole("button", { name: "Continue in workspace chat" })
+        .click();
+      await expect(
+        page.getByText("Could not load the workspace default model", {
+          exact: true,
+        })
+      ).toBeVisible();
+      expect(savedConversation).toBeUndefined();
       await page
         .getByRole("button", { name: "Continue in workspace chat" })
         .click();
@@ -183,7 +205,14 @@ for (const sandboxStatus of ["running", "paused", "stopped"]) {
       expect(savedConversation).toMatchObject({
         repo_id: "repo-1",
         sandbox_id: "sandbox-record-repo-1",
+        model: "openai/current-workspace-default",
       });
+      await expect(
+        page.getByRole("button", {
+          name: "Model: current-workspace-default",
+          exact: true,
+        })
+      ).toBeVisible();
       expect(chats).toBe(0);
     }
   });

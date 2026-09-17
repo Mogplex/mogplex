@@ -27,12 +27,14 @@ export async function checkSchemaCompatibility(
   if (phase === "verify") {
     const profile = await client
       .from("profiles")
-      .select("email")
+      .select("email,default_model,surface_models")
       .eq("id", BEFORE_USER)
       .single();
     assert.equal(profile.error, null, JSON.stringify(profile.error));
     assert.deepEqual(profile.data, {
       email: "compatibility-before@example.test",
+      default_model: "openai/compatibility-default",
+      surface_models: { chat: "openai/compatibility-chat" },
     });
     const job = await client
       .from("job_runs")
@@ -45,6 +47,8 @@ export async function checkSchemaCompatibility(
   const userId = phase === "seed" ? BEFORE_USER : AFTER_USER;
   const profile = await client.from("profiles").insert({
     id: userId,
+    default_model: "openai/compatibility-default",
+    surface_models: { chat: "openai/compatibility-chat" },
     email:
       phase === "seed"
         ? "compatibility-before@example.test"

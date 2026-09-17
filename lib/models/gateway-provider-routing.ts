@@ -36,19 +36,22 @@ export type GatewayProviderOptions = {
   };
 };
 
-function resolveGatewayFallbackModel(
+function resolveGatewayFallbackModels(
   primaryModelId: string,
   fallbackModelIds: readonly string[]
 ) {
   const normalizedPrimary = primaryModelId.trim().toLowerCase();
+  const seen = new Set([normalizedPrimary]);
+  const models: string[] = [];
   for (const fallbackModelId of fallbackModelIds) {
     const candidate = fallbackModelId.trim();
-    if (candidate && candidate.toLowerCase() !== normalizedPrimary) {
-      return candidate;
+    if (candidate && !seen.has(candidate.toLowerCase())) {
+      seen.add(candidate.toLowerCase());
+      models.push(candidate);
     }
   }
 
-  return null;
+  return models;
 }
 
 export function gatewayProviderOptions(
@@ -68,14 +71,12 @@ export function gatewayProviderOptions(
   }
 
   const normalized = modelId.trim().toLowerCase();
-  const fallbackModelId = resolveGatewayFallbackModel(
+  const fallbackModels = resolveGatewayFallbackModels(
     normalized,
     fallbackModelIds
   );
-  if (fallbackModelId) {
-    // Keep the chain intentionally bounded. Automation can retry the complete
-    // primary + fallback route once without multiplying provider cost/latency.
-    gateway.models = [fallbackModelId];
+  if (fallbackModels.length > 0) {
+    gateway.models = fallbackModels;
   }
 
   const pinnedProviders = MODEL_PROVIDER_PINS[normalized];

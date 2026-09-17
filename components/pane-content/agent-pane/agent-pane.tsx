@@ -58,7 +58,7 @@ export function AgentPane({
 }: AgentPaneProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const { asSlashCommands } = useCustomCommands();
-  const { modelIds, contextLimits } = useModels();
+  const { modelIds, contextLimits, defaultModelId } = useModels();
   const hydratedConversationRef = useRef<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -92,7 +92,7 @@ export function AgentPane({
   const storeDefaultModel = useConversationsStore(
     (state) => state.defaultModel
   );
-  const model = conversation?.model || storeDefaultModel;
+  const model = conversation?.model || defaultModelId || storeDefaultModel;
   const mode = conversation?.mode || "AUTO";
   const builtinCommands = useMemo(
     () => buildBuiltinCommands({ models: modelIds, selectedModel: model }),
@@ -488,6 +488,7 @@ export function AgentPane({
             repoId={activeRepo?.id}
             model={model}
             onModelSelect={(m) => setModel(pane.id, m)}
+            defaultModel={defaultModelId ?? undefined}
           />
         </>
       )}

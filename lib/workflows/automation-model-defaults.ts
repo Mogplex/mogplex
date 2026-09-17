@@ -7,8 +7,8 @@ export const AUTOMATION_MODEL_DEFAULT_FALLBACK_POOL = [
   "zai/glm-5.2-fast",
   "openai/gpt-5.4",
 ] as const;
-// Only the first policy-approved candidate reaches AI Gateway. Keep the
-// configurable preference list small as an additional guardrail.
+// Existing limit for the operator-configured system pool. Account preferences
+// and explicit automation choices resolve separately from this pool.
 export const AUTOMATION_MODEL_FALLBACK_POOL_MAX_SIZE = 4;
 
 const AUTOMATION_MODEL_ID_PATTERN =
@@ -62,9 +62,8 @@ export function getAutomationModelFallbackIds(
 
 /**
  * Pool for a run whose node carries a user-picked fallback model: the user's
- * choice leads, ahead of any env-configured/default pool entries. Only the
- * first policy-approved candidate reaches AI Gateway, so a configured
- * fallback effectively replaces the shared pool for that run.
+ * choice leads, ahead of any env-configured pool entries. The gateway tries
+ * the policy-approved candidates in this order.
  */
 export function getAutomationModelFallbackIdsWithOverride(
   primaryModelId: string,
