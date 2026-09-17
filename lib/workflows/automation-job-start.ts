@@ -37,6 +37,7 @@ import {
   loadStartDispatchContext,
   recordStartDispatchEvent,
 } from "@/lib/workflows/automation-job-dispatch";
+import { workflowCapacityMetadata } from "@/lib/billing/workflow-capacity-metadata";
 
 async function startTriggerAutomationRun(
   input: AutomationJobInput,
@@ -294,9 +295,8 @@ export async function startAutomationJobRun(
       reason: ACCOUNT_CONCURRENCY_LIMIT,
       source,
       metadata: {
-        billing_account_id: capacity.accountId,
+        ...workflowCapacityMetadata(capacity),
         active_concurrency: capacity.activeBefore,
-        concurrency_limit: capacity.concurrencyLimit,
       },
       adminClient,
     });
@@ -439,15 +439,7 @@ export async function startAutomationJobRun(
     jobRunId,
     outcome: "started",
     source,
-    metadata: capacity.tracked
-      ? {
-          billing_account_id: capacity.accountId,
-          capacity_accounting_mode: capacity.accountingMode,
-          capacity_would_admit: capacity.wouldAdmit,
-          active_concurrency_before: capacity.activeBefore,
-          concurrency_limit: capacity.concurrencyLimit,
-        }
-      : { capacity_tracking: "unresolved_scope" },
+    metadata: workflowCapacityMetadata(capacity),
     adminClient,
   });
 

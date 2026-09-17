@@ -1,4 +1,5 @@
 export type BaselineSnapshotRestorePhase =
+  | "runtime"
   | "fetch"
   | "checkout"
   | "install"
