@@ -4,10 +4,6 @@ import test from "node:test";
 
 const globalsUrl = new URL("../../app/globals.css", import.meta.url);
 const globalErrorUrl = new URL("../../app/global-error.tsx", import.meta.url);
-const modelsSectionUrl = new URL(
-  "../../components/library/models-section.tsx",
-  import.meta.url
-);
 const monacoPaneUrl = new URL(
   "../../components/monaco-pane.tsx",
   import.meta.url
@@ -31,10 +27,7 @@ const appSidebarUrl = new URL(
 );
 
 test("tokenized shadows preserve semantic shadow tokens", async () => {
-  const [globals, modelsSection] = await Promise.all([
-    readFile(globalsUrl, "utf8"),
-    readFile(modelsSectionUrl, "utf8"),
-  ]);
+  const globals = await readFile(globalsUrl, "utf8");
 
   assert.match(
     globals,
@@ -44,8 +37,8 @@ test("tokenized shadows preserve semantic shadow tokens", async () => {
     globals,
     /--app-shadow-panel: 0 18px 50px oklch\(10\.88% 0\.006 132 \/ 14%\);/
   );
-  assert.match(modelsSection, /shadow-app-card/);
-  assert.match(modelsSection, /shadow-app-panel/);
+  assert.match(globals, /--shadow-app-card: var\(--app-shadow-card\)/);
+  assert.match(globals, /--shadow-app-panel: var\(--app-shadow-panel\)/);
 });
 
 test("global error keeps semantic tokens in their dark scope", async () => {
