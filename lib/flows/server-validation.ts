@@ -1,7 +1,10 @@
 import { validateFlowGraph, getStartConfig } from "./graph";
 import { assertOwnedFlowGraphAgents } from "./server-preset-agents";
 import { findPreconfiguredAgentTemplate } from "@/lib/agents/template-forks";
-import { listUsableModelIdsForScope } from "@/lib/models/default-model";
+import {
+  listUsableModelIdsForScope,
+  resolveStoredUserDefaultModelId,
+} from "@/lib/models/default-model";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isFlowServiceError } from "./errors";
 import type { FlowGraph } from "@/lib/types";
@@ -64,6 +67,7 @@ export async function validateFlowConfiguration(
 
   const ownedGraph: FlowGraph = { ...graph, nodes: [] };
   const modelIds = new Set<string>();
+  let needsDefaultModel = false;
   for (const node of graph.nodes) {
     if (node.type !== "agent") continue;
     const agentId = node.data.agentId;
@@ -77,7 +81,9 @@ export async function validateFlowConfiguration(
       ownedGraph.nodes.push(node);
     }
     if ((node.data.harness ?? "mogplex") === "mogplex") {
-      if (node.data.modelOverride) modelIds.add(node.data.modelOverride);
+      const override = node.data.modelOverride?.trim();
+      if (override) modelIds.add(override);
+      else needsDefaultModel = true;
       if (node.data.fallbackModelOverride)
         modelIds.add(node.data.fallbackModelOverride);
     }
@@ -100,6 +106,17 @@ export async function validateFlowConfiguration(
           `Model "${id}" is not enabled and available. Choose an ID from mogplex_list_models.`
         );
     }
+  }
+  if (
+    needsDefaultModel &&
+    !(await resolveStoredUserDefaultModelId(userId, {
+      surface: "agents",
+      teamId,
+    }))
+  ) {
+    errors.push(
+      "No enabled model is available. Enable a model in settings before publishing."
+    );
   }
   return { valid: errors.length === 0, errors };
 }

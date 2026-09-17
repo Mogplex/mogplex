@@ -161,7 +161,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     name: "mogplex_set_automation_model",
     title: "Set Automation Model",
     description:
-      "Set an agent node's model override to an enabled Mogplex model, or null to inherit the agent model. Optionally publish the change.",
+      "Set an agent node's model override, or null to use the configured Agent/API/MCP default at run time. Leave defaults unchanged unless an override is requested. Optionally publish the change.",
     inputSchema: objectSchema({
       properties: {
         automationId: { type: "string", description: "Automation id." },
@@ -257,6 +257,34 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     annotations: {
       readOnlyHint: true,
       openWorldHint: false,
+    },
+  },
+  {
+    name: "mogplex_cancel_automation_run",
+    title: "Cancel Automation Run",
+    description:
+      "Cancel one Flow automation job run, including its runtime, active AI calls, and pending waits. Use the job run ID from mogplex_list_automation_runs or mogplex_trigger_automation. This does not disable future scheduled runs or undo completed changes.",
+    inputSchema: objectSchema({
+      properties: {
+        automationId: {
+          type: "string",
+          format: "uuid",
+          description: "Automation id.",
+        },
+        runId: {
+          type: "string",
+          format: "uuid",
+          description:
+            "Flow job run id, not a one-off agent run id or Trigger runtime id.",
+        },
+      },
+      required: ["automationId", "runId"],
+    }),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
     },
   },
   {

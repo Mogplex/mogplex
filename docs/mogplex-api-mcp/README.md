@@ -111,6 +111,7 @@ mogplex_set_automation_model
 mogplex_trigger_automation
 mogplex_list_automation_runs
 mogplex_get_automation_run_logs
+mogplex_cancel_automation_run
 mogplex_rerun_pr_review
 ```
 

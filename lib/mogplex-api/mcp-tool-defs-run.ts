@@ -100,7 +100,8 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
   {
     name: "mogplex_cancel_run",
     title: "Cancel Mogplex Run",
-    description: "Request cancellation for an active Mogplex external run.",
+    description:
+      "Request cancellation for a one-off agent run. For Flow job runs, use mogplex_cancel_automation_run instead.",
     inputSchema: objectSchema({
       properties: {
         runId: runIdProperty,

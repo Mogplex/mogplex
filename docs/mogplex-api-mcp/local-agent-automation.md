@@ -36,11 +36,18 @@ For clients without OAuth support, create a key in Mogplex Settings > Mogplex Ke
 For an existing automation:
 
 1. Call `mogplex_list_automations` for bounded, graph-free summaries. Pass its `nextCursor` back as `cursor` to continue, and use `mogplex_get_automation` when you need one automation's full draft and published graphs.
-2. Call `mogplex_list_models` before choosing a model id.
+2. Leave `modelOverride` omitted or `null` to keep the configured defaults. Call `mogplex_list_models` only when choosing an explicit override.
 3. Use `mogplex_set_automation_model` for a narrow node-level change, or `mogplex_update_automation` to replace the complete draft graph.
 4. Call `mogplex_publish_automation` to validate, version, and activate a draft.
 5. Call `mogplex_trigger_automation` with an automation id, a repo id, and an optional event-shaped input object.
 6. Read progress and diagnostics with `mogplex_list_automation_runs` and `mogplex_get_automation_run_logs`.
+7. To stop a Flow run, call `mogplex_cancel_automation_run` with its `automationId` and job `runId`. This requires `write` scope.
+
+Native nodes without an override use the current Agent/API/MCP model setting, then the global default and the existing available-model fallback policy. The graph stays unpinned, so later settings changes apply to future runs. Explicit overrides remain unchanged. CLI harnesses continue to select their own models.
+
+`mogplex_cancel_run` stops only one-off agent runs. Flow cancellation uses `mogplex_cancel_automation_run` and the job ID, not the Trigger runtime ID. It cancels the runtime and requests cancellation of active AI calls, node runs, and waits. It does not disable the schedule or undo completed changes. Existing queue handling can release other queued jobs after cancellation.
+
+Agent nodes store their full output in `output.text` and a preview in `output.text_summary`. Downstream nodes receive the full text, including decisions at the end of long reports. Existing run records retain their original output.
 
 For a new automation:
 

@@ -1,6 +1,7 @@
 /**
  * Shared fixtures and helpers for job-run-cancel tests.
  */
+import { createRequire } from "node:module";
 
 export type JobRunRow = {
   id: string;
@@ -85,6 +86,11 @@ export async function withPatchedCancellationStore<T>(
       import("@/lib/supabase/admin"),
     ]);
   const { runs } = await import("@trigger.dev/sdk/v3");
+  // tsx route imports can load the CommonJS SDK while dynamic imports load ESM.
+  const { runs: cjsRuns } = createRequire(import.meta.url)(
+    "@trigger.dev/sdk/v3"
+  ) as typeof import("@trigger.dev/sdk/v3");
+  const originalCjsCancel = cjsRuns.cancel;
 
   const originalFrom = supabaseAdmin.from.bind(supabaseAdmin);
   const originalAliasedFrom =
@@ -324,6 +330,11 @@ export async function withPatchedCancellationStore<T>(
     writable: true,
     value: input.cancelImpl,
   });
+  Object.defineProperty(cjsRuns, "cancel", {
+    configurable: true,
+    writable: true,
+    value: input.cancelImpl,
+  });
 
   try {
     return await callback({
@@ -346,6 +357,11 @@ export async function withPatchedCancellationStore<T>(
       configurable: true,
       writable: true,
       value: originalCancel,
+    });
+    Object.defineProperty(cjsRuns, "cancel", {
+      configurable: true,
+      writable: true,
+      value: originalCjsCancel,
     });
   }
 }

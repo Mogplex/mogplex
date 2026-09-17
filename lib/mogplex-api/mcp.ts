@@ -122,7 +122,7 @@ function initializeResult() {
       version: MOGPLEX_MCP_SERVER_VERSION,
     },
     instructions:
-      "Use Mogplex tools to discover repos, agents, and models. Before creating an automation, call mogplex_get_automation_schema for graph fields and examples, then mogplex_validate_automation. Scheduled work uses task nodes; edit nodes fix existing PRs. Agent IDs with preset: are provisioned on save, so a separate create-agent tool is not needed. Use the requested harness. Publish activates the schedule; trigger starts a real billed run, not a dry run. Verify runs through logs before reporting execution success. Tools also manage repo env vars, sandboxes, PR reviews, and one-off agent runs.",
+      "Use Mogplex tools to discover repos and agents. Before creating an automation, call mogplex_get_automation_schema for graph fields and examples, then mogplex_validate_automation. Scheduled work uses task nodes; edit nodes fix existing PRs. Agent IDs with preset: are provisioned on save, so a separate create-agent tool is not needed. Leave modelOverride omitted or null to preserve configured defaults; list models only when an explicit override is needed. Use the requested harness. Publish activates the schedule; trigger starts a real billed run, not a dry run. Verify runs through logs before reporting execution success. Use mogplex_cancel_automation_run for Flow job runs and mogplex_cancel_run for one-off agent runs. Cancellation does not disable schedules or undo completed changes.",
   };
 }
 

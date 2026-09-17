@@ -60,6 +60,7 @@ export type ToolCallParams = {
 export type MogplexMcpClient = Pick<
   MogplexApiClient,
   | "cancelRun"
+  | "cancelAutomationRun"
   | "createAutomation"
   | "createSandbox"
   | "deleteRepoEnvVar"

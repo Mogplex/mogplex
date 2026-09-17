@@ -174,7 +174,7 @@ test.each(["mogplex", undefined] as const)(
     assert.ok(work?.type === "agent");
     work.data.harness = harness;
     work.data.agentId = "preset:task-agent";
-    work.data.modelOverride = "openai/gpt-5.4";
+    work.data.modelOverride = null;
     work.data.requireApproval = true;
     assert.deepEqual(validateFlowGraph(graph), { valid: true, errors: [] });
   }

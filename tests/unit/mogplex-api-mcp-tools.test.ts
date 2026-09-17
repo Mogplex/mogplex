@@ -68,6 +68,7 @@ test("Mogplex MCP initialize and tools/list expose the run control tools", async
       "mogplex_trigger_automation",
       "mogplex_list_automation_runs",
       "mogplex_get_automation_run_logs",
+      "mogplex_cancel_automation_run",
       "mogplex_rerun_pr_review",
       "mogplex_start_agent_run",
       "mogplex_get_run",

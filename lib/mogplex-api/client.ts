@@ -15,6 +15,7 @@ import type { MogplexApiSandbox, MogplexApiSandboxLogs } from "./sandboxes";
 import type { MogplexApiRunDetail, StartMogplexApiRunRequest } from "./runs";
 import type { FlowRunDetail, FlowRunRecord, FlowGraph } from "@/lib/types";
 import type { FlowConfigurationValidation } from "@/lib/flows/server-validation";
+import type { AutomationRunCancelResult } from "./automation-run-control";
 
 export { MogplexApiClientError } from "./client-error";
 
@@ -357,6 +358,13 @@ export class MogplexApiClient {
     return this.request<RerunMogplexPrReviewResult>(
       "/api/v1/mogplex/pr-reviews/rerun",
       { method: "POST", body: input }
+    );
+  }
+
+  cancelAutomationRun(input: { automationId: string; runId: string }) {
+    return this.request<AutomationRunCancelResult>(
+      `/api/v1/mogplex/automations/${encodeURIComponent(input.automationId)}/runs/${encodeURIComponent(input.runId)}/cancel`,
+      { method: "POST" }
     );
   }
 

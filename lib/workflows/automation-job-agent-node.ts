@@ -196,14 +196,13 @@ export async function executeFlowAgentNode(
 
   // Harness nodes run an external CLI that picks its own model, so a
   // model selection is meaningless for them and the editor hides it.
-  // Every other agent node must carry one: the node is the only source
-  // of truth, so "no model" is a config error, not a fallback.
+  // Native nodes use the current scoped default unless explicitly pinned.
   const nodeModelId = harnessId
     ? null
-    : node.data.modelOverride?.trim() || null;
+    : node.data.modelOverride?.trim() || resolvedFlow.defaultModelId || null;
 
   if (!harnessId && !nodeModelId) {
-    const message = `No model selected for node "${label}". Open the automation and choose a model for this step.`;
+    const message = `No enabled model is available for node "${label}". Enable a model in settings or choose an available override.`;
     await completeNodeRun({ status: "failed", error: message });
     const recovered = routeFailureOrNull(message);
     if (recovered) return recovered;
@@ -431,7 +430,8 @@ export async function executeFlowAgentNode(
     output: {
       role: nodeRole,
       harness: nodeHarness,
-      text: summarizeNodeOutput(result.text),
+      text: result.text,
+      text_summary: summarizeNodeOutput(result.text),
       review: reviewOutcome,
       tool_calls: toolCalls,
       // The merge itself runs after the review check run is
@@ -457,8 +457,9 @@ export async function executeFlowAgentNode(
     );
   }
 
-  const summary = summarizeNodeOutput(result.text);
-  state.outputs.set(node.id, { label, text: summary });
+  // Summaries are for display only; later nodes and conditions need the verdict
+  // and evidence even when they occur beyond the preview cutoff.
+  state.outputs.set(node.id, { label, text: result.text });
   state.results.push(result);
 
   return {
@@ -467,7 +468,7 @@ export async function executeFlowAgentNode(
       resolvedFlow.graph,
       node.id,
       label,
-      summary,
+      result.text,
       false,
       {
         role: nodeRole,

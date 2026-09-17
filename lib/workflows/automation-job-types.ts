@@ -78,6 +78,7 @@ export type FlowAgentConfig = {
 };
 
 export type ResolvedFlowDefinition = {
+  defaultModelId?: string | null;
   flowId: string;
   flowVersionId: string;
   graph: FlowGraph;
