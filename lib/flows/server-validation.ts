@@ -86,7 +86,9 @@ export async function validateFlowConfiguration(
     await assertOwnedFlowGraphAgents(userId, ownedGraph);
   } catch (error) {
     if (!isFlowServiceError(error)) throw error;
-    errors.push(error.message);
+    errors.push(
+      "Could not verify one or more agents. Choose an ID from mogplex_list_agents and try again."
+    );
   }
   if (modelIds.size > 0) {
     const availableModels = new Set(

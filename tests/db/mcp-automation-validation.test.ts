@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { validateFlowConfiguration } from "@/lib/flows/server-validation";
 import { scheduledTaskExample } from "@/lib/mogplex-api/automation-schema";
 import { coerceGraph } from "@/lib/flows/graph";
+import { PRECONFIGURED_AGENTS } from "@/lib/agents/templates";
 import { createAutomationDb, AGENT_ID } from "./helpers/mcp-automation-fixture";
 
 it("preflight checks owned installations, repositories, agents and enabled models without writes", async () => {
@@ -21,6 +22,15 @@ it("preflight checks owned installations, repositories, agents and enabled model
       valid: true,
       errors: [],
     });
+    task.data.agentId = `preset:${PRECONFIGURED_AGENTS[0].name}`;
+    expect((await validateFlowConfiguration("owner", graph, 123)).valid).toBe(
+      true
+    );
+    task.data.agentId = "preset:NOT_A_TEMPLATE";
+    expect((await validateFlowConfiguration("owner", graph, 123)).valid).toBe(
+      false
+    );
+    task.data.agentId = AGENT_ID;
     expect(
       (await validateFlowConfiguration("owner", graph, 456)).errors.join(" ")
     ).toMatch(/Installation is not available/);
@@ -55,6 +65,12 @@ it("preflight checks owned installations, repositories, agents and enabled model
         (sql) => !/^(insert|update|delete)\b/i.test(sql.trim())
       )
     ).toBe(true);
+    await db.pg.exec("drop table agents cascade");
+    const unavailable = await validateFlowConfiguration("owner", graph, 123);
+    expect(unavailable.errors.join(" ")).toContain(
+      "Could not verify one or more agents"
+    );
+    expect(unavailable.errors.join(" ")).not.toMatch(/relation|does not exist/);
   } finally {
     await db.close();
   }
