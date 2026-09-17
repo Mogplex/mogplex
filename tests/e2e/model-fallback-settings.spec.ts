@@ -2,6 +2,60 @@ import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { mockSettingsPageData, model } from "./helpers/theme-settings-fixtures";
 
+test("default and fallback settings share a compact row above the catalog", async ({
+  page,
+}, testInfo) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsPageData(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.route(/\/api\/settings(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { default_model: model.id, theme: "dark" } })
+  );
+  const alternative = {
+    ...model,
+    id: "moonshotai/kimi-k3-fast",
+    name: "Kimi K3 Fast",
+    provider: "moonshotai",
+  };
+  await page.route("**/api/models", (route) =>
+    route.fulfill({
+      json: { models: [model, alternative], catalog: [model, alternative] },
+    })
+  );
+  await page.route("**/api/settings/model-fallbacks", (route) =>
+    route.fulfill({ json: { fallback_model_ids: [alternative.id] } })
+  );
+  await page.goto(scopedPath("/settings?tab=models"));
+  const defaults = page.getByTestId("models-default-summary");
+  const fallbacks = page.getByRole("region", { name: "Fallback models" });
+  await expect(
+    fallbacks.getByRole("button", { name: "Fallback 1", exact: true })
+  ).toBeVisible();
+  const primary = await defaults.boundingBox();
+  const fallback = await fallbacks.boundingBox();
+  expect(primary).not.toBeNull();
+  expect(fallback).not.toBeNull();
+  expect(Math.abs(primary!.y - fallback!.y)).toBeLessThan(4);
+  expect(primary!.x + primary!.width).toBeLessThan(fallback!.x);
+  await page.screenshot({
+    path: testInfo.outputPath("model-settings-desktop.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobilePrimary = await defaults.boundingBox();
+  const mobileFallback = await fallbacks.boundingBox();
+  expect(mobilePrimary!.y + mobilePrimary!.height).toBeLessThan(
+    mobileFallback!.y
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("model-settings-mobile.png"),
+  });
+});
+
 test("four fallback choices hide the add control until a choice is removed", async ({
   page,
 }, testInfo) => {
