@@ -43,7 +43,9 @@ For an existing automation:
 6. Read progress and diagnostics with `mogplex_list_automation_runs` and `mogplex_get_automation_run_logs`.
 7. To stop a Flow run, call `mogplex_cancel_automation_run` with its `automationId` and job `runId`. This requires `write` scope.
 
-Native nodes without an override use the current Agent/API/MCP model setting, then the global default and the existing available-model fallback policy. The graph stays unpinned, so later settings changes apply to future runs. Explicit overrides remain unchanged. CLI harnesses continue to select their own models.
+Native nodes without an override use the current Agent/API/MCP model setting, or the global default when no surface default is set. If that model is unavailable, the existing available-model fallback policy applies. The graph stays unpinned, so later settings changes apply to future runs. Explicit overrides remain unchanged. CLI harnesses continue to select their own models.
+
+Keep node reports concise to reduce storage and model input costs. Full output can exceed a model's context window. Handoff preserves the full text instead of silently truncating it to fit.
 
 `mogplex_cancel_run` stops only one-off agent runs. Flow cancellation uses `mogplex_cancel_automation_run` and the job ID, not the Trigger runtime ID. It cancels the runtime and requests cancellation of active AI calls, node runs, and waits. It does not disable the schedule or undo completed changes. Existing queue handling can release other queued jobs after cancellation.
 

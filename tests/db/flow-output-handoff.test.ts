@@ -17,7 +17,8 @@ it.each(["mogplex", "claude-code"] as const)(
   "%s passes a trailing verdict intact to the next node and stores full output",
   async (harness) => {
     const db = await createAutomationDb();
-    const analysis = `${"Detailed evidence. ".repeat(100)}\nDECISION: NO_ACTION`;
+    const analysis = `${"Detailed evidence. ".repeat(60_000)}\nDECISION: NO_ACTION`;
+    expect(Buffer.byteLength(analysis)).toBeGreaterThan(1_000_000);
     try {
       const graph = coerceGraph(structuredClone(scheduledTaskExample));
       const apply = graph.nodes.find((node) => node.type === "agent")!;

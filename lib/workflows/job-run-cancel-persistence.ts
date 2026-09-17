@@ -108,5 +108,6 @@ export async function finalizeJobRunCancelled(input: {
     );
   }
 
-  return coerceJobRunControlRow(data) ?? current;
+  // Completion can win after the read; never return that stale snapshot.
+  return coerceJobRunControlRow(data) ?? loadJobRunControlRow(input.jobRunId);
 }

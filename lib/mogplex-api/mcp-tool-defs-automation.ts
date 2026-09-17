@@ -263,7 +263,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     name: "mogplex_cancel_automation_run",
     title: "Cancel Automation Run",
     description:
-      "Cancel one Flow automation job run, including its runtime, active AI calls, and pending waits. Use the job run ID from mogplex_list_automation_runs or mogplex_trigger_automation. This does not disable future scheduled runs or undo completed changes.",
+      "Cancel one Flow automation job run, including its runtime, active AI calls, and pending waits. Use a run's id from mogplex_list_automation_runs or run.jobRunId from mogplex_trigger_automation. This does not disable future scheduled runs or undo completed changes.",
     inputSchema: objectSchema({
       properties: {
         automationId: {
@@ -275,7 +275,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
           type: "string",
           format: "uuid",
           description:
-            "Flow job run id, not a one-off agent run id or Trigger runtime id.",
+            "Flow job run UUID: a run's id from mogplex_list_automation_runs or run.jobRunId from mogplex_trigger_automation. Do not use runtime_run_id, run.runtime.runId, or a one-off agent run id.",
         },
       },
       required: ["automationId", "runId"],
