@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { coerceGraph, validateFlowGraph } from "../../lib/flows/graph";
-import { handleMogplexMcpPayload } from "../../lib/mogplex-api/mcp";
-import { buildFakeMcpClient } from "./helpers/mogplex-api-mcp-fixtures";
+import { test } from "vitest";
+import { coerceGraph, validateFlowGraph } from "../flows/graph";
+import { handleMogplexMcpPayload } from "./mcp";
+import { buildFakeMcpClient } from "../../tests/unit/helpers/mogplex-api-mcp-fixtures";
 
 function scheduledGraph(role: string) {
   return coerceGraph({
@@ -111,7 +111,13 @@ test("scheduled tasks reject unsupported flags, missing instructions and incompa
     const task = graph.nodes.find((node) => node.id === "work");
     assert.ok(task?.type === "agent");
     task.data[flag] = true;
-    assert.equal(validateFlowGraph(graph).valid, false, flag);
+    assert.match(
+      validateFlowGraph(graph).errors.join(" "),
+      flag === "requireApproval"
+        ? /Agent "Apply" needs the Mogplex harness for per-tool approval/
+        : /Task node "Apply" cannot use PR review or merge options/,
+      flag
+    );
   }
   const graph = scheduledGraph("task");
   const task = graph.nodes.find((node) => node.id === "work");
@@ -127,6 +133,49 @@ test("scheduled tasks reject unsupported flags, missing instructions and incompa
   start.data.event = "push";
   assert.match(
     validateFlowGraph(graph).errors.join(" "),
-    /requires a schedule trigger/
+    /Task node "Apply" requires a schedule trigger/
   );
 });
+
+test.each(["pr_opened", "pr_comment", "mention", "labeled"] as const)(
+  "existing PR fixes still accept the %s trigger without task instructions",
+  (event) => {
+    const graph = scheduledGraph("edit");
+    const start = graph.nodes.find((node) => node.type === "start")!;
+    start.data.event = event;
+    const work = graph.nodes.find((node) => node.id === "work");
+    assert.ok(work?.type === "agent");
+    work.data.systemPromptOverride = null;
+    work.data.autofix = true;
+    work.data.autoMerge = true;
+    work.data.autoRevert = true;
+    assert.deepEqual(validateFlowGraph(graph), { valid: true, errors: [] });
+  }
+);
+
+test.each([null, "", "   "])(
+  "task instructions cannot be absent or blank: %j",
+  (instructions) => {
+    const graph = scheduledGraph("task");
+    const work = graph.nodes.find((node) => node.id === "work");
+    assert.ok(work?.type === "agent");
+    work.data.systemPromptOverride = instructions;
+    assert.deepEqual(validateFlowGraph(graph).errors, [
+      'Task node "Apply" needs instructions in systemPromptOverride.',
+    ]);
+  }
+);
+
+test.each(["mogplex", undefined] as const)(
+  "native task approval is valid with harness %s",
+  (harness) => {
+    const graph = scheduledGraph("task");
+    const work = graph.nodes.find((node) => node.id === "work");
+    assert.ok(work?.type === "agent");
+    work.data.harness = harness;
+    work.data.agentId = "preset:task-agent";
+    work.data.modelOverride = "openai/gpt-5.4";
+    work.data.requireApproval = true;
+    assert.deepEqual(validateFlowGraph(graph), { valid: true, errors: [] });
+  }
+);
