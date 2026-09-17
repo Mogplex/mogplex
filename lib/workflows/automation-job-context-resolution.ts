@@ -215,6 +215,17 @@ export async function resolveJobContext(
       repo = repoData;
     }
 
+    const requiresAgentWorkspace = resolvedFlow.graph.nodes.some(
+      (node) =>
+        node.type === "agent" &&
+        (node.data.role === "task" ||
+          node.data.harness === "claude-code" ||
+          node.data.harness === "codex")
+    );
+    if (!repo && requiresAgentWorkspace) {
+      return { error: "MISSING_CONFIG" as const };
+    }
+
     if (!repo && typeof metadata.repo_full_name === "string") {
       repo = {
         id: repoId || "",

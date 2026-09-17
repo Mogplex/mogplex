@@ -158,6 +158,23 @@ it("MCP discovers, validates, creates, publishes and executes a scheduled task w
       )
     ).rows[0];
     expect(stored.trigger_schedule_id).toBe("sched_test");
+    const missingRepoJob = (
+      await db.pg.query<{ id: string }>(
+        "insert into job_runs(flow_id,flow_version_id,metadata) values($1,$2,$3) returning id",
+        [
+          id,
+          stored.published_version_id,
+          JSON.stringify({
+            source_type: "schedule",
+            repo_full_name: "acme/widgets",
+            installation_id: 123,
+          }),
+        ]
+      )
+    ).rows[0];
+    expect(await resolveJobContext(missingRepoJob.id)).toEqual({
+      error: "MISSING_CONFIG",
+    });
     const job = (
       await db.pg.query<{ id: string }>(
         "insert into job_runs(flow_id,flow_version_id,metadata) values($1,$2,$3) returning id",

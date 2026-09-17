@@ -387,5 +387,6 @@ export const automationSchemaGuide = {
     "Create or update the draft, then publish it. Publishing activates the schedule. Published status is not evidence of successful execution.",
     "mogplex_trigger_automation starts a real billed run with the configured write access. There is no dry-run flag. Inspect runs and logs to verify execution.",
     "A prompt to check open PRs is not an atomic duplicate-work lock. Stop overlapping external schedules before handing recurring work to this automation.",
+    "Task commands have repository write access. autoMerge: false disables built-in auto-merge, not shell permissions. Use GitHub branch rules to enforce required human review.",
   ],
 };
