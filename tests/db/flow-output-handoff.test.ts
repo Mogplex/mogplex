@@ -19,12 +19,15 @@ import {
 } from "./helpers/mcp-automation-fixture";
 
 it.each([
-  ["mogplex", false],
-  ["claude-code", false],
-  ["codex", false],
-  ["mogplex", true],
-  ["claude-code", true],
-  ["codex", true],
+  ["mogplex", "none"],
+  ["claude-code", "none"],
+  ["codex", "none"],
+  ["mogplex", "update"],
+  ["claude-code", "update"],
+  ["codex", "update"],
+  ["mogplex", "insert"],
+  ["claude-code", "insert"],
+  ["codex", "insert"],
 ] as const)(
   "%s preserves bounded handoffs and stops on report storage failure=%s",
   async (harness, failStorage) => {
@@ -32,7 +35,16 @@ it.each([
     const analysis = `${"Detailed evidence. ".repeat(60_000)}\nMOGPLEX_FLOW_HANDOFF: {"decision":"NO_ACTION","summary":"Both changes already have open PRs."}`;
     expect(Buffer.byteLength(analysis)).toBeGreaterThan(1_000_000);
     try {
-      if (failStorage)
+      if (failStorage === "insert")
+        await db.pg.exec(`
+        create function reject_node_run() returns trigger language plpgsql as $$
+        begin
+          if new.node_id = 'analyst' then raise exception 'node run storage unavailable'; end if;
+          return new;
+        end $$;
+        create trigger reject_node_run before insert on flow_node_runs for each row execute function reject_node_run();
+      `);
+      if (failStorage === "update")
         await db.pg.exec(`
         create function reject_report() returns trigger language plpgsql as $$
         begin
@@ -79,7 +91,9 @@ it.each([
         )
       ).rows[0].id;
       const prompts: string[] = [];
+      const executedNodes: unknown[] = [];
       const resultFor = async (context: JobContext, prompt: string) => {
+        executedNodes.push(context.metadata.flow_node_id);
         if (context.metadata.flow_node_id === "analyst")
           return { text: analysis, steps: [], usage: null };
         prompts.push(prompt);
@@ -177,8 +191,22 @@ it.each([
           installationId: 123,
         },
       });
-      if (failStorage) {
+      if (failStorage === "insert") {
         expect(outcome.success).toBe(false);
+        expect(executedNodes).toEqual([]);
+        expect(prompts).toHaveLength(0);
+        expect(
+          (
+            await db.pg.query(
+              "select node_id from flow_node_runs where node_type='agent'"
+            )
+          ).rows
+        ).toEqual([]);
+        return;
+      }
+      if (failStorage === "update") {
+        expect(outcome.success).toBe(false);
+        expect(executedNodes).toEqual(["analyst"]);
         expect(prompts).toHaveLength(0);
         expect(
           (
@@ -190,6 +218,7 @@ it.each([
         return;
       }
       expect(outcome.success, JSON.stringify(outcome)).toBe(true);
+      expect(executedNodes).toEqual(["analyst", apply.id]);
       expect(prompts).toHaveLength(1);
       const stored = (
         await db.pg.query<{ output: { text: string; text_summary: string } }>(

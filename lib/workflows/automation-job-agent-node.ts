@@ -321,6 +321,13 @@ export async function executeFlowAgentNode(
     }
   }
 
+  if (!execCtx.nodeRun.id) {
+    return completeFailedNode(
+      "The full Flow report cannot be saved. Downstream nodes were not started.",
+      nodeContext
+    );
+  }
+
   let result: AutomationAgentResult;
 
   // Helper for expectedHeadSha calculation
@@ -432,12 +439,6 @@ export async function executeFlowAgentNode(
     };
   }
 
-  if (!execCtx.nodeRun.id) {
-    return completeFailedNode(
-      "The full Flow report cannot be saved. Downstream nodes were not started.",
-      nodeContext
-    );
-  }
   const handoff = buildFlowReportHandoff(execCtx.nodeRun.id, result.text);
   const nodeDurationMs = await completeNodeRun({
     requirePersistence: true,
