@@ -12,6 +12,13 @@ test("scheduled Task instructions and role survive save and reload", async ({
 }, testInfo) => {
   await setupWorkflowsPage(page);
   let graph = structuredClone(flowPayload.draft_graph) as FlowGraph;
+  const agent = graph.nodes.find((node) => node.type === "agent")!;
+  Object.assign(agent.data, {
+    autofix: true,
+    autofixSandbox: true,
+    autoMerge: true,
+    autoRevert: true,
+  });
   const start = graph.nodes.find((node) => node.type === "start")!;
   start.data = {
     label: "Daily",
@@ -34,6 +41,14 @@ test("scheduled Task instructions and role survive save and reload", async ({
   await openAgentInspector(page);
   await page.getByRole("combobox", { name: "Agent task" }).click();
   await page.getByRole("option", { name: "Task", exact: true }).click();
+  await expect(
+    page.getByRole("checkbox", { name: /^Auto-fix issues/ })
+  ).toHaveCount(0);
+  const approval = page.getByRole("checkbox", {
+    name: /^Require approval for tool calls/,
+  });
+  await expect(approval).toBeVisible();
+  await approval.check();
   const instructions =
     "Check open PRs, run repository checks, and open a PR only for missing changes.";
   await page.getByLabel("System prompt override").fill(instructions);
@@ -47,6 +62,15 @@ test("scheduled Task instructions and role survive save and reload", async ({
   expect(graph.nodes.find((node) => node.type === "agent")?.data.role).toBe(
     "task"
   );
+  expect(graph.nodes.find((node) => node.type === "agent")?.data).toMatchObject(
+    {
+      autofix: false,
+      autofixSandbox: false,
+      autoMerge: false,
+      autoRevert: false,
+      requireApproval: true,
+    }
+  );
   await page.reload();
   await page.locator('.react-flow__node[data-id="agent-1"]').click();
   await expect(page.getByRole("combobox", { name: "Agent task" })).toHaveText(
@@ -55,6 +79,10 @@ test("scheduled Task instructions and role survive save and reload", async ({
   await expect(page.getByLabel("System prompt override")).toHaveValue(
     instructions
   );
+  await expect(
+    page.getByRole("checkbox", { name: /^Require approval for tool calls/ })
+  ).toBeChecked();
+  await page.getByLabel("System prompt override").scrollIntoViewIfNeeded();
   await page.screenshot({
     path: testInfo.outputPath("scheduled-task.png"),
     fullPage: true,

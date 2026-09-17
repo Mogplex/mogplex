@@ -137,28 +137,34 @@ export function ReviewOptionsSection({
       )}
 
       {selectedAgentHarness === "mogplex" && (
-        <label
-          htmlFor={`agent-require-approval-${node.id}`}
-          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-card/60 px-3 py-3 transition-colors hover:border-primary/30 hover:bg-card/80"
-        >
-          <Checkbox
-            id={`agent-require-approval-${node.id}`}
-            checked={node.data.requireApproval === true}
-            onCheckedChange={(checked) => updateNodeData(node.id, (data) => ({
-              ...data,
-              requireApproval: checked === true,
-            }), { mergeKey: `agent-require-approval-${node.id}` })}
-            className="mt-0.5"
-          />
-          <span className="space-y-1">
-            <span className="block text-sm font-medium text-foreground">Require approval for tool calls</span>
-            <span className="block text-xs leading-5 text-muted-foreground">
-              Pause before each tool call until you approve or deny it from Observability, with an optional note to steer the agent. Waits share a 10-minute window per run; unanswered calls are denied and the run continues.
-            </span>
-          </span>
-        </label>
+        <ToolApprovalOption node={node} updateNodeData={updateNodeData} />
       )}
     </div>
+  )
+}
+
+export function ToolApprovalOption({ node, updateNodeData }: Pick<ReviewOptionsSectionProps, "node" | "updateNodeData">) {
+  return (
+    <label
+      htmlFor={`agent-require-approval-${node.id}`}
+      className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-card/60 px-3 py-3 transition-colors hover:border-primary/30 hover:bg-card/80"
+    >
+      <Checkbox
+        id={`agent-require-approval-${node.id}`}
+        checked={node.data.requireApproval === true}
+        onCheckedChange={(checked) => updateNodeData(node.id, (data) => ({
+          ...data,
+          requireApproval: checked === true,
+        }), { mergeKey: `agent-require-approval-${node.id}` })}
+        className="mt-0.5"
+      />
+      <span className="space-y-1">
+        <span className="block text-sm font-medium text-foreground">Require approval for tool calls</span>
+        <span className="block text-xs leading-5 text-muted-foreground">
+          Pause before each tool call until you approve or deny it from Observability, with an optional note to steer the agent. Waits share a 10-minute window per run; unanswered calls are denied and the run continues.
+        </span>
+      </span>
+    </label>
   )
 }
 
