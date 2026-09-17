@@ -66,4 +66,10 @@ describe("previous-release database contracts", () => {
       checkSchemaCompatibility(queryable, "verify")
     ).rejects.toThrow();
   });
+  it("rejects migrations that overwrite an existing Control conversation", async () => {
+    await db.exec("update public.control_sessions set title='Overwritten'");
+    await expect(
+      checkSchemaCompatibility(queryable, "verify")
+    ).rejects.toThrow();
+  });
 });

@@ -27,7 +27,12 @@ beforeAll(async () => {
     ),
   });
   await db.exec(
-    "create role anon; create role authenticated; create role service_role; create table external_agent_runs (id uuid primary key, user_id uuid, repo_id uuid, sandbox_record_id uuid);"
+    `create role anon; create role authenticated; create role service_role;
+    create table repos (id uuid primary key, full_name text);
+    create table external_agent_runs (
+      id uuid primary key, user_id uuid, repo_id uuid, sandbox_record_id uuid,
+      prompt text, metadata jsonb, created_at timestamptz, updated_at timestamptz
+    );`
   );
   for (const migration of [
     "20260807190000_orchestration_runs.sql",
@@ -36,6 +41,7 @@ beforeAll(async () => {
     "20260812120000_control_sessions_repo.sql",
     "20260813120000_orchestration_worktrees.sql",
     "20260830120000_control_session_model.sql",
+    "20260917172000_slack_control_sessions.sql",
   ])
     await db.exec(
       await readFile(

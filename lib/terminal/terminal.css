@@ -1,0 +1,6 @@
+/* wterm 0.3.2 copies the bottom-right cell's background onto the grid.
+   A tmux status bar then colors every default/transparent cell above it.
+   Keep the grid at the terminal's default; explicit row/cell colors remain. */
+.mogplex-terminal .term-grid {
+  background: var(--term-bg) !important;
+}

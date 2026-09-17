@@ -123,6 +123,11 @@ export function useControlSessions({
   useEffect(() => {
     void refreshList();
   }, [refreshList]);
+  useRealtimeRouteRefresh({
+    channelName: "control-session-list",
+    specs: SESSION_EVENTS,
+    onInvalidate: refreshList,
+  });
 
   const selectSession = useCallback(
     async (id: string) => {

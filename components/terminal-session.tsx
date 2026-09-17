@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Terminal, type TerminalHandle } from "@wterm/react";
 import "@wterm/react/css";
+import "@/lib/terminal/terminal.css";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { useTerminalSessionsStore } from "@/hooks/use-terminal-sessions";
 import { useTerminalTransport } from "@/hooks/use-terminal-transport";
@@ -376,6 +377,7 @@ export function TerminalSession({ paneId }: { paneId: string }) {
     <>
       <div className="relative h-full w-full">
         <Terminal
+          className="mogplex-terminal"
           ref={termHandleRef}
           autoResize
           cursorBlink
