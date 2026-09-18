@@ -130,4 +130,29 @@ describe("renderAgentInstructions", () => {
       "<agent/>\n\nFix the tests"
     );
   });
+
+  it("gives skills with colliding names distinct files and escapes the agent name", () => {
+    const rendered = renderAgentInstructions(
+      runtime({
+        name: 'Say "hi" <now>',
+        skills: [
+          { id: "s1", name: "RSC Audit", description: null, content: "one" },
+          { id: "s2", name: "rsc-audit", description: null, content: "two" },
+        ],
+      })
+    );
+    expect(rendered.files.map((file) => file.path)).toEqual([
+      `${AGENT_SKILLS_DIR}/rsc-audit/SKILL.md`,
+      `${AGENT_SKILLS_DIR}/rsc-audit-2/SKILL.md`,
+    ]);
+    expect(rendered.prompt).toContain(
+      `- rsc-audit (${AGENT_SKILLS_DIR}/rsc-audit-2/SKILL.md)`
+    );
+    expect(rendered.prompt).toContain(
+      '<agent name="Say &quot;hi&quot; &lt;now&gt;">'
+    );
+    expect(rendered.prompt).toContain(
+      'You are running as the Mogplex agent "Say "hi" <now>".'
+    );
+  });
 });

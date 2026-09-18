@@ -363,11 +363,14 @@ export function createAgentsDeleteHandler(
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return jsonError("Missing id", 400);
+    let deleted: boolean;
     try {
-      await deps.deleteAgent(id, userId);
+      deleted = await deps.deleteAgent(id, userId);
     } catch (error) {
       return jsonError(error instanceof Error ? error.message : "Failed", 500);
     }
+    // Only the owner can delete; a teammate or stranger sees the same 404.
+    if (!deleted) return jsonError("Agent not found", 404);
     return NextResponse.json({ ok: true });
   };
 }

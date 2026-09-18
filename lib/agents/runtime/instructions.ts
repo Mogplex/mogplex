@@ -38,6 +38,38 @@ export function agentSkillPath(skill: Pick<AgentRuntimeSkill, "name">) {
   return `${AGENT_SKILLS_DIR}/${slugifyAgentName(skill.name)}/SKILL.md`;
 }
 
+/**
+ * One file path per skill. Two skills whose names slugify the same way get
+ * numbered directories so neither overwrites the other.
+ */
+export function agentSkillPaths(
+  skills: Array<Pick<AgentRuntimeSkill, "id" | "name">>
+): Map<string, string> {
+  const taken = new Set<string>();
+  const paths = new Map<string, string>();
+  for (const skill of skills) {
+    const base = slugifyAgentName(skill.name);
+    let slug = base;
+    let n = 2;
+    while (taken.has(slug)) {
+      slug = `${base}-${n}`;
+      n += 1;
+    }
+    taken.add(slug);
+    paths.set(skill.id, `${AGENT_SKILLS_DIR}/${slug}/SKILL.md`);
+  }
+  return paths;
+}
+
+/** Agent names are free text; keep them from breaking the tag they label. */
+function escapeAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 function truncate(value: string, max: number) {
   if (value.length <= max) return value;
   return `${value.slice(0, Math.max(0, max - TRUNCATION_MARKER.length))}${TRUNCATION_MARKER}`;
@@ -65,9 +97,10 @@ function renderRules(runtime: AgentRuntime) {
 function renderSkillList(runtime: AgentRuntime, mode: AgentInstructionsMode) {
   if (runtime.skills.length === 0) return null;
   if (mode === "files") {
+    const paths = agentSkillPaths(runtime.skills);
     const lines = runtime.skills.map((skill) => {
       const summary = skill.description?.trim();
-      return `- ${skill.name}${summary ? ` — ${summary}` : ""} (${agentSkillPath(skill)})`;
+      return `- ${skill.name}${summary ? ` — ${summary}` : ""} (${paths.get(skill.id)})`;
     });
     return [
       "## Skills",
@@ -109,13 +142,14 @@ export function renderAgentInstructions(
     renderRules(runtime),
     renderSkillList(runtime, mode),
   ].filter(Boolean);
-  const prompt = `<agent name="${runtime.name}">\n${parts.join("\n\n")}\n</agent>`;
+  const prompt = `<agent name="${escapeAttribute(runtime.name)}">\n${parts.join("\n\n")}\n</agent>`;
+  const paths = agentSkillPaths(runtime.skills);
   const files =
     mode === "files"
       ? runtime.skills
           .filter((skill) => skill.content.trim().length > 0)
           .map((skill) => ({
-            path: agentSkillPath(skill),
+            path: paths.get(skill.id) ?? agentSkillPath(skill),
             content: skill.content.trim().endsWith("\n")
               ? skill.content.trim()
               : `${skill.content.trim()}\n`,
