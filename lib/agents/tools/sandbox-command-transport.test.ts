@@ -25,7 +25,7 @@ it("the assembled tool set uses the transport without bypassing capability filte
   await expect(
     allowed.tools.bash.execute!(
       { command: "echo test" },
-      { toolCallId: "test", messages: [] }
+      { context: {}, toolCallId: "test", messages: [] }
     )
   ).resolves.toMatchObject({ exitCode: 0, stdout: "in-process" });
   const denied = await buildTools({
@@ -53,7 +53,7 @@ it("background execution waits for the provider without a second HTTP request", 
   });
   const result = tool.execute!(
     { command: "sleep 330 && printf done" },
-    { toolCallId: "test", messages: [] }
+    { context: {}, toolCallId: "test", messages: [] }
   );
   finish(Response.json({ exitCode: 0, stdout: "done", stderr: "" }));
   await expect(result).resolves.toMatchObject({
@@ -79,7 +79,10 @@ it("does not provision or replay a native command when its sandbox is lost", asy
     retryOnSandboxLoss: false,
   });
   await expect(
-    tool.execute!({ command: "do-work" }, { toolCallId: "test", messages: [] })
+    tool.execute!(
+      { command: "do-work" },
+      { context: {}, toolCallId: "test", messages: [] }
+    )
   ).resolves.toMatchObject({
     error: "Sandbox is gone",
     sandboxId: "sandbox-1",

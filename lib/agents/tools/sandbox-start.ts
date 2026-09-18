@@ -105,7 +105,7 @@ export function createStartSandbox(
       inputSchema: startServerSelectedSandboxParams,
       execute: async (
         _input: z.infer<typeof startServerSelectedSandboxParams>,
-        options?: ToolExecutionOptions
+        options?: ToolExecutionOptions<unknown>
       ) => startSandbox(userId, serverRepoId, lifecycle, options?.abortSignal),
     });
   }
@@ -116,7 +116,7 @@ export function createStartSandbox(
     inputSchema: startSandboxParams,
     execute: async (
       { repoId }: z.infer<typeof startSandboxParams>,
-      options?: ToolExecutionOptions
+      options?: ToolExecutionOptions<unknown>
     ) => startSandbox(userId, repoId, lifecycle, options?.abortSignal),
   });
 }

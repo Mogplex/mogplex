@@ -7,7 +7,7 @@ import {
 import type { SandboxFileAccess } from "../../lib/agents/pr-fixer-utils";
 import { buildPromptForJob } from "../../lib/workflows/automation-job-prompts";
 
-const toolOptions = { toolCallId: "call", messages: [] };
+const toolOptions = { context: {}, toolCallId: "call", messages: [] };
 const canonical = {
   number: 17,
   state: "open",

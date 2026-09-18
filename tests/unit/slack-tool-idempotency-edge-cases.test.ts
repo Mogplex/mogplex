@@ -358,6 +358,7 @@ test("hashes undefined input for zero-argument tools", async () => {
 
   assert.deepEqual(
     await execute!(undefined as never, {
+      context: {},
       toolCallId: "zero-argument-call",
       messages: [],
     }),

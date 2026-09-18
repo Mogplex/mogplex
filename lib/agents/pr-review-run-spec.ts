@@ -22,7 +22,7 @@ export function buildPrReviewRunSpec(input: {
   lifecycleTools?: boolean;
 }) {
   return {
-    system: [
+    instructions: [
       input.systemPrompt,
       PR_REVIEW_STATIC_INSTRUCTIONS,
       input.lifecycleTools === true ? PR_REVIEW_LIFECYCLE_INSTRUCTIONS : null,

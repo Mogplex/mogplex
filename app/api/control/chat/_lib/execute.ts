@@ -1,3 +1,4 @@
+import { toolCompletionEvent } from "@/lib/agents/tool-execution-event";
 import {
   streamText,
   convertToModelMessages,
@@ -270,7 +271,7 @@ export async function executeControlChatRequest(input: {
         await sandboxTaskLifecycle.cleanup();
         stampSandboxMetadata();
         // AI SDK 6 turns provider/model failures into stream parts and invokes
-        // onFinish with usage. This path is only for a rejected response body,
+        // onEnd with usage. This path is only for a rejected response body,
         // where the SDK exposes no reliable terminal usage payload.
         await finalizeFinishedControlRun({
           activeCall,
@@ -319,7 +320,7 @@ export async function executeControlChatRequest(input: {
     const result = streamText({
       model,
       providerOptions,
-      system: withGatewaySystemCaching(
+      instructions: withGatewaySystemCaching(
         systemPrompt + (input.background?.systemContext ?? ""),
         gatewayContext
       ),
@@ -332,6 +333,7 @@ export async function executeControlChatRequest(input: {
       abortSignal: input.req.signal,
       tools,
       stopWhen: ORCHESTRATOR_STOP_WHEN,
+      allowSystemInMessages: true,
       prepareStep: input.background
         ? async () => {
             await input.background!.assertCurrent();
@@ -343,11 +345,12 @@ export async function executeControlChatRequest(input: {
         repoName: input.body.repoName,
         userRequestText: input.latestUserText,
       }),
-      experimental_onToolCallStart(event) {
+      onToolExecutionStart(event) {
         sandboxTaskLifecycle.onToolStart(event);
         startToolTelemetry(event);
       },
-      experimental_onToolCallFinish(event) {
+      onToolExecutionEnd(sdkEvent) {
+        const event = toolCompletionEvent(sdkEvent);
         sandboxTaskLifecycle.onToolFinish(event);
         terminalFailure = updateSandboxStartTerminalFailure(
           terminalFailure,
@@ -355,7 +358,7 @@ export async function executeControlChatRequest(input: {
         );
         finishToolTelemetry(event);
       },
-      onStepFinish(step) {
+      onStepEnd(step) {
         latestSteps.push(step);
       },
       async onAbort({ steps }) {
@@ -368,7 +371,7 @@ export async function executeControlChatRequest(input: {
           console.error("[control/chat] abort finalization failed", { error });
         }
       },
-      async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
+      async onEnd({ totalUsage, steps, finishReason, providerMetadata }) {
         replaceLatestSteps(steps);
         // AI SDK provider/model errors arrive as UI error parts and finish with
         // reason `error`; finalizeFinishedControlRun maps that reason to failed.

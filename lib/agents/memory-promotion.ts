@@ -90,7 +90,7 @@ export const defaultPromotionGenerator: PromotionGenerator = async (input) => {
   const { object } = await generateObject({
     model: input.model,
     schema: promotionExtractionSchema,
-    system: PROMOTION_SYSTEM_PROMPT,
+    instructions: PROMOTION_SYSTEM_PROMPT,
     prompt: input.prompt,
   });
   return object;

@@ -69,7 +69,7 @@ for (const [changedPath, shouldStop] of [
     assert.ok(tool.execute);
     const result = await tool.execute(
       { sandboxId: "sandbox-test" },
-      { toolCallId: "stop-test", messages: [] }
+      { context: {}, toolCallId: "stop-test", messages: [] }
     );
     assert.equal(stopRequested, shouldStop);
     if (shouldStop) return;

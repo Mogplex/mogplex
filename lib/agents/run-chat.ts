@@ -78,13 +78,13 @@ type StreamTextOptions = Parameters<typeof streamText>[0];
 export type ChatModelStreamHooks = Partial<
   Pick<
     StreamTextOptions,
-    | "experimental_onToolCallStart"
-    | "experimental_onToolCallFinish"
+    | "onToolExecutionStart"
+    | "onToolExecutionEnd"
     | "onAbort"
     | "onChunk"
     | "onError"
-    | "onFinish"
-    | "onStepFinish"
+    | "onEnd"
+    | "onStepEnd"
   >
 >;
 
@@ -283,8 +283,10 @@ export async function createChatModelStream(
     const result = streamText({
       model,
       providerOptions,
-      system: withGatewaySystemCaching(systemPrompt, gatewayContext),
+      instructions: withGatewaySystemCaching(systemPrompt, gatewayContext),
       messages: await convertToModelMessages(input.uiMessages),
+      // The existing chat contract includes caller-authored system messages.
+      allowSystemInMessages: true,
       abortSignal: input.abortSignal,
       tools: context.enableTools === false ? undefined : tools,
       stopWhen: CHAT_STOP_WHEN,

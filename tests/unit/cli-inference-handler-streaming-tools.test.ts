@@ -11,7 +11,7 @@ test("createOpenAiChatCompletionStream keeps a single tool-call id across stream
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield {
           type: "tool-input-start",
           toolCallId: "call_1",
@@ -138,7 +138,7 @@ test("createOpenAiChatCompletionStream emits final arguments when a tool-call fo
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield {
           type: "tool-input-start",
           toolCallId: "call_2",
@@ -220,7 +220,7 @@ test("createOpenAiChatCompletionStream tracks distinct indexes for parallel tool
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield {
           type: "tool-input-start",
           toolCallId: "call_a",
@@ -314,7 +314,7 @@ test("createOpenAiChatCompletionStream emits a tool-call chunk that arrives with
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield {
           type: "tool-call",
           toolCallId: "call_solo",

@@ -5,7 +5,7 @@
 
 export type CapturedConstructorOptions = {
   model?: string;
-  system?:
+  instructions?:
     | string
     | { role: string; content: string; providerOptions?: unknown };
   tools?: unknown;
@@ -14,7 +14,7 @@ export type CapturedConstructorOptions = {
 
 export type CapturedGenerateTextOptions = {
   model?: string;
-  system?:
+  instructions?:
     | string
     | { role: string; content: string; providerOptions?: unknown };
   tools?: unknown;

@@ -25,7 +25,7 @@ it("serializes shared-sandbox reads without delaying unrelated worker dispatch",
       },
     }),
   });
-  const options = { toolCallId: "call", messages: [] };
+  const options = { context: {}, toolCallId: "call", messages: [] };
   const first = commands.diff_worktree.execute!({ id: "one" }, options);
   const second = commands.diff_worktree.execute!({ id: "two" }, options);
   await commands.spawn_subagent.execute!({}, options);
@@ -50,7 +50,7 @@ it("does not replay a failed command or poison the next queued read", async () =
       },
     }),
   });
-  const options = { toolCallId: "call", messages: [] };
+  const options = { context: {}, toolCallId: "call", messages: [] };
   const first = commands.run_command.execute!({ id: "bad" }, options);
   const second = commands.run_command.execute!({ id: "good" }, options);
   await expect(first).rejects.toThrow("Command failed");
@@ -74,7 +74,12 @@ it("does not execute queued commands after the user cancels", async () => {
   await expect(
     commands.run_command.execute!(
       {},
-      { toolCallId: "call", messages: [], abortSignal: controller.signal }
+      {
+        context: {},
+        toolCallId: "call",
+        messages: [],
+        abortSignal: controller.signal,
+      }
     )
   ).rejects.toThrow("Cancelled");
   expect(called).toBe(false);

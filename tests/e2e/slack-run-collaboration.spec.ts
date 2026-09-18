@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 import { PGlite } from "@electric-sql/pglite";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { streamText, tool } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
 import { createPostgrestShim } from "../../lib/db/postgrest-shim";
 import {
@@ -200,14 +200,14 @@ test("a Slack thread reply reaches the next agent step once and survives termina
     let step = 0;
     const finalReport =
       "Desktop controls preserved. " + "Inspected the layout. ".repeat(100);
-    const model = new MockLanguageModelV3({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           start(sink) {
-            if (step++ === 0)
+            if (step++ < 2)
               sink.enqueue({
                 type: "tool-call",
-                toolCallId: "command-1",
+                toolCallId: `command-${step}`,
                 toolName: "inspect",
                 input: "{}",
               });
@@ -223,7 +223,7 @@ test("a Slack thread reply reaches the next agent step once and survives termina
             sink.enqueue({
               type: "finish",
               finishReason: {
-                unified: step === 1 ? "tool-calls" : "stop",
+                unified: step <= 2 ? "tool-calls" : "stop",
                 raw: "stop",
               },
               usage: {
@@ -248,17 +248,19 @@ test("a Slack thread reply reaches the next agent step once and survives termina
       prepareStep: async ({ messages, stepNumber }) => ({
         messages: await session.prepare(messages, stepNumber),
       }),
-      onStepFinish: () => session.stepFinished(),
+      onStepEnd: () => session.stepFinished(),
       tools: {
         inspect: tool({
           inputSchema: z.object({}),
           execute: async () => {
-            expect(
-              (await request.post(endpoint, { data: raw, headers })).status()
-            ).toBe(200);
-            expect((await loadRunGuidance(run, client))[0].status).toBe(
-              "received"
-            );
+            if (step === 1) {
+              expect(
+                (await request.post(endpoint, { data: raw, headers })).status()
+              ).toBe(200);
+              expect((await loadRunGuidance(run, client))[0].status).toBe(
+                "received"
+              );
+            }
             return "Inspected the header";
           },
         }),
@@ -272,6 +274,12 @@ test("a Slack thread reply reaches the next agent step once and survives termina
     expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain(
       "Keep the desktop header unchanged."
     );
+    expect(model.doStreamCalls).toHaveLength(3);
+    expect(
+      JSON.stringify(model.doStreamCalls[2].prompt).match(
+        /Keep the desktop header unchanged\./g
+      )
+    ).toHaveLength(1);
     expect((await loadRunGuidance(run, client))[0]).toMatchObject({
       status: "delivered",
       delivered_step: 1,

@@ -1,4 +1,4 @@
-import { isToolOrDynamicToolUIPart, type UIMessage } from "ai";
+import { isToolUIPart, type UIMessage } from "ai";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function prepareControlRequestHistory(
@@ -19,9 +19,7 @@ export async function prepareControlRequestHistory(
   const decisions =
     submitted?.role === "assistant"
       ? submitted.parts.filter(
-          (part) =>
-            isToolOrDynamicToolUIPart(part) &&
-            part.state === "approval-responded"
+          (part) => isToolUIPart(part) && part.state === "approval-responded"
         )
       : [];
   if (decisions.length === 0)
@@ -37,14 +35,14 @@ export async function prepareControlRequestHistory(
   const response = messages.find((message) => message.id === submitted!.id);
   const pendingIds = new Set(
     expected?.parts.flatMap((part) =>
-      isToolOrDynamicToolUIPart(part) && part.state === "approval-requested"
+      isToolUIPart(part) && part.state === "approval-requested"
         ? [part.approval.id]
         : []
     )
   );
   const approvalIds =
     response?.parts.flatMap((part) =>
-      isToolOrDynamicToolUIPart(part) &&
+      isToolUIPart(part) &&
       part.state === "approval-responded" &&
       pendingIds.has(part.approval.id)
         ? [part.approval.id]
@@ -105,7 +103,7 @@ export function controlMessagesForModel(
   return messages.map((message) => {
     const parts = message.parts.map((part) => {
       if (
-        isToolOrDynamicToolUIPart(part) &&
+        isToolUIPart(part) &&
         (part.state === "approval-requested" ||
           (part.state === "approval-responded" &&
             !claimed.has(part.approval.id)))
@@ -118,7 +116,7 @@ export function controlMessagesForModel(
     });
     const decisions = parts.filter(
       (part) =>
-        isToolOrDynamicToolUIPart(part) &&
+        isToolUIPart(part) &&
         part.state === "approval-responded" &&
         claimed.has(part.approval.id)
     );
@@ -154,14 +152,14 @@ export function controlRequestHistory(
       ...message,
       parts: message.parts.map((part) => {
         if (
-          !isToolOrDynamicToolUIPart(part) ||
+          !isToolUIPart(part) ||
           part.state !== "approval-requested" ||
           !submitted
         )
           return part;
         const response = submitted.parts.find(
           (candidate) =>
-            isToolOrDynamicToolUIPart(candidate) &&
+            isToolUIPart(candidate) &&
             candidate.type === part.type &&
             candidate.toolCallId === part.toolCallId &&
             candidate.state === "approval-responded" &&
@@ -169,7 +167,7 @@ export function controlRequestHistory(
         );
         if (
           !response ||
-          !isToolOrDynamicToolUIPart(response) ||
+          !isToolUIPart(response) ||
           response.state !== "approval-responded"
         )
           return part;

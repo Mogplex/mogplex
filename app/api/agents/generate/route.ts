@@ -228,14 +228,14 @@ export function createAgentGeneratePostHandler(
     const result = deps.streamText({
       model: resolved.model,
       providerOptions: resolved.providerOptions,
-      system: SYSTEM_PROMPT,
+      instructions: SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
           content: buildGenerationPrompt(description, existingAgent),
         },
       ],
-      async onFinish({ totalUsage, providerMetadata, finishReason }) {
+      async onEnd({ totalUsage, providerMetadata, finishReason }) {
         await recordAiCallTelemetry({
           userId,
           type: "agent",

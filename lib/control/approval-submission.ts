@@ -1,4 +1,4 @@
-import { isToolOrDynamicToolUIPart, type UIMessage } from "ai";
+import { isToolUIPart, type UIMessage } from "ai";
 
 /** One automatic submission per explicit approval click. A persisted message
  * can retain pending approvals before a later continuation's step boundary. */
@@ -11,7 +11,7 @@ export function createControlApprovalSubmission() {
         last?.role === "assistant" &&
         last.parts.some(
           (part) =>
-            isToolOrDynamicToolUIPart(part) &&
+            isToolUIPart(part) &&
             part.state === "approval-requested" &&
             part.approval.id === id
         )
@@ -21,7 +21,7 @@ export function createControlApprovalSubmission() {
     shouldSubmit({ messages }: { messages: UIMessage[] }) {
       const last = messages.at(-1);
       if (last?.role !== "assistant") return false;
-      const tools = last.parts.filter(isToolOrDynamicToolUIPart);
+      const tools = last.parts.filter(isToolUIPart);
       const decisions = tools.flatMap((part) =>
         part.state === "approval-responded" && requested.has(part.approval.id)
           ? [part.approval.id]

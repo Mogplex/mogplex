@@ -253,7 +253,7 @@ test("executeAutomationTextGeneration preserves observed usage on timeout failur
         phase: "pr_review",
         timeoutMs: 18_000,
         generateText: async (request) => {
-          await request.onStepFinish?.({
+          await request.onStepEnd?.({
             usage: {
               inputTokens: 13,
               outputTokens: 4,
@@ -301,7 +301,7 @@ test("executeAutomationTextGeneration preserves observed usage on timeout failur
   );
 });
 
-test("executeAutomationTextGeneration retries transient v3 model failures once", async () => {
+test("executeAutomationTextGeneration retries transient v4 model failures once", async () => {
   const testModel = createTestAutomationModel({
     onGenerate(callNumber) {
       if (callNumber === 1) {
@@ -354,7 +354,7 @@ test("executeAutomationTextGeneration retries transient v3 model failures once",
   });
 });
 
-test("executeAutomationTextGeneration does not retry authentication failures for v3 models", async () => {
+test("executeAutomationTextGeneration does not retry authentication failures for v4 models", async () => {
   const testModel = createTestAutomationModel({
     onGenerate() {
       throw Object.assign(new Error("Invalid API key"), {

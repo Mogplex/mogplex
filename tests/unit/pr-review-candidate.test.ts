@@ -199,7 +199,7 @@ test("PR review run spec keeps static production instructions", () => {
     prNumber: 42,
     systemPrompt: "Review carefully.",
   });
-  assert.match(spec.system, /Always call reportReview exactly once/);
+  assert.match(spec.instructions, /Always call reportReview exactly once/);
   assert.equal(spec.prompt, "Review PR #42.");
 });
 

@@ -57,7 +57,7 @@ function readStreamToolInputDelta(chunk: OpenAiStreamChunk): string {
 }
 
 export function createOpenAiChatCompletionStream(input: {
-  createResult: () => { fullStream: AsyncIterable<unknown> };
+  createResult: () => { stream: AsyncIterable<unknown> };
   responseId: string;
   created: number;
   modelId: string;
@@ -105,7 +105,7 @@ export function createOpenAiChatCompletionStream(input: {
         >();
         let nextToolIndex = 0;
 
-        for await (const chunk of result.fullStream) {
+        for await (const chunk of result.stream) {
           const chunkLike = chunk as OpenAiStreamChunk;
           if (chunkLike.type === "text-delta") {
             const text =

@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
+import { getToolOrDynamicToolName, isToolUIPart } from "ai";
 
 /**
  * Render a control chat session as a markdown transcript for client-side
@@ -21,7 +21,7 @@ export function buildTranscriptMarkdown(
         const filename =
           "filename" in part && part.filename ? part.filename : "attachment";
         lines.push(`_Attachment: ${filename}_`, "");
-      } else if (isToolOrDynamicToolUIPart(part)) {
+      } else if (isToolUIPart(part)) {
         const name = getToolOrDynamicToolName(part);
         const state = "state" in part ? String(part.state) : "";
         lines.push(`- \`${name}\` — ${state || "called"}`, "");

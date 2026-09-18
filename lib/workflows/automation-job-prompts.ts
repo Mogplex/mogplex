@@ -32,7 +32,7 @@ export function buildPromptForJob(
   systemPrompt: string | null
 ): {
   prompt: string;
-  system?: string;
+  instructions?: string;
 } {
   const normalizedType = normalizeAutomationAssignmentType(type);
   const flowPreviousOutputs = Array.isArray(metadata.flow_previous_outputs)
@@ -73,7 +73,7 @@ export function buildPromptForJob(
 
   if (metadata.flow_node_role === "task") {
     return {
-      system: systemPrompt || "Complete the scheduled repository task.",
+      instructions: systemPrompt || "Complete the scheduled repository task.",
       prompt: [
         `Complete the scheduled task for ${String(metadata.repo_full_name || "the repository")} from ${String(metadata.base_branch || "main")}.`,
         "Use runCommand for checkout commands, tests, git, and the authenticated gh CLI. Follow the task instructions above.",
@@ -89,7 +89,7 @@ export function buildPromptForJob(
 
   if (normalizedType === "cron_refactor" || normalizedType === "cron") {
     return {
-      system: systemPrompt || "You are a code refactoring agent.",
+      instructions: systemPrompt || "You are a code refactoring agent.",
       prompt: [
         `Use the GitHub tools to improve ${String(metadata.repo_full_name || "the repository")} on a new branch from ${String(metadata.base_branch || "main")}.`,
         typeof metadata.skill_id === "string" && metadata.skill_id
@@ -360,8 +360,8 @@ export function buildAutomationHarnessPrompt(input: {
     `You are ${input.harnessId === "claude-code" ? "Claude Code" : "Codex"} running a Mogplex automation inside an isolated checkout of ${input.context.repo.full_name}.`,
     "Use the local checkout and the authenticated gh CLI instead of any Mogplex-only tool names mentioned below.",
     "Never print credentials or environment-variable values.",
-    "system" in runSpec && runSpec.system
-      ? `Agent instructions:\n${runSpec.system}`
+    "instructions" in runSpec && runSpec.instructions
+      ? `Agent instructions:\n${runSpec.instructions}`
       : null,
     `Task:\n${runSpec.prompt}`,
   ];

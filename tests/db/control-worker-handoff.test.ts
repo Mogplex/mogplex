@@ -65,6 +65,7 @@ it.each(["stop", "abort", "error", "checkpoint-failure", "approval"] as const)(
         instruction: f.registerArgs.p_instruction,
       };
       const output = await handoff.tool.execute!(args, {
+        context: {},
         toolCallId: "wait",
         messages: [],
       });
@@ -198,7 +199,10 @@ it.each(["stop", "abort", "error", "checkpoint-failure", "approval"] as const)(
             )
         );
         expect(
-          await tools.read.execute!({}, { toolCallId: "before", messages: [] })
+          await tools.read.execute!(
+            {},
+            { context: {}, toolCallId: "before", messages: [] }
+          )
         ).toBe("actual tool output");
         const superseding: UIMessage = {
           id: "new-user",
@@ -210,7 +214,10 @@ it.each(["stop", "abort", "error", "checkpoint-failure", "approval"] as const)(
           client
         );
         await expect(
-          tools.read.execute!({}, { toolCallId: "after", messages: [] })
+          tools.read.execute!(
+            {},
+            { context: {}, toolCallId: "after", messages: [] }
+          )
         ).rejects.toThrow("superseded");
         expect(executions).toBe(2);
         expect(
@@ -250,7 +257,7 @@ it("validates the worker tool input and refuses foreign mission workers without 
       await expect(
         handoff.tool.execute!(
           { workerRunIds, instruction: "Review results" },
-          { toolCallId: "invalid", messages: [] }
+          { context: {}, toolCallId: "invalid", messages: [] }
         )
       ).rejects.toThrow();
     }
@@ -264,7 +271,7 @@ it("validates the worker tool input and refuses foreign mission workers without 
     expect(
       await handoff.tool.execute!(
         { workerRunIds: f.workerIds, instruction: "Review results" },
-        { toolCallId: "done", messages: [] }
+        { context: {}, toolCallId: "done", messages: [] }
       )
     ).toMatchObject({ status: "already_finished" });
     expect(

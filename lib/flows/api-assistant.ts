@@ -153,20 +153,21 @@ export async function streamFlowAssistantChat(input: {
   const result = streamText({
     model,
     providerOptions,
-    system: [
+    instructions: [
       FLOW_ASSISTANT_CHAT_SYSTEM_PROMPT,
       `Current flow name: ${flow.name}`,
       `Available agents: ${JSON.stringify(allowedAgents)}`,
     ].join("\n\n"),
     messages: await convertToModelMessages(input.messages),
+    allowSystemInMessages: true,
     tools,
     stopWhen: () => false,
-    async onStepFinish(event) {
+    async onStepEnd(event) {
       observedStepUsages.push(
         captureUsage(event.usage, event.providerMetadata)
       );
     },
-    async onFinish({ totalUsage, providerMetadata, finishReason, steps }) {
+    async onEnd({ totalUsage, providerMetadata, finishReason, steps }) {
       const observedUsage = observedStepUsages.reduce(
         (usage, stepUsage) => mergeUsage(usage, stepUsage),
         EMPTY_CAPTURED_USAGE
@@ -324,7 +325,7 @@ export async function generateFlowAssistantSuggestion(input: {
   const generation = await generateText({
     model,
     providerOptions,
-    system: FLOW_ASSISTANT_SYSTEM_PROMPT,
+    instructions: FLOW_ASSISTANT_SYSTEM_PROMPT,
     prompt: [
       `User request: ${input.message}`,
       `Current flow name: ${flow.name}`,
@@ -334,7 +335,7 @@ export async function generateFlowAssistantSuggestion(input: {
     ].join("\n\n"),
     tools,
     stopWhen: () => false,
-    onStepFinish(event) {
+    onStepEnd(event) {
       observedStepUsages.push(
         captureUsage(event.usage, event.providerMetadata)
       );

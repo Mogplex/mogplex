@@ -1,4 +1,4 @@
-import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
+import { getToolOrDynamicToolName, isToolUIPart } from "ai";
 import {
   diffFilesFromPatch,
   extractPatchFromValue,
@@ -169,7 +169,7 @@ export function buildCombinedTimeline(
         continue;
       }
 
-      if (isToolOrDynamicToolUIPart(part)) {
+      if (isToolUIPart(part)) {
         const toolName = getToolOrDynamicToolName(part);
         const state = "state" in part ? String(part.state) : "";
         const output = asRecord("output" in part ? part.output : undefined);

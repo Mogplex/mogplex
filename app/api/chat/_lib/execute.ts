@@ -1,3 +1,4 @@
+import { toolCompletionEvent } from "@/lib/agents/tool-execution-event";
 import {
   createChatModelStream,
   type ChatModelStreamHooks,
@@ -66,16 +67,17 @@ export async function executeChatRequest(input: {
         limitClaimId: input.limitClaimId,
         callStartedAt: input.callStartedAt,
       }),
-      experimental_onToolCallStart: createToolCallStartHandler(
+      onToolExecutionStart: createToolCallStartHandler(
         activeCall,
         input.userId,
         scope
       ),
-      experimental_onToolCallFinish: createToolCallFinishHandler(
-        activeCall,
-        input.userId,
-        scope
-      ),
+      onToolExecutionEnd: (event) =>
+        createToolCallFinishHandler(
+          activeCall,
+          input.userId,
+          scope
+        )(toolCompletionEvent(event)),
     };
 
     const modelMessages = await compactChatMessagesForModel({

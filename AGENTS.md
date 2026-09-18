@@ -103,7 +103,7 @@ Mogplex is a Next.js 16 App Router application for running AI-agent workflows ag
 - **Tailwind CSS v4** (`@tailwindcss/postcss`, styles in `app/globals.css`)
 - **shadcn/ui** (new-york style, RSC enabled) — 57+ components in `components/ui/`
 - **Better Auth** for sign-in and **Neon Postgres** for database state; legacy Supabase paths remain for existing installations
-- **Vercel AI SDK** (`ai` v6) for streaming chat with multi-provider model support
+- **Vercel AI SDK** (`ai` v7) for streaming chat with multi-provider model support
 - **Zustand** for client state management
 - **Vercel Sandbox SDK** (`@vercel/sandbox`) for isolated microVM code execution per user
 - **xterm.js** + **Monaco Editor** for terminal and code editor panes (dynamically imported)

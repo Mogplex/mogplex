@@ -1,3 +1,4 @@
+import { toolCompletionEvent } from "@/lib/agents/tool-execution-event";
 import {
   convertToModelMessages,
   type streamText,
@@ -282,15 +283,16 @@ export async function runChatAgent(
           return progressReporter.modelWorking();
         }
       },
-      experimental_onToolCallStart(event) {
+      onToolExecutionStart(event) {
         finalization.onToolStart(event);
         return progressReporter.toolStarted(event);
       },
-      experimental_onToolCallFinish(event) {
+      onToolExecutionEnd(sdkEvent) {
+        const event = toolCompletionEvent(sdkEvent);
         finalization.onToolFinish(event);
         return progressReporter.toolFinished(event);
       },
-      async onStepFinish(event) {
+      async onStepEnd(event) {
         observedStepUsages.push(
           captureUsage(event.usage, event.providerMetadata)
         );

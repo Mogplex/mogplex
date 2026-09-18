@@ -238,7 +238,7 @@ export async function runPrReviewCandidate(
     request: {
       model: options.model,
       providerOptions: options.providerOptions,
-      system: withGatewaySystemCaching(runSpec.system, {
+      instructions: withGatewaySystemCaching(runSpec.instructions, {
         userId: "mogplex-quality",
         caching: "auto",
         tags: ["surface:quality", "type:pr_review"],

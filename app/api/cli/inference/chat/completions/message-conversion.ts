@@ -83,7 +83,11 @@ function toUserContent(content: OpenAiMessage["content"]): UserContent {
             ? part.image_url
             : part.image_url?.url;
         if (typeof url === "string" && url.length > 0) {
-          return { type: "image" as const, image: url };
+          return {
+            type: "file" as const,
+            mediaType: "image",
+            data: { type: "url" as const, url: new URL(url) },
+          };
         }
       }
       const fallback = stringifyUnknown(part);

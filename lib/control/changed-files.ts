@@ -11,7 +11,7 @@
  */
 
 import type { UIMessage } from "ai";
-import { isToolOrDynamicToolUIPart } from "ai";
+import { isToolUIPart } from "ai";
 import { extractPatchFromValue } from "./diff-text";
 import { collectFileMutations } from "./activity-stream";
 
@@ -143,7 +143,7 @@ export function collectChangedFiles(messages: UIMessage[]): ChangedFile[] {
   for (const msg of messages) {
     if (msg.role !== "assistant" || !msg.parts) continue;
     for (const [index, part] of msg.parts.entries()) {
-      if (!isToolOrDynamicToolUIPart(part)) continue;
+      if (!isToolUIPart(part)) continue;
       const patch =
         extractPatchFromValue("output" in part ? part.output : undefined) ??
         extractPatchFromValue("input" in part ? part.input : undefined);

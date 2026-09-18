@@ -19,18 +19,24 @@ it("preserves foreground tools and checks every background execution, including 
   });
   expect(guarded.approval).toBe(tools.approval);
   expect(
-    await guarded.read.execute!({}, { toolCallId: "first", messages: [] })
+    await guarded.read.execute!(
+      {},
+      { context: {}, toolCallId: "first", messages: [] }
+    )
   ).toBe(1);
   allowed = false;
   await expect(
-    guarded.read.execute!({}, { toolCallId: "second", messages: [] })
+    guarded.read.execute!(
+      {},
+      { context: {}, toolCallId: "second", messages: [] }
+    )
   ).rejects.toThrow("Superseded");
   expect(executions).toBe(1);
   const signal = AbortSignal.abort(new Error("Stopped"));
   await expect(
     guarded.read.execute!(
       {},
-      { toolCallId: "third", messages: [], abortSignal: signal }
+      { context: {}, toolCallId: "third", messages: [], abortSignal: signal }
     )
   ).rejects.toThrow("Stopped");
   expect(executions).toBe(1);

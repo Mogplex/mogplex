@@ -347,7 +347,7 @@ test("createAutomationAgentRunner treats pr_opened triggers as PR reviews", asyn
     (options as CapturedGenerateTextOptions).prompt,
     "Review PR #130."
   );
-  const sys = (options as CapturedGenerateTextOptions).system as {
+  const sys = (options as CapturedGenerateTextOptions).instructions as {
     role: string;
     content: string;
   };

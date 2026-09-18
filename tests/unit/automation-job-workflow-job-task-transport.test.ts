@@ -229,7 +229,7 @@ test("createAutomationJobTask classifies transport timeouts from resolved gatewa
     assert.equal(typeof controlMetadata.model_recovered_from_message, "string");
     assert.match(
       controlMetadata.model_recovered_from_message as string,
-      /^Gateway request timed out: Cannot connect to API: Headers Timeout Error/
+      /^Gateway request timed out: (?:Cannot connect to API: )+Headers Timeout Error/
     );
     assert.match(
       controlMetadata.model_recovered_from_message as string,
@@ -246,7 +246,7 @@ test("createAutomationJobTask classifies transport timeouts from resolved gatewa
     assert.equal(typeof controlMetadata.model_failure_message, "string");
     assert.match(
       controlMetadata.model_failure_message as string,
-      /^Gateway request timed out: Cannot connect to API: Headers Timeout Error/
+      /^Gateway request timed out: (?:Cannot connect to API: )+Headers Timeout Error/
     );
     assert.match(
       controlMetadata.model_failure_message as string,
@@ -278,7 +278,7 @@ test("createAutomationJobTask classifies transport timeouts from resolved gatewa
     assert.equal(typeof execution.recoveredFromMessage, "string");
     assert.match(
       execution.recoveredFromMessage as string,
-      /^Gateway request timed out: Cannot connect to API: Headers Timeout Error/
+      /^Gateway request timed out: (?:Cannot connect to API: )+Headers Timeout Error/
     );
     assert.match(
       execution.recoveredFromMessage as string,
@@ -289,7 +289,7 @@ test("createAutomationJobTask classifies transport timeouts from resolved gatewa
     assert.equal(typeof execution.finalFailureMessage, "string");
     assert.match(
       execution.finalFailureMessage as string,
-      /^Gateway request timed out: Cannot connect to API: Headers Timeout Error/
+      /^Gateway request timed out: (?:Cannot connect to API: )+Headers Timeout Error/
     );
     assert.match(
       execution.finalFailureMessage as string,

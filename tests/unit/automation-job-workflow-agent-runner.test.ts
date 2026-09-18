@@ -62,8 +62,8 @@ test("createAutomationAgentRunner uses generateText without mutating global fetc
     assert.ok(options);
     const capturedOptions = options as unknown as CapturedConstructorOptions;
     assert.equal(capturedOptions.model, "minimax/minimax-m2.5");
-    assert.equal(typeof capturedOptions.system, "object");
-    const systemMessage = capturedOptions.system as unknown as {
+    assert.equal(typeof capturedOptions.instructions, "object");
+    const systemMessage = capturedOptions.instructions as unknown as {
       role: string;
       content: string;
       providerOptions: {
@@ -144,14 +144,14 @@ test("pr_review carries agent system_prompt + static instructions on a cacheable
   const mockedGithubFetch = mockGithubPullRequestFetch([7, 11]);
   const agentSystemPrompt = "You are a senior code reviewer.";
 
-  type RunCapture = { system: unknown; prompt: unknown };
+  type RunCapture = { instructions: unknown; prompt: unknown };
   const captures: RunCapture[] = [];
 
   try {
     const runAutomationAgent = createAutomationAgentRunner({
       generateText: async (input) => {
         const opts = input as unknown as CapturedGenerateTextOptions;
-        captures.push({ system: opts.system, prompt: opts.prompt });
+        captures.push({ instructions: opts.instructions, prompt: opts.prompt });
         return {
           text: "ok",
           steps: [makeStep({ text: "ok", inputTokens: 1, outputTokens: 1 })],
@@ -189,9 +189,9 @@ test("pr_review carries agent system_prompt + static instructions on a cacheable
     }
 
     assert.equal(captures.length, 2);
-    assert.deepEqual(captures[0].system, captures[1].system);
+    assert.deepEqual(captures[0].instructions, captures[1].instructions);
 
-    const sys = captures[0].system as {
+    const sys = captures[0].instructions as {
       role: string;
       content: string;
       providerOptions: { anthropic: { cacheControl: { type: string } } };
@@ -264,7 +264,7 @@ test("pr_review with no agent system_prompt still emits a cacheable system messa
 
     assert.ok(captured);
     const opts = captured as CapturedGenerateTextOptions;
-    const sys = opts.system as {
+    const sys = opts.instructions as {
       role: string;
       content: string;
       providerOptions: { anthropic: { cacheControl: { type: string } } };

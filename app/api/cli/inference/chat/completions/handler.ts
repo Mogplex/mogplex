@@ -70,6 +70,13 @@ export async function postChatCompletions(request: Request) {
     return errorResponse("messages is required");
   }
 
+  let modelMessages: ReturnType<typeof toModelMessages>;
+  try {
+    modelMessages = toModelMessages(messages);
+  } catch {
+    return errorResponse("Invalid chat message content");
+  }
+
   let modelId: string;
   try {
     modelId = await resolveCliModelId(userId, body.model);
@@ -123,7 +130,9 @@ export async function postChatCompletions(request: Request) {
   const sharedOptions = {
     model: resolved.model,
     providerOptions: resolved.providerOptions,
-    messages: toModelMessages(messages),
+    messages: modelMessages,
+    // This authenticated OpenAI-compatible endpoint accepts client instructions.
+    allowSystemInMessages: true,
     tools: toAiTools(body.tools) as Parameters<typeof streamText>[0]["tools"],
     toolChoice,
     temperature: body.temperature,
