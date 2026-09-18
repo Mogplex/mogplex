@@ -9,6 +9,7 @@ import {
   type PromotionCandidate,
   type PromotionDeps,
 } from "./memory-promotion";
+import * as promotionModule from "./memory-promotion";
 
 const model = "fake-model" as unknown as LanguageModel;
 
@@ -236,5 +237,77 @@ describe("promoteMemoriesFromCheckpoint", () => {
     expect(result.promoted).toHaveLength(0);
     expect(written).toHaveLength(0);
     expect(result.rejected[0].reason).toBe("low_confidence");
+  });
+});
+
+describe("turn-record promotion", () => {
+  it("builds a turn record only when the turn is substantive", () => {
+    const { buildTurnPromotionEvidence, PROMOTION_TURN_MIN_CHARS } =
+      promotionModule;
+    expect(
+      buildTurnPromotionEvidence({ userText: "thanks", steps: [] })
+    ).toBeNull();
+
+    const record = buildTurnPromotionEvidence({
+      userText: "Please always use pnpm in this repo, never npm.",
+      steps: [
+        {
+          text: "Understood. ".repeat(40),
+          toolCalls: [
+            { toolName: "run_command", input: { command: "pnpm i" } },
+          ],
+        },
+      ],
+    });
+    expect(record).not.toBeNull();
+    expect(record?.length).toBeGreaterThanOrEqual(PROMOTION_TURN_MIN_CHARS);
+    expect(record).toContain("## Operator request");
+    expect(record).toContain("always use pnpm");
+    expect(record).toContain('- run_command {"command":"pnpm i"}');
+  });
+
+  it("promotes from a turn record with turn provenance and verbatim evidence", async () => {
+    const { promoteMemoriesFromEvidence } = promotionModule;
+    const evidenceText =
+      "## Operator request\nPlease always use pnpm in this repo, never npm.\n\n## Assistant response\nNoted.";
+    const added: Array<{ lane: string; metadata: Record<string, unknown> }> =
+      [];
+    const deps: PromotionDeps = {
+      generate: async () => ({
+        candidates: [
+          candidate({
+            content: "The operator wants pnpm used in this repo, never npm.",
+            evidence: ["always use pnpm in this repo, never npm"],
+          }),
+          candidate({
+            content: "The operator likes green.",
+            evidence: ["likes green"],
+          }),
+        ],
+      }),
+      searchMemories: async () => [],
+      addMemory: async (input) => {
+        added.push({ lane: input.lane, metadata: input.metadata });
+      },
+    };
+    const result = await promoteMemoriesFromEvidence(
+      {
+        evidenceText,
+        source: { kind: "turn", id: "call-7" },
+        aiCallId: "call-7",
+        model,
+      },
+      deps
+    );
+    expect(result.promoted).toHaveLength(1);
+    expect(result.rejected.map((r) => r.reason)).toEqual([
+      "evidence_does_not_trace",
+    ]);
+    expect(added[0].metadata).toMatchObject({
+      source: "promotion",
+      sourceKind: "turn",
+      sourceAiCallId: "call-7",
+      sourceCheckpointId: null,
+    });
   });
 });

@@ -53,14 +53,23 @@ export const promotionExtractionSchema = z.object({
 export type PromotionCandidate = z.infer<typeof promotionCandidateSchema>;
 export type PromotionExtraction = z.infer<typeof promotionExtractionSchema>;
 
+export type PromotionSourceKind = "checkpoint" | "turn";
+
 export type PromotionProvenance = {
   source: "promotion";
+  sourceKind: PromotionSourceKind;
   sourceAiCallId: string;
-  sourceCheckpointId: string;
+  /** Checkpoint id when promoted from compaction; null for a turn record. */
+  sourceCheckpointId: string | null;
   promotedAt: string;
   confidence: number;
   evidenceRefs: string[];
 };
+
+/** A finished turn is a promotion source only when it carries this much text. */
+export const PROMOTION_TURN_MIN_CHARS = 400;
+/** Upper bound on the turn record handed to the extractor. */
+export const PROMOTION_TURN_MAX_CHARS = 12_000;
 
 export type PromotionGenerator = (input: {
   model: LanguageModel;
@@ -68,9 +77,9 @@ export type PromotionGenerator = (input: {
 }) => Promise<PromotionExtraction>;
 
 const PROMOTION_SYSTEM_PROMPT = [
-  "You extract durable memories from an agent task checkpoint.",
+  "You extract durable memories from an agent task record (a compaction checkpoint or the transcript of one finished turn).",
   "Promote ONLY facts that are: reusable beyond this task, stable over time,",
-  "scoped to the user/project/repo, and backed by checkpoint evidence.",
+  "scoped to the user/project/repo, and backed by verbatim evidence from the record.",
   "Never promote: run-specific details (ports, transient errors, in-flight",
   "work), secrets or credentials, facts derivable from the repository itself,",
   "or restatements of what the task happened to do. Prefer zero candidates",
@@ -149,10 +158,15 @@ export type PromotionRejection = {
  */
 export function filterPromotionCandidates(input: {
   candidates: PromotionCandidate[];
-  checkpoint: AgentCheckpoint;
+  /** The record candidates must trace back to; a checkpoint or a turn record. */
+  checkpoint?: AgentCheckpoint;
+  evidenceText?: string;
 }): { accepted: PromotionCandidate[]; rejected: PromotionRejection[] } {
   const checkpointText = normalize(
-    serializeCheckpointForPromotion(input.checkpoint)
+    input.evidenceText ??
+      (input.checkpoint
+        ? serializeCheckpointForPromotion(input.checkpoint)
+        : "")
   );
   const rejected: PromotionRejection[] = [];
   const passing: PromotionCandidate[] = [];
@@ -222,6 +236,39 @@ export type PromotionResult = {
   duplicates: PromotionCandidate[];
 };
 
+/**
+ * Build the promotion record for one finished Control turn: the operator's
+ * request, the assistant's final text, and the tools it called. Returns null
+ * for turns too small to hold a durable fact, so trivial exchanges never pay
+ * for an extraction call.
+ */
+export function buildTurnPromotionEvidence(input: {
+  userText: string;
+  steps: Array<{
+    text?: string;
+    toolCalls?: Array<{ toolName: string; input?: unknown }>;
+  }>;
+}): string | null {
+  const assistantText = input.steps
+    .map((step) => step.text?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n");
+  const toolLines = input.steps.flatMap((step) =>
+    (step.toolCalls ?? []).map((call) => {
+      const rendered =
+        call.input === undefined ? "" : (JSON.stringify(call.input) ?? "");
+      return `- ${call.toolName}${rendered ? ` ${rendered.slice(0, 200)}` : ""}`;
+    })
+  );
+  const sections = [
+    `## Operator request\n${input.userText.trim()}`,
+    assistantText ? `## Assistant response\n${assistantText}` : "",
+    toolLines.length > 0 ? `## Tools called\n${toolLines.join("\n")}` : "",
+  ].filter(Boolean);
+  const record = sections.join("\n\n").slice(0, PROMOTION_TURN_MAX_CHARS);
+  return record.length >= PROMOTION_TURN_MIN_CHARS ? record : null;
+}
+
 export async function promoteMemoriesFromCheckpoint(
   input: {
     checkpoint: AgentCheckpoint;
@@ -230,14 +277,39 @@ export async function promoteMemoriesFromCheckpoint(
   },
   deps: PromotionDeps
 ): Promise<PromotionResult> {
+  return promoteMemoriesFromEvidence(
+    {
+      evidenceText: serializeCheckpointForPromotion(input.checkpoint),
+      source: { kind: "checkpoint", id: input.checkpoint.provenance.id },
+      aiCallId: input.aiCallId,
+      model: input.model,
+    },
+    deps
+  );
+}
+
+/**
+ * Promote from any evidence record. Every accepted candidate must quote a
+ * fragment of `evidenceText` verbatim, pass the deterministic filters, and
+ * not duplicate an existing memory in its lane.
+ */
+export async function promoteMemoriesFromEvidence(
+  input: {
+    evidenceText: string;
+    source: { kind: PromotionSourceKind; id: string };
+    aiCallId: string;
+    model: LanguageModel;
+  },
+  deps: PromotionDeps
+): Promise<PromotionResult> {
   const extraction = await deps.generate({
     model: input.model,
-    prompt: serializeCheckpointForPromotion(input.checkpoint),
+    prompt: input.evidenceText,
   });
 
   const { accepted, rejected } = filterPromotionCandidates({
     candidates: extraction.candidates,
-    checkpoint: input.checkpoint,
+    evidenceText: input.evidenceText,
   });
 
   const promoted: PromotionCandidate[] = [];
@@ -257,8 +329,10 @@ export async function promoteMemoriesFromCheckpoint(
     }
     const provenance: PromotionProvenance = {
       source: "promotion",
+      sourceKind: input.source.kind,
       sourceAiCallId: input.aiCallId,
-      sourceCheckpointId: input.checkpoint.provenance.id,
+      sourceCheckpointId:
+        input.source.kind === "checkpoint" ? input.source.id : null,
       promotedAt: (deps.now?.() ?? new Date()).toISOString(),
       confidence: candidate.confidence,
       evidenceRefs: candidate.evidence,

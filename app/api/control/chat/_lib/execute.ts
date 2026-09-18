@@ -234,6 +234,7 @@ export async function executeControlChatRequest(input: {
     });
     let terminalFailure: string | null = null;
     const latestSteps: Array<{
+      text?: string;
       toolCalls?: Array<{ toolName: string; input?: unknown }>;
       toolResults?: unknown[];
     }> = [];
@@ -395,15 +396,16 @@ export async function executeControlChatRequest(input: {
           console.error("[control/chat] finish finalization failed", { error });
         }
         if (!finalizedNow) return;
-        // Memory promotion (compaction plan Phase 4): distill durable facts
-        // from this conversation's checkpoint, if one exists. Best-effort by
-        // contract — never lets a promotion failure touch the finished run.
+        // Memory promotion: distill durable facts from the checkpoint, or
+        // from this turn when none exists. Never touches the finished run.
+        if (finishReason === "error") return;
         promoteMemoriesForConversation({
           userId: input.userId,
           conversationId: scope.conversationId ?? null,
           repoId: scope.repoId ?? null,
           aiCallId: activeCall.id,
           model,
+          turn: { userText: input.latestUserText, steps: latestSteps },
         }).catch((error: unknown) => {
           console.warn("[memory-promotion] failed", {
             conversationId: scope.conversationId,
