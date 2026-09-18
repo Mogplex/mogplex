@@ -1,62 +1,48 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { MemoryGroups, MemoryLane } from "./context-section-types";
+import type { MemoryCounts, MemoryLane } from "./context-section-types";
 import { LANES, LANE_INFO } from "./context-section-types";
 
 interface ActionButtonsProps {
   busyId: string | null;
-  onCompact: () => void;
+  onPrune: () => void;
   onCheckpoint: () => void;
   compact?: boolean;
 }
 
+const PRUNE_TITLE =
+  "Delete session notes older than 30 days and machine-generated rows (harness prompt dumps, automation run outcomes). Hand-written and agent-written memories are kept.";
+const CHECKPOINT_TITLE =
+  "Add a timestamped marker to the current lane so later notes can be read relative to it.";
+
 export function ActionButtons({
   busyId,
-  onCompact,
+  onPrune,
   onCheckpoint,
   compact,
 }: ActionButtonsProps) {
-  if (compact) {
-    return (
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          title="Compact old session memories"
-          disabled={busyId === "compact"}
-          onClick={onCompact}
-          className="border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-2 py-1 text-[11px] disabled:opacity-50"
-        >
-          Compact
-        </button>
-        <button
-          type="button"
-          title="Add checkpoint memory"
-          disabled={busyId === "checkpoint"}
-          onClick={onCheckpoint}
-          className="border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-2 py-1 text-[11px] disabled:opacity-50"
-        >
-          Checkpoint
-        </button>
-      </div>
-    );
-  }
+  const buttonClass = compact
+    ? "border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-2 py-1 text-[11px] disabled:opacity-50"
+    : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-3 py-1.5 text-sm disabled:opacity-50";
 
   return (
-    <div className="flex gap-2">
+    <div className={cn("flex items-center", compact ? "gap-1" : "gap-2")}>
       <button
         type="button"
-        disabled={busyId === "compact"}
-        onClick={onCompact}
-        className="border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+        title={PRUNE_TITLE}
+        disabled={busyId === "prune"}
+        onClick={onPrune}
+        className={buttonClass}
       >
-        Compact
+        {busyId === "prune" ? "Pruning…" : "Prune"}
       </button>
       <button
         type="button"
+        title={CHECKPOINT_TITLE}
         disabled={busyId === "checkpoint"}
         onClick={onCheckpoint}
-        className="border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+        className={buttonClass}
       >
         Checkpoint
       </button>
@@ -67,16 +53,11 @@ export function ActionButtons({
 interface LaneTabsProps {
   lane: MemoryLane;
   onLaneChange: (lane: MemoryLane) => void;
-  memories: MemoryGroups;
+  counts: MemoryCounts;
   compact?: boolean;
 }
 
-export function LaneTabs({
-  lane,
-  onLaneChange,
-  memories,
-  compact,
-}: LaneTabsProps) {
+export function LaneTabs({ lane, onLaneChange, counts, compact }: LaneTabsProps) {
   if (compact) {
     return (
       <div className="border-border flex border-b">
@@ -84,6 +65,7 @@ export function LaneTabs({
           <button
             key={currentLane}
             type="button"
+            title={LANE_INFO[currentLane].desc}
             onClick={() => onLaneChange(currentLane)}
             className={cn(
               "text-muted-foreground hover:bg-secondary flex-1 px-2 py-2 text-[11px]",
@@ -91,8 +73,7 @@ export function LaneTabs({
                 "border-foreground bg-muted text-foreground border-b-2"
             )}
           >
-            {LANE_INFO[currentLane].label} (
-            {(memories[currentLane] || []).length})
+            {LANE_INFO[currentLane].label} ({counts[currentLane] ?? 0})
           </button>
         ))}
       </div>
@@ -105,14 +86,14 @@ export function LaneTabs({
         <button
           key={currentLane}
           type="button"
+          title={LANE_INFO[currentLane].desc}
           onClick={() => onLaneChange(currentLane)}
           className={cn(
             "border-border text-muted-foreground hover:text-foreground rounded border px-3 py-1.5 text-sm",
             lane === currentLane && "border-primary text-primary"
           )}
         >
-          {LANE_INFO[currentLane].label} ({(memories[currentLane] || []).length}
-          )
+          {LANE_INFO[currentLane].label} ({counts[currentLane] ?? 0})
         </button>
       ))}
     </div>

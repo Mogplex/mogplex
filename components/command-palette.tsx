@@ -72,7 +72,7 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
   { path: "/agents/roster", value: "go to agents roster", label: "Agents" },
   { path: "/agents/skills", value: "go to agent skills", label: "Skills" },
   { path: "/agents/rules", value: "go to agent rules", label: "Rules" },
-  { path: "/agents/context", value: "go to agent context", label: "Context" },
+  { path: "/agents/context", value: "go to agent memories", label: "Memories" },
   { path: "/assignments", value: "go to assignments", label: "Assignments" },
   { path: "/workflows", value: "go to workflows automations", label: "Workflows" },
   {

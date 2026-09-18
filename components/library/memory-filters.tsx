@@ -30,6 +30,11 @@ export function ScopeControls({
             key={scope}
             type="button"
             disabled={disabled}
+            title={
+              disabled
+                ? "Switch to a team scope to see memories shared with that team."
+                : undefined
+            }
             onClick={() => onScopeChange(scope)}
             className={cn(
               "border-border text-muted-foreground hover:bg-secondary hover:text-foreground rounded border px-2 py-1 text-[11px] disabled:pointer-events-none disabled:opacity-40",

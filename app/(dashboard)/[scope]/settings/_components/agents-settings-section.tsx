@@ -29,8 +29,8 @@ const AGENT_SECTIONS = [
   },
   {
     key: "context",
-    title: "Context",
-    description: "Global context and documentation agents use for grounding.",
+    title: "Memories",
+    description: "Facts, procedures, and events Control recalls at the start of every turn.",
     pathSuffix: "/agents/context",
     icon: SettingsIcon,
   },

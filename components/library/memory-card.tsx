@@ -1,11 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Check, EditPencil, Trash, Xmark } from "iconoir-react";
 import type { Memory } from "./context-section-types";
-import { formatMemoryDate } from "./context-section-utils";
+import { describeMemoryOrigin, formatMemoryDate } from "./context-section-utils";
+
+/** Content longer than this collapses behind a "Show more" toggle. */
+export const MEMORY_CARD_COLLAPSE_CHARS = 480;
 
 interface MemoryCardProps {
   memory: Memory;
+  repoLabel?: string | null;
   compact?: boolean;
   isEditing: boolean;
   isBusy: boolean;
@@ -17,8 +22,17 @@ interface MemoryCardProps {
   onDelete: () => void;
 }
 
+function MemoryChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="border-border text-muted-foreground rounded border px-1.5 py-0.5 text-[10px] leading-none">
+      {children}
+    </span>
+  );
+}
+
 export function MemoryCard({
   memory,
+  repoLabel,
   compact,
   isEditing,
   isBusy,
@@ -29,6 +43,14 @@ export function MemoryCard({
   onCancelEdit,
   onDelete,
 }: MemoryCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const origin = describeMemoryOrigin(memory);
+  const isLong = memory.content.length > MEMORY_CARD_COLLAPSE_CHARS;
+  const shownContent =
+    isLong && !expanded
+      ? `${memory.content.slice(0, MEMORY_CARD_COLLAPSE_CHARS).trimEnd()}…`
+      : memory.content;
+
   if (isEditing) {
     return (
       <div className="border-border bg-card rounded-md border p-2">
@@ -65,14 +87,28 @@ export function MemoryCard({
   }
 
   return (
-    <div className="border-border bg-card rounded-md border p-2">
+    <div
+      className="border-border bg-card rounded-md border p-2"
+      data-testid="memory-card"
+    >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="text-foreground whitespace-pre-wrap break-words text-xs">
-            {memory.content}
+            {shownContent}
           </div>
-          <div className="text-muted-foreground mt-1 text-[11px]">
-            {formatMemoryDate(memory.updated_at || memory.created_at)}
+          {isLong && (
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              className="text-muted-foreground hover:text-foreground mt-1 text-[11px] underline-offset-2 hover:underline"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          )}
+          <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span>{formatMemoryDate(memory.updated_at || memory.created_at)}</span>
+            {repoLabel ? <MemoryChip>{repoLabel}</MemoryChip> : null}
+            {origin ? <MemoryChip>{origin}</MemoryChip> : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">

@@ -8,10 +8,7 @@
 
 import { summarizeNodeOutput } from "@/lib/flows/graph";
 
-import {
-  AUTOMATION_REASON_CODES,
-  PR_REVIEW_REASON_CODES,
-} from "@/lib/automation-review";
+import { AUTOMATION_REASON_CODES } from "@/lib/automation-review";
 
 import { extractPrReviewHarnessResult } from "@/lib/workflows/pr-review-harness";
 import type { AutomationModelExecutionMetadata } from "@/lib/workflows/automation-model-execution";
@@ -24,12 +21,8 @@ import {
   type JobContext,
   type ReleasedAutomationScope,
 } from "@/lib/workflows/automation-job-types";
-import {
-  hasToolCall,
-  normalizeAutomationAssignmentType,
-} from "@/lib/workflows/automation-job-utils";
+import { hasToolCall } from "@/lib/workflows/automation-job-utils";
 import { buildAutomationExecutionMetadataFields } from "@/lib/workflows/automation-job-metadata";
-import { persistAutomationOutcomeMemory } from "@/lib/workflows/automation-job-persistence";
 import { resolvePullRequestNumber } from "@/lib/workflows/automation-job-sandbox-actions";
 import {
   attemptFlowAutoMerge,
@@ -224,22 +217,6 @@ export async function finalizeFlowSuccess(
       },
     });
   }
-
-  await persistAutomationOutcomeMemory({
-    context,
-    jobRunId,
-    outcome: "completed",
-    summary: `${normalizeAutomationAssignmentType(
-      context.assignmentType
-    )}: ${summarizeNodeOutput(finalResult.text)}`,
-    reason: isPrReview
-      ? (reporter?.state.prReviewCompletionReason ??
-        (reviewOutcome?.hasIssues
-          ? PR_REVIEW_REASON_CODES.posted
-          : PR_REVIEW_REASON_CODES.noFindings))
-      : AUTOMATION_REASON_CODES.completed,
-    execution: finalResult.execution ?? null,
-  });
   await deps.releaseQueuedJobs({
     jobRunId,
     releasedScope,

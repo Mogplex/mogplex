@@ -28,16 +28,12 @@ import {
   type AutomationJobInput,
   type AutomationJobRunResult,
 } from "@/lib/workflows/automation-job-types";
-import {
-  hasToolCall,
-  normalizeAutomationAssignmentType,
-} from "@/lib/workflows/automation-job-utils";
+import { hasToolCall } from "@/lib/workflows/automation-job-utils";
 import {
   buildAutomationExecutionMetadataFields,
   extractToolCalls,
 } from "@/lib/workflows/automation-job-metadata";
 import { buildDispatchLogContext } from "@/lib/workflows/automation-job-dispatch";
-import { persistAutomationOutcomeMemory } from "@/lib/workflows/automation-job-persistence";
 import {
   executeResolvedFlow,
   type FlowExecutorDeps,
@@ -464,21 +460,6 @@ export async function runAutomationJob(
       },
     });
   }
-  await persistAutomationOutcomeMemory({
-    context,
-    jobRunId: input.jobRunId,
-    outcome: "completed",
-    summary: `${normalizeAutomationAssignmentType(
-      context.assignmentType
-    )}: ${summarizeNodeOutput(finalResult.text)}`,
-    reason: isPrReview
-      ? (reporter?.state.prReviewCompletionReason ??
-        (reviewOutcome?.hasIssues
-          ? PR_REVIEW_REASON_CODES.posted
-          : PR_REVIEW_REASON_CODES.noFindings))
-      : AUTOMATION_REASON_CODES.completed,
-    execution: finalResult.execution ?? null,
-  });
   const observabilityError = await deps.tryLogAiCall({
     context,
     jobRunId: input.jobRunId,

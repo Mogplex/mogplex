@@ -30,8 +30,9 @@ import {
   wrapToolsWithPolicy,
   buildOrchestratorSystemPrompt,
   type OrchestratorToolContext,
-  type OrchestratorPromptContext,
 } from "@/lib/agents/orchestrator";
+import { loadControlMemoryContextForUser } from "@/lib/agents/control-memory-context";
+import { buildControlPromptContext } from "./prompt-context";
 import {
   getControlChatRunScope,
   buildControlChatRunMetadata,
@@ -99,18 +100,23 @@ export async function executeControlChatRequest(input: {
     await input.background?.onAiCallStarted(activeCall.id);
 
     // Build orchestrator context
-    const [githubToken, sandboxContext, worktreeContext] = await Promise.all([
-      resolveGithubTokenForRepo(input.userId, input.body.repoId),
-      resolveControlPromptSandboxContext(input.req, input.userId, input.body),
-      resolveControlPromptWorktrees(input.userId, input.body),
-    ]);
+    const [githubToken, sandboxContext, worktreeContext, memoryContext] =
+      await Promise.all([
+        resolveGithubTokenForRepo(input.userId, input.body.repoId),
+        resolveControlPromptSandboxContext(input.req, input.userId, input.body),
+        resolveControlPromptWorktrees(input.userId, input.body),
+        loadControlMemoryContextForUser({
+          userId: input.userId,
+          repoId: input.body.repoId ?? null,
+          query: input.latestUserText,
+        }),
+      ]);
     // Replace the client hint with the owned, server-validated session and
     // fail closed to no mission when the hint cannot be validated.
     scope = {
       ...scope,
       missionId: worktreeContext.controlSessionId,
     };
-    const activeSandboxes = sandboxContext.sandboxes;
     const selectedSandboxId = resolveControlToolSandboxId(sandboxContext);
     const sandboxBinding: NonNullable<
       OrchestratorToolContext["sandboxBinding"]
@@ -173,23 +179,14 @@ export async function executeControlChatRequest(input: {
       sandboxExecution: input.background?.sandboxExecution,
     };
 
-    const promptContext: OrchestratorPromptContext = {
-      repoFullName: input.body.repoFullName ?? undefined,
-      repoOwner: input.body.repoOwner ?? undefined,
-      repoName: input.body.repoName ?? undefined,
-      repoBranch: input.body.repoBranch ?? undefined,
-      repoBaseBranch: input.body.repoBaseBranch ?? undefined,
-      missionId: scope.missionId ?? undefined,
-      missionTitle: input.body.missionTitle ?? undefined,
-      controlScope: input.body.scope ?? undefined,
-      controlTarget: input.body.target ?? undefined,
-      controlPermissions: input.body.permissions ?? undefined,
-      controlMode: input.body.mode ?? undefined,
+    const promptContext = buildControlPromptContext({
+      body: input.body,
+      missionId: scope.missionId,
       infrastructureDiagnosticScope: input.infrastructureDiagnosticScope,
-      sandboxSelectionRequired: sandboxContext.selectionRequired,
-      activeSandboxes,
-      activeWorktrees: worktreeContext.worktrees,
-    };
+      sandboxContext,
+      worktreeContext,
+      memoryContext,
+    });
 
     // Build tools with policy wrapping
     const rawTools = buildOrchestratorTools(toolContext);
