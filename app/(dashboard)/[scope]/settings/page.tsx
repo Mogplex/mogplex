@@ -5,7 +5,7 @@ import { getScopeContext } from "@/lib/scope-context"
 export const metadata: Metadata = {
   title: "Settings | Mogplex",
   description:
-    "Manage account connections, API keys, model defaults, and workspace preferences.",
+    "Manage account connections, API keys, agents, and workspace preferences.",
   robots: {
     index: false,
     follow: false,

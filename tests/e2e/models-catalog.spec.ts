@@ -112,7 +112,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 
 test("models catalog supports provider, state, pricing filters, and state sorting", async ({
   page,
-}) => {
+}, testInfo) => {
   await enableScopedE2EAuth(page);
   let defaultModel = "minimax/minimax-m2.7";
   await page.route("**/api/settings/model-chain", async (route) => {
@@ -176,14 +176,19 @@ test("models catalog supports provider, state, pricing filters, and state sortin
       })
   );
 
-  await page.goto(scopedPath("settings?tab=models"));
+  await page.goto(scopedPath("/models/catalog"));
   await page.waitForLoadState("networkidle");
 
-  const primary = page.getByRole("button", { name: "Primary", exact: true });
-  await expect(primary).toContainText("Minimax M2.7");
+  const primaryRole = (id: string) =>
+    page.getByTestId(`models-chain-role-${id}`);
+  await expect(primaryRole("minimax/minimax-m2.7")).toHaveText("Primary");
   await expect(
     page.getByTestId("models-set-default-minimax/minimax-m2.7")
   ).toHaveCount(0);
+  await expect(page.getByTestId("app-nav-models")).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
   await expect(
     page.getByTestId("models-recommendation-freshness")
   ).toContainText("Recommendations refreshed");
@@ -192,7 +197,7 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   // preferences table.
   await expect(
     page.getByTestId("models-recommendation-freshness")
-  ).toContainText("Showing 4 of 4 models");
+  ).toContainText("4 of 4 models");
   await expect(page.getByText("Claude Opus 4.7")).toHaveCount(0);
   const minimaxProviderIcon = page.getByTestId(
     "models-provider-icon-minimax/minimax-m2.7"
@@ -209,12 +214,18 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   await page.getByTestId("models-toggle-openai/gpt-oss-120b").click();
 
   await page.getByTestId("models-set-default-openai/gpt-oss-120b").click();
-  await expect(primary).toContainText("GPT-OSS 120B");
+  await expect(primaryRole("openai/gpt-oss-120b")).toHaveText("Primary");
+  await expect(primaryRole("minimax/minimax-m2.7")).toHaveCount(0);
   expect(defaultModel).toBe("minimax/minimax-m2.7");
-  await page.getByRole("button", { name: "Save chain" }).click();
-  await expect(page.getByRole("status")).toHaveText("Chain saved.");
+  const draftBar = page.getByTestId("models-chain-draft-bar");
+  await expect(draftBar).toContainText("GPT-OSS 120B");
+  await draftBar.getByRole("button", { name: "Save chain" }).click();
+  await expect(draftBar.getByRole("status")).toHaveText("Chain saved.");
   expect(defaultModel).toBe("openai/gpt-oss-120b");
+  await expect(page.getByTestId("models-draft-indicator")).toHaveCount(0);
 
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.screenshot({ path: testInfo.outputPath("models-catalog.png") });
   await expect(page.getByText("In $2.50")).toBeVisible();
   await expect(page.getByText("Out $75")).toBeVisible();
 
@@ -258,7 +269,9 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   expect(visibleNames).toEqual(["Minimax M2.7"]);
 
   await page.getByTestId("models-set-default-minimax/minimax-m2.7").click();
-  await expect(primary).toContainText("Minimax M2.7");
+  await expect(primaryRole("minimax/minimax-m2.7")).toHaveText("Primary");
   await page.getByRole("button", { name: "Discard", exact: true }).click();
-  await expect(primary).toContainText("GPT-OSS 120B");
+  await page.getByTestId("models-search").fill("");
+  await expect(primaryRole("openai/gpt-oss-120b")).toHaveText("Primary");
+  await expect(primaryRole("minimax/minimax-m2.7")).toHaveCount(0);
 });

@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { useUser } from "@/hooks/use-user"
 import { fetchJsonArray, fetchJsonObject } from "@/lib/client-fetch"
-import { ModelsSection } from "@/components/library/models-section"
 import { TeamSettingsClient } from "@/components/settings/team-settings-client"
 import { TeamsListSection } from "@/components/settings/teams-list-section"
 import { BillingSection } from "@/components/settings/billing-section"
@@ -14,6 +13,7 @@ import { SlackInstallToast } from "@/components/connections/slack-install-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { trackActivation } from "@/lib/activation-tracking"
+import { scopedHref } from "@/lib/scoped-href"
 import type { ScopeContext } from "@/lib/scope-context"
 
 import {
@@ -29,6 +29,8 @@ import {
   SETTINGS_TAB_SET,
   KEYS_SUB_TAB_SET,
   LEGACY_HASH_TO_TAB,
+  LEGACY_MODELS_TAB,
+  MODELS_ROUTE_PATH,
 } from "./_components"
 
 export function SettingsPageClient({ scope }: { scope: ScopeContext }) {
@@ -36,10 +38,10 @@ export function SettingsPageClient({ scope }: { scope: ScopeContext }) {
     return <TeamSettingsClient teamId={scope.teamId} teamSlug={scope.slug} />
   }
 
-  return <PersonalSettingsClient />
+  return <PersonalSettingsClient scope={scope.slug} />
 }
 
-function PersonalSettingsClient() {
+function PersonalSettingsClient({ scope }: { scope: string }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -68,16 +70,26 @@ function PersonalSettingsClient() {
     [router, pathname, searchParams],
   )
 
+  // Models moved to their own route; keep old deep links working.
+  useEffect(() => {
+    if (tabParam !== LEGACY_MODELS_TAB) return
+    router.replace(scopedHref(scope, MODELS_ROUTE_PATH))
+  }, [router, scope, tabParam])
+
   useEffect(() => {
     if (typeof window === "undefined") return
     const hash = window.location.hash.replace(/^#/, "")
     if (!hash) return
+    if (hash === LEGACY_MODELS_TAB) {
+      router.replace(scopedHref(scope, MODELS_ROUTE_PATH))
+      return
+    }
     const mapped = LEGACY_HASH_TO_TAB[hash]
     if (!mapped) return
     const params = new URLSearchParams(window.location.search)
     params.set("tab", mapped)
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }, [router, pathname])
+  }, [router, pathname, scope])
 
   const { user, isLoading } = useUser()
   const { error: settingsError } = useSWR<SettingsView>(
@@ -180,7 +192,6 @@ function PersonalSettingsClient() {
             <TabsTrigger value="teams" className="px-3 h-7 text-[13px]">Teams</TabsTrigger>
             <TabsTrigger value="connections" className="px-3 h-7 text-[13px]">Connections</TabsTrigger>
             <TabsTrigger value="keys" className="px-3 h-7 text-[13px]">Keys &amp; Tokens</TabsTrigger>
-            <TabsTrigger value="models" className="px-3 h-7 text-[13px]">Models</TabsTrigger>
             <TabsTrigger value="agents" className="px-3 h-7 text-[13px]">Agents</TabsTrigger>
             <TabsTrigger value="billing" className="px-3 h-7 text-[13px]">Billing</TabsTrigger>
           </TabsList>
@@ -223,10 +234,6 @@ function PersonalSettingsClient() {
               <CliApiKeysSection />
             </TabsContent>
           </Tabs>
-        </TabsContent>
-
-        <TabsContent value="models" className="mt-0">
-          <ModelsSection />
         </TabsContent>
 
         <TabsContent value="agents" className="mt-0">

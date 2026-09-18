@@ -43,6 +43,7 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
     "automations",
     "delivery",
     "observe",
+    "models",
     "settings",
   ]) {
     await expect(page.getByTestId(`app-nav-${destination}`)).toBeVisible();

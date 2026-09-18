@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { mockSettingsPageData, model } from "./helpers/theme-settings-fixtures";
 
-test("chain edits share catalog state, save atomically, and fit desktop and mobile", async ({
+test("chain edits survive switching tabs, save atomically, and fit desktop and mobile", async ({
   page,
 }, testInfo) => {
   await enableScopedE2EAuth(page);
@@ -59,7 +59,7 @@ test("chain edits share catalog state, save atomically, and fit desktop and mobi
     await route.fulfill({ json: saved });
   });
   await page.setViewportSize({ width: 2560, height: 1440 });
-  await page.goto(scopedPath("/settings?tab=models"));
+  await page.goto(scopedPath("/models/configuration"));
   const section = page.getByRole("region", { name: "Default and fallbacks" });
   await expect(section.getByRole("alert")).toContainText(
     "Unable to load model chain"
@@ -73,8 +73,11 @@ test("chain edits share catalog state, save atomically, and fit desktop and mobi
   ).toBeDisabled();
   expect((await section.boundingBox())!.width).toBeLessThanOrEqual(760);
   expect(
-    (await page.getByTestId("models-content").boundingBox())!.width
+    (await page.getByTestId("models-configuration").boundingBox())!.width
   ).toBeLessThanOrEqual(1440);
+  await expect(page.getByTestId("models-routing-preview")).toContainText(
+    "Fallback 2"
+  );
   const first = section.getByRole("button", {
     name: "Fallback 1",
     exact: true,
@@ -113,12 +116,27 @@ test("chain edits share catalog state, save atomically, and fit desktop and mobi
   expect(
     await primary.evaluate((element) => getComputedStyle(element).boxShadow)
   ).not.toBe("none");
+  await page.getByTestId("models-tab-catalog").click();
+  await expect(page).toHaveURL(/\/models\/catalog$/);
   await page.getByTestId("models-set-default-openai/five").click();
-  await expect(primary).toContainText("Five");
   await expect(page.getByTestId("models-set-default-openai/five")).toHaveCount(
     0
   );
+  await expect(page.getByTestId("models-chain-role-openai/five")).toHaveText(
+    "Primary"
+  );
   await page.getByTestId("models-add-fallback-openai/three").click();
+  await expect(page.getByTestId("models-chain-role-openai/three")).toHaveText(
+    "Fallback 3"
+  );
+  await expect(page.getByTestId("models-draft-indicator")).toBeVisible();
+  await expect(page.getByTestId("models-chain-draft-bar")).toContainText(
+    "Routing chain changed"
+  );
+  expect(writes).toBe(0);
+  await page.getByTestId("models-tab-configuration").click();
+  await expect(page).toHaveURL(/\/models\/configuration$/);
+  await expect(primary).toContainText("Five");
   await section
     .getByRole("button", { name: "Add a fallback", exact: true })
     .click();
@@ -156,14 +174,16 @@ test("chain edits share catalog state, save atomically, and fit desktop and mobi
   });
   await page.reload();
   await expect(primary).toContainText("Five");
+  await page.getByTestId("models-tab-catalog").click();
   await page.getByTestId("models-toggle-openai/five").click();
-  await expect(
-    section.getByText("Disabled in catalog", { exact: true })
-  ).toBeVisible();
   await page.getByTestId("models-toggle-openai/one").click();
+  await page.getByTestId("models-tab-configuration").click();
   await expect(
     section.getByText("Disabled in catalog", { exact: true })
   ).toHaveCount(2);
+  await expect(page.getByTestId("models-routing-preview")).toContainText(
+    "Disabled in catalog"
+  );
   await first.click();
   await expect(
     page.getByRole("option", { name: "One", exact: true })
@@ -181,7 +201,14 @@ test("chain edits share catalog state, save atomically, and fit desktop and mobi
   await page.screenshot({
     path: testInfo.outputPath("model-chain-mobile.png"),
   });
+  await page.getByTestId("models-tab-catalog").click();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true);
   await page.getByTestId("models-toggle-openai/five").click();
+  await page.getByTestId("models-tab-configuration").click();
   for (let index = 0; index < 4; index++)
     await section
       .getByRole("button", { name: "Remove fallback 1", exact: true })

@@ -272,7 +272,7 @@ export function AgentDraftAssist({
           </select>
           {!hasEnabledModels && (
             <div className="text-[11px] text-muted-foreground">
-              Enable a model first in <a href={scopedHref(scope, "/settings?tab=models")} className="text-accent-blue hover:underline">Settings</a>.
+              Enable a model first in <a href={scopedHref(scope, "/models/catalog")} className="text-accent-blue hover:underline">Models</a>.
             </div>
           )}
         </div>

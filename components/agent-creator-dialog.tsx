@@ -245,7 +245,7 @@ export function AgentCreatorDialog({ onClose, onCreated }: Props) {
                   </select>
                   {!hasEnabledModels && (
                     <div className="mt-1 text-[10px] text-muted-foreground">
-                      Enable a model first in <a href={scopedHref(scope, "/settings?tab=models")} className="text-accent-blue hover:underline">Settings</a>.
+                      Enable a model first in <a href={scopedHref(scope, "/models/catalog")} className="text-accent-blue hover:underline">Models</a>.
                     </div>
                   )}
                 </div>
@@ -313,7 +313,7 @@ export function AgentCreatorDialog({ onClose, onCreated }: Props) {
                 </select>
                 {!model && (
                   <div className="mt-1 text-[10px] text-muted-foreground">
-                    Enable a model first in <a href={scopedHref(scope, "/settings?tab=models")} className="text-accent-blue hover:underline">Settings</a>.
+                    Enable a model first in <a href={scopedHref(scope, "/models/catalog")} className="text-accent-blue hover:underline">Models</a>.
                   </div>
                 )}
               </div>

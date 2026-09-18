@@ -17,7 +17,7 @@ export default async function LibraryRedirect({
   const tabValue = Array.isArray(resolved?.tab) ? resolved?.tab[0] : resolved?.tab
 
   if (tabValue === "models") {
-    redirect(scopedHref(scope, "/settings?tab=models"))
+    redirect(scopedHref(scope, "/models/catalog"))
   }
 
   if (tabValue === "rules") {
