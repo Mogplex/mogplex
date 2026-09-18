@@ -173,7 +173,7 @@ const MOGPLEX_GITIGNORE_CONTENT = "*\n";
  * seed it: the whole point is defense-in-depth, so failing-open here would
  * defeat the guard.
  */
-async function ensureMogplexGitignore(
+export async function ensureMogplexGitignore(
   sandbox: McpConfigWritableSandbox,
   rootDirectory: string | null | undefined
 ): Promise<void> {

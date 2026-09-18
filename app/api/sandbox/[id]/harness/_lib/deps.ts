@@ -28,6 +28,7 @@ import {
 } from "@/lib/interactive-runs";
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import { getSlackBotToken } from "@/lib/slack/client";
+import { resolveAgentRuntimeForUser } from "@/lib/agents/runtime/store";
 import {
   syncHarnessGitWorkspace,
   publishHarnessPullRequest,
@@ -103,6 +104,7 @@ export const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
     }
   },
   getSlackBotToken,
+  resolveAgentRuntime: resolveAgentRuntimeForUser,
   fetchSlackAttachment: ({ botToken, url, signal }) =>
     fetch(url, {
       headers: { Authorization: `Bearer ${botToken}` },

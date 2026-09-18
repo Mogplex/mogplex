@@ -11,8 +11,11 @@ export function useAgentEditor({
   defaultModelId,
   renderedCategorySlugsRef,
   mutate,
+  activeTeamId = null,
 }: {
   agents: Agent[];
+  /** Team scope the roster is viewed in; enables the share toggle. */
+  activeTeamId?: string | null;
   enabledModels: AIModel[];
   defaultModelId: string | null;
   renderedCategorySlugsRef: React.MutableRefObject<Set<string>>;
@@ -25,6 +28,9 @@ export function useAgentEditor({
   const [editDescription, setEditDescription] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editSkillIds, setEditSkillIds] = useState<string[]>([]);
+  const [editRuleIds, setEditRuleIds] = useState<string[]>([]);
+  const [editShared, setEditShared] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -55,6 +61,9 @@ export function useAgentEditor({
           ? agent.category
           : ""
       );
+      setEditSkillIds(agent.skill_ids ?? []);
+      setEditRuleIds(agent.rule_ids ?? []);
+      setEditShared(Boolean(agent.team_id));
       setSaveError(null);
     },
     [renderedCategorySlugsRef]
@@ -128,12 +137,19 @@ export function useAgentEditor({
     setSaving(true);
     setSaveError(null);
     try {
+      // Only the owner decides sharing; a teammate editing a shared agent
+      // sends no team_id so the server never sees a sharing change.
+      const ownsAgent = isCreating || editing?.owned !== false;
+      const teamId = editShared ? (editing?.team_id ?? activeTeamId) : null;
       const payload = {
         name: editName,
         model: editModel,
         description: editDescription,
         system_prompt: editPrompt,
         category: editCategory || null,
+        skill_ids: editSkillIds,
+        rule_ids: editRuleIds,
+        ...(ownsAgent ? { team_id: teamId } : {}),
       };
 
       const res = await fetch("/api/agents", {
@@ -165,6 +181,10 @@ export function useAgentEditor({
     editDescription,
     editPrompt,
     editCategory,
+    editSkillIds,
+    editRuleIds,
+    editShared,
+    activeTeamId,
     mutate,
     closeEditor,
   ]);
@@ -187,6 +207,9 @@ export function useAgentEditor({
     setEditDescription("");
     setEditPrompt("");
     setEditCategory("");
+    setEditSkillIds([]);
+    setEditRuleIds([]);
+    setEditShared(false);
     setSaveError(null);
   }, [defaultModelId, enabledModels]);
 
@@ -202,6 +225,14 @@ export function useAgentEditor({
     setEditPrompt,
     editCategory,
     setEditCategory,
+    editSkillIds,
+    setEditSkillIds,
+    editRuleIds,
+    setEditRuleIds,
+    editShared,
+    setEditShared,
+    canShare: Boolean(activeTeamId) || Boolean(editing?.team_id),
+    canEditSharing: isCreating || editing?.owned !== false,
     saving,
     saveError,
     setSaveError,

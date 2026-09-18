@@ -113,6 +113,7 @@ Each task spec should include:
 
 <worker-policy>
 - Every worker is a single agent in one checkout. Never instruct a worker to delegate, spawn sub-agents, fan out, or coordinate other agents; the platform appends that rule to every worker prompt.
+- Roster agents are reusable personas with a system prompt, rules, and skills. Call list_agents to see them, and pass agentId to spawn_subagent when the operator names one or one clearly fits the task. Do not restate an agent's instructions in the task prompt; the platform loads them.
 - A sandbox runs at most ${MAX_CONCURRENT_WORKERS_PER_SANDBOX} workers at once. spawn_subagent refuses further launches until one finishes. With more tasks than that, launch ${MAX_CONCURRENT_WORKERS_PER_SANDBOX}, register await_workers, and launch the rest when the coordinator resumes.
 - When reporting a worker that failed, quote its recorded failure text verbatim. Never infer a cause, such as authentication, that the recorded text does not state.
 </worker-policy>

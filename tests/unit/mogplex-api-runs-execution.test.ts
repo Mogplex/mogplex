@@ -320,3 +320,15 @@ test("executeExternalAgentRun ignores a checkpoint marker when the pass failed",
   assert.equal(currentRun.status, "failed");
   assert.equal(checkpointNotified, false);
 });
+
+test("buildExternalAgentHarnessRequestBody forwards the roster agent so the harness route can load it", () => {
+  assert.equal(
+    buildExternalAgentHarnessRequestBody(buildRunRow({ agent_id: "agent-1" }))
+      .agentId,
+    "agent-1"
+  );
+  assert.equal(
+    "agentId" in buildExternalAgentHarnessRequestBody(buildRunRow()),
+    false
+  );
+});

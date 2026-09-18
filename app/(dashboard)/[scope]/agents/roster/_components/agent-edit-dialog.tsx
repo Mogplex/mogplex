@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AgentDraftAssist } from "@/components/agent-draft-assist";
+import { AgentAttachmentsFields } from "./agent-attachments-fields";
 import type { AgentCategoryRow } from "@/lib/types";
 
 export type CategoryEntry = [
@@ -45,6 +46,14 @@ export function AgentEditDialog({
   onClose,
   onSave,
   onOpenNewCategory,
+  skillIds,
+  setSkillIds,
+  ruleIds,
+  setRuleIds,
+  shared,
+  setShared,
+  canShare,
+  canEditSharing,
 }: {
   isOpen: boolean;
   isCreating: boolean;
@@ -67,6 +76,14 @@ export function AgentEditDialog({
   onClose: () => void;
   onSave: () => void;
   onOpenNewCategory: () => void;
+  skillIds: string[];
+  setSkillIds: (ids: string[]) => void;
+  ruleIds: string[];
+  setRuleIds: (ids: string[]) => void;
+  shared: boolean;
+  setShared: (shared: boolean) => void;
+  canShare: boolean;
+  canEditSharing: boolean;
 }) {
   return (
     <Dialog
@@ -205,6 +222,16 @@ export function AgentEditDialog({
               className="bg-input border-border text-foreground min-h-[320px] w-full resize-y rounded-sm border px-3 py-2 font-mono text-sm"
             />
           </div>
+          <AgentAttachmentsFields
+            skillIds={skillIds}
+            setSkillIds={setSkillIds}
+            ruleIds={ruleIds}
+            setRuleIds={setRuleIds}
+            shared={shared}
+            setShared={setShared}
+            canShare={canShare}
+            canEditSharing={canEditSharing}
+          />
           {saveError && (
             <div className="text-destructive text-sm">{saveError}</div>
           )}

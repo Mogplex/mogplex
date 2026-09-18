@@ -19,6 +19,8 @@ import {
 import { createSlackRunProgressReporter } from "@/lib/slack/run-progress-notify";
 import { createRunGuidanceSession } from "@/lib/slack/run-guidance-session";
 import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
+import { renderAgentInstructions } from "@/lib/agents/runtime/instructions";
+import { resolveAgentRuntimeForUser } from "@/lib/agents/runtime/store";
 import {
   createRunProgressTool,
   SLACK_RUN_PROGRESS_INSTRUCTIONS,
@@ -48,7 +50,25 @@ const defaultDeps = {
   appendEvent: safeAppendAiCallEvent,
   finishCall: finalizeAiCallIfNotCancelled,
   cancelCall: finalizeAiCallAsCancelledIfActive,
+  resolveAgent: resolveAgentRuntimeForUser,
 };
+
+/**
+ * The native harness has no checkout-relative skill files to point at, so the
+ * whole agent block, skills included, rides in the system prompt suffix.
+ */
+async function buildAgentSystemSuffix(
+  run: ExternalAgentRunRow,
+  resolveAgent: typeof resolveAgentRuntimeForUser
+): Promise<string | null> {
+  if (!run.agent_id) return null;
+  const runtime = await resolveAgent({
+    agentId: run.agent_id,
+    userId: run.user_id,
+  });
+  if (!runtime) throw new Error("Agent not found for this run");
+  return renderAgentInstructions(runtime, "inline").prompt;
+}
 
 /** Run Mogplex's shared agent core against the already-owned sandbox and ai_call. */
 export async function runNativeMogplexAgent(
@@ -143,6 +163,12 @@ export async function runNativeMogplexAgent(
     await deps.ensureExecutionLease(run, sandbox, context.teamId);
     const resolvedModel = await deps.resolveModel(run.user_id);
     const uiMessages = await deps.buildMessages(run);
+    const agentSuffix = await buildAgentSystemSuffix(run, deps.resolveAgent);
+    const slackControls = readSlackRunControlsMetadata(run.metadata);
+    const systemSuffix =
+      [agentSuffix, slackControls ? SLACK_RUN_PROGRESS_INSTRUCTIONS : null]
+        .filter(Boolean)
+        .join("\n\n") || null;
     control.signal.throwIfAborted();
     const active = await deps.updateCall(call.id, {
       model: resolvedModel,
@@ -158,7 +184,8 @@ export async function runNativeMogplexAgent(
       payload: { harness_id: "mogplex", model: resolvedModel },
     });
     stream = await deps.createStream({
-      ...(readSlackRunControlsMetadata(run.metadata)
+      systemSuffix,
+      ...(slackControls
         ? {
             additionalTools: {
               report_progress: createRunProgressTool(async (update) => {
@@ -173,7 +200,6 @@ export async function runNativeMogplexAgent(
                 await progress.report(update);
               }),
             },
-            systemSuffix: SLACK_RUN_PROGRESS_INSTRUCTIONS,
           }
         : {}),
       context: {

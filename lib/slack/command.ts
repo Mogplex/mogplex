@@ -37,16 +37,20 @@ import {
   type SlackUserMappingRow,
 } from "@/lib/slack/installations";
 import { handleSlackModelCommand } from "@/lib/slack/model-command";
-import { getSlackModelPreference } from "@/lib/slack/model-preferences";
-import { postSlackResponse } from "@/lib/slack/response";
 import {
-  slackHarnessCommandText,
-  type SlackHarnessCommandDeps,
-} from "./harness-command";
+  defaultSlackAgentCommandListAgents,
+  type SlackAgentCommandDeps,
+} from "@/lib/slack/agent-command";
+import { preferenceCommandText } from "@/lib/slack/preference-command";
 import {
+  getSlackAgentPreference,
+  upsertSlackAgentPreference,
   getSlackHarnessPreference,
   upsertSlackHarnessPreference,
-} from "./harness-preferences";
+} from "@/lib/slack/harness-preferences";
+import { getSlackModelPreference } from "@/lib/slack/model-preferences";
+import { postSlackResponse } from "@/lib/slack/response";
+import type { SlackHarnessCommandDeps } from "./harness-command";
 
 export type SlackCommandPayload = {
   command: string;
@@ -58,25 +62,26 @@ export type SlackCommandPayload = {
   triggerId?: string;
 };
 
-type SlackCommandDeps = SlackHarnessCommandDeps & {
-  getInstallation: typeof getSlackInstallationByTeamId;
-  getUserMapping: typeof getSlackUserMapping;
-  getChannelLink: typeof getSlackChannelLink;
-  setChannelLink: typeof setSlackChannelLink;
-  listRepos: typeof listMogplexApiRepos;
-  loadLatestRun: typeof loadLatestSlackRun;
-  listRunEvents: typeof listMogplexApiRunEvents;
-  listUsableModels: typeof listUsableModelIdsForScope;
-  resolveDefaultModel: typeof resolveStoredUserDefaultModelId;
-  getModelPreference: typeof getSlackModelPreference;
-  loadUsage: typeof loadSlackUsageSummary;
-  listPullRequests: typeof listSlackRepoPullRequests;
-  listIssues: typeof listSlackRepoIssues;
-  getBotToken: typeof getSlackBotToken;
-  openView: typeof openSlackView;
-  postResponse: typeof postSlackResponse;
-  handleModelCommand: typeof handleSlackModelCommand;
-};
+type SlackCommandDeps = SlackHarnessCommandDeps &
+  SlackAgentCommandDeps & {
+    getInstallation: typeof getSlackInstallationByTeamId;
+    getUserMapping: typeof getSlackUserMapping;
+    getChannelLink: typeof getSlackChannelLink;
+    setChannelLink: typeof setSlackChannelLink;
+    listRepos: typeof listMogplexApiRepos;
+    loadLatestRun: typeof loadLatestSlackRun;
+    listRunEvents: typeof listMogplexApiRunEvents;
+    listUsableModels: typeof listUsableModelIdsForScope;
+    resolveDefaultModel: typeof resolveStoredUserDefaultModelId;
+    getModelPreference: typeof getSlackModelPreference;
+    loadUsage: typeof loadSlackUsageSummary;
+    listPullRequests: typeof listSlackRepoPullRequests;
+    listIssues: typeof listSlackRepoIssues;
+    getBotToken: typeof getSlackBotToken;
+    openView: typeof openSlackView;
+    postResponse: typeof postSlackResponse;
+    handleModelCommand: typeof handleSlackModelCommand;
+  };
 
 type SlackCommandUser = {
   installation: SlackInstallationRow;
@@ -87,6 +92,9 @@ type SlackCommandUser = {
 const defaultDeps: SlackCommandDeps = {
   getHarnessPreference: getSlackHarnessPreference,
   saveHarnessPreference: upsertSlackHarnessPreference,
+  getAgentPreference: getSlackAgentPreference,
+  saveAgentPreference: upsertSlackAgentPreference,
+  listAgentsForUser: defaultSlackAgentCommandListAgents,
   getInstallation: getSlackInstallationByTeamId,
   getUserMapping: getSlackUserMapping,
   getChannelLink: getSlackChannelLink,
@@ -373,25 +381,18 @@ async function handleAuthorizedCommand(input: {
   const { deps, payload, user, command } = input;
   switch (command.name) {
     case "harness":
+    case "agent":
       await respond(
         deps,
         payload,
-        await slackHarnessCommandText(
-          deps,
-          {
-            installationId: user.installation.id,
-            channelId: payload.channelId,
-            slackUserId: payload.slackUserId,
-          },
-          command.argument
-        )
+        await preferenceCommandText(deps, payload, user, command)
       );
       return;
     case "help":
       await respond(
         deps,
         payload,
-        "Mogplex commands: status, repo, prs, issues, usage, model, and harness.",
+        "Mogplex commands: status, repo, prs, issues, usage, model, harness, and agent.",
         buildSlackCommandHubBlocks()
       );
       return;

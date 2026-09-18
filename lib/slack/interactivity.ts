@@ -210,6 +210,7 @@ const DISPATCHABLE_COMMANDS = new Set([
   "usage",
   "model",
   "harness",
+  "agent",
 ]);
 
 function findCommandDispatch(payload: SlackBlockActionsPayload) {

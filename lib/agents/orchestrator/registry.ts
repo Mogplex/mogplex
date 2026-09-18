@@ -34,6 +34,7 @@ import {
   createControlReadFile,
 } from "./tools/filesystem-impl";
 import {
+  createListAgentsTool,
   createPlanMissionTool,
   createSpawnSubagentTool,
 } from "./tools/planning-impl";
@@ -243,6 +244,9 @@ function buildToolForDef(
   }
   if (def.name === "spawn_subagent") {
     return createSpawnSubagentTool(ctx);
+  }
+  if (def.name === "list_agents") {
+    return createListAgentsTool(ctx);
   }
 
   return null;

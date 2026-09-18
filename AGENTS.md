@@ -176,6 +176,17 @@ Do not add a new memory writer that stores transcripts, prompts, or per-run outp
 
 For cross-app memory portability (e.g. memories.sh cloud sync with the CLI / other agents), users can add `@memories.sh` as an MCP server through the existing Connection UI — no core dependency required.
 
+### Agents runtime
+
+A roster agent (`public.agents`) is a reusable persona: name, system prompt, attached skills (`agent_skill_links` → `skills`) and rules (`agent_rule_links` → `agent_rules`), optionally shared with one team via `agents.team_id`. `lib/agents/runtime/` is the single definition of what an agent means at run time:
+
+- `resolveAgentRuntime` (`resolve.ts`, production loaders in `store.ts`) turns an agent id into its runtime shape for a user. Access is owner, member of the team it is shared with, or a `preset:<NAME>` template; anything else resolves to `null`, which every caller reports as "Agent not found" so shared ids never leak.
+- `renderAgentInstructions` (`instructions.ts`) renders the `<agent>` block. Rules are inlined (they always apply). For CLI harnesses skills are written under `.mogplex/agent/skills/<slug>/SKILL.md` (self-ignored by git) and listed by path; the native Mogplex harness gets them inlined as a system-prompt suffix.
+
+Every run entry point accepts `agentId` and goes through the same core: the v1 runs API and MCP `mogplex_start_agent_run`, Control's `spawn_subagent` (with `list_agents` to discover ids), Slack channels via `/mogplex agent <slug>`, and the roster's Run button (`POST /api/agents/run`). `startMogplexApiRun` resolves the agent, hashes it into the idempotent request, stamps `agent_id`/`agent_name` on the run and its `ai_call`, and the harness route (`app/api/sandbox/[id]/harness/_lib/agent-runtime.ts`) materializes it before the task prompt. Flow automation agent nodes still read `agents.system_prompt` directly; they predate the resolver and do not load skills or rules yet.
+
+The roster model is advisory: CLI harnesses bring their own model and Flow nodes pin theirs. Skills and rules attach from the editor's own library, so a teammate editing a shared agent attaches their own. Per-agent MCP grants stay out of scope by decision (2026-09-18).
+
 ## Core Commands
 
 - `pnpm dev` — local dev server

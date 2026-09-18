@@ -46,6 +46,7 @@ export type NormalizedStartRequest = {
   workspaceSessionId: string | null;
   mode: string | null;
   worktreeId: string | null;
+  agentId: string | null;
 };
 
 export function normalizeOptionalString(value: unknown) {
@@ -164,6 +165,7 @@ export function normalizeStartRequest(input: {
     workspaceSessionId: normalizeOptionalString(input.body.workspaceSessionId),
     mode: normalizeOptionalString(input.body.mode),
     worktreeId: normalizeOptionalString(input.body.worktreeId),
+    agentId: normalizeOptionalString(input.body.agentId),
   };
   // The generated branch is derived from the pre-branch logical request, then
   // included in the persisted request hash. Retrying the same request with the
@@ -218,6 +220,8 @@ export function buildRunMetadata(input: {
   /** Caller-supplied extras (e.g. Slack message coords). Core fields below
    *  always win — a caller can't clobber `source`, `request_hash`, etc. */
   extraMetadata?: Record<string, unknown>;
+  /** Resolved roster agent, recorded for observability and roster usage. */
+  agent?: { id: string; name: string } | null;
 }) {
   return {
     ...input.extraMetadata,
@@ -236,5 +240,7 @@ export function buildRunMetadata(input: {
     sandbox_record_id: input.sandbox?.id ?? null,
     sandbox_id: input.sandbox?.sandbox_id ?? null,
     worktree_id: input.normalized.worktreeId,
+    agent_id: input.agent?.id ?? null,
+    agent_name: input.agent?.name ?? null,
   };
 }

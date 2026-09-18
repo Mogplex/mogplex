@@ -3,14 +3,18 @@ import { buildAppUrl } from "@/lib/app-url";
 import { SLACK_RUN_CONTROLS_METADATA_KEY } from "@/lib/slack/run-controls";
 import { SLACK_RUN_IMAGE_ATTACHMENTS_METADATA_KEY } from "@/lib/slack/run-attachments";
 import type { StartRepoAgentRunInput, StartRepoAgentRunResult } from "./types";
-import { getSlackHarnessPreference } from "@/lib/slack/harness-preferences";
+import {
+  getSlackAgentPreference,
+  getSlackHarnessPreference,
+} from "@/lib/slack/harness-preferences";
 import { queueSlackRunDelivery } from "@/lib/slack/run-delivery-queue";
 
 export async function defaultStartRepoAgentRun(
   input: StartRepoAgentRunInput,
   startRun = startMogplexApiRun,
   getHarnessPreference = getSlackHarnessPreference,
-  queueDelivery = queueSlackRunDelivery
+  queueDelivery = queueSlackRunDelivery,
+  getAgentPreference = getSlackAgentPreference
 ): Promise<StartRepoAgentRunResult> {
   const extraMetadata: Record<string, unknown> = {
     slack_task_title: input.taskTitle ?? input.prompt.split("\n")[0],
@@ -36,12 +40,16 @@ export async function defaultStartRepoAgentRun(
     };
   }
 
-  const harness =
-    (await getHarnessPreference({
-      installationId: input.slackContext.installationId,
-      channelId: input.slackContext.channelId,
-      slackUserId: input.slackContext.slackUserId,
-    })) ?? "mogplex";
+  const preferenceScope = {
+    installationId: input.slackContext.installationId,
+    channelId: input.slackContext.channelId,
+    slackUserId: input.slackContext.slackUserId,
+  };
+  const [savedHarness, agentId] = await Promise.all([
+    getHarnessPreference(preferenceScope),
+    getAgentPreference(preferenceScope),
+  ]);
+  const harness = savedHarness ?? "mogplex";
   const result = await startRun({
     user: {
       userId: input.mogplexUserId,
@@ -53,6 +61,7 @@ export async function defaultStartRepoAgentRun(
       repoId: input.repoId,
       prompt: input.prompt,
       harness,
+      ...(agentId ? { agentId } : {}),
       createBranch: true,
     },
     origin: "slack",

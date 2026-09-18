@@ -20,12 +20,14 @@ async function exercise(
     | "unauthorized"
     | "lease_failure"
     | "tool_progress"
-    | "guidance",
+    | "guidance"
+    | "agent",
   response = "Fixed the header."
 ) {
   let call = buildAiCall({ model: "harness:mogplex" });
   const run = buildRunRow({
     harness: "mogplex",
+    ...(mode === "agent" ? { agent_id: "agent-1" } : {}),
     ...(mode === "tool_progress" || mode === "guidance"
       ? {
           metadata: {
@@ -50,6 +52,7 @@ async function exercise(
   let cleaned = false;
   let closed = false;
   let executionLeaseAcquired = false;
+  let systemSuffix: string | null | undefined;
   const model = new MockLanguageModelV3({
     doStream: async () => ({
       stream: new ReadableStream({
@@ -125,6 +128,30 @@ async function exercise(
       { recordId: "sandbox-record-1", sandboxId: "sbx_123" },
       {
         loadCall: async () => call,
+        resolveAgent: async (input) => {
+          assert.deepEqual(input, { agentId: "agent-1", userId: run.user_id });
+          return {
+            id: "agent-1",
+            name: "NEXTJS-REVIEWER",
+            slug: "nextjs-reviewer",
+            model: null,
+            systemPrompt: "Review App Router code carefully.",
+            skills: [
+              {
+                id: "skill-1",
+                name: "RSC Audit",
+                description: null,
+                content: "Look for use client.",
+              },
+            ],
+            rules: [
+              { id: "rule-1", name: "No any", content: "Never use any." },
+            ],
+            preset: false,
+            teamId: null,
+            ownerUserId: run.user_id,
+          };
+        },
         ensureExecutionLease: async (_run, _sandbox, teamId) => {
           assert.equal(teamId, "team-1");
           if (mode === "lease_failure") throw new Error("Lease refused");
@@ -166,6 +193,7 @@ async function exercise(
           };
         },
         createStream: async (input) => {
+          systemSuffix = input.systemSuffix;
           assert.equal(
             input.context.sandboxExecution?.retryOnSandboxLoss,
             false
@@ -283,8 +311,24 @@ async function exercise(
     model,
     progress,
     guidanceSteps,
+    systemSuffix,
   };
 }
+
+test("native runner carries the roster agent block, skills inlined, in the system suffix", async () => {
+  const result = await exercise("agent");
+  assert.equal(result.caught, undefined);
+  assert.equal(result.result?.output, "Fixed the header.");
+  assert.ok(result.systemSuffix?.startsWith('<agent name="NEXTJS-REVIEWER">'));
+  assert.ok(result.systemSuffix?.includes("Review App Router code carefully."));
+  assert.ok(result.systemSuffix?.includes("Never use any."));
+  assert.ok(result.systemSuffix?.includes("Look for use client."));
+});
+
+test("native runner leaves the system suffix empty without an agent or Slack controls", async () => {
+  const result = await exercise("success");
+  assert.equal(result.systemSuffix, null);
+});
 
 test("a real SDK run receives mid-command Slack guidance at its next model step and acknowledges only afterward", async () => {
   const result = await exercise("guidance");

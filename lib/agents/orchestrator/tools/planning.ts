@@ -52,6 +52,14 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     implemented: true,
   },
   {
+    name: "list_agents",
+    category: "planning",
+    description:
+      "List roster agents (own, team-shared, and presets) a worker can run as",
+    access: "read",
+    implemented: true,
+  },
+  {
     name: "spawn_subagent",
     category: "planning",
     description:
@@ -160,7 +168,16 @@ export const spawnSubagentSchema = z.object({
       "Task instructions for this single worker. Never tell it to delegate or spawn other agents."
     ),
   agentType: z.enum(["codex", "claude-code"]).default("codex"),
+  agentId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Roster agent id or preset:<NAME> from list_agents. The worker loads that agent's system prompt, rules, and skills."
+    ),
 });
+
+export const listAgentsSchema = z.object({});
 
 export const steerAgentSchema = z.object({
   agentId: z.string().describe("ID of the agent to steer"),

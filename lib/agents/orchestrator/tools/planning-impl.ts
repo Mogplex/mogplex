@@ -16,10 +16,17 @@ import {
   sandboxWorkerLimitMessage,
 } from "@/lib/control/worker-policy";
 import { bindWorktreeAgent, loadOwnedWorktree } from "@/lib/worktrees/store";
+import { listAccessibleAgentRows } from "@/lib/agents/runtime/store";
+import { PRECONFIGURED_AGENTS } from "@/lib/agents/templates";
+import type { AgentRuntimeRow } from "@/lib/agents/runtime/types";
 import { defineTool } from "../helpers";
 import type { HarnessExecutionMode } from "@/lib/harness/claude-permissions";
 import type { OrchestratorToolContext } from "../types";
-import { planMissionSchema, spawnSubagentSchema } from "./planning";
+import {
+  listAgentsSchema,
+  planMissionSchema,
+  spawnSubagentSchema,
+} from "./planning";
 
 type PlanMissionDeps = {
   getRunDetails: typeof getOrchestrationRunDetails;
@@ -173,6 +180,7 @@ export function createSpawnSubagentTool(
       worktreeId,
       taskPrompt,
       agentType,
+      agentId,
     }: z.infer<typeof spawnSubagentSchema>) => {
       if (!ctx.orchestrationRunId || !ctx.repoId) return missingRun();
       try {
@@ -220,6 +228,7 @@ export function createSpawnSubagentTool(
             repoId: ctx.repoId,
             prompt: applyWorkerPromptPolicy(taskPrompt),
             harness: agentType,
+            ...(agentId ? { agentId } : {}),
             worktreeId: worktree.id,
             conversationId: ctx.conversationId,
             workspaceSessionId: ctx.workspaceSessionId,
@@ -250,6 +259,59 @@ export function createSpawnSubagentTool(
           reason: "operation_failed" as const,
         };
       }
+    },
+  });
+}
+
+type ListAgentsDeps = {
+  listAgents: (
+    userId: string
+  ) => Promise<Array<AgentRuntimeRow & { description: string | null }>>;
+};
+
+const defaultListAgentsDeps: ListAgentsDeps = {
+  listAgents: (userId) =>
+    listAccessibleAgentRows({
+      userId,
+      select:
+        "id, user_id, team_id, name, slug, model, system_prompt, description",
+    }),
+};
+
+/**
+ * Roster agents the coordinator can hand to spawn_subagent. Presets come from
+ * the template catalog and need no storage; shared rows carry their team id.
+ */
+export function createListAgentsTool(
+  ctx: OrchestratorToolContext,
+  overrides: Partial<ListAgentsDeps> = {}
+): Tool {
+  const deps = { ...defaultListAgentsDeps, ...overrides };
+  return defineTool({
+    description:
+      "List roster agents the operator can run as: their own, ones shared with their teams, and built-in presets. Pass an id to spawn_subagent as agentId when the operator names an agent or one clearly fits the task.",
+    inputSchema: listAgentsSchema,
+    execute: async () => {
+      const rows = await deps.listAgents(ctx.userId);
+      const roster = rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        description: row.description,
+        shared: row.team_id !== null,
+        owned: row.user_id === ctx.userId,
+        preset: false,
+      }));
+      const presets = PRECONFIGURED_AGENTS.map((template) => ({
+        id: `preset:${template.name}`,
+        name: template.name,
+        slug: null,
+        description: template.description ?? null,
+        shared: false,
+        owned: false,
+        preset: true,
+      }));
+      return { status: "ok" as const, agents: [...roster, ...presets] };
     },
   });
 }

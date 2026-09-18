@@ -27,6 +27,7 @@ import type {
 } from "@/lib/interactive-runs";
 import type { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import type { HarnessId } from "@/lib/harness/config";
+import type { AgentRuntime } from "@/lib/agents/runtime/types";
 import type { getSlackBotToken } from "@/lib/slack/client";
 import type {
   loadHarnessPromptWithMemoryContext,
@@ -121,6 +122,11 @@ export type SandboxHarnessPostDeps = {
     workingBranch: string;
   }) => Promise<void>;
   getSlackBotToken: typeof getSlackBotToken;
+  /** Resolves a roster or preset agent the caller may run; null when not. */
+  resolveAgentRuntime: (input: {
+    agentId: string;
+    userId: string;
+  }) => Promise<AgentRuntime | null>;
   fetchSlackAttachment: (input: {
     botToken: string;
     url: string;

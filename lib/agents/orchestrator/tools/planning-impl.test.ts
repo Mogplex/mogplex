@@ -17,6 +17,7 @@ import {
   WORKER_NO_DELEGATION_FOOTER,
 } from "@/lib/control/worker-policy";
 import {
+  createListAgentsTool,
   createPlanMissionTool,
   createSpawnSubagentTool,
 } from "./planning-impl";
@@ -322,4 +323,90 @@ it("persists new tasks in an existing thread instead of silently returning its o
       filePath: "specs/separate-worktrees/tasks/1-follow-up.md",
     },
   ]);
+});
+
+it("forwards the chosen roster agent to the worker run", async () => {
+  const starts: Array<{ body: { agentId?: string } }> = [];
+  const tool = createSpawnSubagentTool(ctx, {
+    loadWorktree: async () => buildWorktree(),
+    bindAgent: async () => buildWorktree(),
+    countActiveSandboxWorkers: async () => 0,
+    startRun: async (input) => {
+      starts.push(input as unknown as { body: { agentId?: string } });
+      return startedRun();
+    },
+  }) as unknown as ExecutableTool;
+  await tool.execute({
+    worktreeId: WORKTREE_ID,
+    taskPrompt: "Audit the auth routes",
+    agentType: "codex",
+    agentId: "agent-7",
+  });
+  expect(starts[0]?.body.agentId).toBe("agent-7");
+
+  await tool.execute({
+    worktreeId: WORKTREE_ID,
+    taskPrompt: "Audit the auth routes",
+    agentType: "codex",
+  });
+  expect("agentId" in starts[1]!.body).toBe(false);
+});
+
+it("lists own, shared, and preset agents for the coordinator", async () => {
+  const tool = createListAgentsTool(ctx, {
+    listAgents: async (userId) => {
+      expect(userId).toBe("user-1");
+      return [
+        {
+          id: "agent-1",
+          user_id: "user-1",
+          team_id: null,
+          name: "NEXTJS-REVIEWER",
+          slug: "nextjs-reviewer",
+          model: null,
+          system_prompt: null,
+          description: "App Router review",
+        },
+        {
+          id: "agent-2",
+          user_id: "user-2",
+          team_id: "team-1",
+          name: "Security Sweep",
+          slug: null,
+          model: null,
+          system_prompt: null,
+          description: null,
+        },
+      ];
+    },
+  }) as unknown as ExecutableTool;
+  const result = (await tool.execute({})) as {
+    status: string;
+    agents: Array<{
+      id: string;
+      shared: boolean;
+      owned: boolean;
+      preset: boolean;
+    }>;
+  };
+  expect(result.status).toBe("ok");
+  expect(result.agents.slice(0, 2)).toEqual([
+    expect.objectContaining({
+      id: "agent-1",
+      shared: false,
+      owned: true,
+      preset: false,
+    }),
+    expect.objectContaining({
+      id: "agent-2",
+      shared: true,
+      owned: false,
+      preset: false,
+    }),
+  ]);
+  expect(
+    result.agents.some(
+      (agent) => agent.id === "preset:PR-REVIEWER" && agent.preset
+    )
+  ).toBe(true);
 });

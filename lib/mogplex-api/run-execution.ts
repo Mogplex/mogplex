@@ -55,6 +55,7 @@ export type ExternalAgentHarnessRequestBody = {
   mode: string | null;
   aiCallId: string;
   worktreeId: string | null;
+  agentId?: string | null;
   slackImageAttachments?: SlackRunImageAttachmentsMetadata;
 };
 
@@ -72,6 +73,7 @@ export function buildExternalAgentHarnessRequestBody(
     mode: run.mode,
     aiCallId: run.ai_call_id,
     worktreeId: run.worktree_id,
+    ...(run.agent_id ? { agentId: run.agent_id } : {}),
     ...(slackImageAttachments ? { slackImageAttachments } : {}),
   };
 }
