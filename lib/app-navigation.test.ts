@@ -21,12 +21,12 @@ describe("app navigation", () => {
     ]);
   });
 
-  it("places models and settings in the admin section", () => {
+  it("places settings alone in the admin section", () => {
     expect(
       APP_NAV_ITEM_DEFS.filter((item) => item.section === "admin").map(
         (item) => item.id
       )
-    ).toEqual(["models", "settings"]);
+    ).toEqual(["settings"]);
     expect(
       APP_NAV_ITEM_DEFS.every(
         (item) => item.section === "primary" || item.section === "admin"
