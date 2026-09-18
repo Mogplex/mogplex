@@ -18,7 +18,9 @@ const triggerProjectRef =
 export default defineConfig({
   project: triggerProjectRef,
   dirs: ["trigger"],
-  runtime: "node",
+  // "node" still means Node 21 on Trigger.dev; the app pins Node 22 in
+  // package.json engines and .nvmrc, so workers must match.
+  runtime: "node-22",
   logLevel: "log",
   maxDuration: 1800,
   retries: {
