@@ -16,8 +16,13 @@ import {
   MEMORY_RESOURCE_SCOPE_PARAM,
   resolveMemoryResourceScope,
 } from "@/lib/memory-resource-scope";
+import { pruneNoise } from "@/lib/memories-maintenance";
 import { requireUserId } from "@/lib/auth";
-import type { MemoryLane, MemoryScope } from "@/lib/memories-client";
+import type {
+  MemoriesClient,
+  MemoryLane,
+  MemoryScope,
+} from "@/lib/memories-client";
 import type { NextRequest } from "next/server";
 
 function readScopedValue(value: unknown) {
@@ -56,18 +61,52 @@ function mergeMemoryScopes(
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
-export async function POST(req: NextRequest) {
-  const userId = await requireUserId();
-  if (userId instanceof Response) return userId;
+export type MemoriesActionsDeps = {
+  requireUserId: typeof requireUserId;
+  createMemoriesClient: (userId: string) => MemoriesClient;
+};
 
-  const body = (await req.json()) as Record<string, unknown>;
+const defaultDeps: MemoriesActionsDeps = {
+  requireUserId,
+  createMemoriesClient: (userId) => createMemoriesClient(userId),
+};
+
+export function createMemoriesActionsPostHandler(
+  deps: MemoriesActionsDeps = defaultDeps
+) {
+  return async function POST(req: NextRequest) {
+    const userId = await deps.requireUserId();
+    if (userId instanceof Response) return userId;
+
+    const body = (await req.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+    }
+    return runMemoryAction(req, userId, body, deps);
+  };
+}
+
+async function runMemoryAction(
+  req: NextRequest,
+  userId: string,
+  body: Record<string, unknown>,
+  deps: MemoriesActionsDeps
+) {
   const { action, lane, label } = body;
   try {
-    const client = createMemoriesClient(userId);
+    const client = deps.createMemoriesClient(userId);
 
     if (action === "compact") {
       await vacuum(client);
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === "prune_noise") {
+      const pruned = await pruneNoise(client);
+      return NextResponse.json({ ok: true, pruned });
     }
 
     if (action === "checkpoint") {
@@ -129,3 +168,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = createMemoriesActionsPostHandler();

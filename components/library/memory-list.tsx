@@ -8,6 +8,8 @@ import { MemoryCard } from "./memory-card";
 interface MemoryListProps {
   memories: Memory[];
   lane: MemoryLane;
+  /** repo id → "owner/name" for the origin chip on each card. */
+  repoLabels?: ReadonlyMap<string, string>;
   compact?: boolean;
   loading: boolean;
   memoriesError: Error | undefined;
@@ -21,9 +23,19 @@ interface MemoryListProps {
   onDeleteMemory: (id: string) => void;
 }
 
+function repoLabelFor(
+  memory: Memory,
+  repoLabels?: ReadonlyMap<string, string>
+): string | null {
+  const repoId = memory.metadata?.repo_id;
+  if (typeof repoId !== "string" || !repoId) return null;
+  return repoLabels?.get(repoId) ?? null;
+}
+
 export function MemoryList({
   memories,
   lane,
+  repoLabels,
   compact,
   loading,
   memoriesError,
@@ -59,6 +71,7 @@ export function MemoryList({
           <MemoryCard
             key={memory.id}
             memory={memory}
+            repoLabel={repoLabelFor(memory, repoLabels)}
             compact={compact}
             isEditing={editingId === memory.id}
             isBusy={busyId === memory.id}

@@ -13,6 +13,8 @@ export type Memory = {
 };
 
 export type MemoryGroups = Record<MemoryLane, Memory[]>;
+export type MemoryCounts = Record<MemoryLane, number>;
+export type MemoryPayload = { groups: MemoryGroups; counts: MemoryCounts };
 
 export const LANES: MemoryLane[] = [
   "session",
@@ -22,10 +24,22 @@ export const LANES: MemoryLane[] = [
 ];
 
 export const LANE_INFO: Record<MemoryLane, { label: string; desc: string }> = {
-  session: { label: "Session", desc: "Working set for current task" },
-  semantic: { label: "Semantic", desc: "Durable truths and preferences" },
-  episodic: { label: "Episodic", desc: "Timeline events and milestones" },
-  procedural: { label: "Procedural", desc: "Reusable workflows and runbooks" },
+  session: {
+    label: "Session",
+    desc: "Per-conversation notes. Never injected into Control; pruned after 30 days.",
+  },
+  semantic: {
+    label: "Facts",
+    desc: "Stable facts and preferences. Injected into every Control turn.",
+  },
+  episodic: {
+    label: "Events",
+    desc: "Notable decisions and outcomes. The newest few reach Control.",
+  },
+  procedural: {
+    label: "Procedures",
+    desc: "How-to patterns you have accepted. Injected into every Control turn.",
+  },
 };
 
 export const SCOPE_LABELS: Record<MemoryResourceScope, string> = {

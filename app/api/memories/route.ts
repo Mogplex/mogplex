@@ -8,6 +8,7 @@ import {
   editMemory,
   forgetMemory,
   getMemoryScopeForLane,
+  getRepoScopedSearchScope,
   isValidLane,
   validateMetadata,
   MAX_CONTENT_LENGTH,
@@ -22,8 +23,13 @@ import {
   MEMORY_RESOURCE_SCOPE_PARAM,
   resolveMemoryResourceScope,
 } from "@/lib/memory-resource-scope";
+import { countByLane } from "@/lib/memories-maintenance";
 import { requireUserId } from "@/lib/auth";
-import type { MemoryLane, MemoryScope } from "@/lib/memories-client";
+import type {
+  MemoriesClient,
+  MemoryLane,
+  MemoryScope,
+} from "@/lib/memories-client";
 import type { NextRequest } from "next/server";
 
 const LANES: MemoryLane[] = ["session", "semantic", "episodic", "procedural"];
@@ -89,11 +95,29 @@ function getMemorySearchScope(
   scope?: MemoryScope
 ): MemoryScope | undefined {
   if (lane) return getMemoryScopeForLane(lane, scope);
-  return scope?.repoId ? { repoId: scope.repoId } : undefined;
+  // Cross-lane search: drop the session-only filters but keep the repo and
+  // personal/team scope so results match what listByLane would return.
+  return getRepoScopedSearchScope(scope);
 }
 
-export async function GET(req: NextRequest) {
-  const userId = await requireUserId();
+export type MemoriesRouteDeps = {
+  requireUserId: typeof requireUserId;
+  createMemoriesClient: (userId: string) => MemoriesClient;
+};
+
+const defaultDeps: MemoriesRouteDeps = {
+  requireUserId,
+  createMemoriesClient: (userId) => createMemoriesClient(userId),
+};
+
+export function createMemoriesGetHandler(
+  deps: MemoriesRouteDeps = defaultDeps
+) {
+  return (req: NextRequest) => handleGet(req, deps);
+}
+
+async function handleGet(req: NextRequest, deps: MemoriesRouteDeps) {
+  const userId = await deps.requireUserId();
   if (userId instanceof Response) return userId;
 
   const laneParam = req.nextUrl.searchParams.get("lane");
@@ -119,7 +143,7 @@ export async function GET(req: NextRequest) {
   }
   const lane = laneParam as MemoryLane | null;
 
-  const client = createMemoriesClient(userId);
+  const client = deps.createMemoriesClient(userId);
 
   try {
     if (query) {
@@ -143,12 +167,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(memories);
     }
 
-    const [session, semantic, episodic, procedural] = await Promise.all(
-      LANES.map((l) =>
-        listByLane(client, l, 50, getMemoryScopeForLane(l, scope))
-      )
-    );
-    return NextResponse.json({ session, semantic, episodic, procedural });
+    const [[session, semantic, episodic, procedural], counts] =
+      await Promise.all([
+        Promise.all(
+          LANES.map((l) =>
+            listByLane(client, l, 50, getMemoryScopeForLane(l, scope))
+          )
+        ),
+        countByLane(client, scope),
+      ]);
+    return NextResponse.json({
+      session,
+      semantic,
+      episodic,
+      procedural,
+      counts,
+    });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Memories request failed";
@@ -273,3 +307,5 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const GET = createMemoriesGetHandler();

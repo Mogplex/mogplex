@@ -1,17 +1,23 @@
 import type { LanguageModel } from "ai";
 import { loadLatestCompaction } from "@/lib/agents/compaction/store";
 import {
+  buildTurnPromotionEvidence,
   defaultPromotionGenerator,
-  promoteMemoriesFromCheckpoint,
+  promoteMemoriesFromEvidence,
   type PromotionDeps,
   type PromotionResult,
 } from "./memory-promotion";
 
+export type PromotionTurnRecord = Parameters<
+  typeof buildTurnPromotionEvidence
+>[0];
+
 /**
  * Production entry point for memory promotion: fires at task completion
- * (control chat onFinish), only when the conversation actually produced a
- * checkpoint. Best-effort by contract — callers invoke it fire-and-forget and
- * a failure must never affect the finished run.
+ * (control chat onFinish). Prefers the conversation's compaction checkpoint
+ * as the evidence record; without one, falls back to the finished turn itself
+ * when it is substantive enough. Best-effort by contract — callers invoke it
+ * fire-and-forget and a failure must never affect the finished run.
  */
 export async function promoteMemoriesForConversation(input: {
   userId: string;
@@ -19,6 +25,7 @@ export async function promoteMemoriesForConversation(input: {
   repoId?: string | null;
   aiCallId: string;
   model: LanguageModel;
+  turn?: PromotionTurnRecord;
 }): Promise<PromotionResult | null> {
   if (!input.conversationId) return null;
 
@@ -26,7 +33,28 @@ export async function promoteMemoriesForConversation(input: {
     userId: input.userId,
     conversationId: input.conversationId,
   });
-  if (!stored) return null;
+  const source = stored
+    ? {
+        evidenceText: JSON.stringify(
+          (({ provenance: _p, ...body }) => body)(stored.checkpoint)
+        ),
+        source: {
+          kind: "checkpoint" as const,
+          id: stored.checkpoint.provenance.id,
+        },
+      }
+    : (() => {
+        const evidenceText = input.turn
+          ? buildTurnPromotionEvidence(input.turn)
+          : null;
+        return evidenceText
+          ? {
+              evidenceText,
+              source: { kind: "turn" as const, id: input.aiCallId },
+            }
+          : null;
+      })();
+  if (!source) return null;
 
   // Same lazy-import convention as lib/agents/tools/memory.ts: the memories
   // client allocates an embedder closure per creation, so load it only on the
@@ -54,18 +82,15 @@ export async function promoteMemoriesForConversation(input: {
     },
   };
 
-  const result = await promoteMemoriesFromCheckpoint(
-    {
-      checkpoint: stored.checkpoint,
-      aiCallId: input.aiCallId,
-      model: input.model,
-    },
+  const result = await promoteMemoriesFromEvidence(
+    { ...source, aiCallId: input.aiCallId, model: input.model },
     deps
   );
 
   if (result.promoted.length > 0 || result.rejected.length > 0) {
     console.info("[memory-promotion] run complete", {
       conversationId: input.conversationId,
+      sourceKind: source.source.kind,
       promoted: result.promoted.length,
       duplicates: result.duplicates.length,
       rejected: result.rejected.map((r) => r.reason),

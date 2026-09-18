@@ -1,10 +1,13 @@
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import type {
   Memory,
+  MemoryCounts,
   MemoryGroups,
+  MemoryPayload,
   MemoryResourceScope,
   Repo,
 } from "./context-section-types";
+import { LANES } from "./context-section-types";
 
 export function emptyMemoryGroups(): MemoryGroups {
   return { session: [], semantic: [], episodic: [], procedural: [] };
@@ -18,15 +21,58 @@ export function groupMemories(rows: Memory[]): MemoryGroups {
   return grouped;
 }
 
-export function normalizeMemoryPayload(payload: unknown): MemoryGroups {
-  if (Array.isArray(payload)) return groupMemories(payload as Memory[]);
+function countGroups(groups: MemoryGroups): MemoryCounts {
+  return Object.fromEntries(
+    LANES.map((lane) => [lane, groups[lane].length])
+  ) as MemoryCounts;
+}
+
+export function emptyMemoryPayload(): MemoryPayload {
+  const groups = emptyMemoryGroups();
+  return { groups, counts: countGroups(groups) };
+}
+
+/**
+ * Accept the three shapes the API can return: a flat array (search or lane
+ * queries), grouped lanes, or grouped lanes plus exact `counts`. When counts
+ * are absent the visible rows are the best available total.
+ */
+export function normalizeMemoryPayload(payload: unknown): MemoryPayload {
+  if (Array.isArray(payload)) {
+    const groups = groupMemories(payload as Memory[]);
+    return { groups, counts: countGroups(groups) };
+  }
   if (payload && typeof payload === "object") {
+    const { counts, ...lanes } = payload as Partial<MemoryGroups> & {
+      counts?: Partial<MemoryCounts>;
+    };
+    const groups: MemoryGroups = { ...emptyMemoryGroups() };
+    for (const lane of LANES) {
+      if (Array.isArray(lanes[lane])) groups[lane] = lanes[lane] as Memory[];
+    }
+    const visible = countGroups(groups);
     return {
-      ...emptyMemoryGroups(),
-      ...(payload as Partial<MemoryGroups>),
+      groups,
+      counts: Object.fromEntries(
+        LANES.map((lane) => [
+          lane,
+          typeof counts?.[lane] === "number" ? counts[lane] : visible[lane],
+        ])
+      ) as MemoryCounts,
     };
   }
-  return emptyMemoryGroups();
+  return emptyMemoryPayload();
+}
+
+/** Human label for where a memory came from, or null for hand-written rows. */
+export function describeMemoryOrigin(memory: Memory): string | null {
+  const source = memory.metadata?.source;
+  const agent = memory.metadata?.agent;
+  if (source === "memories-pane" || source === "native-chat") return null;
+  if (source === "promotion") return "promoted from a checkpoint";
+  if (typeof agent === "string" && agent) return agent;
+  if (typeof source === "string" && source) return source;
+  return null;
 }
 
 export function buildMemoryUrl(input: {

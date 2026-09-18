@@ -17,7 +17,6 @@ import type {
   ResolvedFlowDefinition,
 } from "./automation-job-types";
 import { JOB_RUN_CANCELLED } from "./automation-job-types";
-import { normalizeAutomationAssignmentType } from "./automation-job-utils";
 import {
   buildAutomationJobModelFailureDiagnostics,
   buildAutomationRuntimeMetadataFields,
@@ -31,7 +30,6 @@ import {
 } from "./automation-job-failure-messages";
 import { buildDispatchLogContext } from "./automation-job-dispatch";
 import type { PrReviewReporter } from "./automation-job-pr-review-reporter";
-import { persistAutomationOutcomeMemory } from "./automation-job-persistence";
 import type {
   getDurationMs,
   persistJobFailure,
@@ -222,19 +220,6 @@ export async function handleAutomationJobFailure(
         }
       : genericFailureMetadata,
   });
-  await persistAutomationOutcomeMemory({
-    context: failureContext,
-    jobRunId,
-    outcome: "failed",
-    summary: `${normalizeAutomationAssignmentType(
-      failureContext.assignmentType
-    )} failed: ${displayMessage.slice(0, 240)}`,
-    reason: usePrReviewFailureReason
-      ? reviewFailureReason
-      : genericFailureReason,
-    execution,
-  });
-
   // Failed flow nodes record their own ai_calls row. Creating an additional
   // job-level row would duplicate usage and cost. Failures that happen
   // outside node model telemetry still rely on this outer write.

@@ -7,7 +7,7 @@ const SUB_NAV = [
   { subpath: "/agents/roster", label: "Roster" },
   { subpath: "/agents/skills", label: "Skills" },
   { subpath: "/agents/rules", label: "Rules" },
-  { subpath: "/agents/context", label: "Context" },
+  { subpath: "/agents/context", label: "Memories" },
 ] as const
 
 export default function AgentsLayout({ children }: { children: React.ReactNode }) {
@@ -20,7 +20,7 @@ export default function AgentsLayout({ children }: { children: React.ReactNode }
         <div>
           <h1 className="ui-page-title">Agents</h1>
           <p className="ui-page-subtitle">
-            Manage your agent roster, skills, rules, and shared context.
+            Manage your agent roster, skills, rules, and memories.
           </p>
         </div>
         <nav className="flex border-b border-border">

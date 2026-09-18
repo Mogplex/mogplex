@@ -331,18 +331,8 @@ export async function setupSlackAttachmentsAndPrompt(
     workingBranch: gitWorkspace.workingBranch,
   });
 
-  void deps.persistHarnessMemory({
-    userId: ctx.userId,
-    lane: "session",
-    content: trimmedPrompt,
-    metadata: {
-      harness_id: ctx.harnessId,
-      kind: "prompt",
-    },
-    scope: memoryScope,
-    source: "harness",
-    agent: ctx.harnessId,
-  });
-
+  // The full task prompt is not a memory: it is run input, already persisted
+  // on the ai_call. Persisting it here used to fill the session lane with
+  // multi-kilobyte prompt dumps that were then re-injected into later runs.
   return { trimmedPrompt, deliveryPrompt };
 }

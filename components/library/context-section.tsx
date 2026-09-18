@@ -6,19 +6,18 @@ import { Filter } from "iconoir-react";
 import { useActiveTeamId } from "@/components/active-scope-provider";
 import type {
   ContextSectionProps,
-  MemoryGroups,
   MemoryLane,
+  MemoryPayload,
   MemoryResourceScope,
   Repo,
 } from "./context-section-types";
 import { LANE_INFO } from "./context-section-types";
 import {
   buildMemoryUrl,
-  emptyMemoryGroups,
+  emptyMemoryPayload,
   fetchMemoryGroups,
   fetchRepos,
   isCurrentProject,
-  requestHeaders,
   scopeForWrites,
 } from "./context-section-utils";
 import { ActionButtons, LaneTabs } from "./memory-actions";
@@ -29,6 +28,7 @@ import {
   ScopeControls,
   SearchControls,
 } from "./memory-filters";
+import { useMemoryMutations } from "./use-memory-mutations";
 
 export function ContextSection({
   compact,
@@ -37,7 +37,7 @@ export function ContextSection({
   workspaceSessionId,
 }: ContextSectionProps) {
   const activeTeamId = useActiveTeamId();
-  const [lane, setLane] = useState<MemoryLane>("session");
+  const [lane, setLane] = useState<MemoryLane>("semantic");
   const [resourceScope, setResourceScope] =
     useState<MemoryResourceScope>("all");
   const [projectFilter, setProjectFilter] = useState(repoId ?? "all");
@@ -47,9 +47,6 @@ export function ContextSection({
   const [newContent, setNewContent] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectTouched) setProjectFilter(repoId ?? "all");
@@ -76,11 +73,13 @@ export function ContextSection({
           string | null,
         ]);
   const {
-    data: memories = emptyMemoryGroups(),
+    data: payload = emptyMemoryPayload(),
     error: memoriesError,
     isLoading: loading,
     mutate,
-  } = useSWR<MemoryGroups, Error>(memoriesKey, fetchMemoryGroups);
+  } = useSWR<MemoryPayload, Error>(memoriesKey, fetchMemoryGroups);
+  const memories = payload.groups;
+  const counts = payload.counts;
 
   const projectListScope: Exclude<MemoryResourceScope, "all"> =
     resourceScope === "team" ? "team" : "personal";
@@ -94,189 +93,67 @@ export function ContextSection({
         ]);
   const { data: repos = [] } = useSWR<Repo[], Error>(reposKey, fetchRepos);
 
-  const projectOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    for (const repo of repos) {
-      options.set(repo.id, repo.full_name);
+  const repoLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const repo of repos) labels.set(repo.id, repo.full_name);
+    if (repoId && !labels.has(repoId)) {
+      labels.set(repoId, repoName || "Current project");
     }
-    if (repoId && !options.has(repoId)) {
-      options.set(repoId, repoName || "Current project");
-    }
-    return Array.from(options, ([id, label]) => ({ id, label }));
+    return labels;
   }, [repoId, repoName, repos]);
+  const projectOptions = useMemo(
+    () => Array.from(repoLabels, ([id, label]) => ({ id, label })),
+    [repoLabels]
+  );
 
   useEffect(() => {
     if (
       projectFilter !== "all" &&
       projectTouched &&
-      !projectOptions.some((project) => project.id === projectFilter)
+      !repoLabels.has(projectFilter)
     ) {
       setProjectFilter("all");
     }
-  }, [projectFilter, projectOptions, projectTouched]);
+  }, [projectFilter, projectTouched, repoLabels]);
 
   const currentMemories = memories[lane] || [];
-  const totalCount = Object.values(memories).reduce(
-    (acc, arr) => acc + (arr?.length || 0),
-    0
-  );
+  const totalCount = Object.values(counts).reduce((acc, n) => acc + n, 0);
   const writeScope = scopeForWrites(resourceScope);
   const writeWorkspaceSessionId =
     isCurrentProject(projectFilter, repoId) && workspaceSessionId
       ? workspaceSessionId
       : null;
 
-  const runMutation = async (
-    action: () => Promise<Response>,
-    failureMessage: string
-  ) => {
-    setError(null);
-    const res = await action();
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      throw new Error(payload?.error || failureMessage);
-    }
-    await mutate();
-  };
+  const mutations = useMemoryMutations({
+    lane,
+    writeScope,
+    activeTeamId,
+    selectedRepoId,
+    workspaceSessionId: writeWorkspaceSessionId,
+    refresh: mutate,
+  });
+  const { busyId } = mutations;
+  const errorMessage = mutations.error || memoriesError?.message || null;
 
   const addMemory = async () => {
     const content = newContent.trim();
     if (!content) return;
-    setCreating(true);
-    try {
-      await runMutation(
-        () =>
-          fetch("/api/memories", {
-            method: "POST",
-            headers: requestHeaders({
-              resourceScope: writeScope,
-              activeTeamId,
-              json: true,
-            }),
-            body: JSON.stringify({
-              lane,
-              content,
-              repoId: selectedRepoId,
-              workspaceSessionId: writeWorkspaceSessionId,
-              resourceScope: writeScope,
-              source: "memories-pane",
-            }),
-          }),
-        "Failed to add memory"
-      );
-      setNewContent("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add memory");
-    } finally {
-      setCreating(false);
-    }
+    if (await mutations.addMemory(content)) setNewContent("");
   };
-
   const saveMemory = async (id: string) => {
     const content = editingContent.trim();
     if (!content) return;
-    setBusyId(id);
-    try {
-      await runMutation(
-        () =>
-          fetch("/api/memories", {
-            method: "PATCH",
-            headers: requestHeaders({
-              resourceScope: writeScope,
-              activeTeamId,
-              json: true,
-            }),
-            body: JSON.stringify({ id, content }),
-          }),
-        "Failed to update memory"
-      );
+    if (await mutations.saveMemory(id, content)) {
       setEditingId(null);
       setEditingContent("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update memory");
-    } finally {
-      setBusyId(null);
     }
   };
-
   const deleteMemory = async (id: string) => {
-    setBusyId(id);
-    try {
-      await runMutation(
-        () =>
-          fetch(`/api/memories?id=${id}`, {
-            method: "DELETE",
-            headers: requestHeaders({ resourceScope: writeScope, activeTeamId }),
-          }),
-        "Failed to delete memory"
-      );
+    if (await mutations.deleteMemory(id)) {
       if (editingId === id) {
         setEditingId(null);
         setEditingContent("");
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete memory");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const compactMemories = async () => {
-    setBusyId("compact");
-    try {
-      await runMutation(
-        () =>
-          fetch("/api/memories/actions", {
-            method: "POST",
-            headers: requestHeaders({
-              resourceScope: writeScope,
-              activeTeamId,
-              json: true,
-            }),
-            body: JSON.stringify({ action: "compact" }),
-          }),
-        "Failed to compact memories"
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to compact memories"
-      );
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const checkpoint = async () => {
-    setBusyId("checkpoint");
-    try {
-      await runMutation(
-        () =>
-          fetch("/api/memories/actions", {
-            method: "POST",
-            headers: requestHeaders({
-              resourceScope: writeScope,
-              activeTeamId,
-              json: true,
-            }),
-            body: JSON.stringify({
-              action: "checkpoint",
-              lane,
-              repoId: selectedRepoId,
-              workspaceSessionId: writeWorkspaceSessionId,
-              resourceScope: writeScope,
-              source: "memories-pane",
-            }),
-          }),
-        "Failed to create checkpoint"
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to create checkpoint"
-      );
-    } finally {
-      setBusyId(null);
     }
   };
 
@@ -298,6 +175,45 @@ export function ContextSection({
     setEditingContent("");
   };
 
+  const list = (
+    <MemoryList
+      memories={currentMemories}
+      lane={lane}
+      repoLabels={repoLabels}
+      compact={compact}
+      loading={loading}
+      memoriesError={memoriesError}
+      editingId={editingId}
+      busyId={busyId}
+      editingContent={editingContent}
+      onEditingContentChange={setEditingContent}
+      onStartEdit={handleStartEdit}
+      onSaveMemory={(id) => void saveMemory(id)}
+      onCancelEdit={handleCancelEdit}
+      onDeleteMemory={(id) => void deleteMemory(id)}
+    />
+  );
+  const composer = (
+    <MemoryComposer
+      lane={lane}
+      writeScope={writeScope}
+      query={query}
+      newContent={newContent}
+      onNewContentChange={setNewContent}
+      creating={busyId === "create"}
+      onAdd={() => void addMemory()}
+      compact={compact}
+    />
+  );
+  const actions = (
+    <ActionButtons
+      busyId={busyId}
+      onPrune={() => void mutations.pruneMemories()}
+      onCheckpoint={() => void mutations.checkpoint()}
+      compact={compact}
+    />
+  );
+
   if (compact) {
     return (
       <div className="flex h-full flex-col overflow-hidden">
@@ -306,15 +222,10 @@ export function ContextSection({
             <div>
               <div className="ui-label">Memories</div>
               <div className="text-muted-foreground text-[11px]">
-                {totalCount} visible
+                {totalCount} stored
               </div>
             </div>
-            <ActionButtons
-              busyId={busyId}
-              onCompact={() => void compactMemories()}
-              onCheckpoint={() => void checkpoint()}
-              compact
-            />
+            {actions}
           </div>
           <div className="flex items-center gap-1">
             <Filter className="text-muted-foreground size-3.5 shrink-0" />
@@ -338,43 +249,13 @@ export function ContextSection({
             onSubmitSearch={submitSearch}
             onClearSearch={clearSearch}
           />
-          {(error || memoriesError) && (
-            <div className="text-destructive text-[11px]">
-              {error || memoriesError?.message}
-            </div>
+          {errorMessage && (
+            <div className="text-destructive text-[11px]">{errorMessage}</div>
           )}
         </div>
-        <LaneTabs
-          lane={lane}
-          onLaneChange={setLane}
-          memories={memories}
-          compact
-        />
-        <MemoryList
-          memories={currentMemories}
-          lane={lane}
-          compact={compact}
-          loading={loading}
-          memoriesError={memoriesError}
-          editingId={editingId}
-          busyId={busyId}
-          editingContent={editingContent}
-          onEditingContentChange={setEditingContent}
-          onStartEdit={handleStartEdit}
-          onSaveMemory={(id) => void saveMemory(id)}
-          onCancelEdit={handleCancelEdit}
-          onDeleteMemory={(id) => void deleteMemory(id)}
-        />
-        <MemoryComposer
-          lane={lane}
-          writeScope={writeScope}
-          query={query}
-          newContent={newContent}
-          onNewContentChange={setNewContent}
-          creating={creating}
-          onAdd={() => void addMemory()}
-          compact={compact}
-        />
+        <LaneTabs lane={lane} onLaneChange={setLane} counts={counts} compact />
+        {list}
+        {composer}
       </div>
     );
   }
@@ -383,16 +264,14 @@ export function ContextSection({
     <div className="flex min-h-[70vh] flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="ui-section-title">Context / Memories</div>
+          <div className="ui-section-title">Memories</div>
           <div className="ui-section-caption">
-            {totalCount} visible memories across four lanes.
+            What Control recalls at the start of every turn: facts, procedures,
+            and recent events for you and the selected project.{" "}
+            {totalCount} stored.
           </div>
         </div>
-        <ActionButtons
-          busyId={busyId}
-          onCompact={() => void compactMemories()}
-          onCheckpoint={() => void checkpoint()}
-        />
+        {actions}
       </div>
 
       <div className="border-border bg-card grid gap-3 rounded-md border p-3 md:grid-cols-[auto_minmax(180px,280px)_minmax(240px,1fr)]">
@@ -422,14 +301,14 @@ export function ContextSection({
             onClearSearch={clearSearch}
           />
         </div>
-        {(error || memoriesError) && (
+        {errorMessage && (
           <div className="text-destructive text-[11px] md:col-span-3">
-            {error || memoriesError?.message}
+            {errorMessage}
           </div>
         )}
       </div>
 
-      <LaneTabs lane={lane} onLaneChange={setLane} memories={memories} />
+      <LaneTabs lane={lane} onLaneChange={setLane} counts={counts} />
 
       <div className="border-border bg-card flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-md border">
         <div className="border-border border-b px-3 py-2">
@@ -438,31 +317,8 @@ export function ContextSection({
             {LANE_INFO[lane].desc}
           </div>
         </div>
-        <MemoryList
-          memories={currentMemories}
-          lane={lane}
-          compact={compact}
-          loading={loading}
-          memoriesError={memoriesError}
-          editingId={editingId}
-          busyId={busyId}
-          editingContent={editingContent}
-          onEditingContentChange={setEditingContent}
-          onStartEdit={handleStartEdit}
-          onSaveMemory={(id) => void saveMemory(id)}
-          onCancelEdit={handleCancelEdit}
-          onDeleteMemory={(id) => void deleteMemory(id)}
-        />
-        <MemoryComposer
-          lane={lane}
-          writeScope={writeScope}
-          query={query}
-          newContent={newContent}
-          onNewContentChange={setNewContent}
-          creating={creating}
-          onAdd={() => void addMemory()}
-          compact={compact}
-        />
+        {list}
+        {composer}
       </div>
     </div>
   );
