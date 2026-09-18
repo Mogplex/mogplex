@@ -16,16 +16,17 @@ describe("app navigation", () => {
       ["sandboxes", "Sandboxes", "/sandboxes"],
       ["delivery", "Delivery", "/delivery"],
       ["observe", "Observe", "/observability"],
+      ["models", "Models", "/models"],
       ["settings", "Settings", "/settings"],
     ]);
   });
 
-  it("places settings alone in the admin section", () => {
+  it("places models and settings in the admin section", () => {
     expect(
       APP_NAV_ITEM_DEFS.filter((item) => item.section === "admin").map(
         (item) => item.id
       )
-    ).toEqual(["settings"]);
+    ).toEqual(["models", "settings"]);
     expect(
       APP_NAV_ITEM_DEFS.every(
         (item) => item.section === "primary" || item.section === "admin"
@@ -70,6 +71,9 @@ describe("app navigation", () => {
       ["/acme/projects/workspace", "workspaces"],
       ["/acme/sandboxes", "sandboxes"],
       ["/acme/sandboxes/record-1", "sandboxes"],
+      ["/acme/models/catalog", "models"],
+      ["/acme/models/configuration", "models"],
+      ["/acme/settings/billing", "settings"],
     ]) {
       expect(
         items

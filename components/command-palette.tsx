@@ -80,6 +80,12 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
     value: "go to observability",
     label: "Observability",
   },
+  { path: "/models/catalog", value: "go to models catalog", label: "Models" },
+  {
+    path: "/models/configuration",
+    value: "go to model configuration primary fallback",
+    label: "Model configuration",
+  },
   { path: "/settings", value: "go to settings", label: "Settings" },
 ];
 

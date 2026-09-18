@@ -19,4 +19,6 @@ export {
   KEYS_SUB_TABS,
   KEYS_SUB_TAB_SET,
   LEGACY_HASH_TO_TAB,
+  LEGACY_MODELS_TAB,
+  MODELS_ROUTE_PATH,
 } from "./settings-types";

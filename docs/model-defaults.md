@@ -1,6 +1,6 @@
 # Choosing where a default model applies
 
-In **Settings → Models**, choosing a default opens a confirmation dialog.
+In **Models → Configuration**, choosing a default opens a confirmation dialog.
 All destination switches start off. Cancel leaves the default and every
 destination unchanged. Confirm sets the default for new automation nodes and
 applies it only to the additional destinations you selected:

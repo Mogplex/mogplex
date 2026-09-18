@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This is the single orientation guide for all coding agents working in `mogplex`. `CLAUDE.md` redirects here.
+This is the single orientation guide for all coding agents working in `mogplex`. `CLAUDE.md` symlinks here.
 
 ## Agent execution policy
 
@@ -347,6 +347,7 @@ upstream provider's balance failure must not ask the customer to change settings
 - Follow existing repo conventions before introducing new abstractions
 - Do not rely on `next build` alone for correctness; run explicit lint/type/test coverage for the touched area
 - Before committing, pushing, or opening a PR, ensure your branch is up to date with its remote base and resolve drift first; do not publish work from a stale branch
+- Open pull requests as ready for review by default (`gh pr create` without `--draft`). Create a draft PR only when the user explicitly requests one.
 - Once a branch's PR is merged, that branch is finished. Never push follow-up commits to it — not review fixes, not "one more thing", not docs. Those commits land nowhere: the PR is closed, so nothing re-reviews or re-merges them, and the branch lingers on the remote looking stale while actually holding the only copy of that work. Start a new branch off fresh `main` and open a new PR instead. This is the single most common way work has been silently lost in this repo; as of 2026-07-26, eleven remote branches each carried exactly one such orphaned commit
 - Do not delete a remote branch whose tip does not match its merged PR head — that gap is unpublished work. Verify with `pnpm git:cleanup -- --remotes` before pruning anything on the remote
 - New scheduled maintenance work should prefer Trigger.dev; keep `/api/cron/*` routes as authenticated manual fallbacks unless there is a concrete reason to schedule on Vercel instead
@@ -363,10 +364,7 @@ upstream provider's balance failure must not ask the customer to change settings
 - Add or update one user-visible regression test in the `tests/e2e/flows-pane-runs-*.spec.ts` suites when changing rail or modal run-control behavior
 - Treat review findings as blocking only when they point to an actual invariant break, failing scenario, or user-visible regression; otherwise keep them as advisory cleanup
 
-## Imported legacy Claude guidance
-
-
-All agent guidance lives in [AGENTS.md](./AGENTS.md). This file exists only so Claude Code auto-loads the pointer.
+## Billing posture
 
 Billing posture: all usage is billed — there is no free tier and no default allowlist. Platform-access exemptions (`PLATFORM_ACCESS_*` env vars, `profiles.allow_platform_ai`) are granted only by Charles's explicit instruction; never add built-in allowlist entries in code.
 

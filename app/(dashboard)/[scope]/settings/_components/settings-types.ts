@@ -96,7 +96,6 @@ export const SETTINGS_TABS = [
   "teams",
   "connections",
   "keys",
-  "models",
   "agents",
   "billing",
 ] as const;
@@ -108,9 +107,12 @@ export type KeysSubTab = (typeof KEYS_SUB_TABS)[number];
 export const KEYS_SUB_TAB_SET: ReadonlySet<string> = new Set(KEYS_SUB_TABS);
 
 export const LEGACY_HASH_TO_TAB: Record<string, SettingsTab> = {
-  models: "models",
   connections: "connections",
 };
+
+/** Legacy `?tab=` / `#hash` value that now lives on the dedicated Models route. */
+export const LEGACY_MODELS_TAB = "models";
+export const MODELS_ROUTE_PATH = "/models/catalog";
 
 export const INITIAL_CONNECTION_FORM: ConnectionForm = {
   type: "rest_api",

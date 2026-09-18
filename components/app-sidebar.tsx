@@ -20,6 +20,7 @@ import {
   Rocket,
   Search,
   Settings,
+  Sparks,
 } from "iconoir-react";
 import {
   buildAppNavItems,
@@ -45,6 +46,7 @@ const NAV_ICONS = {
   sandboxes: Cube,
   delivery: DeliveryTruck,
   observe: Binocular,
+  models: Sparks,
   settings: Settings,
 } satisfies Record<AppNavItemId, typeof Rocket>;
 
