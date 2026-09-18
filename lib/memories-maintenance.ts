@@ -3,7 +3,7 @@ import type {
   MemoryLane,
   MemoryScope,
 } from "@/lib/memories-client";
-import { applyScopeFilters } from "@/lib/memories-scope";
+import { applyScopeFilters, getMemoryScopeForLane } from "@/lib/memories-scope";
 
 export const MEMORY_LANES: MemoryLane[] = [
   "session",
@@ -16,8 +16,11 @@ export type MemoryLaneCounts = Record<MemoryLane, number>;
 
 /**
  * Exact per-lane row counts for the user, honoring the same scope filters as
- * `listByLane`. The list endpoint caps each lane at 50 rows, so the UI needs
- * this to show real totals instead of the page size.
+ * `listByLane`. Pass the full request scope: each lane is narrowed with
+ * `getMemoryScopeForLane`, so the session count keeps the workspace-session
+ * and conversation filters that the durable lanes drop. The list endpoint
+ * caps each lane at 50 rows, so the UI needs this to show real totals instead
+ * of the page size.
  */
 export async function countByLane(
   client: MemoriesClient,
@@ -31,7 +34,7 @@ export async function countByLane(
           .select("id", { count: "exact", head: true })
           .eq("user_id", client.userId)
           .eq("lane", lane),
-        scope
+        getMemoryScopeForLane(lane, scope)
       );
       const { count, error } = await query;
       if (error) throw new Error(error.message);

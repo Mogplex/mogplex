@@ -225,7 +225,16 @@ export async function loadControlMemoryContext(
   );
 }
 
-/** Production wiring: memories client behind the DI boundary above. */
+/**
+ * Production wiring: memories client behind the DI boundary above.
+ *
+ * Team scope is intentionally not applied here. Every memory row is owned by
+ * `userId` (the store filters on `user_id`, never on team membership), so a
+ * team-tagged row is still the operator's own note, and Control's writers
+ * (`memory_write`, `handoff_note`, promotion) stamp no team id. Control
+ * therefore reads everything the operator owns, personal or team-tagged;
+ * the widget's personal/team toggle is a browsing filter, not a boundary.
+ */
 export async function loadControlMemoryContextForUser(
   input: ControlMemoryContextInput
 ): Promise<string | null> {

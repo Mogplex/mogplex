@@ -64,6 +64,56 @@ test("GET /api/memories returns each lane plus exact per-lane counts", async () 
   });
 });
 
+test("GET /api/memories counts the session lane with its own scope", async () => {
+  const { list } = await loadRoutes();
+  const { client, calls } = await makeClient();
+  const handler = list.createMemoriesGetHandler({
+    requireUserId: async () => "user-A",
+    createMemoriesClient: () => client,
+  });
+  const response = await handler(
+    request(
+      "https://example.com/api/memories?repoId=repo-1&workspaceSessionId=ws-1"
+    )
+  );
+  assert.equal(response.status, 200);
+  const selects = calls.filter((c) => c.method === "memories.select");
+  // Four list queries and four head counts: session ones carry the workspace
+  // session filter, the durable lanes carry only the repo.
+  const sessionSelects = selects.filter((c) => c.args.lane === "session");
+  const semanticSelects = selects.filter((c) => c.args.lane === "semantic");
+  assert.equal(sessionSelects.length, 2);
+  assert.equal(semanticSelects.length, 2);
+  for (const call of sessionSelects) {
+    assert.deepEqual(call.args.metadata__contains, {
+      repo_id: "repo-1",
+      workspace_session_id: "ws-1",
+    });
+  }
+  for (const call of semanticSelects) {
+    assert.deepEqual(call.args.metadata__contains, { repo_id: "repo-1" });
+  }
+});
+
+test("GET /api/memories?q= keeps the personal/team scope on a cross-lane search", async () => {
+  const { list } = await loadRoutes();
+  const { client, calls } = await makeClient();
+  const handler = list.createMemoriesGetHandler({
+    requireUserId: async () => "user-A",
+    createMemoriesClient: () => client,
+  });
+  const response = await handler(
+    request(
+      "https://example.com/api/memories?q=pnpm&repoId=repo-1&resourceScope=personal"
+    )
+  );
+  assert.equal(response.status, 200);
+  const search = calls.find((c) => c.method === "memories.select");
+  assert.ok(search);
+  assert.deepEqual(search.args.metadata__contains, { repo_id: "repo-1" });
+  assert.equal(search.args["metadata->>product_team_id__is"], null);
+});
+
 test("GET /api/memories rejects an unknown lane and unauthenticated callers", async () => {
   const { list } = await loadRoutes();
   const { client } = await makeClient();

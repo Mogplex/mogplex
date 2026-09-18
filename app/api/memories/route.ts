@@ -8,6 +8,7 @@ import {
   editMemory,
   forgetMemory,
   getMemoryScopeForLane,
+  getRepoScopedSearchScope,
   isValidLane,
   validateMetadata,
   MAX_CONTENT_LENGTH,
@@ -94,7 +95,9 @@ function getMemorySearchScope(
   scope?: MemoryScope
 ): MemoryScope | undefined {
   if (lane) return getMemoryScopeForLane(lane, scope);
-  return scope?.repoId ? { repoId: scope.repoId } : undefined;
+  // Cross-lane search: drop the session-only filters but keep the repo and
+  // personal/team scope so results match what listByLane would return.
+  return getRepoScopedSearchScope(scope);
 }
 
 export type MemoriesRouteDeps = {
@@ -171,7 +174,7 @@ async function handleGet(req: NextRequest, deps: MemoriesRouteDeps) {
             listByLane(client, l, 50, getMemoryScopeForLane(l, scope))
           )
         ),
-        countByLane(client, getMemoryScopeForLane("semantic", scope)),
+        countByLane(client, scope),
       ]);
     return NextResponse.json({
       session,
