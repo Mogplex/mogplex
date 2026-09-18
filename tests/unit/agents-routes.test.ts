@@ -402,3 +402,25 @@ test("POST /api/agents/run validates input and surfaces run errors with their st
   assert.equal(notFound.status, 404);
   assert.deepEqual(await notFound.json(), { error: "Agent not found" });
 });
+
+test("DELETE /api/agents reports a miss as not found instead of a silent success", async () => {
+  const { agents } = await loadRoutes();
+  const attempts: string[] = [];
+  const handler = agents.createAgentsDeleteHandler({
+    ...baseDeps,
+    deleteAgent: async (id) => {
+      attempts.push(id);
+      return id === "agent-1";
+    },
+  });
+  const removed = await handler(
+    json("https://example.com/api/agents?id=agent-1", "DELETE")
+  );
+  assert.equal(removed.status, 200);
+  const missed = await handler(
+    json("https://example.com/api/agents?id=agent-2", "DELETE")
+  );
+  assert.equal(missed.status, 404);
+  assert.deepEqual(await missed.json(), { error: "Agent not found" });
+  assert.deepEqual(attempts, ["agent-1", "agent-2"]);
+});

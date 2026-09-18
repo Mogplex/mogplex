@@ -227,17 +227,20 @@ export async function updateAgent(
   return data as AgentRow;
 }
 
+/** Deletes an owned agent; false when nothing matched (not found or not owned). */
 export async function deleteOwnedAgent(
   agentId: string,
   userId: string,
   client: Client = supabaseAdmin
-): Promise<void> {
-  const { error } = await client
+): Promise<boolean> {
+  const { data, error } = await client
     .from("agents")
     .delete()
     .eq("id", agentId)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .select("id");
   if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<{ id: string }>).length > 0;
 }
 
 export type PublishedFlowForUsage = {
