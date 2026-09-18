@@ -96,7 +96,6 @@ export const SETTINGS_TABS = [
   "teams",
   "connections",
   "keys",
-  "agents",
   "billing",
 ] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -110,9 +109,14 @@ export const LEGACY_HASH_TO_TAB: Record<string, SettingsTab> = {
   connections: "connections",
 };
 
-/** Legacy `?tab=` / `#hash` value that now lives on the dedicated Models route. */
-export const LEGACY_MODELS_TAB = "models";
-export const MODELS_ROUTE_PATH = "/models/catalog";
+/**
+ * Legacy `?tab=` / `#hash` values whose content moved to a dedicated route.
+ * Models and Agents are primary nav destinations now; old deep links redirect.
+ */
+export const LEGACY_TAB_ROUTES: Record<string, string> = {
+  models: "/models/catalog",
+  agents: "/agents/roster",
+};
 
 export const INITIAL_CONNECTION_FORM: ConnectionForm = {
   type: "rest_api",

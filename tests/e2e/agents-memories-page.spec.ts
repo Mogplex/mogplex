@@ -88,6 +88,15 @@ test("memories page shows exact lane totals, origin chips, and prunes noise", as
   });
 
   await page.goto(scopedPath("agents/context"));
+  // Agents is a primary destination: the sidebar highlights it, not Settings.
+  await expect(page.getByTestId("app-nav-agents")).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+  await expect(page.getByTestId("app-nav-settings")).not.toHaveAttribute(
+    "aria-current",
+    "page"
+  );
 
   // Lane tabs show exact server totals, not the 50-row page size.
   await expect(page.getByRole("button", { name: "Facts (2)" })).toBeVisible();

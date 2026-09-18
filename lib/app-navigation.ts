@@ -44,6 +44,13 @@ export const APP_NAV_ITEM_DEFS = [
     section: "primary",
   },
   {
+    id: "agents",
+    label: "Agents",
+    path: "/agents/roster",
+    subpaths: ["/agents"],
+    section: "primary",
+  },
+  {
     id: "models",
     label: "Models",
     path: "/models",
@@ -54,7 +61,7 @@ export const APP_NAV_ITEM_DEFS = [
     id: "settings",
     label: "Settings",
     path: "/settings",
-    subpaths: ["/settings", "/agents"],
+    subpaths: ["/settings"],
     section: "admin",
   },
 ] as const;

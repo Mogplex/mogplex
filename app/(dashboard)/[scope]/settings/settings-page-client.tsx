@@ -18,7 +18,6 @@ import type { ScopeContext } from "@/lib/scope-context"
 
 import {
   AccountSection,
-  AgentsSettingsSection,
   ApiKeysSection,
   ConnectionsSection,
   type GithubInstallationView,
@@ -29,8 +28,7 @@ import {
   SETTINGS_TAB_SET,
   KEYS_SUB_TAB_SET,
   LEGACY_HASH_TO_TAB,
-  LEGACY_MODELS_TAB,
-  MODELS_ROUTE_PATH,
+  LEGACY_TAB_ROUTES,
 } from "./_components"
 
 export function SettingsPageClient({ scope }: { scope: ScopeContext }) {
@@ -70,18 +68,20 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
     [router, pathname, searchParams],
   )
 
-  // Models moved to their own route; keep old deep links working.
+  // Models and Agents moved to their own routes; keep old deep links working.
   useEffect(() => {
-    if (tabParam !== LEGACY_MODELS_TAB) return
-    router.replace(scopedHref(scope, MODELS_ROUTE_PATH))
+    const movedTo = LEGACY_TAB_ROUTES[tabParam]
+    if (!movedTo) return
+    router.replace(scopedHref(scope, movedTo))
   }, [router, scope, tabParam])
 
   useEffect(() => {
     if (typeof window === "undefined") return
     const hash = window.location.hash.replace(/^#/, "")
     if (!hash) return
-    if (hash === LEGACY_MODELS_TAB) {
-      router.replace(scopedHref(scope, MODELS_ROUTE_PATH))
+    const movedTo = LEGACY_TAB_ROUTES[hash]
+    if (movedTo) {
+      router.replace(scopedHref(scope, movedTo))
       return
     }
     const mapped = LEGACY_HASH_TO_TAB[hash]
@@ -192,7 +192,6 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
             <TabsTrigger value="teams" className="px-3 h-7 text-[13px]">Teams</TabsTrigger>
             <TabsTrigger value="connections" className="px-3 h-7 text-[13px]">Connections</TabsTrigger>
             <TabsTrigger value="keys" className="px-3 h-7 text-[13px]">Keys &amp; Tokens</TabsTrigger>
-            <TabsTrigger value="agents" className="px-3 h-7 text-[13px]">Agents</TabsTrigger>
             <TabsTrigger value="billing" className="px-3 h-7 text-[13px]">Billing</TabsTrigger>
           </TabsList>
           <ScrollBar orientation="horizontal" />
@@ -234,10 +233,6 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
               <CliApiKeysSection />
             </TabsContent>
           </Tabs>
-        </TabsContent>
-
-        <TabsContent value="agents" className="mt-0">
-          <AgentsSettingsSection />
         </TabsContent>
 
         <TabsContent value="billing" className="mt-0">
