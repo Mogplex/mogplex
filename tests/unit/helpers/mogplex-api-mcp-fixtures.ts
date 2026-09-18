@@ -28,6 +28,7 @@ export function buildRun(
     sandboxId: "sbx_123",
     worktreeId: null,
     repoId: "repo-1",
+    agentId: null,
     harness: "codex",
     status: "pending",
     branch: {

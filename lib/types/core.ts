@@ -117,6 +117,12 @@ export type Agent = {
   source_template?: string | null;
   is_preset?: boolean;
   has_fork?: boolean;
+  /** Team the agent is shared with; null for a personal agent. */
+  team_id?: string | null;
+  shared?: boolean;
+  owned?: boolean;
+  skill_ids?: string[];
+  rule_ids?: string[];
   created_at: string;
 };
 

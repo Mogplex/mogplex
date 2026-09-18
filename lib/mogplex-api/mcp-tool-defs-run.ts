@@ -44,6 +44,11 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
           description:
             "Optional repo subdirectory for monorepos. Pass null for repo root.",
         },
+        agentId: {
+          type: "string",
+          description:
+            "Roster agent id from mogplex_list_agents, or preset:<NAME>. The run loads that agent's system prompt, rules, and skills.",
+        },
         idempotencyKey: {
           type: "string",
           maxLength: 200,

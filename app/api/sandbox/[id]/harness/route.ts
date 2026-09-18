@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { SANDBOX_AGENT_EXECUTION_LEASE_MS } from "@/lib/sandbox/activity-lease";
-import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isSandboxCapabilityDeniedError } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getHarnessConfig } from "@/lib/harness/config";
 import { normalizeHarnessExecutionMode } from "@/lib/harness/claude-permissions";
 import { HarnessCancelRequestedError } from "@/lib/harness/runner";
-import { buildAiCallCompletionUpdate } from "@/lib/interactive-runs";
-import { extractVercelApiErrorDetail } from "@/lib/sandbox/api-error";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import {
   buildSandboxRouteErrorResponse,
@@ -15,10 +12,7 @@ import {
 } from "@/lib/sandbox/route-context";
 import type { HarnessId } from "@/lib/harness/config";
 import { readBrowserHarnessAttachments } from "@/lib/harness/browser-attachments";
-import {
-  createSandboxBillingOnResume,
-  presentSandboxBillingAdmissionError,
-} from "@/lib/billing/sandbox-usage";
+import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 import {
   VALID_HARNESSES,
   HARNESS_ROUTE_SELECT,
@@ -43,6 +37,8 @@ import {
 } from "./_lib/setup";
 import { createHarnessStreamBody } from "./_lib/execution";
 import { setupAiCall, createFinalizeCancelledRun } from "./_lib/ai-call";
+import { setupAgentRuntime } from "./_lib/agent-runtime";
+import { buildHarnessFailureResponse } from "./_lib/failure";
 
 // Re-export for tests that import directly from route
 export { isClosedSandboxStreamError } from "./_lib/stream";
@@ -93,6 +89,7 @@ export function createSandboxHarnessPostHandler(
       slackImageAttachments?: unknown;
       attachments?: unknown;
       worktreeId?: string | null;
+      agentId?: string | null;
     };
     try {
       body = await request.json();
@@ -165,6 +162,16 @@ export function createSandboxHarnessPostHandler(
         { error: "Active worktree not found in this sandbox" },
         { status: 404 }
       );
+    }
+    const agentId =
+      typeof body.agentId === "string" && body.agentId.trim()
+        ? body.agentId.trim()
+        : null;
+    const agentRuntime = agentId
+      ? await deps.resolveAgentRuntime({ agentId, userId: creds.userId })
+      : null;
+    if (agentId && !agentRuntime) {
+      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
     const executionRoot =
       worktree?.checkout_path ?? sandboxData.rootDirectory ?? null;
@@ -294,12 +301,15 @@ export function createSandboxHarnessPostHandler(
         runtimeEnv
       );
       const mcpConfigPath = await setupMcpConfig(deps, sandbox, setupCtx);
+      const agentPrompt = agentRuntime
+        ? await setupAgentRuntime(deps, sandbox, setupCtx, agentRuntime, prompt)
+        : prompt;
       const { trimmedPrompt, deliveryPrompt } =
         await setupSlackAttachmentsAndPrompt(
           deps,
           sandbox,
           setupCtx,
-          prompt,
+          agentPrompt,
           memoryScope,
           gitWorkspace,
           body.slackImageAttachments,
@@ -426,73 +436,15 @@ export function createSandboxHarnessPostHandler(
         });
       }
 
-      const billingError = presentSandboxBillingAdmissionError(err);
-      const rawMessage =
-        billingError?.message ??
-        (err instanceof Error ? err.message : "Harness execution failed");
-      const apiDetail = extractVercelApiErrorDetail(err);
-      const message = apiDetail ? `${rawMessage} — ${apiDetail}` : rawMessage;
-
-      console.error("[harness] execution failed", {
-        aiCallId: aiCall.id,
+      return buildHarnessFailureResponse(deps, err, {
+        aiCall,
+        userId: creds.userId,
         sandboxRecordId: id,
         sandboxId: record.sandbox_id,
+        repoId: record.repo_id || null,
+        conversationId: body.conversationId || null,
         harnessId,
-        message: rawMessage,
-        apiDetail,
       });
-
-      if (
-        /status code 410/i.test(rawMessage) ||
-        /sandbox.*(stopped|gone)/i.test(rawMessage)
-      ) {
-        supabaseAdmin
-          .from("sandboxes")
-          .update({ status: "stopped" })
-          .eq("id", id)
-          .then(({ error }) => {
-            if (error)
-              console.warn("Failed to mark sandbox stopped:", error.message);
-          });
-
-        await deps.finalizeAiCallIfNotCancelled(
-          aiCall.id,
-          buildAiCallCompletionUpdate({
-            startedAt: aiCall.started_at ?? new Date().toISOString(),
-            status: "failed",
-            error: "Sandbox has stopped",
-            metadata: aiCall.metadata ?? undefined,
-          })
-        );
-        return NextResponse.json(
-          { error: "Sandbox has stopped. Launch a new sandbox to continue." },
-          { status: 410 }
-        );
-      }
-      const finalizedCall = await deps.finalizeAiCallIfNotCancelled(
-        aiCall.id,
-        buildAiCallCompletionUpdate({
-          startedAt: aiCall.started_at ?? new Date().toISOString(),
-          status: "failed",
-          error: message,
-          metadata: aiCall.metadata ?? undefined,
-        })
-      );
-      if (finalizedCall) {
-        await deps.safeAppendAiCallEvent({
-          aiCallId: aiCall.id,
-          userId: creds.userId,
-          conversationId: body.conversationId || null,
-          repoId: record.repo_id || null,
-          eventType: "failed",
-          message: "Harness execution failed",
-          payload: { error: message },
-        });
-      }
-      return NextResponse.json(
-        { error: message },
-        { status: billingError?.status ?? 500 }
-      );
     }
   };
 }

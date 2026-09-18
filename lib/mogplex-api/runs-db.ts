@@ -44,6 +44,7 @@ export type NormalizedStartRequest = {
   workspaceSessionId: string | null;
   mode: string | null;
   worktreeId: string | null;
+  agentId: string | null;
 };
 
 export type InsertExternalAgentRunInput = {
@@ -196,6 +197,7 @@ export async function insertRun(input: InsertExternalAgentRunInput) {
       conversation_id: input.normalized.conversationId,
       workspace_session_id: input.normalized.workspaceSessionId,
       mode: input.normalized.mode,
+      agent_id: input.normalized.agentId,
       metadata: input.metadata,
     })
     .select("*")

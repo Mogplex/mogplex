@@ -57,6 +57,7 @@ export function buildRunRow(
     conversation_id: null,
     workspace_session_id: null,
     mode: null,
+    agent_id: null,
     runtime_provider: null,
     runtime_run_id: null,
     error: null,
@@ -165,6 +166,7 @@ export function buildStartDeps(
         error: input.error,
       }),
     appendAcceptedEvent: async () => {},
+    resolveAgent: async () => null,
     ...overrides,
   };
 }

@@ -28,6 +28,7 @@ function makeRun(
     idempotency_key: "idem-1",
     request_hash: "hash-1",
     harness: "claude-code",
+    agent_id: null,
     status: "failed",
     prompt: "Fix the mobile layout",
     base_branch: "main",

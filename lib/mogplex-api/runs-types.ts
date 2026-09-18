@@ -36,6 +36,8 @@ export type StartMogplexApiRunRequest = {
   workspaceSessionId?: unknown;
   mode?: unknown;
   worktreeId?: unknown;
+  /** Roster agent id or `preset:<NAME>` whose instructions shape the run. */
+  agentId?: unknown;
 };
 
 export type ExternalAgentRunRow = {
@@ -58,6 +60,7 @@ export type ExternalAgentRunRow = {
   conversation_id: string | null;
   workspace_session_id: string | null;
   mode: string | null;
+  agent_id: string | null;
   runtime_provider: string | null;
   runtime_run_id: string | null;
   error: string | null;
@@ -87,6 +90,7 @@ export type MogplexApiRunDetail = {
     createBranch: boolean;
   };
   rootDirectory: string | null;
+  agentId: string | null;
   eventsUrl: string;
   cancelUrl: string;
   createdAt: string;

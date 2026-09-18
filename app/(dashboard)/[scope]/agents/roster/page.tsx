@@ -2,12 +2,16 @@
 
 import { useState, useDeferredValue } from "react";
 import { useAgents } from "@/hooks/use-agents";
+import { useAgentUsage } from "@/hooks/use-agent-usage";
+import { useActiveTeamId } from "@/components/active-scope-provider";
+import type { Agent } from "@/lib/types";
 import { useAgentCategories } from "@/hooks/use-agent-categories";
 import { useModels } from "@/hooks/use-models";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { AgentCard } from "./_components/agent-card";
 import { AgentEditDialog } from "./_components/agent-edit-dialog";
+import { AgentRunDialog } from "./_components/agent-run-dialog";
 import {
   NewCategoryDialog,
   ManageCategoriesDialog,
@@ -23,6 +27,9 @@ import { useCategoryEditor } from "./_components/use-category-editor";
 
 export default function AgentRosterPage() {
   const { agents, isLoading, error, mutate } = useAgents();
+  const { usage, mutate: mutateUsage } = useAgentUsage();
+  const activeTeamId = useActiveTeamId();
+  const [runningAgent, setRunningAgent] = useState<Agent | null>(null);
   const { categories, mutate: mutateCategories } = useAgentCategories();
   const {
     models: enabledModels,
@@ -53,6 +60,7 @@ export default function AgentRosterPage() {
     defaultModelId,
     renderedCategorySlugsRef,
     mutate,
+    activeTeamId,
   });
 
   const categoryEditor = useCategoryEditor({
@@ -161,6 +169,8 @@ export default function AgentRosterPage() {
                             ? () => editor.deleteAgent(a.id)
                             : undefined
                         }
+                        onRun={() => setRunningAgent(a)}
+                        usage={usage[a.id]}
                         saving={editor.saving}
                       />
                     ))}
@@ -179,6 +189,8 @@ export default function AgentRosterPage() {
                       categoryLabel={null}
                       onEdit={() => editor.openEdit(a)}
                       onDelete={() => editor.deleteAgent(a.id)}
+                      onRun={() => setRunningAgent(a)}
+                      usage={usage[a.id]}
                     />
                   ))}
                 </div>
@@ -218,6 +230,8 @@ export default function AgentRosterPage() {
                           ? () => editor.deleteAgent(a.id)
                           : undefined
                       }
+                      onRun={() => setRunningAgent(a)}
+                      usage={usage[a.id]}
                       saving={editor.saving}
                     />
                   ))}
@@ -241,6 +255,8 @@ export default function AgentRosterPage() {
                   categoryLabel={null}
                   onEdit={() => editor.openEdit(a)}
                   onDelete={() => editor.deleteAgent(a.id)}
+                  onRun={() => setRunningAgent(a)}
+                  usage={usage[a.id]}
                 />
               ))}
             </div>
@@ -270,6 +286,20 @@ export default function AgentRosterPage() {
         onClose={editor.closeEditor}
         onSave={editor.saveEdit}
         onOpenNewCategory={categoryEditor.openNewCategoryDialog}
+        skillIds={editor.editSkillIds}
+        setSkillIds={editor.setEditSkillIds}
+        ruleIds={editor.editRuleIds}
+        setRuleIds={editor.setEditRuleIds}
+        shared={editor.editShared}
+        setShared={editor.setEditShared}
+        canShare={editor.canShare}
+        canEditSharing={editor.canEditSharing}
+      />
+
+      <AgentRunDialog
+        agent={runningAgent}
+        onClose={() => setRunningAgent(null)}
+        onStarted={() => void mutateUsage()}
       />
 
       <NewCategoryDialog

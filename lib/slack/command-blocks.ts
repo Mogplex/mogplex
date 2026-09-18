@@ -32,6 +32,7 @@ const COMMANDS = [
   ["usage", "Usage", "Plan and inference credit"],
   ["model", "Model", "Choose the channel model"],
   ["harness", "Harness", "Choose your repository runner"],
+  ["agent", "Agent", "Run repository tasks as a roster agent"],
 ] as const;
 
 function plainText(text: string) {

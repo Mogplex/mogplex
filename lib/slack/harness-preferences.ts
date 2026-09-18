@@ -55,3 +55,44 @@ export async function upsertSlackHarnessPreference(
       `Failed to save Slack harness preference: ${error.message}`
     );
 }
+
+export async function getSlackAgentPreference(
+  scope: SlackHarnessScope,
+  client: Client = supabaseAdmin
+): Promise<string | null> {
+  const { data, error } = await client
+    .from("slack_harness_preferences")
+    .select("agent_id")
+    .eq("slack_installation_id", scope.installationId)
+    .eq("channel_id", scope.channelId)
+    .eq("slack_user_id", scope.slackUserId)
+    .maybeSingle();
+  if (error)
+    throw new Error(`Failed to load Slack agent preference: ${error.message}`);
+  const agentId = (data as { agent_id?: string | null } | null)?.agent_id;
+  return typeof agentId === "string" && agentId.length > 0 ? agentId : null;
+}
+
+/**
+ * Pins (or clears) a roster agent for the channel. The row shares the harness
+ * preference, so a channel with no harness choice yet keeps the default one.
+ */
+export async function upsertSlackAgentPreference(
+  input: SlackHarnessScope & { agentId: string | null },
+  client: Client = supabaseAdmin
+): Promise<void> {
+  const harness = (await getSlackHarnessPreference(input, client)) ?? "mogplex";
+  const { error } = await client.from("slack_harness_preferences").upsert(
+    {
+      slack_installation_id: input.installationId,
+      channel_id: input.channelId,
+      slack_user_id: input.slackUserId,
+      harness,
+      agent_id: input.agentId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "slack_installation_id,channel_id,slack_user_id" }
+  );
+  if (error)
+    throw new Error(`Failed to save Slack agent preference: ${error.message}`);
+}

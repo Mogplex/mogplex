@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import type { Agent } from "@/lib/types";
+import type { AgentUsage } from "@/lib/agents/usage";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -17,6 +18,8 @@ export const AgentCard = memo(function AgentCard({
   onCustomize,
   onEdit,
   onDelete,
+  onRun,
+  usage,
   saving,
 }: {
   agent: Agent;
@@ -24,6 +27,8 @@ export const AgentCard = memo(function AgentCard({
   onCustomize?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onRun?: () => void;
+  usage?: AgentUsage;
   saving?: boolean;
 }) {
   const isPreset = agent.is_preset;
@@ -31,6 +36,10 @@ export const AgentCard = memo(function AgentCard({
   const isForked = !isPreset && !!agent.source_template;
   const hasFork = isPreset && agent.has_fork;
   const needsCategory = !isPreset && !categoryLabel;
+  const isShared = !isPreset && Boolean(agent.team_id);
+  const isOwned = agent.owned !== false;
+  const automationCount = usage?.automations.length ?? 0;
+  const runCount = usage?.runs ?? 0;
 
   return (
     <div className="bg-card border-border space-y-2 rounded-sm border p-3">
@@ -63,6 +72,15 @@ export const AgentCard = memo(function AgentCard({
                 Customized
               </Badge>
             )}
+            {isShared && (
+              <Badge
+                variant="outline"
+                className="border-sky-300/40 px-1.5 py-0 text-[11px] text-sky-300"
+                data-testid="agent-shared-badge"
+              >
+                {isOwned ? "Shared with team" : "From team"}
+              </Badge>
+            )}
             {needsCategory && (
               <Badge
                 variant="outline"
@@ -86,7 +104,7 @@ export const AgentCard = memo(function AgentCard({
             </p>
           )}
         </div>
-        {!isPreset && (
+        {!isPreset && (onEdit || onDelete) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -100,7 +118,7 @@ export const AgentCard = memo(function AgentCard({
               {onEdit && (
                 <DropdownMenuItem onSelect={onEdit}>Edit</DropdownMenuItem>
               )}
-              {onDelete && (
+              {onDelete && isOwned && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onSelect={onDelete}>
@@ -112,7 +130,22 @@ export const AgentCard = memo(function AgentCard({
           </DropdownMenu>
         )}
       </div>
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-xs" data-testid="agent-usage">
+          {usage
+            ? `${automationCount} automation${automationCount === 1 ? "" : "s"} · ${runCount} run${runCount === 1 ? "" : "s"}`
+            : ""}
+        </span>
+        <span className="flex items-center gap-3">
+        {onRun && (
+          <button
+            onClick={onRun}
+            disabled={saving}
+            className="border-border text-foreground hover:bg-secondary rounded-sm border px-2 py-0.5 text-sm disabled:opacity-50"
+          >
+            Run
+          </button>
+        )}
         {isPreset && onCustomize && (
           <button
             onClick={onCustomize}
@@ -122,6 +155,7 @@ export const AgentCard = memo(function AgentCard({
             {hasFork ? "Edit Customization" : "Customize"}
           </button>
         )}
+        </span>
       </div>
     </div>
   );

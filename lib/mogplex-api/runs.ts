@@ -6,6 +6,8 @@
  * normalization to ./runs-normalize.ts.
  */
 import { createAiCall } from "@/lib/interactive-runs";
+import { resolveAgentRuntimeForUser } from "@/lib/agents/runtime/store";
+import type { AgentRuntime } from "@/lib/agents/runtime/types";
 import { reconcileExternalAgentRunRuntime } from "./run-runtime";
 import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
@@ -103,6 +105,10 @@ export type StartMogplexApiRunDeps = {
   markRunFailed: (
     input: MarkExternalAgentRunFailedInput
   ) => Promise<ExternalAgentRunRow>;
+  resolveAgent: (input: {
+    agentId: string;
+    userId: string;
+  }) => Promise<AgentRuntime | null>;
 };
 
 type ExternalAgentRunQueueResult = {
@@ -123,6 +129,7 @@ const defaultStartMogplexApiRunDeps: StartMogplexApiRunDeps = {
   queueRun: queueExternalAgentRun,
   markRunQueued: markExternalAgentRunQueued,
   markRunFailed: markExternalAgentRunFailed,
+  resolveAgent: resolveAgentRuntimeForUser,
 };
 
 async function queueExternalAgentRun(input: {
@@ -177,6 +184,7 @@ export function presentMogplexApiRun(row: ExternalAgentRunRow) {
       createBranch: row.create_branch,
     },
     rootDirectory: row.root_directory,
+    agentId: row.agent_id ?? null,
     eventsUrl: `/api/v1/mogplex/runs/${row.id}/events`,
     cancelUrl: `/api/v1/mogplex/runs/${row.id}/cancel`,
     createdAt: row.created_at,
@@ -242,7 +250,8 @@ export async function startMogplexApiRun(input: {
       existing.conversation_id === normalized.conversationId &&
       existing.workspace_session_id === normalized.workspaceSessionId &&
       existing.mode === normalized.mode &&
-      existing.worktree_id === normalized.worktreeId;
+      existing.worktree_id === normalized.worktreeId &&
+      (existing.agent_id ?? null) === normalized.agentId;
     if (!sameLogicalRequest) {
       throw new MogplexApiRunError(
         "IDEMPOTENCY_CONFLICT",
@@ -293,6 +302,18 @@ export async function startMogplexApiRun(input: {
     return { run: presentMogplexApiRun(existing), replayed: true };
   }
 
+  // The agent must be runnable by this user: owned, shared with one of their
+  // teams, or a preset. Anything else is "not found" so shared ids never leak.
+  const agent = normalized.agentId
+    ? await deps.resolveAgent({
+        agentId: normalized.agentId,
+        userId: input.user.userId,
+      })
+    : null;
+  if (normalized.agentId && !agent) {
+    throw new MogplexApiRunError("NOT_FOUND", "Agent not found", 404);
+  }
+
   const sandbox =
     boundWorktree?.sandbox ??
     (await deps.findActiveSandbox({
@@ -310,6 +331,7 @@ export async function startMogplexApiRun(input: {
     apiKey: input.user,
     origin: input.origin,
     extraMetadata: input.extraMetadata,
+    agent: agent ? { id: agent.id, name: agent.name } : null,
   });
   const aiCall = await deps.createAiCall({
     userId: input.user.userId,
