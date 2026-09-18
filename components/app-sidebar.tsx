@@ -12,6 +12,7 @@ import { useMemberships } from "@/hooks/use-memberships";
 import {
   ArrowUpCircle,
   Binocular,
+  Cpu,
   Coins,
   Cube,
   DeliveryTruck,
@@ -20,7 +21,6 @@ import {
   Rocket,
   Search,
   Settings,
-  Sparks,
 } from "iconoir-react";
 import {
   buildAppNavItems,
@@ -46,7 +46,7 @@ const NAV_ICONS = {
   sandboxes: Cube,
   delivery: DeliveryTruck,
   observe: Binocular,
-  models: Sparks,
+  models: Cpu,
   settings: Settings,
 } satisfies Record<AppNavItemId, typeof Rocket>;
 

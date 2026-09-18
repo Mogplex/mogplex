@@ -48,7 +48,7 @@ export const APP_NAV_ITEM_DEFS = [
     label: "Models",
     path: "/models",
     subpaths: ["/models"],
-    section: "admin",
+    section: "primary",
   },
   {
     id: "settings",
