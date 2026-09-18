@@ -4,7 +4,6 @@
  */
 
 export { AccountSection } from "./account-section";
-export { AgentsSettingsSection } from "./agents-settings-section";
 export { ApiKeysSection } from "./api-keys-section";
 export { ConnectionsSection } from "./connections-section";
 
@@ -19,6 +18,5 @@ export {
   KEYS_SUB_TABS,
   KEYS_SUB_TAB_SET,
   LEGACY_HASH_TO_TAB,
-  LEGACY_MODELS_TAB,
-  MODELS_ROUTE_PATH,
+  LEGACY_TAB_ROUTES,
 } from "./settings-types";

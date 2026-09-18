@@ -14,6 +14,7 @@ import {
   Binocular,
   Cpu,
   Coins,
+  Community,
   Cube,
   DeliveryTruck,
   Flash,
@@ -46,6 +47,7 @@ const NAV_ICONS = {
   sandboxes: Cube,
   delivery: DeliveryTruck,
   observe: Binocular,
+  agents: Community,
   models: Cpu,
   settings: Settings,
 } satisfies Record<AppNavItemId, typeof Rocket>;
