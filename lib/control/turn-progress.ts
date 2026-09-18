@@ -1,8 +1,4 @@
-import {
-  getToolOrDynamicToolName,
-  isToolOrDynamicToolUIPart,
-  type UIMessage,
-} from "ai";
+import { getToolOrDynamicToolName, isToolUIPart, type UIMessage } from "ai";
 import { sanitizeAgentUserFacingText } from "@/lib/agents/user-facing-output";
 import { controlToolOutcome } from "./tool-outcome";
 
@@ -44,7 +40,7 @@ export function presentTurnProgress(messages: UIMessage[], status: string) {
   const parts = currentTurnMessages(messages)
     .filter((message) => message.role === "assistant")
     .flatMap((message) => message.parts);
-  const tools = parts.filter(isToolOrDynamicToolUIPart);
+  const tools = parts.filter(isToolUIPart);
   const completed = tools.filter(
     (part) =>
       controlToolOutcome(

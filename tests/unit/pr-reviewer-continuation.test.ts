@@ -127,7 +127,7 @@ test("fetchFile validates continuation offsets and reports end-of-file", async (
     );
   }
   const execute = tools.fetchFile.execute!;
-  const options = { toolCallId: "test", messages: [] };
+  const options = { context: {}, toolCallId: "test", messages: [] };
   assert.equal(await execute({ path: "src/file.ts", offset: 3 }, options), "");
   const beyond = await execute({ path: "src/file.ts", offset: 4 }, options);
   assert.ok(typeof beyond === "string");
@@ -149,7 +149,7 @@ test("fetchFile keeps explicit refs and propagates GitHub authorization errors",
     async () =>
       tools.fetchFile.execute!(
         { path: "src/controller.ts", ref: "base-sha", offset: 20_000 },
-        { toolCallId: "test", messages: [] }
+        { context: {}, toolCallId: "test", messages: [] }
       ),
     /GitHub API 403/
   );

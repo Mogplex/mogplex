@@ -12,7 +12,7 @@ async function loadAgentGenerateRoute() {
   return import("../../app/api/agents/generate/route");
 }
 
-test("POST /api/agents/generate contains ai_call logging failures in onFinish", async () => {
+test("POST /api/agents/generate contains ai_call logging failures in onEnd", async () => {
   setSupabaseTestEnv();
   const [{ supabaseAdmin }, { supabaseAdmin: aliasedSupabaseAdmin }] =
     await Promise.all([
@@ -57,7 +57,7 @@ test("POST /api/agents/generate contains ai_call logging failures in onFinish", 
       canUserSetDefaultModel: async () => true,
       resolveUserLanguageModel: async () => "mock-model" as never,
       streamText: ((input) => {
-        capturedOnFinish = input.onFinish as typeof capturedOnFinish;
+        capturedOnFinish = input.onEnd as typeof capturedOnFinish;
         return {
           toTextStreamResponse() {
             return new Response("{}", { status: 200 });
@@ -78,10 +78,10 @@ test("POST /api/agents/generate contains ai_call logging failures in onFinish", 
     );
 
     assert.equal(response.status, 200);
-    const onFinish = capturedOnFinish;
-    assert.ok(onFinish);
+    const onEnd = capturedOnFinish;
+    assert.ok(onEnd);
     await assert.doesNotReject(async () => {
-      await onFinish({
+      await onEnd({
         totalUsage: undefined,
         providerMetadata: undefined,
         finishReason: "stop",

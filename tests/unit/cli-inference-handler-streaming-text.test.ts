@@ -10,7 +10,7 @@ test("createOpenAiChatCompletionStream forwards text-delta chunks as content del
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield { type: "text-delta", textDelta: "Hello, " };
         yield { type: "text-delta", textDelta: "world!" };
         yield { type: "text-delta", textDelta: "" };
@@ -61,7 +61,7 @@ test("createOpenAiChatCompletionStream surfaces error chunks as structured SSE e
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield {
           type: "tool-input-start",
           toolCallId: "call_err",
@@ -118,7 +118,7 @@ test("createOpenAiChatCompletionStream captures finish-step usage and gateway me
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield { type: "text-delta", textDelta: "Done" };
         yield {
           type: "finish-step",
@@ -174,7 +174,7 @@ test("createOpenAiChatCompletionStream coerces non-Error error chunks to a strin
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield { type: "error", error: "rate_limit_exceeded" };
       })(),
     }),
@@ -200,7 +200,7 @@ test("createOpenAiChatCompletionStream rejects an empty successful model respons
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield {
           type: "finish",
           finishReason: "stop",
@@ -250,7 +250,7 @@ test("createOpenAiChatCompletionStream waits for outcome persistence before clos
 
   const response = createOpenAiChatCompletionStream({
     createResult: () => ({
-      fullStream: (async function* streamChunks() {
+      stream: (async function* streamChunks() {
         yield { type: "text-delta", textDelta: "Done" };
         yield {
           type: "finish",

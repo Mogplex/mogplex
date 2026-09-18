@@ -19,7 +19,7 @@ it("the actual native runner exposes scoped, repeatable report tools", async () 
         called = true;
         expect(input.prompt).toContain("MOGPLEX_FLOW_HANDOFF:");
         expect(input.prompt).not.toContain(text);
-        const options = { toolCallId: "test", messages: [] };
+        const options = { context: {}, toolCallId: "test", messages: [] };
         const reports = await input.tools!.listFlowReports.execute!(
           { offset: 0 },
           options

@@ -281,7 +281,10 @@ export function createAutomationAgentRunner(
       request: {
         model: resolvedModel.model,
         providerOptions: resolvedModel.providerOptions,
-        system: buildAutomationSystem(runSpec.system, gatewayContext),
+        instructions: buildAutomationSystem(
+          runSpec.instructions,
+          gatewayContext
+        ),
         tools: applyToolApprovalGate(
           { ...tools, ...buildFlowReportTools(context) },
           context,
@@ -327,7 +330,7 @@ async function runPRFixAgentWithTools(input: {
         input.context,
         input.deps
       ),
-      system: buildAutomationSystem(undefined, gatewayContext),
+      instructions: buildAutomationSystem(undefined, gatewayContext),
       prompt: runSpec.prompt,
       stopWhen: () => false,
     },

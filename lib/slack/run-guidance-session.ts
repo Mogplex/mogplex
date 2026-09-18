@@ -18,11 +18,6 @@ export function createRunGuidanceSession(
   overrides: Partial<typeof defaultDeps> = {}
 ) {
   const deps = { ...defaultDeps, ...overrides };
-  const insertions: Array<{
-    at: number;
-    id: string;
-    messages: ModelMessage[];
-  }> = [];
   const seen = new Set<string>();
   let pending: string[] = [];
   let step = 0;
@@ -33,6 +28,7 @@ export function createRunGuidanceSession(
     ): Promise<ModelMessage[]> {
       step = stepNumber;
       const rows = await deps.load(run);
+      const additions: ModelMessage[] = [];
       for (const row of rows) {
         if (row.status === "not_applied" || seen.has(row.id)) continue;
         const ui = await deps.buildMessages({
@@ -42,24 +38,13 @@ export function createRunGuidanceSession(
             [SLACK_RUN_IMAGE_ATTACHMENTS_METADATA_KEY]: row.attachments,
           },
         });
-        insertions.push({
-          at: messages.length,
-          id: row.id,
-          messages: await convertToModelMessages(ui),
-        });
+        additions.push(...(await convertToModelMessages(ui)));
         seen.add(row.id);
         if (row.status === "received") pending.push(row.id);
       }
-      if (insertions.length === 0) return messages;
-      // prepareStep overrides are not retained by the SDK. Reinsert each user
-      // update at its original transcript boundary on later steps, exactly once.
-      const augmented: ModelMessage[] = [];
-      for (let index = 0; index <= messages.length; index++) {
-        for (const insertion of insertions)
-          if (insertion.at === index) augmented.push(...insertion.messages);
-        if (index < messages.length) augmented.push(messages[index]);
-      }
-      return augmented;
+      // SDK 7 carries prepareStep messages into subsequent steps. Append each
+      // update once; a reconstructed worker loads delivered guidance again.
+      return additions.length === 0 ? messages : [...messages, ...additions];
     },
     async stepFinished() {
       const ids = [...pending];

@@ -1,6 +1,6 @@
 import type { ChatModelStreamHooks } from "./run-chat";
 
-/** SDK errors can end a stream without onFinish; every terminal path releases tools. */
+/** SDK errors can end a stream without onEnd; every terminal path releases tools. */
 export function withChatStreamCleanup(
   hooks: ChatModelStreamHooks | undefined,
   cleanup: () => Promise<void>
@@ -21,9 +21,9 @@ export function withChatStreamCleanup(
         await cleanup();
       }
     },
-    async onFinish(event) {
+    async onEnd(event) {
       try {
-        await hooks?.onFinish?.(event);
+        await hooks?.onEnd?.(event);
       } finally {
         await cleanup();
       }

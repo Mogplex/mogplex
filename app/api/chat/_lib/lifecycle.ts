@@ -23,7 +23,7 @@ export function createChatFinalizationHooks(
     [];
   let capturedUsage = EMPTY_CAPTURED_USAGE;
   return {
-    onStepFinish(step) {
+    onStepEnd(step) {
       completedSteps.push(step);
       capturedUsage = mergeUsage(
         capturedUsage,
@@ -49,7 +49,7 @@ export function createChatFinalizationHooks(
       finalized = true;
       await finalizeCancelledChatRun({ ...input, steps });
     },
-    async onFinish({ totalUsage, steps, finishReason, providerMetadata }) {
+    async onEnd({ totalUsage, steps, finishReason, providerMetadata }) {
       if (finalized) return;
       finalized = true;
       await finalizeFinishedChatRun({

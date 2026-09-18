@@ -18,6 +18,7 @@ test("progress tool publishes a sanitized finding and next step", async () => {
   });
   assert.ok(progress.execute);
   const result = await progress.execute(input, {
+    context: {},
     toolCallId: "p1",
     messages: [],
   });
@@ -54,7 +55,7 @@ test("a reporting failure is not claimed as recorded", async () => {
           summary: "Inspecting the header",
           next: "Read the layout",
         },
-        { toolCallId: "p1", messages: [] }
+        { context: {}, toolCallId: "p1", messages: [] }
       )
     ),
     /Unavailable/

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { streamText } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV4 } from "ai/test";
 import { withChatStreamCleanup } from "./chat-stream-cleanup";
 
 it("releases tool resources on a real SDK provider error with no finished step", async () => {
@@ -17,7 +17,7 @@ it("releases tool resources on a real SDK provider error with no finished step",
       released = true;
     }
   );
-  const model = new MockLanguageModelV3({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       throw failure;
     },
@@ -53,7 +53,7 @@ it("cleans up an aborted stream even without caller hooks", async () => {
   const hooks = withChatStreamCleanup(undefined, async () => {
     released = true;
   });
-  await hooks.onAbort!({ steps: [] });
+  await hooks.onAbort!({ callId: "cancelled", steps: [] });
   expect(released).toBe(true);
 });
 
@@ -61,7 +61,7 @@ it("forwards successful completion before releasing tools", async () => {
   const order: string[] = [];
   const hooks = withChatStreamCleanup(
     {
-      onFinish: () => {
+      onEnd: () => {
         order.push("finished");
       },
     },
@@ -69,7 +69,7 @@ it("forwards successful completion before releasing tools", async () => {
       order.push("released");
     }
   );
-  const model = new MockLanguageModelV3({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({
       stream: new ReadableStream({
         start(controller) {

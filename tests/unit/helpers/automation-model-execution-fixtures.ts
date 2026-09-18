@@ -6,7 +6,7 @@ export type AutomationExecutionInput = Parameters<
 
 export type TestAutomationModel = Extract<
   AutomationExecutionInput["request"]["model"],
-  { specificationVersion: "v3" }
+  { specificationVersion: "v4" }
 >;
 
 export function createSuccessfulModelResult(
@@ -46,7 +46,7 @@ export function createTestAutomationModel(input?: {
   let doGenerateCalls = 0;
 
   const model = {
-    specificationVersion: "v3" as const,
+    specificationVersion: "v4" as const,
     provider: "test-provider",
     modelId: "retry-model",
     supportedUrls: {},

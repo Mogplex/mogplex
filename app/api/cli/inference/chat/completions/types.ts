@@ -57,7 +57,7 @@ export type TokenUsage =
 
 export type UserContentPart =
   | { type: "text"; text: string }
-  | { type: "image"; image: string };
+  | { type: "file"; mediaType: string; data: { type: "url"; url: URL } };
 
 export type UserContent = UserContentPart[];
 

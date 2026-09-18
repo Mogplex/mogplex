@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isToolOrDynamicToolUIPart, tool, type UIMessage } from "ai";
+import { isToolUIPart, tool, type UIMessage } from "ai";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { dispatchControlContinuation } from "./continuation-dispatch";
 import {
@@ -115,9 +115,7 @@ export function createControlWorkerHandoff(
       }
       if (
         event.responseMessage.parts.some(
-          (part) =>
-            isToolOrDynamicToolUIPart(part) &&
-            part.state === "approval-requested"
+          (part) => isToolUIPart(part) && part.state === "approval-requested"
         )
       ) {
         const { error } = await client

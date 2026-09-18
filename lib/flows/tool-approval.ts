@@ -1,4 +1,4 @@
-import type { ToolCallOptions, ToolSet } from "ai";
+import type { ToolExecutionOptions, ToolSet } from "ai";
 import type { FlowToolApprovalWaitConfig } from "@/lib/types";
 import type {
   FlowOperatorWaitProvider,
@@ -349,7 +349,10 @@ export function wrapToolsWithApprovalGate(
       }
       const gated = {
         ...tool,
-        execute: async (toolInput: unknown, options: ToolCallOptions) => {
+        execute: async (
+          toolInput: unknown,
+          options: ToolExecutionOptions<unknown>
+        ) => {
           // Fallback ids (only when the SDK omits toolCallId) must be unique
           // across loops AND process restarts — a repeated id would reuse an
           // already-completed wait token via the idempotency key and apply a

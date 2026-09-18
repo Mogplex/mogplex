@@ -87,7 +87,7 @@ test("native task commands have gh and exclude boot artifacts from commits while
     });
     const result = (await tools.runCommand.execute!(
       { command: "gh --version && git add . && git diff --cached --name-only" },
-      { toolCallId: "task", messages: [] }
+      { context: {}, toolCallId: "task", messages: [] }
     )) as { stdout: string; exitCode: number };
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /gh version 2\.65\.0/);

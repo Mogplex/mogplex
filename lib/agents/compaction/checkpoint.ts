@@ -31,7 +31,7 @@ Rules:
 
 export type CheckpointGenerator = (input: {
   model: LanguageModel;
-  system: string;
+  instructions: string;
   prompt: string;
   abortSignal?: AbortSignal;
 }) => Promise<AgentCheckpointBody>;
@@ -39,7 +39,7 @@ export type CheckpointGenerator = (input: {
 export const generateCheckpointObject: CheckpointGenerator = async (input) => {
   const { object } = await generateObject({
     model: input.model,
-    system: input.system,
+    instructions: input.instructions,
     prompt: input.prompt,
     schema: agentCheckpointSchema,
     abortSignal: input.abortSignal,
@@ -104,7 +104,7 @@ export async function buildCheckpoint(input: {
   const transcript = serializeCoveredTranscript(input.covered);
   const body = await generate({
     model: input.model,
-    system: CHECKPOINT_SYSTEM_PROMPT,
+    instructions: CHECKPOINT_SYSTEM_PROMPT,
     prompt: `Compact the following conversation into a checkpoint.\n\n<transcript>\n${transcript}\n</transcript>`,
     abortSignal: input.abortSignal,
   });

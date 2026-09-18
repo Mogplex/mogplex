@@ -52,7 +52,7 @@ test("captureUsage reads token classes and gateway generation metadata", () => {
   });
 });
 
-test("captureUsage falls back to deprecated and provider-specific fields", () => {
+test("captureUsage handles missing token details and legacy provider metadata", () => {
   const usage = {
     inputTokens: undefined,
     outputTokens: undefined,
@@ -66,8 +66,6 @@ test("captureUsage falls back to deprecated and provider-specific fields", () =>
       reasoningTokens: undefined,
     },
     totalTokens: undefined,
-    cachedInputTokens: 7,
-    reasoningTokens: 3,
   } satisfies LanguageModelUsage;
   const metadata = {
     anthropic: { cacheCreationInputTokens: 11 },
@@ -76,9 +74,9 @@ test("captureUsage falls back to deprecated and provider-specific fields", () =>
   assert.deepEqual(captureUsage(usage, metadata), {
     inputTokens: null,
     outputTokens: null,
-    cacheReadInputTokens: 7,
+    cacheReadInputTokens: null,
     cacheCreationInputTokens: 11,
-    reasoningTokens: 3,
+    reasoningTokens: null,
     generationId: null,
     generationIds: [],
   });

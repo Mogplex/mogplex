@@ -55,6 +55,7 @@ export function markInterruptedChatResponse(
             ) {
               return {
                 ...part,
+                input: part.input,
                 state: "output-error" as const,
                 errorText: CHAT_TOOL_INTERRUPTED_MESSAGE,
               };

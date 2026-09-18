@@ -52,11 +52,7 @@ it("supplies guidance at the next step and retains it at the same transcript pos
   await session.stepFinished();
   expect(receipts).toEqual(["g1"]);
   const second = await session.prepare(
-    [
-      ...initial,
-      assistant,
-      { role: "assistant", content: "Checking desktop." },
-    ],
+    [...first, { role: "assistant", content: "Checking desktop." }],
     2
   );
   expect(second).toHaveLength(4);
@@ -143,7 +139,7 @@ it("preserves image guidance through the actual attachment and model-message con
       {
         type: "file",
         mediaType: "image/png",
-        data: "data:image/png;base64,iVBORw==",
+        data: { type: "url", url: new URL("data:image/png;base64,iVBORw==") },
       },
     ],
   });

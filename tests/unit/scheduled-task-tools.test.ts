@@ -12,7 +12,7 @@ test("native scheduled tasks receive the requested instructions and command tool
     generateText: async (input) => {
       assert.deepEqual(Object.keys(input.tools ?? {}), ["runCommand"]);
       assert.match(
-        JSON.stringify(input.system),
+        JSON.stringify(input.instructions),
         /Check registered model successors/
       );
       assert.match(String(input.prompt), /prepared task branch/);

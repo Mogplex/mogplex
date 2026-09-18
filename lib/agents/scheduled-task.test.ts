@@ -11,7 +11,11 @@ test("scheduled command tool requires a command and declares its write boundarie
       throw new Error("Schema discovery must not launch a workspace");
     },
   });
-  assert.match(tools.runCommand.description!, /Never merge.*default branch/);
+  assert.equal(typeof tools.runCommand.description, "string");
+  assert.match(
+    String(tools.runCommand.description),
+    /Never merge.*default branch/
+  );
   const schema = asSchema(tools.runCommand.inputSchema);
   assert.equal(
     (await schema.validate!({ command: "gh pr list" })).success,
@@ -40,7 +44,7 @@ test("scheduled tasks return command output and nonzero check results from their
   });
   const output = await tools.runCommand.execute!(
     { command: "pnpm test" },
-    { toolCallId: "test", messages: [] }
+    { context: {}, toolCallId: "test", messages: [] }
   );
   assert.deepEqual(output, {
     exitCode: 1,
@@ -68,7 +72,7 @@ test("scheduled tasks surface unavailable workspaces instead of reporting succes
     async () =>
       tools.runCommand.execute!(
         { command: "gh pr list" },
-        { toolCallId: "test", messages: [] }
+        { context: {}, toolCallId: "test", messages: [] }
       ),
     /Workspace launch failed/
   );

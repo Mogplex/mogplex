@@ -20,7 +20,7 @@ test("the native automation runner supplies alert context and executable guarded
         >;
         const blocked = await tools.runCommand!.execute!(
           { command: "git push" },
-          { toolCallId: "command", messages: [] }
+          { context: {}, toolCallId: "command", messages: [] }
         );
         assert.equal("blocked" in blocked && blocked.blocked, true);
         return {

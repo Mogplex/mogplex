@@ -73,6 +73,7 @@ export async function callTool(tools: ToolSet, name: string, input?: unknown) {
   const execute = tools[name]?.execute;
   assert.equal(typeof execute, "function");
   return execute!((input ?? { title: "Fix billing metadata" }) as never, {
+    context: {},
     toolCallId: `${name}-call`,
     messages: [],
   });

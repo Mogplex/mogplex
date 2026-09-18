@@ -148,7 +148,7 @@ function wrapAutomationModelForGenerateRetries(
     isAutomationWrappableLanguageModel(model)
   ) {
     const middleware: LanguageModelMiddleware = {
-      specificationVersion: "v3",
+      specificationVersion: "v4",
       async wrapGenerate({ doGenerate }) {
         try {
           return await doGenerate();
@@ -279,7 +279,7 @@ export async function executeAutomationTextGeneration(input: {
     pinnedModelId: input.pinnedModelId,
     providerOptions: input.request.providerOptions,
   };
-  const requestOnStepFinish = input.request.onStepFinish;
+  const requestOnStepEnd = input.request.onStepEnd;
   const retryState: AutomationGenerateRetryState = {
     retryCount: 0,
     recoveredFromFailureClass: null,
@@ -304,12 +304,12 @@ export async function executeAutomationTextGeneration(input: {
     logger,
     logContext
   );
-  const onStepFinish: NonNullable<GenerateTextRequest["onStepFinish"]> = async (
+  const onStepEnd: NonNullable<GenerateTextRequest["onStepEnd"]> = async (
     event
   ) => {
     observedStepUsages.push(captureUsage(event.usage, event.providerMetadata));
     captureGatewayModelRouting(gatewayRoutingState, event.providerMetadata);
-    await requestOnStepFinish?.(event);
+    await requestOnStepEnd?.(event);
   };
 
   // Keep AI SDK generateText retries disabled so we can retry a single
@@ -318,7 +318,8 @@ export async function executeAutomationTextGeneration(input: {
     ({
       ...input.request,
       model,
-      onStepFinish,
+      onStepEnd,
+
       // Step-level context reduction: demote stale oversized tool outputs to
       // typed references so a long automation tool loop cannot outgrow the
       // window on dead payloads. Deterministic — no model call.
@@ -328,6 +329,7 @@ export async function executeAutomationTextGeneration(input: {
           const reduced = demoteStaleToolOutputs(messages);
           return reduced === messages ? undefined : { messages: reduced };
         }),
+
       maxRetries: 0,
       timeout: generateTimeoutMs,
     }) as GenerateTextRequest;

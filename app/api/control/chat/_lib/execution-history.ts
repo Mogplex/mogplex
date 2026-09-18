@@ -1,4 +1,4 @@
-import { isToolOrDynamicToolUIPart } from "ai";
+import { isToolUIPart } from "ai";
 import { prepareControlRequestHistory } from "@/lib/control/request-history";
 import { saveControlTranscript } from "@/lib/control/transcript-store";
 import { validateControlChatMessages } from "./messages";
@@ -35,8 +35,7 @@ export async function prepareControlExecutionHistory(input: {
   if (
     uiMessages.some((message) =>
       message.parts.some(
-        (part) =>
-          isToolOrDynamicToolUIPart(part) && part.state === "approval-responded"
+        (part) => isToolUIPart(part) && part.state === "approval-responded"
       )
     )
   ) {

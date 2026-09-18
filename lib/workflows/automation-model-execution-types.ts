@@ -5,7 +5,7 @@ export type GenerateTextRequest = Parameters<typeof generateText>[0];
 
 export type AutomationWrappableLanguageModel = Extract<
   GenerateTextRequest["model"],
-  { specificationVersion: "v3" }
+  { specificationVersion: "v3" | "v4" }
 >;
 
 export type AutomationModelFailureClass =
@@ -123,7 +123,8 @@ export function isAutomationWrappableLanguageModel(
 ): model is AutomationWrappableLanguageModel {
   return (
     isRecord(model) &&
-    model.specificationVersion === "v3" &&
+    (model.specificationVersion === "v3" ||
+      model.specificationVersion === "v4") &&
     typeof model.provider === "string" &&
     typeof model.modelId === "string" &&
     typeof model.doGenerate === "function" &&

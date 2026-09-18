@@ -1,4 +1,4 @@
-import { getToolOrDynamicToolName, isToolOrDynamicToolUIPart } from "ai";
+import { getToolOrDynamicToolName, isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
 import { redactSecretsInText } from "@/lib/ai-telemetry";
 import { controlToolOutcome } from "./tool-outcome";
@@ -65,7 +65,7 @@ export function buildActivityEntries(messages: UIMessage[]): ActivityEntry[] {
       }
       const id = `${msg.id}-${index}`;
 
-      if (isToolOrDynamicToolUIPart(part)) {
+      if (isToolUIPart(part)) {
         const name = getToolOrDynamicToolName(part);
         const state = "state" in part ? String(part.state) : "";
 
@@ -237,7 +237,7 @@ export function buildTerminalActivityEntries(
       continue;
     }
     for (const [index, part] of message.parts.entries()) {
-      if (!isToolOrDynamicToolUIPart(part)) continue;
+      if (!isToolUIPart(part)) continue;
       const entry = terminalEntryFromPart(part, `${message.id}-${index}`);
       if (entry) {
         const metadata = message.metadata as
@@ -269,7 +269,7 @@ export function collectFileMutations(messages: UIMessage[]): FileMutation[] {
     if (msg.role !== "assistant" || !msg.parts) continue;
 
     for (const [index, part] of msg.parts.entries()) {
-      if (!isToolOrDynamicToolUIPart(part)) continue;
+      if (!isToolUIPart(part)) continue;
       const name = getToolOrDynamicToolName(part);
       if (!FILE_MUTATION_PATTERN.test(name)) continue;
 

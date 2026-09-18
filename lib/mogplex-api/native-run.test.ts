@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { streamText, tool } from "ai";
 import { z } from "zod";
 import type { HarnessProgressUpdate } from "./harness-progress";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV4 } from "ai/test";
 import { runNativeMogplexAgent } from "./native-run";
 import { createRunGuidanceSession } from "@/lib/slack/run-guidance-session";
 import type { RunGuidance } from "@/lib/slack/run-guidance-store";
@@ -53,7 +53,7 @@ async function exercise(
   let closed = false;
   let executionLeaseAcquired = false;
   let systemSuffix: string | null | undefined;
-  const model = new MockLanguageModelV3({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({
       stream: new ReadableStream({
         start(sink) {

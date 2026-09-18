@@ -1,4 +1,4 @@
-import { consumeStream, isToolOrDynamicToolUIPart } from "ai";
+import { consumeStream, isToolUIPart } from "ai";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
@@ -176,8 +176,7 @@ export async function executeControlContinuation(
     if (callError || call?.status !== "success")
       throw new Error("The coordinator execution did not finish successfully.");
     const needsInput = checkpoint.responseMessage.parts.some(
-      (part) =>
-        isToolOrDynamicToolUIPart(part) && part.state === "approval-requested"
+      (part) => isToolUIPart(part) && part.state === "approval-requested"
     );
     if (!needsInput && checkpoint.finishReason !== "stop")
       throw new Error("The coordinator stopped before completing its reply.");

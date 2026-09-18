@@ -43,6 +43,7 @@ async function callTool(
   assert.ok(tool, "start_repo_agent_run tool should be offered to the agent");
   assert.ok(tool.execute);
   return (await tool.execute(args, {
+    context: {},
     toolCallId: "call-1",
     messages: [],
   })) as ToolResult;

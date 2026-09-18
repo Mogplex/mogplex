@@ -124,6 +124,8 @@ export async function postChatCompletions(request: Request) {
     model: resolved.model,
     providerOptions: resolved.providerOptions,
     messages: toModelMessages(messages),
+    // This authenticated OpenAI-compatible endpoint accepts client instructions.
+    allowSystemInMessages: true,
     tools: toAiTools(body.tools) as Parameters<typeof streamText>[0]["tools"],
     toolChoice,
     temperature: body.temperature,

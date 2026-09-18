@@ -65,10 +65,7 @@ export function captureUsage(
   return {
     inputTokens: usage?.inputTokens ?? null,
     outputTokens: usage?.outputTokens ?? null,
-    cacheReadInputTokens:
-      usage?.inputTokenDetails?.cacheReadTokens ??
-      usage?.cachedInputTokens ??
-      null,
+    cacheReadInputTokens: usage?.inputTokenDetails?.cacheReadTokens ?? null,
     cacheCreationInputTokens:
       usage?.inputTokenDetails?.cacheWriteTokens ??
       readProviderNumber(
@@ -77,10 +74,7 @@ export function captureUsage(
         "cacheCreationInputTokens"
       ) ??
       null,
-    reasoningTokens:
-      usage?.outputTokenDetails?.reasoningTokens ??
-      usage?.reasoningTokens ??
-      null,
+    reasoningTokens: usage?.outputTokenDetails?.reasoningTokens ?? null,
     generationId,
     generationIds: generationId ? [generationId] : [],
   };

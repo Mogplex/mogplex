@@ -1,3 +1,4 @@
+import { toolCompletionEvent } from "@/lib/agents/tool-execution-event";
 import { sanitizeTelemetryValue } from "@/lib/ai-telemetry";
 import {
   createChatModelStream,
@@ -214,14 +215,14 @@ export async function runNativeMogplexAgent(
       prepareMessages: guidance?.prepare,
       abortSignal: control.signal,
       hooks: {
-        async onStepFinish(step) {
+        async onStepEnd(step) {
           usage = mergeUsage(
             usage,
             captureUsage(step.usage, step.providerMetadata)
           );
           await guidance?.stepFinished();
         },
-        async experimental_onToolCallStart({ toolCall }) {
+        async onToolExecutionStart({ toolCall }) {
           toolCount += 1;
           await flushText();
           await event({
@@ -240,11 +241,12 @@ export async function runNativeMogplexAgent(
             input: toolCall.input,
           });
         },
-        async experimental_onToolCallFinish({
-          toolCall,
-          success,
-          output: toolOutput,
-        }) {
+        async onToolExecutionEnd(sdkEvent) {
+          const {
+            toolCall,
+            success,
+            output: toolOutput,
+          } = toolCompletionEvent(sdkEvent);
           await event({
             eventType: "tool_finished",
             toolName: toolCall.toolName,
@@ -265,8 +267,8 @@ export async function runNativeMogplexAgent(
         },
       },
     });
-    // fullStream surfaces provider errors, unlike a text-only consumer.
-    for await (const part of stream.result.fullStream) {
+    // stream surfaces provider errors, unlike a text-only consumer.
+    for await (const part of stream.result.stream) {
       control.signal.throwIfAborted();
       if (part.type === "error") throw part.error;
       if (part.type === "text-end")

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { jsonSchema, streamText, tool } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV4 } from "ai/test";
 import { CHAT_STOP_WHEN } from "./run-chat";
 
 it.each([false, true])(
@@ -9,7 +9,7 @@ it.each([false, true])(
     let steps = 0;
     let calls = 0;
     const controller = new AbortController();
-    const model = new MockLanguageModelV3({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           start(sink) {
@@ -63,7 +63,7 @@ it.each([false, true])(
       stopWhen: CHAT_STOP_WHEN,
     });
     let aborted = false;
-    for await (const part of result.fullStream)
+    for await (const part of result.stream)
       if (part.type === "abort") aborted = true;
     expect(aborted).toBe(cancel);
     expect(calls).toBe(cancel ? 125 : 175);

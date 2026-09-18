@@ -59,8 +59,8 @@ export async function persistedControlStream(input: {
       : [],
     generateId: () => input.messageId,
     execute: ({ writer }) => writer.merge(input.stream),
-    onStepFinish: checkpoint,
-    onFinish: async (event) => {
+    onStepEnd: checkpoint,
+    onEnd: async (event) => {
       await checkpoint(event);
       finished = event;
     },

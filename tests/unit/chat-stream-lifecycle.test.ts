@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { streamText, tool } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
 import { createChatFinalizationHooks } from "@/app/api/chat/_lib/lifecycle";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -82,7 +82,7 @@ for (const scenario of [
         limitClaimId: "chat-claim",
         callStartedAt: activeCall.started_at,
       });
-      const model = new MockLanguageModelV3({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           if (scenario === "provider-throw" || model.doStreamCalls.length > 1)
             throw new Error("private-provider-diagnostic");
@@ -169,7 +169,7 @@ for (const scenario of [
         JSON.stringify({ updates, events }),
         /private-provider-diagnostic/
       );
-      await hooks.onAbort?.({ steps: [] });
+      await hooks.onAbort?.({ callId: "cancelled", steps: [] });
       await hooks.onError?.({ error: new Error("late-error") });
       assert.equal(updates.length, 1, "a later abort cannot overwrite failure");
       assert.equal(releases, 1);
