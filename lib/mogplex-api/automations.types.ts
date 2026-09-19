@@ -93,6 +93,7 @@ export type TriggerMogplexApiAutomationInput = {
 export class MogplexApiAutomationError extends Error {
   constructor(
     public readonly code:
+      | "AUTOMATION_HAS_ACTIVE_RUNS"
       | "AUTOMATION_INACTIVE"
       | "AUTOMATION_NOT_FOUND"
       | "AUTOMATION_NOT_PUBLISHED"

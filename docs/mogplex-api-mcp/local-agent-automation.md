@@ -42,6 +42,9 @@ For an existing automation:
 5. Call `mogplex_trigger_automation` with an automation id, a repo id, and an optional event-shaped input object.
 6. Read progress and diagnostics with `mogplex_list_automation_runs` and `mogplex_get_automation_run_logs`.
 7. To stop a Flow run, call `mogplex_cancel_automation_run` with its `automationId` and job `runId`. This requires `write` scope.
+8. To remove an automation, call `mogplex_delete_automation` with its `automationId`. This requires `write` scope and cannot be undone.
+
+`mogplex_delete_automation` removes the schedule, the draft, every published version, and the per-node run records. Job run rows are kept with no automation attached. An automation with pending or running job runs is refused with a conflict that names them: deleting under a live run would remove the node records and waits that run is still writing to. Cancel those runs with `mogplex_cancel_automation_run`, then delete. Delete only an automation the user asked to remove, or one the agent created as a test and has finished with. Name throwaway automations so they are easy to recognize, and delete them once their run logs have been read.
 
 Native nodes without an override use the current Agent/API/MCP model setting, or the global default when no surface default is set. If that model is unavailable, the existing available-model fallback policy applies. The graph stays unpinned, so later settings changes apply to future runs. Explicit overrides remain unchanged. CLI harnesses continue to select their own models.
 

@@ -110,6 +110,7 @@ GET    /api/v1/mogplex/automations
 POST   /api/v1/mogplex/automations
 GET    /api/v1/mogplex/automations/:automationId
 PUT    /api/v1/mogplex/automations/:automationId
+DELETE /api/v1/mogplex/automations/:automationId
 POST   /api/v1/mogplex/automations/:automationId/publish
 PUT    /api/v1/mogplex/automations/:automationId/model
 POST   /api/v1/mogplex/automations/:automationId/trigger

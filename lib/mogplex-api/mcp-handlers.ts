@@ -69,7 +69,7 @@ function getMogplexApiErrorSuggestion(error: MogplexApiClientError) {
     case "BAD_REQUEST":
       return "Check the tool arguments and retry.";
     case "CONFLICT":
-      return "Refresh the run state; it may no longer be active.";
+      return "Refresh the automation or run state, resolve the conflict, and retry.";
     default:
       return "Retry later or inspect Mogplex API logs for this request.";
   }
@@ -242,6 +242,14 @@ export async function callMogplexTool(
         const result = await context.client.publishAutomation(input);
         return textResult(
           `Published and activated Mogplex automation ${result.automation.id}.`,
+          result
+        );
+      }
+      case "mogplex_delete_automation": {
+        const input = parseArgs(automationIdArgsSchema, args);
+        const result = await context.client.deleteAutomation(input);
+        return textResult(
+          `Deleted Mogplex automation ${result.automationId} (${result.name}). This cannot be undone.`,
           result
         );
       }

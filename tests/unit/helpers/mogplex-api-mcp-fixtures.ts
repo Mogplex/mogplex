@@ -140,6 +140,11 @@ export function buildFakeMcpClient(
     }),
     updateAutomation: async () => ({ automation }),
     publishAutomation: async () => ({ automation }),
+    deleteAutomation: async () => ({
+      deleted: true,
+      automationId: automation.id,
+      name: automation.name,
+    }),
     setAutomationModel: async () => ({ automation }),
     triggerAutomation: async () => ({
       run: {

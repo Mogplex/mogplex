@@ -64,6 +64,7 @@ test("Mogplex MCP initialize and tools/list expose the run control tools", async
       "mogplex_create_automation",
       "mogplex_update_automation",
       "mogplex_publish_automation",
+      "mogplex_delete_automation",
       "mogplex_set_automation_model",
       "mogplex_trigger_automation",
       "mogplex_list_automation_runs",
