@@ -13,6 +13,11 @@ import {
   type SandboxRuntimeBinding,
   type SandboxSelection,
 } from "./sandbox-binding";
+import {
+  annotateShellResult,
+  checkCommandRisk,
+  type ShellDecisionScope,
+} from "@/lib/decisions/shell";
 import { getBlockedAgentShellCommand } from "./shell-command-guard";
 import {
   postSandboxExec,
@@ -149,7 +154,9 @@ export function createTerminalExec(
   userId?: string,
   repoId?: string,
   sandboxBinding?: SandboxRuntimeBinding,
-  execution?: SandboxCommandExecution
+  execution?: SandboxCommandExecution,
+  /** Enables the decision layer for this tool instance; omitted means off. */
+  decisionScope?: ShellDecisionScope
 ) {
   let selectedSandboxId = sandboxBinding?.sandboxId ?? sandboxId;
   // Track the selected/resolved sandbox across calls within this tool instance.
@@ -164,6 +171,10 @@ export function createTerminalExec(
     execute: async ({ command, cwd }: z.infer<typeof terminalParams>) => {
       const blocked = getBlockedAgentShellCommand(command);
       if (blocked) return { ...blocked, command };
+      const risk = decisionScope
+        ? await checkCommandRisk(command, decisionScope)
+        : null;
+      if (risk) return { ...risk, command };
       if (sandboxBinding?.status === "pending") {
         return {
           error: "Sandbox startup is still in progress.",
@@ -228,11 +239,14 @@ export function createTerminalExec(
         }
       );
       if (res.ok) {
-        return formatSandboxExecResult(
+        const formatted = formatSandboxExecResult(
           await res.json(),
           command,
           cachedSandbox
         );
+        return decisionScope
+          ? annotateShellResult(formatted, decisionScope)
+          : formatted;
       }
 
       const retried =

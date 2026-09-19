@@ -17,6 +17,7 @@ import {
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { demoteStaleToolOutputs } from "@/lib/agents/compaction/reduce";
 import { withChatStreamCleanup } from "@/lib/agents/chat-stream-cleanup";
+import { withChatStreamDecisions } from "@/lib/agents/chat-stream-decisions";
 
 /**
  * The shared streaming core for every chat entry point: model resolution,
@@ -67,6 +68,8 @@ export type ChatAgentContext = {
    * filtering) and resolveUserLanguageModel (for model gate + scoped key).
    */
   teamId?: string | null;
+  /** Owning ai_call, when the caller tracks one; links decision events. */
+  aiCallId?: string | null;
 };
 
 type StreamTextOptions = Parameters<typeof streamText>[0];
@@ -277,7 +280,17 @@ export async function createChatModelStream(
   const systemPrompt = input.systemSuffix
     ? `${baseSystemPrompt}\n\n${input.systemSuffix}`
     : baseSystemPrompt;
-  const hooks = withChatStreamCleanup(input.hooks, cleanupTools);
+  const hooks = withChatStreamCleanup(
+    withChatStreamDecisions(input.hooks, {
+      surface: context.surface ?? "chat",
+      userId: context.userId,
+      teamId: context.teamId ?? null,
+      repoId: context.repoId ?? null,
+      aiCallId: context.aiCallId ?? null,
+      conversationId: context.conversationId ?? null,
+    }),
+    cleanupTools
+  );
 
   try {
     const result = streamText({

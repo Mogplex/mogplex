@@ -107,6 +107,7 @@ export async function executeChatRequest(input: {
         conversationId: input.body.conversationId,
         enableTools: input.body.enableTools,
         teamId,
+        aiCallId: activeCall.id,
         latestUserText: extractLatestUserText(input.body.messages),
       },
       resolvedModel: input.resolvedModel,

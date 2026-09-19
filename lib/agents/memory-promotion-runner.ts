@@ -1,5 +1,7 @@
 import type { LanguageModel } from "ai";
 import { loadLatestCompaction } from "@/lib/agents/compaction/store";
+import { decide } from "@/lib/decisions/decide";
+import { clipText } from "@/lib/decisions/state";
 import {
   buildTurnPromotionEvidence,
   defaultPromotionGenerator,
@@ -7,6 +9,8 @@ import {
   type PromotionDeps,
   type PromotionResult,
 } from "./memory-promotion";
+
+const GATE_EVIDENCE_MAX_CHARS = 12_000;
 
 export type PromotionTurnRecord = Parameters<
   typeof buildTurnPromotionEvidence
@@ -26,6 +30,8 @@ export async function promoteMemoriesForConversation(input: {
   aiCallId: string;
   model: LanguageModel;
   turn?: PromotionTurnRecord;
+  /** Injectable for tests; production uses the decision layer. */
+  gate?: typeof decide;
 }): Promise<PromotionResult | null> {
   if (!input.conversationId) return null;
 
@@ -55,6 +61,29 @@ export async function promoteMemoriesForConversation(input: {
           : null;
       })();
   if (!source) return null;
+
+  // Cheap pre-check on whether the record holds anything durable. It records
+  // its answer beside the real outcome, and only skips extraction in enforce
+  // mode, so the saved frontier calls can be measured before it is trusted.
+  const gate = await (input.gate ?? decide)(
+    "memory_promotion_gate",
+    {
+      source_kind: source.source.kind,
+      record: clipText(source.evidenceText, GATE_EVIDENCE_MAX_CHARS),
+    },
+    {
+      surface: "control",
+      userId: input.userId,
+      repoId: input.repoId ?? null,
+      aiCallId: input.aiCallId,
+      conversationId: input.conversationId,
+    },
+    { deferRecord: true }
+  );
+  if (gate.act && gate.mode === "enforce") {
+    await gate.commit({ skipped: true });
+    return { promoted: [], duplicates: [], rejected: [] };
+  }
 
   // Same lazy-import convention as lib/agents/tools/memory.ts: the memories
   // client allocates an embedder closure per creation, so load it only on the
@@ -86,6 +115,13 @@ export async function promoteMemoriesForConversation(input: {
     { ...source, aiCallId: input.aiCallId, model: input.model },
     deps
   );
+
+  await gate.commit({
+    skipped: false,
+    promoted: result.promoted.length,
+    duplicates: result.duplicates.length,
+    rejected: result.rejected.length,
+  });
 
   if (result.promoted.length > 0 || result.rejected.length > 0) {
     console.info("[memory-promotion] run complete", {

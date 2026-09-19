@@ -5,6 +5,8 @@ import {
   resolveControlApproval,
   type CreateControlApprovalInput,
 } from "@/lib/control/approvals-store";
+import { isRemoteDestructiveCommand } from "@/lib/decisions/shell";
+import { controlDecisionScope } from "./decision-scope";
 import {
   ORCHESTRATOR_TOOLS,
   getToolDef,
@@ -229,7 +231,27 @@ export type PolicyApprovalDeps = {
     userId: string;
     toolCallId: string;
   }) => Promise<void>;
+  /**
+   * Semantic second opinion on shell commands. It can only add an approval
+   * gate; it never relaxes the static policy above.
+   */
+  isRiskyCommand?: (
+    command: string,
+    ctx: OrchestratorToolContext
+  ) => Promise<boolean>;
 };
+
+/** Shell tools whose input is judged for remote-destructive effects. */
+const RISK_ASSESSED_TOOLS = new Set(["run_command"]);
+
+const RISKY_COMMAND_SUMMARY =
+  "This command appears to irreversibly change a remote system, for example a force push, a remote deletion, or dropping data. It requires operator approval before it runs.";
+
+function extractCommand(input: unknown): string | null {
+  if (!input || typeof input !== "object") return null;
+  const command = (input as { command?: unknown }).command;
+  return typeof command === "string" && command.trim() ? command : null;
+}
 
 const defaultApprovalDeps: PolicyApprovalDeps = {
   createApproval: (input) => createControlApproval(input),
@@ -243,6 +265,8 @@ const defaultApprovalDeps: PolicyApprovalDeps = {
       source: "in_stream",
     });
   },
+  isRiskyCommand: (command, ctx) =>
+    isRemoteDestructiveCommand(command, controlDecisionScope(ctx)),
 };
 
 /**
@@ -286,19 +310,32 @@ export function wrapWithPolicy(
     return originalTool;
   }
 
+  const riskAssessed = RISK_ASSESSED_TOOLS.has(def.name);
   const mayRequireApproval =
     ALWAYS_APPROVAL_REQUIRED.has(def.name) ||
     def.access === "approval" ||
-    def.name === "git_push";
+    def.name === "git_push" ||
+    riskAssessed;
+
+  const approvalSummary = async (input: unknown): Promise<string | null> => {
+    const policyResult = checkToolPolicy(def, ctx, input);
+    if (!policyResult.allowed) {
+      return policyResult.reason === "approval_required"
+        ? policyResult.summary
+        : null;
+    }
+    const command = riskAssessed ? extractCommand(input) : null;
+    if (!command) return null;
+    const risky = await deps.isRiskyCommand?.(command, ctx);
+    return risky ? RISKY_COMMAND_SUMMARY : null;
+  };
 
   const needsApproval = async (
     input: unknown,
     options: { toolCallId: string }
   ): Promise<boolean> => {
-    const policyResult = checkToolPolicy(def, ctx, input);
-    if (policyResult.allowed || policyResult.reason !== "approval_required") {
-      return false;
-    }
+    const summary = await approvalSummary(input);
+    if (!summary) return false;
     // Persistence is best-effort: a failed write must not skip the gate.
     try {
       await deps.createApproval({
@@ -306,7 +343,7 @@ export function wrapWithPolicy(
         toolName,
         toolCallId: options.toolCallId,
         toolInput: sanitizeInputForAudit(input) as Record<string, unknown>,
-        summary: policyResult.summary,
+        summary,
         runId: ctx.missionId ?? null,
         aiCallId: ctx.aiCallId ?? null,
       });
@@ -360,11 +397,12 @@ export function wrapWithPolicy(
 
       // Reaching execute on an approval-gated call means the operator
       // approved in-stream — mirror that decision onto the audit row.
-      if (
-        !policyResult.allowed &&
-        policyResult.reason === "approval_required" &&
-        options?.toolCallId
-      ) {
+      // A risk-gated shell command has no static policy marker, so resolve by
+      // tool call id; the lookup is a no-op when no approval was requested.
+      const approvalWasPossible =
+        riskAssessed ||
+        (!policyResult.allowed && policyResult.reason === "approval_required");
+      if (approvalWasPossible && options?.toolCallId) {
         await deps
           .resolveApprovalByToolCall({
             userId: ctx.userId,

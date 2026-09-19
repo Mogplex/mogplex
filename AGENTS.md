@@ -187,6 +187,10 @@ Every run entry point accepts `agentId` and goes through the same core: the v1 r
 
 The roster model is advisory: CLI harnesses bring their own model and Flow nodes pin theirs. Skills and rules attach from the editor's own library, so a teammate editing a shared agent attaches their own. Per-agent MCP grants stay out of scope by decision (2026-09-18).
 
+### Decision layer
+
+`lib/decisions/` asks an evaluation model closed questions about program state (command risk, hidden tool failures, unsupported claims, loops, memory promotion) and records every answer in `decision_events`. Read [docs/decisions.md](./docs/decisions.md) before touching it. The binding rules: `decide()` fails open and never throws; a decision may only add caution (an approval, a note) and never relaxes `policy.ts` or the shell guard; nothing in it may end or shorten a run; question wording and thresholds live only in `definitions.ts` with a `version` bump on every change; customer-facing text never names the evaluation provider. Tests inject evaluators through `deps`; the real evaluator is inert under Vitest.
+
 ## Core Commands
 
 - `pnpm dev` — local dev server

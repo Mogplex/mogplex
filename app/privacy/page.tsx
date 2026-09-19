@@ -96,6 +96,15 @@ export default function PrivacyPage() {
             gateway or provider key, your direct agreement with that provider
             governs its processing.
           </p>
+          <p>
+            To keep agent runs safe and accurate, we also run automated checks
+            during a run, such as whether a shell command could irreversibly
+            change a remote system or whether reported results match what the
+            tools did. These checks send the relevant command, tool output, or
+            message excerpt, with secrets redacted, through the same AI gateway
+            to additional model providers, including TypeSafe AI and Anthropic.
+            We keep a record of each check with your run data.
+          </p>
 
           <h2 className="text-lg text-foreground">4. Service providers</h2>
           <p>
