@@ -36,7 +36,12 @@ export function createFlowNodeClassifier(
       scope: {
         surface: "automation",
         userId: input.context.repo.user_id,
-        teamId: metadataTeamId(input.context.metadata),
+        // Scheduled and manual runs may carry no team in their metadata, and
+        // the team's run checks setting must still govern them.
+        teamId:
+          metadataTeamId(input.context.metadata) ??
+          input.context.repo.product_team_id ??
+          null,
         repoId: input.context.repo.id,
       },
       metadata: {

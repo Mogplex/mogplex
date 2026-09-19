@@ -75,4 +75,13 @@ describe("classifyFlowNode", () => {
     expect(classify.mock.calls[0]?.[0].scope.teamId).toBe("team-2");
     expect(classify.mock.calls[1]?.[0].scope.teamId).toBeNull();
   });
+
+  it("should use the repo's team when a scheduled run's metadata names none", async () => {
+    const scheduled = context({});
+    scheduled.repo.product_team_id = "team-3";
+
+    await classifyFlowNode({ ...request, context: scheduled });
+
+    expect(classify.mock.calls[0]?.[0].scope.teamId).toBe("team-3");
+  });
 });

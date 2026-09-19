@@ -44,6 +44,7 @@ export function createControlTurnTasks(input: {
       // none exists.
       promoteMemoriesForConversation({
         userId: input.userId,
+        teamId: input.teamId,
         conversationId: input.conversationId,
         repoId: input.repoId,
         aiCallId: input.aiCallId,

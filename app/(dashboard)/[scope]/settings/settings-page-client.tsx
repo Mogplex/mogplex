@@ -8,6 +8,7 @@ import { fetchJsonArray, fetchJsonObject } from "@/lib/client-fetch"
 import { TeamSettingsClient } from "@/components/settings/team-settings-client"
 import { TeamsListSection } from "@/components/settings/teams-list-section"
 import { BillingSection } from "@/components/settings/billing-section"
+import { DecisionChecksSection } from "@/components/settings/decision-checks-section"
 import { CliApiKeysSection } from "@/components/settings/cli-api-keys-section"
 import { SlackInstallToast } from "@/components/connections/slack-install-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -210,6 +211,9 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
             ownerTargets={ownerTargets}
             ownerTargetsNeedingInstall={ownerTargetsNeedingInstall}
           />
+          <div className="mt-4 md:mt-6">
+            <DecisionChecksSection endpoint="/api/settings/decision-checks" audience="personal" />
+          </div>
         </TabsContent>
 
         <TabsContent value="teams" className="mt-0">

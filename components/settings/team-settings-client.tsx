@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BillingSection } from "@/components/settings/billing-section";
+import { DecisionChecksSection } from "@/components/settings/decision-checks-section";
 import { useTeamSettingsActions } from "./use-team-settings-actions";
 import { MembersTabContent } from "./members-tab-content";
 import { KeysTabContent } from "./keys-tab-content";
@@ -227,6 +228,12 @@ export function TeamSettingsClient({
             catalog={catalog}
             saveModelAllowlist={saveModelAllowlist}
           />
+          <div className="mt-4 md:mt-6">
+            <DecisionChecksSection
+              endpoint={`/api/teams/${teamId}/decision-checks`}
+              audience="team"
+            />
+          </div>
         </TabsContent>
 
         {canManageMembers && (

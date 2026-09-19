@@ -31,9 +31,16 @@ function makeDeps(input: {
   primary: EvaluationResult | (() => never);
   escalation?: EvaluationResult;
   env?: Record<string, string>;
+  /** The account's own switch. Defaults to on, like a new account. */
+  accountEnabled?: boolean;
 }) {
   const recorded: DecisionEventRecord[] = [];
-  const calls = { evaluate: 0, escalate: 0, escalationTimeoutMs: 0 };
+  const calls = {
+    evaluate: 0,
+    escalate: 0,
+    escalationTimeoutMs: 0,
+    gateScopes: [] as unknown[],
+  };
   const evaluate: DecisionEvaluator = async () => {
     calls.evaluate += 1;
     return typeof input.primary === "function"
@@ -52,6 +59,10 @@ function makeDeps(input: {
       recorded.push(event);
     },
     env: input.env ?? {},
+    isEnabled: async (askedScope) => {
+      calls.gateScopes.push(askedScope);
+      return input.accountEnabled ?? true;
+    },
   };
   return { deps, recorded, calls };
 }
@@ -149,6 +160,60 @@ describe("decide", () => {
 
     expect(outcome.act).toBe(false);
     expect(recorded[0]?.error).toBe("escalation error");
+  });
+
+  it("should send and record nothing when the account turned the checks off", async () => {
+    const { deps, recorded, calls } = makeDeps({
+      primary: ok(riskAnswer(0.95)),
+      accountEnabled: false,
+    });
+    const teamScope = { ...scope, teamId: "team-1" };
+
+    const outcome = await decide(
+      "command_risk",
+      { command: "git push --force origin main" },
+      teamScope,
+      {},
+      deps
+    );
+
+    expect(outcome).toMatchObject({ status: "off", mode: "off", act: false });
+    expect(calls.gateScopes).toEqual([teamScope]);
+    expect(calls.evaluate).toBe(0);
+    expect(calls.escalate).toBe(0);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("should not read the account setting when the environment already turned the decision off", async () => {
+    const { deps, calls } = makeDeps({
+      primary: ok(riskAnswer(0.95)),
+      env: { DECISIONS_DISABLED: "1" },
+    });
+
+    await decide("command_risk", { command: "x" }, scope, {}, deps);
+
+    expect(calls.gateScopes).toHaveLength(0);
+  });
+
+  it("should proceed as unavailable when the account setting check itself throws", async () => {
+    const { deps, recorded, calls } = makeDeps({
+      primary: ok(riskAnswer(0.95)),
+    });
+    deps.isEnabled = async () => {
+      throw new Error("gate exploded");
+    };
+
+    const outcome = await decide(
+      "command_risk",
+      { command: "x" },
+      scope,
+      {},
+      deps
+    );
+
+    expect(outcome.act).toBe(false);
+    expect(calls.evaluate).toBe(0);
+    expect(recorded).toHaveLength(0);
   });
 
   it("should skip evaluation entirely when the decision is off", async () => {

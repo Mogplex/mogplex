@@ -64,6 +64,8 @@ export type JobContext = {
     full_name: string;
     default_branch?: string | null;
     github_installation_id?: number | null;
+    /** Present when the row was loaded from `repos`; the repo's owning team. */
+    product_team_id?: string | null;
   };
 };
 
