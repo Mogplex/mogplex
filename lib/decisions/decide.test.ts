@@ -289,4 +289,32 @@ describe("commitDecisionAfter", () => {
     ).rejects.toThrow("extraction failed");
     expect(committed).toEqual([{ failed: true }]);
   });
+
+  const brokenHandle = {
+    commit: async () => {
+      throw new Error("insert failed");
+    },
+  };
+
+  it("should surface the work error when the failure commit also throws", async () => {
+    await expect(
+      commitDecisionAfter(
+        brokenHandle,
+        async () => {
+          throw new Error("extraction failed");
+        },
+        () => ({})
+      )
+    ).rejects.toThrow("extraction failed");
+  });
+
+  it("should return the work result when the success commit throws", async () => {
+    const result = await commitDecisionAfter(
+      brokenHandle,
+      async () => ({ promoted: 2 }),
+      (outcome) => ({ promoted: outcome.promoted })
+    );
+
+    expect(result).toEqual({ promoted: 2 });
+  });
 });

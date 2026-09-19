@@ -211,22 +211,30 @@ export async function decide(
 }
 
 /**
- * Run work guarded by a deferred decision and always commit its event: with
- * the outcome as baseline on success, and marked failed when the work throws,
- * so an exception can never lose the record of what was judged.
+ * Run work guarded by a deferred decision and always try to commit its event:
+ * with the outcome as baseline on success, and marked failed when the work
+ * throws. The work decides the result. A commit that fails is logged and
+ * never replaces the work's value or its error.
  */
 export async function commitDecisionAfter<T>(
   handle: Pick<DecisionHandle, "commit">,
   work: () => Promise<T>,
   toBaseline: (result: T) => unknown
 ): Promise<T> {
+  const commitQuietly = async (baseline: () => unknown) => {
+    try {
+      await handle.commit(baseline());
+    } catch (error) {
+      console.warn("[decisions] deferred commit failed", { error });
+    }
+  };
   let result: T;
   try {
     result = await work();
   } catch (error) {
-    await handle.commit({ failed: true });
+    await commitQuietly(() => ({ failed: true }));
     throw error;
   }
-  await handle.commit(toBaseline(result));
+  await commitQuietly(() => toBaseline(result));
   return result;
 }
