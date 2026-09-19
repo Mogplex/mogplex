@@ -16,7 +16,7 @@ import type {
   NodeExecutionResult,
 } from "@/lib/workflows/automation-job-node-execution";
 
-import { evaluateConditionNode } from "@/lib/flows/graph";
+import { evaluateConditionNode, FAILURE_HANDLE_ID } from "@/lib/flows/graph";
 import { buildFlowConditionState } from "@/lib/workflows/automation-job-context-resolution";
 import { emitToOutgoing } from "@/lib/workflows/automation-job-flow-run-state";
 
@@ -99,6 +99,17 @@ export async function executeFlowConditionNode(
         true,
         null,
         (edge) => (edge.sourceHandle ?? "true") === skippedHandle
+      ),
+      // The condition evaluated, so its recovery branch will not run. Saying
+      // so keeps a join or end node downstream of it from waiting forever.
+      ...emitToOutgoing(
+        resolvedFlow.graph,
+        node.id,
+        label,
+        `Skipped because "${label}" did not fail`,
+        true,
+        null,
+        (edge) => edge.sourceHandle === FAILURE_HANDLE_ID
       ),
     ],
   };

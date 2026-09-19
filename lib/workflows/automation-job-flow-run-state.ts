@@ -9,7 +9,7 @@
 
 import type { FlowGraph } from "@/lib/types";
 import type { FlowExecutionToken } from "@/lib/workflows/automation-job-types";
-import { getOutgoingEdges } from "@/lib/flows/graph";
+import { FAILURE_HANDLE_ID, getOutgoingEdges } from "@/lib/flows/graph";
 import type { FlowReportHandoff } from "./flow-report-handoff";
 
 export type FlowRunOutput = {
@@ -109,7 +109,14 @@ export function collectPredecessorOutputs(
 }
 
 /**
- * Emits tokens to all outgoing edges of a node, optionally filtered by selector.
+ * Emits tokens to the outgoing edges of a node.
+ *
+ * An `error` edge carries an active token only when its node failed. So an
+ * emission with no selector, which is how a node reports success, sends the
+ * error edge a skipped token instead: the recovery branch is told it will not
+ * run, and a join or end node downstream of it does not wait forever. A
+ * caller that passes a selector has chosen its edges and is taken literally;
+ * failure routing uses that to activate the error edge.
  */
 export function emitToOutgoing(
   graph: FlowGraph,
@@ -122,16 +129,20 @@ export function emitToOutgoing(
 ): FlowEmission[] {
   return getOutgoingEdges(graph, nodeId)
     .filter((edge) => (selector ? selector(edge) : true))
-    .map((edge) => ({
-      targetId: edge.target,
-      token: {
-        fromNodeId: nodeId,
-        label,
-        text,
-        skipped,
-        payload: payload ?? null,
-      } satisfies FlowExecutionToken,
-    }));
+    .map((edge) => {
+      const notTaken =
+        !selector && !skipped && edge.sourceHandle === FAILURE_HANDLE_ID;
+      return {
+        targetId: edge.target,
+        token: {
+          fromNodeId: nodeId,
+          label,
+          text: notTaken ? `Skipped because "${label}" did not fail` : text,
+          skipped: skipped || notTaken,
+          payload: notTaken ? null : (payload ?? null),
+        } satisfies FlowExecutionToken,
+      };
+    });
 }
 
 /**
