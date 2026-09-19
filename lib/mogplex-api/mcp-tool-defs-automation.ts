@@ -158,6 +158,27 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     },
   },
   {
+    name: "mogplex_delete_automation",
+    title: "Delete Mogplex Automation",
+    description:
+      "Permanently delete an automation: its schedule, draft, published versions, and per-node run records. This cannot be undone. Past job runs are kept without an automation attached. An automation with in-flight runs is refused; cancel them with mogplex_cancel_automation_run first. Confirm the automation id and name with mogplex_get_automation before deleting.",
+    inputSchema: objectSchema({
+      properties: {
+        automationId: {
+          type: "string",
+          description: "Automation id returned by mogplex_list_automations.",
+        },
+      },
+      required: ["automationId"],
+    }),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
     name: "mogplex_set_automation_model",
     title: "Set Automation Model",
     description:

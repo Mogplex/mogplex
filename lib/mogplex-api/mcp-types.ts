@@ -63,6 +63,7 @@ export type MogplexMcpClient = Pick<
   | "cancelAutomationRun"
   | "createAutomation"
   | "createSandbox"
+  | "deleteAutomation"
   | "deleteRepoEnvVar"
   | "getAutomation"
   | "getAutomationRunLogs"

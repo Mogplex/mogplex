@@ -16,6 +16,7 @@ import type { MogplexApiRunDetail, StartMogplexApiRunRequest } from "./runs";
 import type { FlowRunDetail, FlowRunRecord, FlowGraph } from "@/lib/types";
 import type { FlowConfigurationValidation } from "@/lib/flows/server-validation";
 import type { AutomationRunCancelResult } from "./automation-run-control";
+import type { DeleteMogplexApiAutomationResult } from "./automation-delete";
 
 export { MogplexApiClientError } from "./client-error";
 
@@ -302,6 +303,13 @@ export class MogplexApiClient {
     return this.request<{ automation: MogplexApiAutomation }>(
       `/api/v1/mogplex/automations/${encodeURIComponent(input.automationId)}/publish`,
       { method: "POST" }
+    );
+  }
+
+  deleteAutomation(input: { automationId: string }) {
+    return this.request<DeleteMogplexApiAutomationResult>(
+      `/api/v1/mogplex/automations/${encodeURIComponent(input.automationId)}`,
+      { method: "DELETE" }
     );
   }
 

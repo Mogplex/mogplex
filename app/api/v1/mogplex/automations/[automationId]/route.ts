@@ -1,4 +1,5 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
+import { deleteMogplexApiAutomation } from "@/lib/mogplex-api/automation-delete";
 import { mogplexAutomationErrorResponse } from "@/lib/mogplex-api/automation-response";
 import {
   getMogplexApiAutomation,
@@ -17,12 +18,14 @@ type AutomationItemDeps = {
   resolveApiKey: typeof resolveApiKey;
   getAutomation: typeof getMogplexApiAutomation;
   updateAutomation: typeof updateMogplexApiAutomation;
+  deleteAutomation: typeof deleteMogplexApiAutomation;
 };
 
 const defaults: AutomationItemDeps = {
   resolveApiKey,
   getAutomation: getMogplexApiAutomation,
   updateAutomation: updateMogplexApiAutomation,
+  deleteAutomation: deleteMogplexApiAutomation,
 };
 
 export function createMogplexApiAutomationGetHandler(
@@ -117,5 +120,34 @@ export function createMogplexApiAutomationPutHandler(
   };
 }
 
+export function createMogplexApiAutomationDeleteHandler(
+  overrides: Partial<AutomationItemDeps> = {}
+) {
+  const deps = { ...defaults, ...overrides };
+  return async function DELETE(
+    request: NextRequest,
+    { params }: { params: Promise<{ automationId: string }> }
+  ) {
+    const user = await resolveMogplexApiUser(request, {
+      resolveApiKey: deps.resolveApiKey,
+    });
+    if (!user.ok) return user.response;
+    const forbidden = requireScope(user, "write");
+    if (forbidden) return forbidden;
+    try {
+      const { automationId } = await params;
+      return mogplexApiSuccess(
+        await deps.deleteAutomation(user.userId, automationId)
+      );
+    } catch (error) {
+      return mogplexAutomationErrorResponse(
+        error,
+        "Failed to delete automation"
+      );
+    }
+  };
+}
+
 export const GET = createMogplexApiAutomationGetHandler();
 export const PUT = createMogplexApiAutomationPutHandler();
+export const DELETE = createMogplexApiAutomationDeleteHandler();
