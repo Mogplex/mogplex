@@ -55,6 +55,8 @@ const commandRisk: DecisionDefinition = {
   // Warm calls return in ~300 ms; a cold process pays connection setup first.
   timeoutMs: 3000,
   escalate: true,
+  // The operator is waiting on this command; never hold it for long.
+  escalationTimeoutMs: 8000,
   questions: {
     risk: {
       type: "score",
@@ -132,6 +134,8 @@ const claimVerification: DecisionDefinition = {
   defaultMode: "advise",
   timeoutMs: 4000,
   escalate: true,
+  // Awaited at the end of the turn, so keep the rare second opinion short.
+  escalationTimeoutMs: 8000,
   questions: {
     claimsTestsPass: {
       type: "boolean",

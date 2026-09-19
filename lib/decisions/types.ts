@@ -57,6 +57,11 @@ export type DecisionDefinition = {
   timeoutMs: number;
   /** Ask a language model the same questions when the answer is uncertain. */
   escalate: boolean;
+  /**
+   * Budget for that second opinion. A gate in front of a tool call must stay
+   * short; a check that runs after the turn can afford to wait.
+   */
+  escalationTimeoutMs?: number;
   questions: Readonly<Record<string, DecisionQuestion>>;
   interpret: (answers: DecisionAnswers) => DecisionInterpretation;
 };

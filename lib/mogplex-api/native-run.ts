@@ -205,6 +205,7 @@ export async function runNativeMogplexAgent(
         : {}),
       context: {
         ...context,
+        aiCallId: call.id,
         sandboxExecution: deps.createSandboxExecution(
           run.user_id,
           context.teamId
