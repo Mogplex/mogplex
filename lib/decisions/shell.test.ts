@@ -5,6 +5,7 @@ import {
   COMMAND_RISK_BLOCK_MESSAGE,
   isRemoteDestructiveCommand,
   OUTPUT_CHECK_NOTE,
+  runWithCommandRiskCheck,
   type DecideFn,
 } from "./shell";
 
@@ -68,6 +69,125 @@ describe("checkCommandRisk", () => {
 
   it("should not name the evaluation provider in the customer-facing message", () => {
     expect(COMMAND_RISK_BLOCK_MESSAGE).not.toMatch(/jev|typesafe|gateway/i);
+  });
+});
+
+describe("runWithCommandRiskCheck", () => {
+  const enforce = { DECISION_MODES: '{"command_risk":"enforce"}' };
+  const shadow = { DECISION_MODES: '{"command_risk":"shadow"}' };
+
+  function deferredDecide(outcome: {
+    act: boolean;
+    mode: "shadow" | "enforce";
+  }) {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const decideFn: DecideFn = async () => {
+      order.push("judgment started");
+      await gate;
+      order.push("judgment recorded");
+      return { ...outcome, verdict: "flagged" };
+    };
+    const run = async () => {
+      order.push("command ran");
+      return { exitCode: 0 };
+    };
+    return { decideFn, run, order, release };
+  }
+
+  it("should not run a flagged command in enforce mode", async () => {
+    const { decideFn, run, order, release } = deferredDecide({
+      act: true,
+      mode: "enforce",
+    });
+    release();
+
+    const result = await runWithCommandRiskCheck(
+      "terraform destroy",
+      scope,
+      run,
+      decideFn,
+      enforce
+    );
+
+    expect(result).toEqual({
+      error: COMMAND_RISK_BLOCK_MESSAGE,
+      reason: "command_risk",
+      command: "terraform destroy",
+    });
+    expect(order).not.toContain("command ran");
+  });
+
+  it("should wait for the judgment before running in enforce mode", async () => {
+    const { decideFn, run, order, release } = deferredDecide({
+      act: false,
+      mode: "enforce",
+    });
+
+    const pending = runWithCommandRiskCheck(
+      "pnpm test",
+      scope,
+      run,
+      decideFn,
+      enforce
+    );
+    await Promise.resolve();
+    expect(order).toEqual(["judgment started"]);
+    release();
+
+    expect(await pending).toEqual({ exitCode: 0 });
+    expect(order).toEqual([
+      "judgment started",
+      "judgment recorded",
+      "command ran",
+    ]);
+  });
+
+  it("should run the command without waiting when the mode only observes", async () => {
+    const { decideFn, run, order, release } = deferredDecide({
+      act: true,
+      mode: "shadow",
+    });
+
+    const pending = runWithCommandRiskCheck(
+      "terraform destroy",
+      scope,
+      run,
+      decideFn,
+      shadow
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(order).toEqual(["judgment started", "command ran"]);
+
+    let returned = false;
+    void pending.then(() => {
+      returned = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(returned).toBe(false);
+
+    release();
+    expect(await pending).toEqual({ exitCode: 0 });
+    expect(order.at(-1)).toBe("judgment recorded");
+  });
+
+  it("should return the command result when an observing judgment throws", async () => {
+    const decideFn: DecideFn = async () => {
+      throw new Error("evaluator down");
+    };
+
+    const result = await runWithCommandRiskCheck(
+      "pnpm test",
+      scope,
+      async () => ({ exitCode: 0 }),
+      decideFn,
+      shadow
+    );
+
+    expect(result).toEqual({ exitCode: 0 });
   });
 });
 

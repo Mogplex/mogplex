@@ -52,6 +52,10 @@ layer silently inactive.
   model and its answer decides. That call has its own budget
   (`escalationTimeoutMs`), 8 s by default, because both gated call sites wait on it. On real traffic this matched the language
   model's accuracy at about one eighth of the cost.
+- **Only a mode that can act may wait.** A judgment that can change what
+  happens runs first. One that only observes runs alongside the work and is
+  awaited before the tool call or turn returns, so it costs no wait up front
+  and is not lost when a worker exits with the turn.
 - **No provider names in anything a customer reads.** Notes and approval
   summaries describe the finding, not the machinery.
 

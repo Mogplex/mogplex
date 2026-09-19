@@ -1,4 +1,6 @@
 import { decide, type DecisionHandle } from "./decide";
+import { getDecisionDefinition } from "./definitions";
+import { resolveDecisionMode, type DecisionModeEnv } from "./modes";
 import { clipText, type DecisionState } from "./state";
 import type { DecisionId, DecisionScope } from "./types";
 
@@ -61,6 +63,43 @@ export async function checkCommandRisk(
   );
   if (!(outcome.act && outcome.mode === "enforce")) return null;
   return { error: COMMAND_RISK_BLOCK_MESSAGE, reason: "command_risk" };
+}
+
+export type CommandRiskBlock = {
+  error: string;
+  reason: "command_risk";
+  command: string;
+};
+
+/**
+ * Run a shell command under the risk gate. Only enforce mode can change what
+ * runs, so only enforce mode waits for the judgment first. In the observing
+ * modes the judgment runs alongside the command and is awaited afterwards, so
+ * it adds no wait in front of the command and is still recorded before the
+ * tool call returns. A worker that exits with the turn would drop it otherwise.
+ */
+export async function runWithCommandRiskCheck<T>(
+  command: string,
+  scope: ShellDecisionScope,
+  run: () => Promise<T>,
+  decideFn: DecideFn = decide,
+  env: DecisionModeEnv = process.env
+): Promise<T | CommandRiskBlock> {
+  const mode = resolveDecisionMode(
+    getDecisionDefinition("command_risk"),
+    scope.surface,
+    env
+  );
+  if (mode === "enforce") {
+    const blocked = await checkCommandRisk(command, scope, decideFn);
+    return blocked ? { ...blocked, command } : run();
+  }
+  const recorded = checkCommandRisk(command, scope, decideFn).catch(() => null);
+  try {
+    return await run();
+  } finally {
+    await recorded;
+  }
 }
 
 type ShellResult = {

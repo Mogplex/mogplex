@@ -15,7 +15,7 @@ import {
 } from "./sandbox-binding";
 import {
   annotateShellResult,
-  checkCommandRisk,
+  runWithCommandRiskCheck,
   type ShellDecisionScope,
 } from "@/lib/decisions/shell";
 import { getBlockedAgentShellCommand } from "./shell-command-guard";
@@ -168,109 +168,109 @@ export function createTerminalExec(
     description:
       "Execute a shell command in the selected sandbox. If none is selected, fall back only to exactly one running sandbox for the active repository or start one when none exists. The result identifies the resolved sandbox. This does not create or imply a worktree.",
     inputSchema: terminalParams,
-    execute: async ({ command, cwd }: z.infer<typeof terminalParams>) => {
-      const blocked = getBlockedAgentShellCommand(command);
-      if (blocked) return { ...blocked, command };
-      const risk = decisionScope
-        ? await checkCommandRisk(command, decisionScope)
-        : null;
-      if (risk) return { ...risk, command };
-      if (sandboxBinding?.status === "pending") {
-        return {
-          error: "Sandbox startup is still in progress.",
-          reason: "sandbox_pending" as const,
-          command,
-        };
-      }
-      const boundSandboxId = sandboxBinding?.sandboxId ?? undefined;
-      if (sandboxBinding && boundSandboxId !== selectedSandboxId) {
-        selectedSandboxId = boundSandboxId;
-        cachedSandbox = selectedSandboxId
-          ? {
-              sandboxId: selectedSandboxId,
-              status: "running",
-              source: "selected",
-            }
-          : null;
-      }
-      const requestHeaders = getSandboxRequestHeaders(userId);
-      if ("error" in requestHeaders) {
-        return {
-          error: requestHeaders.error,
-          reason: requestHeaders.reason,
-          command,
-        };
-      }
-
-      // Resolve sandbox at execution time (not build time)
-      if (!cachedSandbox) {
-        const resolution = await resolveOrCreateSandbox(
-          userId,
-          repoId,
-          selectedSandboxId
-        );
-        if (resolution && "error" in resolution) {
-          return {
-            error: resolution.error,
-            reason: resolution.reason,
-            command,
-          };
-        }
-        cachedSandbox = resolution;
-        selectedSandboxId = resolution?.sandboxId;
-        updateSandboxBinding(sandboxBinding, resolution);
-      }
-
-      if (!cachedSandbox) {
-        return {
-          error: "No sandbox available. Select a repository first.",
-          reason: "repo_not_selected" as const,
-          command,
-        };
-      }
-
-      const execute = execution?.execute ?? postSandboxExec;
-      const res = await execute(
-        cachedSandbox.sandboxId,
-        requestHeaders.headers,
-        {
-          command,
-          cwd,
-        }
-      );
-      if (res.ok) {
-        const formatted = formatSandboxExecResult(
-          await res.json(),
-          command,
-          cachedSandbox
-        );
-        return decisionScope
-          ? annotateShellResult(formatted, decisionScope)
-          : formatted;
-      }
-
-      const retried =
-        execution?.retryOnSandboxLoss === false
-          ? null
-          : await retryExecAfterSandboxLoss(res, {
-              userId,
-              repoId,
-              headers: requestHeaders.headers,
-              command,
-              cwd,
-              execute,
-            });
-      if (retried) {
-        cachedSandbox = retried.sandbox;
-        selectedSandboxId = retried.sandbox?.sandboxId;
-        updateSandboxBinding(sandboxBinding, retried.sandbox);
-        if (retried.result) return retried.result;
-      }
-
-      const data = await res.json().catch(() => ({}));
-      return formatSandboxExecError(data, command, cachedSandbox);
+    execute: async (input: z.infer<typeof terminalParams>) => {
+      const blocked = getBlockedAgentShellCommand(input.command);
+      if (blocked) return { ...blocked, command: input.command };
+      return decisionScope
+        ? runWithCommandRiskCheck(input.command, decisionScope, () =>
+            runCommand(input)
+          )
+        : runCommand(input);
     },
   });
+
+  async function runCommand({ command, cwd }: z.infer<typeof terminalParams>) {
+    if (sandboxBinding?.status === "pending") {
+      return {
+        error: "Sandbox startup is still in progress.",
+        reason: "sandbox_pending" as const,
+        command,
+      };
+    }
+    const boundSandboxId = sandboxBinding?.sandboxId ?? undefined;
+    if (sandboxBinding && boundSandboxId !== selectedSandboxId) {
+      selectedSandboxId = boundSandboxId;
+      cachedSandbox = selectedSandboxId
+        ? {
+            sandboxId: selectedSandboxId,
+            status: "running",
+            source: "selected",
+          }
+        : null;
+    }
+    const requestHeaders = getSandboxRequestHeaders(userId);
+    if ("error" in requestHeaders) {
+      return {
+        error: requestHeaders.error,
+        reason: requestHeaders.reason,
+        command,
+      };
+    }
+
+    // Resolve sandbox at execution time (not build time)
+    if (!cachedSandbox) {
+      const resolution = await resolveOrCreateSandbox(
+        userId,
+        repoId,
+        selectedSandboxId
+      );
+      if (resolution && "error" in resolution) {
+        return {
+          error: resolution.error,
+          reason: resolution.reason,
+          command,
+        };
+      }
+      cachedSandbox = resolution;
+      selectedSandboxId = resolution?.sandboxId;
+      updateSandboxBinding(sandboxBinding, resolution);
+    }
+
+    if (!cachedSandbox) {
+      return {
+        error: "No sandbox available. Select a repository first.",
+        reason: "repo_not_selected" as const,
+        command,
+      };
+    }
+
+    const execute = execution?.execute ?? postSandboxExec;
+    const res = await execute(cachedSandbox.sandboxId, requestHeaders.headers, {
+      command,
+      cwd,
+    });
+    if (res.ok) {
+      const formatted = formatSandboxExecResult(
+        await res.json(),
+        command,
+        cachedSandbox
+      );
+      return decisionScope
+        ? annotateShellResult(formatted, decisionScope)
+        : formatted;
+    }
+
+    const retried =
+      execution?.retryOnSandboxLoss === false
+        ? null
+        : await retryExecAfterSandboxLoss(res, {
+            userId,
+            repoId,
+            headers: requestHeaders.headers,
+            command,
+            cwd,
+            execute,
+          });
+    if (retried) {
+      cachedSandbox = retried.sandbox;
+      selectedSandboxId = retried.sandbox?.sandboxId;
+      updateSandboxBinding(sandboxBinding, retried.sandbox);
+      if (retried.result) return retried.result;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    return formatSandboxExecError(data, command, cachedSandbox);
+  }
 }
 
 export const terminalExec = createTerminalExec();
