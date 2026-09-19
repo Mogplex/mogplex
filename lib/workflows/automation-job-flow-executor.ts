@@ -21,6 +21,7 @@ import type {
   FlowOperatorWaitProvider,
   FlowOperatorWaitStore,
 } from "@/lib/flows/operators/types";
+import type { FlowNodeClassifier } from "@/lib/workflows/automation-job-classify";
 
 import { getNodeById } from "@/lib/flows/graph";
 import { getFlowOperator } from "@/lib/flows/operators/registry";
@@ -123,6 +124,7 @@ export type FlowExecutorDeps = {
   }) => Promise<unknown>;
   waitProvider: FlowOperatorWaitProvider;
   waitStore: FlowOperatorWaitStore;
+  classifier?: FlowNodeClassifier;
   executeAutomationContext: (input: {
     jobRunId: string;
     context: JobContext;
@@ -216,6 +218,7 @@ export async function executeResolvedFlow(input: {
           runFlowAction: input.deps.runFlowAction,
           waitProvider: input.deps.waitProvider,
           waitStore: input.deps.waitStore,
+          classifier: input.deps.classifier,
         },
         state,
         loadPullRequestDetails: input.deps.loadPullRequestDetails,
@@ -235,6 +238,7 @@ export async function executeResolvedFlow(input: {
         case "await_event":
         case "set_variable":
         case "transform":
+        case "classify":
         case "end": {
           return await execCtx.runOperator();
         }

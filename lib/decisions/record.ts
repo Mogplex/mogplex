@@ -1,11 +1,11 @@
 import type { DecisionState } from "./state";
 import type {
   DecisionAnswers,
-  DecisionId,
   DecisionMode,
   DecisionQuestion,
   DecisionScope,
   EvaluationUsage,
+  RecordedDecisionId,
 } from "./types";
 
 /**
@@ -14,7 +14,7 @@ import type {
  * state an answer could never be audited or re-scored later.
  */
 export type DecisionEventRecord = {
-  decisionId: DecisionId;
+  decisionId: RecordedDecisionId;
   questionVersion: string;
   mode: DecisionMode;
   status: "ok" | "unavailable";
@@ -65,7 +65,12 @@ export function toDecisionEventRow(event: DecisionEventRecord) {
     escalation_latency_ms: event.escalationUsage?.latencyMs ?? null,
     escalation_cost_usd: event.escalationUsage?.costUsd ?? null,
     error: event.error ?? null,
-    metadata: event.metadata ?? {},
+    metadata: {
+      ...event.metadata,
+      ...(event.usage?.generationId
+        ? { generation_id: event.usage.generationId }
+        : {}),
+    },
   };
 }
 

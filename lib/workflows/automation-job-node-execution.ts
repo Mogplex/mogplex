@@ -31,6 +31,10 @@ import { FAILURE_HANDLE_ID, getFailureEdges } from "@/lib/flows/graph";
 import { buildFlowConditionState } from "@/lib/workflows/automation-job-context-resolution";
 import { getFlowOperator } from "@/lib/flows/operators/registry";
 import {
+  classifyFlowNode,
+  type FlowNodeClassifier,
+} from "@/lib/workflows/automation-job-classify";
+import {
   type FlowRunState,
   type FlowEmission,
   emitToOutgoing,
@@ -51,6 +55,8 @@ export type NodeExecutionDeps = {
   }) => Promise<unknown>;
   waitProvider: FlowOperatorWaitProvider;
   waitStore: FlowOperatorWaitStore;
+  // Defaults to the evaluation model; tests inject a deterministic one.
+  classifier?: FlowNodeClassifier;
 };
 
 export type NodeExecutionInput = {
@@ -346,6 +352,13 @@ export async function createNodeExecutionContext(
           loadPullRequestDetails: input.loadPullRequestDetails,
           resolveAutofixTargetRepo: input.resolveAutofixTargetRepo,
         }) as Promise<FlowOperatorActionResult>,
+      classifier: (request) =>
+        (deps.classifier ?? classifyFlowNode)({
+          ...request,
+          context,
+          flowId: resolvedFlow.flowId,
+          flowVersionId: resolvedFlow.flowVersionId,
+        }),
     };
 
     const result = await operator.execute(operatorContext);

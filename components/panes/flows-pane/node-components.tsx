@@ -29,6 +29,7 @@ import type {
   FlowTransformOperation,
 } from "@/lib/types"
 import { CONDITION_OPERATOR_OPTIONS, FLOW_ACTION_OPTIONS } from "./constants"
+import { ClassifyNodeCard } from "./node-classify"
 import {
   getRoleTheme,
   FlowHarnessIcon,
@@ -457,6 +458,7 @@ export const NODE_TYPES = {
   agent: AgentNodeCard,
   action: ActionNodeCard,
   condition: ConditionNodeCard,
+  classify: ClassifyNodeCard,
   parallel: ParallelNodeCard,
   join: JoinNodeCard,
   delay: DelayNodeCard,

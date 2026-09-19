@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateWithDecisionModel,
+  gatewayGenerationId,
   normalizeEscalationAnswers,
 } from "./evaluator";
 import type { DecisionQuestion } from "./types";
@@ -50,5 +51,19 @@ describe("evaluateWithDecisionModel", () => {
       timeoutMs: 100,
     });
     expect(result).toMatchObject({ ok: false, reason: "unconfigured" });
+  });
+});
+
+describe("gatewayGenerationId", () => {
+  it("should read the generation id from gateway metadata", () => {
+    expect(
+      gatewayGenerationId({ gateway: { generationId: "gen_1", cost: "0" } })
+    ).toBe("gen_1");
+  });
+
+  it("should return null when the metadata carries no usable id", () => {
+    expect(gatewayGenerationId(undefined)).toBeNull();
+    expect(gatewayGenerationId({ typesafe: {} })).toBeNull();
+    expect(gatewayGenerationId({ gateway: { generationId: 42 } })).toBeNull();
   });
 });

@@ -146,6 +146,7 @@ export function buildExecuteContext(
       createWait: async () => ({ id: "wait" }),
       finalizeWait: async () => {},
     },
+    classifier: async () => ({ ok: false, message: "classifier not used" }),
     actionRunner: async () => ({ summary: "", output: {} }),
   };
   // Capture emit() output by wrapping

@@ -36,12 +36,15 @@ export type { GraphAdjacency } from "@/lib/flows/graph-traversal";
 export { coerceGraph } from "@/lib/flows/graph-coerce";
 
 export {
+  CLASSIFY_OPTION_HANDLE_PREFIX,
+  CLASSIFY_UNCERTAIN_HANDLE_ID,
   CONDITION_HANDLE_IDS,
   CONDITION_OPERATORS,
   FAILURE_HANDLE_ID,
   FLOW_AGENT_ROLE_OPTIONS,
   FLOW_CONDITION_FIELD_PRESETS,
   VALUE_LESS_CONDITION_OPERATORS,
+  classifyOptionHandleId,
   conditionOperatorLabel,
   eventLabel,
   flowAgentHarnessLabel,

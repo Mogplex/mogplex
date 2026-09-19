@@ -14,6 +14,14 @@ export type DecisionId =
   | "loop_check"
   | "memory_promotion_gate";
 
+/**
+ * Decisions whose questions are authored outside `definitions.ts`. A flow's
+ * classify node carries its own question in the graph.
+ */
+export type AuthoredDecisionId = "flow_classify";
+
+export type RecordedDecisionId = DecisionId | AuthoredDecisionId;
+
 export type DecisionQuestion =
   | {
       type: "boolean";
@@ -81,6 +89,8 @@ export type EvaluationUsage = {
   inputTokens: number | null;
   costUsd: number | null;
   model: string;
+  /** Gateway generation id, kept so a call can be reconciled or billed later. */
+  generationId?: string | null;
 };
 
 export type EvaluationSuccess = {

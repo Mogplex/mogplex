@@ -11,7 +11,8 @@ import {
   FAILURE_HANDLE_ID,
   getStartConfig,
 } from "@/lib/flows/graph";
-import type { FlowGraph, Repo } from "@/lib/types";
+import { classifyBranchRows } from "@/lib/flows/classify-branches";
+import type { FlowClassifyNodeData, FlowGraph, Repo } from "@/lib/types";
 import type {
   Installation,
   FlowContextMenuState,
@@ -19,6 +20,46 @@ import type {
 } from "./types";
 import { FlowSemanticEdge } from "./edge-component";
 import { installationAccountLabel } from "./start-filter-fields";
+
+type EdgeDecoration = {
+  label: string | null;
+  tone: FlowRenderableEdgeData["tone"];
+};
+
+/** The label and tone an edge is drawn with, from the branch it leaves by. */
+function describeEdge(
+  edge: FlowCanvasEdge,
+  sourceNode: FlowCanvasNode | undefined,
+  targetNode: FlowCanvasNode | undefined
+): EdgeDecoration {
+  if (edge.sourceHandle === FAILURE_HANDLE_ID) {
+    return { label: "Error", tone: "danger" };
+  }
+  if (sourceNode?.type === "condition") {
+    if (edge.sourceHandle === CONDITION_HANDLE_IDS.true) {
+      return { label: "Then", tone: "condition" };
+    }
+    if (edge.sourceHandle === CONDITION_HANDLE_IDS.false) {
+      return { label: "Else", tone: "alternate" };
+    }
+    return { label: null, tone: "default" };
+  }
+  if (sourceNode?.type === "classify") {
+    const branch = classifyBranchRows(
+      sourceNode.data as FlowClassifyNodeData
+    ).find((row) => row.handleId === (edge.sourceHandle ?? null));
+    return {
+      label: branch?.label ?? null,
+      tone: branch?.tone === "uncertain" ? "alternate" : "condition",
+    };
+  }
+  if (sourceNode?.type === "parallel") {
+    return { label: "Branch", tone: "parallel" };
+  }
+  if (targetNode?.type === "join") return { label: "Merge", tone: "join" };
+  if (sourceNode?.type === "delay") return { label: "Resume", tone: "default" };
+  return { label: null, tone: "default" };
+}
 
 export interface FlowDerivedCanvasParams {
   draft: FlowDraftSnapshot | null;
@@ -161,29 +202,7 @@ export function useFlowDerivedCanvas(
         (node: FlowCanvasNode) => node.id === edge.target
       );
 
-      let label: string | null = null;
-      let tone: FlowRenderableEdgeData["tone"] = "default";
-
-      if (edge.sourceHandle === FAILURE_HANDLE_ID) {
-        label = "Error";
-        tone = "danger";
-      } else if (sourceNode?.type === "condition") {
-        if (edge.sourceHandle === CONDITION_HANDLE_IDS.true) {
-          label = "Then";
-          tone = "condition";
-        } else if (edge.sourceHandle === CONDITION_HANDLE_IDS.false) {
-          label = "Else";
-          tone = "alternate";
-        }
-      } else if (sourceNode?.type === "parallel") {
-        label = "Branch";
-        tone = "parallel";
-      } else if (targetNode?.type === "join") {
-        label = "Merge";
-        tone = "join";
-      } else if (sourceNode?.type === "delay") {
-        label = "Resume";
-      }
+      const { label, tone } = describeEdge(edge, sourceNode, targetNode);
 
       return {
         ...edge,

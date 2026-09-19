@@ -18,10 +18,14 @@ Code acts.
 | `claim_verification` | End of every Control, chat, Slack, and API turn (awaited, so a worker that exits with the turn cannot drop it) | `advise` | An unsupported "tests pass", "PR opened", or "pushed" claim becomes a notice in the run's activity |
 | `loop_check` | In the background once a turn has six tool calls | `shadow` | Records only. By policy nothing may end or shorten a run |
 | `memory_promotion_gate` | Before memory promotion's extraction call | `shadow` | In `enforce`, skips extraction when the record holds nothing durable |
+| `flow_classify` | Every automation Classify node | always acts | The run takes the answered branch. The question is authored in the flow graph |
 
-Questions, thresholds, and versions live in `lib/decisions/definitions.ts` and
-nowhere else. The evaluation model answers the question as written, so keep
-wording literal, positive, and atomic, and bump `version` on every change.
+Questions, thresholds, and versions for the runtime's own decisions live in
+`lib/decisions/definitions.ts` and nowhere else. The one exception is
+`flow_classify`: its question belongs to the customer's flow, so it is stored
+with each event instead (`question_version` is `authored`). The evaluation
+model answers the question as written, so keep wording literal, positive, and
+atomic, and bump `version` on every change.
 
 ## Modes
 
@@ -43,6 +47,10 @@ layer silently inactive.
 - **Fail open.** `decide()` never throws. On a timeout, an outage, or an open
   circuit breaker the caller behaves exactly as it did before the layer
   existed.
+- **Authored decisions do not fail open.** `classify()` backs the automation
+  Classify node. The author chose that node to pick a branch, so an outage is
+  returned as a failure for the flow's `error` handle to route. It has no
+  second opinion and no mode: `DECISIONS_DISABLED=1` makes it fail, not pass.
 - **Only add caution.** A decision can add an approval or a note. It can never
   relax `policy.ts`, a protected-branch rule, or the shell guard.
 - **Never end a run.** The agent execution policy forbids iteration budgets.
@@ -69,6 +77,9 @@ purpose. Run telemetry omits most tool inputs and outputs, so without it a
 decision could not be audited or re-scored. Secrets are redacted with the
 telemetry sanitizer before state leaves the process, and state is capped at
 60k characters. Each decision also emits a `[decisions]` structured log line.
+When the gateway reports a generation id it is stored as
+`metadata.generation_id`, so a call can be reconciled against gateway cost
+records later. Classify events also carry the flow, version, run, and node ids.
 
 Useful queries:
 
@@ -76,6 +87,12 @@ Useful queries:
 -- How often would the shadow gate have blocked, by surface?
 select surface, verdict, count(*) from decision_events
 where decision_id = 'command_risk' group by 1, 2 order by 3 desc;
+
+-- What a flow's Classify nodes answered, and how sure they were.
+select metadata->>'flow_node_label' as node, verdict, count(*),
+       round(avg((confidence->>'answer')::numeric), 2) as avg_confidence
+from decision_events where decision_id = 'flow_classify'
+  and metadata->>'flow_id' = '<flow id>' group by 1, 2 order by 3 desc;
 
 -- Frontier calls the promotion gate would save.
 select verdict, (baseline->>'promoted')::int > 0 as promoted, count(*)

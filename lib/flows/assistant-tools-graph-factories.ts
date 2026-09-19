@@ -27,7 +27,7 @@ export type GraphToolContext = ToolContext & {
 export function createConnectTool(ctx: GraphToolContext) {
   return tool({
     description:
-      "Create an edge between two existing nodes. For If (condition) sources pass sourceHandle as 'true' for the then branch or 'false' for the else branch. To route a recovery branch from a failure-aware node (agent, action, condition, delay, await_event, set_variable, transform), pass sourceHandle as 'error'.",
+      "Create an edge between two existing nodes. For If (condition) sources pass sourceHandle as 'true' for the then branch or 'false' for the else branch. For Classify sources pass 'true' or 'false' (boolean), 'option:<id>' for each option (choice), 'uncertain' when a minimum confidence is set, and no sourceHandle for a scale. To route a recovery branch from a failure-aware node (agent, action, condition, classify, delay, await_event, set_variable, transform), pass sourceHandle as 'error'.",
     inputSchema: connectParams,
     execute: async ({
       source,

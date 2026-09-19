@@ -86,6 +86,16 @@ function gatewayCost(metadata: unknown): number | null {
   return Number.isFinite(cost) ? cost : null;
 }
 
+/** The gateway's id for a call, kept so it can be reconciled or billed later. */
+export function gatewayGenerationId(metadata: unknown): string | null {
+  const gateway = (
+    metadata as { gateway?: { generationId?: unknown } } | undefined
+  )?.gateway;
+  return typeof gateway?.generationId === "string"
+    ? gateway.generationId
+    : null;
+}
+
 function failure(
   reason: EvaluationFailure["reason"],
   startedAt: number,
@@ -145,6 +155,7 @@ export const evaluateWithDecisionModel: DecisionEvaluator = async (input) => {
         inputTokens: result.usage?.inputTokens ?? null,
         costUsd: gatewayCost(result.providerMetadata),
         model,
+        generationId: gatewayGenerationId(result.providerMetadata),
       },
     };
   } catch (error) {
@@ -228,6 +239,7 @@ export const evaluateWithLanguageModel: DecisionEvaluator = async (input) => {
         inputTokens: result.usage?.inputTokens ?? null,
         costUsd: gatewayCost(result.providerMetadata),
         model,
+        generationId: gatewayGenerationId(result.providerMetadata),
       },
     };
   } catch (error) {

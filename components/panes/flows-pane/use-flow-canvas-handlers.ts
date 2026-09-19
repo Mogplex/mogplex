@@ -14,7 +14,8 @@ import {
   type FlowCanvasNode,
   type FlowDraftSnapshot,
 } from "@/lib/flows/editor";
-import type { Flow, FlowStartFilter } from "@/lib/types";
+import { pruneClassifyEdges } from "@/lib/flows/classify-branches";
+import type { Flow, FlowClassifyNodeData, FlowStartFilter } from "@/lib/types";
 import type { Installation } from "./types";
 import {
   FLOW_FIT_VIEW_OPTIONS,
@@ -257,12 +258,19 @@ export function useFlowCanvasHandlers(
       options?: { mergeKey?: string | null }
     ) => {
       updateDraft(
-        (current) => ({
-          ...current,
-          nodes: current.nodes.map((node) =>
+        (current) => {
+          const nodes = current.nodes.map((node) =>
             node.id === nodeId ? { ...node, data: updater(node.data) } : node
-          ),
-        }),
+          );
+          const updated = nodes.find((node) => node.id === nodeId);
+          if (updated?.type !== "classify") return { ...current, nodes };
+          const edges = pruneClassifyEdges(
+            nodeId,
+            updated.data as FlowClassifyNodeData,
+            current.edges
+          );
+          return { ...current, nodes, edges };
+        },
         { mergeKey: options?.mergeKey ?? `node-data-${nodeId}` }
       );
     },

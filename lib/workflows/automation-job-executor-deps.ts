@@ -44,6 +44,7 @@ import {
   tryLogAiCall,
 } from "@/lib/workflows/automation-job-persistence";
 import { runFlowAction } from "@/lib/workflows/automation-job-sandbox-actions";
+import type { FlowNodeClassifier } from "@/lib/workflows/automation-job-classify";
 import {
   createAutomationAgentRunner,
   createPRFixAgentRunner,
@@ -102,6 +103,8 @@ export type AutomationJobExecutorDeps = {
   // patching the wait module at the import boundary.
   waitProvider: FlowOperatorWaitProvider;
   waitStore: FlowOperatorWaitStore;
+  // Classify nodes default to the evaluation model when this is omitted.
+  classifier?: FlowNodeClassifier;
 };
 
 /**

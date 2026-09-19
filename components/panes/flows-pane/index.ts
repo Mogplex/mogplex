@@ -272,6 +272,11 @@ export {
 } from "./inspector-condition";
 
 export {
+  ClassifyInspector,
+  type ClassifyInspectorProps,
+} from "./inspector-classify";
+
+export {
   AwaitEventInspector,
   type AwaitEventInspectorProps,
 } from "./inspector-await-event";

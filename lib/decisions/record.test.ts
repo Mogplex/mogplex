@@ -58,4 +58,28 @@ describe("toDecisionEventRow", () => {
       metadata: {},
     });
   });
+
+  it("should keep the gateway generation id beside the caller's metadata", () => {
+    const row = toDecisionEventRow({
+      ...event,
+      decisionId: "flow_classify",
+      metadata: { flow_id: "flow-1" },
+      usage: { ...event.usage!, generationId: "gen_123" },
+    });
+    expect(row.decision_id).toBe("flow_classify");
+    expect(row.metadata).toEqual({
+      flow_id: "flow-1",
+      generation_id: "gen_123",
+    });
+  });
+
+  it("should not invent a generation id when the call reported none", () => {
+    expect(
+      toDecisionEventRow({
+        ...event,
+        metadata: { flow_id: "flow-1" },
+        usage: { ...event.usage!, generationId: null },
+      }).metadata
+    ).toEqual({ flow_id: "flow-1" });
+  });
 });

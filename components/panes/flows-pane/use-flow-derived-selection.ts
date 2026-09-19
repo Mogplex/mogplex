@@ -46,6 +46,11 @@ export interface FlowDerivedSelectionResult {
         data: Extract<FlowNode, { type: "condition" }>["data"];
       })
     | null;
+  selectedClassifyNode:
+    | (FlowCanvasNode & {
+        data: Extract<FlowNode, { type: "classify" }>["data"];
+      })
+    | null;
   selectedParallelNode:
     | (FlowCanvasNode & {
         data: Extract<FlowNode, { type: "parallel" }>["data"];
@@ -173,6 +178,13 @@ export function useFlowDerivedSelection(
         })
       : null;
 
+  const selectedClassifyNode =
+    selectedNode?.type === "classify"
+      ? (selectedNode as FlowCanvasNode & {
+          data: Extract<FlowNode, { type: "classify" }>["data"];
+        })
+      : null;
+
   const selectedParallelNode =
     selectedNode?.type === "parallel"
       ? (selectedNode as FlowCanvasNode & {
@@ -238,6 +250,7 @@ export function useFlowDerivedSelection(
     selectedAgentHarness,
     apiKeysSettingsHref,
     selectedConditionNode,
+    selectedClassifyNode,
     selectedParallelNode,
     selectedJoinNode,
     selectedDelayNode,

@@ -82,6 +82,7 @@ function buildContext(input: {
       },
       finalizeWait: async () => {},
     },
+    classifier: async () => ({ ok: false, message: "classifier not used" }),
     actionRunner: async () => ({ summary: "", output: {} }),
   };
 }

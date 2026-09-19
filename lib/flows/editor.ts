@@ -142,6 +142,13 @@ export function draftToGraph(snapshot: FlowDraftSnapshot): FlowGraph {
             position: node.position,
             data: node.data as Extract<FlowNode, { type: "condition" }>["data"],
           };
+        case "classify":
+          return {
+            id: node.id,
+            type: "classify",
+            position: node.position,
+            data: node.data as Extract<FlowNode, { type: "classify" }>["data"],
+          };
         case "parallel":
           return {
             id: node.id,

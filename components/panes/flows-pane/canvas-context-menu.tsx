@@ -18,7 +18,7 @@ export interface CanvasContextMenuProps {
   draftNodes: FlowCanvasNode[]
   runContextMenuAction: (action: () => void | Promise<unknown>) => void
   addNode: (
-    type: "agent" | "action" | "condition" | "parallel" | "join" | "delay" | "await_event" | "set_variable" | "transform",
+    type: "agent" | "action" | "condition" | "classify" | "parallel" | "join" | "delay" | "await_event" | "set_variable" | "transform",
     position?: { x: number; y: number },
     operation?: FlowActionOperation,
   ) => void

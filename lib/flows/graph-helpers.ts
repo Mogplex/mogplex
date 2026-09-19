@@ -18,6 +18,16 @@ export const CONDITION_HANDLE_IDS = {
 // then/else routing — no schema change required.
 export const FAILURE_HANDLE_ID = "error" as const;
 
+// Classify nodes route on the answer: boolean answers reuse the condition
+// handles, each choice option owns `option:<id>`, a scale leaves through the
+// default handle, and a low-confidence answer leaves through `uncertain`.
+export const CLASSIFY_UNCERTAIN_HANDLE_ID = "uncertain" as const;
+export const CLASSIFY_OPTION_HANDLE_PREFIX = "option:" as const;
+
+export function classifyOptionHandleId(optionId: string) {
+  return `${CLASSIFY_OPTION_HANDLE_PREFIX}${optionId}`;
+}
+
 export type FlowFailureTokenPayload = {
   error: string;
   failed_node_id: string;
