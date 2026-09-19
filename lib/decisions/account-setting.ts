@@ -19,6 +19,7 @@ export type DecisionChecksLoader = (
   owner: DecisionChecksOwner
 ) => Promise<boolean>;
 
+/** Resolves to whether the account allows checks. Must never reject. */
 export type DecisionChecksGate = (scope: DecisionScope) => Promise<boolean>;
 
 /** Work inside a team follows the team's choice, never a member's own. */
@@ -65,6 +66,9 @@ export function createDecisionChecksGate(
 ): DecisionChecksGate & { forget: (owner: DecisionChecksOwner) => void } {
   const cache = new Map<string, { enabled: boolean; expiresAt: number }>();
   const pending = new Map<string, Promise<boolean>>();
+  // Bumped by `forget`, so a read that began before a change cannot write
+  // the value it saw back into the cache after the change.
+  const generations = new Map<string, number>();
   const keyOf = (owner: DecisionChecksOwner) => `${owner.table}:${owner.id}`;
 
   const gate = async (scope: DecisionScope): Promise<boolean> => {
@@ -77,16 +81,20 @@ export function createDecisionChecksGate(
     // Checks on one turn start together; they share a single read.
     const running = pending.get(key);
     if (running) return running;
+    const generation = generations.get(key) ?? 0;
+    const isCurrent = () => (generations.get(key) ?? 0) === generation;
     const lookup = withTimeout(load(owner), DECISION_CHECKS_LOOKUP_TIMEOUT_MS)
       .then((enabled) => {
-        cache.set(key, {
-          enabled,
-          expiresAt: now() + DECISION_CHECKS_CACHE_TTL_MS,
-        });
+        if (isCurrent()) {
+          cache.set(key, {
+            enabled,
+            expiresAt: now() + DECISION_CHECKS_CACHE_TTL_MS,
+          });
+        }
         return enabled;
       })
       .catch((error: unknown) => {
-        cache.delete(key);
+        if (isCurrent()) cache.delete(key);
         console.warn("[decisions] could not read the account setting", {
           owner: key,
           error,
@@ -94,7 +102,7 @@ export function createDecisionChecksGate(
         return false;
       })
       .finally(() => {
-        pending.delete(key);
+        if (pending.get(key) === lookup) pending.delete(key);
       });
     pending.set(key, lookup);
     return lookup;
@@ -102,7 +110,11 @@ export function createDecisionChecksGate(
   return Object.assign(gate, {
     /** Drop a cached choice so a change applies at once in this process. */
     forget: (owner: DecisionChecksOwner) => {
-      cache.delete(keyOf(owner));
+      const key = keyOf(owner);
+      generations.set(key, (generations.get(key) ?? 0) + 1);
+      cache.delete(key);
+      // Callers after the change start a fresh read, never join a stale one.
+      pending.delete(key);
     },
   });
 }
