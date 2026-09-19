@@ -106,7 +106,7 @@ export type FlowOperatorDefinition<TNode extends FlowNode = FlowNode> = {
 Use the fields this way:
 
 - `type` must match one member of `FlowNodeType`.
-- `canFail` allows one outbound `sourceHandle === "error"` edge. Without it, graph validation rejects error edges for that operator.
+- `canFail` allows one outbound `sourceHandle === "error"` edge. Without it, graph validation rejects error edges for that operator. An error edge carries an active token only when its node failed. When the node succeeds, the edge receives a skipped token, so the recovery branch does not run and a join or end node downstream of it is not left waiting.
 - `validate` handles local structural and data rules for one node. Whole-graph invariants stay in `validateFlowGraph()`.
 - `coerceData` converts persisted or assistant-produced JSON into the typed node data shape. It must preserve compatibility with old graph JSON.
 - `defaultData` is the canonical source for editor insertion defaults.
