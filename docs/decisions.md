@@ -42,6 +42,35 @@ DECISION_ESCALATION_MODEL=anthropic/claude-sonnet-5
 An installation without `AI_GATEWAY_API_KEY` (or Vercel OIDC) runs with the
 layer silently inactive.
 
+## The account's switch
+
+The whole layer is a choice each account makes. `teams.decision_checks_enabled`
+governs all work inside a team, and `profiles.decision_checks_enabled` governs
+a person's work outside one. Both default to on. A team owner or admin changes
+the team's value under Settings, Models, "Run checks" (`PATCH
+/api/teams/:teamId/decision-checks`), which writes a
+`decision_checks.changed` audit event. A person changes their own under
+Settings, Account (`PATCH /api/settings/decision-checks`).
+
+- **It outranks every mode.** `decide()` and `classify()` are the only two
+  paths to the evaluation model, and both ask
+  `lib/decisions/account-setting.ts` before any state is built. For an account
+  that is off nothing is evaluated, nothing is sent, and no `decision_events`
+  row is written.
+- **The team decides for team work.** A member's own setting is never
+  consulted for work that carries a team id, so every call site must put the
+  team id in its `DecisionScope`.
+- **Off removes the command-risk approval.** That gate is the same model call,
+  so the Settings copy says so. `policy.ts` and the shell guard are untouched.
+- **Classify fails, visibly.** A Classify node in an account that is off fails
+  with a message that names the setting, for the flow's `error` handle to
+  route. It never picks a branch.
+- **A failed or slow read means off.** The read is bounded at 2 s. Skipping a
+  check costs what an evaluator outage already costs, and sending an opted-out
+  account's data cannot be taken back. Failures are not cached.
+- **Changes land within 30 s.** Each process caches a loaded choice for
+  30 s. The process that handles the change drops its own entry at once.
+
 ## Rules
 
 - **Fail open.** `decide()` never throws. On a timeout, an outage, or an open
@@ -50,7 +79,8 @@ layer silently inactive.
 - **Authored decisions do not fail open.** `classify()` backs the automation
   Classify node. The author chose that node to pick a branch, so an outage is
   returned as a failure for the flow's `error` handle to route. It has no
-  second opinion and no mode: `DECISIONS_DISABLED=1` makes it fail, not pass.
+  second opinion and no mode: `DECISIONS_DISABLED=1`, or an account that
+  turned its checks off, makes it fail, not pass.
 - **Only add caution.** A decision can add an approval or a note. It can never
   relax `policy.ts`, a protected-branch rule, or the shell guard.
 - **Never end a run.** The agent execution policy forbids iteration budgets.

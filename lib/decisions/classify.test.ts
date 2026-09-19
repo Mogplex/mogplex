@@ -4,6 +4,7 @@ import {
   buildClassifyQuestion,
   classify,
   CLASSIFY_TIMEOUT_MS,
+  CLASSIFY_TURNED_OFF_MESSAGE,
   toClassifyResult,
   type ClassifyDeps,
   type ClassifyRequest,
@@ -58,6 +59,7 @@ function makeDeps(
       recorded.push(event);
     },
     env,
+    isEnabled: async () => true,
   };
   return { deps, recorded, asked };
 }
@@ -436,6 +438,36 @@ describe("classify", () => {
       expect(recorded).toHaveLength(0);
     }
   );
+
+  it("should fail the node and send nothing when the account turned the checks off", async () => {
+    const { deps, recorded, asked } = makeDeps(
+      answered({ type: "boolean", probability: 0.9 })
+    );
+    const gateScopes: unknown[] = [];
+    deps.isEnabled = async (scope) => {
+      gateScopes.push(scope);
+      return false;
+    };
+    const teamRequest = request({
+      scope: { surface: "automation", userId: "user-1", teamId: "team-1" },
+    });
+
+    const outcome = await classify(teamRequest, deps);
+
+    expect(outcome).toEqual({
+      ok: false,
+      message: CLASSIFY_TURNED_OFF_MESSAGE,
+    });
+    expect(gateScopes).toEqual([teamRequest.scope]);
+    expect(asked).toHaveLength(0);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("should tell the reader who can turn the checks back on without naming a provider", () => {
+    expect(CLASSIFY_TURNED_OFF_MESSAGE).toMatch(/owner or admin/);
+    expect(CLASSIFY_TURNED_OFF_MESSAGE).toMatch(/Settings/);
+    expect(CLASSIFY_TURNED_OFF_MESSAGE).not.toMatch(/jev|typesafe|gateway/i);
+  });
 
   it("should keep the answer when recording it fails", async () => {
     const { deps } = makeDeps(answered({ type: "boolean", probability: 0.9 }));

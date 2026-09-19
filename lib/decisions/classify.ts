@@ -2,6 +2,10 @@ import type {
   FlowClassifyOutput,
   FlowClassifyResult,
 } from "@/lib/types/flow-classify";
+import {
+  decisionChecksEnabled,
+  type DecisionChecksGate,
+} from "./account-setting";
 import { evaluateWithDecisionModel, type DecisionEvaluator } from "./evaluator";
 import type { DecisionModeEnv } from "./modes";
 import {
@@ -44,11 +48,18 @@ export type ClassifyDeps = {
   evaluate: DecisionEvaluator;
   record: DecisionRecorder;
   env: DecisionModeEnv;
+  /** The account's own switch. Consulted before any state is built or sent. */
+  isEnabled: DecisionChecksGate;
 };
+
+/** Customer-facing: says who can change it and where. */
+export const CLASSIFY_TURNED_OFF_MESSAGE =
+  "Run checks are turned off for this account, so Classify cannot answer. A team owner or admin can turn them on in Settings.";
 
 const defaultDeps: ClassifyDeps = {
   evaluate: evaluateWithDecisionModel,
   record: recordDecisionEvent,
+  isEnabled: decisionChecksEnabled,
   get env() {
     return process.env;
   },
@@ -158,6 +169,11 @@ export async function classify(
       ok: false,
       message: "Classification is turned off on this installation.",
     };
+  }
+  // Never a silent branch: the node fails so the flow's error edge, and the
+  // person reading the run, can see why nothing was decided.
+  if (!(await deps.isEnabled(request.scope))) {
+    return { ok: false, message: CLASSIFY_TURNED_OFF_MESSAGE };
   }
 
   const state = buildDecisionState(request.state);

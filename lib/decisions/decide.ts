@@ -1,3 +1,7 @@
+import {
+  decisionChecksEnabled,
+  type DecisionChecksGate,
+} from "./account-setting";
 import { getDecisionDefinition } from "./definitions";
 import {
   DEFAULT_ESCALATION_TIMEOUT_MS,
@@ -27,12 +31,15 @@ export type DecideDeps = {
   escalate: DecisionEvaluator;
   record: DecisionRecorder;
   env: DecisionModeEnv;
+  /** The account's own switch. Consulted before any state is built or sent. */
+  isEnabled: DecisionChecksGate;
 };
 
 const defaultDeps: DecideDeps = {
   evaluate: evaluateWithDecisionModel,
   escalate: evaluateWithLanguageModel,
   record: recordDecisionEvent,
+  isEnabled: decisionChecksEnabled,
   get env() {
     return process.env;
   },
@@ -134,6 +141,9 @@ export async function decide(
   if (mode === "off") return inactive(id, mode, "off");
 
   try {
+    // The account's choice outranks every mode: nothing is evaluated, sent,
+    // or recorded for a team or person that turned the checks off.
+    if (!(await deps.isEnabled(scope))) return inactive(id, "off", "off");
     const state = buildDecisionState(rawState);
     const request = {
       decisionId: id,

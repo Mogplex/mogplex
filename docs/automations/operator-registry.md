@@ -75,6 +75,10 @@ run state and the node-run output. A scale does not branch on its own: read
   a timeout, or an input that resolves to empty fails the node. Wire the
   `error` handle to recover; otherwise the run fails. This differs from the
   runtime's own decisions, which always fail open.
+- **Needs run checks on.** The node uses the account's "Run checks" setting
+  (the flow owner's team, or the owner personally outside a team). With it
+  off the node fails with a message that names the setting; it never picks a
+  branch. See [the account's switch](../decisions.md#the-accounts-switch).
 - **Wording is the interface.** The question is read literally. Ask one thing,
   phrase it positively, and avoid "and" or "or". Option descriptions are passed
   to the model as guidance.

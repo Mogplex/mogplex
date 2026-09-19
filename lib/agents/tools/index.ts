@@ -88,7 +88,9 @@ export function buildStaticTools(
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
   githubPrSearchOptions?: GithubPrSearchOptions,
   githubRequestMutationAuthorizations?: GithubRequestMutationAuthorizations,
-  sandboxExecution?: SandboxCommandExecution
+  sandboxExecution?: SandboxCommandExecution,
+  /** The team the run belongs to, so its checks follow the team's setting. */
+  teamId?: string | null
 ) {
   // Do not infer sandbox memory scope; buildTools supplies it explicitly.
   const memoryTools = userId
@@ -110,7 +112,12 @@ export function buildStaticTools(
       undefined,
       sandboxExecution,
       userId
-        ? { surface: "agent_tool", userId, repoId: repoId ?? null }
+        ? {
+            surface: "agent_tool",
+            userId,
+            teamId: teamId ?? null,
+            repoId: repoId ?? null,
+          }
         : undefined
     ),
     // With a sandbox, file reads come from the live checkout so the agent
@@ -393,7 +400,8 @@ export async function buildTools(opts: {
       repoOwner: opts.repoOwner,
       repoName: opts.repoName,
     }),
-    opts.sandboxExecution
+    opts.sandboxExecution,
+    opts.teamId ?? null
   );
 
   const emptyCleanup = async () => undefined;

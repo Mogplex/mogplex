@@ -25,6 +25,8 @@ export type PromotionTurnRecord = Parameters<
  */
 export async function promoteMemoriesForConversation(input: {
   userId: string;
+  /** The team the turn ran in, so the gate follows the team's setting. */
+  teamId?: string | null;
   conversationId: string | null;
   repoId?: string | null;
   aiCallId: string;
@@ -74,6 +76,7 @@ export async function promoteMemoriesForConversation(input: {
     {
       surface: "control",
       userId: input.userId,
+      teamId: input.teamId ?? null,
       repoId: input.repoId ?? null,
       aiCallId: input.aiCallId,
       conversationId: input.conversationId,
