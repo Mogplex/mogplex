@@ -34,7 +34,12 @@ export function createControlTurnTasks(input: {
     onStep(steps: TurnSteps) {
       observer.onStep(steps as unknown as DecisionStep[]);
     },
-    onEnd(end: { model: LanguageModel; steps: TurnSteps }) {
+    /**
+     * Promotion stays fire-and-forget because it can take many seconds. The
+     * claim check is short and awaited, so a function that freezes once the
+     * response closes cannot drop it.
+     */
+    async onEnd(end: { model: LanguageModel; steps: TurnSteps }) {
       // Distill durable facts from the checkpoint, or from this turn when
       // none exists.
       promoteMemoriesForConversation({
@@ -50,9 +55,7 @@ export function createControlTurnTasks(input: {
           error,
         });
       });
-      observer
-        .onEnd(end.steps as unknown as DecisionStep[])
-        .catch(() => undefined);
+      await observer.onEnd(end.steps as unknown as DecisionStep[]);
     },
   };
 }

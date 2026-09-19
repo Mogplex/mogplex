@@ -410,7 +410,7 @@ export async function executeControlChatRequest(input: {
         if (!finalizedNow) return;
         // Memory promotion and decision checks never touch the finished run.
         if (finishReason === "error") return;
-        turnTasks.onEnd({ model, steps: latestSteps });
+        await turnTasks.onEnd({ model, steps: latestSteps });
       },
     });
 

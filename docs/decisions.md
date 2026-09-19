@@ -15,7 +15,7 @@ Code acts.
 | `command_risk` | Control `run_command`, via the policy wrapper | `enforce` | A remote-destructive command (force push, remote deletion, dropping data) pauses for operator approval |
 | `command_risk` | Native `bash` tool on chat, Slack, and API runs | `shadow` | In `enforce`, the command is not run and the agent is told why. No approval path exists on these surfaces, so it observes by default |
 | `tool_result_failed` | Every shell result with exit code 0 and output | `advise` | The result gains an `outputCheck` note when a step failed behind `set +e`, `\|\| true`, or a pipe |
-| `claim_verification` | End of every Control and chat turn | `advise` | An unsupported "tests pass", "PR opened", or "pushed" claim becomes a notice in the run's activity |
+| `claim_verification` | End of every Control, chat, Slack, and API turn (awaited, so a worker that exits with the turn cannot drop it) | `advise` | An unsupported "tests pass", "PR opened", or "pushed" claim becomes a notice in the run's activity |
 | `loop_check` | In the background once a turn has six tool calls | `shadow` | Records only. By policy nothing may end or shorten a run |
 | `memory_promotion_gate` | Before memory promotion's extraction call | `shadow` | In `enforce`, skips extraction when the record holds nothing durable |
 
@@ -50,7 +50,7 @@ layer silently inactive.
 - **Second opinion on the uncertain band.** When a definition sets `escalate`
   and the answer falls in its middle band, the same questions go to a language
   model and its answer decides. That call has its own budget
-  (`escalationTimeoutMs`): 8 s in front of a tool call, longer after a turn. On real traffic this matched the language
+  (`escalationTimeoutMs`), 8 s by default, because both gated call sites wait on it. On real traffic this matched the language
   model's accuracy at about one eighth of the cost.
 - **No provider names in anything a customer reads.** Notes and approval
   summaries describe the finding, not the machinery.

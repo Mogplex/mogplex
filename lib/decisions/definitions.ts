@@ -134,8 +134,8 @@ const claimVerification: DecisionDefinition = {
   defaultMode: "advise",
   timeoutMs: 4000,
   escalate: true,
-  // Runs after the turn has ended, so nothing waits on it.
-  escalationTimeoutMs: 15_000,
+  // Awaited at the end of the turn, so keep the rare second opinion short.
+  escalationTimeoutMs: 8000,
   questions: {
     claimsTestsPass: {
       type: "boolean",
