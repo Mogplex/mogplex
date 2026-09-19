@@ -375,6 +375,7 @@ function createTransformContext(input: {
       createWait: async () => ({ id: "wait" }),
       finalizeWait: async () => undefined,
     },
+    classifier: async () => ({ ok: false, message: "classifier not used" }),
     actionRunner: async () => ({ summary: "", output: {} }),
   };
   return { context, completed, flowState };

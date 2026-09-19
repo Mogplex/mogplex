@@ -263,6 +263,7 @@ test("FLOW_OPERATOR_REGISTRY covers every FlowNodeType", () => {
     "agent",
     "action",
     "condition",
+    "classify",
     "parallel",
     "join",
     "delay",

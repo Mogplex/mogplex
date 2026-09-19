@@ -2,6 +2,7 @@ import type { FlowNode, FlowNodeType } from "@/lib/types";
 import { agentOperator } from "./agent";
 import { actionOperator } from "./action";
 import { awaitEventOperator } from "./await-event";
+import { classifyOperator } from "./classify";
 import { conditionOperator } from "./condition";
 import { delayOperator } from "./delay";
 import { endOperator } from "./end";
@@ -17,6 +18,7 @@ export const FLOW_OPERATOR_REGISTRY: FlowOperatorRegistry = {
   agent: agentOperator,
   action: actionOperator,
   condition: conditionOperator,
+  classify: classifyOperator,
   parallel: parallelOperator,
   join: joinOperator,
   delay: delayOperator,

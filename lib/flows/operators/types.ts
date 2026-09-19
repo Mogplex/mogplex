@@ -2,6 +2,8 @@ import type {
   FlowActionNodeData,
   FlowActionOperation,
   FlowAgentNodeRole,
+  FlowClassifyOutput,
+  FlowClassifyResult,
   FlowEdge,
   FlowGraph,
   FlowNode,
@@ -47,6 +49,22 @@ export type FlowOperatorActionRunner = (input: {
   nodeId: string;
   action: FlowActionNodeData;
 }) => Promise<FlowOperatorActionResult>;
+
+export type FlowOperatorClassifyResult =
+  | { ok: true; result: FlowClassifyResult }
+  | { ok: false; message: string };
+
+// Runtime boundary for classify nodes. The executor binds the owner, repo, and
+// flow identifiers and the evaluation model; the operator stays pure.
+export type FlowOperatorClassifier = (input: {
+  jobRunId: string;
+  nodeId: string;
+  nodeLabel: string;
+  question: string;
+  output: FlowClassifyOutput;
+  state: string | Record<string, unknown> | unknown[];
+  minConfidence: number | null;
+}) => Promise<FlowOperatorClassifyResult>;
 
 // Token emitted from one operator to its outbound edges. Mirrors the executor's
 // internal FlowExecutionToken shape so operator modules can hand back tokens
@@ -153,6 +171,8 @@ export type FlowOperatorExecuteContext<TNode extends FlowNode = FlowNode> = {
   // Runtime boundary for deterministic external actions. The executor binds
   // repo, trigger, credential, and sandbox context; the operator stays pure.
   actionRunner: FlowOperatorActionRunner;
+  // Runtime boundary for classify nodes, bound the same way.
+  classifier: FlowOperatorClassifier;
 };
 
 export type FlowOperatorWaitProvider = {

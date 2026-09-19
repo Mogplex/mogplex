@@ -51,6 +51,7 @@ const flowNodeSchema = z
       "agent",
       "action",
       "condition",
+      "classify",
       "parallel",
       "join",
       "delay",

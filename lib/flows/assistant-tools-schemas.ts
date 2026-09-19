@@ -7,7 +7,11 @@ import {
   TRANSFORM_OPERATIONS,
   TRIGGER_EVENTS,
 } from "./assistant-tools-constants";
-import { CONDITION_HANDLE_IDS, FAILURE_HANDLE_ID } from "@/lib/flows/graph";
+import {
+  CLASSIFY_UNCERTAIN_HANDLE_ID,
+  CONDITION_HANDLE_IDS,
+  FAILURE_HANDLE_ID,
+} from "@/lib/flows/graph";
 
 export const positionSchema = z
   .object({ x: z.number(), y: z.number() })
@@ -345,10 +349,17 @@ export const connectParams = z.object({
   source: z.string(),
   target: z.string(),
   sourceHandle: z
-    .enum([
-      CONDITION_HANDLE_IDS.true,
-      CONDITION_HANDLE_IDS.false,
-      FAILURE_HANDLE_ID,
+    .union([
+      z.enum([
+        CONDITION_HANDLE_IDS.true,
+        CONDITION_HANDLE_IDS.false,
+        FAILURE_HANDLE_ID,
+        CLASSIFY_UNCERTAIN_HANDLE_ID,
+      ]),
+      z
+        .string()
+        .regex(/^option:[\w-]+$/)
+        .describe("A Classify choice option branch: option:<id>."),
     ])
     .optional(),
   targetHandle: z.string().optional(),

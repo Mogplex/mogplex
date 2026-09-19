@@ -209,6 +209,7 @@ test("setVariable.execute writes flowState and persists assignments", async () =
       createWait: async () => ({ id: "w" }),
       finalizeWait: async () => undefined,
     },
+    classifier: async () => ({ ok: false, message: "classifier not used" }),
     actionRunner: async () => ({ summary: "", output: {} }),
   };
 
@@ -292,6 +293,7 @@ test("setVariable.execute skips when every inbound branch is skipped", async () 
       createWait: async () => ({ id: "w" }),
       finalizeWait: async () => undefined,
     },
+    classifier: async () => ({ ok: false, message: "classifier not used" }),
     actionRunner: async () => ({ summary: "", output: {} }),
   };
 

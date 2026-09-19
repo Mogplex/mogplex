@@ -24,6 +24,9 @@ The registry currently covers every persisted `FlowNodeType`:
 - `agent`: runs a configured Mogplex agent. It can route failures through an `error` edge.
 - `action`: performs a deterministic repository-scoped side effect. Shipped operations run a static sandbox command, send a Slack channel or trigger-thread message, post a GitHub comment, create a GitHub issue, update labels, set a commit status, submit a pull-request review, or request a safe squash merge after the workflow completes.
 - `condition`: shown as `If` in the UI. It supports `all` / `any` rule groups and persists legacy handle ids `true` and `false` for then/else branches.
+- `classify`: shown as `Classify` in the UI. It asks one closed question about a
+  piece of run state and routes on the typed answer, without an agent call. See
+  [Classify](#classify) below.
 - `parallel`: fans out work to all success-path outbound edges.
 - `join`: fans branches back in with `wait_for_all`, `wait_for_any`, or `quorum`.
 - `delay`: shown as `Wait` in the UI. It handles fixed time waits through the runtime wait provider.
@@ -44,6 +47,39 @@ The editor also offers built-in starter graphs for blank, pull-request review,
 Dependabot autopilot, and issue-triage workflows. They are defined separately
 in `lib/flows/templates.ts` because templates compose registered operators; they
 are not operators themselves.
+
+## Classify
+
+A classify node takes a templated `input` (the state to judge), one `question`,
+and an answer type. It runs through the decision layer
+(`lib/decisions/classify.ts`, see [decisions](../decisions.md)), so an answer
+comes back in a few hundred milliseconds with a probability for every option.
+
+| Answer type | Author provides | Outgoing handles | `state.<resultKey>.answer` |
+| --- | --- | --- | --- |
+| `boolean` | the question | `true`, `false` | `true` or `false` |
+| `choice` | 2 to 255 options, each with a stable `id` | `option:<id>` per option | the chosen option's label |
+| `scale` | 2 to 10 level descriptions, lowest first | the default handle | the level's 1-based position |
+
+Every result also carries `confidence` and `probabilities`, and lands in both
+run state and the node-run output. A scale does not branch on its own: read
+`state.<resultKey>.answer` from an `If` node.
+
+- **Every answer handle must be wired.** Validation rejects a boolean missing a
+  branch, an option without an edge, and an edge from a branch that no longer
+  exists. The inspector removes edges for options it deletes.
+- **Uncertain.** Setting `minConfidence` adds an `uncertain` handle that must be
+  wired. An answer below the floor leaves through it, with the answer it leaned
+  toward still in run state.
+- **No fail-open.** The author chose this node to pick a branch, so an outage,
+  a timeout, or an input that resolves to empty fails the node. Wire the
+  `error` handle to recover; otherwise the run fails. This differs from the
+  runtime's own decisions, which always fail open.
+- **Wording is the interface.** The question is read literally. Ask one thing,
+  phrase it positively, and avoid "and" or "or". Option descriptions are passed
+  to the model as guidance.
+- The limits on options and levels are the evaluation model's, not product
+  limits. There is no cap on classify nodes per flow or calls per run.
 
 ## Operator Contract
 

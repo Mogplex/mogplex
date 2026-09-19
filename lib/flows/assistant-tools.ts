@@ -3,6 +3,7 @@ import { FLOW_ASSISTANT_GRAPH_STATE_TOOL } from "@/lib/flows/assistant-chat-payl
 import { cloneFlowGraph, createDefaultFlowGraph } from "@/lib/flows/graph";
 import { DEFAULT_NEW_AGENT_MODEL_ID } from "@/lib/agents/model-options";
 import type { FlowGraph, FlowNodeType } from "@/lib/types";
+import { createAddClassifyNodeTool } from "./assistant-tools-classify";
 import type { ToolContext } from "./assistant-tools-node-factories";
 import type { GraphToolContext } from "./assistant-tools-graph-factories";
 import {
@@ -141,6 +142,7 @@ export function createFlowAssistantTools(input: {
     addAwaitEventNode: createAddAwaitEventNodeTool(ctx),
     addSetVariableNode: createAddSetVariableNodeTool(ctx),
     addTransformNode: createAddTransformNodeTool(ctx),
+    addClassifyNode: createAddClassifyNodeTool(ctx),
     addRunCommandNode: createAddRunCommandNodeTool(ctx),
     addSlackMessageNode: createAddSlackMessageNodeTool(ctx),
     addGithubCommentNode: createAddGithubCommentNodeTool(ctx),

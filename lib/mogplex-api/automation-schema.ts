@@ -168,6 +168,78 @@ export const automationGraphSchema = {
             },
             ["rules"]
           ),
+          node(
+            "classify",
+            {
+              input: {
+                ...string,
+                description:
+                  "Template for the state to judge, e.g. {{previous_outputs}} or {{metadata.title}}.",
+              },
+              question: {
+                ...string,
+                description:
+                  "One closed question, read literally. Ask one thing, phrased positively.",
+              },
+              output: {
+                oneOf: [
+                  {
+                    type: "object",
+                    properties: { kind: { const: "boolean" } },
+                    required: ["kind"],
+                  },
+                  {
+                    type: "object",
+                    properties: {
+                      kind: { const: "choice" },
+                      options: {
+                        type: "array",
+                        minItems: 2,
+                        maxItems: 255,
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: string,
+                            label: string,
+                            description: string,
+                          },
+                          required: ["id", "label"],
+                        },
+                      },
+                    },
+                    required: ["kind", "options"],
+                  },
+                  {
+                    type: "object",
+                    properties: {
+                      kind: { const: "scale" },
+                      levels: {
+                        type: "array",
+                        minItems: 2,
+                        maxItems: 10,
+                        items: string,
+                        description: "Ordered lowest to highest.",
+                      },
+                    },
+                    required: ["kind", "levels"],
+                  },
+                ],
+              },
+              resultKey: {
+                ...string,
+                description:
+                  "Variable name. Later nodes read state.<resultKey>.answer, .confidence, .probabilities.",
+              },
+              minConfidence: {
+                type: ["number", "null"],
+                exclusiveMinimum: 0,
+                exclusiveMaximum: 1,
+                description:
+                  "Optional. Answers below it leave through the uncertain handle, which must then be wired.",
+              },
+            },
+            ["input", "question", "output", "resultKey"]
+          ),
           node("parallel", {}),
           node("join", {
             policy: { enum: ["wait_for_all", "wait_for_any", "quorum"] },
@@ -310,7 +382,7 @@ export const automationGraphSchema = {
           sourceHandle: {
             ...nullableString,
             description:
-              "condition: true or false; error recovery: error; otherwise omit.",
+              "condition: true or false; classify: true or false (boolean), option:<id> per option (choice), omit for scale, uncertain when minConfidence is set; error recovery: error; otherwise omit.",
           },
           targetHandle: nullableString,
         },
@@ -383,6 +455,7 @@ export const automationSchemaGuide = {
     "Use the requested harness. Do not switch to Claude Code or Codex to avoid choosing a Mogplex agent. CLI harnesses use agentId: null and modelOverride: null.",
     "Task nodes run on a new branch from the default branch. They can run commands and open PRs without an upstream review node. They require a schedule trigger and systemPromptOverride.",
     "Edit nodes fix an existing PR and require an upstream review, except on mention and pr_comment triggers. They do not support schedule triggers.",
+    "Use a classify node to branch on meaning instead of an agent node: it answers one closed question about run state as true/false, a single choice, or a scale position (1-based), in well under a second. Wire every answer handle. A scale has one outgoing edge; branch on state.<resultKey>.answer with a condition node.",
     "Call mogplex_validate_automation with installationId and graph. It does not save, publish, run a model, or create a sandbox.",
     "Create or update the draft, then publish it. Publishing activates the schedule. Published status is not evidence of successful execution.",
     "mogplex_trigger_automation starts a real billed run with the configured write access. There is no dry-run flag. Inspect runs and logs to verify execution.",

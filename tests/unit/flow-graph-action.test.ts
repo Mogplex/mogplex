@@ -108,6 +108,7 @@ test("action operator keeps command source static and persists structured output
       createWait: async () => ({ id: "wait" }),
       finalizeWait: async () => undefined,
     },
+    classifier: async () => ({ ok: false, message: "classifier not used" }),
     actionRunner: async ({ action }) => {
       assert.equal(action.operation, "sandbox.run_command");
       receivedCommand = action.command;

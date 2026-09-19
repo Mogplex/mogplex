@@ -4,6 +4,7 @@
 
 import type { TriggerEvent } from "./common";
 import type { FlowActionNodeData } from "./flow-action";
+import type { FlowClassifyNodeData } from "./flow-classify";
 import type { FlowConditionNodeData } from "./flow-condition";
 import type {
   FlowSetVariableNodeData,
@@ -18,6 +19,13 @@ export type {
   FlowGithubCommitStatusState,
   FlowGithubReviewEvent,
 } from "./flow-action";
+export type {
+  FlowClassifyNodeData,
+  FlowClassifyOption,
+  FlowClassifyOutput,
+  FlowClassifyOutputKind,
+  FlowClassifyResult,
+} from "./flow-classify";
 export type {
   FlowConditionNodeData,
   FlowConditionOperator,
@@ -37,6 +45,7 @@ export type FlowNodeType =
   | "agent"
   | "action"
   | "condition"
+  | "classify"
   | "parallel"
   | "join"
   | "delay"
@@ -261,6 +270,12 @@ export type FlowNode =
       type: "condition";
       position: FlowNodePosition;
       data: FlowConditionNodeData;
+    }
+  | {
+      id: string;
+      type: "classify";
+      position: FlowNodePosition;
+      data: FlowClassifyNodeData;
     }
   | {
       id: string;
