@@ -1,5 +1,6 @@
 import { getDecisionDefinition } from "./definitions";
 import {
+  DEFAULT_ESCALATION_TIMEOUT_MS,
   evaluateWithDecisionModel,
   evaluateWithLanguageModel,
   type DecisionEvaluator,
@@ -162,7 +163,11 @@ export async function decide(
     }
 
     const settled = await settle(definition, primary.answers, () =>
-      deps.escalate(request)
+      deps.escalate({
+        ...request,
+        timeoutMs:
+          definition.escalationTimeoutMs ?? DEFAULT_ESCALATION_TIMEOUT_MS,
+      })
     );
     const { interpretation, escalation } = settled;
     const act = interpretation.act && (mode === "advise" || mode === "enforce");
@@ -203,4 +208,25 @@ export async function decide(
     console.warn("[decisions] decide failed open", { decision: id, error });
     return inactive(id, mode, "unavailable");
   }
+}
+
+/**
+ * Run work guarded by a deferred decision and always commit its event: with
+ * the outcome as baseline on success, and marked failed when the work throws,
+ * so an exception can never lose the record of what was judged.
+ */
+export async function commitDecisionAfter<T>(
+  handle: Pick<DecisionHandle, "commit">,
+  work: () => Promise<T>,
+  toBaseline: (result: T) => unknown
+): Promise<T> {
+  let result: T;
+  try {
+    result = await work();
+  } catch (error) {
+    await handle.commit({ failed: true });
+    throw error;
+  }
+  await handle.commit(toBaseline(result));
+  return result;
 }

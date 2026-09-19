@@ -15,7 +15,7 @@ import type {
 
 export const DEFAULT_DECISION_MODEL = "typesafe-ai/jev";
 export const DEFAULT_ESCALATION_MODEL = "anthropic/claude-sonnet-5";
-const ESCALATION_TIMEOUT_MS = 20_000;
+export const DEFAULT_ESCALATION_TIMEOUT_MS = 8000;
 const BREAKER_FAILURE_LIMIT = 5;
 const BREAKER_OPEN_MS = 60_000;
 
@@ -210,7 +210,7 @@ export const evaluateWithLanguageModel: DecisionEvaluator = async (input) => {
       model: gateway(model),
       providerOptions: gatewayOptions(input),
       maxRetries: 1,
-      abortSignal: AbortSignal.timeout(ESCALATION_TIMEOUT_MS),
+      abortSignal: AbortSignal.timeout(input.timeoutMs),
       output: Output.object({ schema: z.object(shape) }),
       instructions:
         "You are a careful evaluator. Answer each question strictly from the STATE. For a score question return the zero-based index of the best matching level. For a choice question return one option key.",

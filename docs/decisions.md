@@ -49,7 +49,8 @@ layer silently inactive.
   `loop_check` records what it sees and nothing more.
 - **Second opinion on the uncertain band.** When a definition sets `escalate`
   and the answer falls in its middle band, the same questions go to a language
-  model and its answer decides. On real traffic this matched the language
+  model and its answer decides. That call has its own budget
+  (`escalationTimeoutMs`): 8 s in front of a tool call, longer after a turn. On real traffic this matched the language
   model's accuracy at about one eighth of the cost.
 - **No provider names in anything a customer reads.** Notes and approval
   summaries describe the finding, not the machinery.

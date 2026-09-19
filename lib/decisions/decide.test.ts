@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decide, type DecideDeps } from "./decide";
+import { commitDecisionAfter, decide, type DecideDeps } from "./decide";
 import type { DecisionEvaluator } from "./evaluator";
 import type { DecisionEventRecord } from "./record";
 import type { DecisionAnswers, EvaluationResult } from "./types";
@@ -33,15 +33,16 @@ function makeDeps(input: {
   env?: Record<string, string>;
 }) {
   const recorded: DecisionEventRecord[] = [];
-  const calls = { evaluate: 0, escalate: 0 };
+  const calls = { evaluate: 0, escalate: 0, escalationTimeoutMs: 0 };
   const evaluate: DecisionEvaluator = async () => {
     calls.evaluate += 1;
     return typeof input.primary === "function"
       ? input.primary()
       : input.primary;
   };
-  const escalate: DecisionEvaluator = async () => {
+  const escalate: DecisionEvaluator = async (request) => {
     calls.escalate += 1;
+    calls.escalationTimeoutMs = request.timeoutMs;
     return input.escalation ?? { ok: false, reason: "error", latencyMs: 1 };
   };
   const deps: DecideDeps = {
@@ -120,6 +121,9 @@ describe("decide", () => {
     );
 
     expect(calls.escalate).toBe(1);
+    // The operator waits on this gate, so the second opinion gets 8 s, not
+    // the primary call's budget and not an open-ended one.
+    expect(calls.escalationTimeoutMs).toBe(8000);
     expect(outcome).toMatchObject({
       act: false,
       escalated: true,
@@ -242,5 +246,47 @@ describe("decide", () => {
       verdict: "run_promotion",
       baseline: { promoted: 1 },
     });
+  });
+});
+
+describe("commitDecisionAfter", () => {
+  function makeHandle() {
+    const committed: unknown[] = [];
+    return {
+      committed,
+      handle: {
+        commit: async (baseline?: unknown) => {
+          committed.push(baseline);
+        },
+      },
+    };
+  }
+
+  it("should commit the outcome as baseline when the work succeeds", async () => {
+    const { handle, committed } = makeHandle();
+
+    const result = await commitDecisionAfter(
+      handle,
+      async () => ({ promoted: 2 }),
+      (outcome) => ({ promoted: outcome.promoted })
+    );
+
+    expect(result).toEqual({ promoted: 2 });
+    expect(committed).toEqual([{ promoted: 2 }]);
+  });
+
+  it("should still commit, marked failed, and rethrow when the work throws", async () => {
+    const { handle, committed } = makeHandle();
+
+    await expect(
+      commitDecisionAfter(
+        handle,
+        async () => {
+          throw new Error("extraction failed");
+        },
+        () => ({})
+      )
+    ).rejects.toThrow("extraction failed");
+    expect(committed).toEqual([{ failed: true }]);
   });
 });

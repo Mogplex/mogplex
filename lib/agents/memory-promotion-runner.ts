@@ -1,6 +1,6 @@
 import type { LanguageModel } from "ai";
 import { loadLatestCompaction } from "@/lib/agents/compaction/store";
-import { decide } from "@/lib/decisions/decide";
+import { commitDecisionAfter, decide } from "@/lib/decisions/decide";
 import { clipText } from "@/lib/decisions/state";
 import {
   buildTurnPromotionEvidence,
@@ -111,17 +111,20 @@ export async function promoteMemoriesForConversation(input: {
     },
   };
 
-  const result = await promoteMemoriesFromEvidence(
-    { ...source, aiCallId: input.aiCallId, model: input.model },
-    deps
+  const result = await commitDecisionAfter(
+    gate,
+    () =>
+      promoteMemoriesFromEvidence(
+        { ...source, aiCallId: input.aiCallId, model: input.model },
+        deps
+      ),
+    (outcome) => ({
+      skipped: false,
+      promoted: outcome.promoted.length,
+      duplicates: outcome.duplicates.length,
+      rejected: outcome.rejected.length,
+    })
   );
-
-  await gate.commit({
-    skipped: false,
-    promoted: result.promoted.length,
-    duplicates: result.duplicates.length,
-    rejected: result.rejected.length,
-  });
 
   if (result.promoted.length > 0 || result.rejected.length > 0) {
     console.info("[memory-promotion] run complete", {
