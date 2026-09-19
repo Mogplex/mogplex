@@ -172,9 +172,15 @@ export async function classify(
   }
   // Never a silent branch: the node fails so the flow's error edge, and the
   // person reading the run, can see why nothing was decided.
-  if (!(await deps.isEnabled(request.scope))) {
-    return { ok: false, message: CLASSIFY_TURNED_OFF_MESSAGE };
-  }
+  const allowed = await deps
+    .isEnabled(request.scope)
+    .catch((error: unknown) => {
+      console.warn("[decisions] account setting check failed", { error });
+      return null;
+    });
+  // Not knowing the account's choice is no licence to send its data.
+  if (allowed === null) return { ok: false, message: FAILURE_MESSAGES.error };
+  if (!allowed) return { ok: false, message: CLASSIFY_TURNED_OFF_MESSAGE };
 
   const state = buildDecisionState(request.state);
   const questions = {

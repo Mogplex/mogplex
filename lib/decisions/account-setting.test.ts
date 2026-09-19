@@ -95,6 +95,30 @@ describe("createDecisionChecksGate", () => {
     expect(await gate(teamScope)).toBe(false);
   });
 
+  it("should not let a read that began before a change cache the old value", async () => {
+    const releases: Array<(value: boolean) => void> = [];
+    const gate = createDecisionChecksGate(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releases.push(resolve);
+        }),
+      () => 1_000
+    );
+
+    const before = gate(teamScope);
+    gate.forget({ table: "teams", id: "team-1" });
+    const after = gate(teamScope);
+    // The fresh read lands first; the stale one finishes after it.
+    releases[1]?.(false);
+    expect(await after).toBe(false);
+    releases[0]?.(true);
+    expect(await before).toBe(true);
+
+    expect(releases).toHaveLength(2);
+    expect(await gate(teamScope)).toBe(false);
+    expect(releases).toHaveLength(2);
+  });
+
   it("should read as off when the lookup fails, and retry on the next call", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const loader = makeLoader({ "teams:team-1": new Error("db down") });
