@@ -17,7 +17,6 @@ import { persistedControlStream } from "@/lib/control/persisted-stream";
 import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
 import { createAiCall } from "@/lib/interactive-runs";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
-import { promoteMemoriesForConversation } from "@/lib/agents/memory-promotion-runner";
 import {
   createAgentUserFacingOutputTransform,
   sanitizeAgentUserFacingError,
@@ -57,6 +56,7 @@ import {
 } from "./lifecycle";
 import { wrapControlResponseLifecycle } from "./stream-lifecycle";
 import { createControlFinalizationGuard } from "./finalization-guard";
+import { createControlTurnTasks } from "./turn-end";
 import {
   appendSandboxTaskLifecycleFooter,
   createSandboxTaskLifecycle,
@@ -300,6 +300,14 @@ export async function executeControlChatRequest(input: {
       abortSignal: input.req.signal,
     });
 
+    const turnTasks = createControlTurnTasks({
+      userId: input.userId,
+      teamId: teamId ?? null,
+      conversationId: scope.conversationId ?? null,
+      repoId: scope.repoId ?? null,
+      aiCallId: activeCall.id,
+      userText: input.latestUserText,
+    });
     const finishToolTelemetry = createToolCallFinishHandler(
       activeCall,
       input.userId,
@@ -360,6 +368,7 @@ export async function executeControlChatRequest(input: {
       },
       onStepEnd(step) {
         latestSteps.push(step);
+        turnTasks.onStep(latestSteps);
       },
       async onAbort({ steps }) {
         replaceLatestSteps(steps);
@@ -399,22 +408,9 @@ export async function executeControlChatRequest(input: {
           console.error("[control/chat] finish finalization failed", { error });
         }
         if (!finalizedNow) return;
-        // Memory promotion: distill durable facts from the checkpoint, or
-        // from this turn when none exists. Never touches the finished run.
+        // Memory promotion and decision checks never touch the finished run.
         if (finishReason === "error") return;
-        promoteMemoriesForConversation({
-          userId: input.userId,
-          conversationId: scope.conversationId ?? null,
-          repoId: scope.repoId ?? null,
-          aiCallId: activeCall.id,
-          model,
-          turn: { userText: input.latestUserText, steps: latestSteps },
-        }).catch((error: unknown) => {
-          console.warn("[memory-promotion] failed", {
-            conversationId: scope.conversationId,
-            error,
-          });
-        });
+        turnTasks.onEnd({ model, steps: latestSteps });
       },
     });
 

@@ -50,6 +50,7 @@ import { PLANNING_TOOLS } from "./tools/planning";
 import { FILESYSTEM_TOOLS } from "./tools/filesystem";
 import { GIT_TOOLS } from "./tools/git";
 import { EXECUTION_TOOLS } from "./tools/execution";
+import { controlDecisionScope } from "./decision-scope";
 import { MCP_TOOLS } from "./tools/mcp";
 import { INFRASTRUCTURE_TOOLS } from "./tools/infrastructure";
 import { DELIVERY_TOOLS } from "./tools/delivery";
@@ -158,7 +159,8 @@ function buildToolForDef(
       ctx.userId,
       ctx.repoId ?? undefined,
       ctx.sandboxBinding,
-      ctx.sandboxExecution
+      ctx.sandboxExecution,
+      { ...controlDecisionScope(ctx), riskGate: false }
     );
   }
   if (def.name === "sandbox_start") {

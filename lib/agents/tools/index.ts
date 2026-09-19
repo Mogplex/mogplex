@@ -108,7 +108,10 @@ export function buildStaticTools(
       userId,
       repoId,
       undefined,
-      sandboxExecution
+      sandboxExecution,
+      userId
+        ? { surface: "agent_tool", userId, repoId: repoId ?? null }
+        : undefined
     ),
     // With a sandbox, file reads come from the live checkout so the agent
     // sees its own uncommitted edits; GitHub is the fallback without one.
