@@ -80,12 +80,15 @@ export function DecisionChecksSection({
           While an agent works, a small evaluation model judges what it is
           doing: whether a shell command would destroy something remote,
           whether a command that reported success actually failed, and whether
-          the agent&apos;s final claims match what its tools did. The same
-          model answers Classify nodes in automations.
+          the agent&apos;s final claims match what its tools did. It also
+          notes which of the memories and agent skills loaded for a request
+          the request needed, without changing what is loaded. The same model
+          answers Classify nodes in automations.
         </p>
         <p>
-          When this is on, short excerpts of commands, tool output, and the
-          agent&apos;s final message are sent to that model with secrets
+          When this is on, short excerpts of commands, tool output, the
+          agent&apos;s final message, and your request with the memories and
+          skill summaries loaded for it are sent to that model with secrets
           removed. When it is off, nothing is sent, destructive commands no
           longer pause for approval through this check, and Classify nodes
           fail instead of choosing a branch. A change can take up to 30

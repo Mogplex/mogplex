@@ -12,7 +12,9 @@ export type DecisionId =
   | "tool_result_failed"
   | "claim_verification"
   | "loop_check"
-  | "memory_promotion_gate";
+  | "memory_promotion_gate"
+  | "skill_selection"
+  | "memory_relevance";
 
 /**
  * Decisions whose questions are authored outside `definitions.ts`. A flow's
@@ -71,6 +73,12 @@ export type DecisionDefinition = {
    */
   escalationTimeoutMs?: number;
   questions: Readonly<Record<string, DecisionQuestion>>;
+  /**
+   * Builds one question per candidate when the things being judged are only
+   * known at call time, such as an agent's skills or a turn's memories. The
+   * caller passes the candidate keys; `questions` holds the fixed ones.
+   */
+  candidateQuestion?: (key: string) => DecisionQuestion;
   interpret: (answers: DecisionAnswers) => DecisionInterpretation;
 };
 
@@ -80,7 +88,10 @@ export type DecisionScope = {
   repoId?: string | null;
   aiCallId?: string | null;
   conversationId?: string | null;
-  /** Where the decision ran: control, chat, slack, agent_tool, automation. */
+  /**
+   * Where the decision ran: control, chat, slack, agent_tool, automation,
+   * harness (a CLI harness run), or agent_run (the native runner).
+   */
   surface: string;
 };
 

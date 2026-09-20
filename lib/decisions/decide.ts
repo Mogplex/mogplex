@@ -21,6 +21,7 @@ import type {
   DecisionDefinition,
   DecisionId,
   DecisionOutcome,
+  DecisionQuestion,
   DecisionScope,
   EvaluationFailure,
   EvaluationResult,
@@ -54,6 +55,11 @@ export type DecideOptions = {
    */
   deferRecord?: boolean;
   metadata?: Record<string, unknown>;
+  /**
+   * Keys of the candidates to judge, for a definition that asks one question
+   * per candidate. The state must label each candidate with the same key.
+   */
+  candidates?: readonly string[];
 };
 
 export type DecisionHandle = DecisionOutcome & {
@@ -104,6 +110,19 @@ async function recordOutage(
   });
 }
 
+/** The definition's fixed questions plus one per candidate, when it has them. */
+export function buildDecisionQuestions(
+  definition: DecisionDefinition,
+  candidates: readonly string[] = []
+): Readonly<Record<string, DecisionQuestion>> {
+  const perCandidate = definition.candidateQuestion;
+  if (!perCandidate) return definition.questions;
+  return {
+    ...definition.questions,
+    ...Object.fromEntries(candidates.map((key) => [key, perCandidate(key)])),
+  };
+}
+
 /** Interpret the answers, asking for a second opinion when uncertain. */
 async function settle(
   definition: DecisionDefinition,
@@ -139,16 +158,21 @@ export async function decide(
   const definition = getDecisionDefinition(id);
   const mode = resolveDecisionMode(definition, scope.surface, deps.env);
   if (mode === "off") return inactive(id, mode, "off");
+  // A per-candidate decision with no candidates has nothing to judge.
+  if (definition.candidateQuestion && !options.candidates?.length) {
+    return inactive(id, mode, "off");
+  }
 
   try {
     // The account's choice outranks every mode: nothing is evaluated, sent,
     // or recorded for a team or person that turned the checks off.
     if (!(await deps.isEnabled(scope))) return inactive(id, "off", "off");
     const state = buildDecisionState(rawState);
+    const questions = buildDecisionQuestions(definition, options.candidates);
     const request = {
       decisionId: id,
       state,
-      questions: definition.questions,
+      questions,
       timeoutMs: definition.timeoutMs,
       userId: scope.userId ?? null,
     };
@@ -158,7 +182,7 @@ export async function decide(
       mode,
       scope,
       state,
-      questions: definition.questions,
+      questions,
       baseline: options.baseline,
       escalated: false,
       escalationAnswers: null,

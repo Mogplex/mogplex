@@ -18,6 +18,8 @@ import type { HarnessRepoRecord, SandboxHarnessPostDeps } from "./types";
 export type SandboxSetupContext = {
   id: string;
   userId: string;
+  /** The team the sandbox belongs to; null for personal work. */
+  teamId: string | null;
   harnessId: HarnessId;
   conversationId: string | null;
   repoId: string | null;

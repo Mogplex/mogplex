@@ -1,3 +1,4 @@
+import { memoryRelevance, skillSelection } from "./definitions-selection";
 import type {
   DecisionAnswer,
   DecisionAnswers,
@@ -250,6 +251,8 @@ export const DECISION_DEFINITIONS: Readonly<
   claim_verification: claimVerification,
   loop_check: loopCheck,
   memory_promotion_gate: memoryPromotionGate,
+  skill_selection: skillSelection,
+  memory_relevance: memoryRelevance,
 };
 
 export function getDecisionDefinition(id: DecisionId): DecisionDefinition {

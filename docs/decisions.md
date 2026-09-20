@@ -18,14 +18,34 @@ Code acts.
 | `claim_verification` | End of every Control, chat, Slack, and API turn (awaited, so a worker that exits with the turn cannot drop it) | `advise` | An unsupported "tests pass", "PR opened", or "pushed" claim becomes a notice in the run's activity |
 | `loop_check` | In the background once a turn has six tool calls | `shadow` | Records only. By policy nothing may end or shorten a run |
 | `memory_promotion_gate` | Before memory promotion's extraction call | `shadow` | In `enforce`, skips extraction when the record holds nothing durable |
+| `skill_selection` | When a roster agent with linked skills starts a run: the sandbox harness route (`harness`) and the native runner (`agent_run`) | `shadow` | Records only. Every linked skill is still loaded; the row says which ones the task needed |
+| `memory_relevance` | Every Control turn that injects memories, beside the turn | `shadow` | Records only. The prompt is already built; the row says which injected memories bear on the request |
 | `flow_classify` | Every automation Classify node | always acts | The run takes the answered branch. The question is authored in the flow graph |
 
 Questions, thresholds, and versions for the runtime's own decisions live in
-`lib/decisions/definitions.ts` and nowhere else. The one exception is
+`lib/decisions/definitions.ts` and, for the per-candidate decisions,
+`lib/decisions/definitions-selection.ts`, and nowhere else. The one exception is
 `flow_classify`: its question belongs to the customer's flow, so it is stored
 with each event instead (`question_version` is `authored`). The evaluation
 model answers the question as written, so keep wording literal, positive, and
 atomic, and bump `version` on every change.
+
+### Per-candidate decisions
+
+`skill_selection` and `memory_relevance` judge a list that is only known at
+call time. The caller labels each candidate with a short key (`c01`, `c02`,
+...), puts the labelled content in the state, and passes the keys as
+`candidates`; `decide()` builds one yes/no question per key from the
+definition's `candidateQuestion`. One call returns a probability per
+candidate, and the state is billed once, not once per question. A call judges
+at most 48 candidates and records how many it left out as `metadata.omitted`.
+Ids never enter the judged state: `metadata.candidates` maps each key back to
+the skill or memory id.
+
+Both are `shadow` and their thresholds (`SKILL_NEEDED_THRESHOLD`,
+`MEMORY_RELEVANT_THRESHOLD`) are first guesses with no production data behind
+them. Promote neither until the recorded probabilities have been reviewed.
+Rules are out of scope by design: an agent's rules always apply.
 
 ## Modes
 
@@ -124,6 +144,13 @@ select metadata->>'flow_node_label' as node, verdict, count(*),
 from decision_events where decision_id = 'flow_classify'
   and metadata->>'flow_id' = '<flow id>' group by 1, 2 order by 3 desc;
 
+-- How many injected memories the relevance filter would have dropped, per turn.
+select created_at, (baseline->>'injected')::int as injected,
+       (select count(*) from jsonb_each(answers) a
+        where (a.value->>'probability')::numeric < 0.2) as would_drop
+from decision_events where decision_id = 'memory_relevance' and status = 'ok'
+order by created_at desc;
+
 -- Frontier calls the promotion gate would save.
 select verdict, (baseline->>'promoted')::int > 0 as promoted, count(*)
 from decision_events where decision_id = 'memory_promotion_gate' group by 1, 2;
@@ -137,3 +164,12 @@ model; with the second-opinion band, 95.5%, identical to the language model
 alone. A 50-command red-team set for `command_risk`: 49/50 exact, and at the
 0.7 act threshold 20/20 destructive commands caught with 0/30 false alarms,
 including misleading comments, `git push -uf`, and `+HEAD:main`.
+
+Live probe of the per-candidate decisions (2026-09-20, synthetic data): 48
+memory questions in one call returned in 277 ms for $0.00023, against 16 in
+693 ms cold. For "rename the billing page" the memories about the billing
+page, route renames, and UI copy scored 0.80 to 0.97, standing rules such as
+"never push to main" and the commit format 0.67 to 0.78, the package-manager
+preference 0.3, and unrelated notes 0.02 to 0.07. Four skills scored 0.97 for
+the matching one and 0.05 to 0.13 for the rest, and all under 0.03 for an
+unrelated request. This shows the shape works; it is not calibration.

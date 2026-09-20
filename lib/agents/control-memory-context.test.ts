@@ -9,6 +9,7 @@ import {
   isPromptWorthy,
   loadControlMemoryContext,
   selectControlMemories,
+  type ControlMemoryContext,
   type ControlMemoryContextDeps,
 } from "./control-memory-context";
 
@@ -160,6 +161,60 @@ describe("loadControlMemoryContext", () => {
       repoId: "repo-1",
     });
     expect(calls.find((c) => c.query)?.scope).toEqual({ repoId: "repo-1" });
+  });
+
+  it("tells the observer exactly which memories reached the prompt", async () => {
+    const { impl } = deps();
+    const seen: ControlMemoryContext[] = [];
+    const text = await loadControlMemoryContext(
+      {
+        userId: "user-1",
+        repoId: "repo-1",
+        query: "fix the login bug",
+        onSelected: (selected) => seen.push(selected),
+      },
+      impl
+    );
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.semantic.map((row) => row.content)).toEqual([
+      "Uses conventional commits",
+    ]);
+    expect(seen[0]?.relevant.map((row) => row.content)).toEqual([
+      "Related fact",
+    ]);
+    for (const row of Object.values(seen[0] ?? {}).flat()) {
+      expect(text).toContain(row.content);
+    }
+  });
+
+  it("keeps the memories when the observer throws, and stays silent with nothing to inject", async () => {
+    const { impl } = deps();
+    const text = await loadControlMemoryContext(
+      {
+        userId: "user-1",
+        repoId: "repo-1",
+        query: "fix the login bug",
+        onSelected: () => {
+          throw new Error("observer broke");
+        },
+      },
+      impl
+    );
+    expect(text).toContain("Uses conventional commits");
+
+    let notified = false;
+    const empty = await loadControlMemoryContext(
+      {
+        userId: "user-1",
+        query: "",
+        onSelected: () => {
+          notified = true;
+        },
+      },
+      deps({ listByLane: async () => [] }).impl
+    );
+    expect(empty).toBeNull();
+    expect(notified).toBe(false);
   });
 
   it("skips the relevance search when the request is empty", async () => {

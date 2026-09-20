@@ -246,6 +246,7 @@ export function createSandboxHarnessPostHandler(
     const setupCtx: SandboxSetupContext = {
       id,
       userId: creds.userId,
+      teamId: record.product_team_id ?? null,
       harnessId,
       conversationId: body.conversationId || null,
       repoId: record.repo_id || null,

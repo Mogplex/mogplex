@@ -29,6 +29,11 @@ export type ControlMemoryContextInput = {
   repoId?: string | null;
   /** Latest operator text; drives the relevance search. */
   query: string;
+  /**
+   * Told which memories were chosen for the prompt. Must return at once: the
+   * turn is waiting on this load, so an observer starts its work and leaves.
+   */
+  onSelected?: (selected: ControlMemoryContext) => void;
 };
 
 export type ControlMemoryContextDeps = {
@@ -214,15 +219,27 @@ export async function loadControlMemoryContext(
   );
   if (!loaded) return null;
   const [semantic, procedural, episodic, relevant] = loaded;
-  return formatControlMemoryContext(
-    selectControlMemories({
-      repoId: input.repoId,
-      semantic,
-      procedural,
-      episodic,
-      relevant,
-    })
-  );
+  const selected = selectControlMemories({
+    repoId: input.repoId,
+    semantic,
+    procedural,
+    episodic,
+    relevant,
+  });
+  if (selected) notifySelected(input.onSelected, selected);
+  return formatControlMemoryContext(selected);
+}
+
+/** An observer's failure must never cost the turn its memories. */
+function notifySelected(
+  onSelected: ControlMemoryContextInput["onSelected"],
+  selected: ControlMemoryContext
+): void {
+  try {
+    onSelected?.(selected);
+  } catch (error) {
+    console.warn("[control/memory] selection observer failed", { error });
+  }
 }
 
 /**

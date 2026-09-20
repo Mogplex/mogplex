@@ -100,6 +100,15 @@ export async function executeControlChatRequest(input: {
     const activeCall = aiCall;
     await input.background?.onAiCallStarted(activeCall.id);
 
+    const turnTasks = createControlTurnTasks({
+      userId: input.userId,
+      teamId: teamId ?? null,
+      conversationId: scope.conversationId ?? null,
+      repoId: scope.repoId ?? null,
+      aiCallId: activeCall.id,
+      userText: input.latestUserText,
+    });
+
     // Build orchestrator context
     const [githubToken, sandboxContext, worktreeContext, memoryContext] =
       await Promise.all([
@@ -110,6 +119,7 @@ export async function executeControlChatRequest(input: {
           userId: input.userId,
           repoId: input.body.repoId ?? null,
           query: input.latestUserText,
+          onSelected: turnTasks.onMemoriesSelected,
         }),
       ]);
     // Replace the client hint with the owned, server-validated session and
@@ -300,14 +310,6 @@ export async function executeControlChatRequest(input: {
       abortSignal: input.req.signal,
     });
 
-    const turnTasks = createControlTurnTasks({
-      userId: input.userId,
-      teamId: teamId ?? null,
-      conversationId: scope.conversationId ?? null,
-      repoId: scope.repoId ?? null,
-      aiCallId: activeCall.id,
-      userText: input.latestUserText,
-    });
     const finishToolTelemetry = createToolCallFinishHandler(
       activeCall,
       input.userId,
