@@ -164,3 +164,12 @@ model; with the second-opinion band, 95.5%, identical to the language model
 alone. A 50-command red-team set for `command_risk`: 49/50 exact, and at the
 0.7 act threshold 20/20 destructive commands caught with 0/30 false alarms,
 including misleading comments, `git push -uf`, and `+HEAD:main`.
+
+Live probe of the per-candidate decisions (2026-09-20, synthetic data): 48
+memory questions in one call returned in 277 ms for $0.00023, against 16 in
+693 ms cold. For "rename the billing page" the memories about the billing
+page, route renames, and UI copy scored 0.80 to 0.97, standing rules such as
+"never push to main" and the commit format 0.67 to 0.78, the package-manager
+preference 0.3, and unrelated notes 0.02 to 0.07. Four skills scored 0.97 for
+the matching one and 0.05 to 0.13 for the rest, and all under 0.03 for an
+unrelated request. This shows the shape works; it is not calibration.
