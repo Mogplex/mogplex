@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { HarnessProgressUpdate } from "./harness-progress";
 import { MockLanguageModelV4 } from "ai/test";
 import { runNativeMogplexAgent } from "./native-run";
+import type { SkillSelectionInput } from "@/lib/decisions/skills";
 import { createRunGuidanceSession } from "@/lib/slack/run-guidance-session";
 import type { RunGuidance } from "@/lib/slack/run-guidance-store";
 import {
@@ -53,6 +54,9 @@ async function exercise(
   let closed = false;
   let executionLeaseAcquired = false;
   let systemSuffix: string | null | undefined;
+  const skillChecks: SkillSelectionInput[] = [];
+  let skillCheckStartedBeforeStream = false;
+  let skillCheckSettled = false;
   const model = new MockLanguageModelV4({
     doStream: async () => ({
       stream: new ReadableStream({
@@ -192,8 +196,20 @@ async function exercise(
             },
           };
         },
+        observeSkills: async (input) => {
+          skillChecks.push(input);
+          // Slower than the whole run, so only an await can see it settle.
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          skillCheckSettled = true;
+        },
         createStream: async (input) => {
           systemSuffix = input.systemSuffix;
+          skillCheckStartedBeforeStream = skillChecks.length > 0;
+          assert.equal(
+            skillCheckSettled,
+            false,
+            "the skill check must never be awaited in front of the run"
+          );
           assert.equal(
             input.context.sandboxExecution?.retryOnSandboxLoss,
             false
@@ -312,8 +328,43 @@ async function exercise(
     progress,
     guidanceSteps,
     systemSuffix,
+    skillChecks,
+    skillCheckStartedBeforeStream,
+    skillCheckSettled,
   };
 }
+
+test("native runner records which skills the request needed beside the run, scoped to its team", async () => {
+  const result = await exercise("agent");
+  assert.equal(result.caught, undefined);
+  assert.equal(result.skillChecks.length, 1);
+  const [check] = result.skillChecks;
+  assert.equal(check?.request, "Fix the tests");
+  assert.equal(check?.delivery, "inline");
+  assert.deepEqual(
+    check?.agent.skills.map((skill) => skill.id),
+    ["skill-1"]
+  );
+  assert.deepEqual(check?.scope, {
+    surface: "agent_run",
+    userId: result.call.user_id,
+    teamId: "team-1",
+    repoId: result.call.repo_id,
+    aiCallId: result.call.id,
+    conversationId: null,
+  });
+  assert.equal(result.skillCheckStartedBeforeStream, true);
+  assert.equal(
+    result.skillCheckSettled,
+    true,
+    "awaited before the worker exits"
+  );
+});
+
+test("native runner asks nothing about skills when the run has no agent", async () => {
+  const result = await exercise("success");
+  assert.equal(result.skillChecks.length, 0);
+});
 
 test("native runner carries the roster agent block, skills inlined, in the system suffix", async () => {
   const result = await exercise("agent");

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSandboxServiceCredentials } from "@/lib/sandbox/get-user-credentials";
 import { getSandbox } from "@/lib/sandbox/client";
@@ -29,6 +30,7 @@ import {
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import { getSlackBotToken } from "@/lib/slack/client";
 import { resolveAgentRuntimeForUser } from "@/lib/agents/runtime/store";
+import { observeSkillSelection } from "@/lib/decisions/skills";
 import {
   syncHarnessGitWorkspace,
   publishHarnessPullRequest,
@@ -105,6 +107,8 @@ export const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   },
   getSlackBotToken,
   resolveAgentRuntime: resolveAgentRuntimeForUser,
+  observeSkillSelection,
+  runAfterResponse: (work) => after(work),
   fetchSlackAttachment: ({ botToken, url, signal }) =>
     fetch(url, {
       headers: { Authorization: `Bearer ${botToken}` },

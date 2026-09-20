@@ -13,14 +13,39 @@ import type { SandboxHarnessPostDeps } from "./types";
  * under `.mogplex/agent/`, and the agent block (identity, system prompt,
  * rules, skill index) is prepended to the task prompt. The block goes ahead
  * of the memory and delivery sections so the harness reads its role first.
+ *
+ * Which skills the task needed is recorded beside this, never in front of it:
+ * the check is handed to `runAfterResponse`, so the harness starts on time and
+ * the function stays alive until the record is written.
  */
 export async function setupAgentRuntime(
-  deps: Pick<SandboxHarnessPostDeps, "safeAppendAiCallEvent">,
+  deps: Pick<
+    SandboxHarnessPostDeps,
+    "safeAppendAiCallEvent" | "observeSkillSelection" | "runAfterResponse"
+  >,
   sandbox: Pick<Sandbox, "writeFiles" | "readFile">,
   ctx: SandboxSetupContext,
   runtime: AgentRuntime,
   prompt: string
 ): Promise<string> {
+  const observed = deps.observeSkillSelection({
+    agent: runtime,
+    request: prompt,
+    delivery: "files",
+    scope: {
+      surface: "harness",
+      userId: ctx.userId,
+      teamId: ctx.teamId,
+      repoId: ctx.repoId,
+      aiCallId: ctx.aiCallId,
+      conversationId: ctx.conversationId,
+    },
+  });
+  try {
+    deps.runAfterResponse(() => observed);
+  } catch {
+    // Outside a request scope the check still runs; it just is not held open.
+  }
   const rendered = renderAgentInstructions(runtime, "files");
   const written = await materializeAgentRuntimeFiles({
     sandbox,

@@ -16,6 +16,7 @@ import {
   loadSandboxHarnessRouteModule,
 } from "./helpers/sandbox-harness-route-fixtures";
 import type { AgentRuntime } from "../../lib/agents/runtime/types";
+import type { SkillSelectionInput } from "../../lib/decisions/skills";
 
 const reviewer: AgentRuntime = {
   id: "agent-1",
@@ -44,6 +45,8 @@ function buildDeps(input: {
   }) => Promise<AgentRuntime | null>;
   onPrompt?: (prompt: string) => void;
   onWrite?: (files: Array<{ path: string; content: Buffer }>) => void;
+  observeSkills?: (check: SkillSelectionInput) => Promise<void>;
+  onDeferred?: (work: () => Promise<void>) => void;
 }) {
   const aiCall = buildAiCall();
   return {
@@ -51,6 +54,7 @@ function buildDeps(input: {
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     loadOwnedSandboxRecord: async () =>
       buildOwnedSandboxServiceRecord({
+        record: { product_team_id: "team-9" },
         repo: buildSandboxServiceRecordRepo({ github_installation_id: 123 }),
       }),
     resolveSandboxAiAccess: async () =>
@@ -117,6 +121,8 @@ function buildDeps(input: {
       text,
     persistHarnessMemory: async () => {},
     resolveAgentRuntime: input.resolve,
+    observeSkillSelection: input.observeSkills ?? (async () => {}),
+    runAfterResponse: input.onDeferred ?? (() => {}),
   };
 }
 
@@ -185,6 +191,57 @@ test("POST /api/sandbox/[id]/harness materializes the agent's skills and leads t
       harnessPrompt.indexOf("Review the router."),
     "the task follows the agent block"
   );
+});
+
+test("POST /api/sandbox/[id]/harness records which skills the task needed without holding up the harness", async () => {
+  const { createSandboxHarnessPostHandler } =
+    await loadSandboxHarnessRouteModule();
+  const checks: SkillSelectionInput[] = [];
+  const deferred: Array<() => Promise<void>> = [];
+  let harnessRan = false;
+  const neverSettles = new Promise<void>(() => {});
+  const handler = createSandboxHarnessPostHandler(
+    buildDeps({
+      resolve: async () => reviewer,
+      onPrompt: () => {
+        harnessRan = true;
+      },
+      observeSkills: (check) => {
+        checks.push(check);
+        return neverSettles;
+      },
+      onDeferred: (work) => deferred.push(work),
+    })
+  );
+
+  const response = await handler(
+    buildSandboxRouteRequest({
+      method: "POST",
+      suffix: "/harness",
+      init: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          harness: "codex",
+          prompt: "Review the router.",
+          agentId: "agent-1",
+        }),
+      },
+    }),
+    buildSandboxRouteParams()
+  );
+  await response.text();
+
+  assert.equal(harnessRan, true, "a check that never settles delays nothing");
+  assert.equal(checks.length, 1);
+  assert.equal(checks[0]?.request, "Review the router.");
+  assert.equal(checks[0]?.delivery, "files");
+  assert.equal(checks[0]?.agent.id, "agent-1");
+  assert.equal(checks[0]?.scope.surface, "harness");
+  assert.equal(checks[0]?.scope.userId, "user-123");
+  assert.equal(checks[0]?.scope.teamId, "team-9");
+  assert.ok(checks[0]?.scope.aiCallId, "linked to the run's call");
+  assert.equal(deferred.length, 1, "handed to the keep-alive hook");
+  assert.equal(deferred[0]?.(), neverSettles);
 });
 
 test("POST /api/sandbox/[id]/harness refuses an agent the caller cannot run before touching the sandbox", async () => {

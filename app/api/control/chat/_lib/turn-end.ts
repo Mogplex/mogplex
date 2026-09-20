@@ -3,6 +3,8 @@ import {
   promoteMemoriesForConversation,
   type PromotionTurnRecord,
 } from "@/lib/agents/memory-promotion-runner";
+import type { ControlMemoryContext } from "@/lib/agents/control-memory-context";
+import { observeMemoryRelevance } from "@/lib/decisions/memory-relevance";
 import { createTurnDecisionObserver } from "@/lib/decisions/turn-observer";
 import type { DecisionStep } from "@/lib/decisions/turn";
 
@@ -20,17 +22,33 @@ export function createControlTurnTasks(input: {
   repoId: string | null;
   aiCallId: string;
   userText: string;
+  /** Injectable for tests; production uses the decision layer. */
+  observeMemories?: typeof observeMemoryRelevance;
 }) {
-  const observer = createTurnDecisionObserver({
+  const scope = {
     surface: "control",
     userId: input.userId,
     teamId: input.teamId,
     repoId: input.repoId,
     aiCallId: input.aiCallId,
     conversationId: input.conversationId,
-  });
+  };
+  const observer = createTurnDecisionObserver(scope);
+  let memoryCheck: Promise<void> = Promise.resolve();
 
   return {
+    /**
+     * Starts the relevance check on the memories the prompt just received and
+     * returns at once. It runs beside the turn and is awaited when the turn
+     * ends, so it never delays the first token and is not dropped either.
+     */
+    onMemoriesSelected(selected: ControlMemoryContext) {
+      memoryCheck = (input.observeMemories ?? observeMemoryRelevance)({
+        request: input.userText,
+        groups: selected,
+        scope,
+      });
+    },
     onStep(steps: TurnSteps) {
       observer.onStep(steps as unknown as DecisionStep[]);
     },
@@ -56,7 +74,10 @@ export function createControlTurnTasks(input: {
           error,
         });
       });
-      await observer.onEnd(end.steps as unknown as DecisionStep[]);
+      await Promise.all([
+        observer.onEnd(end.steps as unknown as DecisionStep[]),
+        memoryCheck,
+      ]);
     },
   };
 }

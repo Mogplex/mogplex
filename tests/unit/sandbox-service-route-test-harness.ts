@@ -16,6 +16,7 @@ type SandboxServiceRecordRepoFixture = {
 
 type SandboxServiceRouteRecordFixture = {
   repo_id: string | null;
+  product_team_id?: string | null;
   sandbox_id: string;
   base_branch: string;
   working_branch: string;

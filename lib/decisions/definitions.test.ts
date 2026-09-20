@@ -19,11 +19,15 @@ const bool = (values: Record<string, number>): DecisionAnswers =>
   );
 
 describe("decision definitions", () => {
-  it("should give every definition a version, a timeout, and at least one question", () => {
+  it("should give every definition a version, a timeout, and a question to ask", () => {
     for (const definition of Object.values(DECISION_DEFINITIONS)) {
       expect(definition.version).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/);
       expect(definition.timeoutMs).toBeGreaterThan(0);
-      expect(Object.keys(definition.questions).length).toBeGreaterThan(0);
+      // Fixed questions, or one built per candidate at call time.
+      expect(
+        Object.keys(definition.questions).length +
+          (definition.candidateQuestion ? 1 : 0)
+      ).toBeGreaterThan(0);
     }
   });
 

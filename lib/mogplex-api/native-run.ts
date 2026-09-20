@@ -22,6 +22,8 @@ import { createRunGuidanceSession } from "@/lib/slack/run-guidance-session";
 import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
 import { renderAgentInstructions } from "@/lib/agents/runtime/instructions";
 import { resolveAgentRuntimeForUser } from "@/lib/agents/runtime/store";
+import type { AgentRuntime } from "@/lib/agents/runtime/types";
+import { observeSkillSelection } from "@/lib/decisions/skills";
 import {
   createRunProgressTool,
   SLACK_RUN_PROGRESS_INSTRUCTIONS,
@@ -52,6 +54,7 @@ const defaultDeps = {
   finishCall: finalizeAiCallIfNotCancelled,
   cancelCall: finalizeAiCallAsCancelledIfActive,
   resolveAgent: resolveAgentRuntimeForUser,
+  observeSkills: observeSkillSelection,
 };
 
 /**
@@ -61,14 +64,14 @@ const defaultDeps = {
 async function buildAgentSystemSuffix(
   run: ExternalAgentRunRow,
   resolveAgent: typeof resolveAgentRuntimeForUser
-): Promise<string | null> {
+): Promise<{ suffix: string; runtime: AgentRuntime } | null> {
   if (!run.agent_id) return null;
   const runtime = await resolveAgent({
     agentId: run.agent_id,
     userId: run.user_id,
   });
   if (!runtime) throw new Error("Agent not found for this run");
-  return renderAgentInstructions(runtime, "inline").prompt;
+  return { suffix: renderAgentInstructions(runtime, "inline").prompt, runtime };
 }
 
 /** Run Mogplex's shared agent core against the already-owned sandbox and ai_call. */
@@ -90,6 +93,7 @@ export async function runNativeMogplexAgent(
     readSlackRunControlsMetadata(run.metadata)
       ? deps.createGuidance(run)
       : null;
+  let skillCheck: Promise<void> | undefined;
   let usage = EMPTY_CAPTURED_USAGE;
   let output = "";
   let pendingText = "";
@@ -164,10 +168,26 @@ export async function runNativeMogplexAgent(
     await deps.ensureExecutionLease(run, sandbox, context.teamId);
     const resolvedModel = await deps.resolveModel(run.user_id);
     const uiMessages = await deps.buildMessages(run);
-    const agentSuffix = await buildAgentSystemSuffix(run, deps.resolveAgent);
+    const agent = await buildAgentSystemSuffix(run, deps.resolveAgent);
+    // Recorded beside the run and awaited in `finally`: it never delays the
+    // first token, and a worker that exits with the run cannot drop it.
+    if (agent)
+      skillCheck = deps.observeSkills({
+        agent: agent.runtime,
+        request: run.prompt,
+        delivery: "inline",
+        scope: {
+          surface: "agent_run",
+          userId: run.user_id,
+          teamId: context.teamId,
+          repoId: run.repo_id,
+          aiCallId: call.id,
+          conversationId: run.conversation_id,
+        },
+      });
     const slackControls = readSlackRunControlsMetadata(run.metadata);
     const systemSuffix =
-      [agentSuffix, slackControls ? SLACK_RUN_PROGRESS_INSTRUCTIONS : null]
+      [agent?.suffix, slackControls ? SLACK_RUN_PROGRESS_INSTRUCTIONS : null]
         .filter(Boolean)
         .join("\n\n") || null;
     control.signal.throwIfAborted();
@@ -308,6 +328,7 @@ export async function runNativeMogplexAgent(
     throw error;
   } finally {
     const cleanupResults = await Promise.allSettled([
+      skillCheck,
       stream?.cleanup(),
       control?.close(),
       progress.flush(),
