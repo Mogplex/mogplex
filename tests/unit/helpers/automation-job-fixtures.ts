@@ -100,6 +100,14 @@ export function makeStep(input: {
   };
 }
 
+/** A review that filed its report, which is what a finished review looks like. */
+export const FILED_CLEAN_REVIEW = [
+  {
+    toolName: "reportReview",
+    input: { hasIssues: false, summary: "No material issues.", findings: [] },
+  },
+];
+
 export function makePersistedReviewFindingsResult(count = 0) {
   return {
     persisted: true as const,

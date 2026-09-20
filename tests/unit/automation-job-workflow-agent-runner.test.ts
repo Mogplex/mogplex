@@ -7,6 +7,7 @@ import {
 import {
   type CapturedConstructorOptions,
   type CapturedGenerateTextOptions,
+  FILED_CLEAN_REVIEW,
   loadAutomationJobWorkflowModule,
   makeStep,
   mockGithubPullRequestFetch,
@@ -26,7 +27,12 @@ test("createAutomationAgentRunner uses generateText without mutating global fetc
         return {
           text: "final answer",
           steps: [
-            makeStep({ text: "", inputTokens: 5, outputTokens: 2 }),
+            makeStep({
+              text: "",
+              inputTokens: 5,
+              outputTokens: 2,
+              toolCalls: FILED_CLEAN_REVIEW,
+            }),
             makeStep({ text: "final answer", inputTokens: 7, outputTokens: 3 }),
           ],
           totalUsage: {
@@ -154,7 +160,14 @@ test("pr_review carries agent system_prompt + static instructions on a cacheable
         captures.push({ instructions: opts.instructions, prompt: opts.prompt });
         return {
           text: "ok",
-          steps: [makeStep({ text: "ok", inputTokens: 1, outputTokens: 1 })],
+          steps: [
+            makeStep({
+              text: "ok",
+              inputTokens: 1,
+              outputTokens: 1,
+              toolCalls: FILED_CLEAN_REVIEW,
+            }),
+          ],
           totalUsage: { inputTokens: 1, outputTokens: 1 },
         } as never;
       },
@@ -235,7 +248,14 @@ test("pr_review with no agent system_prompt still emits a cacheable system messa
         captured = input as unknown as CapturedGenerateTextOptions;
         return {
           text: "ok",
-          steps: [makeStep({ text: "ok", inputTokens: 1, outputTokens: 1 })],
+          steps: [
+            makeStep({
+              text: "ok",
+              inputTokens: 1,
+              outputTokens: 1,
+              toolCalls: FILED_CLEAN_REVIEW,
+            }),
+          ],
           totalUsage: { inputTokens: 1, outputTokens: 1 },
         } as never;
       },
