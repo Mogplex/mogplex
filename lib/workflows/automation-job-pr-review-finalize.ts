@@ -16,6 +16,7 @@ import type {
   PrReviewHarnessResult,
   ReviewOutcome,
 } from "./pr-review-harness";
+import { isPrReviewVerdictMissing } from "./pr-review-harness-extraction";
 import type { persistJobReviewFindings } from "./automation-job-persistence";
 import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 
@@ -96,9 +97,11 @@ export async function finalizePrReviewSuccess(
 
   const reviewSummary = input.reviewOutcome?.summary ?? input.result.text ?? "";
   const requiresReviewCheckRun = reviewHeadSha.length > 0;
-  const reviewConclusion = input.reviewOutcome?.hasIssues
-    ? "neutral"
-    : "success";
+  // A run that never filed its report has no verdict, so its check must not
+  // turn green: a required check would otherwise pass a PR nobody reviewed.
+  const verdictMissing = isPrReviewVerdictMissing(input.reviewHarnessResult);
+  const reviewConclusion =
+    input.reviewOutcome?.hasIssues || verdictMissing ? "neutral" : "success";
   const currentHeadSha = await loadCurrentPrReviewHeadSha();
   const isStaleHeadSha =
     reviewHeadSha.length > 0 &&
@@ -237,7 +240,9 @@ export async function finalizePrReviewSuccess(
 
   const reviewReason = input.reviewOutcome?.hasIssues
     ? PR_REVIEW_REASON_CODES.posted
-    : PR_REVIEW_REASON_CODES.noFindings;
+    : verdictMissing
+      ? PR_REVIEW_REASON_CODES.incomplete
+      : PR_REVIEW_REASON_CODES.noFindings;
 
   return {
     ok: true,

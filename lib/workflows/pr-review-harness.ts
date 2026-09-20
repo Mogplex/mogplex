@@ -38,7 +38,10 @@ export {
 } from "./pr-review-harness-utils";
 
 // Re-export extraction functions from split modules
-export { extractPrReviewHarnessResult } from "./pr-review-harness-extraction";
+export {
+  extractPrReviewHarnessResult,
+  isPrReviewVerdictMissing,
+} from "./pr-review-harness-extraction";
 
 // Re-export formatting functions from split modules
 export {

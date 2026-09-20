@@ -8,6 +8,8 @@ export const PR_REVIEW_REASON_CODES = {
   staleHeadSha: "PR_REVIEW_STALE_HEAD_SHA",
   posted: "PR_REVIEW_POSTED",
   noFindings: "PR_REVIEW_NO_FINDINGS",
+  /** The reviewer never filed its structured report, so there is no verdict. */
+  incomplete: "PR_REVIEW_INCOMPLETE",
   infraFailed: "PR_REVIEW_INFRA_FAILED",
   checkRunFailed: "PR_REVIEW_CHECK_RUN_FAILED",
   timelineCommentFailed: "PR_REVIEW_TIMELINE_COMMENT_FAILED",
@@ -115,6 +117,7 @@ const REASON_LABELS: Record<string, string> = {
   [PR_REVIEW_REASON_CODES.staleHeadSha]: "Stale PR head SHA",
   [PR_REVIEW_REASON_CODES.posted]: "Review posted",
   [PR_REVIEW_REASON_CODES.noFindings]: "No findings",
+  [PR_REVIEW_REASON_CODES.incomplete]: "Review incomplete",
   [PR_REVIEW_REASON_CODES.infraFailed]: "Automation infra failed",
   [PR_REVIEW_REASON_CODES.checkRunFailed]: "Check run failed",
   [PR_REVIEW_REASON_CODES.timelineCommentFailed]: "Timeline comment failed",
@@ -202,6 +205,7 @@ export function getReviewOutcomeSummary(
   switch (normalizedReason) {
     case PR_REVIEW_REASON_CODES.posted:
     case PR_REVIEW_REASON_CODES.noFindings:
+    case PR_REVIEW_REASON_CODES.incomplete:
     case PR_REVIEW_REASON_CODES.infraFailed:
     case PR_REVIEW_REASON_CODES.checkRunFailed:
     case PR_REVIEW_REASON_CODES.timelineCommentFailed:

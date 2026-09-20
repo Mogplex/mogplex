@@ -151,6 +151,21 @@ export function extractPrAutofixOutcome(
   };
 }
 
+/**
+ * True when the reviewer finished without filing `reportReview` and nothing
+ * else reported a problem. The "no issues" in that result is a default, not a
+ * finding, so it must never be published as a clean verdict or allow a merge.
+ */
+export function isPrReviewVerdictMissing(
+  harnessResult: Pick<PrReviewHarnessResult, "source" | "reviewOutcome"> | null
+): boolean {
+  if (!harnessResult) return false;
+  return (
+    harnessResult.source !== "structured" &&
+    !harnessResult.reviewOutcome.hasIssues
+  );
+}
+
 export function extractPrReviewHarnessResult(
   result: AutomationAgentReviewResult
 ): PrReviewHarnessResult {
