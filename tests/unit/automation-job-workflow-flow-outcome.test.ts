@@ -4,6 +4,7 @@ import {
   type CapturedAiCallInput,
   type CapturedControlDispatchEvent,
   type CapturedGenerateTextOptions,
+  FILED_CLEAN_REVIEW,
   loadAutomationJobWorkflowModule,
   makeStep,
   mockGithubPullRequestFetch,
@@ -309,7 +310,12 @@ test("createAutomationAgentRunner treats pr_opened triggers as PR reviews", asyn
         return {
           text: "reviewed",
           steps: [
-            makeStep({ text: "reviewed", inputTokens: 2, outputTokens: 1 }),
+            makeStep({
+              text: "reviewed",
+              inputTokens: 2,
+              outputTokens: 1,
+              toolCalls: FILED_CLEAN_REVIEW,
+            }),
           ],
           totalUsage: {
             inputTokens: 2,

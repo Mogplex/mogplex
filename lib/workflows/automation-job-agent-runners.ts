@@ -3,7 +3,7 @@ import { buildScheduledTaskTools } from "@/lib/agents/scheduled-task";
 import { buildFlowReportTools } from "./flow-report-tools";
 import { createTaskSandboxLoader } from "./automation-task-sandbox";
 import { createDependabotSandboxLoader } from "./automation-dependabot-sandbox";
-import { generateText } from "ai";
+import { generateText, type ToolSet } from "ai";
 import { buildPRFixTools, buildSandboxPRFixTools } from "@/lib/agents/pr-fixer";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
 import { buildIssueTools } from "@/lib/agents/issue-tools";
@@ -27,6 +27,10 @@ import {
   splitRepoFullName,
 } from "@/lib/workflows/automation-job-utils";
 import { normalizeAutomationAgentResult } from "@/lib/workflows/automation-job-metadata";
+import {
+  fileMissingReviewReport,
+  type ReportRepairRequest,
+} from "@/lib/workflows/pr-review-report-repair";
 import {
   buildPromptForJob,
   buildPromptForPRFix,
@@ -270,36 +274,56 @@ export function createAutomationAgentRunner(
       assignmentType
     );
 
-    const { result, metadata } = await executeAutomationTextGeneration({
-      phase: assignmentType,
-      requestedModelId: resolvedModel.effectiveModelId,
-      // What the graph pinned. Recorded only when it differs, so an upgraded run
-      // is distinguishable from one always pinned to the successor.
-      pinnedModelId: context.agent.model,
-      generateText: deps.generateText,
-      timeoutMs: context.agent.timeout_ms,
-      request: {
-        model: resolvedModel.model,
-        providerOptions: resolvedModel.providerOptions,
-        instructions: buildAutomationSystem(
-          runSpec.instructions,
-          gatewayContext
-        ),
-        tools: applyToolApprovalGate(
-          { ...tools, ...buildFlowReportTools(context) },
-          context,
-          deps
-        ),
-        prompt: runSpec.prompt,
-        stopWhen: () => false,
-      },
-    });
+    const instructions = buildAutomationSystem(
+      runSpec.instructions,
+      gatewayContext
+    );
+    type Ask = { tools: ToolSet; prompt: string } | ReportRepairRequest;
+    const generate = async (request: Ask) => {
+      const { result, metadata } = await executeAutomationTextGeneration({
+        phase: assignmentType,
+        requestedModelId: resolvedModel.effectiveModelId,
+        // What the graph pinned. Recorded only when it differs, so an upgraded
+        // run is distinguishable from one always pinned to the successor.
+        pinnedModelId: context.agent.model,
+        generateText: deps.generateText,
+        timeoutMs: context.agent.timeout_ms,
+        request: {
+          model: resolvedModel.model,
+          providerOptions: resolvedModel.providerOptions,
+          instructions,
+          ...request,
+          stopWhen: () => false,
+        },
+      });
+      return {
+        responseMessages: result.response?.messages,
+        normalized: normalizeAutomationAgentResult({
+          text: result.text,
+          steps: result.steps,
+          totalUsage: result.totalUsage,
+          execution: metadata,
+        }),
+      };
+    };
 
-    return normalizeAutomationAgentResult({
-      text: result.text,
-      steps: result.steps,
-      totalUsage: result.totalUsage,
-      execution: metadata,
+    const review = await generate({
+      tools: applyToolApprovalGate(
+        { ...tools, ...buildFlowReportTools(context) },
+        context,
+        deps
+      ),
+      prompt: runSpec.prompt,
+    });
+    if (assignmentType !== "pr_review") return review.normalized;
+
+    // A reviewer that ends without its report leaves no verdict; ask for it.
+    return fileMissingReviewReport({
+      result: review.normalized,
+      responseMessages: review.responseMessages,
+      prompt: runSpec.prompt,
+      tools,
+      generate: async (request) => (await generate(request)).normalized,
     });
   };
 }
