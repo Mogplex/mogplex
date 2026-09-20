@@ -1,4 +1,5 @@
 import type { ReviewFinding } from "@/lib/types";
+import { isPrReviewVerdictMissing } from "./pr-review-harness-extraction";
 import type {
   PrAutofixCommit,
   PrAutofixOutcome,
@@ -13,7 +14,7 @@ export function buildPrReviewContractNote(source: PrReviewContractSource) {
     case "legacy_post_comment":
       return "Note: Structured review output was missing, so Mogplex used the legacy review comment as fallback output.";
     case "legacy_text":
-      return "Note: Structured review output was missing, so Mogplex used the agent summary text as fallback output.";
+      return "Note: The reviewer finished without filing its structured report, so there is no verdict. The text below is its closing summary only. Rerun the review for a full result.";
     case "structured":
       return null;
   }
@@ -175,6 +176,10 @@ export function buildPrReviewStatusHeading(input: {
     return "**Status:** Review failed";
   }
 
+  if (isPrReviewVerdictMissing(input.harnessResult)) {
+    return "**Status:** Review incomplete";
+  }
+
   return input.harnessResult?.reviewOutcome.hasIssues
     ? "**Status:** Attention needed"
     : "**Status:** No material issues found";
@@ -186,6 +191,10 @@ export function buildPrReviewCheckTitle(input: {
 }) {
   if (input.conclusion === "failure") {
     return "Review failed";
+  }
+
+  if (isPrReviewVerdictMissing(input.harnessResult)) {
+    return "Review incomplete";
   }
 
   return input.harnessResult?.reviewOutcome.hasIssues

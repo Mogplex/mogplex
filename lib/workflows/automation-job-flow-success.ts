@@ -10,7 +10,10 @@ import { summarizeNodeOutput } from "@/lib/flows/graph";
 
 import { AUTOMATION_REASON_CODES } from "@/lib/automation-review";
 
-import { extractPrReviewHarnessResult } from "@/lib/workflows/pr-review-harness";
+import {
+  extractPrReviewHarnessResult,
+  isPrReviewVerdictMissing,
+} from "@/lib/workflows/pr-review-harness";
 import type { AutomationModelExecutionMetadata } from "@/lib/workflows/automation-model-execution";
 import {
   JOB_RUN_CANCELLED,
@@ -152,6 +155,7 @@ export async function finalizeFlowSuccess(
     const autoMergeBlockReason = autoMergeRequest
       ? (getPrReviewAutoMergeBlockReason({
           reviewOutcome,
+          verdictMissing: isPrReviewVerdictMissing(reviewHarnessResult),
           requestedPrNumber: autoMergeRequest.prNumber,
           reviewedPrNumber: resolvePullRequestNumber(context.metadata),
         }) ??

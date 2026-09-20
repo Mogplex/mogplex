@@ -13,11 +13,20 @@ import type { ReviewOutcome } from "@/lib/workflows/pr-review-harness";
 
 export function getPrReviewAutoMergeBlockReason(input: {
   reviewOutcome: Pick<ReviewOutcome, "hasIssues"> | null;
+  /**
+   * True when "no issues" is only the default for a run that never filed its
+   * structured report. Optional so an omitted value can never unblock a merge
+   * that the verdict itself would block.
+   */
+  verdictMissing?: boolean;
   requestedPrNumber: number;
   reviewedPrNumber: number | null;
 }) {
   if (input.requestedPrNumber !== input.reviewedPrNumber) {
     return "Safe merge target does not match the reviewed pull request";
+  }
+  if (input.verdictMissing) {
+    return "Mogplex review finished without a structured verdict";
   }
   if (input.reviewOutcome?.hasIssues === false) return null;
   return input.reviewOutcome?.hasIssues === true
