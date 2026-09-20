@@ -88,7 +88,10 @@ export type DecisionScope = {
   repoId?: string | null;
   aiCallId?: string | null;
   conversationId?: string | null;
-  /** Where the decision ran: control, chat, slack, agent_tool, automation. */
+  /**
+   * Where the decision ran: control, chat, slack, agent_tool, automation,
+   * harness (a CLI harness run), or agent_run (the native runner).
+   */
   surface: string;
 };
 
