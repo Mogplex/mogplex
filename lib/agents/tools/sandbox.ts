@@ -37,6 +37,8 @@ export { createStartSandbox } from "./sandbox-start";
 export type SandboxCommandExecution = {
   execute: typeof postSandboxExec;
   retryOnSandboxLoss?: boolean;
+  /** The hidden-failure check on finished commands. Tests pass their own. */
+  checkOutput?: typeof annotateShellResult;
 };
 
 /** Shape an exec response, truncating streams so tool output stays bounded. */
@@ -235,6 +237,10 @@ export function createTerminalExec(
     }
 
     const execute = execution?.execute ?? postSandboxExec;
+    const annotate = execution?.checkOutput ?? annotateShellResult;
+    const checkOutput = <T extends Parameters<typeof annotateShellResult>[0]>(
+      result: T
+    ) => (decisionScope ? annotate(result, decisionScope) : result);
     const res = await execute(cachedSandbox.sandboxId, requestHeaders.headers, {
       command,
       cwd,
@@ -245,9 +251,7 @@ export function createTerminalExec(
         command,
         cachedSandbox
       );
-      return decisionScope
-        ? annotateShellResult(formatted, decisionScope)
-        : formatted;
+      return checkOutput(formatted);
     }
 
     const retried =
@@ -265,7 +269,9 @@ export function createTerminalExec(
       cachedSandbox = retried.sandbox;
       selectedSandboxId = retried.sandbox?.sandboxId;
       updateSandboxBinding(sandboxBinding, retried.sandbox);
-      if (retried.result) return retried.result;
+      // A replayed command is as able to hide a failed step behind exit 0 as
+      // a first attempt, so it gets the same check. Errors pass through.
+      if (retried.result) return checkOutput(retried.result);
     }
 
     const data = await res.json().catch(() => ({}));
