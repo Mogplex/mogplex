@@ -22,7 +22,8 @@ export type ConnectionPreset = {
   /**
    * Server-side tools built on the provider's REST API, keyed into
    * `lib/connections/api-toolsets.ts`. They use the same saved credential and
-   * run in every turn, including ones with no sandbox to launch `stdio` in.
+   * load wherever connection tools do (`buildTools`), including turns with no
+   * sandbox to launch `stdio` in.
    */
   api_toolset?: "trigger";
   auth_type: "bearer" | "api_key" | "oauth" | "none";
@@ -253,7 +254,7 @@ export function getStdioConnectionPresetDescription(
   preset?: Pick<ConnectionPreset, "api_toolset">
 ) {
   if (preset?.api_toolset) {
-    return "Agents get these tools in every chat and run. The full MCP server also runs inside your sandboxes and the Mogplex CLI, next to your code. The token is stored encrypted.";
+    return "Agents call these tools straight from Mogplex, no sandbox needed. The full MCP server also runs inside your sandboxes and the Mogplex CLI, next to your code. The token is stored encrypted.";
   }
   return "Runs inside your sandboxes and the Mogplex CLI, next to your code. The token is stored encrypted.";
 }

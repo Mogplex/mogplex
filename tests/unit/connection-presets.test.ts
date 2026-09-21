@@ -170,15 +170,15 @@ test("should back the Trigger.dev preset with API tools and link to where its to
   );
 });
 
-test("should tell the user the tools reach every chat when a stdio preset has API tools", () => {
+test("should tell the user the tools need no sandbox when a stdio preset has API tools", () => {
   const withApiTools = getStdioConnectionPresetDescription({
     api_toolset: "trigger",
   });
   const stdioOnly = getStdioConnectionPresetDescription({});
 
-  assert.match(withApiTools, /in every chat and run/);
+  assert.match(withApiTools, /no sandbox needed/);
   assert.match(withApiTools, /sandboxes and the Mogplex CLI/);
-  assert.doesNotMatch(stdioOnly, /every chat/);
+  assert.doesNotMatch(stdioOnly, /no sandbox needed/);
   assert.match(stdioOnly, /sandboxes and the Mogplex CLI/);
 });
 

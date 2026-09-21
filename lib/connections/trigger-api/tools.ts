@@ -139,7 +139,7 @@ function parsePayload(payload: string | undefined): unknown {
 }
 
 /**
- * Trigger.dev tools that run in any turn, backed by the REST API and the saved
+ * Trigger.dev tools that need no sandbox, backed by the REST API and the saved
  * Personal Access Token. Deploys and the dev server stay with the stdio MCP
  * server because they need the repository on disk.
  */

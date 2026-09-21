@@ -84,7 +84,7 @@ test("settings quick-add saves the Trigger.dev stdio preset with a personal acce
   const presetCard = page.getByTestId("settings-preset-trigger");
   await presetCard.getByRole("button", { name: "+ Add" }).click();
   await expect(presetCard).toContainText(
-    "Agents get these tools in every chat and run"
+    "Agents call these tools straight from Mogplex, no sandbox needed"
   );
   await expect(presetCard).toContainText("sandboxes and the Mogplex CLI");
   await expect(
