@@ -38,6 +38,7 @@ import {
 import { createHarnessStreamBody } from "./_lib/execution";
 import { setupAiCall, createFinalizeCancelledRun } from "./_lib/ai-call";
 import { setupAgentRuntime } from "./_lib/agent-runtime";
+import { setupSkillCatalog } from "./_lib/skill-catalog";
 import { buildHarnessFailureResponse } from "./_lib/failure";
 
 // Re-export for tests that import directly from route
@@ -302,9 +303,22 @@ export function createSandboxHarnessPostHandler(
         runtimeEnv
       );
       const mcpConfigPath = await setupMcpConfig(deps, sandbox, setupCtx);
+      // Reads top down as: who the agent is, the skills in play, the task.
+      const skilledPrompt = await setupSkillCatalog(deps, sandbox, setupCtx, {
+        harnessId,
+        prompt,
+        agentRuntime: agentRuntime ?? null,
+      });
       const agentPrompt = agentRuntime
-        ? await setupAgentRuntime(deps, sandbox, setupCtx, agentRuntime, prompt)
-        : prompt;
+        ? await setupAgentRuntime(
+            deps,
+            sandbox,
+            setupCtx,
+            agentRuntime,
+            skilledPrompt,
+            prompt
+          )
+        : skilledPrompt;
       const { trimmedPrompt, deliveryPrompt } =
         await setupSlackAttachmentsAndPrompt(
           deps,

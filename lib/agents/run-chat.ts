@@ -22,6 +22,7 @@ import {
   readUserTexts,
   renderConversationSkills,
   resolveConversationSkills,
+  withoutSkills,
 } from "@/lib/skill-catalog/chat";
 import type { SkillLoadHint } from "@/lib/skill-catalog/render";
 
@@ -192,6 +193,11 @@ export type CreateChatModelStreamInput = {
     messages: ModelMessage[],
     stepNumber: number
   ) => Promise<ModelMessage[]>;
+  /**
+   * Skills the caller already delivers in `systemSuffix` (a roster agent's
+   * attached skills), so the catalog block does not repeat them.
+   */
+  attachedSkillIds?: readonly string[];
   /** Seams for tests. Production callers leave this unset. */
   deps?: Partial<ChatModelStreamDeps>;
 };
@@ -334,7 +340,7 @@ export async function createChatModelStream(
   const systemPrompt = composeChatSystemPrompt([
     baseSystemPrompt,
     renderConversationSkills(
-      await conversationSkills,
+      withoutSkills(await conversationSkills, input.attachedSkillIds),
       skillLoadHint(context, tools)
     ),
     input.systemSuffix,

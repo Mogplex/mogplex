@@ -26,6 +26,7 @@ async function systemPromptFor(input: {
   tools: Record<string, Tool>;
   enableTools?: boolean;
   systemSuffix?: string;
+  attachedSkillIds?: string[];
 }) {
   let seen = "";
   const model = new MockLanguageModelV4({
@@ -81,6 +82,7 @@ async function systemPromptFor(input: {
     resolvedModel: "test/model",
     uiMessages: input.texts.map(userMessage),
     systemSuffix: input.systemSuffix,
+    attachedSkillIds: input.attachedSkillIds,
     deps,
   });
   await result.consumeStream();
@@ -116,6 +118,17 @@ describe("createChatModelStream skills", () => {
     });
     expect(system).toContain("Group changes by area.");
     expect(system).not.toContain("Available skills");
+  });
+
+  it("should not repeat a skill the caller already delivers", async () => {
+    const { system } = await systemPromptFor({
+      texts: ["/deploy-checklist staging"],
+      tools: loadSkillTool,
+      attachedSkillIds: [skills[0].id],
+    });
+    expect(system).not.toContain("1. Run the tests.");
+    expect(system).not.toContain("Invoked skills");
+    expect(system).toContain("$release-notes: Release notes");
   });
 
   it("should leave the index out when tools are switched off", async () => {

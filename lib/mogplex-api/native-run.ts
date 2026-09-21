@@ -206,6 +206,7 @@ export async function runNativeMogplexAgent(
     });
     stream = await deps.createStream({
       systemSuffix,
+      attachedSkillIds: agent?.runtime.skills.map((skill) => skill.id),
       ...(slackControls
         ? {
             additionalTools: {

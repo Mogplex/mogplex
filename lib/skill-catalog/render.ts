@@ -99,7 +99,7 @@ function renderIndex(skills: readonly CatalogSkill[], hint: SkillLoadHint) {
     lines.push(
       hint === "tool"
         ? `- …and ${more} more. Use find_skills to search them.`
-        : `- …and ${more} more under ${CATALOG_SKILLS_DIR}/.`
+        : `- …and ${more} more. Ask the user to invoke one by its $slug.`
     );
   }
   return [
@@ -128,9 +128,16 @@ export function renderSkillCatalog(input: {
   ].filter(Boolean);
   const prompt =
     parts.length > 0 ? `<skills>\n${parts.join("\n\n")}\n</skills>` : null;
+  // Only indexed skills are written: a file the prompt never names is one the
+  // agent cannot find, and a large library should not flood the checkout.
   const fileSkills =
     input.delivery === "files"
-      ? [...input.invoked, ...(input.loadHint === "files" ? rest : [])]
+      ? [
+          ...input.invoked,
+          ...(input.loadHint === "files"
+            ? rest.slice(0, SKILL_INDEX_MAX_ENTRIES)
+            : []),
+        ]
       : [];
   const files = fileSkills
     .filter((skill) => skill.content.trim().length > 0)
