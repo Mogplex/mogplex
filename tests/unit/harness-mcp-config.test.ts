@@ -88,6 +88,22 @@ test("buildClaudeMcpConfig skips rest_api and misconfigured mcp connections", as
   assert.deepEqual(Object.keys(config.mcpServers), ["ok"]);
 });
 
+test("should leave a connection out of the sandbox config when it is set to ask", async () => {
+  const { buildClaudeMcpConfig } = await loadMcpConfigModule();
+  const asks = makeConn({ id: "a", name: "Asks", approval_mode: "ask" });
+  const runs = makeConn({ id: "b", name: "Runs" });
+  const resolved: string[] = [];
+
+  const config = await buildClaudeMcpConfig([asks, runs], async (conn) => {
+    resolved.push(conn.name);
+    return "tok";
+  });
+
+  assert.deepEqual(Object.keys(config.mcpServers), ["runs"]);
+  // Its credential is never decrypted for a run that cannot use it.
+  assert.deepEqual(resolved, ["Runs"]);
+});
+
 test("buildClaudeMcpConfig never resolves or transmits broker-era Sentry credentials", async () => {
   const { buildClaudeMcpConfig } = await loadMcpConfigModule();
   const legacySentry = makeConn({
