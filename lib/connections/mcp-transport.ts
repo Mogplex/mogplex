@@ -1,9 +1,47 @@
-import { getConnectionPreset } from "./presets";
+import { getConnectionPreset, isStdioConnectionPreset } from "./presets";
 import type { Connection } from "@/lib/types";
 
 type McpTransport =
   | { type: "http"; url: string; headers: Record<string, string> }
   | { type: "sse"; url: string; headers: Record<string, string> };
+
+export type McpStdioLaunch = {
+  type: "stdio";
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+};
+
+/**
+ * Stdio connections launch a local process, so only runtimes that own a
+ * filesystem (sandbox harnesses, the CLI) can run them.
+ */
+export function isStdioConnection(
+  conn: Pick<Connection, "mcp_transport">
+): boolean {
+  return conn.mcp_transport === "stdio";
+}
+
+/**
+ * Launch spec for a stdio connection. The command and args come from the
+ * preset definition only; a row whose preset is missing or not stdio returns
+ * null rather than running anything.
+ */
+export function buildMcpStdioLaunch(
+  conn: Pick<Connection, "mcp_transport" | "source_preset">,
+  credential?: string
+): McpStdioLaunch | null {
+  if (!isStdioConnection(conn)) return null;
+  const preset = getConnectionPreset(conn.source_preset);
+  if (!isStdioConnectionPreset(preset)) return null;
+
+  return {
+    type: "stdio",
+    command: preset.stdio.command,
+    args: [...preset.stdio.args],
+    env: credential ? { [preset.stdio.credential_env]: credential } : {},
+  };
+}
 
 function getDefaultAuthHeader(authType: Connection["auth_type"]) {
   return authType === "api_key" ? "X-API-Key" : "Authorization";
@@ -52,10 +90,15 @@ export function buildConnectionAuthHeaders(
   return headers;
 }
 
+/** Remote (http/sse) transport. Stdio connections use buildMcpStdioLaunch. */
 export function buildMcpTransport(
   conn: Connection,
   credential?: string
 ): McpTransport {
+  if (isStdioConnection(conn)) {
+    throw new Error(`${conn.name} runs over stdio and has no remote transport`);
+  }
+
   const preset = getConnectionPreset(conn.source_preset);
   const headers: Record<string, string> = {};
   let url = conn.mcp_url ?? "";

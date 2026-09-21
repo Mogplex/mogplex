@@ -188,3 +188,66 @@ test("authorized broker-era OAuth rows stay out of runtime until native reconnec
     true
   );
 });
+
+test("should normalize the Trigger.dev preset to a stdio row with no URL when a client sends one", () => {
+  const input = normalizeConnectionCreateInput({
+    source_preset: "trigger",
+    mcp_url: "https://attacker.example.com/mcp",
+    mcp_transport: "http",
+    credentials: "tr_pat_123",
+  });
+
+  assert.equal(input.name, "Trigger.dev");
+  assert.equal(input.mcp_transport, "stdio");
+  assert.equal(input.mcp_url, undefined);
+  assert.equal(input.auth_type, "bearer");
+  assert.equal(input.credentials, "tr_pat_123");
+});
+
+test("should reject the Trigger.dev preset when the token is missing", () => {
+  assert.throws(
+    () => normalizeConnectionCreateInput({ source_preset: "trigger" }),
+    (error: unknown) =>
+      error instanceof ConnectionValidationError &&
+      error.message.includes("requires a credential")
+  );
+});
+
+test("should never accept stdio as a manual transport", () => {
+  const input = normalizeConnectionCreateInput({
+    name: "Manual",
+    type: "mcp_server",
+    mcp_url: "https://mcp.example.com/mcp",
+    mcp_transport: "stdio",
+    auth_type: "none",
+  });
+
+  assert.equal(input.mcp_transport, "http");
+});
+
+test("should treat a stdio row as runnable only while its preset defines the launch", () => {
+  const base = {
+    type: "mcp_server" as const,
+    auth_type: "bearer" as const,
+    base_url: null,
+    mcp_url: null,
+    mcp_transport: "stdio" as const,
+    oauth_client_id: null,
+    oauth_authorized_at: null,
+    oauth_authorize_url: null,
+    oauth_token_url: null,
+  };
+
+  assert.equal(
+    isConnectionMisconfigured({ ...base, source_preset: "trigger" }),
+    false
+  );
+  assert.equal(
+    isConnectionMisconfigured({ ...base, source_preset: "linear" }),
+    true
+  );
+  assert.equal(
+    isConnectionMisconfigured({ ...base, source_preset: null }),
+    true
+  );
+});

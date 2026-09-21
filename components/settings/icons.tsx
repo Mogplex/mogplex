@@ -40,6 +40,10 @@ export const Browserbase = ({ size = 24, ...props }: IconProps) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 50 50" fill="currentColor" {...props}><title>Browserbase</title><path fillRule="evenodd" clipRule="evenodd" d="M50 50H0V0h50zM13.861 36.954H32.17l4.145-4.145v-4.836l-3.455-3.455 2.764-2.763v-4.491l-4.146-4.145H13.862z"/><path d="M27.792 29.224h-7v-1.75h7zM27.792 21.55h-7V19.8h7z"/></svg>
 );
 
+export const TriggerDev = ({ size = 24, ...props }: IconProps) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 321 282" fill="currentColor" {...props}><title>Trigger.dev</title><path fillRule="evenodd" clipRule="evenodd" d="M96.1017 113.4L160.679 0L320.718 281.045H0.638916L65.2159 167.642L110.896 194.382L92.0035 227.561H229.354L160.679 106.965L141.786 140.144L96.1017 113.4Z"/></svg>
+);
+
 export const PlugFill = ({ size = 24, ...props }: IconProps) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" {...props}><title>Connection</title><path d="M9 2v6h1V2zM14 2v6h1V2zM7.5 9.5A1.5 1.5 0 0 1 9 8h6a1.5 1.5 0 0 1 1.5 1.5V12a4.5 4.5 0 0 1-3.75 4.437V22h-1.5v-5.563A4.5 4.5 0 0 1 7.5 12z"/></svg>
 );

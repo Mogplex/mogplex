@@ -49,12 +49,11 @@ test("buildClaudeMcpConfig serializes mcp_server connections with auth headers",
   const config = await buildClaudeMcpConfig([conn], async () => "secret-token");
 
   assert.deepEqual(Object.keys(config.mcpServers), ["slack"]);
-  assert.equal(config.mcpServers.slack.type, "http");
-  assert.equal(config.mcpServers.slack.url, "https://mcp.example.com/http");
-  assert.equal(
-    config.mcpServers.slack.headers.Authorization,
-    "Bearer secret-token"
-  );
+  assert.deepEqual(config.mcpServers.slack, {
+    type: "http",
+    url: "https://mcp.example.com/http",
+    headers: { Authorization: "Bearer secret-token" },
+  });
 });
 
 test("buildClaudeMcpConfig uses sse transport when configured", async () => {
@@ -335,4 +334,41 @@ test("injectClaudeMcpConfig returns ok:false when writeFiles fails", async () =>
 
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /sandbox not ready/);
+});
+
+test("should write a stdio entry with the token in env when the connection is a stdio preset", async () => {
+  const { buildClaudeMcpConfig } = await loadMcpConfigModule();
+  const conn = makeConn({
+    id: "t",
+    name: "Trigger.dev",
+    mcp_transport: "stdio",
+    mcp_url: null,
+    source_preset: "trigger",
+  });
+
+  const config = await buildClaudeMcpConfig([conn], async () => "tr_pat_abc");
+
+  assert.deepEqual(config.mcpServers, {
+    trigger_dev: {
+      type: "stdio",
+      command: "npx",
+      args: ["-y", "trigger.dev@latest", "mcp"],
+      env: { TRIGGER_ACCESS_TOKEN: "tr_pat_abc" },
+    },
+  });
+});
+
+test("should leave a stdio row out of the config when no preset defines its launch", async () => {
+  const { buildClaudeMcpConfig } = await loadMcpConfigModule();
+  const orphan = makeConn({
+    id: "o",
+    name: "Orphan",
+    mcp_transport: "stdio",
+    mcp_url: null,
+    source_preset: null,
+  });
+
+  const config = await buildClaudeMcpConfig([orphan], async () => "token");
+
+  assert.deepEqual(config.mcpServers, {});
 });

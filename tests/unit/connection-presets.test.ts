@@ -6,6 +6,7 @@ import {
   getConnectionAuthorizationPath,
   getConnectionPresetAuthorizationDescription,
   getConnectionPreset,
+  isStdioConnectionPreset,
 } from "../../lib/connections/presets";
 
 test("quick-add presets only include the verified provider set", () => {
@@ -19,6 +20,7 @@ test("quick-add presets only include the verified provider set", () => {
       "sentry",
       "sanity",
       "linear",
+      "trigger",
     ]
   );
 
@@ -101,6 +103,14 @@ test("verified presets keep their expected transport and auth metadata", () => {
         mcp_url_field: null,
         credential_binding: null,
       },
+      {
+        id: "trigger",
+        mcp_url: null,
+        mcp_transport: "stdio",
+        auth_type: "bearer",
+        mcp_url_field: null,
+        credential_binding: null,
+      },
     ]
   );
 });
@@ -135,4 +145,25 @@ test("oauth presets route through Mogplex native OAuth authorization", () => {
     token_endpoint_auth_method: "none",
     scopes: ["org:read", "project:write", "team:write", "event:write"],
   });
+});
+
+test("should launch the Trigger.dev preset as a fixed stdio command when it is added", () => {
+  const preset = getConnectionPreset("trigger");
+
+  assert.equal(isStdioConnectionPreset(preset), true);
+  assert.deepEqual(preset?.stdio, {
+    command: "npx",
+    args: ["-y", "trigger.dev@latest", "mcp"],
+    credential_env: "TRIGGER_ACCESS_TOKEN",
+    credential_check: { url: "https://api.trigger.dev/api/v2/whoami" },
+  });
+});
+
+test("should only treat presets with a launch spec as stdio", () => {
+  const remotePresets = CONNECTION_PRESETS.filter(
+    (preset) => preset.id !== "trigger"
+  );
+
+  assert.equal(remotePresets.some(isStdioConnectionPreset), false);
+  assert.equal(isStdioConnectionPreset(null), false);
 });

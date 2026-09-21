@@ -5,6 +5,7 @@ import {
 } from "@/lib/connections/service";
 import { createRestApiTool } from "@/lib/connections/rest-tool";
 import { getMcpTools } from "@/lib/connections/mcp-tools";
+import { isStdioConnection } from "@/lib/connections/mcp-transport";
 import { isConnectionMisconfigured } from "@/lib/connections/validation";
 import { logConnectionEvent } from "@/lib/connections/logging";
 import { hasCapability, type Capability } from "@/lib/team-capabilities";
@@ -83,6 +84,9 @@ export async function buildDynamicConnectionTools(
   const { getValidAccessToken } = await import("@/lib/connections/oauth");
 
   const runnable = connections.filter((conn) => {
+    // Stdio servers need a filesystem to launch in: the sandbox harness and
+    // the CLI run them, a server-side turn cannot.
+    if (isStdioConnection(conn)) return false;
     if (!isConnectionMisconfigured(conn)) return true;
     logConnectionEvent("connection_runtime_skipped", {
       userId: ctx.userId,

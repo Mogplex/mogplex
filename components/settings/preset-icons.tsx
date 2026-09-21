@@ -8,6 +8,7 @@ import {
   Sentry,
   SlackFill,
   SupabaseFill,
+  TriggerDev,
   VercelFill,
   WebhookFill,
   type IconProps,
@@ -23,6 +24,7 @@ const PRESET_ICON: Record<string, PresetIcon> = {
   sentry: Sentry,
   sanity: Sanity,
   linear: Linear,
+  trigger: TriggerDev,
   slack: SlackFill,
   vercel: VercelFill,
 }

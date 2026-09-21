@@ -8,7 +8,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildConnectionAuthHeaders,
   buildMcpTransport,
+  isStdioConnection,
 } from "@/lib/connections/mcp-transport";
+import { checkStdioConnection } from "@/lib/connections/stdio-check";
 import { requireUserId } from "@/lib/auth";
 import { classifyConnectionError } from "@/lib/connections/status";
 import { isConnectionMisconfigured } from "@/lib/connections/validation";
@@ -317,6 +319,15 @@ export async function POST(
 
       return respondWithPersistedResult(userId, conn, {
         ...result,
+        testToken: activeTest.testToken,
+      });
+    }
+
+    if (conn.type === "mcp_server" && isStdioConnection(conn)) {
+      const result = await checkStdioConnection(conn, credential);
+      return respondWithPersistedResult(userId, conn, {
+        ...result,
+        testedAt: new Date().toISOString(),
         testToken: activeTest.testToken,
       });
     }
