@@ -45,6 +45,7 @@ import {
 } from "./github-mutation-authorization";
 import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
+import { createSkillTools } from "./skills";
 import { virtualExecTool } from "./virtual-exec";
 import {
   buildDynamicConnectionTools,
@@ -96,6 +97,8 @@ export function buildStaticTools(
   const memoryTools = userId
     ? createMemoryTools(userId, repoId, memoryContext ?? {})
     : {};
+  // The user's own skills, narrowed by the repo the run is working in.
+  const skillTools = userId ? createSkillTools({ userId, repoId }) : {};
   const requestAuthorizations = githubRequestAuthorizations(
     githubRequestMutationAuthorizations
   );
@@ -134,6 +137,7 @@ export function buildStaticTools(
     stop_sandbox: createStopSandbox(userId),
     ...(repoId ? { start_sandbox: createStartSandbox(userId, repoId) } : {}),
     ...memoryTools,
+    ...skillTools,
     ...(userId
       ? {
           github_pr_search: createGithubPrSearch({

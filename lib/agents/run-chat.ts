@@ -18,6 +18,12 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { demoteStaleToolOutputs } from "@/lib/agents/compaction/reduce";
 import { withChatStreamCleanup } from "@/lib/agents/chat-stream-cleanup";
 import { withChatStreamDecisions } from "@/lib/agents/chat-stream-decisions";
+import {
+  readUserTexts,
+  renderConversationSkills,
+  resolveConversationSkills,
+} from "@/lib/skill-catalog/chat";
+import type { SkillLoadHint } from "@/lib/skill-catalog/render";
 
 /**
  * The shared streaming core for every chat entry point: model resolution,
@@ -186,7 +192,50 @@ export type CreateChatModelStreamInput = {
     messages: ModelMessage[],
     stepNumber: number
   ) => Promise<ModelMessage[]>;
+  /** Seams for tests. Production callers leave this unset. */
+  deps?: Partial<ChatModelStreamDeps>;
 };
+
+export type ChatModelStreamDeps = {
+  resolveModel: typeof resolveUserLanguageModel;
+  buildTools: typeof buildTools;
+  resolveSkills: typeof resolveConversationSkills;
+};
+
+const defaultChatModelStreamDeps: ChatModelStreamDeps = {
+  resolveModel: resolveUserLanguageModel,
+  buildTools,
+  resolveSkills: resolveConversationSkills,
+};
+
+function startConversationSkills(
+  deps: ChatModelStreamDeps,
+  context: ChatAgentContext,
+  input: Pick<CreateChatModelStreamInput, "uiMessages">
+) {
+  return deps.resolveSkills({
+    userId: context.userId,
+    repoId: context.repoId ?? null,
+    userTexts: readUserTexts(input.uiMessages),
+  });
+}
+
+/** An agent is only told about skills it was not handed if it can load one. */
+function skillLoadHint(
+  context: ChatAgentContext,
+  tools: Record<string, Tool>
+): SkillLoadHint {
+  return context.enableTools !== false && "load_skill" in tools
+    ? "tool"
+    : "none";
+}
+
+/** Joins the prompt sections that exist, each separated by a blank line. */
+export function composeChatSystemPrompt(
+  sections: Array<string | null | undefined>
+) {
+  return sections.filter((section) => section?.trim()).join("\n\n");
+}
 
 export type CreateChatModelStreamResult = {
   result: ReturnType<typeof streamText>;
@@ -246,10 +295,13 @@ async function prepareChatContextForDelivery(context: ChatAgentContext) {
 export async function createChatModelStream(
   input: CreateChatModelStreamInput
 ): Promise<CreateChatModelStreamResult> {
+  const deps = { ...defaultChatModelStreamDeps, ...input.deps };
   const context = await prepareChatContextForDelivery(input.context);
+  // Started now and read once the tools are known, so it never adds a wait.
+  const conversationSkills = startConversationSkills(deps, context, input);
 
   const gatewayContext = buildChatGatewayContext(context);
-  const { model, providerOptions } = await resolveUserLanguageModel(
+  const { model, providerOptions } = await deps.resolveModel(
     context.userId,
     input.resolvedModel,
     {
@@ -262,7 +314,7 @@ export async function createChatModelStream(
     tools: builtTools,
     connections,
     cleanup,
-  } = await buildTools(buildToolsInput(context));
+  } = await deps.buildTools(buildToolsInput(context));
   const tools = selectChatTools({
     tools: builtTools,
     surface: context.surface ?? "chat",
@@ -277,9 +329,16 @@ export async function createChatModelStream(
   const baseSystemPrompt = buildSystemPrompt(
     buildPromptContextInput(context, connections)
   );
-  const systemPrompt = input.systemSuffix
-    ? `${baseSystemPrompt}\n\n${input.systemSuffix}`
-    : baseSystemPrompt;
+  // The index only helps an agent that holds load_skill; a team role or a
+  // tools-off turn without it still gets the skills the user invoked.
+  const systemPrompt = composeChatSystemPrompt([
+    baseSystemPrompt,
+    renderConversationSkills(
+      await conversationSkills,
+      skillLoadHint(context, tools)
+    ),
+    input.systemSuffix,
+  ]);
   const hooks = withChatStreamCleanup(
     withChatStreamDecisions(input.hooks, {
       surface: context.surface ?? "chat",

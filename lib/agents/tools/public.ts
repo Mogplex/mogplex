@@ -41,6 +41,7 @@ export {
 } from "./github-mutation-authorization";
 export { createGithubPullRequestStatusTool } from "./github-pr-status";
 export { createMemoryTools, type MemoryToolContext } from "./memory";
+export { createSkillTools, type SkillToolContext } from "./skills";
 export { virtualExecTool } from "./virtual-exec";
 export {
   buildDynamicConnectionTools,
