@@ -18,7 +18,7 @@ Code acts.
 | `claim_verification` | End of every Control, chat, Slack, and API turn (awaited, so a worker that exits with the turn cannot drop it) | `advise` | An unsupported "tests pass", "PR opened", or "pushed" claim becomes a notice in the run's activity |
 | `loop_check` | In the background once a turn has six tool calls | `shadow` | Records only. By policy nothing may end or shorten a run |
 | `memory_promotion_gate` | Before memory promotion's extraction call | `shadow` | In `enforce`, skips extraction when the record holds nothing durable |
-| `skill_selection` | When a roster agent with linked skills starts a run: the sandbox harness route (`harness`) and the native runner (`agent_run`) | `shadow` | Records only. Every linked skill is still loaded; the row says which ones the task needed |
+| `skill_selection` | When a run or turn has skills in play, meaning a roster agent's linked skills, the user's skill catalog, or both: the sandbox harness route (`harness`), the native runner (`agent_run`), Control (`control`), and workspace chat (`chat`) | `shadow` | Records only. Linked skills are still all loaded and the catalog is still offered as an index; the row says which skills the task needed. `metadata.sources` tells a linked skill from a catalog one, `metadata.invoked` lists what the user named, and `baseline.loaded` against `baseline.offered` shows how much was delivered in full |
 | `memory_relevance` | Every Control turn that injects memories, beside the turn | `shadow` | Records only. The prompt is already built; the row says which injected memories bear on the request |
 | `flow_classify` | Every automation Classify node | always acts | The run takes the answered branch. The question is authored in the flow graph |
 

@@ -16,6 +16,7 @@ import {
   loadSandboxHarnessRouteModule,
 } from "./helpers/sandbox-harness-route-fixtures";
 import type { AgentRuntime } from "../../lib/agents/runtime/types";
+import type { SkillSelectionInput } from "../../lib/decisions/skills";
 import type { CatalogSkill, SkillCatalog } from "../../lib/skill-catalog/types";
 
 function skill(
@@ -87,6 +88,8 @@ async function runHarness(input: {
   const writes: Write[] = [];
   const events: LoggedEvent[] = [];
   const used: string[][] = [];
+  const checks: SkillSelectionInput[] = [];
+  const deferred: Array<() => Promise<void>> = [];
   let harnessPrompt = "";
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
@@ -152,8 +155,12 @@ async function runHarness(input: {
       text,
     persistHarnessMemory: async () => {},
     resolveAgentRuntime: async () => reviewer,
-    observeSkillSelection: async () => {},
-    runAfterResponse: () => {},
+    observeSkillSelection: async (check: SkillSelectionInput) => {
+      checks.push(check);
+    },
+    runAfterResponse: (work: () => Promise<void>) => {
+      deferred.push(work);
+    },
     loadSkillCatalog: input.loadSkillCatalog,
     recordSkillUse: async (_userId: string, skills: Array<{ id: string }>) => {
       used.push(skills.map((skill) => skill.id));
@@ -176,7 +183,16 @@ async function runHarness(input: {
     buildSandboxRouteParams()
   );
   const body = await response.text();
-  return { status: response.status, body, writes, events, used, harnessPrompt };
+  return {
+    status: response.status,
+    body,
+    writes,
+    events,
+    used,
+    checks,
+    deferred,
+    harnessPrompt,
+  };
 }
 
 function skillWrites(writes: Write[]) {
@@ -228,6 +244,20 @@ test("POST /api/sandbox/[id]/harness writes an invoked skill and the index ahead
   assert.deepEqual(logged?.payload?.invoked, ["deploy-checklist"]);
   assert.equal(logged?.message, "Invoked skills: Deploy checklist");
   assert.deepEqual(run.used, [["s1"]], "only the invoked skill counts as used");
+  // One shadow check covers the catalog, and it is kept alive, not awaited.
+  assert.equal(run.checks.length, 1);
+  assert.equal(run.checks[0]?.agent, null);
+  assert.deepEqual(run.checks[0]?.catalog?.invokedIds, ["s1"]);
+  assert.deepEqual(
+    run.checks[0]?.catalog?.skills.map((entry) => entry.name),
+    ["Deploy checklist", "Release notes"]
+  );
+  assert.equal(
+    run.checks[0]?.request,
+    "/deploy-checklist ship the staging branch"
+  );
+  assert.equal(run.checks[0]?.scope.surface, "harness");
+  assert.equal(run.deferred.length, 1);
 });
 
 test("POST /api/sandbox/[id]/harness leaves the CLI's own slash commands alone but honors $slug", async () => {
@@ -270,6 +300,17 @@ test("POST /api/sandbox/[id]/harness puts the agent first and does not index a s
   assert.deepEqual(skillWrites(run.writes), [
     ".mogplex/skills/deploy-checklist/SKILL.md",
   ]);
+  // The agent's skills and the catalog are judged together, once.
+  assert.equal(run.checks.length, 1);
+  assert.equal(run.checks[0]?.agent?.id, "agent-1");
+  assert.deepEqual(
+    run.checks[0]?.catalog?.skills.map((entry) => entry.name),
+    ["Deploy checklist"]
+  );
+  assert.equal(
+    run.checks[0]?.request,
+    "Summarize $deploy-checklist for the team."
+  );
 });
 
 test("POST /api/sandbox/[id]/harness runs unchanged for a user without skills or when the catalog fails", async () => {
@@ -280,6 +321,7 @@ test("POST /api/sandbox/[id]/harness runs unchanged for a user without skills or
   assert.equal(none.status, 200);
   assert.ok(!none.harnessPrompt.includes("<skills>"));
   assert.deepEqual(skillWrites(none.writes), []);
+  assert.equal(none.checks.length, 0, "nothing in play, nothing to ask");
 
   const originalWarn = console.warn;
   console.warn = () => {};

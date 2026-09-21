@@ -24,6 +24,7 @@ import { renderAgentInstructions } from "@/lib/agents/runtime/instructions";
 import { resolveAgentRuntimeForUser } from "@/lib/agents/runtime/store";
 import type { AgentRuntime } from "@/lib/agents/runtime/types";
 import { observeSkillSelection } from "@/lib/decisions/skills";
+import type { ConversationSkills } from "@/lib/skill-catalog/chat";
 import {
   createRunProgressTool,
   SLACK_RUN_PROGRESS_INSTRUCTIONS,
@@ -170,10 +171,17 @@ export async function runNativeMogplexAgent(
     const uiMessages = await deps.buildMessages(run);
     const agent = await buildAgentSystemSuffix(run, deps.resolveAgent);
     // Recorded beside the run and awaited in `finally`: it never delays the
-    // first token, and a worker that exits with the run cannot drop it.
-    if (agent)
+    // first token, and a worker that exits with the run cannot drop it. It
+    // starts once the stream knows the user's catalog, so one check covers
+    // the agent's attached skills and the catalog together.
+    const observeSkills = (catalog: ConversationSkills) => {
+      if (!agent && catalog.available.length === 0) return;
       skillCheck = deps.observeSkills({
-        agent: agent.runtime,
+        agent: agent?.runtime ?? null,
+        catalog: {
+          skills: catalog.available,
+          invokedIds: catalog.invoked.map((skill) => skill.id),
+        },
         request: run.prompt,
         delivery: "inline",
         scope: {
@@ -185,6 +193,7 @@ export async function runNativeMogplexAgent(
           conversationId: run.conversation_id,
         },
       });
+    };
     const slackControls = readSlackRunControlsMetadata(run.metadata);
     const systemSuffix =
       [agent?.suffix, slackControls ? SLACK_RUN_PROGRESS_INSTRUCTIONS : null]
@@ -207,6 +216,7 @@ export async function runNativeMogplexAgent(
     stream = await deps.createStream({
       systemSuffix,
       attachedSkillIds: agent?.runtime.skills.map((skill) => skill.id),
+      onSkillsResolved: observeSkills,
       ...(slackControls
         ? {
             additionalTools: {

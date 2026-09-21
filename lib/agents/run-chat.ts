@@ -23,6 +23,7 @@ import {
   renderConversationSkills,
   resolveConversationSkills,
   withoutSkills,
+  type ConversationSkills,
 } from "@/lib/skill-catalog/chat";
 import type { SkillLoadHint } from "@/lib/skill-catalog/render";
 
@@ -198,6 +199,11 @@ export type CreateChatModelStreamInput = {
    * attached skills), so the catalog block does not repeat them.
    */
   attachedSkillIds?: readonly string[];
+  /**
+   * Told which skills this turn has in play, once the catalog is known. The
+   * caller decides how to keep its own follow-up work alive; this never waits.
+   */
+  onSkillsResolved?: (skills: ConversationSkills) => void;
   /** Seams for tests. Production callers leave this unset. */
   deps?: Partial<ChatModelStreamDeps>;
 };
@@ -224,6 +230,17 @@ function startConversationSkills(
     repoId: context.repoId ?? null,
     userTexts: readUserTexts(input.uiMessages),
   });
+}
+
+function notifySkillsResolved(
+  input: Pick<CreateChatModelStreamInput, "onSkillsResolved">,
+  skills: ConversationSkills
+) {
+  try {
+    input.onSkillsResolved?.(skills);
+  } catch (error) {
+    console.warn("[chat] skills observer failed", error);
+  }
 }
 
 /** An agent is only told about skills it was not handed if it can load one. */
@@ -337,12 +354,14 @@ export async function createChatModelStream(
   );
   // The index only helps an agent that holds load_skill; a team role or a
   // tools-off turn without it still gets the skills the user invoked.
+  const skills = withoutSkills(
+    await conversationSkills,
+    input.attachedSkillIds
+  );
+  notifySkillsResolved(input, skills);
   const systemPrompt = composeChatSystemPrompt([
     baseSystemPrompt,
-    renderConversationSkills(
-      withoutSkills(await conversationSkills, input.attachedSkillIds),
-      skillLoadHint(context, tools)
-    ),
+    renderConversationSkills(skills, skillLoadHint(context, tools)),
     input.systemSuffix,
   ]);
   const hooks = withChatStreamCleanup(

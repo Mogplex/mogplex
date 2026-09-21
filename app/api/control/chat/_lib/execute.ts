@@ -121,6 +121,7 @@ export async function executeControlChatRequest(input: {
           latestUserText: input.latestUserText,
           messages: input.body.messages,
           onMemoriesSelected: turnTasks.onMemoriesSelected,
+          onSkillsResolved: turnTasks.onSkillsResolved,
         }),
       ]);
     // Replace the client hint with the owned, server-validated session and

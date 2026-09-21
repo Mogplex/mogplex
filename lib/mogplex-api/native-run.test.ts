@@ -206,6 +206,8 @@ async function exercise(
         createStream: async (input) => {
           systemSuffix = input.systemSuffix;
           attachedSkillIds = input.attachedSkillIds;
+          // The real stream reports the catalog once it has resolved it.
+          input.onSkillsResolved?.({ invoked: [], available: [] });
           skillCheckStartedBeforeStream = skillChecks.length > 0;
           assert.equal(
             skillCheckSettled,
@@ -344,10 +346,8 @@ test("native runner records which skills the request needed beside the run, scop
   const [check] = result.skillChecks;
   assert.equal(check?.request, "Fix the tests");
   assert.equal(check?.delivery, "inline");
-  assert.deepEqual(
-    check?.agent.skills.map((skill) => skill.id),
-    ["skill-1"]
-  );
+  assert.equal(check?.agent?.skills[0]?.id, "skill-1");
+  assert.deepEqual(check?.catalog, { skills: [], invokedIds: [] });
   assert.deepEqual(check?.scope, {
     surface: "agent_run",
     userId: result.call.user_id,
@@ -364,7 +364,7 @@ test("native runner records which skills the request needed beside the run, scop
   );
 });
 
-test("native runner asks nothing about skills when the run has no agent", async () => {
+test("native runner asks nothing about skills when the run has no agent and the user keeps no skills", async () => {
   const result = await exercise("success");
   assert.equal(result.skillChecks.length, 0);
 });
