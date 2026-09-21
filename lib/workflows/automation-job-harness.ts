@@ -19,6 +19,7 @@ import {
   parseAutomationHarnessReviewResult,
   stripAutomationHarnessReviewMarker,
 } from "@/lib/workflows/automation-job-prompts";
+import { resolveAutomationSkills } from "@/lib/workflows/automation-job-skills";
 import {
   buildAutofixSandboxInternalApiHeaders,
   launchAutofixSandbox,
@@ -229,7 +230,13 @@ export async function runAutomationHarnessAgent(input: {
               : undefined
         );
   await prepareHarnessFlowReports(input.context, sandbox);
-  const prompt = buildAutomationHarnessPrompt(input);
+  // The harness route resolves the user's catalog from the prompt; this adds
+  // what the node's roster agent carries, which the route never sees.
+  const { instructionsSuffix } = await resolveAutomationSkills(
+    input.context,
+    "harness"
+  );
+  const prompt = buildAutomationHarnessPrompt({ ...input, instructionsSuffix });
   const { createSandboxHarnessPostHandler } =
     await import("@/app/api/sandbox/[id]/harness/route");
   const response = await createSandboxHarnessPostHandler()(

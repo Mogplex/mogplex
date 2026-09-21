@@ -32,7 +32,7 @@ import {
   type ReportRepairRequest,
 } from "@/lib/workflows/pr-review-report-repair";
 import {
-  buildPromptForJob,
+  buildJobRunSpec,
   buildPromptForPRFix,
 } from "@/lib/workflows/automation-job-prompts";
 import { assertPullRequestGithubAccess } from "@/lib/workflows/automation-job-github";
@@ -259,15 +259,11 @@ export function createAutomationAgentRunner(
       });
     }
 
-    const runSpec = buildPromptForJob(
+    const skills = await deps.resolveSkills(context, "native");
+    const runSpec = buildJobRunSpec(
+      context,
       assignmentType,
-      {
-        ...context.metadata,
-        repo_full_name: context.repo.full_name,
-        base_branch: baseBranch,
-        skill_id: context.skillId,
-      },
-      context.agent.system_prompt
+      skills.instructionsSuffix
     );
     const gatewayContext = buildAutomationGatewayContext(
       context,
@@ -309,7 +305,7 @@ export function createAutomationAgentRunner(
 
     const review = await generate({
       tools: applyToolApprovalGate(
-        { ...tools, ...buildFlowReportTools(context) },
+        { ...tools, ...skills.tools, ...buildFlowReportTools(context) },
         context,
         deps
       ),

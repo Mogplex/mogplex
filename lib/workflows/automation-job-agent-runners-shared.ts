@@ -22,6 +22,7 @@ import {
   type AutomationLanguageModel,
   type JobContext,
 } from "@/lib/workflows/automation-job-types";
+import { resolveAutomationSkills } from "@/lib/workflows/automation-job-skills";
 import { normalizeAutomationAssignmentType } from "@/lib/workflows/automation-job-utils";
 import { getAutomationGenerateTimeoutMs } from "@/lib/workflows/automation-model-defaults";
 
@@ -33,6 +34,8 @@ export type AutomationAgentDeps = {
   waitProvider: FlowOperatorWaitProvider;
   waitStore: FlowOperatorWaitStore;
   loadApprovalSpentWaitMs: typeof loadToolApprovalSpentWaitMs;
+  /** The node's skills and its agent's attachments; never rejects. */
+  resolveSkills: typeof resolveAutomationSkills;
 };
 
 export const defaultAutomationAgentDeps: AutomationAgentDeps = {
@@ -40,6 +43,7 @@ export const defaultAutomationAgentDeps: AutomationAgentDeps = {
   waitProvider: triggerWaitProvider,
   waitStore: supabaseWaitStore,
   loadApprovalSpentWaitMs: loadToolApprovalSpentWaitMs,
+  resolveSkills: resolveAutomationSkills,
 };
 
 // Applies the tool-approval gate when the flow agent node opted in via
