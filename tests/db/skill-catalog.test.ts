@@ -129,9 +129,11 @@ describe("skill catalog against the migrated schema", () => {
 
   it("should put a repo's own skills first so they take the plain slug", async () => {
     await db.query(
-      `insert into repo_skill_overrides(repo_id,name,description,content) values
-        ($1,'Release notes','Repo flavour','Use the widgets template.'),
-        ($1,'Seed data',null,'')`,
+      // Rows written in one statement share now(); the catalog orders by
+      // created_at, so the fixture states the order it means.
+      `insert into repo_skill_overrides(repo_id,name,description,content,created_at) values
+        ($1,'Release notes','Repo flavour','Use the widgets template.','2026-02-01'),
+        ($1,'Seed data',null,'','2026-02-02')`,
       [repo]
     );
     const catalog = await loadSkillCatalog(
