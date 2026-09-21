@@ -66,6 +66,8 @@ function buildChatBuiltinCommands(models: string[]): SlashCommand[] {
           "  web_search — Search the web via DuckDuckGo",
           "  web_fetch — Fetch a public URL for source-backed context",
           "  browse_skills — Search skills.sh registry",
+          "  find_skills — Search your own skills for a task",
+          "  load_skill — Load one of your skills by slug",
           "  browse_vercel_docs — Search Vercel documentation",
           "  bash — Run shell commands in sandbox",
           "  read_file — Read a file from the repository",

@@ -36,6 +36,9 @@ export const TOOL_CAPABILITY: Record<string, Capability> = {
   add_memory: "tools.memories",
   search_memories: "tools.memories",
   list_memories: "tools.memories",
+  // Reading the acting user's own skill library. Every role may do it.
+  find_skills: "tools.skills",
+  load_skill: "tools.skills",
 };
 
 /**
