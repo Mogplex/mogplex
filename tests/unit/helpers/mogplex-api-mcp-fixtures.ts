@@ -76,6 +76,10 @@ export function buildFakeMcpClient(
   return {
     listAgents: async () => ({ agents: [] }),
     listModels: async () => ({ models: [] }),
+    listSkills: async () => ({ skills: [], total: 0 }),
+    getSkill: async () => {
+      throw new Error("getSkill was not stubbed");
+    },
     listRepos: async () => ({ repos: [] }),
     listRepoEnvVars: async () => ({ envVars: [] }),
     upsertRepoEnvVar: async () => ({

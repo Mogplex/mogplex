@@ -53,6 +53,8 @@ test("Mogplex MCP initialize and tools/list expose the run control tools", async
       "mogplex_set_env_var",
       "mogplex_delete_env_var",
       "mogplex_list_agents",
+      "mogplex_list_skills",
+      "mogplex_get_skill",
       "mogplex_list_models",
       "mogplex_list_sandboxes",
       "mogplex_create_sandbox",

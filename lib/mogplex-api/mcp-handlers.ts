@@ -14,9 +14,11 @@ import {
   createAutomationArgsSchema,
   createSandboxArgsSchema,
   deleteEnvVarArgsSchema,
+  getSkillArgsSchema,
   listAutomationsArgsSchema,
   listReposArgsSchema,
   listSandboxesArgsSchema,
+  listSkillsArgsSchema,
   repoIdArgsSchema,
   rerunPrReviewArgsSchema,
   runEventsArgsSchema,
@@ -170,6 +172,22 @@ export async function callMogplexTool(
         const result = await context.client.listAgents();
         return textResult(
           `Found ${result.agents.length} Mogplex agents.`,
+          result
+        );
+      }
+      case "mogplex_list_skills": {
+        const input = parseArgs(listSkillsArgsSchema, args);
+        const result = await context.client.listSkills(input);
+        return textResult(
+          `Found ${result.skills.length} of ${result.total} Mogplex skills.`,
+          result
+        );
+      }
+      case "mogplex_get_skill": {
+        const input = parseArgs(getSkillArgsSchema, args);
+        const result = await context.client.getSkill(input);
+        return textResult(
+          `Loaded the ${result.skill.name} skill ($${result.skill.slug}).`,
           result
         );
       }

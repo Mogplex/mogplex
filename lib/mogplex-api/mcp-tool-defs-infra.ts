@@ -132,6 +132,60 @@ export const MCP_TOOLS_INFRA: McpToolDefinition[] = [
     },
   },
   {
+    name: "mogplex_list_skills",
+    title: "List Mogplex Skills",
+    description:
+      "Search the user's skills: written procedures for recurring work. Returns slug, name, and description. Put $slug in a run or automation prompt to make the agent follow that skill, or read it with mogplex_get_skill.",
+    inputSchema: objectSchema({
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "What the task involves, in a few words. Omit to list every skill.",
+        },
+        repoId: {
+          type: "string",
+          description:
+            "Optional repo id from mogplex_list_repos. Applies that repo's skill exclusions and adds its own skills.",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 200,
+          description: "Maximum skills to return. Defaults to 50.",
+        },
+      },
+    }),
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "mogplex_get_skill",
+    title: "Get Mogplex Skill",
+    description:
+      "Read one skill's full instructions by slug from mogplex_list_skills.",
+    inputSchema: objectSchema({
+      properties: {
+        slug: {
+          type: "string",
+          description: "Skill slug, with or without its leading $.",
+        },
+        repoId: {
+          type: "string",
+          description:
+            "Optional repo id, required to reach a skill the repo defines.",
+        },
+      },
+      required: ["slug"],
+    }),
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
     name: "mogplex_list_models",
     title: "List Mogplex Models",
     description:

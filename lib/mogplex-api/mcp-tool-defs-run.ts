@@ -18,7 +18,8 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
         },
         prompt: {
           type: "string",
-          description: "Task prompt for the Mogplex agent.",
+          description:
+            "Task prompt for the Mogplex agent. Write $slug (from mogplex_list_skills) to have the agent follow one of the user's skills.",
         },
         harness: {
           type: "string",

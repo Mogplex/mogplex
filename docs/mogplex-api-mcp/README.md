@@ -99,6 +99,8 @@ The current automation and sandbox extension adds:
 
 ```txt
 mogplex_list_agents
+mogplex_list_skills
+mogplex_get_skill
 mogplex_list_models
 mogplex_create_sandbox
 mogplex_get_sandbox_logs

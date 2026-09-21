@@ -10,6 +10,21 @@ export const listReposArgsSchema = z
   })
   .strict();
 
+export const listSkillsArgsSchema = z
+  .object({
+    query: z.string().trim().min(1).max(500).optional(),
+    repoId: z.string().uuid().optional(),
+    limit: limitSchema,
+  })
+  .strict();
+
+export const getSkillArgsSchema = z
+  .object({
+    slug: z.string().trim().min(1).max(200),
+    repoId: z.string().uuid().optional(),
+  })
+  .strict();
+
 export const listSandboxesArgsSchema = z
   .object({
     repoId: z.string().trim().min(1).optional(),
