@@ -1,5 +1,6 @@
 "use client";
 
+import { useSkillCatalog } from "@/hooks/use-skill-catalog";
 import { formatSkillScope } from "@/lib/skills";
 import type { Skill, RegistrySkill, VercelDoc } from "./skills-section-types";
 import { formatInstalls } from "./skills-section-types";
@@ -223,6 +224,9 @@ export function InstalledTab({
   setEditing,
   deleteSkill,
 }: InstalledTabProps) {
+  // The handle a skill answers to in any composer: /slug or $slug.
+  const { skills: catalog } = useSkillCatalog();
+  const handles = new Map(catalog.map(entry => [entry.id, entry.slug]));
   if (compact) {
     return (
       <>
@@ -242,6 +246,7 @@ export function InstalledTab({
               </div>
               {s.description && <div className="text-muted-foreground text-[11px] mt-0.5">{s.description}</div>}
               <div className="flex gap-2 mt-1 text-[11px] text-muted-foreground">
+                {handles.has(s.id) && <span className="font-mono text-accent-blue" title="Type this in any composer to use the skill">${handles.get(s.id)}</span>}
                 <span>Scope: {formatSkillScope(s.scope)}</span>
                 {s.is_public && <span className="text-accent-green">Public</span>}
                 <span>{s.usage_count} uses</span>
@@ -275,6 +280,7 @@ export function InstalledTab({
                 </div>
                 {s.description && <div className="text-[11px] text-muted-foreground mt-0.5">{s.description}</div>}
                 <div className="flex gap-3 mt-1 text-[11px] text-muted-foreground">
+                  {handles.has(s.id) && <span data-testid="skill-handle" className="font-mono text-accent-blue" title="Type this in any composer to use the skill">${handles.get(s.id)}</span>}
                   <span>Scope: {formatSkillScope(s.scope)}</span>
                   {s.is_public && <span className="text-accent-green">Public</span>}
                   <span>{s.usage_count} uses</span>

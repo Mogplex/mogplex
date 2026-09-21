@@ -479,7 +479,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                   onStop={stop}
                   initialModelId={activeSession?.model_id ?? null}
                   onModelSelect={selectModel}
-                  contextUsage={contextUsage}
+                  contextUsage={contextUsage} repoId={activeRepo?.id ?? null}
                 />
               </div>
               <ArtifactSidePanel messages={messages} />

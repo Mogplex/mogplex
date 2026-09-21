@@ -57,7 +57,7 @@ export function AgentPane({
   onUpdatePane,
 }: AgentPaneProps) {
   const endRef = useRef<HTMLDivElement>(null);
-  const { asSlashCommands } = useCustomCommands();
+  const { asSlashCommands } = useCustomCommands(activeRepo?.id);
   const { modelIds, contextLimits, defaultModelId } = useModels();
   const hydratedConversationRef = useRef<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -279,7 +279,7 @@ export function AgentPane({
         : parseSlashCommand(input, builtinCommands, asSlashCommands(), {
             allowUnknown: model.startsWith("harness:"),
           });
-      if (result) {
+      if (result && result.action !== "skill") {
         if (result.action === "set_model") {
           setModel(pane.id, result.payload as string);
           addLocalMsg(pane.id, {

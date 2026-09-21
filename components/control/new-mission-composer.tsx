@@ -24,6 +24,7 @@ import {
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
+import { useSkillSuggestionMenu } from "./skill-suggestions";
 import { NewProjectFields, NewProjectStatus } from "./new-project-fields";
 import { ProjectCombobox } from "./project-combobox";
 import {
@@ -188,14 +189,20 @@ export function NewMissionComposer({
     text,
   ]);
 
+  const skillMenu = useSkillSuggestionMenu({
+    value: text,
+    onChange: setText,
+    repoId: selectedRepoId,
+  });
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (skillMenu.handleKeyDown(e)) return;
       if (e.key === "Enter" && !e.shiftKey && !submitDisabled) {
         e.preventDefault();
         void handleSubmit();
       }
     },
-    [handleSubmit, submitDisabled]
+    [handleSubmit, skillMenu, submitDisabled]
   );
 
   return (
@@ -276,6 +283,7 @@ export function NewMissionComposer({
               Drop images or files to attach
             </div>
           ) : null}
+          {skillMenu.element}
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}

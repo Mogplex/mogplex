@@ -22,6 +22,7 @@ import {
   type ControlComposerFile,
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
+import { useSkillSuggestionMenu } from "./skill-suggestions";
 
 export type ComposerSendOptions = {
   model: string | null;
@@ -46,6 +47,8 @@ type Props = {
   onModelSelect: (modelId: string) => Promise<boolean>;
   /** Provider measurement for the latest model step, not cumulative billing. */
   contextUsage?: ControlContextUsage | null;
+  /** Narrows skill completion to the open repo's catalog. */
+  repoId?: string | null;
 };
 
 const CHIP_CLASS =
@@ -230,6 +233,7 @@ export function Composer({
   initialModelId,
   onModelSelect,
   contextUsage = null,
+  repoId,
 }: Props) {
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
@@ -324,14 +328,16 @@ export function Composer({
     onChange,
   ]);
 
+  const skillMenu = useSkillSuggestionMenu({ value, onChange, repoId });
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (skillMenu.handleKeyDown(e)) return;
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         void handleSend();
       }
     },
-    [handleSend]
+    [handleSend, skillMenu]
   );
 
   const skipPermissions =
@@ -354,6 +360,7 @@ export function Composer({
             Drop images or files to attach
           </div>
         ) : null}
+        {skillMenu.element}
         <label htmlFor="control-composer" className="sr-only">
           Ask for follow-up changes
         </label>

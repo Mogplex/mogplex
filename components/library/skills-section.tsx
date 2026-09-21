@@ -1,7 +1,8 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import useSWR from "swr";
+import useSWR, { mutate as mutateCache } from "swr";
 import { toast } from "@/hooks/use-toast";
+import { skillCatalogKey } from "@/hooks/use-skill-catalog";
 import { SkillEditor } from "./skill-editor";
 import { BrowseTab, VercelTab, InstalledTab } from "./skills-tabs";
 import {
@@ -107,7 +108,7 @@ export function SkillsSection({ compact }: Props) {
     const savedSkill = await res.json() as Skill;
     setEditing(null);
     setCreating(false);
-    await Promise.all([mutateSkills(), mutateAllSkills()]);
+    await Promise.all([mutateSkills(), mutateAllSkills(), mutateCache(skillCatalogKey())]);
     return savedSkill;
   };
 
@@ -118,7 +119,7 @@ export function SkillsSection({ compact }: Props) {
       toast({ title: "Delete failed", description: errorData?.error || "Failed to delete skill", variant: "destructive" });
       return;
     }
-    await Promise.all([mutateSkills(), mutateAllSkills()]);
+    await Promise.all([mutateSkills(), mutateAllSkills(), mutateCache(skillCatalogKey())]);
     toast({ title: "Skill deleted" });
   };
 
