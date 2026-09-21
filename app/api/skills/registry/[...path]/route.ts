@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchRegistrySkillMarkdown } from "@/lib/skills-registry/skill-md";
 
 type SkillDetail = {
   name: string;
@@ -13,9 +14,27 @@ type SkillDetail = {
 const detailCache = new Map<string, { data: SkillDetail; time: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
 
-export async function GET(
+type RegistryDetailDeps = {
+  fetchPage: typeof fetch;
+  fetchSkillMarkdown: typeof fetchRegistrySkillMarkdown;
+};
+
+export function createRegistrySkillDetailGetHandler(
+  overrides: Partial<RegistryDetailDeps> = {}
+) {
+  const deps: RegistryDetailDeps = {
+    fetchPage: (...args) => fetch(...args),
+    fetchSkillMarkdown: fetchRegistrySkillMarkdown,
+    ...overrides,
+  };
+  return (req: Request, ctx: { params: Promise<{ path: string[] }> }) =>
+    handleGet(req, ctx, deps);
+}
+
+async function handleGet(
   _req: Request,
-  { params }: { params: Promise<{ path: string[] }> }
+  { params }: { params: Promise<{ path: string[] }> },
+  deps: RegistryDetailDeps
 ) {
   try {
     const { path } = await params;
@@ -33,7 +52,7 @@ export async function GET(
 
     // Fetch the skill page from skills.sh
     const pageUrl = `https://skills.sh/${fullPath}`;
-    const res = await fetch(pageUrl, {
+    const res = await deps.fetchPage(pageUrl, {
       headers: { "User-Agent": "MOGPLEX/1.0" },
     });
 
@@ -76,11 +95,15 @@ export async function GET(
     const skillId =
       path.length >= 3 ? path.slice(2).join("/") : (path.at(-1) ?? fullPath);
 
-    // Try to extract SKILL.md content from code blocks or pre elements
-    let content = "";
-    const codeBlockMatch =
-      /<pre[^>]*><code[^>]*>([\S\s]*?)<\/code><\/pre>/.exec(html) ||
-      /<pre[^>]*>([\S\s]*?)<\/pre>/.exec(html);
+    // The instructions are the SKILL.md in the source repository. The listing
+    // page's first code block is an install command or a stray URL, which is
+    // what used to be saved as the skill. It stays as a last resort only.
+    const markdown = await deps.fetchSkillMarkdown({ source, skillId });
+    let content = markdown?.content ?? "";
+    const codeBlockMatch = content
+      ? null
+      : /<pre[^>]*><code[^>]*>([\S\s]*?)<\/code><\/pre>/.exec(html) ||
+        /<pre[^>]*>([\S\s]*?)<\/pre>/.exec(html);
     if (codeBlockMatch) {
       content = codeBlockMatch[1]
         .replace(/<[^>]+>/g, "")
@@ -113,8 +136,8 @@ export async function GET(
     const installCommand = `npx skills add ${source} --skill ${skillId}`;
 
     const detail: SkillDetail = {
-      name,
-      description,
+      name: markdown?.name ?? name,
+      description: markdown?.description ?? description,
       installs,
       source,
       content,
@@ -142,3 +165,5 @@ export async function GET(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const GET = createRegistrySkillDetailGetHandler();
