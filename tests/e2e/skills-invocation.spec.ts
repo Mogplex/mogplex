@@ -168,6 +168,63 @@ test("Control completes a skill handle and sends the message exactly as typed", 
   await expect(followUp).toHaveValue("/deploy-checklist ");
 });
 
+test("a composer still sends a skill handle when completion cannot load", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseApp(page);
+  // Completion is a convenience: the server resolves the handle on its own.
+  await page.route("**/api/skills/catalog**", (route) =>
+    fulfillJson(route, { error: "Failed to load skills" }, 500)
+  );
+  await page.route("**/api/commands", (route) => fulfillJson(route, []));
+  await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === "GET") {
+      await fulfillJson(route, {
+        messages: [],
+        local_msgs: [],
+        model: workspaceModelId,
+        mode: "AUTO",
+      });
+      return;
+    }
+    await fulfillJson(route, { ok: true });
+  });
+  const sentTexts: string[] = [];
+  await page.route("**/api/chat", async (route) => {
+    const body = route.request().postDataJSON() as {
+      messages?: Array<{ role?: string; parts?: Array<{ text?: string }> }>;
+    };
+    const lastUser = body.messages?.findLast((m) => m.role === "user");
+    sentTexts.push(
+      lastUser?.parts?.map((part) => part.text ?? "").join("") ?? ""
+    );
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: buildUiMessageStreamBody("Notes drafted."),
+    });
+  });
+
+  await page.goto(scopedPath("projects/workspace"));
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId(`home-open-workspace-${workspaceRepo.id}`).click();
+  const composer = page.getByRole("textbox", {
+    name: "Ask the agent what to build, fix, or explain. Type / for commands or drop files here.",
+  });
+  // The slash menu only opens once the composer is hydrated; sending before
+  // that would be a keypress into inert markup.
+  await composer.fill("/he");
+  await expect(page.getByText("Show available commands")).toBeVisible();
+  await composer.fill("Draft them with $release-notes");
+  await composer.press("Enter");
+  await expect(page.getByText("Notes drafted.")).toBeVisible();
+  expect(sentTexts).toEqual(["Draft them with $release-notes"]);
+});
+
 test("the skills library shows the handle each skill answers to", async ({
   page,
 }) => {
