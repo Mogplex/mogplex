@@ -7,6 +7,8 @@ import {
 } from "./chat";
 import { catalogOf, skillRow } from "./test-fixtures";
 
+const noRecord = async () => {};
+
 const skills = catalogOf(
   skillRow("Deploy checklist", { content: "1. Run the tests." }),
   skillRow("Release notes", { content: "Group changes by area." })
@@ -42,13 +44,14 @@ describe("readUserTexts", () => {
 describe("resolveConversationSkills", () => {
   it("should deliver an invoked skill in full and index the rest", async () => {
     const loadCatalog = vi.fn(async () => ({ skills }));
+    const recordUse = vi.fn(async () => {});
     const result = await resolveConversationSkills(
       {
         userId: "user-1",
         repoId: "repo-1",
         userTexts: ["/deploy-checklist staging", "and now production"],
       },
-      { loadCatalog }
+      { loadCatalog, recordUse }
     );
     expect(loadCatalog).toHaveBeenCalledWith({
       userId: "user-1",
@@ -57,16 +60,31 @@ describe("resolveConversationSkills", () => {
     expect(result.invoked.map((skill) => skill.slug)).toEqual([
       "deploy-checklist",
     ]);
+    // The invocation was counted on the turn it was typed, not again now.
+    expect(recordUse).toHaveBeenCalledWith("user-1", []);
     const prompt = renderConversationSkills(result, "tool");
     expect(prompt).toContain("1. Run the tests.");
     expect(prompt).toContain("- $release-notes: Release notes");
     expect(prompt).not.toContain("Group changes by area.");
   });
 
+  it("should count a skill as used on the turn that invokes it", async () => {
+    const recordUse = vi.fn(async () => {});
+    await resolveConversationSkills(
+      {
+        userId: "user-1",
+        userTexts: ["/deploy-checklist staging", "now use $release-notes"],
+      },
+      { loadCatalog: async () => ({ skills }), recordUse }
+    );
+    expect(recordUse).toHaveBeenCalledTimes(1);
+    expect(recordUse).toHaveBeenCalledWith("user-1", [skills[1]]);
+  });
+
   it("should still deliver invoked skills when the agent cannot load others", async () => {
     const result = await resolveConversationSkills(
       { userId: "user-1", userTexts: ["use $release-notes"] },
-      { loadCatalog: async () => ({ skills }) }
+      { loadCatalog: async () => ({ skills }), recordUse: noRecord }
     );
     const prompt = renderConversationSkills(result, "none");
     expect(prompt).toContain("Group changes by area.");
@@ -80,7 +98,7 @@ describe("resolveConversationSkills", () => {
         userTexts: ["/deploy-checklist"],
         invocation: { reservedSlashNames: new Set(["deploy-checklist"]) },
       },
-      { loadCatalog: async () => ({ skills }) }
+      { loadCatalog: async () => ({ skills }), recordUse: noRecord }
     );
     expect(result.invoked).toEqual([]);
     expect(renderConversationSkills(result, "none")).toBeNull();
@@ -90,7 +108,7 @@ describe("resolveConversationSkills", () => {
     expect(
       await resolveConversationSkills(
         { userId: "user-1", userTexts: ["$anything"] },
-        { loadCatalog: async () => ({ skills: [] }) }
+        { loadCatalog: async () => ({ skills: [] }), recordUse: noRecord }
       )
     ).toBe(NO_CONVERSATION_SKILLS);
   });
@@ -104,6 +122,7 @@ describe("resolveConversationSkills", () => {
           loadCatalog: async () => {
             throw new Error("database offline");
           },
+          recordUse: noRecord,
         }
       )
     ).toBe(NO_CONVERSATION_SKILLS);

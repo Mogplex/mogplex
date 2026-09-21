@@ -32,6 +32,7 @@ import { getSlackBotToken } from "@/lib/slack/client";
 import { resolveAgentRuntimeForUser } from "@/lib/agents/runtime/store";
 import { observeSkillSelection } from "@/lib/decisions/skills";
 import { loadSkillCatalogOrEmpty } from "@/lib/skill-catalog/store";
+import { recordSkillUse } from "@/lib/skill-catalog/usage";
 import {
   syncHarnessGitWorkspace,
   publishHarnessPullRequest,
@@ -110,6 +111,7 @@ export const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   resolveAgentRuntime: resolveAgentRuntimeForUser,
   observeSkillSelection,
   loadSkillCatalog: (input) => loadSkillCatalogOrEmpty(input),
+  recordSkillUse: (userId, skills) => recordSkillUse(userId, skills),
   runAfterResponse: (work) => after(work),
   fetchSlackAttachment: ({ botToken, url, signal }) =>
     fetch(url, {

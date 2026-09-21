@@ -30,6 +30,7 @@ import type { HarnessId } from "@/lib/harness/config";
 import type { AgentRuntime } from "@/lib/agents/runtime/types";
 import type { observeSkillSelection } from "@/lib/decisions/skills";
 import type { loadSkillCatalogOrEmpty } from "@/lib/skill-catalog/store";
+import type { RecordSkillUse } from "@/lib/skill-catalog/usage";
 import type { getSlackBotToken } from "@/lib/slack/client";
 import type {
   loadHarnessPromptWithMemoryContext,
@@ -135,6 +136,8 @@ export type SandboxHarnessPostDeps = {
   loadSkillCatalog: (
     input: Parameters<typeof loadSkillCatalogOrEmpty>[0]
   ) => ReturnType<typeof loadSkillCatalogOrEmpty>;
+  /** Counts invoked skills as used. Best effort; never rejects. */
+  recordSkillUse: RecordSkillUse;
   /** Keeps the function alive for work that must not delay the response. */
   runAfterResponse: (work: () => Promise<void>) => void;
   fetchSlackAttachment: (input: {

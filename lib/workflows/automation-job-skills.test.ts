@@ -49,6 +49,7 @@ function deps(overrides: Partial<AutomationSkillsDeps> = {}) {
     loadLinkedSkills: vi.fn(async () => []),
     loadLinkedRules: vi.fn(async () => []),
     createTools: vi.fn(() => tools),
+    recordUse: vi.fn(async () => {}),
     ...overrides,
   } satisfies AutomationSkillsDeps;
 }
@@ -106,6 +107,7 @@ describe("resolveAutomationSkills", () => {
       repoId: "repo-1",
     });
     expect(Object.keys(result.tools)).toEqual(["find_skills", "load_skill"]);
+    expect(injected.recordUse).toHaveBeenCalledWith(OWNER, [deploy]);
     expect(result.instructionsSuffix).toContain("1. Run the tests.");
     expect(result.instructionsSuffix).toContain(
       "- $release-notes: Release notes"

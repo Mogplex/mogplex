@@ -50,6 +50,7 @@ const TOOL_OPTIONS = { toolCallId: "call-1", messages: [] };
 async function buildTools(loadCatalog: () => Promise<SkillCatalog>) {
   const { createSkillTools } = await import("../../lib/agents/tools/skills");
   const calls: unknown[] = [];
+  const used: string[][] = [];
   const tools = createSkillTools(
     { userId: "user-1", repoId: "repo-1" },
     {
@@ -57,9 +58,12 @@ async function buildTools(loadCatalog: () => Promise<SkillCatalog>) {
         calls.push(context);
         return loadCatalog();
       },
+      recordUse: async (_userId, skills) => {
+        used.push(skills.map((skill) => skill.id));
+      },
     }
   ) as unknown as Record<"find_skills" | "load_skill", Executable>;
-  return { tools, calls };
+  return { tools, calls, used };
 }
 
 test("find_skills ranks matches and reads the catalog once per run", async () => {
@@ -97,6 +101,15 @@ test("load_skill returns the full instructions for a slug typed any way", async 
     assert.equal(loaded.skill.truncated, false);
     assert.equal(loaded.skill.source, "library");
   }
+});
+
+test("a skill counts as used when it is loaded, not when it is only found", async () => {
+  const { tools, used } = await buildTools(async () => CATALOG);
+  await tools.find_skills.execute({ query: "deploy", limit: 10 }, TOOL_OPTIONS);
+  assert.deepEqual(used, []);
+  await tools.load_skill.execute({ slug: "deploy-checklist" }, TOOL_OPTIONS);
+  await tools.load_skill.execute({ slug: "missing" }, TOOL_OPTIONS);
+  assert.deepEqual(used, [["s1"]]);
 });
 
 test("load_skill names close matches when the slug is unknown", async () => {

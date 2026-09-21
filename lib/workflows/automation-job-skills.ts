@@ -22,6 +22,7 @@ import { createSkillTools } from "@/lib/agents/tools/skills";
 import { resolveInvokedSkills } from "@/lib/skill-catalog/invocations";
 import { renderSkillCatalog } from "@/lib/skill-catalog/render";
 import { loadSkillCatalogOrEmpty } from "@/lib/skill-catalog/store";
+import { recordSkillUse, type RecordSkillUse } from "@/lib/skill-catalog/usage";
 import { isUuid } from "@/lib/uuid";
 import { normalizeAutomationAssignmentType } from "@/lib/workflows/automation-job-utils";
 import type { JobContext } from "@/lib/workflows/automation-job-types";
@@ -47,6 +48,7 @@ export type AutomationSkillsDeps = {
   loadLinkedSkills: typeof loadAgentLinkedSkills;
   loadLinkedRules: typeof loadAgentLinkedRules;
   createTools: typeof createSkillTools;
+  recordUse: RecordSkillUse;
 };
 
 const defaultDeps: AutomationSkillsDeps = {
@@ -54,6 +56,7 @@ const defaultDeps: AutomationSkillsDeps = {
   loadLinkedSkills: loadAgentLinkedSkills,
   loadLinkedRules: loadAgentLinkedRules,
   createTools: createSkillTools,
+  recordUse: (userId, skills) => recordSkillUse(userId, skills),
 };
 
 export const NO_AUTOMATION_SKILLS: AutomationSkills = {
@@ -129,12 +132,14 @@ export async function resolveAutomationSkills(
       const available = skills.filter((skill) => !attached.has(skill.id));
       if (available.length > 0) {
         tools = deps.createTools(scope);
+        const invoked = resolveInvokedSkills(
+          readAutomationInvocationTexts(context),
+          available
+        );
+        void deps.recordUse(scope.userId, invoked);
         blocks.push(
           renderSkillCatalog({
-            invoked: resolveInvokedSkills(
-              readAutomationInvocationTexts(context),
-              available
-            ),
+            invoked,
             available,
             delivery: "inline",
             loadHint: "tool",

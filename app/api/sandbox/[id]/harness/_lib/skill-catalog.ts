@@ -23,7 +23,7 @@ import type { SandboxHarnessPostDeps } from "./types";
 export async function setupSkillCatalog(
   deps: Pick<
     SandboxHarnessPostDeps,
-    "safeAppendAiCallEvent" | "loadSkillCatalog"
+    "safeAppendAiCallEvent" | "loadSkillCatalog" | "recordSkillUse"
   >,
   sandbox: Pick<Sandbox, "writeFiles" | "readFile">,
   ctx: SandboxSetupContext,
@@ -58,6 +58,7 @@ export async function setupSkillCatalog(
       loadHint: "files",
     });
     if (!rendered.prompt) return input.prompt;
+    void deps.recordSkillUse(ctx.userId, invoked);
     const written = await materializeAgentRuntimeFiles({
       sandbox,
       rootDirectory: ctx.rootDirectory,

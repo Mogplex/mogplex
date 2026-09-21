@@ -72,6 +72,7 @@ export function buildHarnessGitDeliveryDeps() {
     updateSandboxWorkingBranch: async () => {},
     // Most route tests run for a user who keeps no skills.
     loadSkillCatalog: async (): Promise<SkillCatalog> => ({ skills: [] }),
+    recordSkillUse: async () => {},
   };
 }
 
