@@ -127,4 +127,26 @@ describe("renderSkillCatalog", () => {
     expect(prompt).not.toContain(`- $skill-${SKILL_INDEX_MAX_ENTRIES + 1}:`);
     expect(prompt).toContain("…and 3 more. Use find_skills to search them.");
   });
+
+  it("should write files only for the skills a file surface indexes", () => {
+    const many = catalogOf(
+      ...Array.from({ length: SKILL_INDEX_MAX_ENTRIES + 3 }, (_, index) =>
+        skillRow(`Skill ${index + 1}`)
+      )
+    );
+    const invoked = many[many.length - 1];
+    const { prompt, files } = renderSkillCatalog({
+      invoked: [invoked],
+      available: many,
+      delivery: "files",
+      loadHint: "files",
+    });
+    expect(files).toHaveLength(SKILL_INDEX_MAX_ENTRIES + 1);
+    expect(files[0].path).toBe(
+      `${CATALOG_SKILLS_DIR}/${invoked.slug}/SKILL.md`
+    );
+    expect(prompt).toContain(
+      "…and 2 more. Ask the user to invoke one by its $slug."
+    );
+  });
 });

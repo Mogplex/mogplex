@@ -107,3 +107,16 @@ export function renderConversationSkills(
     loadHint,
   }).prompt;
 }
+
+/** Drops skills another prompt section already delivers, by id. */
+export function withoutSkills(
+  skills: ConversationSkills,
+  skillIds: readonly string[] | null | undefined
+): ConversationSkills {
+  if (!skillIds?.length) return skills;
+  const dropped = new Set(skillIds);
+  return {
+    invoked: skills.invoked.filter((skill) => !dropped.has(skill.id)),
+    available: skills.available.filter((skill) => !dropped.has(skill.id)),
+  };
+}

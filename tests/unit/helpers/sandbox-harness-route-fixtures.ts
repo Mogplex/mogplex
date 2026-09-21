@@ -1,5 +1,6 @@
 import type { AiCall } from "../../../lib/types";
 import type { Sandbox } from "@vercel/sandbox";
+import type { SkillCatalog } from "../../../lib/skill-catalog/types";
 
 export function buildAiCall(overrides: Partial<AiCall> = {}): AiCall {
   return {
@@ -69,6 +70,8 @@ export function buildHarnessGitDeliveryDeps() {
       autoCommittedFiles: [],
     }),
     updateSandboxWorkingBranch: async () => {},
+    // Most route tests run for a user who keeps no skills.
+    loadSkillCatalog: async (): Promise<SkillCatalog> => ({ skills: [] }),
   };
 }
 

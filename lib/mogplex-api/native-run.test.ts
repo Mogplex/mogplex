@@ -54,6 +54,7 @@ async function exercise(
   let closed = false;
   let executionLeaseAcquired = false;
   let systemSuffix: string | null | undefined;
+  let attachedSkillIds: readonly string[] | undefined;
   const skillChecks: SkillSelectionInput[] = [];
   let skillCheckStartedBeforeStream = false;
   let skillCheckSettled = false;
@@ -204,6 +205,7 @@ async function exercise(
         },
         createStream: async (input) => {
           systemSuffix = input.systemSuffix;
+          attachedSkillIds = input.attachedSkillIds;
           skillCheckStartedBeforeStream = skillChecks.length > 0;
           assert.equal(
             skillCheckSettled,
@@ -328,6 +330,7 @@ async function exercise(
     progress,
     guidanceSteps,
     systemSuffix,
+    attachedSkillIds,
     skillChecks,
     skillCheckStartedBeforeStream,
     skillCheckSettled,
@@ -374,6 +377,7 @@ test("native runner carries the roster agent block, skills inlined, in the syste
   assert.ok(result.systemSuffix?.includes("Review App Router code carefully."));
   assert.ok(result.systemSuffix?.includes("Never use any."));
   assert.ok(result.systemSuffix?.includes("Look for use client."));
+  assert.deepEqual(result.attachedSkillIds, ["skill-1"]);
 });
 
 test("native runner leaves the system suffix empty without an agent or Slack controls", async () => {

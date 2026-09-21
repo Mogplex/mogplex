@@ -26,11 +26,13 @@ export async function setupAgentRuntime(
   sandbox: Pick<Sandbox, "writeFiles" | "readFile">,
   ctx: SandboxSetupContext,
   runtime: AgentRuntime,
-  prompt: string
+  prompt: string,
+  /** The task as the user wrote it, when `prompt` already carries a preamble. */
+  request: string = prompt
 ): Promise<string> {
   const observed = deps.observeSkillSelection({
     agent: runtime,
-    request: prompt,
+    request,
     delivery: "files",
     scope: {
       surface: "harness",

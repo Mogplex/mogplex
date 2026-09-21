@@ -29,6 +29,7 @@ import type { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import type { HarnessId } from "@/lib/harness/config";
 import type { AgentRuntime } from "@/lib/agents/runtime/types";
 import type { observeSkillSelection } from "@/lib/decisions/skills";
+import type { loadSkillCatalogOrEmpty } from "@/lib/skill-catalog/store";
 import type { getSlackBotToken } from "@/lib/slack/client";
 import type {
   loadHarnessPromptWithMemoryContext,
@@ -130,6 +131,10 @@ export type SandboxHarnessPostDeps = {
   }) => Promise<AgentRuntime | null>;
   /** Records which of the agent's skills the task needed. Never rejects. */
   observeSkillSelection: typeof observeSkillSelection;
+  /** The acting user's skills for this repo; empty when they cannot load. */
+  loadSkillCatalog: (
+    input: Parameters<typeof loadSkillCatalogOrEmpty>[0]
+  ) => ReturnType<typeof loadSkillCatalogOrEmpty>;
   /** Keeps the function alive for work that must not delay the response. */
   runAfterResponse: (work: () => Promise<void>) => void;
   fetchSlackAttachment: (input: {
