@@ -19,6 +19,13 @@ export type ConnectionPreset = {
       url: string;
     };
   };
+  /**
+   * Server-side tools built on the provider's REST API, keyed into
+   * `lib/connections/api-toolsets.ts`. They use the same saved credential and
+   * load wherever connection tools do (`buildTools`), including turns with no
+   * sandbox to launch `stdio` in.
+   */
+  api_toolset?: "trigger";
   auth_type: "bearer" | "api_key" | "oauth" | "none";
   mcp_url_field?: {
     label: string;
@@ -45,6 +52,8 @@ export type ConnectionPreset = {
     secret?: boolean;
   }[];
   docs_url: string;
+  /** Where the user creates the credential the preset asks for. */
+  credential_url?: string;
 };
 
 export const CONNECTION_PRESET_MANUAL_HINT =
@@ -188,6 +197,7 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
         url: "https://api.trigger.dev/api/v2/whoami",
       },
     },
+    api_toolset: "trigger",
     auth_type: "bearer",
     auth_fields: [
       {
@@ -198,6 +208,7 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
       },
     ],
     docs_url: "https://trigger.dev/docs/mcp-introduction",
+    credential_url: "https://cloud.trigger.dev/account/tokens",
   },
 ];
 
@@ -239,7 +250,12 @@ export function getConnectionAuthorizationPath(input: {
 }
 
 /** Shown beside a stdio preset's credential field on every quick-add surface. */
-export function getStdioConnectionPresetDescription() {
+export function getStdioConnectionPresetDescription(
+  preset?: Pick<ConnectionPreset, "api_toolset">
+) {
+  if (preset?.api_toolset) {
+    return "Agents call these tools straight from Mogplex, no sandbox needed. The full MCP server also runs inside your sandboxes and the Mogplex CLI, next to your code. The token is stored encrypted.";
+  }
   return "Runs inside your sandboxes and the Mogplex CLI, next to your code. The token is stored encrypted.";
 }
 

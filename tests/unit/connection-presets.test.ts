@@ -6,6 +6,7 @@ import {
   getConnectionAuthorizationPath,
   getConnectionPresetAuthorizationDescription,
   getConnectionPreset,
+  getStdioConnectionPresetDescription,
   isStdioConnectionPreset,
 } from "../../lib/connections/presets";
 
@@ -157,6 +158,28 @@ test("should launch the Trigger.dev preset as a fixed stdio command when it is a
     credential_env: "TRIGGER_ACCESS_TOKEN",
     credential_check: { url: "https://api.trigger.dev/api/v2/whoami" },
   });
+});
+
+test("should back the Trigger.dev preset with API tools and link to where its token is made", () => {
+  const preset = getConnectionPreset("trigger");
+
+  assert.equal(preset?.api_toolset, "trigger");
+  assert.equal(
+    preset?.credential_url,
+    "https://cloud.trigger.dev/account/tokens"
+  );
+});
+
+test("should tell the user the tools need no sandbox when a stdio preset has API tools", () => {
+  const withApiTools = getStdioConnectionPresetDescription({
+    api_toolset: "trigger",
+  });
+  const stdioOnly = getStdioConnectionPresetDescription({});
+
+  assert.match(withApiTools, /no sandbox needed/);
+  assert.match(withApiTools, /sandboxes and the Mogplex CLI/);
+  assert.doesNotMatch(stdioOnly, /no sandbox needed/);
+  assert.match(stdioOnly, /sandboxes and the Mogplex CLI/);
 });
 
 test("should only treat presets with a launch spec as stdio", () => {

@@ -20,6 +20,16 @@ test("should say where the tools load when a healthy stdio connection has no too
   assert.equal(detail, "Token verified · tools load in sandboxes and the CLI");
 });
 
+test("should report the tool count when a healthy stdio connection's preset has API tools", () => {
+  const detail = getConnectionStatusDetail({
+    ...healthy,
+    mcp_transport: "stdio",
+    last_test_tool_count: 8,
+  });
+
+  assert.equal(detail, "8 tools detected");
+});
+
 test("should keep reporting the tool count when a healthy remote connection has one", () => {
   const detail = getConnectionStatusDetail({
     ...healthy,
