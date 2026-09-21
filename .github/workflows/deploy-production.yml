@@ -221,8 +221,20 @@ jobs:
       # The integration tags every deployment with its commit SHA. Do not add
       # task-only path filters: every app release needs a matching task release.
 
+      # Vercel returns the placeholder "[SENSITIVE]" for a variable marked
+      # sensitive, so a pulled CRON_SECRET can stop working without anything in
+      # this repository changing. The Actions secret wins when it is set; the
+      # pulled value remains the fallback for projects that keep it readable.
       - name: Load production smoke auth
+        env:
+          CRON_SECRET_FROM_ACTIONS: ${{ secrets.CRON_SECRET }}
         run: |
+          if [ -n "$CRON_SECRET_FROM_ACTIONS" ]; then
+            echo "::add-mask::$CRON_SECRET_FROM_ACTIONS"
+            echo "CRON_SECRET=$CRON_SECRET_FROM_ACTIONS" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
           CRON_SECRET="$(python - <<'PY'
           from pathlib import Path
 
@@ -238,6 +250,12 @@ jobs:
               raise SystemExit("CRON_SECRET not found in .vercel/.env.production.local")
           PY
           )"
+          case "$CRON_SECRET" in
+            "["*"]")
+              echo "::error::CRON_SECRET is marked sensitive in Vercel, so 'vercel pull' returned the placeholder $CRON_SECRET instead of the value. Add CRON_SECRET as a GitHub Actions secret on this repository. The deployment itself succeeded; only the smoke check cannot authenticate."
+              exit 1
+              ;;
+          esac
           echo "::add-mask::$CRON_SECRET"
           echo "CRON_SECRET=$CRON_SECRET" >> "$GITHUB_ENV"
 
