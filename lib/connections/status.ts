@@ -114,6 +114,9 @@ export function classifyConnectionError(
   return "error";
 }
 
+export const STDIO_HEALTHY_DETAIL =
+  "Token verified · tools load in sandboxes and the CLI";
+
 export function getConnectionStatusDetail(
   connection: Pick<
     Connection,
@@ -123,13 +126,19 @@ export function getConnectionStatusDetail(
     | "last_test_http_status"
     | "last_test_tool_count"
     | "oauth_authorized_at"
-  >
+  > &
+    Partial<Pick<Connection, "mcp_transport">>
 ) {
   if (connection.auth_type === "oauth" && !connection.oauth_authorized_at) {
     return "Connect to authorize this connection";
   }
 
   if (connection.health_status === "healthy") {
+    // A stdio test checks the credential without starting the server, so
+    // there is never a tool count to show.
+    if (connection.mcp_transport === "stdio") {
+      return STDIO_HEALTHY_DETAIL;
+    }
     return connection.last_test_tool_count == null
       ? "Connection test passed"
       : `${connection.last_test_tool_count} tools detected`;
