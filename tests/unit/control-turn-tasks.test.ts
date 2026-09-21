@@ -148,3 +148,23 @@ test("the end of the turn waits for the skill check so it is not dropped", async
 
   assert.equal(settled, true);
 });
+
+test("a turn that reports its skills twice still waits for both checks", async () => {
+  const settled: number[] = [];
+  let calls = 0;
+  const tasks = buildSkillTasks(async () => {
+    calls += 1;
+    const id = calls;
+    await new Promise((resolve) => setTimeout(resolve, id === 1 ? 40 : 5));
+    settled.push(id);
+  });
+  tasks.onSkillsResolved({ invoked: [], available: [notesSkill] });
+  tasks.onSkillsResolved({ invoked: [], available: [deploySkill] });
+
+  await tasks.onEnd({ model: {} as never, steps: [] });
+
+  assert.deepEqual(
+    settled.sort((a, b) => a - b),
+    [1, 2]
+  );
+});

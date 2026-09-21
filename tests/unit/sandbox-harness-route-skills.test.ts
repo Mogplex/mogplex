@@ -88,6 +88,7 @@ async function runHarness(input: {
   const writes: Write[] = [];
   const events: LoggedEvent[] = [];
   const used: string[][] = [];
+  let skillWriteCalls = 0;
   const checks: SkillSelectionInput[] = [];
   const deferred: Array<() => Promise<void>> = [];
   let harnessPrompt = "";
@@ -107,6 +108,9 @@ async function runHarness(input: {
       ({
         readFile: async () => null,
         writeFiles: async (files: Array<{ path: string; content: Buffer }>) => {
+          if (files.some((file) => file.path.includes(".mogplex/skills/"))) {
+            skillWriteCalls += 1;
+          }
           for (const file of files) {
             writes.push({ path: file.path, content: file.content.toString() });
           }
@@ -189,6 +193,7 @@ async function runHarness(input: {
     writes,
     events,
     used,
+    skillWriteCalls: () => skillWriteCalls,
     checks,
     deferred,
     harnessPrompt,
@@ -218,6 +223,11 @@ test("POST /api/sandbox/[id]/harness writes an invoked skill and the index ahead
     ".mogplex/skills/deploy-checklist/SKILL.md",
     ".mogplex/skills/release-notes/SKILL.md",
   ]);
+  assert.equal(
+    run.skillWriteCalls(),
+    1,
+    "every skill file goes to the sandbox in one call, not one call per file"
+  );
   assert.ok(
     run.writes.some((file) => file.path.endsWith(".mogplex/.gitignore")),
     "skill files are kept out of git"

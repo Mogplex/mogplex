@@ -55,7 +55,8 @@ export function createControlTurnTasks(input: {
     },
     /** The same arrangement for the operator's skills: beside, then awaited. */
     onSkillsResolved(skills: ConversationSkills) {
-      skillCheck = (input.observeSkills ?? observeSkillSelection)({
+      const earlier = skillCheck;
+      const check = (input.observeSkills ?? observeSkillSelection)({
         catalog: {
           skills: skills.available,
           invokedIds: skills.invoked.map((skill) => skill.id),
@@ -64,6 +65,9 @@ export function createControlTurnTasks(input: {
         delivery: "inline",
         scope,
       });
+      // One stream per turn reports once today. Accumulating keeps every
+      // check awaited if a retried stream ever reports again.
+      skillCheck = Promise.all([earlier, check]).then(() => {});
     },
     onStep(steps: TurnSteps) {
       observer.onStep(steps as unknown as DecisionStep[]);

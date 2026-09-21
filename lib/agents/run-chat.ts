@@ -202,6 +202,8 @@ export type CreateChatModelStreamInput = {
   /**
    * Told which skills this turn has in play, once the catalog is known. The
    * caller decides how to keep its own follow-up work alive; this never waits.
+   * Called once per stream. A caller that may build several streams for one
+   * turn must collect what it starts here rather than keep only the last.
    */
   onSkillsResolved?: (skills: ConversationSkills) => void;
   /** Seams for tests. Production callers leave this unset. */

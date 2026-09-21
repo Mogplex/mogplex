@@ -176,7 +176,8 @@ export async function runNativeMogplexAgent(
     // the agent's attached skills and the catalog together.
     const observeSkills = (catalog: ConversationSkills) => {
       if (!agent && catalog.available.length === 0) return;
-      skillCheck = deps.observeSkills({
+      const earlier = skillCheck;
+      const check = deps.observeSkills({
         agent: agent?.runtime ?? null,
         catalog: {
           skills: catalog.available,
@@ -193,6 +194,8 @@ export async function runNativeMogplexAgent(
           conversationId: run.conversation_id,
         },
       });
+      // Accumulate, so a stream that ever reports twice loses no check.
+      skillCheck = Promise.all([earlier, check]).then(() => {});
     };
     const slackControls = readSlackRunControlsMetadata(run.metadata);
     const systemSuffix =
