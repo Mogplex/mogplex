@@ -187,6 +187,28 @@ Every run entry point accepts `agentId` and goes through the same core: the v1 r
 
 The roster model is advisory: CLI harnesses bring their own model and Flow nodes pin theirs. Skills and rules attach from the editor's own library, so a teammate editing a shared agent attaches their own. Per-agent MCP grants stay out of scope by decision (2026-09-18).
 
+### Web research
+
+All native agent surfaces use the shared `web_search` and `web_fetch` tools
+in `lib/agents/tools/web.ts`. Exa's Vercel integration supplies the server-only
+`EXA_API_KEY`. Workers without a readable key use the authenticated
+`/api/internal/exa` relay with the dedicated `EXA_RESEARCH_SECRET`, keeping
+write-only Vercel secrets on Vercel. Provision the research secret as an
+encrypted, exportable variable so Trigger environment sync can read it.
+Use `/search` with `auto` and highlights for discovery, then `/contents` for
+clean page text. Preserve source URLs, validate provider responses and per-URL
+statuses, and distinguish provider errors from zero results. Request fresh
+crawls only when current page content is required.
+
+Claude Code and Codex sandbox harnesses use `/api/harness-research/mcp` with
+signed run-scoped tokens. Recheck run ownership, cancellation, sandbox binding,
+and current team capabilities on every request. Never copy the platform Exa key
+into a sandbox. Keep research tools inside automation approval gates.
+
+For new Exa features, consult the official build-with-exa skill and
+[Exa documentation](https://exa.ai/docs); ordinary documentation retrieval does
+not require deep research, a separate answer model, or recurring monitors.
+
 ### Skill catalog
 
 `lib/skill-catalog/` decides which skills a run may draw on: the acting user's library, minus the skills the repo excludes, plus the repo's own. Read [docs/skills.md](./docs/skills.md) before touching it. A user invokes a skill by slug on any surface (`/slug` as the first word, `$slug` anywhere; `resolveInvokedSkills` is the only parser), and an agent discovers one through the prompt index plus `find_skills` / `load_skill` (`lib/agents/tools/skills.ts`, capability `tools.skills`). The binding rules: a catalog that fails to load never blocks a run; the user's message is never rewritten, skill text travels beside it; slugs are derived from names, never stored. Every conversational surface gets this from `createChatModelStream`, Control from `loadControlKnowledgeContext` beside its memory block, CLI harness runs from the harness route's `setupSkillCatalog`, and automation nodes from `resolveAutomationSkills`; a new surface that builds its own prompt must call the catalog itself.

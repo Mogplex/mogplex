@@ -13,6 +13,7 @@ import {
   createScopedGithubIssueTool,
   createGithubApi,
   webFetch,
+  webSearch,
   createTerminalExec,
   createMemoryTools,
   createSkillTools,
@@ -221,6 +222,9 @@ function buildToolForDef(
   }
   if (def.name === "web_fetch") {
     return webFetch;
+  }
+  if (def.name === "web_search") {
+    return webSearch;
   }
   if (def.name === "memory_write" || def.name === "memory_search") {
     const memoryTools = createMemoryTools(ctx.userId, ctx.repoId ?? undefined, {

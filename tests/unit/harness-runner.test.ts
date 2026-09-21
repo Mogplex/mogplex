@@ -169,6 +169,8 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
     OPENAI_BASE_URL: "https://ai-gateway.vercel.sh/v1",
     OPENAI_API_KEY: "gateway-key",
     CODEX_API_KEY: "gateway-key",
+    MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
+    MOGPLEX_RESEARCH_TOKEN: "run-scoped-token",
   });
 
   const detachedCall = runCommandCalls.find((call) => call.detached);
@@ -177,6 +179,8 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
     OPENAI_BASE_URL: "https://ai-gateway.vercel.sh/v1",
     OPENAI_API_KEY: "gateway-key",
     CODEX_API_KEY: "gateway-key",
+    MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
+    MOGPLEX_RESEARCH_TOKEN: "run-scoped-token",
   });
   assert.ok(detachedCall.args?.includes('model_provider="mogplex_gateway"'));
   assert.ok(
@@ -195,6 +199,15 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
     )
   );
   assert.equal(detachedCall.args?.includes("gateway-key"), false);
+  assert.ok(
+    detachedCall.args?.includes(
+      'mcp_servers.mogplex_research.bearer_token_env_var="MOGPLEX_RESEARCH_TOKEN"'
+    )
+  );
+  assert.equal(
+    detachedCall.args?.some((arg) => arg.includes("run-scoped-token")),
+    false
+  );
   assert.ok(
     detachedCall.args?.includes("features.multi_agent=false"),
     "Codex workers must not spawn sub-agents inside the shared sandbox"

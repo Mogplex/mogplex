@@ -56,6 +56,13 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     access: "read",
     implemented: true,
   },
+  {
+    name: "web_search",
+    category: "memory",
+    description: "Search documentation and public resources with Exa",
+    access: "read",
+    implemented: true,
+  },
 ];
 
 // --- Communication tool definitions ---

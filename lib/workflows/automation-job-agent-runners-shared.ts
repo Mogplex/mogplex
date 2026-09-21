@@ -1,4 +1,6 @@
 import { generateText, type ToolSet } from "ai";
+import { webFetch, webSearch } from "@/lib/agents/tools/web";
+import { WEB_RESEARCH_INSTRUCTIONS } from "@/lib/agents/web-research-instructions";
 import {
   loadToolApprovalSpentWaitMs,
   supabaseWaitStore,
@@ -47,16 +49,21 @@ export const defaultAutomationAgentDeps: AutomationAgentDeps = {
 };
 
 // Applies the tool-approval gate when the flow agent node opted in via
-// requireApproval (stamped onto metadata by the agent-node executor). Runs
-// without that flag pass tools through untouched.
+// requireApproval (stamped onto metadata by the agent-node executor).
+// Every native automation role receives the same research tools before approval.
 export function applyToolApprovalGate(
   tools: ToolSet,
   context: JobContext,
   deps: AutomationAgentDeps
 ): ToolSet {
+  const researchTools = {
+    ...tools,
+    web_search: webSearch,
+    web_fetch: webFetch,
+  };
   const approvalContext = resolveToolApprovalContext(context);
-  if (!approvalContext) return tools;
-  return wrapToolsWithApprovalGate(tools, approvalContext, {
+  if (!approvalContext) return researchTools;
+  return wrapToolsWithApprovalGate(researchTools, approvalContext, {
     waitProvider: deps.waitProvider,
     waitStore: deps.waitStore,
     loadSpentWaitMs: deps.loadApprovalSpentWaitMs,
@@ -95,7 +102,10 @@ export function buildAutomationSystem(
   system: string | undefined,
   gatewayContext: GatewayCallContext
 ): Parameters<typeof generateText>[0]["system"] {
-  return system ? withGatewaySystemCaching(system, gatewayContext) : undefined;
+  return withGatewaySystemCaching(
+    [system, WEB_RESEARCH_INSTRUCTIONS].filter(Boolean).join("\n\n"),
+    gatewayContext
+  );
 }
 
 export function fallbackAutomationModel(

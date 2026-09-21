@@ -21,6 +21,7 @@ export type HarnessConfig = {
       resumeSessionId?: string | null;
       mode?: HarnessExecutionMode;
       mcpConfigPath?: string;
+      researchServerName?: string;
     }
   ) => { cmd: string; args: string[] };
   timeoutMs: number;
@@ -62,7 +63,7 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
               ]
             : ["-p", prompt, "--verbose", "--output-format", "stream-json"]),
         ...mcpArgs,
-        ...buildClaudePermissionArgs(opts?.mode),
+        ...buildClaudePermissionArgs(opts?.mode, opts?.researchServerName),
       ];
       return { cmd: "claude", args };
     },

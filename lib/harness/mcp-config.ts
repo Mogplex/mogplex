@@ -243,6 +243,7 @@ export type InjectClaudeMcpConfigResult =
       mcpConfigPath: string;
       serverCount: number;
       serverNames: string[];
+      researchServerName?: string;
     }
   | { ok: false; error: string };
 
@@ -257,22 +258,44 @@ export async function injectClaudeMcpConfig(
   sandbox: McpConfigWritableSandbox,
   opts: {
     userId: string;
-    repoId: string;
+    repoId: string | null;
     rootDirectory: string | null | undefined;
     resolveConnections: (
       userId: string,
       repoId: string
     ) => Promise<Connection[]>;
     resolveCredential?: CredentialResolver;
+    researchEnv?: Record<string, string>;
   }
 ): Promise<InjectClaudeMcpConfigResult> {
   try {
-    const connections = await opts.resolveConnections(opts.userId, opts.repoId);
+    const connections = opts.repoId
+      ? await opts.resolveConnections(opts.userId, opts.repoId)
+      : [];
     const mcpConfig = await buildClaudeMcpConfig(
       connections,
       opts.resolveCredential,
       { userId: opts.userId }
     );
+    let researchServerName: string | undefined;
+    if (
+      opts.researchEnv?.MOGPLEX_RESEARCH_TOKEN &&
+      opts.researchEnv.MOGPLEX_RESEARCH_MCP_URL
+    ) {
+      const name = uniqueKey(
+        "mogplex_research",
+        new Set(Object.keys(mcpConfig.mcpServers)),
+        "platform"
+      );
+      researchServerName = name;
+      mcpConfig.mcpServers[name] = {
+        type: "http",
+        url: opts.researchEnv.MOGPLEX_RESEARCH_MCP_URL,
+        headers: {
+          Authorization: `Bearer ${opts.researchEnv.MOGPLEX_RESEARCH_TOKEN}`,
+        },
+      };
+    }
     const mcpConfigPath = await writeClaudeMcpConfig(
       sandbox,
       opts.rootDirectory,
@@ -284,6 +307,7 @@ export async function injectClaudeMcpConfig(
       mcpConfigPath,
       serverCount: serverNames.length,
       serverNames,
+      researchServerName,
     };
   } catch (err) {
     return {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { WEB_RESEARCH_INSTRUCTIONS } from "../../lib/agents/web-research-instructions";
 import {
   AUTOMATION_MODEL_TIMEOUT_FLOOR_MS,
   getAutomationGenerateTimeoutMs,
@@ -66,6 +67,11 @@ test("createAutomationAgentRunner uses generateText without mutating global fetc
 
     assert.equal(globalThis.fetch, mockedGithubFetch.mockedFetch);
     assert.ok(options);
+    const researchTools = (
+      options as unknown as { tools: Record<string, unknown> }
+    ).tools;
+    assert.ok(researchTools.web_search);
+    assert.ok(researchTools.web_fetch);
     const capturedOptions = options as unknown as CapturedConstructorOptions;
     assert.equal(capturedOptions.model, "minimax/minimax-m2.5");
     assert.equal(typeof capturedOptions.instructions, "object");
@@ -88,6 +94,8 @@ test("createAutomationAgentRunner uses generateText without mutating global fetc
         "If there are no material issues, call reportReview with hasIssues=false.",
         "Write summary, commentBody, and finding bodies as plain prose or bullet lists — never markdown headings (#). Mogplex embeds your text under its own '## Mogplex PR Review' heading, so headings you emit would render as top-level section titles.",
         "commentBody is only published when you report no structured findings; use it for the full review narrative in that case. When you include findings, omit commentBody — put everything in summary and the finding bodies.",
+        "",
+        WEB_RESEARCH_INSTRUCTIONS,
       ].join("\n")
     );
     assert.deepEqual(systemMessage.providerOptions.anthropic.cacheControl, {
@@ -304,6 +312,8 @@ test("pr_review with no agent system_prompt still emits a cacheable system messa
         "If there are no material issues, call reportReview with hasIssues=false.",
         "Write summary, commentBody, and finding bodies as plain prose or bullet lists — never markdown headings (#). Mogplex embeds your text under its own '## Mogplex PR Review' heading, so headings you emit would render as top-level section titles.",
         "commentBody is only published when you report no structured findings; use it for the full review narrative in that case. When you include findings, omit commentBody — put everything in summary and the finding bodies.",
+        "",
+        WEB_RESEARCH_INSTRUCTIONS,
       ].join("\n")
     );
     assert.equal(opts.prompt, "Review PR #99.");

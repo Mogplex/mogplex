@@ -10,7 +10,11 @@ test("native scheduled tasks receive the requested instructions and command tool
     await loadAutomationJobWorkflowModule();
   const run = createAutomationAgentRunner({
     generateText: async (input) => {
-      assert.deepEqual(Object.keys(input.tools ?? {}), ["runCommand"]);
+      assert.deepEqual(Object.keys(input.tools ?? {}), [
+        "runCommand",
+        "web_search",
+        "web_fetch",
+      ]);
       assert.match(
         JSON.stringify(input.instructions),
         /Check registered model successors/

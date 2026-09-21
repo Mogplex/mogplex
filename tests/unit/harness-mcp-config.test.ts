@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { HARNESSES } from "../../lib/harness/config";
 import type { Connection } from "@/lib/types";
 import type * as McpConfigModule from "../../lib/harness/mcp-config";
 
@@ -311,6 +312,68 @@ test("injectClaudeMcpConfig always writes even when no MCP connections are resol
     mcpServers: {},
   });
   assert.ok(writes.some((w) => w.path === ".mogplex/.gitignore"));
+});
+
+test("Claude harness receives platform research without replacing a user connection", async () => {
+  const { injectClaudeMcpConfig } = await loadMcpConfigModule();
+  const { sandbox, writes } = makeSandboxMock();
+  const result = await injectClaudeMcpConfig(sandbox as never, {
+    userId: "user-1",
+    repoId: "repo-1",
+    rootDirectory: null,
+    resolveConnections: async () => [makeConn({ name: "Mogplex Research" })],
+    resolveCredential: async () => "user-connection-token",
+    researchEnv: {
+      MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
+      MOGPLEX_RESEARCH_TOKEN: "run-scoped-token",
+    },
+  });
+  assert.equal(result.ok, true);
+  const written = writes.find((entry) => entry.path.endsWith("mcp.json"));
+  assert.ok(written);
+  const servers = JSON.parse(written.content.toString()).mcpServers;
+  assert.equal(servers.mogplex_research.url, "https://mcp.example.com/http");
+  assert.equal(
+    servers.mogplex_research_platform.url,
+    "https://mogplex.com/api/harness-research/mcp"
+  );
+  assert.equal(
+    servers.mogplex_research_platform.headers.Authorization,
+    "Bearer run-scoped-token"
+  );
+  assert.ok(result.ok);
+  assert.equal(result.researchServerName, "mogplex_research_platform");
+  for (const mode of ["AUTO", "SAFE"] as const) {
+    const { args } = HARNESSES["claude-code"].buildCommand("read docs", {
+      mode,
+      mcpConfigPath: result.mcpConfigPath,
+      researchServerName: result.researchServerName,
+    });
+    const allowed = args[args.indexOf("--allowedTools") + 1].split(",");
+    assert.ok(allowed.includes("mcp__mogplex_research_platform__web_search"));
+    assert.ok(allowed.includes("mcp__mogplex_research_platform__web_fetch"));
+    assert.ok(!allowed.includes("mcp__mogplex_research__web_search"));
+    assert.ok(!allowed.some((name) => name.includes("*")));
+  }
+});
+
+test("Claude research also works without a repository connection", async () => {
+  const { injectClaudeMcpConfig } = await loadMcpConfigModule();
+  const { sandbox } = makeSandboxMock();
+  const result = await injectClaudeMcpConfig(sandbox as never, {
+    userId: "user-1",
+    repoId: null,
+    rootDirectory: null,
+    resolveConnections: async () => {
+      throw new Error("No repository to resolve");
+    },
+    researchEnv: {
+      MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
+      MOGPLEX_RESEARCH_TOKEN: "scoped-token",
+    },
+  });
+  assert.ok(result.ok);
+  assert.equal(result.researchServerName, "mogplex_research");
 });
 
 test("injectClaudeMcpConfig returns ok:false on resolveConnections failure without throwing", async () => {

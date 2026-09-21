@@ -97,7 +97,7 @@ test("a native automation node hands the model its skills and the tools to load 
   const instructions = instructionsText(options);
   assert.ok(instructions.includes("Review carefully."));
   assert.ok(
-    instructions.endsWith(SUFFIX),
+    instructions.indexOf(SUFFIX) > instructions.indexOf("Review carefully."),
     "the skills block follows the node's own instructions"
   );
   const tools = options.tools as Record<string, unknown>;
