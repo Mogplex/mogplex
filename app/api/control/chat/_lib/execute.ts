@@ -31,7 +31,7 @@ import {
   buildOrchestratorSystemPrompt,
   type OrchestratorToolContext,
 } from "@/lib/agents/orchestrator";
-import { loadControlMemoryContextForUser } from "@/lib/agents/control-memory-context";
+import { loadControlKnowledgeContext } from "./knowledge-context";
 import { buildControlPromptContext } from "./prompt-context";
 import {
   getControlChatRunScope,
@@ -110,16 +110,17 @@ export async function executeControlChatRequest(input: {
     });
 
     // Build orchestrator context
-    const [githubToken, sandboxContext, worktreeContext, memoryContext] =
+    const [githubToken, sandboxContext, worktreeContext, knowledge] =
       await Promise.all([
         resolveGithubTokenForRepo(input.userId, input.body.repoId),
         resolveControlPromptSandboxContext(input.req, input.userId, input.body),
         resolveControlPromptWorktrees(input.userId, input.body),
-        loadControlMemoryContextForUser({
+        loadControlKnowledgeContext({
           userId: input.userId,
           repoId: input.body.repoId ?? null,
-          query: input.latestUserText,
-          onSelected: turnTasks.onMemoriesSelected,
+          latestUserText: input.latestUserText,
+          messages: input.body.messages,
+          onMemoriesSelected: turnTasks.onMemoriesSelected,
         }),
       ]);
     // Replace the client hint with the owned, server-validated session and
@@ -196,7 +197,7 @@ export async function executeControlChatRequest(input: {
       infrastructureDiagnosticScope: input.infrastructureDiagnosticScope,
       sandboxContext,
       worktreeContext,
-      memoryContext,
+      knowledge,
     });
 
     // Build tools with policy wrapping

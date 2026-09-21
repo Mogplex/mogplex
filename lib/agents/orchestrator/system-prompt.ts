@@ -1,4 +1,8 @@
 import { MAX_CONCURRENT_WORKERS_PER_SANDBOX } from "@/lib/control/worker-policy";
+import {
+  renderConversationSkills,
+  type ConversationSkills,
+} from "@/lib/skill-catalog/chat";
 import { ORCHESTRATOR_TOOLS, getToolsByCategory } from "./registry";
 import type { InfrastructureDiagnosticScope } from "../user-facing-output";
 
@@ -26,6 +30,11 @@ export type OrchestratorPromptContext = {
    * lib/agents/control-memory-context.ts). Null when none are prompt-worthy.
    */
   memoryContext?: string | null;
+  /**
+   * The operator's skills for this turn: the ones they invoked by name and
+   * the rest of their catalog (see lib/skill-catalog/chat.ts).
+   */
+  skills?: ConversationSkills | null;
   /** Server-owned signal that execution must wait for an operator choice. */
   sandboxSelectionRequired?: boolean;
   activeSandboxes?: Array<{
@@ -54,7 +63,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, the coding agent for this repository. You read, edit, run, and verify code directly in the selected sandbox. You can also delegate independent tasks to worker agents in isolated Git worktrees when parallel work is worth it, then integrate and deliver their results.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}${buildSandboxTaskLifecycleBlock()}${buildUserFacingInfrastructureBlock(ctx)}${buildMemoryBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}${buildSandboxTaskLifecycleBlock()}${buildUserFacingInfrastructureBlock(ctx)}${buildMemoryBlock(ctx)}${buildSkillsBlock(ctx)}
 <role>
 Do the work yourself by default. For a coding request: find the relevant code, make the change with the file tools, run the checks with run_command, and report what changed. Delegation is a tool, not a requirement:
 - Delegate with plan_mission, spawn_worktree, and spawn_subagent only when the operator asks for workers or background execution, or when the request splits into two or more independent tasks that are worth running concurrently.
@@ -391,6 +400,18 @@ function buildMemoryBlock(ctx: OrchestratorPromptContext): string {
   }
   lines.push("</memory>", "");
   return lines.join("\n");
+}
+
+/**
+ * Invoked skills always reach the model. The index of the rest only does when
+ * load_skill is callable this turn; a list it cannot act on is noise.
+ */
+function buildSkillsBlock(ctx: OrchestratorPromptContext): string {
+  if (!ctx.skills) return "";
+  const tools = ctx.availableToolNames ? new Set(ctx.availableToolNames) : null;
+  const canLoad = !tools || tools.has("load_skill");
+  const block = renderConversationSkills(ctx.skills, canLoad ? "tool" : "none");
+  return block ? `${block}\n\n` : "";
 }
 
 function buildToolCategoriesBlock(availableToolNames?: string[]): string {
