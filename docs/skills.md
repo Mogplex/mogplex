@@ -81,3 +81,8 @@ lines. Past the index cap the block points the agent at `find_skills`.
 - Conversational surfaces go through `createChatModelStream`
   (`lib/agents/run-chat.ts`), which already resolves skills for workspace
   chat, Slack conversations, and native agent runs.
+- Control builds its own prompt. `loadControlKnowledgeContext`
+  (`app/api/control/chat/_lib/knowledge-context.ts`) loads skills beside the
+  memory block, the orchestrator prompt renders them in `<skills>` right
+  after `<memory>`, and `find_skills` / `load_skill` are registered as
+  read-access orchestrator tools, so plan mode keeps them.

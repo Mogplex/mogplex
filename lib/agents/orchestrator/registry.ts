@@ -15,6 +15,7 @@ import {
   webFetch,
   createTerminalExec,
   createMemoryTools,
+  createSkillTools,
 } from "@/lib/agents/tools";
 import type {
   OrchestratorToolDef,
@@ -111,6 +112,23 @@ export function getImplementationStats(): {
   const implemented = ORCHESTRATOR_TOOLS.filter((t) => t.implemented).length;
   const total = ORCHESTRATOR_TOOLS.length;
   return { implemented, planned: total - implemented, total };
+}
+
+const skillToolsByContext = new WeakMap<
+  OrchestratorToolContext,
+  Record<string, Tool>
+>();
+
+/** Both skill tools share one catalog read per turn. */
+function skillToolsFor(ctx: OrchestratorToolContext) {
+  const existing = skillToolsByContext.get(ctx);
+  if (existing) return existing;
+  const tools = createSkillTools({
+    userId: ctx.userId,
+    repoId: ctx.repoId ?? null,
+  });
+  skillToolsByContext.set(ctx, tools);
+  return tools;
 }
 
 /**
@@ -213,6 +231,9 @@ function buildToolForDef(
     return def.name === "memory_write"
       ? memoryTools.add_memory
       : memoryTools.search_memories;
+  }
+  if (def.name === "find_skills" || def.name === "load_skill") {
+    return skillToolsFor(ctx)[def.name];
   }
   if (def.name === "summarize_history") {
     return createSummarizeHistoryTool(ctx);

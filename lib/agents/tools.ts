@@ -41,6 +41,7 @@ export {
   createGithubPullRequestStatusTool,
   // Memory tools
   createMemoryTools,
+  createSkillTools,
   // Virtual exec
   virtualExecTool,
   // Connections

@@ -4,6 +4,7 @@ import type {
   resolveControlPromptSandboxContext,
   resolveControlPromptWorktrees,
 } from "./context";
+import type { ControlKnowledgeContext } from "./knowledge-context";
 import type { ControlChatRequestBody } from "./types";
 
 type PromptSandboxContext = Awaited<
@@ -15,7 +16,7 @@ type PromptWorktreeContext = Awaited<
 
 /**
  * Assemble the orchestrator system-prompt context from the validated request
- * and the server-resolved sandbox, worktree, and memory state.
+ * and the server-resolved sandbox, worktree, memory, and skill state.
  */
 export function buildControlPromptContext(input: {
   body: ControlChatRequestBody;
@@ -23,7 +24,7 @@ export function buildControlPromptContext(input: {
   infrastructureDiagnosticScope: InfrastructureDiagnosticScope;
   sandboxContext: PromptSandboxContext;
   worktreeContext: PromptWorktreeContext;
-  memoryContext: string | null;
+  knowledge: ControlKnowledgeContext;
 }): OrchestratorPromptContext {
   const { body } = input;
   return {
@@ -42,6 +43,7 @@ export function buildControlPromptContext(input: {
     sandboxSelectionRequired: input.sandboxContext.selectionRequired,
     activeSandboxes: input.sandboxContext.sandboxes,
     activeWorktrees: input.worktreeContext.worktrees,
-    memoryContext: input.memoryContext,
+    memoryContext: input.knowledge.memoryContext,
+    skills: input.knowledge.skills,
   };
 }

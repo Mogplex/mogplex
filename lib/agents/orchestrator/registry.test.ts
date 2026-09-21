@@ -76,6 +76,12 @@ describe("buildOrchestratorTools", () => {
     expect(tools.memory_search.description).toContain("saved memories");
   });
 
+  it("should wire find_skills and load_skill to the skill catalog tools", () => {
+    // The catalog tools carry their own descriptions, not the registry defs'.
+    expect(tools.find_skills.description).toContain("Search the user's skills");
+    expect(tools.load_skill.description).toContain("full instructions");
+  });
+
   it("should describe sandbox_stop as non-deleting", () => {
     expect(tools.sandbox_stop.description).toContain(
       "does not delete the sandbox record"

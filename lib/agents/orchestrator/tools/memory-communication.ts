@@ -22,6 +22,20 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     implemented: true,
   },
   {
+    name: "find_skills",
+    category: "memory",
+    description: "Search the operator's skills for a task",
+    access: "read",
+    implemented: true,
+  },
+  {
+    name: "load_skill",
+    category: "memory",
+    description: "Load one of the operator's skills by slug",
+    access: "read",
+    implemented: true,
+  },
+  {
     name: "read_spec",
     category: "memory",
     description: "Read a spec document from the specs directory",
@@ -95,6 +109,15 @@ export const memorySearchSchema = z.object({
   limit: z.number().optional().describe("Max results"),
 });
 
+export const findSkillsSchema = z.object({
+  query: z.string().optional().describe("What the task involves"),
+  limit: z.number().optional().describe("Max results"),
+});
+
+export const loadSkillSchema = z.object({
+  slug: z.string().describe("Skill slug"),
+});
+
 export const readSpecSchema = z.object({
   specPath: z.string().describe("Path to spec file"),
 });
@@ -132,6 +155,8 @@ export const handoffNoteSchema = z.object({
 export const MEMORY_COMMUNICATION_SCHEMAS: Record<string, z.ZodType> = {
   memory_write: memoryWriteSchema,
   memory_search: memorySearchSchema,
+  find_skills: findSkillsSchema,
+  load_skill: loadSkillSchema,
   read_spec: readSpecSchema,
   summarize_history: summarizeHistorySchema,
   notify_operator: notifyOperatorSchema,
