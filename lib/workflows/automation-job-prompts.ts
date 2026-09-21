@@ -322,34 +322,71 @@ export function buildPromptForPRFix(input: {
   };
 }
 
+type AutomationRunSpec = { prompt: string; instructions?: string };
+
+/**
+ * Adds a suffix (the node's skills block) to a built run spec. It joins the
+ * instructions when the job type has them, so a type's default instructions
+ * survive a node that wrote none, and otherwise leads the prompt.
+ */
+export function appendToRunSpec<T extends AutomationRunSpec>(
+  runSpec: T,
+  suffix: string | null | undefined
+): T {
+  if (!suffix) return runSpec;
+  return runSpec.instructions
+    ? { ...runSpec, instructions: `${runSpec.instructions}\n\n${suffix}` }
+    : { ...runSpec, prompt: `${suffix}\n\n${runSpec.prompt}` };
+}
+
+/** The run spec for a job as its context describes it, skills included. */
+export function buildJobRunSpec(
+  context: JobContext,
+  assignmentType: string,
+  instructionsSuffix?: string | null
+) {
+  return appendToRunSpec(
+    buildPromptForJob(
+      assignmentType,
+      {
+        ...context.metadata,
+        repo_full_name: context.repo.full_name,
+        base_branch: context.repo.default_branch || "main",
+        skill_id: context.skillId,
+      },
+      context.agent.system_prompt
+    ),
+    instructionsSuffix
+  );
+}
+
 export function buildAutomationHarnessPrompt(input: {
   context: JobContext;
   harnessId: HarnessId;
   review?: ReviewOutcome | null;
   pullRequest?: PullRequestDetails | null;
   targetRepo?: JobContext["repo"] | null;
+  /** Rules and skills attached to the node's roster agent, already rendered. */
+  instructionsSuffix?: string | null;
 }) {
   const assignmentType = normalizeAutomationAssignmentType(
     input.context.assignmentType
   );
-  const baseBranch = input.context.repo.default_branch || "main";
   const runSpec =
     input.review && input.pullRequest && input.targetRepo
-      ? buildPromptForPRFix({
-          context: input.context,
-          review: input.review,
-          pullRequest: input.pullRequest,
-          targetRepo: input.targetRepo,
-        })
-      : buildPromptForJob(
+      ? appendToRunSpec(
+          buildPromptForPRFix({
+            context: input.context,
+            review: input.review,
+            pullRequest: input.pullRequest,
+            targetRepo: input.targetRepo,
+          }),
+          input.instructionsSuffix
+        )
+      : buildJobRunSpec(
+          input.context,
           assignmentType,
-          {
-            ...input.context.metadata,
-            repo_full_name: input.context.repo.full_name,
-            base_branch: baseBranch,
-            skill_id: input.context.skillId,
-          },
-          input.context.agent.system_prompt
+          input.instructionsSuffix
         );
 
   const metadataRole = input.context.metadata.flow_node_role;

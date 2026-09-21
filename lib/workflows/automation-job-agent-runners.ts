@@ -32,7 +32,8 @@ import {
   type ReportRepairRequest,
 } from "@/lib/workflows/pr-review-report-repair";
 import {
-  buildPromptForJob,
+  appendToRunSpec,
+  buildJobRunSpec,
   buildPromptForPRFix,
 } from "@/lib/workflows/automation-job-prompts";
 import { assertPullRequestGithubAccess } from "@/lib/workflows/automation-job-github";
@@ -259,15 +260,11 @@ export function createAutomationAgentRunner(
       });
     }
 
-    const runSpec = buildPromptForJob(
+    const skills = await deps.resolveSkills(context, "native");
+    const runSpec = buildJobRunSpec(
+      context,
       assignmentType,
-      {
-        ...context.metadata,
-        repo_full_name: context.repo.full_name,
-        base_branch: baseBranch,
-        skill_id: context.skillId,
-      },
-      context.agent.system_prompt
+      skills.instructionsSuffix
     );
     const gatewayContext = buildAutomationGatewayContext(
       context,
@@ -309,7 +306,7 @@ export function createAutomationAgentRunner(
 
     const review = await generate({
       tools: applyToolApprovalGate(
-        { ...tools, ...buildFlowReportTools(context) },
+        { ...tools, ...skills.tools, ...buildFlowReportTools(context) },
         context,
         deps
       ),
@@ -337,7 +334,13 @@ async function runPRFixAgentWithTools(input: {
   resolvedModel: AutomationLanguageModel;
   tools: NonNullable<Parameters<typeof generateText>[0]["tools"]>;
 }) {
-  const runSpec = buildPromptForPRFix(input);
+  // The fixer is the node's agent too: same skills, same attached rules.
+  const skills = await input.deps.resolveSkills(input.context, "native");
+  const runSpec = appendToRunSpec(
+    buildPromptForPRFix(input),
+    skills.instructionsSuffix
+  );
+  const tools = { ...input.tools, ...skills.tools };
   const gatewayContext = buildAutomationGatewayContext(input.context, "pr_fix");
 
   const { result, metadata } = await executeAutomationTextGeneration({
@@ -350,7 +353,7 @@ async function runPRFixAgentWithTools(input: {
       model: input.resolvedModel.model,
       providerOptions: input.resolvedModel.providerOptions,
       tools: applyToolApprovalGate(
-        { ...input.tools, ...buildFlowReportTools(input.context) },
+        { ...tools, ...buildFlowReportTools(input.context) },
         input.context,
         input.deps
       ),
