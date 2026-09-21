@@ -6,7 +6,7 @@ import { getValidAccessToken } from "./oauth";
 import type { Connection } from "@/lib/types";
 
 const CONNECTION_COLUMNS =
-  "id, user_id, name, type, base_url, auth_type, auth_header, mcp_transport, mcp_url, description, is_enabled, health_status, scope, repo_id, oauth_client_id, oauth_authorize_url, oauth_token_url, oauth_scopes, oauth_authorized_at, oauth_token_expires_at, source_preset, last_tested_at, last_test_error, last_test_http_status, last_test_tool_count, created_at, updated_at";
+  "id, user_id, name, type, base_url, auth_type, auth_header, mcp_transport, mcp_url, description, is_enabled, approval_mode, health_status, scope, repo_id, oauth_client_id, oauth_authorize_url, oauth_token_url, oauth_scopes, oauth_authorized_at, oauth_token_expires_at, source_preset, last_tested_at, last_test_error, last_test_http_status, last_test_tool_count, created_at, updated_at";
 
 /** Return all enabled mcp_server connections as CLI-ready config records. */
 export async function listConnectionsForCli(

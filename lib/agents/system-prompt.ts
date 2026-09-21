@@ -162,22 +162,34 @@ When you need more information:
 }
 
 /** Names each connection and the tool prefix it contributes. Shared with Control. */
-export function buildConnectionsBlock(connections?: Connection[]): string {
+export function buildConnectionsBlock(
+  connections?: Connection[],
+  options: { canAskApproval?: boolean } = {}
+): string {
   if (!connections || connections.length === 0) return "";
 
   const lines = connections.map((c) => {
+    if (c.approval_mode === "ask" && !options.canAskApproval) {
+      // The tools were withheld: say so, or the model will guess at why a
+      // service the user mentions has no tools.
+      return `- ${c.name}: not loaded. The user set this connection to ask before its tools run, and this conversation has no way to ask. They can use it from Control, or switch it to run automatically in Settings > Connections.`;
+    }
+    const approvalNote =
+      c.approval_mode === "ask"
+        ? " Each call pauses for the user's approval; if they deny one, do not retry it unchanged."
+        : "";
     if (c.type === "rest_api") {
       const toolName = `api_${c.name
         .toLowerCase()
         .replace(/[^\da-z]+/g, "_")
         .replace(/^_|_$/g, "")}`;
-      return `- ${toolName}: REST API — ${c.description || c.base_url || c.name}`;
+      return `- ${toolName}: REST API — ${c.description || c.base_url || c.name}.${approvalNote}`;
     }
     const prefix = c.name
       .toLowerCase()
       .replace(/[^\da-z]+/g, "_")
       .replace(/^_|_$/g, "");
-    return `- ${prefix}_*: MCP server — ${c.description || c.mcp_url || c.name} (multiple tools available)`;
+    return `- ${prefix}_*: MCP server — ${c.description || c.mcp_url || c.name} (multiple tools available).${approvalNote}`;
   });
 
   return `

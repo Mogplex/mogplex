@@ -21,6 +21,7 @@ function server(
     mcp_url: "https://example.com/mcp",
     description: null,
     is_enabled: true,
+    approval_mode: "auto",
     health_status: "healthy",
     scope: "global",
     repo_id: null,

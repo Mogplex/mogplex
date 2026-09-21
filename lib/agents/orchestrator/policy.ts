@@ -431,7 +431,7 @@ export function wrapWithPolicy(
  * Sanitize tool input for audit logging.
  * Removes potentially sensitive fields.
  */
-function sanitizeInputForAudit(input: unknown): unknown {
+export function sanitizeInputForAudit(input: unknown): unknown {
   if (!input || typeof input !== "object") return input;
   if (Array.isArray(input)) return input.map(sanitizeInputForAudit);
 

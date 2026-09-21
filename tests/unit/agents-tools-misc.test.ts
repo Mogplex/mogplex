@@ -76,6 +76,7 @@ test("createRestApiTool exposes inputSchema for provider validation", async () =
       mcp_url: null,
       description: "Test API",
       is_enabled: true,
+      approval_mode: "auto",
       health_status: "healthy",
       scope: "global",
       repo_id: null,

@@ -129,4 +129,8 @@ export type {
 // -----------------------------------------------------------------------------
 // Connection types
 // -----------------------------------------------------------------------------
-export type { Connection, ConnectionOverride } from "./types/connection";
+export type {
+  Connection,
+  ConnectionApprovalMode,
+  ConnectionOverride,
+} from "./types/connection";

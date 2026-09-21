@@ -1,4 +1,5 @@
 import { guardControlBackgroundTools } from "@/lib/control/background-context";
+import { gateConnectionTools } from "@/lib/agents/orchestrator/connection-approval";
 import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
 import {
   buildOrchestratorSystemPrompt,
@@ -30,6 +31,8 @@ export const CONTROL_CONNECTION_TOOLS_TIMEOUT_MS = 8000;
 export type ControlConnectionTools = {
   tools: Record<string, Tool>;
   connections: Connection[];
+  /** Tools of connections set to `ask`; each call waits for the operator. */
+  askToolNames: ReadonlySet<string>;
   /** Closes the MCP clients these tools hold. Safe to call more than once. */
   cleanup: () => Promise<void>;
 };
@@ -37,6 +40,7 @@ export type ControlConnectionTools = {
 const NO_CONNECTION_TOOLS: ControlConnectionTools = {
   tools: {},
   connections: [],
+  askToolNames: new Set<string>(),
   cleanup: async () => undefined,
 };
 
@@ -55,7 +59,7 @@ export type ControlConnectionToolDeps = {
   ) => Promise<Connection[]>;
   buildTools: (
     connections: Connection[],
-    ctx: { userId: string; repoId?: string }
+    ctx: { userId: string; repoId?: string; canAskApproval: boolean }
   ) => Promise<BuiltConnectionTools>;
   timeoutMs: number;
 };
@@ -100,6 +104,9 @@ export async function loadControlConnectionTools(
     const building = deps.buildTools(connections, {
       userId: input.userId,
       repoId,
+      // Control can put an approval card in front of a call, so it loads
+      // connections set to `ask` instead of withholding them.
+      canAskApproval: true,
     });
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
@@ -123,6 +130,7 @@ export async function loadControlConnectionTools(
     return {
       tools: built.dynamicTools,
       connections,
+      askToolNames: built.askToolNames,
       cleanup: () => cleanupMcpClients(built.mcpCleanups),
     };
   } catch (error) {
@@ -156,7 +164,14 @@ export function buildControlTurnTools(input: {
       shadowed,
     });
   }
-  const rawTools = { ...input.connectionTools.tools, ...registryTools };
+  const rawTools = {
+    ...gateConnectionTools(
+      input.connectionTools.tools,
+      input.connectionTools.askToolNames,
+      input.toolContext
+    ),
+    ...registryTools,
+  };
 
   const tools = input.enableTools
     ? serializeSandboxCommandTools(
@@ -171,6 +186,7 @@ export function buildControlTurnTools(input: {
     ...input.promptContext,
     availableToolNames: input.enableTools ? Object.keys(rawTools) : [],
     connections: input.enableTools ? input.connectionTools.connections : [],
+    connectionsCanAskApproval: true,
   });
 
   return { tools, systemPrompt };

@@ -20,6 +20,7 @@ function makeConnection(overrides: Partial<Connection> = {}): Connection {
     mcp_url: "https://example.com/mcp",
     description: null,
     is_enabled: true,
+    approval_mode: "auto",
     health_status: "unknown",
     scope: "global",
     repo_id: null,

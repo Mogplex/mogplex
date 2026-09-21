@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { KeyedMutator } from "swr";
 import { toast } from "@/hooks/use-toast";
 import type { ConnectionPreset } from "@/lib/connections/presets";
+import { nextApprovalMode } from "@/lib/connections/approval";
 import { getConnectionAuthorizationPath } from "@/lib/connections/presets";
 import type { ConnectionHealthStatus } from "@/lib/connections/status";
 import { getConnectionStatusLabel } from "@/lib/connections/status";
@@ -217,18 +218,21 @@ export function useConnectionActions({
     [activeRepoId, excludedSet, mutate]
   );
 
-  const toggleEnabled = useCallback(
-    async (conn: Connection) => {
+  const updateSetting = useCallback(
+    async (
+      conn: Connection,
+      patch: Pick<Connection, "is_enabled"> | Pick<Connection, "approval_mode">
+    ) => {
       setTogglingId(conn.id);
       try {
         const res = await fetch("/api/connections", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: conn.id, is_enabled: !conn.is_enabled }),
+          body: JSON.stringify({ id: conn.id, ...patch }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to toggle connection");
+          throw new Error(data.error || "Failed to update connection");
         }
         await mutate();
       } catch (e) {
@@ -242,6 +246,19 @@ export function useConnectionActions({
       }
     },
     [mutate]
+  );
+
+  const toggleEnabled = useCallback(
+    (conn: Connection) => updateSetting(conn, { is_enabled: !conn.is_enabled }),
+    [updateSetting]
+  );
+
+  const toggleApprovalMode = useCallback(
+    (conn: Connection) =>
+      updateSetting(conn, {
+        approval_mode: nextApprovalMode(conn.approval_mode),
+      }),
+    [updateSetting]
   );
 
   const deleteConnection = useCallback(
@@ -317,6 +334,7 @@ export function useConnectionActions({
     addPresetConnection,
     toggleExclude,
     toggleEnabled,
+    toggleApprovalMode,
     deleteConnection,
     testConnection,
   };

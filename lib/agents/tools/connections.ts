@@ -93,20 +93,36 @@ async function loadConnectionTools(
   }
 }
 
-/** Build the dynamic (REST / MCP) tool map, skipping misconfigured connections. */
+/**
+ * Build the dynamic (REST / MCP) tool map, skipping misconfigured connections.
+ *
+ * A connection set to `ask` needs the user's approval for every call. Only a
+ * surface that can put that question to the user passes `canAskApproval`; any
+ * other surface withholds the connection's tools rather than run them unasked.
+ */
 export async function buildDynamicConnectionTools(
   connections: Connection[],
-  ctx: { userId?: string; repoId?: string },
+  ctx: { userId?: string; repoId?: string; canAskApproval?: boolean },
   deps: ConnectionToolDeps = DEFAULT_CONNECTION_TOOL_DEPS
 ): Promise<{
   dynamicTools: Record<string, Tool>;
   mcpCleanups: Array<() => Promise<void>>;
   mcpToolNames: Set<string>;
   restToolNames: Set<string>;
+  /** Tools of `ask` connections; the caller must gate each call on approval. */
+  askToolNames: Set<string>;
+  /** `ask` connections left out because this surface cannot ask. */
+  withheldConnections: Connection[];
 }> {
   const { getValidAccessToken } = await import("@/lib/connections/oauth");
 
+  const withheldConnections = ctx.canAskApproval
+    ? []
+    : connections.filter((conn) => conn.approval_mode === "ask");
+  const withheldIds = new Set(withheldConnections.map((conn) => conn.id));
+
   const runnable = connections.filter((conn) => {
+    if (withheldIds.has(conn.id)) return false;
     // Stdio servers need a filesystem to launch in: the sandbox harness and
     // the CLI run them, a server-side turn cannot. One whose preset also has
     // an API toolset still contributes those tools here.
@@ -131,19 +147,40 @@ export async function buildDynamicConnectionTools(
     )
   );
 
+  return {
+    ...registerLoadedTools(
+      results.map((result, index) =>
+        result.status === "fulfilled" && result.value
+          ? {
+              loaded: result.value,
+              asks: runnable[index].approval_mode === "ask",
+            }
+          : null
+      )
+    ),
+    withheldConnections,
+  };
+}
+
+/** Name each loaded tool and sort the names into the sets callers act on. */
+function registerLoadedTools(
+  entries: Array<{ loaded: LoadedConnectionTools; asks: boolean } | null>
+) {
   const dynamicTools: Record<string, Tool> = {};
   const mcpCleanups: Array<() => Promise<void>> = [];
   const mcpToolNames = new Set<string>();
   const restToolNames = new Set<string>();
+  const askToolNames = new Set<string>();
 
-  for (const result of results) {
-    if (result.status === "rejected" || !result.value) continue;
-    const val = result.value;
+  for (const entry of entries) {
+    if (!entry) continue;
+    const { loaded: val, asks } = entry;
 
     if (val.connType === "rest_api") {
       const toolName = `api_${sanitize(val.connName)}`;
       dynamicTools[toolName] = val.tool;
       restToolNames.add(toolName);
+      if (asks) askToolNames.add(toolName);
       continue;
     }
 
@@ -156,10 +193,17 @@ export async function buildDynamicConnectionTools(
       const toolName = `${sanitize(val.connName)}_${name}`;
       dynamicTools[toolName] = t;
       mcpToolNames.add(toolName);
+      if (asks) askToolNames.add(toolName);
     }
   }
 
-  return { dynamicTools, mcpCleanups, mcpToolNames, restToolNames };
+  return {
+    dynamicTools,
+    mcpCleanups,
+    mcpToolNames,
+    restToolNames,
+    askToolNames,
+  };
 }
 
 /**
