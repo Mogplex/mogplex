@@ -15,6 +15,11 @@ on. `loadSkillCatalog({ userId, repoId })` returns:
 - plus the skills the repo defines for itself (override rows with no
   `skill_id`), listed first.
 
+Repo overrides apply only when the acting user owns the repo, the same rule
+the repo settings panel enforces. Surfaces pass the repo id from the request,
+so `loadSkillCatalog` is the gate: for anyone else the catalog is just their
+own library.
+
 Each catalog skill gets a **slug** from its name (`Deploy Checklist (v2)`
 becomes `deploy-checklist-v2`). Slugs are assigned in catalog order, so a
 repo's own skill takes the plain slug ahead of a library skill with the same

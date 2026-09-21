@@ -150,6 +150,20 @@ describe("skill catalog against the migrated schema", () => {
     expect(catalog.skills[0].content).toBe("Use the widgets template.");
   });
 
+  it("should never show a repo's own skills to someone who does not own the repo", async () => {
+    // Surfaces pass the repo id from the request, so the loader is the gate.
+    expect(
+      summary(
+        await loadSkillCatalog({ userId: stranger, repoId: repo }, client)
+      )
+    ).toEqual(["library:private"]);
+    expect(
+      summary(
+        await loadSkillCatalog({ userId: owner, repoId: "not-a-uuid" }, client)
+      )
+    ).toHaveLength(3);
+  });
+
   it("should reject a second override row for the same repo and skill", async () => {
     await expect(
       db.query(

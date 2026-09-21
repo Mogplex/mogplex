@@ -1,9 +1,11 @@
 /**
  * Loads the skill catalog for a run: the acting user's library, minus the
  * skills the repo excludes, plus the skills the repo defines for itself.
+ * Repo overrides apply only when the acting user owns the repo.
  * Every function takes a client so tests can pass the PostgREST shim.
  */
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isUuid } from "@/lib/uuid";
 import { assignSkillSlugs } from "./slug";
 import {
   EMPTY_SKILL_CATALOG,
@@ -97,13 +99,41 @@ export function buildSkillCatalog(
   return { skills: assignSkillSlugs([...repoRows, ...libraryRows]) };
 }
 
+/**
+ * A repo's overrides belong to the repo's owner, the same rule the settings
+ * panel enforces. Callers pass repo ids straight from a request, so this is
+ * the check that keeps one person's repo skills out of another's prompt.
+ */
+async function isRepoOwner(repoId: string, userId: string, client: Client) {
+  const { data, error } = await client
+    .from("repos")
+    .select("id")
+    .eq("id", repoId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`Failed to load repo: ${error.message}`);
+  return Boolean(data);
+}
+
+async function loadOwnedOverrideRows(
+  input: LoadSkillCatalogInput,
+  client: Client
+): Promise<OverrideRow[]> {
+  if (!input.repoId || !isUuid(input.repoId)) return [];
+  const [owned, overrides] = await Promise.all([
+    isRepoOwner(input.repoId, input.userId, client),
+    loadOverrideRows(input.repoId, client),
+  ]);
+  return owned ? overrides : [];
+}
+
 export async function loadSkillCatalog(
   input: LoadSkillCatalogInput,
   client: Client = supabaseAdmin
 ): Promise<SkillCatalog> {
   const [library, overrides] = await Promise.all([
     loadLibraryRows(input.userId, client),
-    input.repoId ? loadOverrideRows(input.repoId, client) : Promise.resolve([]),
+    loadOwnedOverrideRows(input, client),
   ]);
   return buildSkillCatalog(library, overrides);
 }
