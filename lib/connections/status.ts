@@ -134,9 +134,12 @@ export function getConnectionStatusDetail(
   }
 
   if (connection.health_status === "healthy") {
-    // A stdio test checks the credential without starting the server, so
-    // there is never a tool count to show.
-    if (connection.mcp_transport === "stdio") {
+    // A stdio test checks the credential without starting the server, so a
+    // tool count only exists when the preset also has an API toolset.
+    if (
+      connection.mcp_transport === "stdio" &&
+      connection.last_test_tool_count == null
+    ) {
       return STDIO_HEALTHY_DETAIL;
     }
     return connection.last_test_tool_count == null

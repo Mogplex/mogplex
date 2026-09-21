@@ -102,6 +102,9 @@ test("should report healthy when Trigger.dev accepts the token", async () => {
   ]);
   assert.equal(result.healthy, true);
   assert.equal(result.status, "healthy");
+  // The token also backs the preset's API tools, so the test can count them.
+  assert.equal(result.toolCount, 8);
+  assert.equal(result.summary, "8 tools detected");
 });
 
 test("should report auth_failed when Trigger.dev rejects the token", async () => {

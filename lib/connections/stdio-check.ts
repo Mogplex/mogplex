@@ -1,3 +1,4 @@
+import { countConnectionApiTools } from "./api-toolsets";
 import { getConnectionPreset, isStdioConnectionPreset } from "./presets";
 import type { ConnectionTestResult } from "./status";
 import type { Connection } from "@/lib/types";
@@ -5,6 +6,32 @@ import type { Connection } from "@/lib/types";
 const CREDENTIAL_CHECK_TIMEOUT_MS = 10_000;
 
 type StdioCheckResult = Omit<ConnectionTestResult, "testedAt">;
+
+/**
+ * The API toolset uses the same credential, so a verified token means those
+ * tools are live even though the stdio server was never started.
+ */
+function verifiedResult(
+  conn: Pick<Connection, "source_preset">,
+  httpStatus: number
+): StdioCheckResult {
+  const toolCount = countConnectionApiTools(conn);
+  if (toolCount == null) {
+    return {
+      healthy: true,
+      status: "healthy",
+      summary: "Credential verified",
+      httpStatus,
+    };
+  }
+  return {
+    healthy: true,
+    status: "healthy",
+    summary: `${toolCount} tools detected`,
+    toolCount,
+    httpStatus,
+  };
+}
 
 /**
  * Test a stdio connection without launching it. The server runs in sandboxes
@@ -43,14 +70,7 @@ export async function checkStdioConnection(
     signal: AbortSignal.timeout(CREDENTIAL_CHECK_TIMEOUT_MS),
   });
 
-  if (res.ok) {
-    return {
-      healthy: true,
-      status: "healthy",
-      summary: "Credential verified",
-      httpStatus: res.status,
-    };
-  }
+  if (res.ok) return verifiedResult(conn, res.status);
 
   const rejected = res.status === 401 || res.status === 403;
   return {

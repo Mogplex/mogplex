@@ -65,9 +65,18 @@ test("settings quick-add saves the Trigger.dev stdio preset with a personal acce
     connections.splice(0, connections.length, created);
     await fulfillJson(route, { connection: created }, 201);
   });
-  await page.route("**/api/connections/conn-trigger-new/test", (route) =>
-    fulfillJson(route, { healthy: true, summary: "Credential verified" })
-  );
+  await page.route("**/api/connections/conn-trigger-new/test", (route) => {
+    connections[0] = {
+      ...connections[0],
+      last_tested_at: new Date().toISOString(),
+      last_test_tool_count: 8,
+    };
+    return fulfillJson(route, {
+      healthy: true,
+      summary: "8 tools detected",
+      toolCount: 8,
+    });
+  });
 
   await page.goto(scopedPath("settings?tab=connections"));
   await page.waitForLoadState("networkidle");
@@ -75,11 +84,17 @@ test("settings quick-add saves the Trigger.dev stdio preset with a personal acce
   const presetCard = page.getByTestId("settings-preset-trigger");
   await presetCard.getByRole("button", { name: "+ Add" }).click();
   await expect(presetCard).toContainText(
-    "Runs inside your sandboxes and the Mogplex CLI"
+    "Agents get these tools in every chat and run"
   );
+  await expect(presetCard).toContainText("sandboxes and the Mogplex CLI");
+  await expect(
+    presetCard.getByRole("link", { name: "Get a token" })
+  ).toHaveAttribute("href", "https://cloud.trigger.dev/account/tokens");
   await presetCard.getByPlaceholder("tr_pat_...").fill("tr_pat_e2e_token");
   await presetCard.getByRole("button", { name: "Add" }).click();
 
-  await expect(presetCard).toContainText("Connected");
+  await expect(presetCard).toContainText("Connected · 8 tools");
   await expect(page.getByText("preset · Trigger.dev")).toBeVisible();
+  // The row reports the API tools instead of a bare "test passed".
+  await expect(page.getByText("8 tools detected")).toBeVisible();
 });

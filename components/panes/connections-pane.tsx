@@ -234,7 +234,7 @@ export function ConnectionsPane() {
           <div className="space-y-1.5">
             {activePreset.mcp_transport === "stdio" ? (
               <div className="text-[11px] text-muted-foreground">
-                {getStdioConnectionPresetDescription()}
+                {getStdioConnectionPresetDescription(activePreset)}
               </div>
             ) : null}
             <div className="flex gap-1.5 items-center">
@@ -266,6 +266,11 @@ export function ConnectionsPane() {
                   autoFocus
                 />
               )}
+              {activePreset.credential_url ? (
+                <a href={activePreset.credential_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-accent-blue hover:underline shrink-0">
+                  get a token
+                </a>
+              ) : null}
               <a href={activePreset.docs_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground shrink-0">
                 docs
               </a>

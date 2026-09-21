@@ -257,14 +257,19 @@ export function PresetGrid({
                   )}
                   {preset.mcp_transport === "stdio" ? (
                     <div className="text-[11px] text-muted-foreground leading-tight">
-                      {getStdioConnectionPresetDescription()}
+                      {getStdioConnectionPresetDescription(preset)}
                     </div>
                   ) : null}
                   {status?.type === "error" && (
                     <div className="text-[11px] text-red-400">{status.message}</div>
                   )}
                   <div className="flex items-center justify-between">
-                    <a href={preset.docs_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground">Docs</a>
+                    <div className="flex items-center gap-2">
+                      <a href={preset.docs_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground">Docs</a>
+                      {preset.credential_url ? (
+                        <a href={preset.credential_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-accent-blue hover:underline">Get a token</a>
+                      ) : null}
+                    </div>
                     <button
                       onClick={() => void addPresetConnection(preset)}
                       disabled={(!!preset.mcp_url_field && !presetMcpUrl.trim()) || (preset.auth_fields.some(f => !(presetCredentials[f.key] ?? "").trim())) || presetSaving}

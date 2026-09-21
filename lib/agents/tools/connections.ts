@@ -3,6 +3,7 @@ import {
   getUserConnections,
   getConnectionCredentials,
 } from "@/lib/connections/service";
+import { getConnectionApiToolset } from "@/lib/connections/api-toolsets";
 import { createRestApiTool } from "@/lib/connections/rest-tool";
 import { getMcpTools } from "@/lib/connections/mcp-tools";
 import { isStdioConnection } from "@/lib/connections/mcp-transport";
@@ -18,11 +19,21 @@ export { cleanupMcpClients } from "@/lib/connections/mcp-tools";
 
 type LoadedConnectionTools = { connName: string } & (
   | { connType: "rest_api"; tool: Tool }
+  | { connType: "api_toolset"; tools: Record<string, Tool> }
   | {
       connType: "mcp_server";
       mcpTools: Awaited<ReturnType<typeof getMcpTools>>;
     }
 );
+
+type ConnectionToolDeps = {
+  /** Stored credential for a non-OAuth connection. */
+  getCredentials: (connectionId: string) => Promise<string>;
+};
+
+const DEFAULT_CONNECTION_TOOL_DEPS: ConnectionToolDeps = {
+  getCredentials: getConnectionCredentials,
+};
 
 /**
  * Resolve one connection's credential and materialize its tools. Throws so the
@@ -31,13 +42,24 @@ type LoadedConnectionTools = { connName: string } & (
 async function loadConnectionTools(
   conn: Connection,
   ctx: { userId?: string; repoId?: string },
-  getValidAccessToken: (conn: Connection) => Promise<string>
+  getValidAccessToken: (conn: Connection) => Promise<string>,
+  getCredentials: ConnectionToolDeps["getCredentials"]
 ): Promise<LoadedConnectionTools | null> {
   try {
     // OAuth gets a fresh access token, others use the stored credential.
     const cred = await (conn.auth_type === "oauth"
       ? getValidAccessToken(conn)
-      : getConnectionCredentials(conn.id));
+      : getCredentials(conn.id));
+
+    const buildApiToolset = getConnectionApiToolset(conn);
+    if (buildApiToolset) {
+      if (!cred) throw new Error(`${conn.name} is missing credentials`);
+      return {
+        connName: conn.name,
+        connType: "api_toolset",
+        tools: buildApiToolset(cred),
+      };
+    }
 
     if (conn.type === "rest_api") {
       return {
@@ -74,7 +96,8 @@ async function loadConnectionTools(
 /** Build the dynamic (REST / MCP) tool map, skipping misconfigured connections. */
 export async function buildDynamicConnectionTools(
   connections: Connection[],
-  ctx: { userId?: string; repoId?: string }
+  ctx: { userId?: string; repoId?: string },
+  deps: ConnectionToolDeps = DEFAULT_CONNECTION_TOOL_DEPS
 ): Promise<{
   dynamicTools: Record<string, Tool>;
   mcpCleanups: Array<() => Promise<void>>;
@@ -85,8 +108,9 @@ export async function buildDynamicConnectionTools(
 
   const runnable = connections.filter((conn) => {
     // Stdio servers need a filesystem to launch in: the sandbox harness and
-    // the CLI run them, a server-side turn cannot.
-    if (isStdioConnection(conn)) return false;
+    // the CLI run them, a server-side turn cannot. One whose preset also has
+    // an API toolset still contributes those tools here.
+    if (isStdioConnection(conn) && !getConnectionApiToolset(conn)) return false;
     if (!isConnectionMisconfigured(conn)) return true;
     logConnectionEvent("connection_runtime_skipped", {
       userId: ctx.userId,
@@ -102,7 +126,9 @@ export async function buildDynamicConnectionTools(
   });
 
   const results = await Promise.allSettled(
-    runnable.map((conn) => loadConnectionTools(conn, ctx, getValidAccessToken))
+    runnable.map((conn) =>
+      loadConnectionTools(conn, ctx, getValidAccessToken, deps.getCredentials)
+    )
   );
 
   const dynamicTools: Record<string, Tool> = {};
@@ -114,20 +140,22 @@ export async function buildDynamicConnectionTools(
     if (result.status === "rejected" || !result.value) continue;
     const val = result.value;
 
-    if (val.connType === "rest_api" && val.tool) {
+    if (val.connType === "rest_api") {
       const toolName = `api_${sanitize(val.connName)}`;
       dynamicTools[toolName] = val.tool;
       restToolNames.add(toolName);
       continue;
     }
 
-    if (val.connType === "mcp_server" && val.mcpTools) {
-      mcpCleanups.push(val.mcpTools.cleanup);
-      for (const [name, t] of Object.entries(val.mcpTools.tools)) {
-        const toolName = `${sanitize(val.connName)}_${name}`;
-        dynamicTools[toolName] = t;
-        mcpToolNames.add(toolName);
-      }
+    // An API toolset is named and idempotency-protected like MCP tools:
+    // several per connection, and some of them write.
+    const namespaced =
+      val.connType === "api_toolset" ? val.tools : val.mcpTools.tools;
+    if (val.connType === "mcp_server") mcpCleanups.push(val.mcpTools.cleanup);
+    for (const [name, t] of Object.entries(namespaced)) {
+      const toolName = `${sanitize(val.connName)}_${name}`;
+      dynamicTools[toolName] = t;
+      mcpToolNames.add(toolName);
     }
   }
 
