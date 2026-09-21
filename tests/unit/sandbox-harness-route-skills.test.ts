@@ -86,6 +86,7 @@ async function runHarness(input: {
   const aiCall = buildAiCall();
   const writes: Write[] = [];
   const events: LoggedEvent[] = [];
+  const used: string[][] = [];
   let harnessPrompt = "";
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
@@ -154,6 +155,9 @@ async function runHarness(input: {
     observeSkillSelection: async () => {},
     runAfterResponse: () => {},
     loadSkillCatalog: input.loadSkillCatalog,
+    recordSkillUse: async (_userId: string, skills: Array<{ id: string }>) => {
+      used.push(skills.map((skill) => skill.id));
+    },
   } as never);
 
   const response = await handler(
@@ -172,7 +176,7 @@ async function runHarness(input: {
     buildSandboxRouteParams()
   );
   const body = await response.text();
-  return { status: response.status, body, writes, events, harnessPrompt };
+  return { status: response.status, body, writes, events, used, harnessPrompt };
 }
 
 function skillWrites(writes: Write[]) {
@@ -223,6 +227,7 @@ test("POST /api/sandbox/[id]/harness writes an invoked skill and the index ahead
   );
   assert.deepEqual(logged?.payload?.invoked, ["deploy-checklist"]);
   assert.equal(logged?.message, "Invoked skills: Deploy checklist");
+  assert.deepEqual(run.used, [["s1"]], "only the invoked skill counts as used");
 });
 
 test("POST /api/sandbox/[id]/harness leaves the CLI's own slash commands alone but honors $slug", async () => {

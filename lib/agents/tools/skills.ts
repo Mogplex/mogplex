@@ -9,6 +9,7 @@ import { normalizeSkillToken } from "@/lib/skill-catalog/invocations";
 import { searchSkills } from "@/lib/skill-catalog/search";
 import { loadSkillCatalog } from "@/lib/skill-catalog/store";
 import type { CatalogSkill, SkillCatalog } from "@/lib/skill-catalog/types";
+import { recordSkillUse, type RecordSkillUse } from "@/lib/skill-catalog/usage";
 import { defineTool } from "./shared";
 
 export const LOAD_SKILL_MAX_CHARS = 32_000;
@@ -21,10 +22,12 @@ export type SkillToolContext = {
 
 export type SkillToolDeps = {
   loadCatalog: (context: SkillToolContext) => Promise<SkillCatalog>;
+  recordUse: RecordSkillUse;
 };
 
 const defaultSkillToolDeps: SkillToolDeps = {
   loadCatalog: (context) => loadSkillCatalog(context),
+  recordUse: (userId, skills) => recordSkillUse(userId, skills),
 };
 
 const findSkillsParams = z.object({
@@ -119,6 +122,7 @@ export function createSkillTools(
           };
         }
         const content = skill.content.trim();
+        await deps.recordUse(context.userId, [skill]);
         return {
           ok: true,
           skill: {

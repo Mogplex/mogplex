@@ -10,6 +10,7 @@ import {
 import { renderSkillCatalog, type SkillLoadHint } from "./render";
 import { loadSkillCatalogOrEmpty, type LoadSkillCatalogInput } from "./store";
 import type { CatalogSkill, SkillCatalog } from "./types";
+import { recordSkillUse, type RecordSkillUse } from "./usage";
 
 export type ConversationMessage = {
   role?: string;
@@ -59,10 +60,12 @@ export type ConversationSkillsInput = LoadSkillCatalogInput & {
 
 export type ConversationSkillsDeps = {
   loadCatalog: (input: LoadSkillCatalogInput) => Promise<SkillCatalog>;
+  recordUse: RecordSkillUse;
 };
 
 const defaultDeps: ConversationSkillsDeps = {
   loadCatalog: (input) => loadSkillCatalogOrEmpty(input),
+  recordUse: (userId, skills) => recordSkillUse(userId, skills),
 };
 
 /** Never rejects: a turn runs without skills rather than not at all. */
@@ -81,6 +84,15 @@ export async function resolveConversationSkills(
       skills,
       input.invocation
     );
+    // Earlier invocations were counted on their own turns; count only what
+    // the newest message asked for. Not awaited: a count never delays a turn.
+    const latest = input.userTexts.at(-1);
+    if (latest) {
+      void deps.recordUse(
+        input.userId,
+        resolveInvokedSkills(latest, skills, input.invocation)
+      );
+    }
     return { invoked, available: skills };
   } catch (error) {
     console.warn(
