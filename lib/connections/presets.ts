@@ -5,7 +5,20 @@ export type ConnectionPreset = {
   name: string;
   description: string;
   mcp_url?: string;
-  mcp_transport: "http" | "sse";
+  mcp_transport: "http" | "sse" | "stdio";
+  /**
+   * Local process launch for `stdio` presets. The command and args only ever
+   * come from this file, never from a request or a stored row, and the saved
+   * credential reaches the process through `credential_env`.
+   */
+  stdio?: {
+    command: string;
+    args: string[];
+    credential_env: string;
+    credential_check?: {
+      url: string;
+    };
+  };
   auth_type: "bearer" | "api_key" | "oauth" | "none";
   mcp_url_field?: {
     label: string;
@@ -162,6 +175,30 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
     ],
     docs_url: "https://linear.app/docs/mcp",
   },
+  {
+    id: "trigger",
+    name: "Trigger.dev",
+    description: "Tasks, runs, deploys, and Trigger.dev docs search",
+    mcp_transport: "stdio",
+    stdio: {
+      command: "npx",
+      args: ["-y", "trigger.dev@latest", "mcp"],
+      credential_env: "TRIGGER_ACCESS_TOKEN",
+      credential_check: {
+        url: "https://api.trigger.dev/api/v2/whoami",
+      },
+    },
+    auth_type: "bearer",
+    auth_fields: [
+      {
+        key: "credential",
+        label: "Personal Access Token",
+        placeholder: "tr_pat_...",
+        secret: true,
+      },
+    ],
+    docs_url: "https://trigger.dev/docs/mcp-introduction",
+  },
 ];
 
 export function getConnectionPreset(
@@ -169,6 +206,15 @@ export function getConnectionPreset(
 ): ConnectionPreset | null {
   if (!presetId) return null;
   return CONNECTION_PRESETS.find((preset) => preset.id === presetId) ?? null;
+}
+
+/** True when the preset launches a local process instead of calling a URL. */
+export function isStdioConnectionPreset(
+  preset: ConnectionPreset | null | undefined
+): preset is ConnectionPreset & {
+  stdio: NonNullable<ConnectionPreset["stdio"]>;
+} {
+  return preset?.mcp_transport === "stdio" && preset.stdio !== undefined;
 }
 
 export function needsNativeOAuthMigration(
@@ -190,6 +236,11 @@ export function getConnectionAuthorizationPath(input: {
   connectionId: string;
 }) {
   return `/api/connections/oauth?connectionId=${encodeURIComponent(input.connectionId)}`;
+}
+
+/** Shown beside a stdio preset's credential field on every quick-add surface. */
+export function getStdioConnectionPresetDescription() {
+  return "Runs inside your sandboxes and the Mogplex CLI, next to your code. The token is stored encrypted.";
 }
 
 export function getConnectionPresetAuthorizationDescription() {

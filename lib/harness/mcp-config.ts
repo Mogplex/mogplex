@@ -1,4 +1,9 @@
-import { buildMcpTransport } from "@/lib/connections/mcp-transport";
+import {
+  buildMcpStdioLaunch,
+  buildMcpTransport,
+  isStdioConnection,
+  type McpStdioLaunch,
+} from "@/lib/connections/mcp-transport";
 import { getConnectionCredentials } from "@/lib/connections/service";
 import { logConnectionEvent } from "@/lib/connections/logging";
 import { getValidAccessToken } from "@/lib/connections/oauth";
@@ -7,11 +12,13 @@ import { resolveSandboxPath } from "@/lib/repo-settings";
 import type { Connection } from "@/lib/types";
 import type { Sandbox } from "@vercel/sandbox";
 
-export type ClaudeMcpServerEntry = {
-  type: "http" | "sse";
-  url: string;
-  headers: Record<string, string>;
-};
+export type ClaudeMcpServerEntry =
+  | {
+      type: "http" | "sse";
+      url: string;
+      headers: Record<string, string>;
+    }
+  | McpStdioLaunch;
 
 export type ClaudeMcpConfig = {
   mcpServers: Record<string, ClaudeMcpServerEntry>;
@@ -51,6 +58,22 @@ async function resolveConnectionCredential(
       ? await getValidAccessToken(conn)
       : await getConnectionCredentials(conn.id);
   return cred || undefined;
+}
+
+/** Stdio presets launch inside the sandbox; everything else is a remote URL. */
+function buildServerEntry(
+  conn: Connection,
+  credential: string | undefined
+): ClaudeMcpServerEntry | null {
+  if (isStdioConnection(conn)) return buildMcpStdioLaunch(conn, credential);
+
+  const transport = buildMcpTransport(conn, credential);
+  if (!transport.url) return null;
+  return {
+    type: transport.type,
+    url: transport.url,
+    headers: transport.headers,
+  };
 }
 
 export type CredentialResolver = (
@@ -98,7 +121,7 @@ export async function buildClaudeMcpConfig(
     | {
         ok: true;
         conn: Connection;
-        transport: ReturnType<typeof buildMcpTransport>;
+        entry: ClaudeMcpServerEntry | null;
       }
     | { ok: false; conn: Connection; error: unknown };
 
@@ -106,7 +129,7 @@ export async function buildClaudeMcpConfig(
     runnable.map(async (conn): Promise<ResolveOutcome> => {
       try {
         const cred = await resolveCredential(conn);
-        return { ok: true, conn, transport: buildMcpTransport(conn, cred) };
+        return { ok: true, conn, entry: buildServerEntry(conn, cred) };
       } catch (error) {
         return { ok: false, conn, error };
       }
@@ -131,16 +154,12 @@ export async function buildClaudeMcpConfig(
       continue;
     }
 
-    const { conn, transport } = result;
-    if (!transport.url) continue;
+    const { conn, entry } = result;
+    if (!entry) continue;
 
     const key = uniqueKey(sanitizeServerName(conn.name), used, conn.id);
     used.add(key);
-    mcpServers[key] = {
-      type: transport.type,
-      url: transport.url,
-      headers: transport.headers,
-    };
+    mcpServers[key] = entry;
   }
 
   return { mcpServers };

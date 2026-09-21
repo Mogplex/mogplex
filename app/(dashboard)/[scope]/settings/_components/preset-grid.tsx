@@ -6,6 +6,7 @@ import {
   CONNECTION_PRESETS,
   CONNECTION_PRESET_MANUAL_HINT,
   getConnectionPresetAuthorizationDescription,
+  getStdioConnectionPresetDescription,
 } from "@/lib/connections/presets"
 import type { ConnectionPreset } from "@/lib/connections/presets"
 import type { PresetConnectionState } from "@/lib/connections/presentation"
@@ -254,6 +255,11 @@ export function PresetGrid({
                       />
                     ))
                   )}
+                  {preset.mcp_transport === "stdio" ? (
+                    <div className="text-[11px] text-muted-foreground leading-tight">
+                      {getStdioConnectionPresetDescription()}
+                    </div>
+                  ) : null}
                   {status?.type === "error" && (
                     <div className="text-[11px] text-red-400">{status.message}</div>
                   )}

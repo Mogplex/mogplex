@@ -1,4 +1,8 @@
-import { getConnectionPreset, needsNativeOAuthMigration } from "./presets";
+import {
+  getConnectionPreset,
+  isStdioConnectionPreset,
+  needsNativeOAuthMigration,
+} from "./presets";
 import { assertSafeOutboundHttpUrl } from "@/lib/security/outbound-url";
 import type { Connection } from "@/lib/types";
 
@@ -8,7 +12,7 @@ type ConnectionWriteInput = {
   base_url?: string;
   auth_type?: "none" | "api_key" | "bearer" | "basic" | "oauth";
   auth_header?: string;
-  mcp_transport?: "http" | "sse";
+  mcp_transport?: "http" | "sse" | "stdio";
   mcp_url?: string;
   credentials?: string;
   description?: string;
@@ -314,12 +318,16 @@ export function isConnectionMisconfigured(
   >
 ) {
   if (connection.type === "rest_api" && !connection.base_url) return true;
+  const preset = getConnectionPreset(connection.source_preset);
+  if (connection.mcp_transport === "stdio") {
+    // A stdio row is only runnable while its preset still defines the launch.
+    return !isStdioConnectionPreset(preset);
+  }
   if (
     connection.type === "mcp_server" &&
     (!connection.mcp_url || !connection.mcp_transport)
   )
     return true;
-  const preset = getConnectionPreset(connection.source_preset);
   if (needsNativeOAuthMigration(connection)) {
     return true;
   }

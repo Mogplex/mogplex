@@ -8,6 +8,7 @@ import {
   CONNECTION_PRESETS,
   CONNECTION_PRESET_MANUAL_HINT,
   getConnectionPresetAuthorizationDescription,
+  getStdioConnectionPresetDescription,
 } from "@/lib/connections/presets"
 import type { ConnectionPreset } from "@/lib/connections/presets"
 import { getPresetConnectionState } from "@/lib/connections/presentation"
@@ -231,6 +232,11 @@ export function ConnectionsPane() {
         </div>
         {activePreset && (
           <div className="space-y-1.5">
+            {activePreset.mcp_transport === "stdio" ? (
+              <div className="text-[11px] text-muted-foreground">
+                {getStdioConnectionPresetDescription()}
+              </div>
+            ) : null}
             <div className="flex gap-1.5 items-center">
               {activePreset.mcp_url_field ? (
                 <div className="flex-1 space-y-1">

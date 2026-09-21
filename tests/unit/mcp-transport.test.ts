@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildMcpTransport } from "../../lib/connections/mcp-transport";
+import {
+  buildMcpStdioLaunch,
+  buildMcpTransport,
+  isStdioConnection,
+} from "../../lib/connections/mcp-transport";
 import type { Connection } from "../../lib/types";
 
 function makeConnection(overrides: Partial<Connection> = {}): Connection {
@@ -115,4 +119,50 @@ test("buildMcpTransport preserves a user-specific Zapier MCP URL without extra a
 
   assert.equal(transport.url, "https://mcp.zapier.com/custom/server-secret");
   assert.deepEqual(transport.headers, {});
+});
+
+test("should build the stdio launch from the preset when the connection is a Trigger.dev preset", () => {
+  const conn = makeConnection({
+    name: "Trigger.dev",
+    mcp_transport: "stdio",
+    mcp_url: null,
+    source_preset: "trigger",
+  });
+
+  assert.equal(isStdioConnection(conn), true);
+  assert.deepEqual(buildMcpStdioLaunch(conn, "tr_pat_secret"), {
+    type: "stdio",
+    command: "npx",
+    args: ["-y", "trigger.dev@latest", "mcp"],
+    env: { TRIGGER_ACCESS_TOKEN: "tr_pat_secret" },
+  });
+});
+
+test("should refuse to build a stdio launch when the row has no stdio preset behind it", () => {
+  const withoutPreset = makeConnection({
+    mcp_transport: "stdio",
+    mcp_url: null,
+    source_preset: null,
+  });
+  const remotePreset = makeConnection({
+    mcp_transport: "stdio",
+    mcp_url: null,
+    source_preset: "linear",
+  });
+  const remoteConnection = makeConnection({ source_preset: "trigger" });
+
+  assert.equal(buildMcpStdioLaunch(withoutPreset, "token"), null);
+  assert.equal(buildMcpStdioLaunch(remotePreset, "token"), null);
+  assert.equal(buildMcpStdioLaunch(remoteConnection, "token"), null);
+});
+
+test("should throw instead of building a remote transport when the connection is stdio", () => {
+  const conn = makeConnection({
+    name: "Trigger.dev",
+    mcp_transport: "stdio",
+    mcp_url: null,
+    source_preset: "trigger",
+  });
+
+  assert.throws(() => buildMcpTransport(conn, "token"), /runs over stdio/);
 });

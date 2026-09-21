@@ -12,7 +12,7 @@ export type Connection = {
   base_url: string | null;
   auth_type: "none" | "api_key" | "bearer" | "basic" | "oauth" | null;
   auth_header: string | null;
-  mcp_transport: "sse" | "http" | null;
+  mcp_transport: "sse" | "http" | "stdio" | null;
   mcp_url: string | null;
   description: string | null;
   is_enabled: boolean;
