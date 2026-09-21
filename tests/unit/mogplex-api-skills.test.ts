@@ -90,6 +90,35 @@ test("listMogplexApiSkills returns summaries without instructions, ranked by the
   ]);
 });
 
+test("listMogplexApiSkills holds the limit cap for callers that skip validation", async () => {
+  const { listMogplexApiSkills, MOGPLEX_API_SKILLS_MAX_LIMIT } =
+    await import("../../lib/mogplex-api/skills");
+  const many: SkillCatalog = {
+    skills: Array.from(
+      { length: MOGPLEX_API_SKILLS_MAX_LIMIT + 25 },
+      (_, n) => ({
+        ...CATALOG.skills[0],
+        id: `s-${n}`,
+        slug: `skill-${n}`,
+        name: `Skill ${n}`,
+      })
+    ),
+  };
+  const deps = { loadCatalog: async () => many };
+  const over = await listMogplexApiSkills({ userId: "u", limit: 10_000 }, deps);
+  assert.equal(over.skills.length, MOGPLEX_API_SKILLS_MAX_LIMIT);
+  assert.equal(over.total, MOGPLEX_API_SKILLS_MAX_LIMIT + 25);
+  for (const limit of [0, -3, Number.NaN]) {
+    const result = await listMogplexApiSkills({ userId: "u", limit }, deps);
+    assert.ok(result.skills.length > 0, String(limit));
+  }
+  const fractional = await listMogplexApiSkills(
+    { userId: "u", limit: 2.9 },
+    deps
+  );
+  assert.equal(fractional.skills.length, 2);
+});
+
 test("getMogplexApiSkill resolves a slug typed any way and returns null for an unknown one", async () => {
   const { getMogplexApiSkill } = await import("../../lib/mogplex-api/skills");
   const deps = { loadCatalog: async () => CATALOG };

@@ -12,6 +12,9 @@ export const listReposArgsSchema = z
 
 export const listSkillsArgsSchema = z
   .object({
+    // Stricter than the HTTP route, which reads a blank `q` as "list all". A
+    // tool caller that means "list all" omits the field, the same convention
+    // as listReposArgsSchema; an empty string is more likely a mistake.
     query: z.string().trim().min(1).max(500).optional(),
     repoId: z.string().uuid().optional(),
     limit: limitSchema,

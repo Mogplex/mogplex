@@ -43,6 +43,19 @@ function summarise(skill: CatalogSkill): MogplexApiSkillSummary {
   };
 }
 
+/** Holds the cap for every caller, not only the ones that validate first. */
+function clampLimit(limit: number | undefined) {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return MOGPLEX_API_SKILLS_DEFAULT_LIMIT;
+  }
+  return Math.min(MOGPLEX_API_SKILLS_MAX_LIMIT, Math.max(1, Math.floor(limit)));
+}
+
+/**
+ * There is no offset. A skill library is curated by hand and small, `total`
+ * tells a client when the page is not the whole catalog, and `query` is how
+ * to reach the rest.
+ */
 export async function listMogplexApiSkills(
   input: {
     userId: string;
@@ -56,11 +69,7 @@ export async function listMogplexApiSkills(
     userId: input.userId,
     repoId: input.repoId ?? null,
   });
-  const matches = searchSkills(
-    skills,
-    input.query,
-    input.limit ?? MOGPLEX_API_SKILLS_DEFAULT_LIMIT
-  );
+  const matches = searchSkills(skills, input.query, clampLimit(input.limit));
   return { skills: matches.map(summarise), total: skills.length };
 }
 
