@@ -19,18 +19,52 @@ export type SelectableSkill = {
 };
 
 export type SkillSelectionInput = {
-  agent: { id: string; name: string; skills: readonly SelectableSkill[] };
+  /** The roster agent shaping the run, with the skills attached to it. */
+  agent?: {
+    id: string;
+    name: string;
+    skills: readonly SelectableSkill[];
+  } | null;
+  /**
+   * The user's own catalog as it was offered to the agent, and the skills in
+   * it they invoked by name. Offered skills reach the agent as an index; only
+   * invoked ones are delivered in full.
+   */
+  catalog?: {
+    skills: readonly SelectableSkill[];
+    invokedIds: readonly string[];
+  } | null;
   /** The task the agent was asked to do. */
   request: string;
-  /** How the skills reach the agent today: as files, or inline in the prompt. */
+  /** How skills reach the agent today: as files, or inline in the prompt. */
   delivery: "files" | "inline";
   scope: DecisionScope;
 };
 
+type Candidate = { skill: SelectableSkill; source: "agent" | "catalog" };
+
+/** Attached skills first, then catalog skills the agent does not already carry. */
+function collectCandidates(input: SkillSelectionInput): Candidate[] {
+  const attached = input.agent?.skills ?? [];
+  const seen = new Set(attached.map((skill) => skill.id));
+  const candidates: Candidate[] = attached.map((skill) => ({
+    skill,
+    source: "agent",
+  }));
+  for (const skill of input.catalog?.skills ?? []) {
+    if (seen.has(skill.id)) continue;
+    seen.add(skill.id);
+    candidates.push({ skill, source: "catalog" });
+  }
+  return candidates;
+}
+
 /**
- * Record which of an agent's skills the request needs. Every linked skill is
- * still loaded: this only observes, so trimming can be judged on evidence
- * first. Never rejects, and an agent without skills asks nothing.
+ * Record which of the skills in play the request needs. Nothing changes: an
+ * agent's attached skills are all still loaded, and the user's catalog is
+ * still offered as an index. This only observes, so loading a skill
+ * automatically can be judged on evidence first. Never rejects, and a run
+ * with no skills in play asks nothing.
  */
 export function observeSkillSelection(
   input: SkillSelectionInput,
@@ -38,8 +72,14 @@ export function observeSkillSelection(
 ): Promise<void> {
   return observeQuietly("skill selection", async () => {
     const request = input.request.trim();
-    if (!request || input.agent.skills.length === 0) return;
-    const { labelled, omitted } = labelCandidates(input.agent.skills);
+    const candidates = collectCandidates(input);
+    if (!request || candidates.length === 0) return;
+    const invoked = new Set(input.catalog?.invokedIds);
+    // Delivered in full: everything attached, plus what the user invoked.
+    const loaded = candidates.filter(
+      ({ skill, source }) => source === "agent" || invoked.has(skill.id)
+    );
+    const { labelled, omitted } = labelCandidates(candidates);
     await decideFn(
       "skill_selection",
       {
@@ -48,12 +88,15 @@ export function observeSkillSelection(
           labelled.map(({ key, item }) => [
             key,
             {
-              name: item.name,
+              name: item.skill.name,
               description: clipText(
-                item.description ?? "",
+                item.skill.description ?? "",
                 SKILL_DESCRIPTION_MAX_CHARS
               ),
-              excerpt: clipText(item.content.trim(), SKILL_EXCERPT_MAX_CHARS),
+              excerpt: clipText(
+                item.skill.content.trim(),
+                SKILL_EXCERPT_MAX_CHARS
+              ),
             },
           ])
         ),
@@ -62,20 +105,25 @@ export function observeSkillSelection(
       {
         candidates: labelled.map(({ key }) => key),
         baseline: {
-          loaded: input.agent.skills.length,
+          loaded: loaded.length,
+          offered: candidates.length,
           delivery: input.delivery,
-          contentChars: input.agent.skills.reduce(
-            (sum, skill) => sum + skill.content.length,
+          contentChars: loaded.reduce(
+            (sum, { skill }) => sum + skill.content.length,
             0
           ),
         },
         metadata: {
-          agent_id: input.agent.id,
-          agent_name: input.agent.name,
+          agent_id: input.agent?.id ?? null,
+          agent_name: input.agent?.name ?? null,
           omitted,
           candidates: Object.fromEntries(
-            labelled.map(({ key, item }) => [key, item.id])
+            labelled.map(({ key, item }) => [key, item.skill.id])
           ),
+          sources: Object.fromEntries(
+            labelled.map(({ key, item }) => [key, item.source])
+          ),
+          invoked: [...invoked],
         },
       }
     );

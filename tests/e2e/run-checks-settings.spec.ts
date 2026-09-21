@@ -36,9 +36,7 @@ test("Account settings show Run checks on, say what is sent, and save a change",
   await expect(toggle).toBeChecked();
   // The copy is the customer's only account of what leaves their workspace.
   await expect(
-    page.getByText(
-      /your request with the memories and\s+skill summaries loaded for it are sent/
-    )
+    page.getByText(/summaries of the skills available to it are sent/)
   ).toBeVisible();
   await expect(page.getByText(/When it is off, nothing is sent/)).toBeVisible();
 

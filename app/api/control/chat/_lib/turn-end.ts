@@ -5,8 +5,10 @@ import {
 } from "@/lib/agents/memory-promotion-runner";
 import type { ControlMemoryContext } from "@/lib/agents/control-memory-context";
 import { observeMemoryRelevance } from "@/lib/decisions/memory-relevance";
+import { observeSkillSelection } from "@/lib/decisions/skills";
 import { createTurnDecisionObserver } from "@/lib/decisions/turn-observer";
 import type { DecisionStep } from "@/lib/decisions/turn";
+import type { ConversationSkills } from "@/lib/skill-catalog/chat";
 
 type TurnSteps = PromotionTurnRecord["steps"];
 
@@ -24,6 +26,7 @@ export function createControlTurnTasks(input: {
   userText: string;
   /** Injectable for tests; production uses the decision layer. */
   observeMemories?: typeof observeMemoryRelevance;
+  observeSkills?: typeof observeSkillSelection;
 }) {
   const scope = {
     surface: "control",
@@ -35,6 +38,7 @@ export function createControlTurnTasks(input: {
   };
   const observer = createTurnDecisionObserver(scope);
   let memoryCheck: Promise<void> = Promise.resolve();
+  let skillCheck: Promise<void> = Promise.resolve();
 
   return {
     /**
@@ -48,6 +52,22 @@ export function createControlTurnTasks(input: {
         groups: selected,
         scope,
       });
+    },
+    /** The same arrangement for the operator's skills: beside, then awaited. */
+    onSkillsResolved(skills: ConversationSkills) {
+      const earlier = skillCheck;
+      const check = (input.observeSkills ?? observeSkillSelection)({
+        catalog: {
+          skills: skills.available,
+          invokedIds: skills.invoked.map((skill) => skill.id),
+        },
+        request: input.userText,
+        delivery: "inline",
+        scope,
+      });
+      // One stream per turn reports once today. Accumulating keeps every
+      // check awaited if a retried stream ever reports again.
+      skillCheck = Promise.all([earlier, check]).then(() => {});
     },
     onStep(steps: TurnSteps) {
       observer.onStep(steps as unknown as DecisionStep[]);
@@ -77,6 +97,7 @@ export function createControlTurnTasks(input: {
       await Promise.all([
         observer.onEnd(end.steps as unknown as DecisionStep[]),
         memoryCheck,
+        skillCheck,
       ]);
     },
   };

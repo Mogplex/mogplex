@@ -235,7 +235,7 @@ test("POST /api/sandbox/[id]/harness records which skills the task needed withou
   assert.equal(checks.length, 1);
   assert.equal(checks[0]?.request, "Review the router.");
   assert.equal(checks[0]?.delivery, "files");
-  assert.equal(checks[0]?.agent.id, "agent-1");
+  assert.equal(checks[0]?.agent?.id, "agent-1");
   assert.equal(checks[0]?.scope.surface, "harness");
   assert.equal(checks[0]?.scope.userId, "user-123");
   assert.equal(checks[0]?.scope.teamId, "team-9");

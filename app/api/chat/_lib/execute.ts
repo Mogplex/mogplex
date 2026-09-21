@@ -22,6 +22,7 @@ import {
   createToolCallFinishHandler,
 } from "./events";
 import { createChatFinalizationHooks } from "./lifecycle";
+import { observeChatSkills } from "./skill-observation";
 
 export async function executeChatRequest(input: {
   req: Request;
@@ -93,6 +94,7 @@ export async function executeChatRequest(input: {
       abortSignal: input.req.signal,
     });
 
+    const latestUserText = extractLatestUserText(input.body.messages);
     const { result } = await createChatModelStream({
       context: {
         userId: input.userId,
@@ -108,7 +110,7 @@ export async function executeChatRequest(input: {
         enableTools: input.body.enableTools,
         teamId,
         aiCallId: activeCall.id,
-        latestUserText: extractLatestUserText(input.body.messages),
+        latestUserText,
       },
       resolvedModel: input.resolvedModel,
       uiMessages: modelMessages as Parameters<
@@ -117,6 +119,19 @@ export async function executeChatRequest(input: {
       systemSuffix,
       abortSignal: input.req.signal,
       hooks,
+      onSkillsResolved: (skills) =>
+        observeChatSkills({
+          skills,
+          request: latestUserText,
+          scope: {
+            surface: "chat",
+            userId: input.userId,
+            teamId: teamId ?? null,
+            repoId: scope.repoId ?? null,
+            aiCallId: activeCall.id,
+            conversationId: scope.conversationId ?? null,
+          },
+        }),
     });
 
     return {

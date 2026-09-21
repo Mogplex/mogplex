@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import type { Tool } from "ai";
+import type { ConversationSkills } from "@/lib/skill-catalog/chat";
 import { catalogOf, skillRow } from "@/lib/skill-catalog/test-fixtures";
 import {
   composeChatSystemPrompt,
@@ -27,6 +28,7 @@ async function systemPromptFor(input: {
   enableTools?: boolean;
   systemSuffix?: string;
   attachedSkillIds?: string[];
+  onSkillsResolved?: (skills: ConversationSkills) => void;
 }) {
   let seen = "";
   const model = new MockLanguageModelV4({
@@ -83,6 +85,7 @@ async function systemPromptFor(input: {
     uiMessages: input.texts.map(userMessage),
     systemSuffix: input.systemSuffix,
     attachedSkillIds: input.attachedSkillIds,
+    onSkillsResolved: input.onSkillsResolved,
     deps,
   });
   await result.consumeStream();
@@ -129,6 +132,31 @@ describe("createChatModelStream skills", () => {
     expect(system).not.toContain("1. Run the tests.");
     expect(system).not.toContain("Invoked skills");
     expect(system).toContain("$release-notes: Release notes");
+  });
+
+  it("should report the skills in play, minus what the caller already delivers", async () => {
+    const seen: ConversationSkills[] = [];
+    await systemPromptFor({
+      texts: ["/deploy-checklist and $release-notes"],
+      tools: loadSkillTool,
+      attachedSkillIds: [skills[1].id],
+      onSkillsResolved: (resolved) => seen.push(resolved),
+    });
+    expect(seen).toEqual([{ invoked: [skills[0]], available: [skills[0]] }]);
+  });
+
+  it("should still answer when the skills observer throws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { system } = await systemPromptFor({
+      texts: ["/deploy-checklist"],
+      tools: loadSkillTool,
+      onSkillsResolved: () => {
+        throw new Error("observer broke");
+      },
+    });
+    expect(system).toContain("1. Run the tests.");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("should leave the index out when tools are switched off", async () => {

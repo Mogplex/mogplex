@@ -49,7 +49,11 @@ export const SKILL_NEEDED_THRESHOLD = 0.5;
 
 export const skillSelection: DecisionDefinition = {
   id: "skill_selection",
-  version: "2026-09-20.1",
+  // 2026-09-21.1: the wording is unchanged, but the candidates now include
+  // the user's catalog, offered as one-line index entries, beside an agent's
+  // fully loaded skills. Rows are only comparable within a version, and
+  // `metadata.sources` slices a row by where each candidate came from.
+  version: "2026-09-21.1",
   // Every linked skill is loaded today. This records which ones the request
   // needed, so trimming can be judged on evidence before it changes a prompt.
   defaultMode: "shadow",

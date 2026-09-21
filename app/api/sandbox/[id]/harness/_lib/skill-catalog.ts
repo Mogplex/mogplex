@@ -6,6 +6,7 @@ import type { HarnessId } from "@/lib/harness/config";
 import { resolveInvokedSkills } from "@/lib/skill-catalog/invocations";
 import { renderSkillCatalog } from "@/lib/skill-catalog/render";
 import type { SandboxSetupContext } from "./setup";
+import type { HarnessSkillCatalog } from "./skill-observation";
 import type { SandboxHarnessPostDeps } from "./types";
 
 /**
@@ -33,13 +34,14 @@ export async function setupSkillCatalog(
     prompt: string;
     agentRuntime: AgentRuntime | null;
   }
-): Promise<string> {
+): Promise<{ prompt: string; catalog: HarnessSkillCatalog | null }> {
+  const unchanged = { prompt: input.prompt, catalog: null };
   try {
     const { skills } = await deps.loadSkillCatalog({
       userId: ctx.userId,
       repoId: ctx.repoId,
     });
-    if (skills.length === 0) return input.prompt;
+    if (skills.length === 0) return unchanged;
     const invoked = resolveInvokedSkills(input.prompt, skills, {
       reservedSlashNames: new Set(
         buildHarnessSlashCommands(input.harnessId).map(
@@ -51,13 +53,14 @@ export async function setupSkillCatalog(
     const attached = new Set(
       input.agentRuntime?.skills.map((skill) => skill.id)
     );
+    const available = skills.filter((skill) => !attached.has(skill.id));
     const rendered = renderSkillCatalog({
       invoked,
-      available: skills.filter((skill) => !attached.has(skill.id)),
+      available,
       delivery: "files",
       loadHint: "files",
     });
-    if (!rendered.prompt) return input.prompt;
+    if (!rendered.prompt) return unchanged;
     void deps.recordSkillUse(ctx.userId, invoked);
     const written = await materializeAgentRuntimeFiles({
       sandbox,
@@ -81,12 +84,15 @@ export async function setupSkillCatalog(
         files: written,
       },
     });
-    return `${rendered.prompt}\n\n${input.prompt.trim()}`;
+    return {
+      prompt: `${rendered.prompt}\n\n${input.prompt.trim()}`,
+      catalog: { skills: available, invokedIds: invoked.map((s) => s.id) },
+    };
   } catch (error) {
     console.warn(
       "[harness] skill catalog skipped:",
       error instanceof Error ? error.message : error
     );
-    return input.prompt;
+    return unchanged;
   }
 }

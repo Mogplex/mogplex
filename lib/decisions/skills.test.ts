@@ -110,6 +110,65 @@ describe("observeSkillSelection", () => {
     expect(options?.baseline).toMatchObject({ loaded: CANDIDATE_LIMIT + 3 });
   });
 
+  it("should judge the user's catalog beside the agent's skills, once each", async () => {
+    const { calls, decideFn } = recorder();
+    await observeSkillSelection(
+      {
+        agent: { id: "agent-1", name: "Reviewer", skills: [skill(1)] },
+        catalog: {
+          skills: [skill(1), skill(2), skill(3, "abc")],
+          invokedIds: ["skill-3"],
+        },
+        request: "Ship it with $skill-3",
+        delivery: "files",
+        scope,
+      },
+      decideFn
+    );
+    const options = calls[0]?.[3];
+    expect(options?.candidates).toEqual(["c01", "c02", "c03"]);
+    expect(options?.metadata).toMatchObject({
+      candidates: { c01: "skill-1", c02: "skill-2", c03: "skill-3" },
+      sources: { c01: "agent", c02: "catalog", c03: "catalog" },
+      invoked: ["skill-3"],
+    });
+    // Attached and invoked skills are delivered in full; the rest is an index.
+    expect(options?.baseline).toMatchObject({
+      loaded: 2,
+      offered: 3,
+      contentChars: skill(1).content.length + 3,
+    });
+  });
+
+  it("should observe a run that has a catalog and no agent", async () => {
+    const { calls, decideFn } = recorder();
+    await observeSkillSelection(
+      {
+        catalog: { skills: [skill(1), skill(2)], invokedIds: [] },
+        request: "Fix the header",
+        delivery: "inline",
+        scope,
+      },
+      decideFn
+    );
+    expect(calls[0]?.[3]).toMatchObject({
+      candidates: ["c01", "c02"],
+      baseline: { loaded: 0, offered: 2, contentChars: 0 },
+      metadata: { agent_id: null, agent_name: null, invoked: [] },
+    });
+
+    await observeSkillSelection(
+      {
+        catalog: { skills: [], invokedIds: [] },
+        request: "Fix the header",
+        delivery: "inline",
+        scope,
+      },
+      decideFn
+    );
+    expect(calls).toHaveLength(1);
+  });
+
   it("should never reject when the check itself throws", async () => {
     await expect(
       observeSkillSelection(

@@ -37,6 +37,8 @@ export async function loadControlKnowledgeContext(
     latestUserText: string;
     messages: readonly ConversationMessage[];
     onMemoriesSelected?: MemoryInput["onSelected"];
+    /** Told which skills this turn has in play, so they can be observed. */
+    onSkillsResolved?: (skills: ConversationSkills) => void;
   },
   deps: ControlKnowledgeDeps = defaultDeps
 ): Promise<ControlKnowledgeContext> {
@@ -53,5 +55,10 @@ export async function loadControlKnowledgeContext(
       userTexts: readUserTexts(input.messages),
     }),
   ]);
+  try {
+    input.onSkillsResolved?.(skills);
+  } catch {
+    // An observer must never cost the operator their turn.
+  }
   return { memoryContext, skills };
 }

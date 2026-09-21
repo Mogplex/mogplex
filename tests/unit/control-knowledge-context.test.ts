@@ -128,3 +128,36 @@ test("the Control prompt context carries the loaded skills to the system prompt"
   assert.equal(context.memoryContext, "## Facts");
   assert.deepEqual(context.skills, { invoked: [deploy], available: [deploy] });
 });
+
+test("Control reports the resolved skills to its observer, and an observer that throws costs nothing", async () => {
+  const knowledgeModule = await importKnowledge();
+  const seen: unknown[] = [];
+  const deps: ControlKnowledgeDeps = {
+    loadMemoryContext: async () => null,
+    resolveSkills: async () => ({ invoked: [deploy], available: [deploy] }),
+  };
+  const messages = [userMessage("/deploy-checklist staging")];
+  const base = {
+    userId: "user-1",
+    repoId: null,
+    latestUserText: "/deploy-checklist staging",
+    messages,
+  };
+
+  await knowledgeModule.loadControlKnowledgeContext(
+    { ...base, onSkillsResolved: (skills) => seen.push(skills) },
+    deps
+  );
+  assert.deepEqual(seen, [{ invoked: [deploy], available: [deploy] }]);
+
+  const survived = await knowledgeModule.loadControlKnowledgeContext(
+    {
+      ...base,
+      onSkillsResolved: () => {
+        throw new Error("observer broke");
+      },
+    },
+    deps
+  );
+  assert.deepEqual(survived.skills.invoked, [deploy]);
+});
