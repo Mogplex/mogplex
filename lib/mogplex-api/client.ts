@@ -12,6 +12,7 @@ import type { MogplexApiModel } from "./models";
 import type { PresentedAiCallEvent } from "./run-control";
 import type { MogplexApiRepo } from "./repos";
 import type { MogplexApiSandbox, MogplexApiSandboxLogs } from "./sandboxes";
+import type { MogplexApiSkill, MogplexApiSkillSummary } from "./skills";
 import type { MogplexApiRunDetail, StartMogplexApiRunRequest } from "./runs";
 import type { FlowRunDetail, FlowRunRecord, FlowGraph } from "@/lib/types";
 import type { FlowConfigurationValidation } from "@/lib/flows/server-validation";
@@ -251,6 +252,26 @@ export class MogplexApiClient {
   listAgents() {
     return this.request<{ agents: MogplexApiAgent[] }>(
       "/api/v1/mogplex/agents"
+    );
+  }
+
+  listSkills(
+    input: {
+      query?: string | null;
+      repoId?: string | null;
+      limit?: number;
+    } = {}
+  ) {
+    return this.request<{ skills: MogplexApiSkillSummary[]; total: number }>(
+      "/api/v1/mogplex/skills",
+      { query: { q: input.query, repoId: input.repoId, limit: input.limit } }
+    );
+  }
+
+  getSkill(input: { slug: string; repoId?: string | null }) {
+    return this.request<{ skill: MogplexApiSkill }>(
+      `/api/v1/mogplex/skills/${encodeURIComponent(input.slug)}`,
+      { query: { repoId: input.repoId } }
     );
   }
 
