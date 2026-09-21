@@ -17,6 +17,7 @@ function createSentryConnection(
     mcp_url: "https://mcp.sentry.dev/mcp",
     description: "Connection",
     is_enabled: true,
+    approval_mode: "auto",
     health_status: "unknown",
     scope: "global",
     repo_id: null,

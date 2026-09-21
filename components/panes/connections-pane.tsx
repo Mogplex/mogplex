@@ -121,6 +121,7 @@ export function ConnectionsPane() {
     addPresetConnection,
     toggleExclude,
     toggleEnabled,
+    toggleApprovalMode,
     deleteConnection,
     testConnection,
   } = useConnectionActions({
@@ -311,6 +312,7 @@ export function ConnectionsPane() {
                 deletingId={deletingId}
                 testingId={testingId}
                 onToggleEnabled={() => void toggleEnabled(conn)}
+                onToggleApproval={() => void toggleApprovalMode(conn)}
                 onToggleExclude={() => void toggleExclude(conn)}
                 onDelete={() => void deleteConnection(conn.id)}
                 onTest={() => void testConnection(conn)}
@@ -335,6 +337,7 @@ export function ConnectionsPane() {
                 deletingId={deletingId}
                 testingId={testingId}
                 onToggleEnabled={() => void toggleEnabled(conn)}
+                onToggleApproval={() => void toggleApprovalMode(conn)}
                 onToggleExclude={() => {}}
                 onDelete={() => void deleteConnection(conn.id)}
                 onTest={() => void testConnection(conn)}

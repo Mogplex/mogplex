@@ -4,6 +4,12 @@
 
 import type { ConnectionHealthStatus } from "@/lib/connections/health-status";
 
+/**
+ * `auto`: the connection's tools run without asking. `ask`: each call needs the
+ * user's approval, and a surface that cannot ask withholds the tools.
+ */
+export type ConnectionApprovalMode = "auto" | "ask";
+
 export type Connection = {
   id: string;
   user_id: string;
@@ -16,6 +22,7 @@ export type Connection = {
   mcp_url: string | null;
   description: string | null;
   is_enabled: boolean;
+  approval_mode: ConnectionApprovalMode;
   health_status: ConnectionHealthStatus;
   scope: "global" | "project";
   repo_id: string | null;

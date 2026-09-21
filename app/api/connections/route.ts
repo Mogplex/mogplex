@@ -15,6 +15,7 @@ import { isConnectionsEncryptionConfigError } from "@/lib/connections/encryption
 import {
   ConnectionValidationError,
   normalizeConnectionCreateInput,
+  normalizeConnectionSettingsPatch,
 } from "@/lib/connections/validation";
 
 async function verifyConnectionOwnership(connectionId: string, userId: string) {
@@ -158,21 +159,19 @@ export async function PATCH(req: Request) {
   if (userId instanceof Response) return userId;
 
   try {
-    const { id, is_enabled } = await req.json();
+    const body = await req.json();
+    const id = body?.id;
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
     if (!(await verifyConnectionOwnership(id, userId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    if (typeof is_enabled !== "boolean") {
-      return NextResponse.json(
-        { error: "is_enabled must be a boolean" },
-        { status: 400 }
-      );
-    }
-    await updateConnection(id, { is_enabled });
+    await updateConnection(id, normalizeConnectionSettingsPatch(body));
     return NextResponse.json({ ok: true });
   } catch (e) {
+    if (e instanceof ConnectionValidationError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     if (isConnectionsEncryptionConfigError(e)) {
       return NextResponse.json(
         {

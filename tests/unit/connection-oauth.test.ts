@@ -18,6 +18,7 @@ function createConnection(overrides: Partial<Connection> = {}): Connection {
     mcp_url: "https://mcp.notion.com/mcp",
     description: "Connection",
     is_enabled: true,
+    approval_mode: "auto",
     health_status: "unknown",
     scope: "global",
     repo_id: null,

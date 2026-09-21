@@ -1,6 +1,13 @@
 "use client"
 
 import { useCallback, useState } from "react"
+import {
+  APPROVAL_ASK_BADGE,
+  APPROVAL_ASK_HINT,
+  asksBeforeRunning,
+  getApprovalModeActionLabel,
+  nextApprovalMode,
+} from "@/lib/connections/approval"
 import type { Connection } from "@/lib/types"
 import {
   getConnectionPreset,
@@ -37,13 +44,16 @@ export function ConnectionsTable({
 }: ConnectionsTableProps) {
   const [testing, setTesting] = useState<string | null>(null)
 
-  const toggleConnection = useCallback(async (conn: Connection) => {
+  const updateConnectionSetting = useCallback(async (
+    conn: Connection,
+    patch: Pick<Connection, "is_enabled"> | Pick<Connection, "approval_mode">
+  ) => {
     setConnectionError(null)
     try {
       const res = await fetch("/api/connections", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: conn.id, is_enabled: !conn.is_enabled }),
+        body: JSON.stringify({ id: conn.id, ...patch }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -134,6 +144,14 @@ export function ConnectionsTable({
                       disabled
                     </span>
                   )}
+                  {asksBeforeRunning(c) && (
+                    <span
+                      title={APPROVAL_ASK_HINT}
+                      className="font-mono text-[11px] px-1.5 py-px rounded border text-accent-blue border-accent-blue/20 bg-accent-blue/[0.06]"
+                    >
+                      {APPROVAL_ASK_BADGE}
+                    </span>
+                  )}
                 </div>
               </td>
               <td className="px-4 py-2 text-muted-foreground">{c.type === "rest_api" ? "REST API" : "MCP Server"}</td>
@@ -155,7 +173,7 @@ export function ConnectionsTable({
                   <DropdownMenuTrigger asChild>
                     <button aria-label="Connection actions" className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-secondary text-sm">···</button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuContent align="end" className="w-52">
                     {displayState.oauthActionLabel && (
                       <>
                         <DropdownMenuItem onSelect={() => initiateOAuth(c)}>
@@ -167,8 +185,14 @@ export function ConnectionsTable({
                     <DropdownMenuItem onSelect={() => void testConnection(c.id)} disabled={testing === c.id}>
                       {testing === c.id ? "Testing..." : "Test Connection"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => void toggleConnection(c)}>
+                    <DropdownMenuItem onSelect={() => void updateConnectionSetting(c, { is_enabled: !c.is_enabled })}>
                       {c.is_enabled ? "Disable" : "Enable"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      title={APPROVAL_ASK_HINT}
+                      onSelect={() => void updateConnectionSetting(c, { approval_mode: nextApprovalMode(c.approval_mode) })}
+                    >
+                      {getApprovalModeActionLabel(c.approval_mode)}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onSelect={() => void removeConnection(c.id)}>

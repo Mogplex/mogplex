@@ -4,7 +4,7 @@ import {
   needsNativeOAuthMigration,
 } from "./presets";
 import { assertSafeOutboundHttpUrl } from "@/lib/security/outbound-url";
-import type { Connection } from "@/lib/types";
+import type { Connection, ConnectionApprovalMode } from "@/lib/types";
 
 type ConnectionWriteInput = {
   name: string;
@@ -300,6 +300,43 @@ export function normalizeConnectionCreateInput(
     scope,
     repo_id: repoId,
   };
+}
+
+export type ConnectionSettingsPatch = {
+  is_enabled?: boolean;
+  approval_mode?: ConnectionApprovalMode;
+};
+
+/** The two settings a saved connection's owner can change from a row. */
+export function normalizeConnectionSettingsPatch(
+  input: unknown
+): ConnectionSettingsPatch {
+  const raw =
+    typeof input === "object" && input !== null
+      ? (input as Record<string, unknown>)
+      : {};
+  const patch: ConnectionSettingsPatch = {};
+
+  if (raw.is_enabled !== undefined) {
+    if (typeof raw.is_enabled !== "boolean") {
+      throw new ConnectionValidationError("is_enabled must be a boolean");
+    }
+    patch.is_enabled = raw.is_enabled;
+  }
+
+  if (raw.approval_mode !== undefined) {
+    if (raw.approval_mode !== "auto" && raw.approval_mode !== "ask") {
+      throw new ConnectionValidationError("approval_mode must be auto or ask");
+    }
+    patch.approval_mode = raw.approval_mode;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new ConnectionValidationError(
+      "Send is_enabled or approval_mode to update a connection"
+    );
+  }
+  return patch;
 }
 
 export function isConnectionMisconfigured(

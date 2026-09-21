@@ -1,10 +1,14 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { encrypt, decrypt } from "./encryption";
 import { MAX_MCP_CONNECTIONS } from "./constants";
-import type { Connection, ConnectionOverride } from "@/lib/types";
+import type {
+  Connection,
+  ConnectionApprovalMode,
+  ConnectionOverride,
+} from "@/lib/types";
 
 const CONNECTION_COLUMNS =
-  "id, user_id, name, type, base_url, auth_type, auth_header, mcp_transport, mcp_url, description, is_enabled, health_status, scope, repo_id, oauth_client_id, oauth_authorize_url, oauth_token_url, oauth_scopes, oauth_authorized_at, oauth_token_expires_at, source_preset, last_tested_at, last_test_error, last_test_http_status, last_test_tool_count, created_at, updated_at";
+  "id, user_id, name, type, base_url, auth_type, auth_header, mcp_transport, mcp_url, description, is_enabled, approval_mode, health_status, scope, repo_id, oauth_client_id, oauth_authorize_url, oauth_token_url, oauth_scopes, oauth_authorized_at, oauth_token_expires_at, source_preset, last_tested_at, last_test_error, last_test_http_status, last_test_tool_count, created_at, updated_at";
 
 async function fetchRepoConnectionData(userId: string, repoId: string) {
   const [globalResult, projectResult, overrideResult] = await Promise.all([
@@ -286,6 +290,7 @@ export async function updateConnection(
     credentials?: string;
     description?: string;
     is_enabled?: boolean;
+    approval_mode?: ConnectionApprovalMode;
     scope?: "global" | "project";
     repo_id?: string;
     oauth_client_id?: string | null;

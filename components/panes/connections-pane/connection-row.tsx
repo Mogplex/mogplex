@@ -11,6 +11,11 @@ import {
   getConnectionStatusLabel,
   getConnectionStatusTone,
 } from "@/lib/connections/status"
+import {
+  APPROVAL_ASK_HINT,
+  asksBeforeRunning,
+  getApprovalModeActionLabel,
+} from "@/lib/connections/approval"
 import type { Connection } from "@/lib/types"
 
 const TYPE_BADGES: Record<string, { label: string; color: string }> = {
@@ -23,7 +28,7 @@ const SCOPE_BADGES: Record<string, { label: string; color: string }> = {
   project: { label: "project", color: "text-amber-400 border-amber-400/20 bg-amber-400/[0.06]" },
 }
 
-export function ConnectionRow({ conn, isExcluded, hasRepo, togglingId, deletingId, testingId, onToggleEnabled, onToggleExclude, onDelete, onTest, onOAuth }: {
+export function ConnectionRow({ conn, isExcluded, hasRepo, togglingId, deletingId, testingId, onToggleEnabled, onToggleApproval, onToggleExclude, onDelete, onTest, onOAuth }: {
   conn: Connection
   isExcluded: boolean
   hasRepo: boolean
@@ -31,6 +36,7 @@ export function ConnectionRow({ conn, isExcluded, hasRepo, togglingId, deletingI
   deletingId: string | null
   testingId: string | null
   onToggleEnabled: () => void
+  onToggleApproval: () => void
   onToggleExclude: () => void
   onDelete: () => void
   onTest: () => void
@@ -129,6 +135,20 @@ export function ConnectionRow({ conn, isExcluded, hasRepo, togglingId, deletingI
           {isExcluded ? "excluded" : "exclude"}
         </button>
       )}
+
+      <button
+        onClick={onToggleApproval}
+        disabled={togglingId === conn.id}
+        aria-label={getApprovalModeActionLabel(conn.approval_mode)}
+        className={`text-[9px] px-1 py-px rounded border shrink-0 ${
+          asksBeforeRunning(conn)
+            ? "text-accent-blue border-accent-blue/20 hover:bg-accent-blue/10"
+            : "text-muted-foreground border-border-dim hover:bg-muted"
+        }`}
+        title={`${getApprovalModeActionLabel(conn.approval_mode)}. ${APPROVAL_ASK_HINT}`}
+      >
+        {asksBeforeRunning(conn) ? "asks" : "auto"}
+      </button>
 
       <button
         onClick={onTest}

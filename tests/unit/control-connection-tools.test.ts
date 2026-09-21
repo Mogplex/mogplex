@@ -39,6 +39,8 @@ function makeDeps(
       mcpCleanups: [],
       mcpToolNames: new Set(["trigger_dev_list_runs"]),
       restToolNames: new Set<string>(),
+      askToolNames: new Set<string>(),
+      withheldConnections: [],
     }),
     timeoutMs: 1000,
     ...overrides,
@@ -153,6 +155,8 @@ test("should give up on a slow connection and close what it opens afterwards", a
           ],
           mcpToolNames: new Set(["slow_tool"]),
           restToolNames: new Set<string>(),
+          askToolNames: new Set<string>(),
+          withheldConnections: [],
         };
       },
     })
@@ -185,6 +189,8 @@ test("should close the MCP clients a loaded turn holds when it cleans up", async
         ],
         mcpToolNames: new Set(["linear_list_issues"]),
         restToolNames: new Set<string>(),
+        askToolNames: new Set<string>(),
+        withheldConnections: [],
       }),
     })
   );
@@ -204,6 +210,7 @@ test("should expose connection tools to the coordinator and describe them in its
     connectionTools: {
       tools: { trigger_dev_list_runs: fakeTool("runs") },
       connections: [triggerConnection],
+      askToolNames: new Set<string>(),
       cleanup: async () => undefined,
     },
     enableTools: true,
@@ -223,6 +230,7 @@ test("should keep Control's own tool when a connection tool has the same name", 
     connectionTools: {
       tools: { memory_write: fakeTool("from a connection") },
       connections: [triggerConnection],
+      askToolNames: new Set<string>(),
       cleanup: async () => undefined,
     },
     enableTools: true,
@@ -243,6 +251,7 @@ test("should offer no tools and no connections block when the turn has tools dis
     connectionTools: {
       tools: { trigger_dev_list_runs: fakeTool("runs") },
       connections: [triggerConnection],
+      askToolNames: new Set<string>(),
       cleanup: async () => undefined,
     },
     enableTools: false,
@@ -250,4 +259,52 @@ test("should offer no tools and no connections block when the turn has tools dis
 
   assert.equal(tools, undefined);
   assert.doesNotMatch(systemPrompt, /<connections>/);
+});
+
+test("should tell the connection builder that Control can ask for approval", async () => {
+  const contexts: Array<{ canAskApproval: boolean }> = [];
+
+  const loaded = await loadControlConnectionTools(
+    solo,
+    makeDeps({
+      buildTools: async (_connections, ctx) => {
+        contexts.push({ canAskApproval: ctx.canAskApproval });
+        return {
+          dynamicTools: { trigger_dev_trigger_task: fakeTool("triggered") },
+          mcpCleanups: [],
+          mcpToolNames: new Set(["trigger_dev_trigger_task"]),
+          restToolNames: new Set<string>(),
+          askToolNames: new Set(["trigger_dev_trigger_task"]),
+          withheldConnections: [],
+        };
+      },
+    })
+  );
+
+  assert.deepEqual(contexts, [{ canAskApproval: true }]);
+  assert.deepEqual([...loaded.askToolNames], ["trigger_dev_trigger_task"]);
+});
+
+test("should put an approval gate on an ask connection's tools and leave the rest ungated", () => {
+  const { tools, systemPrompt } = buildControlTurnTools({
+    toolContext,
+    promptContext,
+    connectionTools: {
+      tools: {
+        trigger_dev_trigger_task: fakeTool("triggered"),
+        linear_list_issues: fakeTool("issues"),
+      },
+      connections: [{ ...triggerConnection, approval_mode: "ask" }],
+      askToolNames: new Set(["trigger_dev_trigger_task"]),
+      cleanup: async () => undefined,
+    },
+    enableTools: true,
+  });
+
+  const gated = tools?.trigger_dev_trigger_task as { needsApproval?: unknown };
+  const open = tools?.linear_list_issues as { needsApproval?: unknown };
+  assert.equal(typeof gated.needsApproval, "function");
+  assert.equal(open.needsApproval, undefined);
+  assert.match(systemPrompt, /pauses for the user's approval/);
+  assert.doesNotMatch(systemPrompt, /not loaded/);
 });
