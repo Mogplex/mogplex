@@ -253,6 +253,30 @@ describe("run specs with a skills suffix", () => {
     );
   });
 
+  it("should carry the agent's attachments into a CLI harness PR-fix prompt", () => {
+    const prompt = buildAutomationHarnessPrompt({
+      context: job({ agent: { model: "m", system_prompt: "Fix carefully." } }),
+      harnessId: "codex",
+      review: {
+        hasIssues: true,
+        summary: "Null guard missing",
+        commentBody: null,
+        affectedFiles: [],
+        findings: [],
+      },
+      pullRequest: {
+        number: 7,
+        title: "Guard",
+        headRef: "fix/guard",
+        baseRef: "main",
+      } as never,
+      targetRepo: job().repo,
+      instructionsSuffix: '<agent name="R">rules</agent>',
+    });
+    expect(prompt).toContain('<agent name="R">rules</agent>\n\nFix carefully.');
+    expect(prompt).toContain("A prior PR review found issues in PR #7");
+  });
+
   it("should carry the agent's attachments into a CLI harness prompt", () => {
     const prompt = buildAutomationHarnessPrompt({
       context: job(),

@@ -374,12 +374,15 @@ export function buildAutomationHarnessPrompt(input: {
   );
   const runSpec =
     input.review && input.pullRequest && input.targetRepo
-      ? buildPromptForPRFix({
-          context: input.context,
-          review: input.review,
-          pullRequest: input.pullRequest,
-          targetRepo: input.targetRepo,
-        })
+      ? appendToRunSpec(
+          buildPromptForPRFix({
+            context: input.context,
+            review: input.review,
+            pullRequest: input.pullRequest,
+            targetRepo: input.targetRepo,
+          }),
+          input.instructionsSuffix
+        )
       : buildJobRunSpec(
           input.context,
           assignmentType,

@@ -32,6 +32,7 @@ import {
   type ReportRepairRequest,
 } from "@/lib/workflows/pr-review-report-repair";
 import {
+  appendToRunSpec,
   buildJobRunSpec,
   buildPromptForPRFix,
 } from "@/lib/workflows/automation-job-prompts";
@@ -333,7 +334,13 @@ async function runPRFixAgentWithTools(input: {
   resolvedModel: AutomationLanguageModel;
   tools: NonNullable<Parameters<typeof generateText>[0]["tools"]>;
 }) {
-  const runSpec = buildPromptForPRFix(input);
+  // The fixer is the node's agent too: same skills, same attached rules.
+  const skills = await input.deps.resolveSkills(input.context, "native");
+  const runSpec = appendToRunSpec(
+    buildPromptForPRFix(input),
+    skills.instructionsSuffix
+  );
+  const tools = { ...input.tools, ...skills.tools };
   const gatewayContext = buildAutomationGatewayContext(input.context, "pr_fix");
 
   const { result, metadata } = await executeAutomationTextGeneration({
@@ -346,7 +353,7 @@ async function runPRFixAgentWithTools(input: {
       model: input.resolvedModel.model,
       providerOptions: input.resolvedModel.providerOptions,
       tools: applyToolApprovalGate(
-        { ...input.tools, ...buildFlowReportTools(input.context) },
+        { ...tools, ...buildFlowReportTools(input.context) },
         input.context,
         input.deps
       ),

@@ -118,3 +118,60 @@ test("a native automation node without skills runs exactly as before", async () 
     false
   );
 });
+
+test("the native PR fixer carries the node's skills and tools too", async () => {
+  const { createPRFixAgentRunner } = await loadAutomationJobWorkflowModule();
+  let options: CapturedGenerateTextOptions | null = null;
+  const modes: string[] = [];
+  const runPRFixAgent = createPRFixAgentRunner({
+    resolveSkills: (async (_context: unknown, mode: string) => {
+      modes.push(mode);
+      return {
+        instructionsSuffix: SUFFIX,
+        tools: { find_skills: {} as Tool, load_skill: {} as Tool },
+      };
+    }) as never,
+    generateText: async (input) => {
+      options = input as unknown as CapturedGenerateTextOptions;
+      return {
+        text: "fixed",
+        steps: [],
+        totalUsage: { inputTokens: 1, outputTokens: 1 },
+      } as never;
+    },
+  });
+
+  await runPRFixAgent(
+    {
+      context: { ...reviewContext(), metadata: {} } as never,
+      review: {
+        hasIssues: true,
+        summary: "Fix the null guard",
+        commentBody: null,
+        affectedFiles: ["src/file.ts"],
+        findings: [],
+      },
+      pullRequest: {
+        number: 42,
+        title: "Fix race condition",
+        body: null,
+        headRef: "fix/race",
+        baseRef: "main",
+        headSha: "abc123",
+      } as never,
+      targetRepo: reviewContext().repo as never,
+    },
+    "github-token"
+  );
+
+  assert.deepEqual(modes, ["native"]);
+  const captured = options as CapturedGenerateTextOptions | null;
+  assert.ok(captured, "the model was called");
+  // The fixer has no separate instructions, so the block leads its prompt.
+  assert.ok(captured.prompt?.startsWith(`${SUFFIX}\n\n`));
+  assert.ok(
+    captured.prompt?.includes("A prior PR review found issues in PR #42")
+  );
+  assert.ok("load_skill" in (captured.tools as Record<string, unknown>));
+  assert.ok("find_skills" in (captured.tools as Record<string, unknown>));
+});
