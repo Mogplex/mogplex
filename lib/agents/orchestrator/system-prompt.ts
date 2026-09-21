@@ -3,8 +3,10 @@ import {
   renderConversationSkills,
   type ConversationSkills,
 } from "@/lib/skill-catalog/chat";
+import { buildConnectionsBlock } from "../system-prompt";
 import { ORCHESTRATOR_TOOLS, getToolsByCategory } from "./registry";
 import type { InfrastructureDiagnosticScope } from "../user-facing-output";
+import type { Connection } from "@/lib/types";
 
 /**
  * Context for building the orchestrator system prompt.
@@ -25,6 +27,8 @@ export type OrchestratorPromptContext = {
   infrastructureDiagnosticScope?: InfrastructureDiagnosticScope;
   /** Exact tool names exposed to this model invocation. */
   availableToolNames?: string[];
+  /** Connections whose tools are callable this turn; they sit outside the registry. */
+  connections?: Connection[];
   /**
    * Rendered durable memories for this operator/repository (see
    * lib/agents/control-memory-context.ts). Null when none are prompt-worthy.
@@ -92,7 +96,7 @@ For sensitive decisions no tool gates on its own, such as plan sign-off or scope
 <tool-categories>
 ${buildToolCategoriesBlock(ctx.availableToolNames)}
 </tool-categories>
-
+${buildConnectionsBlock(ctx.connections)}
 <communication>
 - Be direct and concise. Lead with actions, not explanations.
 - Before each major tool action, write one short progress sentence that states the next action and why. Keep private chain-of-thought hidden.
