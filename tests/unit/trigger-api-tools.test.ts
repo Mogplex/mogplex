@@ -1,78 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTriggerApiTools } from "../../lib/connections/trigger-api/tools";
+import {
+  TRIGGER_AUTH_ROUTES,
+  TRIGGER_TEST_JWT,
+  TRIGGER_TEST_PAT,
+  executeTriggerTool,
+  fakeTriggerApi,
+} from "../support/trigger-api-fake";
 
-type RecordedCall = {
-  method: string;
-  url: string;
-  authorization: string | null;
-  branch: string | null;
-  body: unknown;
-};
-
-type Route = { status?: number; body: unknown; contentType?: string };
-
-const PAT = "tr_pat_test";
-const JWT = "jwt_scoped";
+const PAT = TRIGGER_TEST_PAT;
+const JWT = TRIGGER_TEST_JWT;
 const TARGET = { projectRef: "proj_abc", environment: "prod" } as const;
+const JWT_ROUTE = TRIGGER_AUTH_ROUTES;
+const fakeApi = fakeTriggerApi;
+const execute = executeTriggerTool;
 
-/** Fake Trigger.dev API: answers by `METHOD path`, records what was sent. */
-function fakeApi(routes: Record<string, Route>) {
-  const calls: RecordedCall[] = [];
-  const fetchImpl: typeof fetch = async (input, init) => {
-    const url = new URL(String(input));
-    const headers = new Headers(init?.headers);
-    const method = init?.method ?? "GET";
-    calls.push({
-      method,
-      url: url.toString(),
-      authorization: headers.get("Authorization"),
-      branch: headers.get("x-trigger-branch"),
-      body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
-    });
-    const route = routes[`${method} ${url.pathname}`];
-    if (!route) return Response.json({ error: "no route" }, { status: 404 });
-    const payload =
-      typeof route.body === "string" ? route.body : JSON.stringify(route.body);
-    return new Response(payload, {
-      status: route.status ?? 200,
-      headers: { "content-type": route.contentType ?? "application/json" },
-    });
-  };
-  return { calls, fetchImpl };
-}
+test("should expose the whole management API, read and write, under unique names", () => {
+  const names = Object.keys(createTriggerApiTools(PAT));
 
-const JWT_ROUTE = {
-  "POST /api/v1/projects/proj_abc/prod/jwt": { body: { token: JWT } },
-};
-
-async function execute(
-  fetchImpl: typeof fetch,
-  name: string,
-  input: Record<string, unknown>
-) {
-  const tools = createTriggerApiTools(PAT, fetchImpl);
-  const selected = tools[name] as unknown as {
-    inputSchema: { parse: (value: unknown) => unknown };
-    execute: (input: unknown, options: unknown) => Promise<unknown>;
-  };
-  return (await selected.execute(
-    selected.inputSchema.parse(input),
-    {}
-  )) as Record<string, unknown>;
-}
-
-test("should expose the eight Trigger.dev API tools", () => {
-  assert.deepEqual(Object.keys(createTriggerApiTools(PAT)), [
+  assert.equal(names.length, 60);
+  assert.equal(new Set(names).size, 60);
+  for (const expected of [
     "list_projects",
-    "get_current_worker",
     "trigger_task",
+    "batch_trigger_tasks",
+    "create_bulk_action",
     "list_runs",
-    "get_run_details",
-    "cancel_run",
-    "list_deploys",
+    "replay_run",
+    "reschedule_run",
+    "create_schedule",
+    "delete_schedule",
+    "pause_queue",
+    "override_queue_concurrency",
+    "import_env_vars",
+    "promote_deployment",
+    "resolve_error",
+    "query",
+    "complete_waitpoint_token",
+    "close_session",
     "search_docs",
-  ]);
+  ]) {
+    assert.ok(names.includes(expected), `missing ${expected}`);
+  }
 });
 
 test("should list projects with the saved token and name the ref projectRef", async () => {

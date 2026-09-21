@@ -10,7 +10,7 @@ test("should build the Trigger.dev toolset when the connection came from that pr
 
   assert.ok(build);
   assert.ok("list_runs" in build("tr_pat_abc"));
-  assert.equal(countConnectionApiTools({ source_preset: "trigger" }), 8);
+  assert.equal(countConnectionApiTools({ source_preset: "trigger" }), 60);
 });
 
 test("should have no API toolset when the preset is remote-only, unknown, or absent", () => {

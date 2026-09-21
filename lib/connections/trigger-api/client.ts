@@ -18,14 +18,28 @@ export type TriggerEnvironmentTarget = {
   branch?: string;
 };
 
-export type TriggerRunFilters = {
-  status?: string[];
-  taskIdentifier?: string[];
-  tag?: string[];
-  version?: string;
-  period?: string;
-  limit?: number;
-  cursor?: string;
+/**
+ * How a call authenticates. All three start from the saved Personal Access
+ * Token and none of them leaves the server:
+ * - `pat`: account-level routes take the token itself.
+ * - `jwt`: a short-lived token carrying only these scopes, for routes that
+ *   accept one. This is the exchange the official MCP server performs.
+ * - `env_key`: the environment's secret key, for management routes that accept
+ *   nothing else. The CLI bootstraps the same way.
+ */
+export type TriggerAuth =
+  | { kind: "pat" }
+  | { kind: "jwt"; target: TriggerEnvironmentTarget; scopes: string[] }
+  | { kind: "env_key"; target: TriggerEnvironmentTarget };
+
+export type TriggerQuery = Record<string, string | number | undefined>;
+
+export type TriggerRequest = {
+  auth: TriggerAuth;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  query?: TriggerQuery;
+  body?: unknown;
 };
 
 export class TriggerApiError extends Error {
@@ -38,18 +52,12 @@ export class TriggerApiError extends Error {
   }
 }
 
-type RequestOptions = {
-  token: string;
-  method?: "GET" | "POST";
-  body?: unknown;
-  query?: Record<string, string | undefined>;
-  branch?: string;
-};
-
-function buildUrl(path: string, query: RequestOptions["query"]) {
+function buildUrl(path: string, query: TriggerQuery | undefined) {
   const url = new URL(path, TRIGGER_API_URL);
   for (const [key, value] of Object.entries(query ?? {})) {
-    if (value) url.searchParams.set(key, value);
+    if (value !== undefined && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
   }
   return url;
 }
@@ -74,21 +82,30 @@ function parseJsonRpcBody(text: string, contentType: string | null): unknown {
   return JSON.parse(dataLine.slice("data:".length).trim());
 }
 
-/**
- * Trigger.dev REST client for a Personal Access Token. Account-level routes
- * take the token directly; environment routes take a short-lived JWT minted
- * from it with only the scopes that call needs, the same exchange the official
- * MCP server performs.
- */
+function targetPath(target: TriggerEnvironmentTarget) {
+  return `/api/v1/projects/${encodeURIComponent(target.projectRef)}/${target.environment}`;
+}
+
+/** Trigger.dev REST client for one saved Personal Access Token. */
 export function createTriggerApiClient(
   accessToken: string,
   fetchImpl: typeof fetch = fetch
 ) {
-  async function request<T>(path: string, options: RequestOptions): Promise<T> {
+  // Lives as long as this client, which is one turn: a key fetched for the
+  // first call serves the rest, and nothing outlives the request.
+  const environmentKeys = new Map<string, Promise<string>>();
+
+  async function send<T>(
+    path: string,
+    token: string,
+    options: Pick<TriggerRequest, "method" | "query" | "body"> & {
+      branch?: string;
+    }
+  ): Promise<T> {
     const res = await fetchImpl(buildUrl(path, options.query), {
       method: options.method ?? "GET",
       headers: {
-        Authorization: `Bearer ${options.token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         ...(options.branch ? { "x-trigger-branch": options.branch } : {}),
       },
@@ -96,120 +113,63 @@ export function createTriggerApiClient(
         options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!res.ok)
+    if (!res.ok) {
       throw new TriggerApiError(res.status, await readErrorDetail(res));
-    return (await res.json()) as T;
+    }
+    const text = await res.text();
+    return (text ? JSON.parse(text) : {}) as T;
   }
 
-  async function mintEnvironmentToken(
+  async function mintScopedToken(
     target: TriggerEnvironmentTarget,
     scopes: string[]
   ) {
-    const project = encodeURIComponent(target.projectRef);
-    const { token } = await request<{ token: string }>(
-      `/api/v1/projects/${project}/${target.environment}/jwt`,
-      {
-        token: accessToken,
-        method: "POST",
-        body: { claims: { scopes } },
-        branch: target.branch,
-      }
+    const { token } = await send<{ token: string }>(
+      `${targetPath(target)}/jwt`,
+      accessToken,
+      { method: "POST", body: { claims: { scopes } }, branch: target.branch }
     );
     return token;
   }
 
+  function environmentKey(target: TriggerEnvironmentTarget) {
+    const cacheKey = `${target.projectRef}:${target.environment}:${target.branch ?? ""}`;
+    const cached = environmentKeys.get(cacheKey);
+    if (cached) return cached;
+    const pending = send<{ apiKey: string }>(targetPath(target), accessToken, {
+      branch: target.branch,
+    }).then((env) => env.apiKey);
+    // A failed lookup must not poison later calls in the same turn.
+    pending.catch(() => environmentKeys.delete(cacheKey));
+    environmentKeys.set(cacheKey, pending);
+    return pending;
+  }
+
+  async function resolveToken(auth: TriggerAuth) {
+    if (auth.kind === "pat") return accessToken;
+    if (auth.kind === "jwt") return mintScopedToken(auth.target, auth.scopes);
+    return environmentKey(auth.target);
+  }
+
   return {
-    listProjects: () =>
-      request<unknown[]>("/api/v1/projects", { token: accessToken }),
-
-    getCurrentWorker: (target: TriggerEnvironmentTarget) =>
-      request<{ worker?: Record<string, unknown> }>(
-        `/api/v1/projects/${encodeURIComponent(target.projectRef)}/${target.environment}/workers/current`,
-        { token: accessToken, branch: target.branch }
-      ),
-
-    async listRuns(
-      target: TriggerEnvironmentTarget,
-      filters: TriggerRunFilters
-    ) {
-      const token = await mintEnvironmentToken(target, ["read:runs"]);
-      return request<{ data?: unknown[]; pagination?: { next?: string } }>(
-        "/api/v1/runs",
-        {
-          token,
-          query: {
-            "filter[status]": filters.status?.join(","),
-            "filter[taskIdentifier]": filters.taskIdentifier?.join(","),
-            "filter[tag]": filters.tag?.join(","),
-            "filter[version]": filters.version,
-            "filter[createdAt][period]": filters.period,
-            "page[size]": filters.limit?.toString(),
-            "page[after]": filters.cursor,
-          },
-        }
-      );
+    async request<T = unknown>(req: TriggerRequest): Promise<T> {
+      const token = await resolveToken(req.auth);
+      return send<T>(req.path, token, {
+        method: req.method,
+        query: req.query,
+        body: req.body,
+        branch: req.auth.kind === "pat" ? undefined : req.auth.target.branch,
+      });
     },
 
-    async retrieveRunWithTrace(
-      target: TriggerEnvironmentTarget,
-      runId: string
+    /** Account-level call that still names a preview branch. */
+    requestWithPat<T = unknown>(
+      path: string,
+      options: Pick<TriggerRequest, "method" | "query" | "body"> & {
+        branch?: string;
+      } = {}
     ) {
-      const token = await mintEnvironmentToken(target, [`read:runs:${runId}`]);
-      const run = encodeURIComponent(runId);
-      const [details, trace] = await Promise.all([
-        request<Record<string, unknown>>(`/api/v3/runs/${run}`, { token }),
-        request<{ trace?: { rootSpan?: unknown } }>(
-          `/api/v1/runs/${run}/trace`,
-          { token }
-        ),
-      ]);
-      return { details, trace: trace.trace };
-    },
-
-    async triggerTask(
-      target: TriggerEnvironmentTarget,
-      taskId: string,
-      body: { payload: unknown; options?: Record<string, unknown> }
-    ) {
-      const token = await mintEnvironmentToken(target, ["write:tasks"]);
-      return request<{ id: string }>(
-        `/api/v1/tasks/${encodeURIComponent(taskId)}/trigger`,
-        { token, method: "POST", body }
-      );
-    },
-
-    async cancelRun(target: TriggerEnvironmentTarget, runId: string) {
-      const token = await mintEnvironmentToken(target, [
-        `write:runs:${runId}`,
-        `read:runs:${runId}`,
-      ]);
-      const run = encodeURIComponent(runId);
-      await request(`/api/v2/runs/${run}/cancel`, { token, method: "POST" });
-      return request<Record<string, unknown>>(`/api/v3/runs/${run}`, { token });
-    },
-
-    async listDeployments(
-      target: TriggerEnvironmentTarget,
-      filters: {
-        status?: string;
-        period?: string;
-        limit?: number;
-        cursor?: string;
-      }
-    ) {
-      const token = await mintEnvironmentToken(target, ["read:deployments"]);
-      return request<{ data?: unknown[]; pagination?: { next?: string } }>(
-        "/api/v1/deployments",
-        {
-          token,
-          query: {
-            status: filters.status,
-            period: filters.period,
-            "page[size]": filters.limit?.toString(),
-            "page[after]": filters.cursor,
-          },
-        }
-      );
+      return send<T>(path, accessToken, options);
     },
 
     /** Public docs search; sends no credential. */
@@ -229,8 +189,9 @@ export function createTriggerApiClient(
         }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-      if (!res.ok)
+      if (!res.ok) {
         throw new TriggerApiError(res.status, await readErrorDetail(res));
+      }
       const parsed = parseJsonRpcBody(
         await res.text(),
         res.headers.get("content-type")

@@ -45,7 +45,7 @@ test("should give a server-side turn the preset's API tools when the connection 
 
   const toolNames = Object.keys(loaded.dynamicTools);
   assert.deepEqual(requestedCredentialsFor, ["conn-trigger"]);
-  assert.equal(toolNames.length, 8);
+  assert.equal(toolNames.length, 60);
   assert.ok(toolNames.includes("trigger_dev_list_runs"));
   assert.ok(toolNames.includes("trigger_dev_trigger_task"));
   // Registered as MCP-class names so Slack idempotency protects the writes.

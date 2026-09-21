@@ -69,12 +69,12 @@ test("settings quick-add saves the Trigger.dev stdio preset with a personal acce
     connections[0] = {
       ...connections[0],
       last_tested_at: new Date().toISOString(),
-      last_test_tool_count: 8,
+      last_test_tool_count: 60,
     };
     return fulfillJson(route, {
       healthy: true,
-      summary: "8 tools detected",
-      toolCount: 8,
+      summary: "60 tools detected",
+      toolCount: 60,
     });
   });
 
@@ -93,8 +93,8 @@ test("settings quick-add saves the Trigger.dev stdio preset with a personal acce
   await presetCard.getByPlaceholder("tr_pat_...").fill("tr_pat_e2e_token");
   await presetCard.getByRole("button", { name: "Add" }).click();
 
-  await expect(presetCard).toContainText("Connected · 8 tools");
+  await expect(presetCard).toContainText("Connected · 60 tools");
   await expect(page.getByText("preset · Trigger.dev")).toBeVisible();
   // The row reports the API tools instead of a bare "test passed".
-  await expect(page.getByText("8 tools detected")).toBeVisible();
+  await expect(page.getByText("60 tools detected")).toBeVisible();
 });
