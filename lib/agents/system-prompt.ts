@@ -161,7 +161,8 @@ When you need more information:
 </search_and_exploration>`;
 }
 
-function buildConnectionsBlock(connections?: Connection[]): string {
+/** Names each connection and the tool prefix it contributes. Shared with Control. */
+export function buildConnectionsBlock(connections?: Connection[]): string {
   if (!connections || connections.length === 0) return "";
 
   const lines = connections.map((c) => {

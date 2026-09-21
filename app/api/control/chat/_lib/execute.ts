@@ -8,13 +8,9 @@ import { controlMessageMetadata } from "@/lib/control/context-usage";
 import { controlMessagesForModel } from "@/lib/control/request-history";
 import { prepareControlWorkerHandoff } from "./worker-handoff";
 import { prepareControlExecutionHistory } from "./execution-history";
-import {
-  guardControlBackgroundTools,
-  type ControlBackgroundExecution,
-} from "@/lib/control/background-context";
+import type { ControlBackgroundExecution } from "@/lib/control/background-context";
 import { saveControlTranscript } from "@/lib/control/transcript-store";
 import { persistedControlStream } from "@/lib/control/persisted-stream";
-import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
 import { createAiCall } from "@/lib/interactive-runs";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import {
@@ -25,12 +21,11 @@ import {
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
 import { withGatewaySystemCaching } from "@/lib/models/gateway-provider-routing";
+import type { OrchestratorToolContext } from "@/lib/agents/orchestrator";
 import {
-  buildOrchestratorTools,
-  wrapToolsWithPolicy,
-  buildOrchestratorSystemPrompt,
-  type OrchestratorToolContext,
-} from "@/lib/agents/orchestrator";
+  buildControlTurnTools,
+  loadControlConnectionTools,
+} from "./connection-tools";
 import { loadControlKnowledgeContext } from "./knowledge-context";
 import { buildControlPromptContext } from "./prompt-context";
 import {
@@ -110,20 +105,31 @@ export async function executeControlChatRequest(input: {
     });
 
     // Build orchestrator context
-    const [githubToken, sandboxContext, worktreeContext, knowledge] =
-      await Promise.all([
-        resolveGithubTokenForRepo(input.userId, input.body.repoId),
-        resolveControlPromptSandboxContext(input.req, input.userId, input.body),
-        resolveControlPromptWorktrees(input.userId, input.body),
-        loadControlKnowledgeContext({
-          userId: input.userId,
-          repoId: input.body.repoId ?? null,
-          latestUserText: input.latestUserText,
-          messages: input.body.messages,
-          onMemoriesSelected: turnTasks.onMemoriesSelected,
-          onSkillsResolved: turnTasks.onSkillsResolved,
-        }),
-      ]);
+    const [
+      githubToken,
+      sandboxContext,
+      worktreeContext,
+      knowledge,
+      connectionTools,
+    ] = await Promise.all([
+      resolveGithubTokenForRepo(input.userId, input.body.repoId),
+      resolveControlPromptSandboxContext(input.req, input.userId, input.body),
+      resolveControlPromptWorktrees(input.userId, input.body),
+      loadControlKnowledgeContext({
+        userId: input.userId,
+        repoId: input.body.repoId ?? null,
+        latestUserText: input.latestUserText,
+        messages: input.body.messages,
+        onMemoriesSelected: turnTasks.onMemoriesSelected,
+        onSkillsResolved: turnTasks.onSkillsResolved,
+      }),
+      loadControlConnectionTools({
+        userId: input.userId,
+        teamId: teamId ?? null,
+        repoId: input.body.repoId,
+        enabled: input.body.enableTools !== false,
+      }),
+    ]);
     // Replace the client hint with the owned, server-validated session and
     // fail closed to no mission when the hint cannot be validated.
     scope = {
@@ -201,23 +207,13 @@ export async function executeControlChatRequest(input: {
       knowledge,
     });
 
-    // Build tools with policy wrapping
-    const rawTools = buildOrchestratorTools(toolContext);
-    const tools =
-      input.body.enableTools === false
-        ? undefined
-        : serializeSandboxCommandTools(
-            guardControlBackgroundTools(
-              wrapToolsWithPolicy(rawTools, toolContext),
-              input.background?.assertCurrent
-            )
-          );
-
-    // Build system prompt
-    const systemPrompt = buildOrchestratorSystemPrompt({
-      ...promptContext,
-      availableToolNames:
-        input.body.enableTools === false ? [] : Object.keys(rawTools),
+    // Registry tools with policy wrapping, plus the operator's connections
+    const { tools, systemPrompt } = buildControlTurnTools({
+      toolContext,
+      promptContext,
+      connectionTools,
+      enableTools: input.body.enableTools !== false,
+      assertCurrent: input.background?.assertCurrent,
     });
 
     // Resolve model
@@ -266,6 +262,7 @@ export async function executeControlChatRequest(input: {
     const finalizeCancelled = async () => {
       await finalization.run(async () => {
         await sandboxTaskLifecycle.cleanup();
+        await connectionTools.cleanup();
         stampSandboxMetadata();
         await finalizeCancelledControlRun({
           activeCall,
@@ -281,6 +278,7 @@ export async function executeControlChatRequest(input: {
     const finalizeStreamFailure = async () => {
       await finalization.run(async () => {
         await sandboxTaskLifecycle.cleanup();
+        await connectionTools.cleanup();
         stampSandboxMetadata();
         // AI SDK 6 turns provider/model failures into stream parts and invokes
         // onEnd with usage. This path is only for a rejected response body,
@@ -392,6 +390,7 @@ export async function executeControlChatRequest(input: {
         try {
           finalizedNow = await finalization.run(async () => {
             await sandboxTaskLifecycle.cleanup();
+            await connectionTools.cleanup();
             stampSandboxMetadata();
             await finalizeFinishedControlRun({
               activeCall,
