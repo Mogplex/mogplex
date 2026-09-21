@@ -15,6 +15,8 @@ export type CommandResult = {
     | "clear"
     | "help"
     | "custom"
-    | "passthrough";
+    | "passthrough"
+    // A skill's handle. Nothing runs locally: the message is sent as typed.
+    | "skill";
   payload?: unknown;
 };
