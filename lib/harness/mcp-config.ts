@@ -1,3 +1,4 @@
+import { asksBeforeRunning } from "@/lib/connections/approval";
 import {
   buildMcpStdioLaunch,
   buildMcpTransport,
@@ -106,8 +107,13 @@ export async function buildClaudeMcpConfig(
   const mcpServers: Record<string, ClaudeMcpServerEntry> = {};
   const used = new Set<string>();
 
+  // A sandbox harness runs with permissions skipped and nobody to ask, so a
+  // connection set to ask stays out, as it does in chat and Slack.
   const runnable = connections.filter(
-    (conn) => conn.type === "mcp_server" && !isConnectionMisconfigured(conn)
+    (conn) =>
+      conn.type === "mcp_server" &&
+      !isConnectionMisconfigured(conn) &&
+      !asksBeforeRunning(conn)
   );
 
   // Wrap each per-connection resolution so a rejection still carries
