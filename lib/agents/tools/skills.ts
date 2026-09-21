@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import type { Tool } from "ai";
+import { normalizeSkillToken } from "@/lib/skill-catalog/invocations";
 import { searchSkills } from "@/lib/skill-catalog/search";
 import { loadSkillCatalog } from "@/lib/skill-catalog/store";
 import type { CatalogSkill, SkillCatalog } from "@/lib/skill-catalog/types";
@@ -59,10 +60,6 @@ function summarise(skill: CatalogSkill) {
   };
 }
 
-function normalizeSlug(value: string) {
-  return value.trim().replace(/^[$/]/, "").toLowerCase().replaceAll("_", "-");
-}
-
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
@@ -108,7 +105,7 @@ export function createSkillTools(
     execute: async ({ slug }: z.infer<typeof loadSkillParams>) => {
       try {
         const { skills } = await catalog();
-        const wanted = normalizeSlug(slug);
+        const wanted = normalizeSkillToken(slug);
         const skill = skills.find((entry) => entry.slug === wanted);
         if (!skill) {
           return {

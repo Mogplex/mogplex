@@ -4,6 +4,7 @@
  * somewhere in the body. Good enough for a library a person curates by hand,
  * and it keeps discovery free of a model call.
  */
+import { normalizeSkillToken } from "./invocations";
 import type { CatalogSkill } from "./types";
 
 const NAME_WEIGHT = 6;
@@ -61,9 +62,7 @@ export function scoreSkill(skill: CatalogSkill, query: string): number {
   const description = new Set(words(skill.description));
   const content = new Set(words(skill.content));
   const exact =
-    query.trim().toLowerCase().replace(/^[$/]/, "") === skill.slug
-      ? EXACT_SLUG_BONUS
-      : 0;
+    normalizeSkillToken(query) === skill.slug ? EXACT_SLUG_BONUS : 0;
   return (
     exact +
     countMatches(name, needles) * NAME_WEIGHT +

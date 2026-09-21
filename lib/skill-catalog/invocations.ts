@@ -26,8 +26,18 @@ export type SkillInvocationOptions = {
   reservedSlashNames?: ReadonlySet<string>;
 };
 
-function normalizeToken(token: string) {
-  return token.toLowerCase().replaceAll("_", "-").replace(/-+$/, "");
+/**
+ * The one spelling of a handle: sigil dropped, lower case, underscores as
+ * hyphens. Shared with `load_skill`, so a slug an agent passes resolves the
+ * same way as one a user types.
+ */
+export function normalizeSkillToken(token: string) {
+  return token
+    .trim()
+    .replace(/^[$/]/, "")
+    .toLowerCase()
+    .replaceAll("_", "-")
+    .replace(/-+$/, "");
 }
 
 function stripCode(text: string) {
@@ -43,11 +53,11 @@ export function findSkillTokens(
   const tokens: string[] = [];
   const leading = LEADING_SLASH.exec(prose);
   if (leading) {
-    const name = normalizeToken(leading[1]);
+    const name = normalizeSkillToken(leading[1]);
     if (!options.reservedSlashNames?.has(name)) tokens.push(name);
   }
   for (const match of prose.matchAll(DOLLAR_MENTION)) {
-    tokens.push(normalizeToken(match[1]));
+    tokens.push(normalizeSkillToken(match[1]));
   }
   return [...new Set(tokens.filter(Boolean))];
 }
