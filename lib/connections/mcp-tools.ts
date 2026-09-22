@@ -21,7 +21,11 @@ export async function getMcpTools(
 
 export async function getRemoteMcpTools(
   transport: ReturnType<typeof buildMcpTransport>,
-  options: { validateRequests?: boolean; startupSignal?: AbortSignal } = {}
+  options: {
+    validateRequests?: boolean;
+    startupSignal?: AbortSignal;
+    cleanupSignal?: () => AbortSignal;
+  } = {}
 ): Promise<McpToolsResult> {
   await assertSafeOutboundHttpUrlWithDns(transport.url, "mcp_url");
   options.startupSignal?.throwIfAborted();
@@ -36,14 +40,20 @@ export async function getRemoteMcpTools(
       fetch: options.validateRequests
         ? async (input, init) => {
             const url = input instanceof Request ? input.url : String(input);
+            // Teardown must remain possible after discovery is cancelled.
+            const cleanupSignal =
+              init?.method === "DELETE" ? options.cleanupSignal?.() : undefined;
             await assertSafeOutboundHttpUrlWithDns(url, "mcp_url");
+            const signals = cleanupSignal
+              ? [cleanupSignal]
+              : [
+                  ...(starting && options.startupSignal
+                    ? [options.startupSignal]
+                    : []),
+                  ...(init?.signal ? [init.signal] : []),
+                ];
             const signal =
-              starting && options.startupSignal
-                ? AbortSignal.any([
-                    options.startupSignal,
-                    ...(init?.signal ? [init.signal] : []),
-                  ])
-                : init?.signal;
+              signals.length > 0 ? AbortSignal.any(signals) : undefined;
             signal?.throwIfAborted();
             return fetch(input, { ...init, signal, redirect: "error" });
           }

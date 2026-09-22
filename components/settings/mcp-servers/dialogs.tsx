@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { McpServer, FormState } from "./types";
 import { KeyValueEditor } from "./key-value-editor";
+import { PermissionsEditor } from "./permissions-editor";
 
 interface McpServerDialogProps {
   open: boolean;
@@ -36,6 +37,7 @@ interface McpServerDialogProps {
   onFormChange: (updater: (current: FormState) => FormState) => void;
   onClose: (open: boolean) => void;
   onSave: () => void;
+  toolNames?: string[];
 }
 
 export function McpServerDialog({
@@ -47,6 +49,7 @@ export function McpServerDialog({
   onFormChange,
   onClose,
   onSave,
+  toolNames,
 }: McpServerDialogProps) {
   const dialogTitle = editingServer ? "Edit MCP server" : "Add MCP server";
   const dialogDescription = editingServer
@@ -193,6 +196,12 @@ export function McpServerDialog({
               />
             </TabsContent>
           </Tabs>
+
+          {form.transport === "http" && <PermissionsEditor
+            extraText={form.extraText}
+            toolNames={toolNames}
+            onChange={(extraText) => onFormChange((current) => ({ ...current, extraText }))}
+          />}
 
           <div className="space-y-2">
             <Label htmlFor="mcp-server-extra">Extra JSON</Label>

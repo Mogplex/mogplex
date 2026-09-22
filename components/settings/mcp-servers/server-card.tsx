@@ -4,14 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { McpServer } from "./types";
 import { formatTimestamp, summarizeServer } from "./helpers";
+import { ConnectionTest } from "./connection-test";
+import type { McpDiagnosticResult } from "@/lib/mcp-servers/diagnostic-result";
 
 interface ServerCardProps {
   server: McpServer;
   onEdit: (server: McpServer) => void;
   onDelete: (server: McpServer) => void;
+  onTestResult: (result: McpDiagnosticResult) => void;
 }
 
-export function ServerCard({ server, onEdit, onDelete }: ServerCardProps) {
+export function ServerCard({ server, onEdit, onDelete, onTestResult }: ServerCardProps) {
   return (
     <div className="rounded-lg border border-border bg-background/60 p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -69,6 +72,7 @@ export function ServerCard({ server, onEdit, onDelete }: ServerCardProps) {
           </Button>
         </div>
       </div>
+      {server.transport === "http" && <div className="mt-3"><ConnectionTest server={server} onResult={onTestResult} /></div>}
     </div>
   );
 }

@@ -199,7 +199,7 @@ test("Connections MCP tab supports add, edit, secret overwrite, and delete witho
       "Runs on your computer through the CLI. Not available in web chat."
     )
   ).toBeVisible();
-  await page.getByLabel("Name").fill("supabase");
+  await page.getByLabel("Name", { exact: true }).fill("supabase");
   await page.getByLabel("Command").fill("npx");
   await page
     .getByLabel("Args")
@@ -241,7 +241,7 @@ test("Connections MCP tab supports add, edit, secret overwrite, and delete witho
   await expect(page.getByText("No synced MCP servers yet.")).toBeVisible();
 
   await page.getByRole("button", { name: "Add server" }).click();
-  await page.getByLabel("Name").fill("remote-docs");
+  await page.getByLabel("Name", { exact: true }).fill("remote-docs");
   await page
     .getByLabel("URL", { exact: true })
     .fill("https://docs.example.com/mcp");

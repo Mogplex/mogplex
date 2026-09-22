@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Tool } from "ai";
-import { z } from "zod";
+import { readToolPolicy, toolApproval } from "./policy";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   getRemoteMcpTools,
@@ -12,25 +12,10 @@ import { normalizeStringRecord } from "./validation";
 import { resolveVaultSecrets } from "./secrets";
 import type { McpServerRow } from "./types";
 
-type ChatServerRow = Pick<
+export type ChatServerRow = Pick<
   McpServerRow,
   "id" | "name" | "url" | "header_refs" | "header_plain" | "extra"
 >;
-
-const toolPolicySchema = z.object({
-  enabled_tools: z.array(z.string()).optional(),
-  disabled_tools: z.array(z.string()).optional(),
-  default_tools_approval_mode: z.enum(["auto", "approve", "prompt"]).optional(),
-  tools: z
-    .record(
-      z.string(),
-      z.object({
-        enabled: z.boolean().optional(),
-        approval_mode: z.enum(["auto", "approve", "prompt", "deny"]).optional(),
-      })
-    )
-    .optional(),
-});
 
 export async function listSavedHttpMcpServers(
   userId: string,
@@ -47,17 +32,10 @@ export async function listSavedHttpMcpServers(
   return (data ?? []) as ChatServerRow[];
 }
 
-function toolApproval(policy: z.infer<typeof toolPolicySchema>, name: string) {
-  if (policy.enabled_tools && !policy.enabled_tools.includes(name))
-    return "deny";
-  if (policy.disabled_tools?.includes(name)) return "deny";
-  const perTool = policy.tools?.[name];
-  if (perTool?.enabled === false) return "deny";
-  // CLI approval.ts defines "approve" as pre-approved, equivalent to "auto".
-  return perTool?.approval_mode ?? policy.default_tools_approval_mode;
-}
-
-function duringStartup<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+export function duringStartup<T>(
+  work: Promise<T>,
+  signal: AbortSignal
+): Promise<T> {
   let onAbort: () => void;
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(signal.reason);
@@ -69,8 +47,18 @@ function duringStartup<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-async function loadSavedServer(server: ChatServerRow, signal: AbortSignal) {
-  const policy = toolPolicySchema.parse(server.extra ?? {});
+export class MissingMcpSecretError extends Error {}
+
+// Return partial results before Control's outer deadline.
+export const SAVED_MCP_STARTUP_TIMEOUT_MS =
+  CONNECTION_TOOL_STARTUP_TIMEOUT_MS - 2000;
+
+export async function loadSavedServer(
+  server: ChatServerRow,
+  signal: AbortSignal,
+  cleanupSignal?: () => AbortSignal
+) {
+  const policy = readToolPolicy(server.extra);
   if (!server.url) throw new Error("Missing MCP URL");
   // Local HTTP servers still sync to the CLI. The hosted runtime must not
   // read their secrets or dial private addresses.
@@ -82,7 +70,8 @@ async function loadSavedServer(server: ChatServerRow, signal: AbortSignal) {
   signal.throwIfAborted();
   for (const [name, id] of Object.entries(refs)) {
     const value = secrets.get(id);
-    if (value === undefined) throw new Error("Missing MCP secret");
+    if (value === undefined)
+      throw new MissingMcpSecretError("Missing MCP secret");
     headers[name] = value;
   }
   // Detach a healthy session from the shared deadline: its startup requests
@@ -96,7 +85,7 @@ async function loadSavedServer(server: ChatServerRow, signal: AbortSignal) {
       policy,
       loaded: await getRemoteMcpTools(
         { type: "http", url: server.url, headers },
-        { validateRequests: true, startupSignal: startup.signal }
+        { validateRequests: true, startupSignal: startup.signal, cleanupSignal }
       ),
     };
   } finally {
@@ -116,7 +105,7 @@ export async function loadSavedMcpServerTools(
   const timer = setTimeout(
     () => startup.abort(new Error("MCP startup timed out")),
     // Leave time to return healthy results before Control's outer deadline.
-    CONNECTION_TOOL_STARTUP_TIMEOUT_MS - 2000
+    SAVED_MCP_STARTUP_TIMEOUT_MS
   );
   try {
     const servers = await duringStartup(

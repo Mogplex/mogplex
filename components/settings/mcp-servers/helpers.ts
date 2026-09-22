@@ -1,5 +1,6 @@
 import type { McpServer, KeyValueEntry, FormState } from "./types";
 import { EMPTY_FORM } from "./types";
+import { readToolPolicy } from "@/lib/mcp-servers/policy";
 
 export function createEntry(partial?: Partial<KeyValueEntry>): KeyValueEntry {
   return {
@@ -85,7 +86,7 @@ export function summarizeServer(server: McpServer) {
   return `${server.url ?? "No URL"} - ${headerCount} headers`;
 }
 
-function parseExtra(extraText: string) {
+export function parseExtra(extraText: string) {
   const trimmed = extraText.trim();
   if (!trimmed) {
     return {};
@@ -173,6 +174,13 @@ function buildKeyValuePayload(entries: KeyValueEntry[], label: string) {
 
 export function buildPayload(form: FormState) {
   const extra = parseExtra(form.extraText);
+  if (form.transport === "http") {
+    try {
+      readToolPolicy(extra);
+    } catch {
+      throw new Error("Correct the tool permissions before saving.");
+    }
+  }
   const env = buildKeyValuePayload(form.envEntries, "Environment");
   const headers = buildKeyValuePayload(form.headerEntries, "Header");
   const base = {
