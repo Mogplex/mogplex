@@ -1,22 +1,12 @@
-import { expect, test, type Route } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
-import { mockSettingsShell } from "./helpers/billing-settings-fixtures";
+import { expect, test, fulfillJson } from "./helpers/run-checks-fixtures";
 
 const ENDPOINT = "**/api/settings/decision-checks";
-
-async function fulfillJson(route: Route, data: unknown, status = 200) {
-  await route.fulfill({
-    status,
-    contentType: "application/json",
-    body: JSON.stringify(data),
-  });
-}
 
 test("Account settings show Run checks on, say what is sent, and save a change", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
-  await mockSettingsShell(page);
 
   let enabled = true;
   const patchBodies: unknown[] = [];
@@ -55,7 +45,6 @@ test("Run checks stays on and says so when the change cannot be saved", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
-  await mockSettingsShell(page);
 
   await page.route(ENDPOINT, async (route) => {
     if (route.request().method() === "PATCH") {

@@ -1,6 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
-import { mockSettingsShell } from "./helpers/billing-settings-fixtures";
+import {
+  fulfillJson,
+  mockSettingsShell,
+} from "./helpers/billing-settings-fixtures";
+
+test.beforeEach(async ({ page }) => {
+  // Account settings can mount before the legacy tab redirect completes.
+  await page.route("**/api/settings/decision-checks", (route) =>
+    fulfillJson(route, { enabled: true, viewer: { canManage: true } })
+  );
+});
 
 test("legacy Settings agents tab redirects to the Agents route", async ({
   page,
