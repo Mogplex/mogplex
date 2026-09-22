@@ -230,7 +230,13 @@ test("lets users add and remove tool approval overrides, and preserves disabled 
     tools: { search: { enabled: false, custom: true } },
   });
   await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Approval for search" })
+  ).toBeDisabled();
   await page.getByRole("switch", { name: "Enable search" }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Approval for search" })
+  ).toBeEnabled();
   await page.getByLabel("Tool name for approval override").fill("publish");
   await page.getByRole("button", { name: "Add tool rule" }).click();
   await page.getByRole("combobox", { name: "Approval for publish" }).click();
@@ -251,6 +257,48 @@ test("lets users add and remove tool approval overrides, and preserves disabled 
   expect(
     (fixture.saved[1].extra as { tools: { publish: object } }).tools.publish
   ).toEqual({});
+});
+
+test("cancels an in-flight connection test when saved settings change", async ({
+  page,
+}) => {
+  await setup(page);
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/mcp-servers/*/test", async (route) => {
+    await ready;
+    await fulfillJson(route, {
+      status: "success",
+      enabled: true,
+      tools: [],
+      checkedAt: new Date().toISOString(),
+      serverUpdatedAt: "2026-09-22T01:00:00Z",
+    });
+  });
+  const ended = new Promise<string>((resolve) => {
+    page.on("requestfailed", (request) => {
+      if (request.url().endsWith("/test")) resolve("cancelled");
+    });
+    page.on("requestfinished", (request) => {
+      if (request.url().endsWith("/test")) resolve("completed");
+    });
+  });
+  await page
+    .getByRole("button", { name: "Test connection", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Testing connection..." })
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Not tested in this visit.")).toBeVisible();
+  release();
+  expect(await ended).toBe("cancelled");
+  await expect(
+    page.getByText("Connection test passed. 0 tools found.")
+  ).not.toBeVisible();
 });
 
 for (const variant of [

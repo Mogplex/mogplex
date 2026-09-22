@@ -12,6 +12,8 @@ import { toolApproval } from "./policy";
 import type { DiagnosticCode, McpDiagnosticResult } from "./diagnostic-result";
 
 function failureCode(error: unknown, signal: AbortSignal): DiagnosticCode {
+  // Cancellation shares this code: the disconnected caller needs no response,
+  // and the request has the same bounded teardown as a discovery timeout.
   if (signal.aborted) return "timeout";
   if (error instanceof z.ZodError) return "invalid_policy";
   if (error instanceof UnsafeOutboundUrlError) return "unsafe_url";

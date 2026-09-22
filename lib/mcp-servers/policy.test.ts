@@ -52,6 +52,12 @@ describe("saved MCP permission controls", () => {
         .extra
     ).toEqual({ enabled_tools: [] });
     expect(() => readToolPolicy(existing.extra)).toThrow();
+    expect(() =>
+      normalizeMcpServerUpdateInput(
+        { transport: "http", url: "https://example.com/mcp" },
+        { ...existing, transport: "stdio", command: "server", url: null }
+      )
+    ).toThrow("Correct the tool permissions");
   });
 
   it("normalizes edited tool lists without changing the original stored array", () => {

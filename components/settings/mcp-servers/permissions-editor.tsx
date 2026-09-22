@@ -82,7 +82,7 @@ export function PermissionsEditor({ extraText, onChange, toolNames = [] }: {
               <span className="text-xs">Disabled in saved settings</span>
             </div>}
           </div>
-          <Select value={mode} onValueChange={(value) => setMode(value as ToolApproval | "inherit", name)}>
+          <Select disabled={entry?.enabled === false} value={mode} onValueChange={(value) => setMode(value as ToolApproval | "inherit", name)}>
             <SelectTrigger aria-label={`Approval for ${name}`}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="inherit">Use default</SelectItem>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { diagnosticMessages, diagnosticResultSchema, type McpDiagnosticResult } from "@/lib/mcp-servers/diagnostic-result";
 import type { McpServer } from "./types";
@@ -12,17 +12,23 @@ export function ConnectionTest({ server, onResult }: {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<McpDiagnosticResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const activeTest = useRef<AbortController | null>(null);
+  useEffect(() => () => activeTest.current?.abort(), []);
   async function testConnection() {
+    const controller = new AbortController();
+    activeTest.current = controller;
     setTesting(true);
     setResult(null);
     setError(null);
     try {
-      const response = await fetch(`/api/mcp-servers/${server.id}/test`, { method: "POST" });
+      const response = await fetch(`/api/mcp-servers/${server.id}/test`, { method: "POST", signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (!response.ok) {
         setError(response.status === 401 ? "Sign in again to test this connection." : response.status === 404 ? "This server no longer exists. Refresh the page." : "The test could not complete. Try again.");
         return;
       }
       const data = diagnosticResultSchema.parse(await response.json());
+      if (controller.signal.aborted) return;
       if (data.serverUpdatedAt && data.serverUpdatedAt !== server.updatedAt) {
         setError("The saved settings changed. Refresh the page, then test again.");
         return;
@@ -30,9 +36,9 @@ export function ConnectionTest({ server, onResult }: {
       setResult(data);
       onResult(data);
     } catch {
-      setError("The test could not complete. Check your connection and try again.");
+      if (!controller.signal.aborted) setError("The test could not complete. Check your connection and try again.");
     } finally {
-      setTesting(false);
+      if (!controller.signal.aborted) setTesting(false);
     }
   }
   if (server.transport === "stdio") return null;

@@ -242,7 +242,11 @@ export function normalizeMcpServerUpdateInput(
       : normalizeStringArray(input.args, "args");
   const extra =
     input.extra === undefined ? existing.extra : normalizeExtra(input.extra);
-  validateExtraKeys(extra, nextTransport, input.extra !== undefined);
+  validateExtraKeys(
+    extra,
+    nextTransport,
+    input.extra !== undefined || nextTransport !== existing.transport
+  );
 
   if (nextTransport === "stdio") {
     if (input.url !== undefined && asTrimmedString(input.url)) {
