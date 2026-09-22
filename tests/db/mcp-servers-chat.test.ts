@@ -3,6 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { createPostgrestShim } from "@/lib/db/postgrest-shim";
 import { listSavedHttpMcpServers } from "@/lib/mcp-servers/chat";
+import { getSavedMcpServerForTest } from "@/lib/mcp-servers/diagnostics";
 
 it("reads only the caller's enabled HTTP catalog entries and sees disabling and deletion on the next turn", async () => {
   const pg = await PGlite.create();
@@ -34,6 +35,16 @@ it("reads only the caller's enabled HTTP catalog entries and sees disabling and 
     expect(
       (await listSavedHttpMcpServers(owner, db)).map((row) => row.name)
     ).toEqual(["active"]);
+    const { rows: diagnosticRows } = await pg.query<{ id: string }>(
+      "select id from user_mcp_servers where user_id=$1 and name='disabled'",
+      [owner]
+    );
+    const target = diagnosticRows[0].id;
+    expect(
+      (await getSavedMcpServerForTest(owner, target, db)).data
+    ).toMatchObject({ name: "disabled", enabled: false });
+    expect((await getSavedMcpServerForTest(other, target, db)).data).toBeNull();
+    expect((await getSavedMcpServerForTest(owner, other, db)).data).toBeNull();
     await pg.query(
       "update user_mcp_servers set enabled=false where user_id=$1 and name='active'",
       [owner]

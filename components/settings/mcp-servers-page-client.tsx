@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchJsonObject } from "@/lib/client-fetch";
+import type { McpDiagnosticResult } from "@/lib/mcp-servers/diagnostic-result";
 
 import type { McpServer, McpServersResponse, FormState } from "./mcp-servers/types";
 import { EMPTY_FORM } from "./mcp-servers/types";
@@ -30,6 +31,7 @@ export function McpServersPageClient() {
   const [deleteTarget, setDeleteTarget] = useState<McpServer | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, McpDiagnosticResult>>({});
 
   const stats = useMemo(
     () => ({
@@ -160,10 +162,11 @@ export function McpServersPageClient() {
             <div className="space-y-3">
               {servers.map((server) => (
                 <ServerCard
-                  key={server.id}
+                  key={`${server.id}:${server.updatedAt}`}
                   server={server}
                   onEdit={openEditDialog}
                   onDelete={setDeleteTarget}
+                  onTestResult={(result) => setTestResults((current) => ({ ...current, [server.id]: result }))}
                 />
               ))}
             </div>
@@ -180,6 +183,10 @@ export function McpServersPageClient() {
         onFormChange={setForm}
         onClose={closeDialog}
         onSave={() => void handleSave()}
+        toolNames={(() => {
+          const result = editingServer ? testResults[editingServer.id] : undefined;
+          return result?.status === "success" && result.serverUpdatedAt === editingServer?.updatedAt ? result.tools.map((tool) => tool.name) : [];
+        })()}
       />
 
       <DeleteServerDialog

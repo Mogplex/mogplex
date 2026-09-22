@@ -7,6 +7,7 @@ import type {
   McpServerUpdateInput,
 } from "./types";
 import { McpServerValidationError } from "./types";
+import { readToolPolicy } from "./policy";
 import {
   isObject,
   normalizeName,
@@ -95,6 +96,16 @@ function normalizeSecretMutationRecord(
 }
 
 function validateExtraKeys(extra: JsonObject, transport: "stdio" | "http") {
+  if (transport === "http") {
+    try {
+      readToolPolicy(extra);
+    } catch {
+      throw new McpServerValidationError(
+        "Correct the tool permissions before saving.",
+        "INVALID_TOOL_POLICY"
+      );
+    }
+  }
   const reservedKeys =
     transport === "stdio"
       ? RESERVED_STDIO_EXTRA_KEYS

@@ -21,7 +21,11 @@ export async function getMcpTools(
 
 export async function getRemoteMcpTools(
   transport: ReturnType<typeof buildMcpTransport>,
-  options: { validateRequests?: boolean; startupSignal?: AbortSignal } = {}
+  options: {
+    validateRequests?: boolean;
+    startupSignal?: AbortSignal;
+    sessionSignal?: AbortSignal;
+  } = {}
 ): Promise<McpToolsResult> {
   await assertSafeOutboundHttpUrlWithDns(transport.url, "mcp_url");
   options.startupSignal?.throwIfAborted();
@@ -37,13 +41,15 @@ export async function getRemoteMcpTools(
         ? async (input, init) => {
             const url = input instanceof Request ? input.url : String(input);
             await assertSafeOutboundHttpUrlWithDns(url, "mcp_url");
+            const signals = [
+              ...(starting && options.startupSignal
+                ? [options.startupSignal]
+                : []),
+              ...(options.sessionSignal ? [options.sessionSignal] : []),
+              ...(init?.signal ? [init.signal] : []),
+            ];
             const signal =
-              starting && options.startupSignal
-                ? AbortSignal.any([
-                    options.startupSignal,
-                    ...(init?.signal ? [init.signal] : []),
-                  ])
-                : init?.signal;
+              signals.length > 0 ? AbortSignal.any(signals) : undefined;
             signal?.throwIfAborted();
             return fetch(input, { ...init, signal, redirect: "error" });
           }
