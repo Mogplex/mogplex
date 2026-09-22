@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -8,7 +9,7 @@ import { useUser } from "@/hooks/use-user";
 import { ScopeMenuItems } from "@/components/scope-switcher";
 import { SlackFill } from "@/components/settings/icons";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +24,8 @@ import {
   isAppNavItemActive,
   type AppNavItem,
 } from "@/lib/app-navigation";
+import { SettingsNavigation } from "@/components/settings/settings-navigation";
+import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
 
 const DOCS_URL = "https://docs.mogplex.com/";
 
@@ -40,14 +43,20 @@ const fetchSlackInstallations = async (url: string) => {
 function MobileNavLink({
   item,
   pathname,
+  onClick,
+  linkRef,
 }: {
   item: AppNavItem;
   pathname: string;
+  onClick?: () => void;
+  linkRef?: React.Ref<HTMLAnchorElement>;
 }) {
   const isActive = isAppNavItemActive(pathname, item.match);
   return (
     <Link
       href={item.href}
+      ref={linkRef}
+      onClick={onClick}
       aria-current={isActive ? "page" : undefined}
       className={`border-border border-b px-4 py-3 text-sm transition-colors ${
         isActive
@@ -64,21 +73,35 @@ export function MobileSheetNav({
   primaryItems,
   adminItems,
   pathname,
+  onNavigate,
+  scope,
 }: {
   primaryItems: AppNavItem[];
   adminItems: AppNavItem[];
   pathname: string;
+  onNavigate?: () => void;
+  scope: string;
 }) {
+  const { showSettings, backToMain, openSettings, settingsLinkRef } = useSettingsNavigation(scope, pathname);
+  if (showSettings) {
+    return <SettingsNavigation onBack={backToMain} onNavigate={onNavigate} />;
+  }
   return (
-    <nav className="flex flex-col">
+    <nav className="flex flex-col" aria-label="Main navigation">
       {primaryItems.map((item) => (
-        <MobileNavLink key={item.id} item={item} pathname={pathname} />
+        <MobileNavLink key={item.id} item={item} pathname={pathname} onClick={onNavigate} />
       ))}
       {adminItems.length > 0 && (
         <>
           <div className="border-border mt-6 border-t" aria-hidden="true" />
           {adminItems.map((item) => (
-            <MobileNavLink key={item.id} item={item} pathname={pathname} />
+            <MobileNavLink
+              key={item.id}
+              item={item}
+              pathname={pathname}
+              onClick={item.id === "settings" ? openSettings : onNavigate}
+              linkRef={item.id === "settings" ? settingsLinkRef : undefined}
+            />
           ))}
         </>
       )}
@@ -128,19 +151,24 @@ export function TopBar() {
         }
       : null);
 
+  const [navigationOpen, setNavigationOpen] = useState(false);
+
   return (
     <div className="app-topbar flex items-center justify-end gap-2 bg-transparent">
-      <Sheet>
+      <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
         <SheetTrigger asChild>
-          <button className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg border px-2 py-1 font-mono text-[10px] tracking-[0.12em] uppercase lg:hidden">
+          <button aria-label="Open navigation" className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg border px-2 py-1 font-mono text-[10px] tracking-[0.12em] uppercase lg:hidden">
             |||
           </button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-56 p-0 pt-12">
+        <SheetContent side="left" className="w-64 overflow-y-auto p-0 pt-12">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
           <MobileSheetNav
+            scope={scope}
             primaryItems={primaryItems}
             adminItems={adminItems}
             pathname={pathname}
+            onNavigate={() => setNavigationOpen(false)}
           />
         </SheetContent>
       </Sheet>

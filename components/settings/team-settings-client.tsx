@@ -1,33 +1,21 @@
 "use client";
 
-import { useCallback } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BillingSection } from "@/components/settings/billing-section";
 import { DecisionChecksSection } from "@/components/settings/decision-checks-section";
 import { useTeamSettingsActions } from "./use-team-settings-actions";
 import { MembersTabContent } from "./members-tab-content";
 import { KeysTabContent } from "./keys-tab-content";
 import { ModelsTabContent } from "./models-tab-content";
 import { AuditTabContent } from "./audit-tab-content";
-import { TEAM_TAB_SET, type TeamSettingsTab } from "./team-settings-types";
 
 export function TeamSettingsClient({
   teamId,
   teamSlug,
+  section,
 }: {
   teamId: string;
   teamSlug: string;
+  section: "members" | "keys" | "models" | "audit";
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const tabParam = searchParams?.get("tab") ?? "";
-  const activeTab: TeamSettingsTab = TEAM_TAB_SET.has(tabParam)
-    ? (tabParam as TeamSettingsTab)
-    : "members";
-
   const actions = useTeamSettingsActions(teamId);
   const {
     status,
@@ -70,25 +58,13 @@ export function TeamSettingsClient({
     saveModelAllowlist,
   } = actions;
 
-  const resolvedActiveTab =
-    activeTab === "audit" && membersData && !canManageMembers
-      ? "members"
-      : activeTab;
-
-  const handleTabChange = useCallback(
-    (value: string) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? "");
-      params.set("tab", value);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
+  const title = { members: "Members", keys: "Provider Keys", models: "Models", audit: "Audit" }[section];
 
   return (
-    <div className="min-h-full space-y-4 p-3 md:space-y-6 md:p-6">
+    <div className="min-h-full w-full max-w-[1488px] space-y-4 p-3 md:space-y-6 md:p-6">
       <div>
-        <h1 className="ui-page-title">Team Settings</h1>
-        <div className="ui-page-subtitle">Manage {membersData?.team.name ?? teamSlug}.</div>
+        <h1 className="ui-page-title">{title}</h1>
+        <div className="ui-page-subtitle">{membersData?.team.name ?? teamSlug}</div>
       </div>
 
       {status && (
@@ -97,125 +73,116 @@ export function TeamSettingsClient({
         </div>
       )}
 
-      <section className="flex items-center gap-4 border border-border/60 bg-card px-5 py-4">
-        <div
-          className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent text-sm font-medium text-foreground/80"
-          aria-hidden="true"
-        >
-          {membersData?.team.iconUrl ? (
-            <img
-              src={membersData.team.iconUrl}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span>
-              {(membersData?.team.name ?? teamSlug)
-                .trim()
-                .split(/\s+/)
-                .filter(Boolean)
-                .slice(0, 2)
-                .map((part) => part[0]?.toUpperCase() ?? "")
-                .join("") || "?"}
-            </span>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="ui-section-title">Team icon</div>
-          <div className="ui-section-caption">
-            PNG, JPG, WEBP, or GIF · up to 2 MB · square works best.
+      {section === "members" && (
+        <section className="flex flex-wrap items-center gap-4 border border-border/60 bg-card px-5 py-4">
+          <div
+            className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent text-sm font-medium text-foreground/80"
+            aria-hidden="true"
+          >
+            {membersData?.team.iconUrl ? (
+              <img
+                src={membersData.team.iconUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span>
+                {(membersData?.team.name ?? teamSlug)
+                  .trim()
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((part) => part[0]?.toUpperCase() ?? "")
+                  .join("") || "?"}
+              </span>
+            )}
           </div>
-        </div>
-        {canManageIcon && (
-          <div className="flex items-center gap-2">
-            <input
-              ref={iconInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void uploadTeamIcon(file);
-              }}
-            />
-            <button
-              type="button"
-              disabled={busyKey === "icon"}
-              onClick={() => iconInputRef.current?.click()}
-              className="border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-50"
-            >
-              {busyKey === "icon"
-                ? "Uploading…"
-                : membersData?.team.iconUrl
-                  ? "Replace"
-                  : "Upload"}
-            </button>
-            {membersData?.team.iconUrl && (
+          <div className="min-w-0 flex-1">
+            <div className="ui-section-title">Team icon</div>
+            <div className="ui-section-caption">
+              PNG, JPG, WEBP, or GIF · up to 2 MB · square works best.
+            </div>
+          </div>
+          {canManageIcon && (
+            <div className="flex items-center gap-2">
+              <input
+                ref={iconInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void uploadTeamIcon(file);
+                }}
+              />
               <button
                 type="button"
                 disabled={busyKey === "icon"}
-                onClick={() => void removeTeamIcon()}
-                className="border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary disabled:opacity-50"
+                onClick={() => iconInputRef.current?.click()}
+                className="border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-50"
               >
-                Remove
+                {busyKey === "icon"
+                  ? "Uploading…"
+                  : membersData?.team.iconUrl
+                    ? "Replace"
+                    : "Upload"}
               </button>
-            )}
-          </div>
-        )}
-      </section>
+              {membersData?.team.iconUrl && (
+                <button
+                  type="button"
+                  disabled={busyKey === "icon"}
+                  onClick={() => void removeTeamIcon()}
+                  className="border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
-      <Tabs value={resolvedActiveTab} onValueChange={handleTabChange} className="gap-4 md:gap-6">
-        <ScrollArea className="w-full">
-          <TabsList className="inline-flex h-8 w-max bg-transparent p-0 gap-1">
-            <TabsTrigger value="members" className="h-7 px-3 text-[13px]">Members</TabsTrigger>
-            <TabsTrigger value="keys" className="h-7 px-3 text-[13px]">Keys</TabsTrigger>
-            <TabsTrigger value="models" className="h-7 px-3 text-[13px]">Models</TabsTrigger>
-            {canManageMembers && <TabsTrigger value="audit" className="h-7 px-3 text-[13px]">Audit</TabsTrigger>}
-            <TabsTrigger value="billing" className="h-7 px-3 text-[13px]">Billing</TabsTrigger>
-          </TabsList>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+      {section === "members" && (
+        <MembersTabContent
+          teamSlug={teamSlug}
+          membersData={membersData}
+          membersError={membersError}
+          canManageMembers={canManageMembers}
+          canManageIcon={canManageIcon}
+          busyKey={busyKey}
+          inviteEmail={inviteEmail}
+          setInviteEmail={setInviteEmail}
+          inviteRole={inviteRole}
+          setInviteRole={setInviteRole}
+          inviteMember={inviteMember}
+          updateMemberRole={updateMemberRole}
+          removeMember={removeMember}
+          mutateInvite={mutateInvite}
+          nextOwnerUserId={nextOwnerUserId}
+          setNextOwnerUserId={setNextOwnerUserId}
+          ownerTransferCandidates={ownerTransferCandidates}
+          transferOwnership={transferOwnership}
+          uploadTeamIcon={uploadTeamIcon}
+          removeTeamIcon={removeTeamIcon}
+          iconInputRef={iconInputRef}
+        />
+      )}
 
-        <TabsContent value="members" className="mt-0">
-          <MembersTabContent
-            teamSlug={teamSlug}
-            membersData={membersData}
-            membersError={membersError}
-            canManageMembers={canManageMembers}
-            canManageIcon={canManageIcon}
-            busyKey={busyKey}
-            inviteEmail={inviteEmail}
-            setInviteEmail={setInviteEmail}
-            inviteRole={inviteRole}
-            setInviteRole={setInviteRole}
-            inviteMember={inviteMember}
-            updateMemberRole={updateMemberRole}
-            removeMember={removeMember}
-            mutateInvite={mutateInvite}
-            nextOwnerUserId={nextOwnerUserId}
-            setNextOwnerUserId={setNextOwnerUserId}
-            ownerTransferCandidates={ownerTransferCandidates}
-            transferOwnership={transferOwnership}
-            uploadTeamIcon={uploadTeamIcon}
-            removeTeamIcon={removeTeamIcon}
-            iconInputRef={iconInputRef}
-          />
-        </TabsContent>
+      {section === "keys" && (
+        <KeysTabContent
+          keysError={keysError}
+          canManageKeys={canManageKeys}
+          busyKey={busyKey}
+          configuredProviders={configuredProviders}
+          keyInputs={keyInputs}
+          setKeyInputs={setKeyInputs}
+          saveProviderKey={saveProviderKey}
+          deleteProviderKey={deleteProviderKey}
+        />
+      )}
 
-        <TabsContent value="keys" className="mt-0">
-          <KeysTabContent
-            keysError={keysError}
-            canManageKeys={canManageKeys}
-            busyKey={busyKey}
-            configuredProviders={configuredProviders}
-            keyInputs={keyInputs}
-            setKeyInputs={setKeyInputs}
-            saveProviderKey={saveProviderKey}
-            deleteProviderKey={deleteProviderKey}
-          />
-        </TabsContent>
-
-        <TabsContent value="models" className="mt-0">
+      {section === "models" && (
+        <div>
           <ModelsTabContent
             modelsError={modelsError}
             canManageModels={canManageModels}
@@ -233,21 +200,15 @@ export function TeamSettingsClient({
               audience="team"
             />
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {canManageMembers && (
-          <TabsContent value="audit" className="mt-0">
-            <AuditTabContent
-              auditData={auditData}
-              auditError={auditError}
-            />
-          </TabsContent>
-        )}
-
-        <TabsContent value="billing" className="mt-0">
-          <BillingSection embedded />
-        </TabsContent>
-      </Tabs>
+      {section === "audit" && (
+        canManageMembers ? <AuditTabContent auditData={auditData} auditError={auditError} /> :
+          <p className="text-sm text-muted-foreground" role="status">
+            {membersError ? "Unable to load team permissions." : membersData ? "Only a team owner or admin can view the audit log." : "Loading team permissions…"}
+          </p>
+      )}
     </div>
   );
 }

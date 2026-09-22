@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
   fetchWithActiveTeam,
@@ -10,10 +10,7 @@ import {
 } from "@/components/active-scope-provider";
 import { CapacityAddOnDialog } from "@/components/settings/capacity-add-on-dialog";
 import { BillingSubscriptionDetails } from "@/components/settings/billing-subscription-details";
-import {
-  formatDate,
-  formatUsd,
-} from "@/components/settings/capacity-billing-format";
+import { formatUsd } from "@/components/settings/capacity-billing-format";
 import { useCapacityBillingEvents } from "@/components/settings/use-capacity-billing-events";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +28,8 @@ import {
 } from "@/lib/billing/capacity-catalog";
 import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
 import { findTopupPresetByAmount } from "@/lib/billing/catalog";
+import { BillingUsage } from "./billing-usage";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 type BillingLoadResult =
   | { enabled: false }
@@ -111,10 +110,19 @@ async function loadBillingSummary([url, activeTeamId]: [
   };
 }
 
-export function BillingSection({ embedded = false }: { embedded?: boolean }) {
+export function BillingSection() {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTeamId = useActiveTeamId();
+  const activeTab = searchParams.get("tab") === "usage" ? "usage" : "settings";
+  function changeTab(value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "usage") params.set("tab", "usage");
+    else params.delete("tab");
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
   const { data, error, isLoading, mutate } = useSWR<BillingLoadResult>(
     ["/api/billing/capacity", activeTeamId],
     loadBillingSummary
@@ -126,7 +134,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const [actionError, setActionError] = useState<string | null>(null);
   const hostedUsageAttempts = useRef(new Map<string, string>());
   const checkoutResult = searchParams.get("billing");
-  const returnPath = embedded ? `${pathname}?tab=billing` : pathname;
+  const returnPath = pathname;
   const summary = data?.enabled ? data.summary : undefined;
   const refresh = useCallback(() => mutate(), [mutate]);
 
@@ -247,7 +255,11 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
   const showCapacityAddOns = summary.plan.offerKind === "individual";
 
   return (
-    <div className="flex flex-col gap-6">
+    <Tabs value={activeTab} onValueChange={changeTab} className="gap-6">
+      <TabsList aria-label="Billing sections">
+        <TabsTrigger value="settings">Billing Settings</TabsTrigger>
+        <TabsTrigger value="usage">Usage</TabsTrigger>
+      </TabsList>
       {submitted ? (
         <div
           className="bg-muted/40 rounded-md border p-3 text-sm"
@@ -257,6 +269,7 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         </div>
       ) : null}
 
+      <TabsContent value="settings" className="mt-0 space-y-6">
       <BillingSubscriptionDetails
         onOpenPortal={(action) => redirectTo(action, "/api/stripe/portal", {})}
         pendingAction={pendingAction}
@@ -433,42 +446,11 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
           </CardContent>
         </Card>
       ) : null}
+      </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>Recent usage costs</h2>
-          </CardTitle>
-          <CardDescription>
-            See what used your inference balance.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="divide-y">
-          {summary.recentCosts.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No usage costs yet.</p>
-          ) : (
-            summary.recentCosts.map((cost) => (
-              <div
-                className="flex items-start justify-between gap-4 py-3 first:pt-0"
-                key={cost.operationId}
-              >
-                <div>
-                  <p className="text-sm font-medium">{cost.description}</p>
-                  <p className="text-muted-foreground text-xs">
-                    {formatDate(cost.occurredAt)} ·{" "}
-                    {cost.status.replaceAll("_", " ")}
-                  </p>
-                </div>
-                <p className="text-sm font-medium tabular-nums">
-                  {cost.totalCents === null
-                    ? "In progress"
-                    : formatUsd(cost.totalCents)}
-                </p>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      <TabsContent value="usage" className="mt-0">
+        <BillingUsage summary={summary} />
+      </TabsContent>
 
       {actionError ? (
         <p className="text-destructive text-sm" role="alert">
@@ -489,6 +471,6 @@ export function BillingSection({ embedded = false }: { embedded?: boolean }) {
         }}
         open={selectedAddOn !== null}
       />
-    </div>
+    </Tabs>
   );
 }

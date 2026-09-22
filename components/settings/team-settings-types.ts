@@ -1,27 +1,10 @@
 import type { TeamRole } from "@/lib/team-capabilities";
 import type { Provider } from "@/lib/vault";
 
-export type TeamSettingsTab =
-  | "members"
-  | "keys"
-  | "models"
-  | "audit"
-  | "billing";
-
 export type TeamKeysResponse = {
   keys: Array<{ provider: Provider; created_at: string; updated_at: string }>;
   viewer: { role: TeamRole; canManage: boolean };
 };
-
-export const TEAM_TABS = [
-  "members",
-  "keys",
-  "models",
-  "audit",
-  "billing",
-] as const;
-
-export const TEAM_TAB_SET: ReadonlySet<string> = new Set(TEAM_TABS);
 
 export const PROVIDERS: Array<{
   id: Provider;

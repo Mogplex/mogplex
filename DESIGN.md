@@ -168,6 +168,10 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   6px corners, Iconoir icons, and `aria-current` on the active destination.
   The generic [sidebar menu](./components/ui/sidebar-menu.tsx) has different
   defaults (32px rows, 4px corners); these are separate components.
+  Settings opens a secondary menu in the same sidebar, with a back arrow to
+  restore the main navigation. Each Settings section has a scoped page URL.
+  The mobile navigation sheet follows the same pattern and closes after a
+  section is selected. Billing alone has Billing Settings and Usage tabs.
 - **[Dialog](./components/ui/dialog.tsx):** reuse the Radix-backed focus and
   dismissal behavior, 6px corners, 24px padding, and responsive action layout.
   Provide a title and description. Use inline disclosure when it can complete

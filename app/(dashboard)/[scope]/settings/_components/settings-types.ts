@@ -71,11 +71,3 @@ export const PROVIDER_META: Record<
     masked: "sk-or-...****",
   },
 };
-
-export const SETTINGS_TABS = ["account", "teams", "keys", "billing"] as const;
-export type SettingsTab = (typeof SETTINGS_TABS)[number];
-export const SETTINGS_TAB_SET: ReadonlySet<string> = new Set(SETTINGS_TABS);
-
-export const KEYS_SUB_TABS = ["api", "cli"] as const;
-export type KeysSubTab = (typeof KEYS_SUB_TABS)[number];
-export const KEYS_SUB_TAB_SET: ReadonlySet<string> = new Set(KEYS_SUB_TABS);

@@ -13,9 +13,10 @@ test("mobile sheet nav renders admin items after a divider and marks the active 
   const items = buildAppNavItems("acme");
   const html = renderToStaticMarkup(
     createElement(MobileSheetNav, {
+      scope: "acme",
       primaryItems: items.filter((item) => item.section === "primary"),
       adminItems: items.filter((item) => item.section === "admin"),
-      pathname: "/acme/settings",
+      pathname: "/acme/control",
     })
   );
 
@@ -26,7 +27,8 @@ test("mobile sheet nav renders admin items after a divider and marks the active 
   assert.ok(dividerIndex !== -1, "divider is rendered between the groups");
   assert.ok(settingsIndex > dividerIndex, "settings renders after the divider");
   assert.ok(settingsAnchor);
-  assert.ok(settingsAnchor.includes('aria-current="page"'));
+  assert.ok(!settingsAnchor.includes('aria-current="page"'));
+  assert.ok(findAnchor(html, "/acme/control")?.includes('aria-current="page"'));
   assert.equal(html.match(/aria-current="page"/g)?.length, 1);
 });
 
@@ -36,6 +38,7 @@ test("mobile sheet nav omits the divider when the admin group is empty", async (
   const items = buildAppNavItems("acme");
   const html = renderToStaticMarkup(
     createElement(MobileSheetNav, {
+      scope: "acme",
       primaryItems: items.filter((item) => item.section === "primary"),
       adminItems: [],
       pathname: "/acme/control",

@@ -19,6 +19,7 @@ import {
   DeliveryTruck,
   Flash,
   PlugTypeA,
+  NavArrowRight,
   Repository,
   Rocket,
   Search,
@@ -33,6 +34,8 @@ import {
 import { formatUsd } from "@/lib/billing/catalog";
 import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
 import { scopedHref } from "@/lib/scoped-href";
+import { SettingsNavigation } from "@/components/settings/settings-navigation";
+import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
 
 const SIDEBAR_WIDTH_KEY = "mogplex.appSidebar.width";
 const SIDEBAR_COLLAPSED_KEY = "mogplex.appSidebar.collapsed";
@@ -40,6 +43,7 @@ const DEFAULT_WIDTH = 272;
 const MIN_WIDTH = 64;
 const COMPACT_THRESHOLD = 120;
 const MAX_WIDTH = 320;
+const SETTINGS_MIN_WIDTH = 240;
 
 const NAV_ICONS = {
   control: Rocket,
@@ -72,16 +76,22 @@ function SidebarNavLink({
   item,
   compact,
   pathname,
+  onClick,
+  linkRef,
 }: {
   item: AppNavItem;
   compact: boolean;
   pathname: string;
+  onClick?: () => void;
+  linkRef?: React.Ref<HTMLAnchorElement>;
 }) {
   const Icon = NAV_ICONS[item.id];
   const active = isAppNavItemActive(pathname, item.match);
   return (
     <Link
       href={item.href}
+      ref={linkRef}
+      onClick={onClick}
       aria-current={active ? "page" : undefined}
       aria-label={compact ? item.label : undefined}
       title={compact ? item.label : undefined}
@@ -96,6 +106,7 @@ function SidebarNavLink({
       {compact ? null : (
         <span className="app-sidebar-link-label truncate">{item.label}</span>
       )}
+      {item.id === "settings" && !compact && <NavArrowRight className="ml-auto size-4 shrink-0" aria-hidden="true" />}
     </Link>
   );
 }
@@ -147,9 +158,10 @@ export function AppSidebar() {
     Boolean(scope) && (membershipsLoading || scopeResolved);
   const billingPending = membershipsLoading || billingLoading;
   const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const { showSettings, backToMain, openSettings, settingsLinkRef } = useSettingsNavigation(scope, pathname);
   const [resizing, setResizing] = useState(false);
   const activePointerId = useRef<number | null>(null);
-  const compact = width <= COMPACT_THRESHOLD;
+  const compact = !showSettings && width <= COMPACT_THRESHOLD;
 
   useEffect(() => {
     const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -213,7 +225,7 @@ export function AppSidebar() {
       data-compact={compact ? "true" : "false"}
       data-resizing={resizing ? "true" : "false"}
       data-testid="app-sidebar"
-      style={{ width }}
+      style={{ width: showSettings ? Math.max(width, SETTINGS_MIN_WIDTH) : width }}
     >
       <div className="app-sidebar-header h-[20px] shrink-0" aria-hidden="true" />
 
@@ -229,8 +241,11 @@ export function AppSidebar() {
         </div>
       )}
 
+      {showSettings ? (
+        <SettingsNavigation onBack={backToMain} />
+      ) : <>
       <nav
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden px-4 py-0"
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-4 py-0"
         aria-label="Primary"
       >
         {primaryItems.map((item) => (
@@ -253,9 +268,12 @@ export function AppSidebar() {
             item={item}
             compact={compact}
             pathname={pathname}
+            onClick={item.id === "settings" ? openSettings : undefined}
+            linkRef={item.id === "settings" ? settingsLinkRef : undefined}
           />
         ))}
       </nav>
+      </>}
 
       {!compact && showBillingCard ? (
         <div className="app-sidebar-footer mx-5 mb-5 overflow-hidden rounded-lg border border-sidebar-border bg-card px-4 py-4 text-sm">
@@ -290,7 +308,7 @@ export function AppSidebar() {
         </div>
       ) : null}
 
-      <div
+      {!showSettings && <div
         role="separator"
         aria-label="Resize app navigation"
         aria-orientation="vertical"
@@ -309,7 +327,7 @@ export function AppSidebar() {
           setResizing(true);
         }}
         className="app-sidebar-resizer absolute inset-y-0 -right-1 z-30 w-2 cursor-col-resize touch-none outline-none"
-      />
+      />}
     </aside>
   );
 }
