@@ -99,6 +99,11 @@ Mogplex is a Next.js 16 App Router application for running AI-agent workflows ag
 
 ## Tech Stack
 
+For authenticated app UI changes, read [PRODUCT.md](./PRODUCT.md) and
+[DESIGN.md](./DESIGN.md). Reuse the semantic tokens in `app/globals.css` and
+the primitives in `components/ui`; update DESIGN.md when shared defaults change.
+Marketing surfaces use their own scoped styles in `components/marketing`.
+
 - **Next.js 16** (App Router) + **React 19** + **TypeScript** (strict mode)
 - **Tailwind CSS v4** (`@tailwindcss/postcss`, styles in `app/globals.css`)
 - **shadcn/ui** (new-york style, RSC enabled) — 57+ components in `components/ui/`
