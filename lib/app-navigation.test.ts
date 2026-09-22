@@ -18,6 +18,7 @@ describe("app navigation", () => {
       ["observe", "Observe", "/observability"],
       ["agents", "Agents", "/agents/roster"],
       ["models", "Models", "/models"],
+      ["connections", "Connections", "/connections"],
       ["settings", "Settings", "/settings"],
     ]);
   });
@@ -73,6 +74,7 @@ describe("app navigation", () => {
       ["/acme/sandboxes", "sandboxes"],
       ["/acme/sandboxes/record-1", "sandboxes"],
       ["/acme/models/catalog", "models"],
+      ["/acme/connections", "connections"],
       ["/acme/models/configuration", "models"],
       ["/acme/agents/roster", "agents"],
       ["/acme/agents/context", "agents"],

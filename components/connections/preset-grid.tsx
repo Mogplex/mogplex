@@ -11,7 +11,7 @@ import {
 import type { ConnectionPreset } from "@/lib/connections/presets"
 import type { PresetConnectionState } from "@/lib/connections/presentation"
 import { getPresetIcon } from "@/components/settings/preset-icons"
-import { scrollToConnectionRow } from "./settings-types"
+import { scrollToConnectionRow } from "./connection-form"
 
 type PresetStatus = {
   presetId: string

@@ -6,7 +6,6 @@ export type TeamSettingsTab =
   | "keys"
   | "models"
   | "audit"
-  | "connections"
   | "billing";
 
 export type TeamKeysResponse = {
@@ -19,7 +18,6 @@ export const TEAM_TABS = [
   "keys",
   "models",
   "audit",
-  "connections",
   "billing",
 ] as const;
 

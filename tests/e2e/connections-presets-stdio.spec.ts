@@ -1,3 +1,4 @@
+import { mockSettingsShell } from "./helpers/billing-settings-fixtures";
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
@@ -5,6 +6,10 @@ import {
   modelId,
   fulfillJson,
 } from "./helpers/connections-presets-fixtures";
+
+test.beforeEach(async ({ page }) => {
+  await mockSettingsShell(page);
+});
 
 test("settings quick-add saves the Trigger.dev stdio preset with a personal access token", async ({
   page,
@@ -78,7 +83,7 @@ test("settings quick-add saves the Trigger.dev stdio preset with a personal acce
     });
   });
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   const presetCard = page.getByTestId("settings-preset-trigger");

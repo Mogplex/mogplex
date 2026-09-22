@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   const config = getSlackOAuthConfig(request);
   if (!config) {
     return NextResponse.redirect(
-      buildAppUrl("/settings?slack=not_configured", request)
+      buildAppUrl("/connections?slack=not_configured", request)
     );
   }
 

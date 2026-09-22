@@ -161,8 +161,8 @@ export function useFlowDerivedSelection(
   const slackInstallations = slackInstallationsResponse?.installations ?? [];
 
   const slackConnectionsHref = scope
-    ? scopedHref(scope, "/settings?tab=connections")
-    : "/settings?tab=connections";
+    ? scopedHref(scope, "/connections")
+    : "/connections";
 
   const selectedAgentHarness: FlowAgentHarness =
     selectedAgentNode?.data.harness ?? "mogplex";

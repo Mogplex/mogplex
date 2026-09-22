@@ -1,9 +1,14 @@
+import { mockSettingsShell } from "./helpers/billing-settings-fixtures";
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
   setupWorkspaceRoutes,
 } from "./helpers/connections-presets-fixtures";
+
+test.beforeEach(async ({ page }) => {
+  await mockSettingsShell(page);
+});
 
 for (const surface of ["settings", "workspace"] as const) {
   test(`${surface} quick-add saves and tests a Neon connection`, async ({
@@ -53,11 +58,7 @@ for (const surface of ["settings", "workspace"] as const) {
     });
 
     await page.goto(
-      scopedPath(
-        surface === "settings"
-          ? "settings?tab=connections"
-          : "projects/workspace"
-      )
+      scopedPath(surface === "settings" ? "connections" : "projects/workspace")
     );
     if (surface === "workspace") {
       await page.getByTestId("home-open-workspace-repo-1").click();

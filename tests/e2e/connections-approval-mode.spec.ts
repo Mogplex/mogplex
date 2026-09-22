@@ -1,3 +1,4 @@
+import { mockSettingsShell } from "./helpers/billing-settings-fixtures";
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
@@ -5,6 +6,10 @@ import {
   modelId,
   fulfillJson,
 } from "./helpers/connections-presets-fixtures";
+
+test.beforeEach(async ({ page }) => {
+  await mockSettingsShell(page);
+});
 
 test("settings lets the owner make a connection ask before its tools run, and switch it back", async ({
   page,
@@ -66,7 +71,7 @@ test("settings lets the owner make a connection ask before its tools run, and sw
     await fulfillJson(route, { ok: true });
   });
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   const row = page.locator('tr[data-connection-id="conn-trigger"]');

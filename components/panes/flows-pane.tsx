@@ -341,8 +341,8 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   const createState: AutomationCreateState = installations === undefined ? "loading"
     : installations.length > 0 ? "ready" : "needs-connection"
   const connectionsHref = scope
-    ? scopedHref(scope, "/settings?tab=connections")
-    : "/settings?tab=connections"
+    ? scopedHref(scope, "/connections")
+    : "/connections"
   const openCreateFlow = () => {
     setSidebarCollapsed(false)
     setTemplatePickerOpen(true)

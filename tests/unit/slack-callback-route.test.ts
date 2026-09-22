@@ -68,7 +68,9 @@ function callbackRequest(params: Record<string, string>) {
 function locationParams(response: Response) {
   const location = response.headers.get("location");
   assert.ok(location, "expected a Location header");
-  return new URL(location).searchParams;
+  const url = new URL(location);
+  assert.equal(url.pathname, "/connections");
+  return url.searchParams;
 }
 
 const successExchange: SlackOAuthAccessResponse = {

@@ -217,7 +217,7 @@ export function TopBar() {
               ) : slackConnected ? (
                 <DropdownMenuItem
                   onSelect={() =>
-                    router.push(scopedHref(scope, "/settings?tab=connections"))
+                    router.push(scopedHref(scope, "/connections"))
                   }
                 >
                   <SlackFill

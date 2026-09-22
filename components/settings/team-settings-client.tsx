@@ -171,7 +171,6 @@ export function TeamSettingsClient({
             <TabsTrigger value="keys" className="h-7 px-3 text-[13px]">Keys</TabsTrigger>
             <TabsTrigger value="models" className="h-7 px-3 text-[13px]">Models</TabsTrigger>
             {canManageMembers && <TabsTrigger value="audit" className="h-7 px-3 text-[13px]">Audit</TabsTrigger>}
-            <TabsTrigger value="connections" className="h-7 px-3 text-[13px]">Connections</TabsTrigger>
             <TabsTrigger value="billing" className="h-7 px-3 text-[13px]">Billing</TabsTrigger>
           </TabsList>
           <ScrollBar orientation="horizontal" />
@@ -244,18 +243,6 @@ export function TeamSettingsClient({
             />
           </TabsContent>
         )}
-
-        <TabsContent value="connections" className="mt-0">
-          <section className="border border-border/60 bg-card">
-            <div className="px-5 pt-5 pb-2">
-              <div className="ui-section-title">Team Connections</div>
-              <div className="ui-section-caption">Shared OAuth and MCP connections need a separate ownership model.</div>
-            </div>
-            <div className="px-5 pb-5 text-sm text-muted-foreground">
-              Team-scoped connections are intentionally deferred. Personal connections continue to work from your personal scope.
-            </div>
-          </section>
-        </TabsContent>
 
         <TabsContent value="billing" className="mt-0">
           <BillingSection embedded />

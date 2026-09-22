@@ -174,7 +174,7 @@ export function buildConnectionsBlock(
     if (c.approval_mode === "ask" && !options.canAskApproval) {
       // The tools were withheld: say so, or the model will guess at why a
       // service the user mentions has no tools.
-      return `- ${c.name}: not loaded. The user set this connection to ask before its tools run, and this conversation has no way to ask. They can use it from Control, or switch it to run automatically in Settings > Connections.`;
+      return `- ${c.name}: not loaded. The user set this connection to ask before its tools run, and this conversation has no way to ask. They can use it from Control, or switch it to run automatically in Connections.`;
     }
     const approvalNote =
       c.approval_mode === "ask"

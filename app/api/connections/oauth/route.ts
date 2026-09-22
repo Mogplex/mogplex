@@ -110,7 +110,7 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error("[connections-oauth] authorization start failed", error);
     return NextResponse.redirect(
-      buildAppUrl("/settings?tab=connections&oauth=setup_error", req)
+      buildAppUrl("/connections?oauth=setup_error", req)
     );
   }
 }
