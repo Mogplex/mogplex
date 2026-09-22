@@ -1,5 +1,11 @@
+/* eslint-disable unicorn/prefer-bigint-literals -- The ES6 TypeScript target rejects BigInt literal syntax. */
+
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
 import { accrueTokenUsage } from "@/lib/billing/ledger";
+import {
+  recordShadowProviderCost,
+  type ShadowProviderCostEvent,
+} from "@/lib/billing/shadow-ledger";
 import { loadExplicitPlatformAccess } from "@/lib/platform-access";
 
 export type TokenUsageMeteringInput = {
@@ -29,12 +35,14 @@ type TokenUsageMeteringDeps = {
   loadExplicitPlatformAccess: typeof loadExplicitPlatformAccess;
   findBillingAccountForScope: typeof findBillingAccountForScope;
   accrueTokenUsage: typeof accrueTokenUsage;
+  recordProviderCost: typeof recordShadowProviderCost;
 };
 
 const defaultDeps: TokenUsageMeteringDeps = {
   loadExplicitPlatformAccess,
   findBillingAccountForScope,
   accrueTokenUsage,
+  recordProviderCost: recordShadowProviderCost,
 };
 
 function readMetadataTeamId(metadata: Record<string, unknown> | null) {
@@ -77,6 +85,39 @@ function metadataText(
   return String(value).trim() || null;
 }
 
+function unbilledAiCostEvent(
+  input: TokenUsageMeteringInput,
+  costUnits: number,
+  reason: "allowlisted" | "before_billing_account"
+): ShadowProviderCostEvent {
+  // Match the precision and identity used by publish_token_usage_cost_event.
+  // Billed calls already publish their cost in the token accrual transaction.
+  const providerCostMicros = (BigInt(costUnits) + BigInt(99)) / BigInt(100);
+  return {
+    provider: "vercel-ai-gateway",
+    providerEventId: `tok:${input.aiCallId}`,
+    costSource: "ai",
+    owner: { sharedOverheadCategory: "platform_operations" },
+    providerCostMicros,
+    normalizedCostMicros: providerCostMicros,
+    retailDebitMicros: BigInt(0),
+    billingTreatment: "shared_overhead",
+    pricingRuleVersion: "gateway_passthrough_2026_08_18",
+    measuredQuantity: String(costUnits),
+    measuredUnit: "1e-8_usd",
+    occurredAt: new Date(input.completedAt),
+    refs: { operationRef: input.aiCallId },
+    metadata: {
+      ai_call_id: input.aiCallId,
+      user_id: input.userId,
+      product_team_id: readMetadataTeamId(input.metadata),
+      model: input.model,
+      gateway_generation_ids: input.generationIds,
+      exemption_reason: reason,
+    },
+  };
+}
+
 export async function meterReconciledTokenUsage(
   input: TokenUsageMeteringInput,
   overrides: Partial<TokenUsageMeteringDeps> = {}
@@ -93,6 +134,9 @@ export async function meterReconciledTokenUsage(
   }
   const explicitAccess = await deps.loadExplicitPlatformAccess(input.userId);
   if (explicitAccess.allowPlatformAi) {
+    await deps.recordProviderCost(
+      unbilledAiCostEvent(input, costUnits, "allowlisted")
+    );
     return {
       metered: false,
       reason: "allowlisted",
@@ -125,6 +169,9 @@ export async function meterReconciledTokenUsage(
     Number.isFinite(completedAt) &&
     completedAt < accountCreatedAt
   ) {
+    await deps.recordProviderCost(
+      unbilledAiCostEvent(input, costUnits, "before_billing_account")
+    );
     return {
       metered: false,
       reason: "before_billing_account",

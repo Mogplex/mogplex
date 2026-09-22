@@ -178,6 +178,7 @@ test("pre-account calls are not accrued", async () => {
   const { meterReconciledTokenUsage } = await loadTokenUsage();
   let accrualCalls = 0;
   const deps = {
+    recordProviderCost: async () => ({ posted: true }),
     loadExplicitPlatformAccess: async () => ({
       allowPlatformAi: false,
       allowPlatformSandbox: false,
@@ -227,6 +228,7 @@ test("explicitly allowlisted users are not debited from funded accounts", async 
   const { meterReconciledTokenUsage } = await loadTokenUsage();
   let billingCalls = 0;
   const result = await meterReconciledTokenUsage(input(), {
+    recordProviderCost: async () => ({ posted: true }),
     loadExplicitPlatformAccess: async () => ({
       allowPlatformAi: true,
       allowPlatformSandbox: false,
