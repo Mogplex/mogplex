@@ -16,6 +16,7 @@ export default async function SettingsSectionPage({ params }: {
   if (!item) notFound();
 
   if (scope.kind === "team") {
+    // Billing and MCP have static route segments; this page owns the other sections.
     if (section !== "members" && section !== "keys" && section !== "models" && section !== "audit") notFound();
     return <TeamSettingsClient teamId={scope.teamId} teamSlug={scope.slug} section={section} />;
   }

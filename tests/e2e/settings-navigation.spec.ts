@@ -120,6 +120,9 @@ test("mobile Settings navigation opens, selects a page and closes", async ({
   await page.getByRole("button", { name: "Open navigation" }).click();
   const dialog = page.getByRole("dialog", { name: "Navigation" });
   await dialog.getByRole("button", { name: "Back to main navigation" }).click();
+  await expect(
+    dialog.getByRole("link", { name: "Settings", exact: true })
+  ).toBeFocused();
   await dialog.getByRole("link", { name: "Settings", exact: true }).click();
   await dialog.getByRole("link", { name: "Billing", exact: true }).click();
   await expect(dialog).not.toBeVisible();
@@ -225,4 +228,33 @@ test("team owners can open Keys and Audit as pages", async ({ page }) => {
   await expect(
     nav.getByRole("link", { name: "Audit", exact: true })
   ).toHaveAttribute("aria-current", "page");
+});
+
+test("Back restores focus and reentering Billing opens its Settings menu", async ({
+  page,
+}) => {
+  await page.route("**/api/skills/catalog", (route) =>
+    fulfillJson(route, { skills: [] })
+  );
+  await page.route("**/api/observability/calls**", (route) =>
+    fulfillJson(route, { calls: [] })
+  );
+  await page.goto(scopedPath("settings/billing"));
+  await page
+    .getByRole("button", { name: "Back to main navigation" })
+    .press("Enter");
+  await expect(page.getByTestId("app-nav-settings")).toBeFocused();
+  await page.getByTestId("app-nav-connections").click();
+  await expect(page).toHaveURL(scopedPath("connections"));
+  await page.getByRole("link", { name: "Manage billing", exact: true }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Settings", exact: true })
+  ).toBeVisible();
+  await expect(page.getByTestId("settings-nav-billing")).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+  await expect(
+    page.getByRole("separator", { name: "Resize app navigation" })
+  ).toHaveCount(0);
 });

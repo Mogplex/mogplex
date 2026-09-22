@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -24,6 +25,7 @@ import {
   type AppNavItem,
 } from "@/lib/app-navigation";
 import { SettingsNavigation } from "@/components/settings/settings-navigation";
+import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
 
 const DOCS_URL = "https://docs.mogplex.com/";
 
@@ -42,15 +44,18 @@ function MobileNavLink({
   item,
   pathname,
   onClick,
+  linkRef,
 }: {
   item: AppNavItem;
   pathname: string;
   onClick?: () => void;
+  linkRef?: React.Ref<HTMLAnchorElement>;
 }) {
   const isActive = isAppNavItemActive(pathname, item.match);
   return (
     <Link
       href={item.href}
+      ref={linkRef}
       onClick={onClick}
       aria-current={isActive ? "page" : undefined}
       className={`border-border border-b px-4 py-3 text-sm transition-colors ${
@@ -77,11 +82,9 @@ export function MobileSheetNav({
   onNavigate?: () => void;
   scope: string;
 }) {
-  const [mainNavigationPath, setMainNavigationPath] = useState<string | null>(null);
-  const settingsPath = scopedHref(scope, "/settings");
-  const inSettings = pathname === settingsPath || pathname.startsWith(`${settingsPath}/`);
-  if (inSettings && mainNavigationPath !== pathname) {
-    return <SettingsNavigation onBack={() => setMainNavigationPath(pathname)} onNavigate={onNavigate} />;
+  const { showSettings, backToMain, openSettings, settingsLinkRef } = useSettingsNavigation(scope, pathname);
+  if (showSettings) {
+    return <SettingsNavigation onBack={backToMain} onNavigate={onNavigate} />;
   }
   return (
     <nav className="flex flex-col" aria-label="Main navigation">
@@ -92,7 +95,13 @@ export function MobileSheetNav({
         <>
           <div className="border-border mt-6 border-t" aria-hidden="true" />
           {adminItems.map((item) => (
-            <MobileNavLink key={item.id} item={item} pathname={pathname} onClick={() => setMainNavigationPath(null)} />
+            <MobileNavLink
+              key={item.id}
+              item={item}
+              pathname={pathname}
+              onClick={item.id === "settings" ? openSettings : onNavigate}
+              linkRef={item.id === "settings" ? settingsLinkRef : undefined}
+            />
           ))}
         </>
       )}
