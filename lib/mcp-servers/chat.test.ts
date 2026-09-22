@@ -4,6 +4,7 @@ import {
   cleanupMcpClients,
 } from "../agents/tools/connections";
 import type { McpServerRow } from "./types";
+import type { Connection } from "@/lib/types";
 
 const server = (overrides: Partial<McpServerRow> = {}): McpServerRow => ({
   id: "11111111-1111-4111-8111-111111111111",
@@ -193,6 +194,43 @@ it("isolates catalog errors", async () => {
   failCatalog = true;
   const built = await buildDynamicConnectionTools([], { userId: "user-1" });
   expect(built.dynamicTools).toEqual({});
+});
+
+it("keeps existing Integration tools available when the saved catalog fails", async () => {
+  failCatalog = true;
+  const connection = {
+    id: "integration-1",
+    name: "Existing docs",
+    type: "mcp_server",
+    mcp_transport: "http",
+    mcp_url: "https://8.8.8.8/mcp",
+    auth_type: "bearer",
+    approval_mode: "auto",
+  } as Connection;
+  const built = await buildDynamicConnectionTools(
+    [connection],
+    { userId: "user-1" },
+    {
+      getCredentials: async () => "integration-secret",
+    }
+  );
+  expect(Object.keys(built.dynamicTools)).toEqual(["existing_docs_find_docs"]);
+  expect(built.mcpToolNames.has("existing_docs_find_docs")).toBe(true);
+  const result = await built.dynamicTools.existing_docs_find_docs.execute!(
+    {},
+    {
+      toolCallId: "existing-call",
+      messages: [],
+      context: undefined,
+    }
+  );
+  expect(result).toMatchObject({ content: [{ text: "Documentation found" }] });
+  expect(
+    requests
+      .find((request) => request.url.startsWith("https://8.8.8.8"))
+      ?.headers.get("Authorization")
+  ).toBe("Bearer integration-secret");
+  await cleanupMcpClients(built.mcpCleanups);
 });
 
 it.each([
