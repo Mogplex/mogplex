@@ -112,6 +112,24 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
     docs_url: "https://supabase.com/docs/guides/getting-started/mcp",
   },
   {
+    id: "neon",
+    name: "Neon",
+    description: "Manage Postgres projects, branches, and queries",
+    mcp_url: "https://mcp.neon.tech/mcp",
+    mcp_transport: "http",
+    auth_type: "bearer",
+    auth_fields: [
+      {
+        key: "credential",
+        label: "API Key",
+        placeholder: "Neon API key",
+        secret: true,
+      },
+    ],
+    docs_url: "https://neon.com/docs/ai/neon-mcp-server",
+    credential_url: "https://console.neon.tech/app/settings/api-keys",
+  },
+  {
     id: "browserbase",
     name: "Browserbase",
     description: "Cloud browser automation and scraping",
