@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+import { capacitySummary } from "./billing";
 
 export async function fulfillJson(route: Route, data: unknown, status = 200) {
   await route.fulfill({
@@ -30,6 +31,20 @@ export async function mockSettingsShell(page: Page) {
   );
   await page.route(/\/api\/settings(?:\?.*)?$/, (route) =>
     fulfillJson(route, { default_model: null, theme: "light" })
+  );
+  // Background settings and shell hooks must not reach a real local database.
+  // Individual specs can override these defaults with routes registered later.
+  await page.route("**/api/models/new-arrivals", (route) =>
+    fulfillJson(route, { models: [], autoEnable: true })
+  );
+  await page.route("**/api/models", (route) =>
+    fulfillJson(route, { models: [], catalog: [], default_model: null })
+  );
+  await page.route("**/api/integrations/slack/installations", (route) =>
+    fulfillJson(route, { installations: [] })
+  );
+  await page.route("**/api/billing/capacity", (route) =>
+    fulfillJson(route, capacitySummary())
   );
   await page.route("**/api/github/installations", (route) =>
     fulfillJson(route, [])
