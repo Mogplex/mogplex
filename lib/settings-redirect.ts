@@ -1,5 +1,6 @@
 import type { ScopeContext } from "./scope-context";
 import { scopedHref } from "./scoped-href";
+import { PERSONAL_SETTINGS, TEAM_SETTINGS } from "./settings-navigation";
 
 const MOVED_PERSONAL_TABS = new Map([
   ["models", "/models/catalog"],
@@ -11,17 +12,26 @@ export function getLegacySettingsDestination(
   scope: ScopeContext,
   query: string,
   hash = ""
-): string | null {
+): string {
   const params = new URLSearchParams(query);
   const tab = params.get("tab") || hash.replace(/^#/, "");
   const isConnectionReturn = params.has("oauth") || params.has("slack");
-  const path =
-    tab === "connections" || isConnectionReturn
-      ? "/connections"
-      : scope.kind === "personal"
-        ? MOVED_PERSONAL_TABS.get(tab)
-        : undefined;
-  if (!path) return null;
+  const sections = scope.kind === "team" ? TEAM_SETTINGS : PERSONAL_SETTINGS;
+  const section = sections.find((item) => item.id === tab)?.id;
+  let path = `/settings/${section ?? (scope.kind === "team" ? "members" : "account")}`;
+  if (tab === "connections" || isConnectionReturn) {
+    path = "/connections";
+  } else if (scope.kind === "personal" && MOVED_PERSONAL_TABS.has(tab)) {
+    path = MOVED_PERSONAL_TABS.get(tab)!;
+  } else if (
+    scope.kind === "personal" &&
+    tab === "keys" &&
+    params.get("sub") === "cli"
+  ) {
+    path = "/settings/mogplex-keys";
+  } else if (!tab && params.has("billing")) {
+    path = "/settings/billing";
+  }
   params.delete("tab");
   params.delete("sub");
   const remaining = params.toString();

@@ -166,7 +166,11 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   expect(headings.slice(0, 2)).toEqual(["Plus", "Add inference credit"]);
   await expect(page.getByText("7 of 35")).toHaveCount(0);
   await expect(page.getByText("2.3 GB of 5 GB")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
   await expect(page.getByText(/Code review .*#285/)).toBeVisible();
+  await page
+    .getByRole("tab", { name: "Billing Settings", exact: true })
+    .click();
 
   const inferenceCheckout = page.waitForRequest(
     "**/api/billing/hosted-usage/checkout"
@@ -174,6 +178,7 @@ test("personal Billing shows capacity and reviews an add-on change", async ({
   await page.getByRole("button", { name: "Pay $10, get $10 credit" }).click();
   expect((await inferenceCheckout).postDataJSON()).toMatchObject({
     preset: "capacity_v2_hosted_usage_credit_10",
+    returnPath: scopedPath("settings/billing"),
   });
   await expect(
     page.getByText("Payment submitted. Stripe will add the full credit amount.")

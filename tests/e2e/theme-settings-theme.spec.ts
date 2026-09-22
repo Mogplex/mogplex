@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/run-checks-fixtures";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   connectedUser,
@@ -12,6 +12,13 @@ import {
   expectDocumentTheme,
 } from "./helpers/theme-settings-fixtures";
 import type { TestThemePreference } from "./helpers/theme-settings-fixtures";
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/realtime/events**", (route) =>
+    route.fulfill({ status: 204 })
+  );
+  await page.route("**/api/github/repos", (route) => fulfillJson(route, []));
+});
 
 test("theme preference persists from user menu into spaces without UI regressions", async ({
   page,

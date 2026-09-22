@@ -41,21 +41,49 @@ describe("legacy Settings destinations", () => {
     ).toBe("/alex/connections?slack=error&reason=denied");
   });
 
-  it("keeps personal Models and Agents redirects and leaves Team Models in Settings", () => {
+  it("keeps Models and Agents redirects and routes Team Models to its own Settings page", () => {
     expect(getLegacySettingsDestination(personal, "tab=models")).toBe(
       "/alex/models/catalog"
     );
     expect(getLegacySettingsDestination(personal, "", "#agents")).toBe(
       "/alex/agents/roster"
     );
-    expect(getLegacySettingsDestination(team, "tab=models")).toBeNull();
-    expect(getLegacySettingsDestination(team, "", "#models")).toBeNull();
+    expect(getLegacySettingsDestination(team, "tab=models")).toBe(
+      "/acme/settings/models"
+    );
+    expect(getLegacySettingsDestination(team, "", "#models")).toBe(
+      "/acme/settings/models"
+    );
   });
 
-  it.each(["", "tab=account", "tab=billing", "tab=unknown", "tab=constructor"])(
-    "leaves ordinary Settings alone: %s",
-    (query) => {
-      expect(getLegacySettingsDestination(personal, query)).toBeNull();
-    }
-  );
+  it.each([
+    ["", "/alex/settings/account"],
+    ["tab=account", "/alex/settings/account"],
+    ["tab=billing&billing=topup", "/alex/settings/billing?billing=topup"],
+    ["tab=keys&sub=cli", "/alex/settings/mogplex-keys"],
+    ["tab=keys&sub=api", "/alex/settings/keys"],
+    ["tab=teams", "/alex/settings/teams"],
+    ["tab=unknown", "/alex/settings/account"],
+    ["tab=constructor", "/alex/settings/account"],
+  ])("redirects retired tabs: %s", (query, expected) => {
+    expect(getLegacySettingsDestination(personal, query)).toBe(expected);
+  });
+
+  it("keeps team settings scoped and handles hashes", () => {
+    expect(getLegacySettingsDestination(team, "")).toBe(
+      "/acme/settings/members"
+    );
+    expect(getLegacySettingsDestination(team, "tab=keys&sub=cli")).toBe(
+      "/acme/settings/keys"
+    );
+    expect(getLegacySettingsDestination(team, "", "#audit")).toBe(
+      "/acme/settings/audit"
+    );
+    expect(getLegacySettingsDestination(personal, "keep=1", "#keys")).toBe(
+      "/alex/settings/keys?keep=1"
+    );
+    expect(getLegacySettingsDestination(personal, "billing=topup")).toBe(
+      "/alex/settings/billing?billing=topup"
+    );
+  });
 });

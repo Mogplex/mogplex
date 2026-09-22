@@ -25,6 +25,7 @@ test("Connections has its own navigation destination outside Settings", async ({
   await expect(
     page.getByRole("tab", { name: "Connections", exact: true })
   ).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to main navigation" }).click();
   await page.getByTestId("app-nav-connections").click();
   await expect(page).toHaveURL(scopedPath("connections"));
   await expect(

@@ -168,8 +168,8 @@ export function useFlowDerivedSelection(
     selectedAgentNode?.data.harness ?? "mogplex";
 
   const apiKeysSettingsHref = scope
-    ? scopedHref(scope, "/settings?tab=keys")
-    : "/settings?tab=keys";
+    ? scopedHref(scope, "/settings/keys")
+    : "/settings/keys";
 
   const selectedConditionNode =
     selectedNode?.type === "condition"

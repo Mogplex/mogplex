@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/run-checks-fixtures";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   connectedUser,
@@ -234,6 +234,8 @@ test("settings surfaces settings preference load failures without crashing", asy
   await expect(
     page.getByText("Unable to load settings preferences")
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Account", exact: true })
+  ).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

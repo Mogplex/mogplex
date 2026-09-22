@@ -19,6 +19,7 @@ import {
   DeliveryTruck,
   Flash,
   PlugTypeA,
+  NavArrowRight,
   Repository,
   Rocket,
   Search,
@@ -33,6 +34,7 @@ import {
 import { formatUsd } from "@/lib/billing/catalog";
 import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-types";
 import { scopedHref } from "@/lib/scoped-href";
+import { SettingsNavigation } from "@/components/settings/settings-navigation";
 
 const SIDEBAR_WIDTH_KEY = "mogplex.appSidebar.width";
 const SIDEBAR_COLLAPSED_KEY = "mogplex.appSidebar.collapsed";
@@ -72,16 +74,19 @@ function SidebarNavLink({
   item,
   compact,
   pathname,
+  onClick,
 }: {
   item: AppNavItem;
   compact: boolean;
   pathname: string;
+  onClick?: () => void;
 }) {
   const Icon = NAV_ICONS[item.id];
   const active = isAppNavItemActive(pathname, item.match);
   return (
     <Link
       href={item.href}
+      onClick={onClick}
       aria-current={active ? "page" : undefined}
       aria-label={compact ? item.label : undefined}
       title={compact ? item.label : undefined}
@@ -96,6 +101,7 @@ function SidebarNavLink({
       {compact ? null : (
         <span className="app-sidebar-link-label truncate">{item.label}</span>
       )}
+      {item.id === "settings" && !compact && <NavArrowRight className="ml-auto size-4 shrink-0" aria-hidden="true" />}
     </Link>
   );
 }
@@ -147,9 +153,13 @@ export function AppSidebar() {
     Boolean(scope) && (membershipsLoading || scopeResolved);
   const billingPending = membershipsLoading || billingLoading;
   const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [mainNavigationPath, setMainNavigationPath] = useState<string | null>(null);
+  const settingsPath = scopedHref(scope, "/settings");
+  const inSettings = pathname === settingsPath || pathname.startsWith(`${settingsPath}/`);
+  const showSettings = inSettings && mainNavigationPath !== pathname;
   const [resizing, setResizing] = useState(false);
   const activePointerId = useRef<number | null>(null);
-  const compact = width <= COMPACT_THRESHOLD;
+  const compact = !showSettings && width <= COMPACT_THRESHOLD;
 
   useEffect(() => {
     const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -213,7 +223,7 @@ export function AppSidebar() {
       data-compact={compact ? "true" : "false"}
       data-resizing={resizing ? "true" : "false"}
       data-testid="app-sidebar"
-      style={{ width }}
+      style={{ width: showSettings ? Math.max(width, 240) : width }}
     >
       <div className="app-sidebar-header h-[20px] shrink-0" aria-hidden="true" />
 
@@ -229,8 +239,11 @@ export function AppSidebar() {
         </div>
       )}
 
+      {showSettings ? (
+        <SettingsNavigation onBack={() => setMainNavigationPath(pathname)} />
+      ) : <>
       <nav
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden px-4 py-0"
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-4 py-0"
         aria-label="Primary"
       >
         {primaryItems.map((item) => (
@@ -253,9 +266,11 @@ export function AppSidebar() {
             item={item}
             compact={compact}
             pathname={pathname}
+            onClick={() => setMainNavigationPath(null)}
           />
         ))}
       </nav>
+      </>}
 
       {!compact && showBillingCard ? (
         <div className="app-sidebar-footer mx-5 mb-5 overflow-hidden rounded-lg border border-sidebar-border bg-card px-4 py-4 text-sm">

@@ -24,8 +24,11 @@ for (const role of ["owner", "admin"] as const) {
     });
 
     await page.goto(TEAM_SETTINGS_PATH);
-    await page.getByRole("tab", { name: "Models", exact: true }).click();
-    await expect(page).toHaveURL(`${TEAM_SETTINGS_PATH}?tab=models`);
+    await page
+      .getByRole("navigation", { name: "Settings", exact: true })
+      .getByRole("link", { name: "Models", exact: true })
+      .click();
+    await expect(page).toHaveURL(`${TEAM_SETTINGS_PATH}/models`);
     const toggle = page.getByRole("switch", { name: "Run checks" });
     await expect(toggle).toBeChecked();
     await expect(toggle).toBeEnabled();

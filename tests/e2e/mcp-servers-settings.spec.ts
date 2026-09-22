@@ -1,4 +1,5 @@
-import { expect, test, type Route } from "@playwright/test";
+import type { Route } from "@playwright/test";
+import { expect, test } from "./helpers/run-checks-fixtures";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 
 type MockServer = {

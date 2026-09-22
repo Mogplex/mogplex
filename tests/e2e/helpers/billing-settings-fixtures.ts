@@ -10,6 +10,9 @@ export async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 export async function mockSettingsShell(page: Page) {
+  await page.route("**/api/settings/decision-checks", (route) =>
+    fulfillJson(route, { enabled: true, viewer: { canManage: true } })
+  );
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, {
       user: {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BillingSection } from "@/components/settings/billing-section";
+import { getScopeContext } from "@/lib/scope-context";
 
 export const metadata: Metadata = {
   title: "Billing | Mogplex",
@@ -10,10 +11,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function BillingSettingsPage() {
+export default async function BillingSettingsPage() {
+  await getScopeContext();
   return (
-    <div className="mx-auto w-full max-w-3xl p-6">
-      <h1 className="mb-6 text-xl font-semibold">Billing</h1>
+    <div className="min-h-full w-full max-w-[1488px] space-y-4 p-3 md:space-y-6 md:p-6">
+      <h1 className="ui-page-title">Billing</h1>
       <BillingSection />
     </div>
   );

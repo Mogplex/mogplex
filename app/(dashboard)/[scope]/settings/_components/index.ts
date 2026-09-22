@@ -10,10 +10,4 @@ export {
   type GithubInstallationView,
   type GithubOwnerTarget,
   type SettingsView,
-  type SettingsTab,
-  type KeysSubTab,
-  SETTINGS_TABS,
-  SETTINGS_TAB_SET,
-  KEYS_SUB_TABS,
-  KEYS_SUB_TAB_SET,
 } from "./settings-types";
