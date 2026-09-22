@@ -303,7 +303,12 @@ export function createSandboxHarnessPostHandler(
         setupCtx,
         runtimeEnv
       );
-      const mcpConfig = await setupMcpConfig(deps, sandbox, setupCtx);
+      const mcpConfig = await setupMcpConfig(
+        deps,
+        sandbox,
+        setupCtx,
+        runtimeEnv
+      );
       // Reads top down as: who the agent is, the skills in play, the task.
       const skilled = await setupSkillCatalog(deps, sandbox, setupCtx, {
         harnessId,

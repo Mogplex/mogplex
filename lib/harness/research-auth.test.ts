@@ -62,4 +62,15 @@ describe("run scoped research authorization", () => {
     vi.stubEnv("EXA_RESEARCH_SECRET", "different-secret");
     expect(verifyResearchToken(token)).toBe(null);
   });
+
+  it.each([null, undefined, {}])(
+    "denies a run with missing sandbox metadata: %s",
+    (metadata) => {
+      // Persisted data can violate the non-null application model.
+      const malformedRun = { ...run, metadata } as unknown as Parameters<
+        typeof isActiveResearchRun
+      >[0];
+      expect(isActiveResearchRun(malformedRun, claims)).toBe(false);
+    }
+  );
 });

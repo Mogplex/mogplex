@@ -32,7 +32,7 @@ export function isActiveResearchRun(
     ["pending", "streaming"].includes(run.status) &&
     run.control_state === "active" &&
     !run.cancel_requested_at &&
-    run.metadata.sandbox_record_id === claims.sandboxRecordId
+    run.metadata?.sandbox_record_id === claims.sandboxRecordId
   );
 }
 
