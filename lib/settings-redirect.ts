@@ -19,7 +19,7 @@ export function getLegacySettingsDestination(
   const sections = scope.kind === "team" ? TEAM_SETTINGS : PERSONAL_SETTINGS;
   const section = sections.find((item) => item.id === tab)?.id;
   let path = `/settings/${section ?? (scope.kind === "team" ? "members" : "account")}`;
-  if (tab === "connections" || isConnectionReturn) {
+  if (tab === "connections" || tab === "mcp" || isConnectionReturn) {
     path = "/connections";
   } else if (scope.kind === "personal" && MOVED_PERSONAL_TABS.has(tab)) {
     path = MOVED_PERSONAL_TABS.get(tab)!;
@@ -34,6 +34,7 @@ export function getLegacySettingsDestination(
   }
   params.delete("tab");
   params.delete("sub");
+  if (tab === "mcp" && !isConnectionReturn) params.set("tab", "mcp");
   const remaining = params.toString();
   return scopedHref(scope.slug, remaining ? `${path}?${remaining}` : path);
 }

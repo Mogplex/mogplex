@@ -1,10 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { scopedHref } from "@/lib/scoped-href";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchJsonObject } from "@/lib/client-fetch";
@@ -16,7 +13,6 @@ import { ServerCard } from "./mcp-servers/server-card";
 import { McpServerDialog, DeleteServerDialog } from "./mcp-servers/dialogs";
 
 export function McpServersPageClient() {
-  const { scope } = useParams<{ scope: string }>();
   const { data, mutate } = useSWR<McpServersResponse>(
     "/api/mcp-servers",
     (url: string) =>
@@ -129,27 +125,14 @@ export function McpServersPageClient() {
   };
 
   return (
-    <div className="min-h-full space-y-4 p-3 md:space-y-6 md:p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="ui-page-title">MCP Servers</h1>
-          <div className="ui-page-subtitle">
-            Sync CLI-ready MCP server definitions without exposing stored secrets
-            back to the browser.
-          </div>
-        </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href={scopedHref(scope, "/settings")}>Back to Settings</Link>
-        </Button>
-      </div>
-
+    <div className="space-y-4">
       <section className="border border-border bg-card">
         <div className="flex flex-col gap-3 border-b border-border px-4 py-3 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="ui-section-title">Server Definitions</div>
             <div className="ui-section-caption">
-              Mogplex resolves Vault-backed secrets only when the CLI fetches
-              `/api/mcp-servers?format=cli`.
+              Manage MCP servers that sync with the Mogplex CLI. Saved secrets
+              stay hidden in the browser.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">

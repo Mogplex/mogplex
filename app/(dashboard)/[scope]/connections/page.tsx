@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { getScopeContext } from "@/lib/scope-context";
-import { ConnectionsSection } from "@/components/connections/connections-section";
-import { SlackInstallToast } from "@/components/connections/slack-install-toast";
+import { ConnectionsTabs } from "@/components/connections/connections-tabs";
 import { TeamConnectionsNotice } from "@/components/connections/team-connections-notice";
 
 export const metadata: Metadata = {
@@ -21,10 +20,7 @@ export default async function ConnectionsPage() {
         </p>
       </header>
       {scope.kind === "personal" ? (
-        <>
-          <SlackInstallToast />
-          <ConnectionsSection />
-        </>
+        <ConnectionsTabs />
       ) : (
         <TeamConnectionsNotice />
       )}

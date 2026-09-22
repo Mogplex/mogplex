@@ -43,7 +43,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
   });
 }
 
-test("settings MCP page supports add, edit, secret overwrite, and delete without exposing refs", async ({
+test("Connections MCP tab supports add, edit, secret overwrite, and delete without exposing refs", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
@@ -182,7 +182,7 @@ test("settings MCP page supports add, edit, secret overwrite, and delete without
     }
   );
 
-  await page.goto(scopedPath("settings/mcp"));
+  await page.goto(scopedPath("connections?tab=mcp"));
 
   await page.getByRole("button", { name: "Add server" }).click();
   await page.getByLabel("Name").fill("supabase");

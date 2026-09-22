@@ -40,7 +40,6 @@ test("Settings drills into page navigation and back restores the main menu", asy
     ["Teams", "teams"],
     ["Provider Keys", "keys"],
     ["Mogplex Keys", "mogplex-keys"],
-    ["MCP Servers", "mcp"],
     ["Account", "account"],
   ]) {
     await nav.getByRole("link", { name: label, exact: true }).click();

@@ -5,7 +5,6 @@ export const PERSONAL_SETTINGS = [
   { id: "teams", label: "Teams" },
   { id: "keys", label: "Provider Keys" },
   { id: "mogplex-keys", label: "Mogplex Keys" },
-  { id: "mcp", label: "MCP Servers" },
   { id: "billing", label: "Billing" },
 ] as const;
 

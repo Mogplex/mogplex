@@ -10,6 +10,17 @@ const personal: ScopeContext = {
 const team: ScopeContext = { kind: "team", slug: "acme", teamId: "team-1" };
 
 describe("legacy Settings destinations", () => {
+  it("moves MCP links to the Connections tab and preserves unrelated query values", () => {
+    expect(getLegacySettingsDestination(personal, "tab=mcp&keep=1")).toBe(
+      "/alex/connections?keep=1&tab=mcp"
+    );
+    expect(getLegacySettingsDestination(personal, "", "#mcp")).toBe(
+      "/alex/connections?tab=mcp"
+    );
+    expect(
+      getLegacySettingsDestination(personal, "tab=mcp&oauth=success")
+    ).toBe("/alex/connections?oauth=success");
+  });
   it.each([personal, team])(
     "preserves connection return messages in $kind scope",
     (scope) => {
