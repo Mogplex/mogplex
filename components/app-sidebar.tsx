@@ -18,6 +18,7 @@ import {
   Cube,
   DeliveryTruck,
   Flash,
+  PlugTypeA,
   Repository,
   Rocket,
   Search,
@@ -49,6 +50,7 @@ const NAV_ICONS = {
   observe: Binocular,
   agents: Community,
   models: Cpu,
+  connections: PlugTypeA,
   settings: Settings,
 } satisfies Record<AppNavItemId, typeof Rocket>;
 

@@ -10,17 +10,15 @@ import { TeamsListSection } from "@/components/settings/teams-list-section"
 import { BillingSection } from "@/components/settings/billing-section"
 import { DecisionChecksSection } from "@/components/settings/decision-checks-section"
 import { CliApiKeysSection } from "@/components/settings/cli-api-keys-section"
-import { SlackInstallToast } from "@/components/connections/slack-install-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { trackActivation } from "@/lib/activation-tracking"
-import { scopedHref } from "@/lib/scoped-href"
+import { getLegacySettingsDestination } from "@/lib/settings-redirect"
 import type { ScopeContext } from "@/lib/scope-context"
 
 import {
   AccountSection,
   ApiKeysSection,
-  ConnectionsSection,
   type GithubInstallationView,
   type GithubOwnerTarget,
   type SettingsView,
@@ -28,19 +26,27 @@ import {
   type KeysSubTab,
   SETTINGS_TAB_SET,
   KEYS_SUB_TAB_SET,
-  LEGACY_HASH_TO_TAB,
-  LEGACY_TAB_ROUTES,
 } from "./_components"
 
 export function SettingsPageClient({ scope }: { scope: ScopeContext }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const query = searchParams.toString()
+  const destination = getLegacySettingsDestination(scope, query)
+  useEffect(() => {
+    const target = getLegacySettingsDestination(scope, query, window.location.hash)
+    if (target) router.replace(target, { scroll: false })
+  }, [scope, query, router])
+  if (destination) return null
+
   if (scope.kind === "team") {
     return <TeamSettingsClient teamId={scope.teamId} teamSlug={scope.slug} />
   }
 
-  return <PersonalSettingsClient scope={scope.slug} />
+  return <PersonalSettingsClient />
 }
 
-function PersonalSettingsClient({ scope }: { scope: string }) {
+function PersonalSettingsClient() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -68,29 +74,6 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
     },
     [router, pathname, searchParams],
   )
-
-  // Models and Agents moved to their own routes; keep old deep links working.
-  useEffect(() => {
-    const movedTo = LEGACY_TAB_ROUTES[tabParam]
-    if (!movedTo) return
-    router.replace(scopedHref(scope, movedTo))
-  }, [router, scope, tabParam])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const hash = window.location.hash.replace(/^#/, "")
-    if (!hash) return
-    const movedTo = LEGACY_TAB_ROUTES[hash]
-    if (movedTo) {
-      router.replace(scopedHref(scope, movedTo))
-      return
-    }
-    const mapped = LEGACY_HASH_TO_TAB[hash]
-    if (!mapped) return
-    const params = new URLSearchParams(window.location.search)
-    params.set("tab", mapped)
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }, [router, pathname, scope])
 
   const { user, isLoading } = useUser()
   const { error: settingsError } = useSWR<SettingsView>(
@@ -176,10 +159,9 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
 
   return (
     <div className="min-h-full w-full max-w-[1488px] p-3 space-y-4 md:p-6 md:space-y-6">
-      <SlackInstallToast />
       <div>
         <h1 className="ui-page-title">Settings</h1>
-        <div className="ui-page-subtitle">Account connections and preferences.</div>
+        <div className="ui-page-subtitle">Account preferences, keys, and billing.</div>
       </div>
 
       {settingsLoadError && (
@@ -191,7 +173,6 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
           <TabsList className="h-8 inline-flex w-max bg-transparent p-0 gap-1">
             <TabsTrigger value="account" className="px-3 h-7 text-[13px]">Account</TabsTrigger>
             <TabsTrigger value="teams" className="px-3 h-7 text-[13px]">Teams</TabsTrigger>
-            <TabsTrigger value="connections" className="px-3 h-7 text-[13px]">Connections</TabsTrigger>
             <TabsTrigger value="keys" className="px-3 h-7 text-[13px]">Keys &amp; Tokens</TabsTrigger>
             <TabsTrigger value="billing" className="px-3 h-7 text-[13px]">Billing</TabsTrigger>
           </TabsList>
@@ -218,10 +199,6 @@ function PersonalSettingsClient({ scope }: { scope: string }) {
 
         <TabsContent value="teams" className="mt-0">
           <TeamsListSection />
-        </TabsContent>
-
-        <TabsContent value="connections" className="mt-0">
-          <ConnectionsSection />
         </TabsContent>
 
         <TabsContent value="keys" className="mt-0">

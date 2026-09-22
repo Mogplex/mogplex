@@ -58,6 +58,13 @@ export const APP_NAV_ITEM_DEFS = [
     section: "primary",
   },
   {
+    id: "connections",
+    label: "Connections",
+    path: "/connections",
+    subpaths: ["/connections"],
+    section: "primary",
+  },
+  {
     id: "settings",
     label: "Settings",
     path: "/settings",

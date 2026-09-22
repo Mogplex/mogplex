@@ -37,6 +37,12 @@ export async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 export async function setupWorkspaceRoutes(page: Page) {
+  await page.route(/\/api\/skills\/catalog(?:\?.*)?$/, (route) =>
+    fulfillJson(route, { skills: [] })
+  );
+  await page.route("**/api/observability/calls?*", (route) =>
+    fulfillJson(route, { calls: [], total: 0, page: 1, limit: 20 })
+  );
   await page.route("**/__e2e/preview/**", async (route) => {
     await route.fulfill({
       status: 200,

@@ -6,7 +6,7 @@ import {
   INITIAL_CONNECTION_FORM,
   getDefaultAuthHeader,
   type ConnectionForm,
-} from "./settings-types"
+} from "./connection-form"
 
 type AddConnectionFormProps = {
   mutateConnections: () => Promise<unknown>

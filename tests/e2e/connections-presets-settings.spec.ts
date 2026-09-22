@@ -1,3 +1,4 @@
+import { mockSettingsShell } from "./helpers/billing-settings-fixtures";
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
@@ -5,6 +6,10 @@ import {
   modelId,
   fulfillJson,
 } from "./helpers/connections-presets-fixtures";
+
+test.beforeEach(async ({ page }) => {
+  await mockSettingsShell(page);
+});
 
 test("settings handles duplicate preset adds gracefully and shows preset origin badge", async ({
   page,
@@ -73,7 +78,7 @@ test("settings handles duplicate preset adds gracefully and shows preset origin 
     await fulfillJson(route, { ok: true });
   });
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("settings-preset-manual-hint")).toContainText(
@@ -154,7 +159,7 @@ test("settings starts provider OAuth for hosted MCP presets instead of auto-test
       await route.fulfill({
         status: 302,
         headers: {
-          location: scopedPath("settings?tab=connections&oauth=success"),
+          location: scopedPath("connections?oauth=success"),
         },
         body: "",
       });
@@ -165,7 +170,7 @@ test("settings starts provider OAuth for hosted MCP presets instead of auto-test
     await fulfillJson(route, { healthy: false, error: "should not run" }, 500);
   });
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   const presetCard = page.getByTestId("settings-preset-notion");
@@ -175,7 +180,7 @@ test("settings starts provider OAuth for hosted MCP presets instead of auto-test
   );
   await presetCard.getByRole("button", { name: "Connect" }).click();
 
-  await page.waitForURL("**/settings?tab=connections&oauth=success");
+  await page.waitForURL("**/connections?oauth=success");
   await expect(
     page.getByText("OAuth connection established. Run a test to verify tools.")
   ).toBeVisible();
@@ -245,7 +250,7 @@ test("settings quick-add supports Zapier's secret full MCP URL", async ({
     await fulfillJson(route, { healthy: true, toolCount: 12 });
   });
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   const presetCard = page.getByTestId("settings-preset-zapier");
@@ -292,7 +297,7 @@ test("settings manual add preserves input and surfaces API errors", async ({
     );
   });
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   const connectionTypeSelect = page
@@ -343,7 +348,7 @@ test("settings manual add surfaces network failures and keeps oauth hidden", asy
     await route.abort("failed");
   });
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   const connectionTypeSelect = page
@@ -445,7 +450,7 @@ test("settings shows oauth reconnect and surfaces hard connection test failures"
     }
   );
 
-  await page.goto(scopedPath("settings?tab=connections"));
+  await page.goto(scopedPath("connections"));
   await page.waitForLoadState("networkidle");
 
   await page.getByLabel("Connection actions").click();

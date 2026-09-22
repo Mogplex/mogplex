@@ -86,8 +86,6 @@ export default async function SlackLinkPage({
     );
   }
 
-  // TODO(#557 commit 3): resolve scope from x-mogplex-scope-* headers and use
-  // scopedHref(scope, "/settings?tab=connections&slack=linked"). For now, bounce
-  // through root so middleware can route to the user's personal slug.
-  redirect("/?tab=connections&slack=linked");
+  // The proxy resolves this route to the authenticated personal scope.
+  redirect("/connections?slack=linked");
 }

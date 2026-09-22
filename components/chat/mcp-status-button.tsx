@@ -331,7 +331,7 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
                   + Add MCP server{mcpAtCap ? " (at cap)" : ""}
                 </button>
                 <Link
-                  href={scopedHref(scope, "/settings?tab=connections")}
+                  href={scopedHref(scope, "/connections")}
                   onClick={closeMenu}
                   className="text-[11px] text-muted-foreground hover:text-foreground"
                 >

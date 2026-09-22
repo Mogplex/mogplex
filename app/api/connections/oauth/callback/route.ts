@@ -18,10 +18,7 @@ export async function GET(req: Request) {
   const cookieStore = await cookies();
   const storedState = cookieStore.get("conn_oauth_state")?.value;
   const pkceVerifier = cookieStore.get("conn_oauth_pkce_verifier")?.value;
-  const settingsSuccessUrl = buildAppUrl(
-    "/settings?tab=connections&oauth=success",
-    req
-  );
+  const connectionsSuccessUrl = buildAppUrl("/connections?oauth=success", req);
   const redirect = (path: string) =>
     NextResponse.redirect(buildAppUrl(path, req));
   const clearCookies = (response: NextResponse) => {
@@ -36,10 +33,9 @@ export async function GET(req: Request) {
     return response;
   };
 
-  // TODO(#557 commit 3): resolve user scope from x-mogplex-scope-* headers and wrap these
-  // redirects via scopedHref. Root path bounces through middleware to the personal slug for now.
+  // The proxy resolves this unscoped route to the authenticated personal scope.
   if (!code || !state || state !== storedState) {
-    return clearCookies(redirect("/?tab=connections&oauth=invalid_state"));
+    return clearCookies(redirect("/connections?oauth=invalid_state"));
   }
 
   const userId = await getUserId();
@@ -57,10 +53,10 @@ export async function GET(req: Request) {
     };
     connectionId = parsed.connectionId;
     if (parsed.userId !== userId) {
-      return clearCookies(redirect("/?tab=connections&oauth=invalid_state"));
+      return clearCookies(redirect("/connections?oauth=invalid_state"));
     }
   } catch {
-    return clearCookies(redirect("/?tab=connections&oauth=invalid_state"));
+    return clearCookies(redirect("/connections?oauth=invalid_state"));
   }
 
   // Fetch connection
@@ -72,7 +68,7 @@ export async function GET(req: Request) {
     .single();
 
   if (!data) {
-    return clearCookies(redirect("/?tab=connections&oauth=not_found"));
+    return clearCookies(redirect("/connections?oauth=not_found"));
   }
 
   const conn = data as Connection;
@@ -100,12 +96,12 @@ export async function GET(req: Request) {
       throw new Error("Failed to persist OAuth tokens");
     }
 
-    return clearCookies(NextResponse.redirect(settingsSuccessUrl));
+    return clearCookies(NextResponse.redirect(connectionsSuccessUrl));
   } catch (err) {
     console.error(
       "[oauth-callback] token exchange failed:",
       err instanceof Error ? err.message : err
     );
-    return clearCookies(redirect("/?tab=connections&oauth=token_error"));
+    return clearCookies(redirect("/connections?oauth=token_error"));
   }
 }

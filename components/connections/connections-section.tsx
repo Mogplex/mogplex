@@ -97,7 +97,7 @@ export function ConnectionsSection() {
     <>
       <section className="border border-border/60 bg-card">
         <div className="px-5 pt-5 pb-2">
-          <div className="ui-section-title">Connections</div>
+          <h2 className="ui-section-title">Services</h2>
           <div className="ui-section-caption">External APIs and MCP servers your agents can use.</div>
         </div>
         {oauthNotice && (

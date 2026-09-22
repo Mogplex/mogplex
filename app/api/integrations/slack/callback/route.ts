@@ -15,8 +15,8 @@ import {
   type UpsertSlackInstallationInput,
 } from "@/lib/slack/installations";
 
-function settingsRedirect(request: Request, query: string) {
-  return NextResponse.redirect(buildAppUrl(`/settings?${query}`, request));
+function connectionsRedirect(request: Request, query: string) {
+  return NextResponse.redirect(buildAppUrl(`/connections?${query}`, request));
 }
 
 type ValidatedCallbackInputs = {
@@ -82,29 +82,29 @@ async function validateSlackCallback(
     console.warn("[slack-callback] user-aborted or Slack returned error", {
       slackError,
     });
-    return settingsRedirect(
+    return connectionsRedirect(
       request,
       `slack=denied&reason=${encodeURIComponent(slackError)}`
     );
   }
   if (!code || !state) {
-    return settingsRedirect(request, "slack=error&reason=missing_params");
+    return connectionsRedirect(request, "slack=error&reason=missing_params");
   }
 
   const config = deps.getOAuthConfig(request);
   if (!config) {
-    return settingsRedirect(request, "slack=not_configured");
+    return connectionsRedirect(request, "slack=not_configured");
   }
 
   const verified = verifySlackOAuthState(state, config.signingSecret);
   if (!verified) {
-    return settingsRedirect(request, "slack=error&reason=invalid_state");
+    return connectionsRedirect(request, "slack=error&reason=invalid_state");
   }
   // Defense-in-depth: the signed state binds to the original user, and the
   // cookie nonce binds to the original browser session. Mismatched cookie means
   // the redirect was likely replayed in a different context.
   if (!cookieNonce || cookieNonce !== verified.nonce) {
-    return settingsRedirect(request, "slack=error&reason=nonce_mismatch");
+    return connectionsRedirect(request, "slack=error&reason=nonce_mismatch");
   }
 
   return { code, config, verified };
@@ -153,7 +153,7 @@ export function createSlackCallbackGetHandler(
         error: exchange.error,
         teamId: exchange.team?.id,
       });
-      return settingsRedirect(
+      return connectionsRedirect(
         request,
         `slack=error&reason=${encodeURIComponent(
           exchange.error ?? "exchange_failed"
@@ -173,10 +173,10 @@ export function createSlackCallbackGetHandler(
       });
     } catch (error) {
       console.error("[slack-callback] failed to persist installation", error);
-      return settingsRedirect(request, "slack=error&reason=persist_failed");
+      return connectionsRedirect(request, "slack=error&reason=persist_failed");
     }
 
-    return settingsRedirect(
+    return connectionsRedirect(
       request,
       `slack=connected&team=${encodeURIComponent(exchange.team.id)}`
     );

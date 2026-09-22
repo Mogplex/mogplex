@@ -9,6 +9,7 @@ export const DASHBOARD_SCOPED_FIRST_SEGMENTS: ReadonlySet<string> = new Set([
   "agents",
   "assignments",
   "automations",
+  "connections",
   "flows",
   "library",
   "observability",

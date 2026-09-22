@@ -41,18 +41,6 @@ export type SettingsView = {
   theme?: string | null;
 };
 
-export type ConnectionForm = {
-  type: "rest_api" | "mcp_server";
-  name: string;
-  base_url: string;
-  auth_type: string;
-  auth_header: string;
-  mcp_transport: "sse" | "http";
-  mcp_url: string;
-  credentials: string;
-  description: string;
-};
-
 export const PROVIDER_META: Record<
   string,
   { label: string; description: string; placeholder: string; masked: string }
@@ -84,61 +72,10 @@ export const PROVIDER_META: Record<
   },
 };
 
-export const CONNECTION_AUTH_OPTIONS = [
-  { value: "none", label: "No Auth" },
-  { value: "bearer", label: "Bearer Token" },
-  { value: "api_key", label: "API Key" },
-  { value: "basic", label: "Basic Auth" },
-] as const;
-
-export const SETTINGS_TABS = [
-  "account",
-  "teams",
-  "connections",
-  "keys",
-  "billing",
-] as const;
+export const SETTINGS_TABS = ["account", "teams", "keys", "billing"] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 export const SETTINGS_TAB_SET: ReadonlySet<string> = new Set(SETTINGS_TABS);
 
 export const KEYS_SUB_TABS = ["api", "cli"] as const;
 export type KeysSubTab = (typeof KEYS_SUB_TABS)[number];
 export const KEYS_SUB_TAB_SET: ReadonlySet<string> = new Set(KEYS_SUB_TABS);
-
-export const LEGACY_HASH_TO_TAB: Record<string, SettingsTab> = {
-  connections: "connections",
-};
-
-/**
- * Legacy `?tab=` / `#hash` values whose content moved to a dedicated route.
- * Models and Agents are primary nav destinations now; old deep links redirect.
- */
-export const LEGACY_TAB_ROUTES: Record<string, string> = {
-  models: "/models/catalog",
-  agents: "/agents/roster",
-};
-
-export const INITIAL_CONNECTION_FORM: ConnectionForm = {
-  type: "rest_api",
-  name: "",
-  base_url: "",
-  auth_type: "none",
-  auth_header: "Authorization",
-  mcp_transport: "http",
-  mcp_url: "",
-  credentials: "",
-  description: "",
-};
-
-export function getDefaultAuthHeader(authType: string): string {
-  return authType === "api_key" ? "X-API-Key" : "Authorization";
-}
-
-export function scrollToConnectionRow(
-  connectionId: string | null | undefined
-): void {
-  if (!connectionId) return;
-  document
-    .querySelector<HTMLElement>(`[data-connection-id="${connectionId}"]`)
-    ?.scrollIntoView({ block: "center", behavior: "smooth" });
-}

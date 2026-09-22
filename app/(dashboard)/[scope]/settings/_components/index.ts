@@ -5,7 +5,6 @@
 
 export { AccountSection } from "./account-section";
 export { ApiKeysSection } from "./api-keys-section";
-export { ConnectionsSection } from "./connections-section";
 
 export {
   type GithubInstallationView,
@@ -17,6 +16,4 @@ export {
   SETTINGS_TAB_SET,
   KEYS_SUB_TABS,
   KEYS_SUB_TAB_SET,
-  LEGACY_HASH_TO_TAB,
-  LEGACY_TAB_ROUTES,
 } from "./settings-types";
