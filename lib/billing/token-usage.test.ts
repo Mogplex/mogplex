@@ -1,6 +1,7 @@
 /* eslint-disable unicorn/prefer-bigint-literals -- The ES6 TypeScript target rejects BigInt literal syntax. */
 
 import { describe, expect, it, vi } from "vitest";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { BillingAccount } from "./accounts";
 import {
   meterReconciledTokenUsage,
@@ -47,6 +48,37 @@ function dependencies(allowPlatformAi = true) {
 }
 
 describe("unbilled AI provider costs", () => {
+  it("uses the production provider ledger recorder when no override is supplied", async () => {
+    const rpc = vi.fn(async () => ({ data: true, error: null }));
+    const prior = Object.getOwnPropertyDescriptor(supabaseAdmin, "rpc");
+    Object.defineProperty(supabaseAdmin, "rpc", {
+      configurable: true,
+      value: rpc,
+    });
+    try {
+      await meterReconciledTokenUsage(input, {
+        loadExplicitPlatformAccess: async () => ({
+          allowPlatformAi: true,
+          allowPlatformSandbox: false,
+        }),
+      });
+      expect(rpc).toHaveBeenCalledExactlyOnceWith(
+        "record_billing_provider_cost_event",
+        expect.objectContaining({
+          p_provider: "vercel-ai-gateway",
+          p_provider_event_id: "tok:call-exempt",
+          p_account: null,
+          p_shared_overhead_category: "platform_operations",
+          p_provider_cost_micros: "83400",
+          p_retail_debit_micros: "0",
+        })
+      );
+    } finally {
+      if (prior) Object.defineProperty(supabaseAdmin, "rpc", prior);
+      else Reflect.deleteProperty(supabaseAdmin, "rpc");
+    }
+  });
+
   it.each([
     [true, "allowlisted"],
     [false, "before_billing_account"],
