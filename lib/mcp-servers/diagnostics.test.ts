@@ -129,6 +129,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -182,10 +183,22 @@ it.each(["other", "owner"])(
 
 it("reports database failure without treating it as a missing server or exposing details", async () => {
   databaseFailure = true;
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const result = await testSavedMcpServer("owner", id);
-  expect(result).toMatchObject({ status: "error", code: "connection" });
+  expect(result).toMatchObject({
+    status: "error",
+    code: "settings_unavailable",
+  });
   expect(JSON.stringify(result)).not.toContain("fixture-secret");
   expect(methods).toEqual([]);
+  expect(warning).toHaveBeenCalledWith(
+    "[mcp-servers] Connection test failed",
+    expect.objectContaining({
+      code: "settings_unavailable",
+      databaseCode: "DB_UNAVAILABLE",
+    })
+  );
+  expect(JSON.stringify(warning.mock.calls)).not.toContain("fixture-secret");
 });
 
 it("recognizes authentication errors nested in a transport failure", async () => {

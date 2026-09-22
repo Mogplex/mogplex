@@ -196,7 +196,9 @@ test("shows pending, failure and retry states without automatic tests", async ({
     await responseReady;
     await fulfillJson(route, {
       status: "error",
-      code: "authentication" satisfies DiagnosticCode,
+      code: (calls === 1
+        ? "authentication"
+        : "settings_unavailable") satisfies DiagnosticCode,
       checkedAt: new Date().toISOString(),
       serverUpdatedAt: "2026-09-22T01:00:00Z",
     });
@@ -221,6 +223,11 @@ test("shows pending, failure and retry states without automatic tests", async ({
     page.getByRole("button", { name: "Test connection", exact: true })
   ).toBeEnabled();
   expect(calls).toBe(2);
+  await expect(
+    page.getByText(
+      "Mogplex could not read the saved connection. Try again later."
+    )
+  ).toBeVisible();
 });
 
 test("lets users add and remove tool approval overrides, and preserves disabled rules", async ({

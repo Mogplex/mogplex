@@ -2,6 +2,8 @@ import type { ToolApproval } from "./policy";
 import { z } from "zod";
 
 export const diagnosticMessages = {
+  settings_unavailable:
+    "Mogplex could not read the saved connection. Try again later.",
   invalid_policy:
     "The tool permissions are invalid. Edit the server and correct its permission fields in Extra JSON.",
   unsafe_url:

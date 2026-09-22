@@ -81,6 +81,7 @@ export async function testSavedMcpServer(
     SAVED_MCP_STARTUP_TIMEOUT_MS
   );
   let updatedAt = "";
+  let readingSettings = true;
   try {
     const { data, error } = await duringStartup(
       getSavedMcpServerForTest(userId, id),
@@ -88,6 +89,7 @@ export async function testSavedMcpServer(
     );
     if (error) throw error;
     if (!data) return null;
+    readingSettings = false;
     const server = data as ChatServerRow & {
       transport: string;
       enabled: boolean;
@@ -114,11 +116,19 @@ export async function testSavedMcpServer(
       serverUpdatedAt: updatedAt,
     };
   } catch (error) {
-    const code = failureCode(error, signal);
+    const code = readingSettings
+      ? "settings_unavailable"
+      : failureCode(error, signal);
     console.warn("[mcp-servers] Connection test failed", {
       userId,
       serverId: id,
       code,
+      ...(readingSettings &&
+      error &&
+      typeof error === "object" &&
+      "code" in error
+        ? { databaseCode: error.code }
+        : {}),
     });
     return {
       status: "error",
