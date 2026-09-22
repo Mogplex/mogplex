@@ -83,7 +83,7 @@ export function McpServerDialog({
                     name: event.target.value,
                   }))
                 }
-                placeholder="supabase"
+                placeholder="My MCP server"
               />
             </div>
 
