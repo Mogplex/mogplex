@@ -6,6 +6,31 @@ import {
   normalizeConnectionCreateInput,
 } from "../../lib/connections/validation";
 
+test("Neon quick-add pins hosted HTTP and bearer auth to the verified preset", () => {
+  const input = normalizeConnectionCreateInput({
+    source_preset: "neon",
+    credentials: "  neon_test_key  ",
+    mcp_url: "https://attacker.example.com",
+    auth_type: "none",
+  });
+
+  assert.equal(input.name, "Neon");
+  assert.equal(input.type, "mcp_server");
+  assert.equal(input.mcp_url, "https://mcp.neon.tech/mcp");
+  assert.equal(input.mcp_transport, "http");
+  assert.equal(input.auth_type, "bearer");
+  assert.equal(input.auth_header, "Authorization");
+  assert.equal(input.credentials, "neon_test_key");
+  assert.equal(input.source_preset, "neon");
+});
+
+test("Neon quick-add requires an API key", () => {
+  assert.throws(
+    () => normalizeConnectionCreateInput({ source_preset: "neon" }),
+    /Neon requires a credential/
+  );
+});
+
 test("preset-backed connections are normalized from server-side preset metadata", () => {
   const input = normalizeConnectionCreateInput({
     name: "Custom Browserbase",

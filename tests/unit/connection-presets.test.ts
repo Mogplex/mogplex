@@ -17,6 +17,7 @@ test("quick-add presets only include the verified provider set", () => {
       "zapier",
       "notion",
       "supabase",
+      "neon",
       "browserbase",
       "sentry",
       "sanity",
@@ -64,6 +65,14 @@ test("verified presets keep their expected transport and auth metadata", () => {
       {
         id: "supabase",
         mcp_url: "https://mcp.supabase.com/mcp",
+        mcp_transport: "http",
+        auth_type: "bearer",
+        mcp_url_field: null,
+        credential_binding: null,
+      },
+      {
+        id: "neon",
+        mcp_url: "https://mcp.neon.tech/mcp",
         mcp_transport: "http",
         auth_type: "bearer",
         mcp_url_field: null,
