@@ -188,7 +188,8 @@ export async function setupMcpConfig(
     "injectClaudeMcpConfig" | "getResolvedConnections" | "safeAppendAiCallEvent"
   >,
   sandbox: Sandbox,
-  ctx: SandboxSetupContext
+  ctx: SandboxSetupContext,
+  runtimeEnv: Record<string, string>
 ): Promise<{ mcpConfigPath: string; researchServerName?: string } | undefined> {
   if (ctx.harnessId !== "claude-code") {
     return undefined;
@@ -199,7 +200,7 @@ export async function setupMcpConfig(
     repoId: ctx.repoId,
     rootDirectory: ctx.rootDirectory,
     resolveConnections: deps.getResolvedConnections,
-    researchEnv: buildHarnessResearchEnv(ctx),
+    researchEnv: runtimeEnv,
   });
 
   if (injection.ok) {
