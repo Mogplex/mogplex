@@ -303,7 +303,7 @@ export function createSandboxHarnessPostHandler(
         setupCtx,
         runtimeEnv
       );
-      const mcpConfigPath = await setupMcpConfig(deps, sandbox, setupCtx);
+      const mcpConfig = await setupMcpConfig(deps, sandbox, setupCtx);
       // Reads top down as: who the agent is, the skills in play, the task.
       const skilled = await setupSkillCatalog(deps, sandbox, setupCtx, {
         harnessId,
@@ -347,7 +347,7 @@ export function createSandboxHarnessPostHandler(
           mode: normalizedMode,
           cwd: executionRoot || undefined,
           runtimeEnv,
-          mcpConfigPath,
+          ...mcpConfig,
           shouldCancel: async () =>
             isCancellationRequested(await loadCurrentCall()),
         }

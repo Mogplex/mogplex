@@ -5,6 +5,7 @@ import {
 } from "@/lib/skill-catalog/chat";
 import { buildConnectionsBlock } from "../system-prompt";
 import { ORCHESTRATOR_TOOLS, getToolsByCategory } from "./registry";
+import { WEB_RESEARCH_INSTRUCTIONS } from "../web-research-instructions";
 import type { InfrastructureDiagnosticScope } from "../user-facing-output";
 import type { Connection } from "@/lib/types";
 
@@ -98,6 +99,8 @@ For sensitive decisions no tool gates on its own, such as plan sign-off or scope
 <tool-categories>
 ${buildToolCategoriesBlock(ctx.availableToolNames)}
 </tool-categories>
+
+${WEB_RESEARCH_INSTRUCTIONS}
 ${buildConnectionsBlock(ctx.connections, {
   canAskApproval: ctx.connectionsCanAskApproval,
 })}

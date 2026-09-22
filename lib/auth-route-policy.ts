@@ -26,6 +26,9 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   // The MCP route owns its bearer validation and must be able to return the
   // RFC 9728 WWW-Authenticate challenge before a client has a token.
   { path: "/api/v1/mogplex/mcp", match: "exact" },
+  // This endpoint validates a signed, run-scoped research token itself.
+  { path: "/api/harness-research/mcp", match: "exact" },
+  { path: "/api/internal/exa", match: "exact" },
   { path: "/api/webhooks/", match: "prefix" },
   // Neon-backend object serving (provider icons); mirrors Supabase Storage's
   // public-bucket semantics, so it is public by definition.

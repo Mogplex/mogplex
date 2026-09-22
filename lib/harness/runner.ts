@@ -1,5 +1,6 @@
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import { getHarnessConfig } from "./config";
+import { codexResearchArgs } from "./research-auth";
 import { codexProviderArgs, codexWorkerIsolationArgs } from "./codex-provider";
 import { installHarnessPackage, isHarnessInstalled } from "./install";
 import type { HarnessId } from "./config";
@@ -13,6 +14,7 @@ type RunHarnessOpts = {
   cwd?: string;
   runtimeEnv?: Record<string, string>;
   mcpConfigPath?: string;
+  researchServerName?: string;
   shouldCancel?: () => boolean | Promise<boolean>;
 };
 
@@ -76,6 +78,7 @@ export async function runHarness(
     resumeSessionId: opts?.resumeSessionId,
     mode: opts?.mode,
     mcpConfigPath: opts?.mcpConfigPath,
+    researchServerName: opts?.researchServerName,
   });
 
   const env: Record<string, string> =
@@ -105,6 +108,7 @@ export async function runHarness(
             "--",
             cmd,
             ...codexProviderArgs(env),
+            ...codexResearchArgs(env),
             ...codexWorkerIsolationArgs(),
             ...args,
           ]

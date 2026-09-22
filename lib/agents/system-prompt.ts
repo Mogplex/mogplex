@@ -1,4 +1,5 @@
 import type { Connection } from "@/lib/types";
+import { WEB_RESEARCH_INSTRUCTIONS } from "./web-research-instructions";
 
 type PromptContext = {
   repoFullName?: string;
@@ -99,6 +100,7 @@ No sandbox is running. You can still use virtual_exec for instant text processin
 The user has selected a repository and you have tools to explore it, execute commands in a live sandbox, search the web, and more. Your job is to be the most effective coding partner possible — proactive, precise, and fast.
 
 ${repoBlock}${sandboxBlock}${buildConnectionsBlock(connections)}
+${WEB_RESEARCH_INSTRUCTIONS}
 <communication>
 - Be direct and concise. Lead with actions, not explanations.
 - Use markdown formatting. Use backticks for file paths, functions, and code references.

@@ -58,7 +58,11 @@ test("webFetch schema does not advertise selector extraction", async () => {
     inputSchema: { shape: Record<string, unknown> };
   };
 
-  assert.deepEqual(Object.keys(tool.inputSchema.shape), ["url"]);
+  assert.deepEqual(Object.keys(tool.inputSchema.shape), [
+    "url",
+    "maxCharacters",
+    "maxAgeHours",
+  ]);
 });
 
 test("createRestApiTool exposes inputSchema for provider validation", async () => {

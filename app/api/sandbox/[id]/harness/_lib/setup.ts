@@ -1,4 +1,5 @@
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
+import { buildHarnessResearchEnv } from "@/lib/harness/research-auth";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import {
   appendSlackAttachmentPromptSection,
@@ -61,6 +62,10 @@ export async function setupSandboxEnv(
   Object.assign(runtimeEnv, harnessAiEnv.env, {
     MOGPLEX_AI_BILLING_SOURCE: harnessAiEnv.aiBillingSource,
   });
+  // Never inherit another run's token from repository environment variables.
+  delete runtimeEnv.MOGPLEX_RESEARCH_TOKEN;
+  delete runtimeEnv.MOGPLEX_RESEARCH_MCP_URL;
+  Object.assign(runtimeEnv, buildHarnessResearchEnv(ctx));
 
   let githubToken: string | null = null;
   if (repoRecord?.github_installation_id) {
@@ -184,16 +189,8 @@ export async function setupMcpConfig(
   >,
   sandbox: Sandbox,
   ctx: SandboxSetupContext
-): Promise<string | undefined> {
+): Promise<{ mcpConfigPath: string; researchServerName?: string } | undefined> {
   if (ctx.harnessId !== "claude-code") {
-    return undefined;
-  }
-
-  if (!ctx.repoId) {
-    console.warn(
-      "[harness] skipping MCP injection: claude-code sandbox has no repo_id",
-      { sandboxId: ctx.sandboxId }
-    );
     return undefined;
   }
 
@@ -202,6 +199,7 @@ export async function setupMcpConfig(
     repoId: ctx.repoId,
     rootDirectory: ctx.rootDirectory,
     resolveConnections: deps.getResolvedConnections,
+    researchEnv: buildHarnessResearchEnv(ctx),
   });
 
   if (injection.ok) {
@@ -221,7 +219,10 @@ export async function setupMcpConfig(
         },
       });
     }
-    return injection.mcpConfigPath;
+    return {
+      mcpConfigPath: injection.mcpConfigPath,
+      researchServerName: injection.researchServerName,
+    };
   }
 
   console.warn("[harness] failed to inject MCP config", {

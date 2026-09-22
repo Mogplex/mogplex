@@ -78,11 +78,26 @@ export function normalizeHarnessExecutionMode(
   return "AUTO";
 }
 
-export function buildClaudePermissionArgs(mode?: string | null) {
+export function buildClaudePermissionArgs(
+  mode?: string | null,
+  researchServerName?: string
+) {
   const normalizedMode = normalizeHarnessExecutionMode(mode);
+  // Only grant the two read-only tools on the server we actually injected.
+  const researchTools = researchServerName
+    ? ["web_search", "web_fetch"].map(
+        (name) => `mcp__${researchServerName}__${name}`
+      )
+    : [];
 
   if (normalizedMode === "SAFE") {
-    return withDisallowedTools(["--permission-mode", "plan"]);
+    return withDisallowedTools([
+      "--permission-mode",
+      "plan",
+      ...(researchTools.length > 0
+        ? ["--allowedTools", researchTools.join(",")]
+        : []),
+    ]);
   }
 
   if (normalizedMode === "YOLO") {
@@ -93,6 +108,6 @@ export function buildClaudePermissionArgs(mode?: string | null) {
     "--permission-mode",
     "acceptEdits",
     "--allowedTools",
-    CLAUDE_AUTO_ALLOWED_TOOLS.join(","),
+    [...CLAUDE_AUTO_ALLOWED_TOOLS, ...researchTools].join(","),
   ]);
 }
