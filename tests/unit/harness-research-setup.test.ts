@@ -66,7 +66,7 @@ test("sandbox environment and Claude MCP reuse one research credential across se
         {
           injectClaudeMcpConfig,
           getResolvedConnections: async () => [],
-          safeAppendAiCallEvent: async () => {},
+          safeAppendAiCallEvent: async () => null,
         },
         sandbox,
         context,
