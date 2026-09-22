@@ -26,6 +26,7 @@ export function ServerCard({ server, onEdit, onDelete }: ServerCardProps) {
             <Badge variant="outline">
               {server.enabled ? "Enabled" : "Disabled"}
             </Badge>
+            {server.transport === "stdio" && <Badge variant="outline">CLI only</Badge>}
           </div>
           <p className="text-[11px] leading-5 text-muted-foreground">
             {summarizeServer(server)}

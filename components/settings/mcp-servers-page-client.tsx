@@ -131,8 +131,8 @@ export function McpServersPageClient() {
           <div>
             <div className="ui-section-title">Server Definitions</div>
             <div className="ui-section-caption">
-              Manage MCP servers that sync with the Mogplex CLI. Saved secrets
-              stay hidden in the browser.
+              Enabled public HTTP servers provide tools in web chat and the CLI.
+              Local servers run through the CLI. Saved secrets stay hidden in the browser.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">

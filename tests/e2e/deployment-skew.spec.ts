@@ -53,6 +53,7 @@ test("an old page keeps its API release and unsaved form after schema drift", as
   });
   await page.goto(scopedPath("settings/mcp"));
   await page.getByRole("button", { name: "Add server" }).click();
+  await page.getByRole("tab", { name: "Local (CLI only)" }).click();
   await page.getByLabel("Name").fill("My unsaved server");
   await page.getByLabel("Command").fill("npx");
   const documentToken = await page.evaluate(() => {

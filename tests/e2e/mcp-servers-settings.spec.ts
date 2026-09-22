@@ -185,6 +185,20 @@ test("Connections MCP tab supports add, edit, secret overwrite, and delete witho
   await page.goto(scopedPath("connections?tab=mcp"));
 
   await page.getByRole("button", { name: "Add server" }).click();
+  await expect(
+    page.getByRole("tab", { name: "Streamable HTTP" })
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByText(
+      "Available in web chat and the CLI. Web chat requires a public server URL."
+    )
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Local (CLI only)" }).click();
+  await expect(
+    page.getByText(
+      "Runs on your computer through the CLI. Not available in web chat."
+    )
+  ).toBeVisible();
   await page.getByLabel("Name").fill("supabase");
   await page.getByLabel("Command").fill("npx");
   await page
@@ -196,6 +210,7 @@ test("Connections MCP tab supports add, edit, secret overwrite, and delete witho
   await page.getByRole("button", { name: "Create server" }).click();
 
   await expect(page.getByText("supabase")).toBeVisible();
+  await expect(page.getByText("CLI only", { exact: true })).toBeVisible();
   expect(postBodies).toHaveLength(1);
 
   await page.getByRole("button", { name: "Edit" }).click();
@@ -224,4 +239,27 @@ test("Connections MCP tab supports add, edit, secret overwrite, and delete witho
     .getByRole("button", { name: "Delete" })
     .click();
   await expect(page.getByText("No synced MCP servers yet.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Add server" }).click();
+  await page.getByLabel("Name").fill("remote-docs");
+  await page
+    .getByLabel("URL", { exact: true })
+    .fill("https://docs.example.com/mcp");
+  await page.getByRole("button", { name: "Add secret header" }).click();
+  await page.getByPlaceholder("Header name").fill("Authorization");
+  await page.getByPlaceholder("Secret value").fill("Bearer saved-http-secret");
+  await page.getByRole("button", { name: "Create server" }).click();
+  await expect(page.getByText("remote-docs", { exact: true })).toBeVisible();
+  expect(postBodies[1]).toMatchObject({
+    transport: "http",
+    enabled: true,
+    url: "https://docs.example.com/mcp",
+    headerSecrets: { Authorization: "Bearer saved-http-secret" },
+  });
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByPlaceholder("Overwrite saved secret")).toHaveValue("");
+  await page.getByRole("switch", { name: "Server enabled" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Disabled", { exact: true })).toBeVisible();
+  expect(patchBodies[2]).toMatchObject({ enabled: false, headerSecrets: {} });
 });

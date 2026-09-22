@@ -20,13 +20,15 @@ import {
 } from "@/lib/team-capabilities";
 import type { Connection } from "@/lib/types";
 import type { Tool } from "ai";
+import { CONNECTION_TOOL_STARTUP_TIMEOUT_MS } from "@/lib/connections/mcp-tools";
 
 /**
  * How long a Control turn waits for connection tools. Remote MCP servers are
  * someone else's uptime: a slow one must cost the turn its connection tools,
  * never the turn itself. Same posture as the memory block: fail open.
  */
-export const CONTROL_CONNECTION_TOOLS_TIMEOUT_MS = 8000;
+export const CONTROL_CONNECTION_TOOLS_TIMEOUT_MS =
+  CONNECTION_TOOL_STARTUP_TIMEOUT_MS;
 
 export type ControlConnectionTools = {
   tools: Record<string, Tool>;
@@ -99,7 +101,6 @@ export async function loadControlConnectionTools(
     }
 
     const connections = await deps.loadConnections(input.userId, repoId);
-    if (connections.length === 0) return NO_CONNECTION_TOOLS;
 
     const building = deps.buildTools(connections, {
       userId: input.userId,

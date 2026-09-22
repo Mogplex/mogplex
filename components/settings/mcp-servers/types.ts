@@ -44,7 +44,7 @@ export type FormState = {
 export const EMPTY_FORM: FormState = {
   name: "",
   enabled: true,
-  transport: "stdio",
+  transport: "http",
   command: "",
   argsText: "",
   url: "",
