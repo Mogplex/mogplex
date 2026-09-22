@@ -1,4 +1,5 @@
 import type { FC } from "react"
+import { NeonIcon } from "./neon-icon"
 import {
   Browserbase,
   Linear,
@@ -20,6 +21,7 @@ const PRESET_ICON: Record<string, PresetIcon> = {
   zapier: WebhookFill,
   notion: NotionFill,
   supabase: SupabaseFill,
+  neon: NeonIcon,
   browserbase: Browserbase,
   sentry: Sentry,
   sanity: Sanity,
