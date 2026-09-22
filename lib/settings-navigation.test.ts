@@ -10,7 +10,6 @@ describe("Settings navigation", () => {
       "/alex/settings/teams",
       "/alex/settings/keys",
       "/alex/settings/mogplex-keys",
-      "/alex/settings/mcp",
       "/alex/settings/billing",
     ]);
   });

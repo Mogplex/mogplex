@@ -171,7 +171,9 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   Settings opens a secondary menu in the same sidebar, with a back arrow to
   restore the main navigation. Each Settings section has a scoped page URL.
   The mobile navigation sheet follows the same pattern and closes after a
-  section is selected. Billing alone has Billing Settings and Usage tabs.
+  section is selected. Billing has Billing Settings and Usage tabs.
+  Connections has Integrations and MCP Servers tabs; MCP Servers is not a
+  Settings section.
 - **[Dialog](./components/ui/dialog.tsx):** reuse the Radix-backed focus and
   dismissal behavior, 6px corners, 24px padding, and responsive action layout.
   Provide a title and description. Use inline disclosure when it can complete
