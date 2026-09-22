@@ -447,14 +447,6 @@ export async function buildTools(opts: {
   }
 
   const connections = await loadScopedConnections(opts.userId, opts.repoId);
-  if (connections.length === 0) {
-    recordDeniedTools(opts.teamId ?? null, opts.userId, deniedTools);
-    return {
-      tools: withIdempotency(staticTools),
-      connections: [],
-      cleanup: emptyCleanup,
-    };
-  }
 
   const { dynamicTools, mcpCleanups, mcpToolNames, restToolNames } =
     await buildDynamicConnectionTools(connections, {

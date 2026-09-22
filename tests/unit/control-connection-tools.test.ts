@@ -54,6 +54,15 @@ const solo = {
   enabled: true,
 };
 
+test("should load saved MCP tools even when there are no Integration connections", async () => {
+  const loaded = await loadControlConnectionTools(
+    solo,
+    makeDeps({ loadConnections: async () => [] })
+  );
+  assert.deepEqual(loaded.connections, []);
+  assert.deepEqual(Object.keys(loaded.tools), ["trigger_dev_list_runs"]);
+});
+
 test("should load the operator's connection tools for a Control turn in solo scope", async () => {
   const requested: Array<[string, string | undefined]> = [];
 

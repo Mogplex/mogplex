@@ -12,6 +12,7 @@ import { logConnectionEvent } from "@/lib/connections/logging";
 import { hasCapability, type Capability } from "@/lib/team-capabilities";
 import type { Connection } from "@/lib/types";
 import { sanitize } from "./shared";
+import { loadSavedMcpServerTools } from "@/lib/mcp-servers/chat";
 
 export const DYNAMIC_CONNECTION_CAPABILITY: Capability = "connections.create";
 
@@ -141,25 +142,37 @@ export async function buildDynamicConnectionTools(
     return false;
   });
 
+  const savedLoading = ctx.userId
+    ? loadSavedMcpServerTools(ctx.userId, ctx.canAskApproval)
+    : null;
   const results = await Promise.allSettled(
     runnable.map((conn) =>
       loadConnectionTools(conn, ctx, getValidAccessToken, deps.getCredentials)
     )
   );
 
-  return {
-    ...registerLoadedTools(
-      results.map((result, index) =>
-        result.status === "fulfilled" && result.value
-          ? {
-              loaded: result.value,
-              asks: runnable[index].approval_mode === "ask",
-            }
-          : null
-      )
-    ),
-    withheldConnections,
-  };
+  const registered = registerLoadedTools(
+    results.map((result, index) =>
+      result.status === "fulfilled" && result.value
+        ? {
+            loaded: result.value,
+            asks: runnable[index].approval_mode === "ask",
+          }
+        : null
+    )
+  );
+  if (savedLoading) {
+    const saved = await savedLoading;
+    registered.mcpCleanups.push(...saved.mcpCleanups);
+    for (const [name, tool] of Object.entries(saved.dynamicTools)) {
+      // Preserve the permissions and identity of existing integration tools.
+      if (name in registered.dynamicTools) continue;
+      registered.dynamicTools[name] = tool;
+      registered.mcpToolNames.add(name);
+      if (saved.askToolNames.has(name)) registered.askToolNames.add(name);
+    }
+  }
+  return { ...registered, withheldConnections };
 }
 
 /** Name each loaded tool and sort the names into the sets callers act on. */

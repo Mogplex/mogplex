@@ -13,12 +13,25 @@ export async function getMcpTools(
   conn: Connection,
   credential?: string
 ): Promise<McpToolsResult> {
-  if (conn.mcp_url) {
-    await assertSafeOutboundHttpUrlWithDns(conn.mcp_url, "mcp_url");
-  }
+  return getRemoteMcpTools(buildMcpTransport(conn, credential));
+}
+
+export async function getRemoteMcpTools(
+  transport: ReturnType<typeof buildMcpTransport>
+): Promise<McpToolsResult> {
+  await assertSafeOutboundHttpUrlWithDns(transport.url, "mcp_url");
 
   const client = await createMCPClient({
-    transport: buildMcpTransport(conn, credential),
+    transport: {
+      ...transport,
+      // Validate every outbound request, including a legacy SSE message URL.
+      // Do not let redirects forward stored headers to an unchecked target.
+      fetch: async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        await assertSafeOutboundHttpUrlWithDns(url, "mcp_url");
+        return fetch(input, { ...init, redirect: "error" });
+      },
+    },
   });
 
   try {

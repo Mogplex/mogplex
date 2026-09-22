@@ -51,7 +51,7 @@ export function McpServerDialog({
   const dialogTitle = editingServer ? "Edit MCP server" : "Add MCP server";
   const dialogDescription = editingServer
     ? "Update the synced server definition. Saved secrets stay masked until you overwrite or clear them."
-    : "Create a synced MCP server definition for CLI and agent sessions.";
+    : "Add a server for web chat and the CLI.";
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -86,6 +86,7 @@ export function McpServerDialog({
 
             <div className="flex items-center gap-3 rounded-lg border border-border bg-background/60 px-3 py-2">
               <Switch
+                aria-label="Server enabled"
                 checked={form.enabled}
                 onCheckedChange={(checked) =>
                   onFormChange((current) => ({ ...current, enabled: checked }))
@@ -94,8 +95,7 @@ export function McpServerDialog({
               <div className="space-y-0.5">
                 <div className="text-sm text-foreground">Enabled</div>
                 <div className="text-[11px] text-muted-foreground">
-                  Disabled servers stay stored but do not sync into the CLI
-                  cache.
+                  Disabled servers stay saved but cannot provide tools.
                 </div>
               </div>
             </div>
@@ -112,11 +112,14 @@ export function McpServerDialog({
             className="space-y-4"
           >
             <TabsList className="h-9">
-              <TabsTrigger value="stdio">stdio</TabsTrigger>
-              <TabsTrigger value="http">http</TabsTrigger>
+              <TabsTrigger value="http">Streamable HTTP</TabsTrigger>
+              <TabsTrigger value="stdio">Local (CLI only)</TabsTrigger>
             </TabsList>
 
             <TabsContent value="stdio" className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Runs on your computer through the CLI. Not available in web chat.
+              </p>
               <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="space-y-2">
                   <Label htmlFor="mcp-server-command">Command</Label>
@@ -161,6 +164,9 @@ export function McpServerDialog({
             </TabsContent>
 
             <TabsContent value="http" className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Available in web chat and the CLI. Web chat requires a public server URL.
+              </p>
               <div className="space-y-2">
                 <Label htmlFor="mcp-server-url">URL</Label>
                 <Input
@@ -172,7 +178,7 @@ export function McpServerDialog({
                       url: event.target.value,
                     }))
                   }
-                  placeholder="https://mcp.linear.app/sse"
+                  placeholder="https://mcp.linear.app/mcp"
                 />
               </div>
 

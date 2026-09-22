@@ -99,7 +99,6 @@ export async function loadControlConnectionTools(
     }
 
     const connections = await deps.loadConnections(input.userId, repoId);
-    if (connections.length === 0) return NO_CONNECTION_TOOLS;
 
     const building = deps.buildTools(connections, {
       userId: input.userId,
