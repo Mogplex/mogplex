@@ -53,6 +53,7 @@ function toolApproval(policy: z.infer<typeof toolPolicySchema>, name: string) {
   if (policy.disabled_tools?.includes(name)) return "deny";
   const perTool = policy.tools?.[name];
   if (perTool?.enabled === false) return "deny";
+  // CLI approval.ts defines "approve" as pre-approved, equivalent to "auto".
   return perTool?.approval_mode ?? policy.default_tools_approval_mode;
 }
 
@@ -84,14 +85,23 @@ async function loadSavedServer(server: ChatServerRow, signal: AbortSignal) {
     if (value === undefined) throw new Error("Missing MCP secret");
     headers[name] = value;
   }
-  return {
-    server,
-    policy,
-    loaded: await getRemoteMcpTools(
-      { type: "http", url: server.url, headers },
-      { validateRequests: true, startupSignal: signal }
-    ),
-  };
+  // Detach a healthy session from the shared deadline: its startup requests
+  // can include streams that stay open for the lifetime of the client.
+  const startup = new AbortController();
+  const abort = () => startup.abort(signal.reason);
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    return {
+      server,
+      policy,
+      loaded: await getRemoteMcpTools(
+        { type: "http", url: server.url, headers },
+        { validateRequests: true, startupSignal: startup.signal }
+      ),
+    };
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
 }
 
 /** The catalog is personal. Filter before reading any Vault-backed headers. */
@@ -105,7 +115,8 @@ export async function loadSavedMcpServerTools(
   const startup = new AbortController();
   const timer = setTimeout(
     () => startup.abort(new Error("MCP startup timed out")),
-    CONNECTION_TOOL_STARTUP_TIMEOUT_MS
+    // Leave time to return healthy results before Control's outer deadline.
+    CONNECTION_TOOL_STARTUP_TIMEOUT_MS - 2000
   );
   try {
     const servers = await duringStartup(

@@ -276,6 +276,11 @@ it("bounds saved-server startup, keeps healthy tools, and does not abort later t
   expect(
     requests.find((request) => request.url.endsWith("/slow"))?.signal.aborted
   ).toBe(true);
+  expect(
+    requests
+      .filter((request) => request.url.endsWith("/mcp"))
+      .every((request) => !request.signal.aborted)
+  ).toBe(true);
   const tool = Object.values(built.dynamicTools)[0];
   expect(
     await tool.execute!(
@@ -284,6 +289,41 @@ it("bounds saved-server startup, keeps healthy tools, and does not abort later t
     )
   ).toMatchObject({ content: [{ text: "Documentation found" }] });
   await cleanupMcpClients(built.mcpCleanups);
+});
+
+it("returns healthy saved tools before Control's outer startup deadline", async () => {
+  const { loadControlConnectionTools } =
+    await import("@/app/api/control/chat/_lib/connection-tools");
+  vi.useFakeTimers();
+  stallDiscovery = true;
+  const started = new Promise<void>((resolve) => {
+    onDiscovery = resolve;
+  });
+  rows.push(
+    server({
+      id: "22222222-2222-4222-8222-222222222222",
+      url: "https://8.8.8.8/slow",
+    })
+  );
+  let settled = false;
+  const loading = loadControlConnectionTools(
+    { userId: "user-1", teamId: null, enabled: true },
+    {
+      resolveCapabilities: async () => new Set(["*"]),
+      loadConnections: async () => [],
+      buildTools: buildDynamicConnectionTools,
+      timeoutMs: 8000,
+    }
+  ).then((value) => {
+    settled = true;
+    return value;
+  });
+  await started;
+  await vi.advanceTimersByTimeAsync(6001);
+  expect(settled).toBe(true);
+  const loaded = await loading;
+  expect(Object.keys(loaded.tools)).toHaveLength(1);
+  await loaded.cleanup();
 });
 
 it.each([
