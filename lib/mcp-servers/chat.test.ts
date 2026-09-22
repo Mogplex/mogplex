@@ -30,6 +30,8 @@ let requests: Request[];
 let secrets: Array<{ id: string; decrypted_secret: string }>;
 let failCatalog = false;
 let failDiscovery = false;
+let stallDiscovery = false;
+let onDiscovery: () => void = () => undefined;
 
 beforeEach(() => {
   vi.stubEnv("MOGPLEX_DATA_BACKEND", "supabase");
@@ -40,6 +42,7 @@ beforeEach(() => {
   secrets = [{ id: "secret-1", decrypted_secret: "Bearer test-secret" }];
   failCatalog = false;
   failDiscovery = false;
+  stallDiscovery = false;
   vi.stubGlobal(
     "fetch",
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -66,6 +69,20 @@ beforeEach(() => {
       const body = await request.json();
       if (body.method === "notifications/initialized")
         return new Response(null, { status: 202 });
+      if (
+        body.method === "tools/list" &&
+        stallDiscovery &&
+        url.pathname === "/slow"
+      ) {
+        return new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener(
+            "abort",
+            () => reject(request.signal.reason),
+            { once: true }
+          );
+          onDiscovery();
+        });
+      }
       if (
         body.method === "tools/list" &&
         failDiscovery &&
@@ -100,6 +117,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -230,6 +248,41 @@ it("keeps existing Integration tools available when the saved catalog fails", as
       .find((request) => request.url.startsWith("https://8.8.8.8"))
       ?.headers.get("Authorization")
   ).toBe("Bearer integration-secret");
+  expect(
+    requests.find((request) => request.url.startsWith("https://8.8.8.8"))
+      ?.redirect
+  ).toBe("error");
+  await cleanupMcpClients(built.mcpCleanups);
+});
+
+it("bounds saved-server startup, keeps healthy tools, and does not abort later tool calls", async () => {
+  vi.useFakeTimers();
+  stallDiscovery = true;
+  const started = new Promise<void>((resolve) => {
+    onDiscovery = resolve;
+  });
+  rows.push(
+    server({
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Slow",
+      url: "https://8.8.8.8/slow",
+    })
+  );
+  const loading = buildDynamicConnectionTools([], { userId: "user-1" });
+  await started;
+  await vi.advanceTimersByTimeAsync(8001);
+  const built = await loading;
+  expect(Object.keys(built.dynamicTools)).toHaveLength(1);
+  expect(
+    requests.find((request) => request.url.endsWith("/slow"))?.signal.aborted
+  ).toBe(true);
+  const tool = Object.values(built.dynamicTools)[0];
+  expect(
+    await tool.execute!(
+      {},
+      { toolCallId: "after-deadline", messages: [], context: undefined }
+    )
+  ).toMatchObject({ content: [{ text: "Documentation found" }] });
   await cleanupMcpClients(built.mcpCleanups);
 });
 

@@ -9,6 +9,9 @@ export type McpToolsResult = {
   cleanup: () => Promise<void>;
 };
 
+// The existing Control startup budget also bounds saved-server discovery.
+export const CONNECTION_TOOL_STARTUP_TIMEOUT_MS = 8000;
+
 export async function getMcpTools(
   conn: Connection,
   credential?: string
@@ -17,25 +20,40 @@ export async function getMcpTools(
 }
 
 export async function getRemoteMcpTools(
-  transport: ReturnType<typeof buildMcpTransport>
+  transport: ReturnType<typeof buildMcpTransport>,
+  options: { validateRequests?: boolean; startupSignal?: AbortSignal } = {}
 ): Promise<McpToolsResult> {
   await assertSafeOutboundHttpUrlWithDns(transport.url, "mcp_url");
+  options.startupSignal?.throwIfAborted();
+  let starting = true;
 
   const client = await createMCPClient({
+    initializationOptions: { signal: options.startupSignal },
     transport: {
       ...transport,
-      // Validate every outbound request, including a legacy SSE message URL.
-      // Do not let redirects forward stored headers to an unchecked target.
-      fetch: async (input, init) => {
-        const url = input instanceof Request ? input.url : String(input);
-        await assertSafeOutboundHttpUrlWithDns(url, "mcp_url");
-        return fetch(input, { ...init, redirect: "error" });
-      },
+      // Saved servers use guarded requests. Keep existing Integrations'
+      // transport behavior unchanged.
+      fetch: options.validateRequests
+        ? async (input, init) => {
+            const url = input instanceof Request ? input.url : String(input);
+            await assertSafeOutboundHttpUrlWithDns(url, "mcp_url");
+            const signal =
+              starting && options.startupSignal
+                ? AbortSignal.any([
+                    options.startupSignal,
+                    ...(init?.signal ? [init.signal] : []),
+                  ])
+                : init?.signal;
+            signal?.throwIfAborted();
+            return fetch(input, { ...init, signal, redirect: "error" });
+          }
+        : undefined,
     },
   });
 
   try {
     const tools = await client.tools();
+    options.startupSignal?.throwIfAborted();
     let closed = false;
     return {
       tools,
@@ -48,6 +66,9 @@ export async function getRemoteMcpTools(
   } catch (error) {
     await client.close().catch(() => undefined);
     throw error;
+  } finally {
+    // A startup deadline must never abort a later tool call.
+    starting = false;
   }
 }
 
