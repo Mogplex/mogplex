@@ -56,7 +56,7 @@ export const SAVED_MCP_STARTUP_TIMEOUT_MS =
 export async function loadSavedServer(
   server: ChatServerRow,
   signal: AbortSignal,
-  sessionSignal?: AbortSignal
+  cleanupSignal?: () => AbortSignal
 ) {
   const policy = readToolPolicy(server.extra);
   if (!server.url) throw new Error("Missing MCP URL");
@@ -85,7 +85,7 @@ export async function loadSavedServer(
       policy,
       loaded: await getRemoteMcpTools(
         { type: "http", url: server.url, headers },
-        { validateRequests: true, startupSignal: startup.signal, sessionSignal }
+        { validateRequests: true, startupSignal: startup.signal, cleanupSignal }
       ),
     };
   } finally {

@@ -95,8 +95,12 @@ function normalizeSecretMutationRecord(
   return record;
 }
 
-function validateExtraKeys(extra: JsonObject, transport: "stdio" | "http") {
-  if (transport === "http") {
+function validateExtraKeys(
+  extra: JsonObject,
+  transport: "stdio" | "http",
+  validatePolicy = true
+) {
+  if (transport === "http" && validatePolicy) {
     try {
       readToolPolicy(extra);
     } catch {
@@ -238,7 +242,7 @@ export function normalizeMcpServerUpdateInput(
       : normalizeStringArray(input.args, "args");
   const extra =
     input.extra === undefined ? existing.extra : normalizeExtra(input.extra);
-  validateExtraKeys(extra, nextTransport);
+  validateExtraKeys(extra, nextTransport, input.extra !== undefined);
 
   if (nextTransport === "stdio") {
     if (input.url !== undefined && asTrimmedString(input.url)) {

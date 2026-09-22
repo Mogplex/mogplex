@@ -18,6 +18,10 @@ export const toolPolicySchema = z.object({
 export type ToolPolicy = z.infer<typeof toolPolicySchema>;
 export type ToolApproval = "auto" | "approve" | "prompt" | "deny";
 
+export function normalizeToolNames(names: string[]): string[] {
+  return [...new Set(names.map((name) => name.trim()).filter(Boolean))];
+}
+
 export function readToolPolicy(extra: unknown): ToolPolicy {
   return toolPolicySchema.parse(extra ?? {});
 }

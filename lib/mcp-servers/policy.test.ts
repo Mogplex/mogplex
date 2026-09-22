@@ -1,12 +1,65 @@
 import { describe, expect, it } from "vitest";
-import { readToolPolicy, toolApproval, updateToolPolicy } from "./policy";
-import { normalizeMcpServerCreateInput } from "./normalization";
+import {
+  readToolPolicy,
+  toolApproval,
+  updateToolPolicy,
+  normalizeToolNames,
+} from "./policy";
+import {
+  normalizeMcpServerCreateInput,
+  normalizeMcpServerUpdateInput,
+} from "./normalization";
 import {
   buildPayload,
   serverToForm,
 } from "@/components/settings/mcp-servers/helpers";
 
 describe("saved MCP permission controls", () => {
+  it("uses automatic approval when no rule exists and rejects invalid defaults", () => {
+    expect(toolApproval(readToolPolicy({}), "search")).toBe("auto");
+    for (const mode of ["deny", "inherit"] as const) {
+      expect(() => updateToolPolicy({}, { mode })).toThrow(
+        "Invalid default permission"
+      );
+    }
+  });
+
+  it("allows disabling and renaming legacy rows without accepting a new invalid policy", () => {
+    const existing = {
+      ...normalizeMcpServerCreateInput({
+        name: "docs",
+        transport: "http",
+        url: "https://example.com/mcp",
+      }),
+      id: "server",
+      envRefs: {},
+      headerRefs: {},
+      createdAt: "2026-09-22",
+      updatedAt: "2026-09-22",
+      extra: { enabled_tools: "all" },
+    };
+    expect(
+      normalizeMcpServerUpdateInput({ enabled: false }, existing)
+    ).toMatchObject({ enabled: false, extra: existing.extra });
+    expect(
+      normalizeMcpServerUpdateInput({ name: "renamed" }, existing)
+    ).toMatchObject({ name: "renamed", extra: existing.extra });
+    expect(() =>
+      normalizeMcpServerUpdateInput({ extra: existing.extra }, existing)
+    ).toThrow("Correct the tool permissions");
+    expect(
+      normalizeMcpServerUpdateInput({ extra: { enabled_tools: [] } }, existing)
+        .extra
+    ).toEqual({ enabled_tools: [] });
+    expect(() => readToolPolicy(existing.extra)).toThrow();
+  });
+
+  it("normalizes edited tool lists without changing the original stored array", () => {
+    const original = [" search ", "", "search", "  ", "publish"];
+    expect(normalizeToolNames(original)).toEqual(["search", "publish"]);
+    expect(original[0]).toBe(" search ");
+    expect(normalizeToolNames([" ", ""])).toEqual([]);
+  });
   it("rejects malformed HTTP permissions on the API and browser save paths", () => {
     expect(() =>
       normalizeMcpServerCreateInput({

@@ -147,7 +147,10 @@ test("allowlist editing supports keyboard newlines and never makes an empty allo
   await allowed.press("Enter");
   await allowed.pressSequentially("publish");
   await expect(allowed).toHaveValue("search\npublish");
-  await page.getByLabel("Blocked tools (one name per line)").fill("publish");
+  await allowed.fill(" search \nsearch\n \npublish ");
+  await page
+    .getByLabel("Blocked tools (one name per line)")
+    .fill(" publish \n\npublish");
   await page.getByRole("button", { name: "Save changes" }).click();
   expect(fixture.saved[1]).toMatchObject({
     extra: {

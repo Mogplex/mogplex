@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { readToolPolicy, toolApproval, updateToolPolicy, type ToolApproval } from "@/lib/mcp-servers/policy";
+import { readToolPolicy, toolApproval, updateToolPolicy, normalizeToolNames, type ToolApproval } from "@/lib/mcp-servers/policy";
 import { parseExtra } from "./helpers";
 
 export function PermissionsEditor({ extraText, onChange, toolNames = [] }: {
@@ -56,12 +56,12 @@ export function PermissionsEditor({ extraText, onChange, toolNames = [] }: {
     </div>
     {policy.enabled_tools !== undefined && <div className="space-y-2">
       <Label htmlFor="mcp-allowed-tools">Allowed tools (one name per line)</Label>
-      <Textarea id="mcp-allowed-tools" value={policy.enabled_tools.join("\n")} onChange={(event) => write({ ...extra, enabled_tools: lines(event.target.value) })} />
+      <Textarea id="mcp-allowed-tools" value={policy.enabled_tools.join("\n")} onChange={(event) => write({ ...extra, enabled_tools: lines(event.target.value) })} onBlur={(event) => write({ ...extra, enabled_tools: normalizeToolNames(lines(event.target.value)) })} />
       <p className="text-sm text-muted-foreground">An empty list allows no tools. New tools stay unavailable until added here.</p>
     </div>}
     <div className="space-y-2">
       <Label htmlFor="mcp-blocked-tools">Blocked tools (one name per line)</Label>
-      <Textarea id="mcp-blocked-tools" value={(policy.disabled_tools ?? []).join("\n")} onChange={(event) => write({ ...extra, disabled_tools: lines(event.target.value) })} />
+      <Textarea id="mcp-blocked-tools" value={(policy.disabled_tools ?? []).join("\n")} onChange={(event) => write({ ...extra, disabled_tools: lines(event.target.value) })} onBlur={(event) => write({ ...extra, disabled_tools: normalizeToolNames(lines(event.target.value)) })} />
       <p className="text-sm text-muted-foreground">Blocked tools remain unavailable even if their approval allows them.</p>
     </div>
     <div className="space-y-3">

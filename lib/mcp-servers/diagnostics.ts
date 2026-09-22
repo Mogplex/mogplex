@@ -45,13 +45,12 @@ export async function getSavedMcpServerForTest(
     .maybeSingle();
 }
 
-async function closeLateSession(
-  loading: ReturnType<typeof loadSavedServer>,
-  signal: AbortSignal
+async function closeDiagnosticSession(
+  loading: ReturnType<typeof loadSavedServer>
 ) {
   try {
     const { loaded } = await loading;
-    if (signal.aborted) await loaded.cleanup();
+    await loaded.cleanup();
   } catch {
     /* Discovery failures are reported by the caller. */
   }
@@ -64,6 +63,14 @@ export async function testSavedMcpServer(
   requestSignal?: AbortSignal
 ): Promise<McpDiagnosticResult | null> {
   const deadline = new AbortController();
+  const cleanup = new AbortController();
+  let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+  // Keep the complete test within the existing eight-second connection budget.
+  const getCleanupSignal = () => {
+    cleanupTimer ??= setTimeout(() => cleanup.abort(), 2000);
+    return cleanup.signal;
+  };
+  let loading: ReturnType<typeof loadSavedServer> | undefined;
   const signal = requestSignal
     ? AbortSignal.any([deadline.signal, requestSignal])
     : deadline.signal;
@@ -92,24 +99,18 @@ export async function testSavedMcpServer(
         checkedAt: new Date().toISOString(),
         serverUpdatedAt: updatedAt,
       };
-    const loading = loadSavedServer(server, signal, signal);
-    // Also close a session if it finishes just after cancellation/deadline.
-    void closeLateSession(loading, signal);
+    loading = loadSavedServer(server, signal, getCleanupSignal);
     const { loaded, policy } = await duringStartup(loading, signal);
-    try {
-      return {
-        status: "success",
-        enabled: server.enabled,
-        tools: Object.keys(loaded.tools).map((name) => ({
-          name,
-          approval: toolApproval(policy, name),
-        })),
-        checkedAt: new Date().toISOString(),
-        serverUpdatedAt: updatedAt,
-      };
-    } finally {
-      await duringStartup(loaded.cleanup(), signal);
-    }
+    return {
+      status: "success",
+      enabled: server.enabled,
+      tools: Object.keys(loaded.tools).map((name) => ({
+        name,
+        approval: toolApproval(policy, name),
+      })),
+      checkedAt: new Date().toISOString(),
+      serverUpdatedAt: updatedAt,
+    };
   } catch (error) {
     const code = failureCode(error, signal);
     console.warn("[mcp-servers] Connection test failed", {
@@ -126,5 +127,15 @@ export async function testSavedMcpServer(
   } finally {
     clearTimeout(timer);
     deadline.abort();
+    if (loading) {
+      // Await teardown after success, cancellation, or failure, without masking
+      // the discovery result. The same fresh signal bounds its DELETE request.
+      await duringStartup(
+        closeDiagnosticSession(loading),
+        getCleanupSignal()
+      ).catch(() => undefined);
+    }
+    clearTimeout(cleanupTimer);
+    cleanup.abort();
   }
 }

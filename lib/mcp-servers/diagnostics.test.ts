@@ -12,6 +12,8 @@ let stall: boolean;
 let stallClose: boolean;
 let tools: string[];
 let onDiscovery: () => void;
+let databaseFailure: boolean;
+let discoveryError: Error | undefined;
 
 beforeEach(() => {
   vi.stubEnv("MOGPLEX_DATA_BACKEND", "supabase");
@@ -42,19 +44,27 @@ beforeEach(() => {
   stallClose = false;
   tools = ["search", "publish", "delete"];
   onDiscovery = () => undefined;
+  databaseFailure = false;
+  discoveryError = undefined;
   vi.stubGlobal(
     "fetch",
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       requests.push(request);
       const url = new URL(request.url);
-      if (url.pathname.endsWith("/user_mcp_servers"))
+      if (url.pathname.endsWith("/user_mcp_servers")) {
+        if (databaseFailure)
+          return Response.json(
+            { message: "fixture-secret-never-return", code: "DB_UNAVAILABLE" },
+            { status: 503 }
+          );
         return Response.json(
           url.searchParams.get("user_id") === `eq.${row.user_id}` &&
             url.searchParams.get("id") === `eq.${row.id}`
             ? row
             : null
         );
+      }
       if (url.pathname.endsWith("/decrypted_secrets"))
         return Response.json(
           missingSecret
@@ -82,6 +92,7 @@ beforeEach(() => {
       if (body.method === "notifications/initialized")
         return new Response(null, { status: 202 });
       if (body.method === "tools/list") {
+        if (discoveryError) throw discoveryError;
         if (stall)
           return new Promise<Response>((_resolve, reject) => {
             request.signal.addEventListener(
@@ -169,6 +180,23 @@ it.each(["other", "owner"])(
   }
 );
 
+it("reports database failure without treating it as a missing server or exposing details", async () => {
+  databaseFailure = true;
+  const result = await testSavedMcpServer("owner", id);
+  expect(result).toMatchObject({ status: "error", code: "connection" });
+  expect(JSON.stringify(result)).not.toContain("fixture-secret");
+  expect(methods).toEqual([]);
+});
+
+it("recognizes authentication errors nested in a transport failure", async () => {
+  discoveryError = new Error("fixture-secret-never-return", {
+    cause: { statusCode: 401 },
+  });
+  const result = await testSavedMcpServer("owner", id);
+  expect(result).toMatchObject({ status: "error", code: "authentication" });
+  expect(JSON.stringify(result)).not.toContain("fixture-secret");
+});
+
 it("reports disabled and empty servers truthfully while allowing a test", async () => {
   row.enabled = false;
   tools = [];
@@ -233,6 +261,9 @@ it("bounds stalled discovery and aborts the network request", async () => {
   await vi.advanceTimersByTimeAsync(6001);
   expect(await result).toMatchObject({ status: "error", code: "timeout" });
   expect(
+    requests.filter((request) => request.method === "DELETE")
+  ).toHaveLength(1);
+  expect(
     requests.some(
       (r) => r.url.startsWith("https://8.8.8.8") && r.signal.aborted
     )
@@ -249,9 +280,12 @@ it("honors request cancellation", async () => {
   await started;
   controller.abort();
   expect(await result).toMatchObject({ status: "error", code: "timeout" });
+  expect(
+    requests.filter((request) => request.method === "DELETE")
+  ).toHaveLength(1);
 });
 
-it("also bounds cleanup and aborts a stalled session close", async () => {
+it("preserves successful discovery while bounding a stalled session close", async () => {
   vi.useFakeTimers();
   stallClose = true;
   const closing = new Promise<void>((resolve) => {
@@ -259,7 +293,26 @@ it("also bounds cleanup and aborts a stalled session close", async () => {
   });
   const result = testSavedMcpServer("owner", id);
   await closing;
-  await vi.advanceTimersByTimeAsync(6001);
+  await vi.advanceTimersByTimeAsync(2001);
+  expect(await result).toMatchObject({
+    status: "success",
+    tools: [{ name: "search" }, { name: "publish" }, { name: "delete" }],
+  });
+  expect(
+    requests.find((request) => request.method === "DELETE")?.signal.aborted
+  ).toBe(true);
+});
+
+it("bounds stalled discovery plus stalled teardown within eight seconds", async () => {
+  vi.useFakeTimers();
+  stall = true;
+  stallClose = true;
+  const started = new Promise<void>((resolve) => {
+    onDiscovery = resolve;
+  });
+  const result = testSavedMcpServer("owner", id);
+  await started;
+  await vi.advanceTimersByTimeAsync(8001);
   expect(await result).toMatchObject({ status: "error", code: "timeout" });
   expect(
     requests.find((request) => request.method === "DELETE")?.signal.aborted

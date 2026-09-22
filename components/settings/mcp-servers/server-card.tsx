@@ -72,7 +72,7 @@ export function ServerCard({ server, onEdit, onDelete, onTestResult }: ServerCar
           </Button>
         </div>
       </div>
-      <div className="mt-3"><ConnectionTest server={server} onResult={onTestResult} /></div>
+      {server.transport === "http" && <div className="mt-3"><ConnectionTest server={server} onResult={onTestResult} /></div>}
     </div>
   );
 }
