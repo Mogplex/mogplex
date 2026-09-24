@@ -96,6 +96,38 @@ test("Slack cancellation respects owner, workspace, channel, actor and run state
         await listSlackCancelableRuns({ ...scope, runId: id(index) }, client)
       ).toEqual([]);
     }
+    await db.query(
+      "update external_agent_runs set metadata=metadata || jsonb_build_object('slack_thread_ts',$2::text) where id=$1",
+      [id(10), "thread-a"]
+    );
+    await db.query(
+      "update external_agent_runs set metadata=metadata || jsonb_build_object('slack_thread_ts',$2::text) where id=$1",
+      [id(11), "thread-b"]
+    );
+    expect(
+      await listSlackCancelableRuns({ ...scope, threadTs: "thread-a" }, client)
+    ).toEqual([{ id: id(10), status: "streaming" }]);
+    expect(
+      await listSlackCancelableRuns({ ...scope, threadTs: "thread-b" }, client)
+    ).toEqual([{ id: id(11), status: "pending" }]);
+    expect(
+      await listSlackCancelableRuns(
+        { ...scope, threadTs: "empty-thread" },
+        client
+      )
+    ).toEqual([]);
+    expect(
+      await listSlackCancelableRuns(
+        { ...scope, threadTs: "thread-a", runId: id(11) },
+        client
+      )
+    ).toEqual([]);
+    // Legacy runs attach the controls directly to the thread root.
+    expect(
+      (await listSlackCancelableRuns({ ...scope, threadTs: "1.2" }, client))
+        .map((row) => row.id)
+        .sort()
+    ).toEqual([id(10), id(11), id(12)]);
     Object.defineProperty(supabaseAdmin, "from", {
       configurable: true,
       value: client.from.bind(client),

@@ -6,6 +6,7 @@ import type { SlackEventTaskPayload } from "@/trigger/slack-event";
 import type { SlackBlockActionsPayload } from "@/lib/slack/interactivity";
 import type { SlackCommandPayload } from "@/lib/slack/command";
 import { getSlackConversationThreadTs } from "@/lib/slack/conversation-scope";
+import { parseSlackThreadCancel } from "@/lib/slack/thread-cancel";
 
 /**
  * Sanity ceiling on the request body. Legitimate Slack event/interactivity
@@ -304,12 +305,13 @@ export function buildSlackThreadConcurrencyKey(
   payload: Pick<
     SlackEventTaskPayload,
     "teamId" | "channelId" | "threadTs" | "messageTs" | "channelType"
-  >
+  > & { text?: string }
 ) {
-  // Serialize runs per Mogplex conversation, so a DM channel (one shared
-  // conversation) never persists two turns concurrently.
+  // Control messages must not wait behind the turn they are trying to stop.
+  const cancellation =
+    parseSlackThreadCancel({ ...payload, text: payload.text ?? "" }) !== null;
   return [
-    "slack-thread",
+    cancellation ? "slack-thread-control" : "slack-thread",
     payload.teamId,
     payload.channelId,
     getSlackConversationThreadTs(payload),

@@ -8,31 +8,46 @@ type CancelScope = {
   teamId: string;
   channelId: string;
   slackUserId: string;
+  threadTs?: string;
   runId?: string;
 };
 
-/** Default cancellation stays inside the caller's current Slack channel. */
+/** Thread context is strict: never fall back to another run in the channel. */
 export async function listSlackCancelableRuns(
   input: CancelScope,
   client: Pick<typeof supabaseAdmin, "from"> = supabaseAdmin
 ): Promise<Pick<ExternalAgentRunRow, "id" | "status">[]> {
-  let query = client
-    .from("external_agent_runs")
-    .select("id, status")
-    .eq("user_id", input.userId)
-    .contains("metadata", {
-      slackRunControls: { teamId: input.teamId, channelId: input.channelId },
-      slack_user_id: input.slackUserId,
-    });
-  query = input.runId
-    ? query.eq("id", input.runId)
-    : query.in("status", ["pending", "streaming", "awaiting_input"]);
-  const { data, error } = await query.order("created_at", { ascending: false });
-  if (error)
+  const base = () => {
+    let query = client
+      .from("external_agent_runs")
+      .select("id, status")
+      .eq("user_id", input.userId)
+      .contains("metadata", {
+        slackRunControls: { teamId: input.teamId, channelId: input.channelId },
+        slack_user_id: input.slackUserId,
+      });
+    query = input.runId
+      ? query.eq("id", input.runId)
+      : query.in("status", ["pending", "streaming", "awaiting_input"]);
+    return query.order("created_at", { ascending: false });
+  };
+  const results = input.threadTs
+    ? await Promise.all([
+        base().eq("metadata->>slack_thread_ts", input.threadTs),
+        base().contains("metadata", {
+          slackRunControls: { messageTs: input.threadTs },
+        }),
+      ])
+    : [await base()];
+  if (results.some(({ error }) => error))
     throw new Error("Failed to load Slack cancellation targets", {
-      cause: error,
+      cause: results.find(({ error }) => error)?.error,
     });
-  return data ?? [];
+  return [
+    ...new Map(
+      results.flatMap(({ data }) => data ?? []).map((row) => [row.id, row])
+    ).values(),
+  ];
 }
 
 export type SlackCancelCommandDeps = {
@@ -50,8 +65,10 @@ export async function slackCancelCommandText(
   argument: string,
   deps: SlackCancelCommandDeps
 ): Promise<string> {
+  const location = scope.threadTs ? "thread" : "channel";
+  const command = scope.threadTs ? "mogplex-cancel" : "/mogplex-cancel";
   if (argument && !z.string().uuid().safeParse(argument).success) {
-    return "Usage: `/mogplex-cancel [run-id]` or `/mogplex cancel [run-id]`. Omit the ID to cancel your active run in this channel.";
+    return `Usage: \`${command} [run-id]\`. Omit the ID to cancel your active run in this ${location}.`;
   }
   let runs: Awaited<ReturnType<SlackCancelCommandDeps["listCancelableRuns"]>>;
   try {
@@ -61,15 +78,15 @@ export async function slackCancelCommandText(
     });
   } catch (error) {
     console.error("[slack-command] run lookup failed", error);
-    return "Run lookup failed, so no cancellation was sent. Retry `/mogplex-cancel` or check `/mogplex status`.";
+    return `Run lookup failed, so no cancellation was sent. Retry \`${command}\` or check \`/mogplex status\`.`;
   }
   if (runs.length === 0) {
     return argument
-      ? "That run was not found among your Slack runs in this channel. Use `/mogplex status` to find your run."
-      : "You have no active Mogplex runs in this channel.";
+      ? `That run was not found among your Slack runs in this ${location}. Use \`/mogplex status\` to find your run.`
+      : `You have no active Mogplex runs in this ${location}.`;
   }
   if (runs.length > 1) {
-    return `You have multiple active runs in this channel. Choose one with \`/mogplex-cancel <run-id>\`:\n${runs.map((run) => `• \`${run.id}\` (${run.status})`).join("\n")}`;
+    return `You have multiple active runs in this ${location}. Choose one with \`${command} <run-id>\`:\n${runs.map((run) => `• \`${run.id}\` (${run.status})`).join("\n")}`;
   }
   const run = runs[0];
   try {
@@ -87,6 +104,6 @@ export async function slackCancelCommandText(
       runId: run.id,
       error,
     });
-    return `Cancellation failed for run \`${run.id}\`. Use \`/mogplex status\` to check its state and retry \`/mogplex-cancel ${run.id}\`.`;
+    return `Cancellation failed for run \`${run.id}\`. Use \`/mogplex status\` to check its state and retry \`${command} ${run.id}\`.`;
   }
 }

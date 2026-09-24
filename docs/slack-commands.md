@@ -28,7 +28,12 @@ in that thread. Each new DM root starts its own conversation; replies use that
 root's conversation and history.
 
 [Slack does not support custom slash commands inside message threads](https://docs.slack.dev/interactivity/implementing-slash-commands/).
-Use the main composer for slash commands and the run's Cancel button in a thread.
+Use the main composer for slash commands. Inside a thread, send `mogplex-cancel`
+as a plain reply (no slash). This immediately cancels your run in that exact
+thread, before any agent or workflow dispatch, without a confirmation prompt.
+It never falls back to another thread's run. You can append a run ID if several
+active runs share the thread. Control messages bypass the normal conversation
+queue so cancellation does not wait for the current turn to finish.
 Command responses are private to the caller.
 
 ## App registration
