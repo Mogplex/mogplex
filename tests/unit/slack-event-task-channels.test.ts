@@ -153,7 +153,10 @@ test("continues bound channel thread replies without a fresh app mention", async
     /Resolve a short confirmation against the most recent concrete proposed action/
   );
   assert.match(systemSuffix ?? "", /perform an issue edit or comment directly/);
-  assert.match(systemSuffix ?? "", /call start_repo_agent_run when the approved action is a code fix/);
+  assert.match(
+    systemSuffix ?? "",
+    /call start_repo_agent_run when the approved action is a code fix/
+  );
   assert.match(systemSuffix ?? "", /Ask at most one blocking question/);
 });
 
