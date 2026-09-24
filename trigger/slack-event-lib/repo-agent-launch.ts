@@ -57,8 +57,8 @@ export async function launchSlackRepoAgentRun(input: {
   repoId: string;
   prompt: string;
   attachments: PreparedSlackRepoAgentAttachments;
-  /** Slack `thread_ts` for every message this launch posts. Omit for DMs. */
-  postThreadTs: string | undefined;
+  /** Slack `thread_ts` for every message this launch posts, including DMs. */
+  postThreadTs: string;
 }): Promise<SlackRepoAgentLaunchResult> {
   const {
     deps,
@@ -125,7 +125,7 @@ export async function launchSlackRepoAgentRun(input: {
         teamId: payload.teamId,
         channelId: payload.channelId,
         messageTs: placeholder.ts,
-        threadTs: postThreadTs ?? placeholder.ts,
+        threadTs: postThreadTs,
       },
       slackAttachments: attachments.files,
       slackAttachmentDroppedCount: attachments.droppedCount,

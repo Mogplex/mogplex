@@ -26,6 +26,7 @@ import {
 
 const COMMANDS = [
   ["status", "Status", "Active or recent run"],
+  ["cancel", "Cancel", "Stop your active run in this channel"],
   ["repo", "Repository", "Channel repository context"],
   ["prs", "Pull requests", "Open PR readiness"],
   ["issues", "Issues", "Browse or create issues"],
@@ -56,7 +57,7 @@ export function buildSlackCommandHubBlocks(): SlackBlock[] {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*What would you like to do?*\nChoose an action or type a subcommand after `/mogplex`.",
+        text: "*Mogplex commands*\n`/mogplex help` — Show this guide\n`/mogplex status` — View your latest run\n`/mogplex-cancel [run-id]` or `/mogplex cancel [run-id]` — Stop your active run in this channel\n`/mogplex repo [owner/repo]` — View or choose the channel repository\n`/mogplex prs` — View open pull requests\n`/mogplex issues [create]` — Browse or create issues\n`/mogplex usage` — View inference credit\n`/mogplex model [model-id]` — View or choose your model\n`/mogplex harness [mogplex|codex|claude-code]` — Choose your runner\n`/mogplex agent [slug]` — Choose a roster agent",
       },
     },
     {
@@ -80,7 +81,7 @@ export function buildSlackCommandHubBlocks(): SlackBlock[] {
       elements: [
         {
           type: "mrkdwn",
-          text: "Try `/mogplex status`, `/mogplex repo`, or `/mogplex model`.",
+          text: "Ask Mogplex in a DM or @mention it in a channel. Replies and run updates stay in your question's thread. Slack slash commands run from the main composer; use the run's Cancel button inside a thread.",
         },
       ],
     },

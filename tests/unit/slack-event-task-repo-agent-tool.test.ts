@@ -106,7 +106,11 @@ test("DM chat agent can start a full repo-agent run for the resolved repository"
       repoId: string;
       prompt: string;
       idempotencyKey: string;
-      slackMessage?: { channelId: string; messageTs: string };
+      slackMessage?: {
+        channelId: string;
+        messageTs: string;
+        threadTs?: string;
+      };
       slackContext: { mode: string; channelId: string };
     };
   };
@@ -118,7 +122,7 @@ test("DM chat agent can start a full repo-agent run for the resolved repository"
   assert.equal(startCall.input.slackContext.mode, "repo_agent");
   assert.equal(startCall.input.slackContext.channelId, "D1");
 
-  // The run status message is a top-level DM message with a cancel button,
+  // The run status message stays in the request's DM thread with a cancel button,
   // and it is the message the completion hook will rewrite.
   const runPost = calls.find(
     (c) =>
@@ -127,8 +131,9 @@ test("DM chat agent can start a full repo-agent run for the resolved repository"
   ) as { input: { channel: string; thread_ts?: string } };
   assert.ok(runPost);
   assert.equal(runPost.input.channel, "D1");
-  assert.equal(runPost.input.thread_ts, undefined);
+  assert.equal(runPost.input.thread_ts, basePayload.threadTs);
   assert.equal(startCall.input.slackMessage?.channelId, "D1");
+  assert.equal(startCall.input.slackMessage?.threadTs, basePayload.threadTs);
   const startedUpdate = calls.find(
     (c) =>
       c.op === "update" &&

@@ -15,6 +15,8 @@ import {
   type SlackWebhookDispatchInput,
 } from "./_lib/event-types";
 import type { SlackCommandPayload } from "@/lib/slack/command";
+import { parseCommand } from "@/lib/slack/command-parse";
+import { buildSlackCommandHelpResponse } from "@/lib/slack/command-help";
 
 // Re-export types and functions that tests depend on
 export {
@@ -125,6 +127,10 @@ async function handleSlashCommandRequest(
       },
       { status: 200 }
     );
+  }
+  // Static help fits Slack's acknowledgement window and works before linking.
+  if (parseCommand(payload)?.name === "help") {
+    return NextResponse.json(buildSlackCommandHelpResponse());
   }
   scheduleAfterResponse(() =>
     safeDispatch(

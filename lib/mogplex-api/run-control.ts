@@ -14,6 +14,9 @@ import {
 } from "./runs";
 import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
 import type { AiCall, AiCallEvent } from "@/lib/types";
+import { MogplexApiRunControlError } from "./run-control-error";
+
+export { MogplexApiRunControlError } from "./run-control-error";
 
 export type PresentedAiCallEvent = {
   id: string;
@@ -23,8 +26,6 @@ export type PresentedAiCallEvent = {
   payload: Record<string, unknown>;
   createdAt: string;
 };
-
-type RunControlErrorCode = "BAD_REQUEST" | "CONFLICT" | "NOT_FOUND";
 
 type RunEventListDeps = {
   loadRun: (
@@ -42,7 +43,8 @@ type RunCancelDeps = {
   updateRun: (
     userId: string,
     runId: string,
-    update: Partial<Pick<ExternalAgentRunRow, "status" | "error">>
+    update: Partial<Pick<ExternalAgentRunRow, "status" | "error">>,
+    expectedStatus?: ExternalAgentRunRow["status"]
   ) => Promise<ExternalAgentRunRow | null>;
   loadAiCall: typeof loadOwnedAiCall;
   requestCancellation: typeof requestAiCallCancellationIfActive;
@@ -82,19 +84,6 @@ const SENSITIVE_EVENT_PAYLOAD_KEYS = new Set([
   "aibillingsource",
   "mogplexaibillingsource",
 ]);
-
-export class MogplexApiRunControlError extends Error {
-  code: RunControlErrorCode;
-  status: number;
-
-  constructor(code: RunControlErrorCode, message: string, status: number) {
-    super(message);
-    this.name = "MogplexApiRunControlError";
-    this.code = code;
-    this.status = status;
-    Object.setPrototypeOf(this, MogplexApiRunControlError.prototype);
-  }
-}
 
 async function getSupabaseAdmin() {
   const mod = await import("@/lib/supabase/admin");
@@ -186,7 +175,8 @@ async function listAiCallEvents(aiCallId: string, limit: number) {
 async function updateRunForUser(
   userId: string,
   runId: string,
-  update: Partial<Pick<ExternalAgentRunRow, "status" | "error">>
+  update: Partial<Pick<ExternalAgentRunRow, "status" | "error">>,
+  expectedStatus?: ExternalAgentRunRow["status"]
 ) {
   const supabaseAdmin = await getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
@@ -194,7 +184,7 @@ async function updateRunForUser(
     .update(update)
     .eq("user_id", userId)
     .eq("id", runId)
-    .in("status", ACTIVE_RUN_STATUSES)
+    .in("status", expectedStatus ? [expectedStatus] : ACTIVE_RUN_STATUSES)
     .select("*")
     .maybeSingle();
 
@@ -353,6 +343,31 @@ export async function cancelMogplexApiRun(input: {
       run: presentMogplexApiRun(run),
       status: run.status,
       alreadyTerminal: true,
+    };
+  }
+
+  if (run.status === "awaiting_input") {
+    // Preserve the completed pass; refuse to race a resume into an active pass.
+    const cancelled = await deps.updateRun(
+      input.userId,
+      run.id,
+      {
+        status: "cancelled",
+        error: null,
+      },
+      "awaiting_input"
+    );
+    if (!cancelled)
+      throw new MogplexApiRunControlError(
+        "CONFLICT",
+        "Run state changed; retry cancellation",
+        409
+      );
+    await safeNotifyTerminal(cancelled, "cancelled");
+    return {
+      run: presentMogplexApiRun(cancelled),
+      status: cancelled.status,
+      alreadyTerminal: false,
     };
   }
 

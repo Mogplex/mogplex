@@ -28,10 +28,10 @@ test("a DM thread question keeps its reply and conversation in that exact thread
   assert.equal(getSlackReplyThreadTs(question), question.threadTs);
   assert.equal(getSlackConversationThreadTs(question), question.threadTs);
 });
-test("ordinary DM messages share a conversation and remain top-level", () => {
+test("ordinary DM messages start their own reply thread and conversation", () => {
   const root = { ...question, threadTs: question.messageTs };
-  assert.equal(getSlackReplyThreadTs(root), undefined);
-  assert.equal(getSlackConversationThreadTs(root), root.channelId);
+  assert.equal(getSlackReplyThreadTs(root), root.messageTs);
+  assert.equal(getSlackConversationThreadTs(root), root.messageTs);
 });
 after(restoreFetch);
 

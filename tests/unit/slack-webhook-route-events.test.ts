@@ -173,7 +173,7 @@ test("buildSlackThreadConcurrencyKey scopes Trigger runs to one Slack thread", a
   );
 });
 
-test("buildSlackThreadConcurrencyKey serializes top-level messages in a DM channel", async () => {
+test("buildSlackThreadConcurrencyKey isolates new DM requests and serializes their replies", async () => {
   const { buildSlackThreadConcurrencyKey } = await loadSlackWebhookRoute();
 
   const first = buildSlackThreadConcurrencyKey({
@@ -191,8 +191,18 @@ test("buildSlackThreadConcurrencyKey serializes top-level messages in a DM chann
     channelType: "im",
   });
 
-  assert.equal(first, "slack-thread:T123:D1:D1");
-  assert.equal(first, second);
+  assert.equal(first, "slack-thread:T123:D1:1700000000.000100");
+  assert.notEqual(first, second);
+  assert.equal(
+    first,
+    buildSlackThreadConcurrencyKey({
+      teamId: "T123",
+      channelId: "D1",
+      channelType: "im",
+      threadTs: "1700000000.000100",
+      messageTs: "1700000010.000100",
+    })
+  );
 });
 
 test("supports non-mention messages in direct conversations and only thread replies in channels", async () => {

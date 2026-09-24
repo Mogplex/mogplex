@@ -32,9 +32,7 @@ import {
 import {
   getSlackInstallationByTeamId,
   getSlackUserMapping,
-  isExplicitSlackUserMapping,
   type SlackInstallationRow,
-  type SlackUserMappingRow,
 } from "@/lib/slack/installations";
 import { handleSlackModelCommand } from "@/lib/slack/model-command";
 import {
@@ -51,6 +49,13 @@ import {
 import { getSlackModelPreference } from "@/lib/slack/model-preferences";
 import { postSlackResponse } from "@/lib/slack/response";
 import type { SlackHarnessCommandDeps } from "./harness-command";
+import { resolveSlackCommandUserId } from "./command-identity";
+import { buildSlackCommandHelpResponse } from "./command-help";
+import {
+  defaultSlackCancelCommandDeps,
+  slackCancelCommandText,
+  type SlackCancelCommandDeps,
+} from "./cancel-command";
 
 export type SlackCommandPayload = {
   command: string;
@@ -63,7 +68,8 @@ export type SlackCommandPayload = {
 };
 
 type SlackCommandDeps = SlackHarnessCommandDeps &
-  SlackAgentCommandDeps & {
+  SlackAgentCommandDeps &
+  SlackCancelCommandDeps & {
     getInstallation: typeof getSlackInstallationByTeamId;
     getUserMapping: typeof getSlackUserMapping;
     getChannelLink: typeof getSlackChannelLink;
@@ -90,6 +96,7 @@ type SlackCommandUser = {
 };
 
 const defaultDeps: SlackCommandDeps = {
+  ...defaultSlackCancelCommandDeps,
   getHarnessPreference: getSlackHarnessPreference,
   saveHarnessPreference: upsertSlackHarnessPreference,
   getAgentPreference: getSlackAgentPreference,
@@ -115,18 +122,6 @@ const defaultDeps: SlackCommandDeps = {
   handleModelCommand: handleSlackModelCommand,
 };
 
-function resolveMogplexUserId(
-  installation: SlackInstallationRow,
-  mapping: SlackUserMappingRow | null,
-  slackUserId: string
-) {
-  if (isExplicitSlackUserMapping(mapping)) return mapping.mogplex_user_id;
-  if (installation.authed_user_slack_id === slackUserId) {
-    return installation.installed_by_user_id;
-  }
-  return null;
-}
-
 async function resolveCommandUser(
   deps: SlackCommandDeps,
   payload: SlackCommandPayload
@@ -137,7 +132,7 @@ async function resolveCommandUser(
     installationId: installation.id,
     slackUserId: payload.slackUserId,
   });
-  const mogplexUserId = resolveMogplexUserId(
+  const mogplexUserId = resolveSlackCommandUserId(
     installation,
     mapping,
     payload.slackUserId
@@ -388,12 +383,20 @@ async function handleAuthorizedCommand(input: {
         await preferenceCommandText(deps, payload, user, command)
       );
       return;
-    case "help":
+    case "cancel":
       await respond(
         deps,
         payload,
-        "Mogplex commands: status, repo, prs, issues, usage, model, harness, and agent.",
-        buildSlackCommandHubBlocks()
+        await slackCancelCommandText(
+          {
+            userId: user.mogplexUserId,
+            teamId: payload.teamId,
+            channelId: payload.channelId,
+            slackUserId: payload.slackUserId,
+          },
+          command.argument,
+          deps
+        )
       );
       return;
     case "status":
@@ -465,6 +468,13 @@ export function createSlackCommandHandler(
       return;
     }
     try {
+      if (command.name === "help") {
+        await deps.postResponse(
+          payload.responseUrl,
+          buildSlackCommandHelpResponse()
+        );
+        return;
+      }
       const user = await resolveCommandUser(deps, payload);
       if (typeof user === "string") {
         await respond(deps, payload, user);
