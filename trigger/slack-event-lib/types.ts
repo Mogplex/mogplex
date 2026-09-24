@@ -1,4 +1,5 @@
 import type { loadSlackThreadRunContext } from "@/lib/slack/thread-run-context";
+import type { SlackCancelCommandDeps } from "@/lib/slack/cancel-command";
 import type {
   SlackThreadMessage,
   postSlackEphemeral,
@@ -54,6 +55,7 @@ export type SlackEventTaskResult = {
     | "conversational_reply"
     | "repo_agent_run_started"
     | "run_guidance_received"
+    | "run_cancel_handled"
     | "run_guidance_not_applied"
     | "run_guidance_unavailable"
     | "workflow_runs_started"
@@ -145,6 +147,7 @@ export type StartRepoAgentRunResult = {
 };
 
 export type SlackEventTaskDeps = {
+  cancelCommand: SlackCancelCommandDeps;
   queueRunDelivery?: (input: {
     runId: string;
     userId: string;

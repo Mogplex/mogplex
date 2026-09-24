@@ -1,4 +1,9 @@
 import { loadSlackThreadRunContext } from "@/lib/slack/thread-run-context";
+import { parseSlackThreadCancel } from "@/lib/slack/thread-cancel";
+import {
+  defaultSlackCancelCommandDeps,
+  slackCancelCommandText,
+} from "@/lib/slack/cancel-command";
 import { metadata, task } from "@trigger.dev/sdk/v3";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
@@ -84,6 +89,7 @@ export { SlackConversationPersistConflictError } from "./slack-event-lib/convers
 export { formatSlackConversationalReply } from "./slack-event-lib/system";
 
 const defaultDeps: SlackEventTaskDeps = {
+  cancelCommand: defaultSlackCancelCommandDeps,
   findGuidanceRuns: findSlackGuidanceRuns,
   loadThreadRunContext: loadSlackThreadRunContext,
   submitGuidance: submitSlackRunGuidance,
@@ -253,6 +259,32 @@ export async function runSlackEventTask(
     };
   }
 
+  const cancelArgument = parseSlackThreadCancel(payload);
+  if (cancelArgument !== null) {
+    const text = await slackCancelCommandText(
+      {
+        userId: mogplexUserId,
+        teamId: payload.teamId,
+        channelId: payload.channelId,
+        slackUserId: payload.slackUserId,
+        threadTs: payload.threadTs,
+      },
+      cancelArgument,
+      deps.cancelCommand
+    );
+    await postOrReuseSlackMessage({
+      deps,
+      botToken,
+      channelId: payload.channelId,
+      threadTs: payload.threadTs,
+      postThreadTs: payload.threadTs,
+      eventId: payload.eventId,
+      metadataKey: "slackThreadCancelReply",
+      text,
+    });
+    return { outcome: "run_cancel_handled", mogplexUserId };
+  }
+
   const guidance = await handleSlackRunGuidance({
     deps,
     payload,
@@ -330,6 +362,11 @@ export const handleSlackEventTask = task({
     const canDispatchWorkflow =
       !Array.isArray(allowedSlackUsers) ||
       allowedSlackUsers.includes(payload.slackUserId);
+    if (parseSlackThreadCancel(payload) !== null) {
+      return runSlackEventTask(payload, {
+        getInstallation: async () => workflowInstallation,
+      });
+    }
     if (workflowInstallation) {
       const guidance = await resolveGuidanceBeforeWorkflow(
         payload,

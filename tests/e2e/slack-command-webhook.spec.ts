@@ -25,6 +25,9 @@ test("Slack help immediately shows commands and thread guidance before linking",
   expect(JSON.stringify(body.blocks)).toContain("/mogplex-cancel [run-id]");
   expect(JSON.stringify(body.blocks)).toContain("question's thread");
   expect(JSON.stringify(body.blocks)).toContain("/mogplex help");
+  expect(JSON.stringify(body.blocks)).toContain(
+    "reply `mogplex-cancel` (no slash)"
+  );
 });
 
 function signedHeaders(rawBody: string) {

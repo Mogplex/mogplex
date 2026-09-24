@@ -81,7 +81,7 @@ export function buildSlackCommandHubBlocks(): SlackBlock[] {
       elements: [
         {
           type: "mrkdwn",
-          text: "Ask Mogplex in a DM or @mention it in a channel. Replies and run updates stay in your question's thread. Slack slash commands run from the main composer; use the run's Cancel button inside a thread.",
+          text: "Ask Mogplex in a DM or @mention it in a channel. Replies and run updates stay in your question's thread. To stop that thread's run, reply `mogplex-cancel` (no slash). Slash commands run from the main composer.",
         },
       ],
     },
