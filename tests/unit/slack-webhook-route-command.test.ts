@@ -6,7 +6,38 @@ import {
   signedHeaders,
 } from "./helpers/slack-webhook-route-fixtures";
 
-for (const command of ["/mogplex", "/harness"]) {
+test("verified help responds immediately without deferred work or account lookup", async () => {
+  const { createSlackWebhookPostHandler } = await loadSlackWebhookRoute();
+  const rawBody = new URLSearchParams({
+    command: "/mogplex",
+    text: "help",
+    team_id: "T123",
+    channel_id: "C123",
+    user_id: "U123",
+    response_url: "https://hooks.slack.test/response",
+  }).toString();
+  const handler = createSlackWebhookPostHandler({
+    getSigningSecret: () => SIGNING_SECRET,
+    scheduleAfterResponse: () => {
+      throw new Error("help must not need deferred work");
+    },
+  });
+  const response = await handler(
+    new Request("http://localhost/api/webhooks/slack", {
+      method: "POST",
+      body: rawBody,
+      headers: signedHeaders(rawBody, {
+        contentType: "application/x-www-form-urlencoded",
+      }),
+    })
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.response_type, "ephemeral");
+  assert.match(JSON.stringify(body.blocks), /mogplex-cancel/);
+});
+
+for (const command of ["/mogplex", "/harness", "/mogplex-cancel"]) {
   test(`acknowledges verified ${command} before deferred dispatch`, async () => {
     const { createSlackWebhookPostHandler } = await loadSlackWebhookRoute();
     const rawBody = new URLSearchParams({

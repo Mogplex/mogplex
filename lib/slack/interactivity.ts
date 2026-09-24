@@ -203,6 +203,7 @@ function modelSelectionChannelId(payload: SlackBlockActionsPayload) {
 }
 
 const DISPATCHABLE_COMMANDS = new Set([
+  "cancel",
   "status",
   "repo",
   "prs",

@@ -48,8 +48,8 @@ export async function postOrReuseSlackMessage(input: {
   // Cache identity key for idempotent retries. For one-to-one DMs this stays
   // bound to the inbound thread even when the outbound message is top-level.
   threadTs: string;
-  // Slack API `thread_ts` for the message being posted. Omit for top-level DMs.
-  postThreadTs?: string;
+  // Slack API `thread_ts` for the message being posted, including DMs.
+  postThreadTs: string;
   eventId: string;
   metadataKey: string;
   text: string;

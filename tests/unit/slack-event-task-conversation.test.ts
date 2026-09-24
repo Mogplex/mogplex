@@ -90,7 +90,7 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
     input: { channel: string; thread_ts?: string; text: string };
   };
   assert.equal(placeholderPost.input.channel, "C1");
-  assert.equal(placeholderPost.input.thread_ts, undefined);
+  assert.equal(placeholderPost.input.thread_ts, basePayload.threadTs);
   assert.equal(placeholderPost.input.text, "_Preparing your request..._");
 
   const agentCall = calls.find((c) => c.op === "agent") as {

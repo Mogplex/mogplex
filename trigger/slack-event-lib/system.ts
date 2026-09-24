@@ -82,16 +82,17 @@ export async function sendSlackAccountLinkNotice(input: {
   if (input.payload.channelType === "im") {
     await input.deps.postMessage(input.botToken, {
       channel: input.payload.channelId,
+      thread_ts: input.payload.threadTs,
       text,
     });
     return;
   }
 
   // Account-link URLs are short-lived bearer tokens. Keep them private via an
-  // ephemeral channel notice, but post into the visible channel surface instead
-  // of a thread so the user can actually find the one-time link.
+  // ephemeral notice in the thread that triggered the request.
   await input.deps.postEphemeral(input.botToken, {
     channel: input.payload.channelId,
+    thread_ts: input.payload.threadTs,
     user: input.payload.slackUserId,
     text,
   });

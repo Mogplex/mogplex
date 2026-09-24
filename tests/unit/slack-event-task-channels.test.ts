@@ -401,7 +401,7 @@ for (const channelType of ["group"] as const) {
   });
 }
 
-test("continues one conversation across top-level DM messages", async () => {
+test("keeps a DM request and its saved context in the request's thread", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
 
   let conversationLookup:
@@ -466,13 +466,13 @@ test("continues one conversation across top-level DM messages", async () => {
   );
 
   assert.equal(result.outcome, "conversational_reply");
-  // The DM channel, not the individual message, identifies the conversation.
+  // The request's root identifies the conversation for all future replies.
   assert.deepEqual(conversationLookup, {
     channelId: "D1",
-    threadTs: "D1",
+    threadTs: "1700000009.000100",
     requireExisting: false,
   });
-  assert.equal(postedThreadTs, undefined);
+  assert.equal(postedThreadTs, "1700000009.000100");
   assert.equal(agentMessages.length, 3);
   assert.equal(agentMessages[0]?.content, "Please fix this in acme/widgets");
   assert.equal(agentMessages.at(-1)?.content, "Can you fix it?");

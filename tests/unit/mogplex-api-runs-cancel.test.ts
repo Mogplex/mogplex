@@ -12,6 +12,33 @@ import {
   loadRunCancelRoute,
 } from "./helpers/mogplex-api-runs-fixtures";
 
+test("cancels a paused run without changing its completed harness pass", async () => {
+  let currentRun = buildRunRow({ status: "awaiting_input" });
+  const notified: string[] = [];
+  const result = await cancelMogplexApiRun({
+    userId: currentRun.user_id,
+    runId: currentRun.id,
+    deps: {
+      loadRun: async () => currentRun,
+      updateRun: async (_user, _run, update) => {
+        currentRun = { ...currentRun, ...update };
+        return currentRun;
+      },
+      loadAiCall: async () => buildAiCall({ status: "success" }),
+      requestCancellation: async () => {
+        throw new Error("completed pass must remain intact");
+      },
+      notifyTerminal: async (_run, status) => {
+        notified.push(status);
+      },
+    },
+  });
+  assert.equal(result?.status, "cancelled");
+  assert.equal(result?.alreadyTerminal, false);
+  assert.equal(currentRun.status, "cancelled");
+  assert.deepEqual(notified, ["cancelled"]);
+});
+
 test("cancelMogplexApiRun finalizes pending runs without a runtime command", async () => {
   let currentRun = buildRunRow({ status: "pending" });
   const events: Array<unknown> = [];

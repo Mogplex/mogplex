@@ -242,7 +242,7 @@ test("posts an ephemeral link notice for unmapped channel mentions", async () =>
   assert.deepEqual(ephemerals, [
     {
       user: "USLACK",
-      threadTs: undefined,
+      threadTs: basePayload.threadTs,
       text: ":lock: I found a Mogplex account with your Slack email, but you still need to explicitly link Slack before I can act for you: https://example.test/slack/link?token=link-token",
     },
   ]);

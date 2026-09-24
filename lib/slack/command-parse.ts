@@ -5,6 +5,9 @@ export function parseCommand(payload: {
   text: string;
 }): ParsedCommand | null {
   const command = payload.command.trim().toLowerCase();
+  if (command === "/mogplex-cancel") {
+    return { name: "cancel", argument: payload.text.trim() };
+  }
   if (command === "/model" || command === "/harness") {
     return { name: command.slice(1), argument: payload.text.trim() };
   }

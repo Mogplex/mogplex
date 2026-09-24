@@ -1,5 +1,8 @@
 # Slack harness selection
 
+See [Slack commands and replies](./slack-commands.md) for help, cancellation,
+and thread behavior.
+
 `/harness` shows your current repository runner. Choose with `/harness mogplex`,
 `/harness codex`, or `/harness claude-code`. `/mogplex harness` supports the same
 arguments using the existing Mogplex slash command.

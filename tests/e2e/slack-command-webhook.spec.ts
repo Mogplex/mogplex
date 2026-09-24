@@ -4,6 +4,29 @@ import { getSlackSigningFixture } from "../support/slack-signing-fixture";
 
 const SIGNING_FIXTURE = getSlackSigningFixture();
 
+test("Slack help immediately shows commands and thread guidance before linking", async ({
+  request,
+}) => {
+  const rawBody = new URLSearchParams({
+    command: "/mogplex",
+    text: "help",
+    team_id: "T_UNKNOWN",
+    channel_id: "C1",
+    user_id: "U1",
+    response_url: "https://hooks.slack.test/response",
+  }).toString();
+  const response = await request.post("/api/webhooks/slack", {
+    data: rawBody,
+    headers: signedHeaders(rawBody),
+  });
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  expect(body.response_type).toBe("ephemeral");
+  expect(JSON.stringify(body.blocks)).toContain("/mogplex-cancel [run-id]");
+  expect(JSON.stringify(body.blocks)).toContain("question's thread");
+  expect(JSON.stringify(body.blocks)).toContain("/mogplex help");
+});
+
 function signedHeaders(rawBody: string) {
   const timestamp = String(Math.floor(Date.now() / 1_000));
   const signature = `v0=${crypto

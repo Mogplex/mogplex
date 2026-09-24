@@ -85,6 +85,63 @@ test("bare /mogplex opens the command hub", async () => {
   assert.match(JSON.stringify(blocks), /mogplex_select_command/);
 });
 
+test("help is available before account linking and documents cancellation", async () => {
+  const { deps, responses } = makeDeps({ getInstallation: async () => null });
+  await mod.createSlackCommandHandler(deps as never)(PAYLOAD);
+  assert.match(JSON.stringify(responses[0]), /mogplex-cancel/);
+  assert.match(JSON.stringify(responses[0]), /mogplex help/);
+});
+
+test("cancel alias stops the caller's active channel run without confirmation", async () => {
+  const cancelled: unknown[] = [];
+  const { deps, responses } = makeDeps({
+    listCancelableRuns: async (scope: unknown) => {
+      assert.deepEqual(scope, {
+        userId: "user-1",
+        teamId: "T123",
+        channelId: "C123",
+        slackUserId: "U123",
+      });
+      return [{ id: REPO.id, status: "streaming" }];
+    },
+    cancelRun: async (input: unknown) => {
+      cancelled.push(input);
+      return { status: "cancelled", alreadyTerminal: false };
+    },
+  });
+  await mod.createSlackCommandHandler(deps as never)({
+    ...PAYLOAD,
+    command: "/mogplex-cancel",
+    text: "",
+  });
+  assert.deepEqual(cancelled, [{ userId: "user-1", runId: REPO.id }]);
+  assert.match(String(responses[0]?.text), /Cancellation requested/);
+});
+
+test("unlinked users cannot cancel runs through either spelling", async () => {
+  for (const command of ["/mogplex", "/mogplex-cancel"]) {
+    let touched = false;
+    const { deps, responses } = makeDeps({
+      listCancelableRuns: async () => {
+        touched = true;
+        return [];
+      },
+      cancelRun: async () => {
+        touched = true;
+        return null;
+      },
+    });
+    await mod.createSlackCommandHandler(deps as never)({
+      ...PAYLOAD,
+      command,
+      text: command === "/mogplex" ? "cancel" : "",
+      slackUserId: "UNLINKED",
+    });
+    assert.equal(touched, false);
+    assert.match(String(responses[0]?.text), /Link your Slack identity/);
+  }
+});
+
 test("status shows only the invoking user's latest Slack run and cancel control", async () => {
   const latestCalls: unknown[] = [];
   const { deps, responses } = makeDeps({
