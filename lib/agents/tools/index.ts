@@ -61,7 +61,6 @@ export { filterToolsByCapability, TOOL_CAPABILITY } from "./tool-capabilities";
 const EMPTY_GITHUB_REQUEST_AUTHORIZATIONS: GithubRequestMutationAuthorizations =
   {
     pullRequestMerge: null,
-    issueMutations: [],
   };
 
 /** Sandbox-backed reads are a bash-class capability, not a GitHub API one. */
@@ -154,11 +153,9 @@ export function buildStaticTools(
           github_create_issue: createGithubIssueTool({ userId }),
           github_update_issue: createGithubIssueUpdateTool({
             userId,
-            authorizations: requestAuthorizations.issueMutations,
           }),
           github_comment_issue: createGithubIssueCommentTool({
             userId,
-            authorizations: requestAuthorizations.issueMutations,
           }),
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,
@@ -349,7 +346,7 @@ export async function buildTools(opts: {
    * durably deduplicated within this scope.
    */
   toolExecutionIdempotencyKey?: string | null;
-  /** Current user-authored request, used only for narrow mutation consent. */
+  /** Current user-authored request, used only for pull request merge consent. */
   latestUserText?: string | null;
 }): Promise<{
   tools: Record<string, Tool>;

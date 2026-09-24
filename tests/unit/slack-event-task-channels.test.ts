@@ -148,7 +148,15 @@ test("continues bound channel thread replies without a fresh app mention", async
     /continuing an existing Mogplex conversation/
   );
   assert.doesNotMatch(systemSuffix ?? "", /may not have repository context/);
-  assert.match(systemSuffix ?? "", /treat that as approval/);
+  assert.match(
+    systemSuffix ?? "",
+    /Resolve a short confirmation against the most recent concrete proposed action/
+  );
+  assert.match(systemSuffix ?? "", /perform an issue edit or comment directly/);
+  assert.match(
+    systemSuffix ?? "",
+    /call start_repo_agent_run when the approved action is a code fix/
+  );
   assert.match(systemSuffix ?? "", /Ask at most one blocking question/);
 });
 

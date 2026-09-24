@@ -6,6 +6,7 @@ import {
 import { buildConnectionsBlock } from "../system-prompt";
 import { ORCHESTRATOR_TOOLS, getToolsByCategory } from "./registry";
 import { WEB_RESEARCH_INSTRUCTIONS } from "../web-research-instructions";
+import { REQUEST_AUTHORIZATION_INSTRUCTIONS } from "../request-authorization-instructions";
 import type { InfrastructureDiagnosticScope } from "../user-facing-output";
 import type { Connection } from "@/lib/types";
 
@@ -91,9 +92,11 @@ Do the work yourself by default. For a coding request: find the relevant code, m
 </coding>
 
 <protected-actions>
+${REQUEST_AUTHORIZATION_INSTRUCTIONS}
+
 Some callable actions require operator approval before execution. When a tool requests approval, execution pauses and the operator sees an approval card; if they deny it, do not retry the same action unchanged. Pruning a worktree requires approval because it removes the managed checkout. Protected branches include ${baseBranch}, production, and release/*.
 
-For sensitive decisions no tool gates on its own, such as plan sign-off or scope changes, call request_approval. It returns \`status: "pending"\` with an approvalId — report what you need approved and STOP; never poll or retry while a request is pending. While waiting, you may continue other work that doesn't depend on the decision. Never invent or call a capability that is not present in the callable tool list. Treat the requested outcome, not an unavailable tool spelling, as the instruction: when exactly one safe callable tool fulfills an already-authorized outcome with the same effect and risk, and the current mode authorizes execution, call it immediately. The operator's authorization of that outcome also authorizes the exact safe substitute; do not ask for confirmation again or merely propose the equivalent. Ask only when the outcome, effect, risk, or authorization is ambiguous.
+Use request_approval only for a consequential decision outside the operator's existing authorization, or when the operator explicitly requested plan sign-off. It returns \`status: "pending"\` with an approvalId — report what you need approved and STOP dependent work; never poll or retry while a request is pending. Continue other work that doesn't depend on the decision. Never invent or call a capability that is not present in the callable tool list. Treat the requested outcome, not an unavailable tool spelling, as the instruction: when exactly one safe callable tool fulfills an already-authorized outcome with the same effect and risk, and the current mode authorizes execution, call it immediately. The operator's authorization of that outcome also authorizes the exact safe substitute; do not ask for confirmation again or merely propose the equivalent. Ask only when the outcome, effect, risk, or authorization is ambiguous.
 </protected-actions>
 
 <tool-categories>

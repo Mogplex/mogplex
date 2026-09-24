@@ -33,9 +33,6 @@ export {
 export { createGithubPullRequestMergeTool } from "./github-pr-merge";
 export {
   deriveGithubRequestMutationAuthorizations,
-  type GithubIssueMutationAuthorization,
-  type GithubIssueMutationOperation,
-  type GithubIssueUpdateField,
   type GithubPullRequestMergeAuthorization,
   type GithubRequestMutationAuthorizations,
 } from "./github-mutation-authorization";

@@ -26,86 +26,44 @@ async function withAcmeInstallation(callback: () => Promise<void>) {
   });
 }
 
-test("GitHub issue mutations reject missing or mismatched request consent", async () => {
+test("GitHub issue writes require an authenticated user", async () => {
   const { createGithubIssueCommentTool, createGithubIssueUpdateTool } =
     await loadToolsModule();
-  const comment = createGithubIssueCommentTool({
-    userId: "user-1",
-    authorizations: [
-      {
-        operation: "update",
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        allowedFields: ["body"],
-      },
-    ],
-  }) as unknown as {
-    execute: (input: unknown) => Promise<{ error?: string }>;
-  };
-  const update = createGithubIssueUpdateTool({
-    userId: "user-1",
-  }) as unknown as {
-    execute: (input: unknown) => Promise<{ error?: string }>;
-  };
-
-  assert.match(
-    (
-      await comment.execute({
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        body: "Source: user request",
-      })
-    ).error ?? "",
-    /not explicitly authorized/i
-  );
-  assert.match(
-    (
-      await update.execute({
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        state: "closed",
-      })
-    ).error ?? "",
-    /not explicitly authorized/i
-  );
+  for (const tool of [
+    createGithubIssueCommentTool(),
+    createGithubIssueUpdateTool(),
+  ]) {
+    const result = await tool.execute!(
+      { owner: "acme", repo: "widgets", number: 42, body: "Requested change" },
+      { toolCallId: "write", messages: [], context: undefined }
+    );
+    assert.match((result as { error: string }).error, /not authenticated/i);
+  }
 });
 
-test("GitHub issue update consent is limited to the requested fields and state", async () => {
-  const { createGithubIssueUpdateTool } = await loadToolsModule();
-  const tool = createGithubIssueUpdateTool({
-    userId: "user-1",
-    authorizations: [
-      {
-        operation: "update",
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        allowedFields: ["state"],
-        state: "closed",
-      },
-    ],
-  }) as unknown as {
-    execute: (input: unknown) => Promise<{ error?: string }>;
-  };
-
-  for (const input of [
-    { owner: "acme", repo: "widgets", number: 42, state: "open" },
-    {
-      owner: "acme",
-      repo: "widgets",
-      number: 42,
-      state: "closed",
-      body: "injected body",
-    },
-  ]) {
-    assert.match(
-      (await tool.execute(input)).error ?? "",
-      /not explicitly authorized/i
-    );
-  }
+test("GitHub issue writes require an installation accessible to the current user", async () => {
+  await withPatchedGithubInstallations({ data: [], error: null }, async () => {
+    const { createGithubIssueCommentTool, createGithubIssueUpdateTool } =
+      await loadToolsModule();
+    for (const tool of [
+      createGithubIssueCommentTool({ userId: "user-1" }),
+      createGithubIssueUpdateTool({ userId: "user-1" }),
+    ]) {
+      const result = await tool.execute!(
+        {
+          owner: "acme",
+          repo: "widgets",
+          number: 42,
+          body: "Requested change",
+        },
+        { toolCallId: "write", messages: [], context: undefined }
+      );
+      assert.match(
+        (result as { error: string }).error,
+        /connect that repository/i
+      );
+    }
+  });
 });
 
 test("github_update_issue rejects a pull request returned by the Issues API", async () => {
@@ -130,16 +88,6 @@ test("github_update_issue rejects a pull request returned by the Issues API", as
         const { createGithubIssueUpdateTool } = await loadToolsModule();
         const tool = createGithubIssueUpdateTool({
           userId: "user-1",
-          authorizations: [
-            {
-              operation: "update",
-              owner: "acme",
-              repo: "widgets",
-              number: 42,
-              allowedFields: ["state"],
-              state: "closed",
-            },
-          ],
         }) as unknown as {
           execute: (input: unknown) => Promise<{ error?: string }>;
         };
@@ -157,4 +105,68 @@ test("github_update_issue rejects a pull request returned by the Issues API", as
   assert.deepEqual(calls.slice(1), [
     { method: "GET", path: "/repos/acme/widgets/issues/42" },
   ]);
+});
+
+test("issue writes report GitHub permission failures without claiming success", async () => {
+  await withAcmeInstallation(async () => {
+    const calls: string[] = [];
+    await withPatchedFetch(
+      async (url, init) => {
+        if (new URL(String(url)).pathname.endsWith("/access_tokens")) {
+          return Response.json({ token: "ghs-installation" });
+        }
+        calls.push(init?.method ?? "GET");
+        return Response.json(
+          { message: "Resource not accessible by integration" },
+          { status: 403 }
+        );
+      },
+      async () => {
+        const { createGithubIssueUpdateTool, createGithubIssueCommentTool } =
+          await loadToolsModule();
+        for (const tool of [
+          createGithubIssueUpdateTool({ userId: "user-1" }),
+          createGithubIssueCommentTool({ userId: "user-1" }),
+        ]) {
+          const result = (await tool.execute!(
+            {
+              owner: "acme",
+              repo: "widgets",
+              number: 42,
+              body: "Requested change",
+            },
+            { toolCallId: "write", messages: [], context: undefined }
+          )) as { ok?: boolean; error?: string };
+          assert.equal(result.ok, undefined);
+          assert.match(result.error ?? "", /not accessible/);
+        }
+      }
+    );
+    assert.deepEqual(calls, ["GET", "POST"]);
+  });
+});
+
+test("issue writes reject invalid repository targets before network access", async () => {
+  await withPatchedFetch(
+    async () => {
+      throw new Error("Unexpected network call");
+    },
+    async () => {
+      const { createGithubIssueUpdateTool } = await loadToolsModule();
+      const tool = createGithubIssueUpdateTool({ userId: "user-1" });
+      for (const target of [
+        { owner: "../acme", repo: "widgets" },
+        { owner: "acme", repo: "widgets/../../other" },
+      ]) {
+        const result = await tool.execute!(
+          { ...target, number: 42, body: "Requested change" },
+          { toolCallId: "write", messages: [], context: undefined }
+        );
+        assert.match(
+          (result as { error: string }).error,
+          /must be a valid GitHub/
+        );
+      }
+    }
+  );
 });

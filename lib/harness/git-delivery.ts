@@ -1,5 +1,6 @@
 import type { Sandbox } from "@vercel/sandbox";
 import { buildAgentGitSyncScript } from "@/lib/sandbox/agent-git-sync";
+import { REQUEST_AUTHORIZATION_INSTRUCTIONS } from "@/lib/agents/request-authorization-instructions";
 
 type CommandResult = {
   exitCode: number;
@@ -67,6 +68,8 @@ Never commit files under .mogplex; they contain runtime configuration and delive
 
 Do not leave completed work only in the sandbox. If GitHub delivery is blocked, state the exact blocker instead of claiming the work is finished.
 </delivery-contract>
+
+${REQUEST_AUTHORIZATION_INSTRUCTIONS}
 
 ${input.prompt}`;
 }

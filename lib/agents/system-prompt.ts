@@ -1,5 +1,6 @@
 import type { Connection } from "@/lib/types";
 import { WEB_RESEARCH_INSTRUCTIONS } from "./web-research-instructions";
+import { REQUEST_AUTHORIZATION_INSTRUCTIONS } from "./request-authorization-instructions";
 
 type PromptContext = {
   repoFullName?: string;
@@ -101,6 +102,7 @@ The user has selected a repository and you have tools to explore it, execute com
 
 ${repoBlock}${sandboxBlock}${buildConnectionsBlock(connections)}
 ${WEB_RESEARCH_INSTRUCTIONS}
+${REQUEST_AUTHORIZATION_INSTRUCTIONS}
 <communication>
 - Be direct and concise. Lead with actions, not explanations.
 - Use markdown formatting. Use backticks for file paths, functions, and code references.
