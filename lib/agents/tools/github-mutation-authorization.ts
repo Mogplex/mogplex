@@ -6,23 +6,8 @@ export type GithubMutationTarget = {
 
 export type GithubPullRequestMergeAuthorization = GithubMutationTarget;
 
-export type GithubIssueMutationOperation = "update" | "comment";
-
-export type GithubIssueUpdateField = "title" | "body" | "state";
-
-export type GithubIssueMutationAuthorization = GithubMutationTarget &
-  (
-    | { operation: "comment" }
-    | {
-        operation: "update";
-        allowedFields: GithubIssueUpdateField[];
-        state?: "open" | "closed";
-      }
-  );
-
 export type GithubRequestMutationAuthorizations = {
   pullRequestMerge: GithubPullRequestMergeAuthorization | null;
-  issueMutations: GithubIssueMutationAuthorization[];
 };
 
 type GithubRequestAuthorizationInput = {
@@ -32,7 +17,7 @@ type GithubRequestAuthorizationInput = {
 };
 
 type ExplicitCommand = {
-  operation: GithubIssueMutationOperation | "merge";
+  operation: "merge";
   text: string;
   arguments: string;
 };
@@ -43,21 +28,10 @@ const COMMAND_OPENING =
   String.raw`i\s+(?:want|need)\s+you\s+to\s+)?`;
 
 const MERGE_ACTION = String.raw`(?:squash[- ]?)?merge\b`;
-const COMMENT_ACTION =
-  String.raw`(?:comment(?:\s+on)?|annotate|` +
-  String.raw`add\s+(?:a\s+)?(?:comment|note)(?:\s+to)?|` +
-  String.raw`post\s+(?:a\s+)?comment(?:\s+on)?|reply\s+to)\b`;
-const UPDATE_ACTION =
-  String.raw`(?:(?:update|edit|change)\s+(?:the\s+)?(?:github\s+)?issues?|` +
-  String.raw`(?:update|edit|change)\s+(?:the\s+)?(?:title|body|description|state)` +
-  String.raw`\s+(?:of|on)\s+(?:the\s+)?(?:github\s+)?issue|` +
-  String.raw`(?:close|reopen)\s+(?:the\s+)?(?:github\s+)?issue)\b`;
-
 const GITHUB_TARGET_URL =
   /github\.com\/([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+)\/(issues|pull)\/(\d+)/gi;
 const SHORTHAND_TARGET =
   /\b([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+?)#(\d+)\b/gi;
-const REPOSITORY = /\b([a-z\d](?:[a-z\d-]{0,38}))\/([a-z\d._-]+)\b/gi;
 
 function explicitCommand(
   text: string,
@@ -165,112 +139,12 @@ function derivePullRequestMergeAuthorization(
   return targets.size === 1 ? [...targets.values()][0] : null;
 }
 
-function repositories(text: string) {
-  const found = new Map<string, { owner: string; repo: string }>();
-  for (const match of text.matchAll(REPOSITORY)) {
-    const repo = match[2].replace(/\.git$/i, "");
-    found.set(`${match[1].toLowerCase()}/${repo.toLowerCase()}`, {
-      owner: match[1],
-      repo,
-    });
-  }
-  return [...found.values()];
-}
-
-function issueNumbers(text: string) {
-  const numbers = [...text.matchAll(/#(\d+)\b/g)].map((match) => match[1]);
-  const leading = text.match(/^\s*(\d+)\b/);
-  if (leading) numbers.push(leading[1]);
-  return [...new Set(numbers)];
-}
-
-function issueTargets(
-  clause: string,
-  operation: GithubIssueMutationOperation,
-  input: GithubRequestAuthorizationInput
-) {
-  const targetClause = clause.split(
-    /\b(?:with|saying|to say|using the text|using this text)\b/i,
-    1
-  )[0];
-  const allowedPaths =
-    operation === "comment" ? new Set(["issues", "pull"]) : new Set(["issues"]);
-  const { targets, residual } = directTargets(targetClause, allowedPaths);
-  const repos = repositories(residual);
-  const numbers = issueNumbers(residual);
-  const contextualRepo =
-    repos.length === 0 && input.repoOwner && input.repoName
-      ? { owner: input.repoOwner, repo: input.repoName }
-      : null;
-  const repo = repos.length === 1 ? repos[0] : contextualRepo;
-  if (repo) {
-    for (const number of numbers) {
-      addTarget(targets, repo.owner, repo.repo, number);
-    }
-  }
-  return [...targets.values()];
-}
-
-function updateAuthorizationConstraints(
-  actionText: string,
-  commandArguments: string
-): {
-  allowedFields: GithubIssueUpdateField[];
-  state?: "open" | "closed";
-} {
-  const text = actionText.toLowerCase();
-  if (/\breopen\b/.test(text)) {
-    return { allowedFields: ["state"], state: "open" };
-  }
-  if (/\bclose\b/.test(text)) {
-    return { allowedFields: ["state"], state: "closed" };
-  }
-  const qualifiers = `${actionText} ${
-    commandArguments.split(
-      /\b(?:to|with|saying|using the text|using this text)\b/i,
-      1
-    )[0]
-  }`.toLowerCase();
-  const allowedFields: GithubIssueUpdateField[] = [];
-  if (/\btitle\b/.test(qualifiers)) allowedFields.push("title");
-  if (/\b(?:body|description)\b/.test(qualifiers)) allowedFields.push("body");
-  if (/\bstate\b/.test(qualifiers)) allowedFields.push("state");
-  return { allowedFields };
-}
-
-function deriveIssueMutationAuthorizations(
-  text: string,
-  input: GithubRequestAuthorizationInput
-) {
-  const commands = [
-    explicitCommand(text, COMMENT_ACTION, "comment"),
-    explicitCommand(text, UPDATE_ACTION, "update"),
-  ].filter((command): command is ExplicitCommand => command !== null);
-  if (commands.length !== 1) return [];
-  const command = commands[0];
-  const authorizations: GithubIssueMutationAuthorization[] = [];
-  const operation = command.operation as GithubIssueMutationOperation;
-  for (const target of issueTargets(command.arguments, operation, input)) {
-    authorizations.push(
-      operation === "comment"
-        ? { ...target, operation }
-        : {
-            ...target,
-            operation,
-            ...updateAuthorizationConstraints(command.text, command.arguments),
-          }
-    );
-  }
-  return authorizations;
-}
-
 export function deriveGithubRequestMutationAuthorizations(
   input: GithubRequestAuthorizationInput
 ): GithubRequestMutationAuthorizations {
   const text = input.userText?.trim() ?? "";
-  if (!text) return { pullRequestMerge: null, issueMutations: [] };
+  if (!text) return { pullRequestMerge: null };
   return {
     pullRequestMerge: derivePullRequestMergeAuthorization(text, input),
-    issueMutations: deriveIssueMutationAuthorizations(text, input),
   };
 }

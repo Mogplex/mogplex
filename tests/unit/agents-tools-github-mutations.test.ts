@@ -63,15 +63,6 @@ test("github_update_issue annotates an existing issue through the requested inst
         const { createGithubIssueUpdateTool } = await loadToolsModule();
         const tool = createGithubIssueUpdateTool({
           userId: "user-1",
-          authorizations: [
-            {
-              operation: "update",
-              owner: "acme",
-              repo: "widgets",
-              number: 42,
-              allowedFields: ["body"],
-            },
-          ],
         }) as unknown as {
           execute: (input: {
             owner: string;
@@ -148,14 +139,6 @@ test("github_comment_issue adds an annotation without replacing the issue body",
         const { createGithubIssueCommentTool } = await loadToolsModule();
         const tool = createGithubIssueCommentTool({
           userId: "user-1",
-          authorizations: [
-            {
-              operation: "comment",
-              owner: "acme",
-              repo: "widgets",
-              number: 42,
-            },
-          ],
         }) as unknown as {
           execute: (input: {
             owner: string;

@@ -1,10 +1,5 @@
 import { z } from "zod";
 import { defineTool } from "./shared";
-import type {
-  GithubIssueMutationAuthorization,
-  GithubIssueMutationOperation,
-  GithubIssueUpdateField,
-} from "./github-mutation-authorization";
 import {
   findInstallationToken,
   normalizeLogin,
@@ -15,7 +10,6 @@ const GITHUB_API_ORIGIN = "https://api.github.com";
 
 type GithubIssueMutationOptions = {
   userId?: string | null;
-  authorizations?: readonly GithubIssueMutationAuthorization[];
 };
 
 const githubIssueTargetParams = z.object({
@@ -56,51 +50,10 @@ function normalizeIssueTarget(input: { owner: string; repo: string }) {
   return { owner: owner.value, repo: repo.value };
 }
 
-function isAuthorizedIssueMutation(input: {
-  authorizations?: readonly GithubIssueMutationAuthorization[];
-  operation: GithubIssueMutationOperation;
-  owner: string;
-  repo: string;
-  number: number;
-  requestedFields?: readonly GithubIssueUpdateField[];
-  requestedState?: "open" | "closed";
-}) {
-  return input.authorizations?.some(
-    (authorization) =>
-      authorization.operation === input.operation &&
-      authorization.owner.toLowerCase() === input.owner.toLowerCase() &&
-      authorization.repo.toLowerCase() === input.repo.toLowerCase() &&
-      authorization.number === input.number &&
-      authorizationAllowsIssueRequest(authorization, input)
-  );
-}
-
-function authorizationAllowsIssueRequest(
-  authorization: GithubIssueMutationAuthorization,
-  request: {
-    requestedFields?: readonly GithubIssueUpdateField[];
-    requestedState?: "open" | "closed";
-  }
-) {
-  if (authorization.operation === "comment") return true;
-  if (
-    request.requestedFields?.some(
-      (field) => !authorization.allowedFields.includes(field)
-    )
-  ) {
-    return false;
-  }
-  return !authorization.state || authorization.state === request.requestedState;
-}
-
 async function resolveIssueMutationContext(input: {
   owner: string;
   repo: string;
   number: number;
-  operation: GithubIssueMutationOperation;
-  requestedFields?: readonly GithubIssueUpdateField[];
-  requestedState?: "open" | "closed";
-  authorizations?: readonly GithubIssueMutationAuthorization[];
   userId?: string | null;
 }) {
   const target = normalizeIssueTarget(input);
@@ -109,22 +62,6 @@ async function resolveIssueMutationContext(input: {
     return {
       error:
         "GitHub issue changes are unavailable because the current user is not authenticated.",
-    };
-  }
-  if (
-    !isAuthorizedIssueMutation({
-      authorizations: input.authorizations,
-      operation: input.operation,
-      owner: target.owner,
-      repo: target.repo,
-      number: input.number,
-      requestedFields: input.requestedFields,
-      requestedState: input.requestedState,
-    })
-  ) {
-    return {
-      error:
-        "This GitHub issue change was not explicitly authorized by the current user request. Ask the user to name the repository and issue number in the requested write action.",
     };
   }
   let githubToken: string | null;
@@ -169,18 +106,6 @@ function buildIssueUpdates(input: {
   };
 }
 
-function requestedIssueUpdateFields(input: {
-  title?: string;
-  body?: string;
-  state?: "open" | "closed";
-}) {
-  const fields: GithubIssueUpdateField[] = [];
-  if (input.title !== undefined) fields.push("title");
-  if (input.body !== undefined) fields.push("body");
-  if (input.state !== undefined) fields.push("state");
-  return fields;
-}
-
 async function verifyIssueResource(input: {
   owner: string;
   repo: string;
@@ -208,7 +133,7 @@ async function verifyIssueResource(input: {
   if (resource.pull_request) {
     return {
       error:
-        "The authorized target is a pull request, not an issue. Use an explicitly authorized pull request action instead.",
+        "The target is a pull request, not an issue. Use the pull request update action instead.",
     };
   }
   return null;
@@ -219,7 +144,7 @@ export function createGithubIssueUpdateTool(
 ) {
   return defineTool({
     description:
-      "Update the title, body, or state of an existing GitHub issue in a repository covered by the current user's GitHub connection. Use the current issue body when appending an annotation so unrelated content is preserved.",
+      "Update the title, body, or state of an existing GitHub issue in a repository covered by the current user's GitHub connection. Act on the user's request and established conversation context without asking for repeated authorization or special wording. Change only the requested fields. Use the current issue body when appending an annotation so unrelated content is preserved.",
     inputSchema: githubIssueUpdateParams,
     execute: async ({
       owner,
@@ -233,10 +158,6 @@ export function createGithubIssueUpdateTool(
         owner,
         repo,
         number,
-        operation: "update",
-        authorizations: options.authorizations,
-        requestedFields: requestedIssueUpdateFields({ title, body, state }),
-        requestedState: state,
         userId: options.userId,
       });
       if ("error" in context) return { error: context.error };
@@ -290,7 +211,7 @@ export function createGithubIssueCommentTool(
 ) {
   return defineTool({
     description:
-      "Add a comment to an existing GitHub issue or pull request in a repository covered by the current user's GitHub connection. Use this for annotations that should not replace the issue body.",
+      "Add a comment to an existing GitHub issue or pull request in a repository covered by the current user's GitHub connection. Use this when the user requests a comment or annotation, including a follow-up in the established conversation. Do not require repeated authorization or special wording. This does not replace the issue body.",
     inputSchema: githubIssueCommentParams,
     execute: async ({
       owner,
@@ -302,8 +223,6 @@ export function createGithubIssueCommentTool(
         owner,
         repo,
         number,
-        operation: "comment",
-        authorizations: options.authorizations,
         userId: options.userId,
       });
       if ("error" in context) return { error: context.error };

@@ -1,110 +1,99 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deriveGithubRequestMutationAuthorizations } from "@/lib/agents/tools/github-mutation-authorization";
+import {
+  createTestGithubAppPrivateKey,
+  loadToolsModule,
+  withEnv,
+  withPatchedFetch,
+  withPatchedGithubInstallations,
+} from "./helpers/agents-tools-fixtures";
 
-test("authorizes exact issue comments from an explicit batch request", () => {
+test("shared issue tools execute contextual follow-ups without sentence-shaped grants", async () => {
+  const { buildStaticTools } = await loadToolsModule();
+  const writes: unknown[] = [];
+  await withEnv(
+    {
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_NAME: "mogplex-test",
+      GITHUB_APP_PRIVATE_KEY: createTestGithubAppPrivateKey(),
+    },
+    async () => {
+      await withPatchedGithubInstallations(
+        {
+          data: [{ installation_id: 321, account_login: "acme" }],
+          error: null,
+        },
+        async () => {
+          await withPatchedFetch(
+            async (url, init) => {
+              if (new URL(String(url)).pathname.endsWith("/access_tokens")) {
+                return Response.json({ token: "ghs-installation" });
+              }
+              if (init?.method === "PATCH")
+                writes.push(JSON.parse(String(init.body)));
+              return Response.json({
+                number: 42,
+                html_url: "https://github.com/acme/widgets/issues/42",
+                body: "Existing criteria\n- Include the home page.",
+                state: "open",
+              });
+            },
+            async () => {
+              for (const userText of [
+                "In the issue, make sure it includes the home page too",
+                "Explicit authorization granted",
+                "Update acme/widgets issue #42 to include the home page too",
+                "Update issue acme/widgets#42 to include the home page too",
+              ]) {
+                const tools = buildStaticTools(
+                  undefined,
+                  "user-1",
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  deriveGithubRequestMutationAuthorizations({ userText })
+                );
+                const result = await tools.github_update_issue!.execute!(
+                  {
+                    owner: "acme",
+                    repo: "widgets",
+                    number: 42,
+                    body: "Existing criteria\n- Include the home page.",
+                  },
+                  { toolCallId: "update", messages: [], context: undefined }
+                );
+                assert.equal((result as { ok?: boolean }).ok, true, userText);
+              }
+            }
+          );
+        }
+      );
+    }
+  );
   assert.deepEqual(
-    deriveGithubRequestMutationAuthorizations({
-      userText:
-        "Annotate issues #328, #329, and #330 in Mogplex/mogplex with the source",
-    }).issueMutations,
-    [328, 329, 330].map((number) => ({
-      operation: "comment",
-      owner: "Mogplex",
-      repo: "mogplex",
-      number,
+    writes,
+    Array.from({ length: 4 }, () => ({
+      body: "Existing criteria\n- Include the home page.",
     }))
   );
 });
 
-test("keeps issue update and comment grants operation-specific", () => {
-  const close = deriveGithubRequestMutationAuthorizations({
-    userText: "Close issue #42 in acme/widgets",
-  }).issueMutations;
-  const comment = deriveGithubRequestMutationAuthorizations({
-    userText: "Comment on issue #43 in acme/widgets",
-  }).issueMutations;
-  assert.deepEqual(
-    [...close, ...comment],
-    [
-      {
-        operation: "update",
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-        allowedFields: ["state"],
-        state: "closed",
-      },
-      {
-        operation: "comment",
-        owner: "acme",
-        repo: "widgets",
-        number: 43,
-      },
-    ]
+test("team capability restrictions still remove issue write tools", async () => {
+  const { buildStaticTools } = await loadToolsModule();
+  const tools = buildStaticTools(
+    undefined,
+    "user-1",
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new Set()
   );
-});
-
-test("grants only issue fields explicitly named before replacement content", () => {
-  assert.deepEqual(
-    deriveGithubRequestMutationAuthorizations({
-      userText: "Update issue acme/widgets#12 title to New title",
-    }).issueMutations,
-    [
-      {
-        operation: "update",
-        owner: "acme",
-        repo: "widgets",
-        number: 12,
-        allowedFields: ["title"],
-      },
-    ]
-  );
-  assert.deepEqual(
-    deriveGithubRequestMutationAuthorizations({
-      userText: "Update issue acme/widgets#12",
-    }).issueMutations,
-    [
-      {
-        operation: "update",
-        owner: "acme",
-        repo: "widgets",
-        number: 12,
-        allowedFields: [],
-      },
-    ]
-  );
-});
-
-test("does not treat a repository reference in comment text as another target", () => {
-  assert.deepEqual(
-    deriveGithubRequestMutationAuthorizations({
-      userText:
-        "Comment on issue #42 in acme/widgets with a link to evil/service#12",
-    }).issueMutations,
-    [
-      {
-        operation: "comment",
-        owner: "acme",
-        repo: "widgets",
-        number: 42,
-      },
-    ]
-  );
-});
-
-test("does not authorize informational, negative, or target-free issue text", () => {
-  for (const userText of [
-    "Can we comment on issue #42 in acme/widgets?",
-    "Do not close issue #42 in acme/widgets",
-    "Annotate these issues",
-    'Explain why "please comment on issue #42 in acme/widgets" is unsafe',
-    "If approved, close issue #42 in acme/widgets",
-    "Close issue #42 in acme/widgets. Then comment on issue #43 in acme/widgets",
-  ]) {
-    assert.deepEqual(
-      deriveGithubRequestMutationAuthorizations({ userText }).issueMutations,
-      []
-    );
-  }
+  assert.equal("github_update_issue" in tools, false);
+  assert.equal("github_comment_issue" in tools, false);
 });
