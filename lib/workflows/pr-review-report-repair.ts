@@ -1,6 +1,7 @@
 import type { ModelMessage, ToolSet } from "ai";
 import type { AutomationAgentResult } from "./automation-job-types";
 import { mergeAutomationAgentResults } from "./automation-job-metadata";
+import { AutomationModelExecutionError } from "./automation-model-execution-errors";
 
 export const REPORT_REVIEW_TOOL_NAME = "reportReview";
 
@@ -8,9 +9,14 @@ export const REPORT_REVIEW_TOOL_NAME = "reportReview";
 export const PR_REVIEW_REPORT_REPAIR_PROMPT =
   "You finished this review without calling reportReview, so nothing was recorded and the pull request has no verdict. Call reportReview now with the verdict and findings from the review you just did. Do not start a new review and do not call any other tool.";
 
+const FORCED_REPORT_CHOICE = {
+  type: "tool",
+  toolName: REPORT_REVIEW_TOOL_NAME,
+} as const;
+
 export type ReportRepairRequest = {
   tools: ToolSet;
-  toolChoice: { type: "tool"; toolName: typeof REPORT_REVIEW_TOOL_NAME };
+  toolChoice: typeof FORCED_REPORT_CHOICE | "auto";
   messages: ModelMessage[];
 };
 
@@ -55,11 +61,28 @@ export function buildReportRepairMessages(input: {
 }
 
 /**
+ * True when the provider refused the request itself rather than failing to
+ * serve it. Models that always think reject a forced tool choice this way
+ * (a 400 such as "enable_thinking is restricted to True"), so the same
+ * request can never succeed there. Timeouts, rate limits and outages are
+ * left alone: asking again differently would not help and only delays the
+ * review's publication.
+ */
+function isRejectedRequest(error: unknown): boolean {
+  return (
+    error instanceof AutomationModelExecutionError &&
+    error.failure.classification === "configuration"
+  );
+}
+
+/**
  * When a review ends without its structured report, ask the same model once
- * to file it from the work it already did. The reviewer's own closing text is
- * kept. This never fails a review that otherwise completed: if the request
- * cannot be made or throws, the result is returned as it was and is published
- * as incomplete.
+ * to file it from the work it already did. The report is forced where the
+ * provider allows it; a provider that rejects a forced tool choice is asked
+ * again with the report as the only tool on offer. The reviewer's own closing
+ * text is kept. This never fails a review that otherwise completed: if the
+ * request cannot be made or throws, the result is returned as it was and is
+ * published as incomplete.
  */
 export async function fileMissingReviewReport(input: {
   result: AutomationAgentResult;
@@ -72,15 +95,22 @@ export async function fileMissingReviewReport(input: {
   const tools = buildReportOnlyTools(input.tools);
   if (!tools) return input.result;
 
+  const messages = buildReportRepairMessages({
+    prompt: input.prompt,
+    responseMessages: input.responseMessages,
+    text: input.result.text,
+  });
+  const ask = (toolChoice: ReportRepairRequest["toolChoice"]) =>
+    input.generate({ tools, toolChoice, messages });
+
   try {
-    const repair = await input.generate({
-      tools,
-      toolChoice: { type: "tool", toolName: REPORT_REVIEW_TOOL_NAME },
-      messages: buildReportRepairMessages({
-        prompt: input.prompt,
-        responseMessages: input.responseMessages,
-        text: input.result.text,
-      }),
+    const repair = await ask(FORCED_REPORT_CHOICE).catch((error: unknown) => {
+      if (!isRejectedRequest(error)) throw error;
+      console.warn(
+        "[pr-review] provider rejected a forced report; asking without forcing",
+        { error }
+      );
+      return ask("auto");
     });
     return {
       ...mergeAutomationAgentResults([input.result, repair]),

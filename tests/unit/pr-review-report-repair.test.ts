@@ -176,3 +176,70 @@ test("a reviewer that still does not report after being asked stays without a ve
   assert.equal(calls.length, 2);
   assert.equal(verdictMissing, true);
 });
+
+// What a thinking-only model's provider returned for the forced follow-up on
+// webrenew/gtm-supahost#604.
+function forcedToolChoiceRejected() {
+  return Object.assign(
+    new Error(
+      "<400> InternalError.Algo.InvalidParameter: The value of the enable_thinking parameter is restricted to True."
+    ),
+    { statusCode: 400 }
+  );
+}
+
+async function withQuietWarnings<T>(run: () => Promise<T>): Promise<T> {
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    return await run();
+  } finally {
+    console.warn = originalWarn;
+  }
+}
+
+test("a provider that rejects a forced report is asked again without forcing and the review gets its verdict", async () => {
+  const { calls, harness, verdictMissing } = await withQuietWarnings(() =>
+    runReview([FORGOT_TO_REPORT, forcedToolChoiceRejected(), FILED_REPORT])
+  );
+
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[1].toolChoice, {
+    type: "tool",
+    toolName: "reportReview",
+  });
+  assert.equal(calls[2].toolChoice, "auto");
+  // The unforced ask still offers nothing but the report, with no execute.
+  assert.deepEqual(Object.keys(calls[2].tools ?? {}), ["reportReview"]);
+  assert.equal(calls[2].tools?.reportReview.execute, undefined);
+  assert.deepEqual(calls[2].messages, calls[1].messages);
+  assert.equal(harness.source, "structured");
+  assert.equal(verdictMissing, false);
+  assert.equal(harness.reviewOutcome.hasIssues, true);
+});
+
+test("a follow-up that fails for any other reason is not asked again", async () => {
+  const timedOut = Object.assign(new Error("Request timed out"), {
+    name: "TimeoutError",
+  });
+  const { calls, verdictMissing } = await withQuietWarnings(() =>
+    runReview([FORGOT_TO_REPORT, timedOut, FILED_REPORT])
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(verdictMissing, true);
+});
+
+test("a rejected forced report whose unforced ask also fails stays without a verdict", async () => {
+  const { calls, result, verdictMissing } = await withQuietWarnings(() =>
+    runReview([
+      FORGOT_TO_REPORT,
+      forcedToolChoiceRejected(),
+      forcedToolChoiceRejected(),
+    ])
+  );
+
+  assert.equal(calls.length, 3);
+  assert.equal(result.text, FORGOT_TO_REPORT.text);
+  assert.equal(verdictMissing, true);
+});
