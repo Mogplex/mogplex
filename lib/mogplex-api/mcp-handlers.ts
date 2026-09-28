@@ -145,7 +145,7 @@ export async function callMogplexTool(
         const input = parseArgs(repoIdArgsSchema, args);
         const result = await context.client.listRepoEnvVars(input);
         return textResult(
-          `Found ${result.envVars.length} env vars on the linked Vercel project. Values are not returned.`,
+          `Found ${result.envVars.length} project environment variables. Values are not returned.`,
           result
         );
       }
@@ -154,8 +154,8 @@ export async function callMogplexTool(
         const result = await context.client.upsertRepoEnvVar(input);
         return textResult(
           result.action === "created"
-            ? `Created env var ${result.key} on the linked Vercel project.`
-            : `Updated ${result.updatedCount} ${result.key} env var ${result.updatedCount === 1 ? "entry" : "entries"} on the linked Vercel project.`,
+            ? `Created project environment variable ${result.key}. Existing processes keep their current environment.`
+            : `Updated project environment variable ${result.key}. Existing processes keep their current environment.`,
           result
         );
       }
@@ -163,7 +163,7 @@ export async function callMogplexTool(
         const input = parseArgs(deleteEnvVarArgsSchema, args);
         const result = await context.client.deleteRepoEnvVar(input);
         return textResult(
-          `Deleted ${result.deletedCount} ${result.key} env var ${result.deletedCount === 1 ? "entry" : "entries"} from the linked Vercel project.`,
+          `Deleted project environment variable ${result.key}. Existing processes keep their current environment.`,
           result
         );
       }

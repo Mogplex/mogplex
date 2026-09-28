@@ -281,8 +281,8 @@ test("Mogplex MCP env var tools list, set, and delete through the client", async
           {
             id: "env-1",
             key: "DATABASE_URL",
-            target: ["production", "preview", "development"],
-            type: "encrypted",
+            target: ["sandbox"],
+            type: "sandbox",
             updatedAt: null,
           },
         ],
@@ -294,7 +294,7 @@ test("Mogplex MCP env var tools list, set, and delete through the client", async
     },
     deleteRepoEnvVar: async (input) => {
       calls.push({ tool: "delete", input });
-      return { key: input.key, deletedCount: 2 };
+      return { key: input.key, deletedCount: 1 };
     },
   });
 
@@ -321,8 +321,6 @@ test("Mogplex MCP env var tools list, set, and delete through the client", async
           repoId: "repo-1",
           key: "STRIPE_SECRET_KEY",
           value: "sk_test_123",
-          target: ["production", "preview"],
-          type: "sensitive",
         },
       },
     },
@@ -349,8 +347,6 @@ test("Mogplex MCP env var tools list, set, and delete through the client", async
         repoId: "repo-1",
         key: "STRIPE_SECRET_KEY",
         value: "sk_test_123",
-        target: ["production", "preview"],
-        type: "sensitive",
       },
     },
     { tool: "delete", input: { repoId: "repo-1", key: "OLD_KEY" } },
@@ -381,7 +377,7 @@ test("Mogplex MCP env var tools list, set, and delete through the client", async
       result: { structuredContent: { deletedCount: number } };
     }
   ).result;
-  assert.equal(deleteResult.structuredContent.deletedCount, 2);
+  assert.equal(deleteResult.structuredContent.deletedCount, 1);
 });
 
 test("Mogplex MCP rejects invalid env var keys before calling the API", async () => {
