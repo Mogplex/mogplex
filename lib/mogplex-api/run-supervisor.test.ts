@@ -13,6 +13,7 @@ it("a hard-killed child finalizes the run even though the child cannot run clean
   });
   let call = buildAiCall({ status: "streaming" });
   const deliveries: string[] = [];
+  const paused: string[] = [];
   const result = await superviseExternalAgentRun(
     { runId: run.id, userId: run.user_id },
     "run_parent",
@@ -35,6 +36,10 @@ it("a hard-killed child finalizes the run even though the child cannot run clean
         return run;
       },
       appendEvent: async () => null,
+      cleanupSandbox: async (terminal) => {
+        expect(terminal.status).toBe("failed");
+        paused.push(terminal.sandbox_record_id!);
+      },
       notifyTerminal: async (_run, status) => {
         deliveries.push(status);
       },
@@ -47,6 +52,7 @@ it("a hard-killed child finalizes the run even though the child cannot run clean
   });
   expect(call.status).toBe("failed");
   expect(deliveries).toEqual(["failed"]);
+  expect(paused).toEqual(["sandbox-record-1"]);
 });
 
 it("does not execute another child when retrying terminal notification", async () => {

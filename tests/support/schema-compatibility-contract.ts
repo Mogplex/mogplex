@@ -55,6 +55,19 @@ export async function checkSchemaCompatibility(
       pinned: true,
       archived: true,
     });
+    const run = await client
+      .from("external_agent_runs")
+      .select("status,metadata")
+      .eq("user_id", BEFORE_USER)
+      .single();
+    assert.equal(run.error, null, JSON.stringify(run.error));
+    assert.deepEqual(run.data, {
+      status: "pending",
+      metadata: {
+        run_origin: "slack",
+        slack_model_id: "openai/compatibility-slack",
+      },
+    });
   }
   const userId = phase === "seed" ? BEFORE_USER : AFTER_USER;
   const profile = await client.from("profiles").insert({
@@ -119,7 +132,10 @@ export async function checkSchemaCompatibility(
     prompt: "Existing Slack request",
     base_branch: "main",
     working_branch: "fix/fixture",
-    metadata: { run_origin: "slack" },
+    metadata: {
+      run_origin: "slack",
+      slack_model_id: "openai/compatibility-slack",
+    },
   });
   assert.equal(externalRun.error, null, JSON.stringify(externalRun.error));
   const job = await client

@@ -7,6 +7,7 @@ import {
   type TerminalRunStatus,
 } from "./run-runtime-store";
 import type { ExternalAgentRunRow } from "./runs-types";
+import { cleanupTerminalRunSandbox } from "./run-sandbox-cleanup";
 
 export type WorkerCompletion = {
   status: "completed" | "failed" | "cancelled";
@@ -19,6 +20,7 @@ export type RuntimeFinalizationDeps = {
   syncRun: typeof syncRunAfterRuntime;
   appendEvent: typeof safeAppendAiCallEvent;
   notifyTerminal: typeof notifyTerminalSlackRunOnce;
+  cleanupSandbox: typeof cleanupTerminalRunSandbox;
 };
 const defaultDeps: RuntimeFinalizationDeps = {
   loadRun: loadRunForExecution,
@@ -27,6 +29,7 @@ const defaultDeps: RuntimeFinalizationDeps = {
   syncRun: syncRunAfterRuntime,
   appendEvent: safeAppendAiCallEvent,
   notifyTerminal: notifyTerminalSlackRunOnce,
+  cleanupSandbox: cleanupTerminalRunSandbox,
 };
 
 export function isTerminalRunStatus(
@@ -94,6 +97,12 @@ export async function finalizeRunAfterWorkerExit(
   }
   // Propagate notification errors so the supervisor retries delivery without
   // executing the agent again. A terminal row alone is not successful delivery.
-  await deps.notifyTerminal(run, run.status);
+  const results = await Promise.allSettled([
+    deps.cleanupSandbox(run),
+    deps.notifyTerminal(run, run.status),
+  ]);
+  for (const result of results) {
+    if (result.status === "rejected") throw result.reason;
+  }
   return run;
 }
