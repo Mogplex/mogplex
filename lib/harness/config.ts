@@ -6,6 +6,18 @@ import type { FlowAgentHarness } from "@/lib/types";
 export type HarnessId = Exclude<FlowAgentHarness, "mogplex">;
 export type HarnessProvider = "anthropic" | "openai";
 
+/**
+ * The Agent Client Protocol server Mogplex drives this harness through. When
+ * present (and not switched off, see `lib/harness/acp/enabled.ts`), runs
+ * launch this package behind the in-sandbox ACP bridge instead of the CLI's
+ * one-shot `buildCommand` invocation.
+ */
+export type HarnessAcpAgent = {
+  package: string;
+  version: string;
+  binary: string;
+};
+
 export type HarnessConfig = {
   id: HarnessId;
   name: string;
@@ -25,6 +37,7 @@ export type HarnessConfig = {
     }
   ) => { cmd: string; args: string[] };
   timeoutMs: number;
+  acp?: HarnessAcpAgent;
 };
 
 export const HARNESSES: Record<HarnessId, HarnessConfig> = {
@@ -87,6 +100,12 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
       ],
     }),
     timeoutMs: 5 * 60 * 1000,
+    // Bundles its own compatible @openai/codex, which it runs as an app server.
+    acp: {
+      package: "@agentclientprotocol/codex-acp",
+      version: "2.0.0",
+      binary: "codex-acp",
+    },
   },
 };
 

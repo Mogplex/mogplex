@@ -1,8 +1,14 @@
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
+import { resolveHarnessAcpAgent } from "./acp/agent";
+import { buildAcpAgentEnv, buildAcpRunConfig, writeAcpRun } from "./acp/launch";
 import { getHarnessConfig } from "./config";
 import { codexResearchArgs } from "./research-auth";
 import { codexProviderArgs, codexWorkerIsolationArgs } from "./codex-provider";
-import { installHarnessPackage, isHarnessInstalled } from "./install";
+import {
+  installHarnessPackage,
+  isHarnessInstalled,
+  resolveHarnessInstallTarget,
+} from "./install";
 import type { HarnessId } from "./config";
 import type { Sandbox, Command } from "@vercel/sandbox";
 import type { HarnessExecutionMode } from "./claude-permissions";
@@ -16,6 +22,8 @@ type RunHarnessOpts = {
   mcpConfigPath?: string;
   researchServerName?: string;
   shouldCancel?: () => boolean | Promise<boolean>;
+  /** Platform settings such as `MOGPLEX_HARNESS_ACP`; defaults to process.env. */
+  platformEnv?: Record<string, string | undefined>;
 };
 
 type RunHarnessResult = {
@@ -60,43 +68,79 @@ export async function runHarness(
   opts?: RunHarnessOpts
 ): Promise<RunHarnessResult> {
   const config = getHarnessConfig(harnessId);
+  const acpAgent = resolveHarnessAcpAgent(harnessId, opts?.platformEnv);
+  const installTarget = resolveHarnessInstallTarget(harnessId, acpAgent);
 
   let installed = false;
   let installLogs: string | undefined;
 
   await throwIfCancelled(opts?.shouldCancel);
-  const alreadyInstalled = await isHarnessInstalled(sandbox, harnessId);
+  const alreadyInstalled = await isHarnessInstalled(
+    sandbox,
+    harnessId,
+    installTarget
+  );
   await throwIfCancelled(opts?.shouldCancel);
   if (!alreadyInstalled) {
-    installLogs = await installHarnessPackage(sandbox, harnessId);
+    installLogs = await installHarnessPackage(
+      sandbox,
+      harnessId,
+      installTarget
+    );
     installed = true;
     await throwIfCancelled(opts?.shouldCancel, { installed, installLogs });
   }
 
-  const { cmd, args } = config.buildCommand(prompt, {
-    continue: opts?.continue,
-    resumeSessionId: opts?.resumeSessionId,
-    mode: opts?.mode,
-    mcpConfigPath: opts?.mcpConfigPath,
-    researchServerName: opts?.researchServerName,
-  });
+  const authEnv: Record<string, string> =
+    typeof auth === "string" ? { [config.envVar]: auth } : auth;
+  const cwd = resolveSandboxWorkingDirectory(opts?.cwd);
+  let cmd: string;
+  let args: string[];
+  let env: Record<string, string>;
 
-  const env: Record<string, string> =
-    typeof auth === "string"
-      ? {
-          [config.envVar]: auth,
-          ...opts?.runtimeEnv,
-        }
-      : {
-          ...auth,
-          ...opts?.runtimeEnv,
-        };
+  if (acpAgent) {
+    // One ACP turn behind the in-sandbox bridge. MCP servers, including the
+    // research server, come from the MCP config file for every harness.
+    const baseEnv = { ...authEnv, ...opts?.runtimeEnv };
+    ({ cmd, args } = await writeAcpRun(
+      sandbox,
+      buildAcpRunConfig({
+        harnessId,
+        agent: acpAgent,
+        prompt,
+        cwd,
+        mode: opts?.mode,
+        resumeSessionId: opts?.resumeSessionId,
+        mcpConfigPath: opts?.mcpConfigPath,
+        env: baseEnv,
+      })
+    ));
+    env = { ...baseEnv, ...buildAcpAgentEnv(harnessId, baseEnv, opts?.mode) };
+  } else {
+    ({ cmd, args } = config.buildCommand(prompt, {
+      continue: opts?.continue,
+      resumeSessionId: opts?.resumeSessionId,
+      mode: opts?.mode,
+      mcpConfigPath: opts?.mcpConfigPath,
+      researchServerName: opts?.researchServerName,
+    }));
+    env = { ...authEnv, ...opts?.runtimeEnv };
+    if (harnessId === "codex") {
+      args = [
+        ...codexProviderArgs(env),
+        ...codexResearchArgs(env),
+        ...codexWorkerIsolationArgs(),
+        ...args,
+      ];
+    }
+  }
 
   await throwIfCancelled(opts?.shouldCancel, { installed, installLogs });
   // Persistent Linux sandboxes can give their non-root user ambient
   // capabilities. Codex's bubblewrap rejects those privileges. Drop them
   // before exec, without changing the selected Codex sandbox/approval policy.
   // setpriv (util-linux) is required; never fall back to an unisolated launch.
+  // The ACP bridge inherits the same restriction for the Codex it starts.
   const command = await sandbox.runCommand({
     cmd: harnessId === "codex" ? "setpriv" : cmd,
     args:
@@ -107,16 +151,13 @@ export async function runHarness(
             "--ambient-caps=-all",
             "--",
             cmd,
-            ...codexProviderArgs(env),
-            ...codexResearchArgs(env),
-            ...codexWorkerIsolationArgs(),
             ...args,
           ]
         : args,
     detached: true,
     // The provider resolves a relative cwd against `/`; anchor it under the
     // checkout so a monorepo root directory such as `apps/web` works.
-    cwd: resolveSandboxWorkingDirectory(opts?.cwd),
+    cwd,
     env,
   });
 

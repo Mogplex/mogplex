@@ -51,6 +51,34 @@ export function appendText(
   return chunk;
 }
 
+/**
+ * Appends one streamed piece of a message verbatim. `continues` means the
+ * piece belongs to the message already being written, so it joins the last
+ * text segment as-is; otherwise it starts a paragraph the way `appendText`
+ * does, keeping its trailing whitespace for the pieces that follow.
+ */
+export function appendTextChunk(
+  store: SegmentStore,
+  chunk: string,
+  continues: boolean
+): string {
+  const text = chunk.replace(/\r\n/g, "\n");
+  const last = store.segments.at(-1);
+  const joins = continues && last?.type === "text";
+  const body = joins ? text : text.replace(/^\s+/, "");
+  if (!body) return "";
+
+  const piece = joins || !last ? body : `\n\n${body}`;
+  if (last?.type === "text") {
+    last.text += piece;
+  } else {
+    store.segments.push({ type: "text", text: piece });
+  }
+  store.dirty = true;
+  store.pendingTextDelta += piece;
+  return piece;
+}
+
 export function upsertToolCall(store: SegmentStore, toolCall: LocalToolCall) {
   const existingIndex = store.toolCallIndex.get(toolCall.id);
   if (existingIndex !== undefined) {

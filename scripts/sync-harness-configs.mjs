@@ -13,7 +13,11 @@ const ROOT_DIR = path.resolve(CURRENT_DIR, "..");
 const HARNESS_CONFIG_PATH = path.join(ROOT_DIR, "lib/harness/config.ts");
 const NPM_REGISTRY_BASE_URL = "https://registry.npmjs.org";
 
-const KNOWN_HARNESS_PACKAGES = ["@anthropic-ai/claude-code", "@openai/codex"];
+const KNOWN_HARNESS_PACKAGES = [
+  "@anthropic-ai/claude-code",
+  "@openai/codex",
+  "@agentclientprotocol/codex-acp",
+];
 
 function escapeRegExp(value) {
   return value.replaceAll(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
