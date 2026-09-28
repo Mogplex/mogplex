@@ -28,6 +28,7 @@ import type {
 } from "@/lib/github-check-runs";
 import type { loadPullRequestDetails } from "./automation-job-github";
 import type { persistJobReviewFindings } from "./automation-job-persistence";
+import type { polishPrReviewForPublish } from "./pr-review-format-check";
 import {
   finalizePrReviewSuccess,
   type FinalizePrReviewSuccessResult,
@@ -44,6 +45,7 @@ export type PrReviewReporterDeps = {
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
   loadPullRequestDetails: typeof loadPullRequestDetails;
   persistJobReviewFindings: typeof persistJobReviewFindings;
+  polishPrReviewForPublish?: typeof polishPrReviewForPublish;
 };
 
 /**
@@ -435,7 +437,10 @@ export function createPrReviewReporter(
   }): Promise<FinalizePrReviewSuccessResult> =>
     finalizePrReviewSuccess(
       finalizeInput,
-      { persistJobReviewFindings: deps.persistJobReviewFindings },
+      {
+        persistJobReviewFindings: deps.persistJobReviewFindings,
+        polishPrReviewForPublish: deps.polishPrReviewForPublish,
+      },
       {
         context,
         reviewHeadSha,

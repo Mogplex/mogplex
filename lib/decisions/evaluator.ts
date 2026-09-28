@@ -55,10 +55,11 @@ function noteResult(ok: boolean, now: number): void {
 }
 
 /**
- * Decisions use the platform gateway credential. Unit tests never reach the
- * network: they inject an evaluator instead of resolving this one.
+ * Decisions use the platform gateway credential, so they are never billed to
+ * an account. Unit tests never reach the network: they inject an evaluator
+ * instead of resolving this one.
  */
-function resolveGateway(): Gateway | null {
+export function resolveDecisionGateway(): Gateway | null {
   if (process.env.NODE_ENV === "test" || process.env.VITEST) return null;
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   if (apiKey) return createGateway({ apiKey });
@@ -126,7 +127,7 @@ function isTimeout(error: unknown): boolean {
 /** Primary path: one parallel pass over all questions, typed answers back. */
 export const evaluateWithDecisionModel: DecisionEvaluator = async (input) => {
   const startedAt = performance.now();
-  const gateway = resolveGateway();
+  const gateway = resolveDecisionGateway();
   if (!gateway) return failure("unconfigured", startedAt);
   if (Date.now() < breakerOpenUntil) return failure("circuit_open", startedAt);
 
@@ -207,7 +208,7 @@ export function normalizeEscalationAnswers(
 /** Second opinion for the uncertain band: same questions, a language model. */
 export const evaluateWithLanguageModel: DecisionEvaluator = async (input) => {
   const startedAt = performance.now();
-  const gateway = resolveGateway();
+  const gateway = resolveDecisionGateway();
   if (!gateway) return failure("unconfigured", startedAt);
 
   const model =

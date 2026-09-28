@@ -57,6 +57,7 @@ import {
   resolveJobContext,
 } from "@/lib/workflows/automation-job-context-resolution";
 import { asAutomationModelExecutionError } from "@/lib/workflows/automation-model-execution";
+import type { polishPrReviewForPublish } from "./pr-review-format-check";
 
 /**
  * Runner constants for automation agent execution.
@@ -105,6 +106,8 @@ export type AutomationJobExecutorDeps = {
   waitStore: FlowOperatorWaitStore;
   // Classify nodes default to the evaluation model when this is omitted.
   classifier?: FlowNodeClassifier;
+  // PR reviews default to the platform format check when this is omitted.
+  polishPrReviewForPublish?: typeof polishPrReviewForPublish;
 };
 
 /**

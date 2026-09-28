@@ -45,8 +45,12 @@ test("buildPrReviewCheckText prefers the summary over commentBody when structure
   });
 
   assert.match(text, /^One warning worth a look\./);
-  assert.doesNotMatch(text, /\*\*Warnings\*\*/);
-  assert.match(text, /Warnings\n- Guard nullable lookup \(src\/widget\.ts\)/);
+  // The commentBody restating the finding is dropped, not rendered twice.
+  assert.equal(text.split("The lookup can return undefined.").length, 2);
+  assert.match(
+    text,
+    /\*\*Warnings\*\*\n\n- \*\*Guard nullable lookup\*\* \(`src\/widget\.ts`\)/
+  );
 });
 
 test("buildPrReviewCheckText keeps failed-review diagnostics internal", () => {

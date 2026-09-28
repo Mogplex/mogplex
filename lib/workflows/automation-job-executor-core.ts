@@ -211,6 +211,7 @@ export async function runAutomationJob(
           upsertPrReviewTimelineComment: deps.upsertPrReviewTimelineComment,
           loadPullRequestDetails: deps.loadPullRequestDetails,
           persistJobReviewFindings: deps.persistJobReviewFindings,
+          polishPrReviewForPublish: deps.polishPrReviewForPublish,
         },
         context,
         githubToken: githubToken!,

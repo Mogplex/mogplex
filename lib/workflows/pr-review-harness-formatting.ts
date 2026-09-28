@@ -57,6 +57,17 @@ export function demoteAgentMarkdownHeadings(value: string) {
     .join("\n");
 }
 
+/**
+ * Indent every line of a finding body so multi-paragraph bodies, lists, and
+ * code fences stay inside their bullet instead of breaking out of the list.
+ */
+function indentListItemBody(body: string) {
+  return demoteAgentMarkdownHeadings(body.trim())
+    .split("\n")
+    .map((line) => (line.trim() ? `  ${line}` : ""))
+    .join("\n");
+}
+
 export function buildReviewFindingsSections(findings: ReviewFinding[]) {
   const sections: string[] = [];
   const orderedSections: Array<{
@@ -78,22 +89,26 @@ export function buildReviewFindingsSections(findings: ReviewFinding[]) {
 
     sections.push(
       [
-        section.title,
-        ...entries.flatMap((finding) => {
-          const location = formatReviewFindingLocation(finding);
-          const heading = location
-            ? `- ${finding.title} (${location})`
-            : `- ${finding.title}`;
-          return [heading, `  ${demoteAgentMarkdownHeadings(finding.body)}`];
-        }),
-      ].join("\n")
+        `**${section.title}**`,
+        entries
+          .map((finding) => {
+            const location = formatReviewFindingLocation(finding);
+            const heading = location
+              ? `- **${finding.title}** (${formatInlineCode(location)})`
+              : `- **${finding.title}**`;
+            return [heading, indentListItemBody(finding.body)]
+              .filter(Boolean)
+              .join("\n");
+          })
+          .join("\n\n"),
+      ].join("\n\n")
     );
   }
 
   return sections;
 }
 
-function formatInlineCode(value: string) {
+export function formatInlineCode(value: string) {
   return `\`${value.replaceAll("`", "'")}\``;
 }
 
@@ -115,7 +130,9 @@ export function buildAutofixSection(
     return null;
   }
 
-  const lines = [autofix.applied ? "Autofix Applied" : "Autofix Not Applied"];
+  const lines = [
+    autofix.applied ? "**Autofix Applied**" : "**Autofix Not Applied**",
+  ];
 
   if (autofix.summary) {
     lines.push(autofix.summary);

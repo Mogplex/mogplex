@@ -19,6 +19,8 @@ import type {
 import { isPrReviewVerdictMissing } from "./pr-review-harness-extraction";
 import type { persistJobReviewFindings } from "./automation-job-persistence";
 import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
+import { metadataTeamId } from "./automation-job-classify";
+import { polishPrReviewForPublish } from "./pr-review-format-check";
 
 export type FinalizePrReviewSuccessResult =
   | {
@@ -42,6 +44,8 @@ export type FinalizePrReviewSuccessInput = {
 
 export type FinalizePrReviewSuccessDeps = {
   persistJobReviewFindings: typeof persistJobReviewFindings;
+  /** Defaults to the platform format check; tests pass their own. */
+  polishPrReviewForPublish?: typeof polishPrReviewForPublish;
 };
 
 export type FinalizePrReviewSuccessContext = {
@@ -158,15 +162,37 @@ export async function finalizePrReviewSuccess(
     };
   }
 
+  // Every surface below publishes the same checked text.
+  const publishedHarnessResult = await (
+    deps.polishPrReviewForPublish ?? polishPrReviewForPublish
+  )(
+    input.reviewHarnessResult,
+    {
+      surface: "pr_review",
+      userId: context.repo.user_id,
+      teamId:
+        metadataTeamId(context.metadata) ??
+        context.repo.product_team_id ??
+        null,
+      repoId: context.repo.id,
+      aiCallId: input.result.aiCallId ?? null,
+    },
+    { job_run_id: input.jobRunId, pr_number: reviewPrNumber }
+  );
+  const publishedOutcome =
+    publishedHarnessResult === input.reviewHarnessResult
+      ? input.reviewOutcome
+      : (publishedHarnessResult?.reviewOutcome ?? input.reviewOutcome);
+
   const reviewCheckPublished = await publishPrReviewCheckRun({
-    reviewHarnessResult: input.reviewHarnessResult,
-    reviewOutcome: input.reviewOutcome,
+    reviewHarnessResult: publishedHarnessResult,
+    reviewOutcome: publishedOutcome,
     fallbackText: input.result.text,
     conclusion: reviewConclusion,
   });
   const githubReviewPublished = await publishPrReviewGithubReview({
-    reviewHarnessResult: input.reviewHarnessResult,
-    reviewOutcome: input.reviewOutcome,
+    reviewHarnessResult: publishedHarnessResult,
+    reviewOutcome: publishedOutcome,
     conclusion: reviewConclusion,
   });
   if (
@@ -183,8 +209,8 @@ export async function finalizePrReviewSuccess(
     (!input.reviewOutcome?.hasIssues || !githubReviewPublished);
   const timelineCommentPublished = requiresReviewTimelineComment
     ? await publishPrReviewTimelineComment({
-        reviewHarnessResult: input.reviewHarnessResult,
-        reviewOutcome: input.reviewOutcome,
+        reviewHarnessResult: publishedHarnessResult,
+        reviewOutcome: publishedOutcome,
         fallbackText: input.result.text,
         conclusion: reviewConclusion,
       })
@@ -201,7 +227,7 @@ export async function finalizePrReviewSuccess(
       repoFullName: context.repo.full_name,
       prNumber: reviewPrNumber,
       headSha: reviewHeadSha.length > 0 ? reviewHeadSha : null,
-      findings: input.reviewOutcome?.findings ?? [],
+      findings: publishedOutcome?.findings ?? [],
     });
     reviewFindingsPersisted = persistedReviewFindings.persisted;
     reviewFindingsCount = persistedReviewFindings.count;

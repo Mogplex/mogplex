@@ -15,7 +15,9 @@ export type FlowNodeClassifier = (
   }
 ) => ReturnType<FlowOperatorClassifier>;
 
-function metadataTeamId(metadata: Record<string, unknown>): string | null {
+export function metadataTeamId(
+  metadata: Record<string, unknown>
+): string | null {
   for (const key of ["product_team_id", "team_id"]) {
     const value = metadata[key];
     if (typeof value === "string" && value.trim()) return value.trim();

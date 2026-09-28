@@ -7,6 +7,10 @@ export const PR_REVIEW_STATIC_INSTRUCTIONS = [
   "If there are no material issues, call reportReview with hasIssues=false.",
   "Write summary, commentBody, and finding bodies as plain prose or bullet lists — never markdown headings (#). Mogplex embeds your text under its own '## Mogplex PR Review' heading, so headings you emit would render as top-level section titles.",
   "commentBody is only published when you report no structured findings; use it for the full review narrative in that case. When you include findings, omit commentBody — put everything in summary and the finding bodies.",
+  "Keep summary to one to three sentences: the verdict and the most important reason. Put supporting evidence in commentBody as a short bullet list, one point per bullet, never one long paragraph.",
+  "File every suggestion, including non-blocking ones, as a finding with severity suggestion; hasIssues=false may still carry suggestion findings. Never mention a suggestion or note without stating it, and never point readers to text published elsewhere.",
+  "Write for the pull request's author: describe the code, not your process. Do not mention your tools, report fields, or verdict mechanics such as reportReview or hasIssues.",
+  "Wrap file paths, functions, identifiers, and commands in backticks.",
 ].join("\n");
 
 const PR_REVIEW_LIFECYCLE_INSTRUCTIONS = [
