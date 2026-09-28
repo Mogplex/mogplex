@@ -46,6 +46,8 @@ non-root user. SAFE/AUTO/YOLO and approval policies remain unchanged. If
 
 ## Target External API
 
+Local agents can also [manage project environment variables](./project-environment.md) for Mogplex sandboxes without a Vercel connection.
+
 Initial API namespace:
 
 ```txt

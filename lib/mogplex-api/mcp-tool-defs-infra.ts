@@ -35,7 +35,7 @@ export const MCP_TOOLS_INFRA: McpToolDefinition[] = [
     name: "mogplex_list_env_vars",
     title: "List Mogplex Env Vars",
     description:
-      "List environment variable keys and metadata for the Vercel project linked to a Mogplex repo. Values are never returned.",
+      "List environment variable keys and metadata saved in a Mogplex repository's sandbox settings. Values are never returned. No Vercel connection is required.",
     inputSchema: objectSchema({
       properties: {
         repoId: {
@@ -54,7 +54,7 @@ export const MCP_TOOLS_INFRA: McpToolDefinition[] = [
     name: "mogplex_set_env_var",
     title: "Set Mogplex Env Var",
     description:
-      "Create or update an environment variable on the Vercel project linked to a Mogplex repo. Omitting target updates the value of every existing entry with the same key; creating defaults to all targets. Passing target when the key has multiple target-specific entries returns CONFLICT — delete the key first. Sandboxes on Vercel-linked env sync pick up changes on restart or resume.",
+      "Set one variable in a Mogplex repository's sandbox environment settings. Other keys stay unchanged. No Vercel connection is required. This does not change Vercel deployment variables. New sandbox launches use these settings. Existing processes keep their current environment. Values are never returned.",
     inputSchema: objectSchema({
       properties: {
         repoId: {
@@ -70,21 +70,6 @@ export const MCP_TOOLS_INFRA: McpToolDefinition[] = [
           type: "string",
           description: "Env var value.",
         },
-        target: {
-          type: "array",
-          items: {
-            type: "string",
-            enum: ["production", "preview", "development"],
-          },
-          description:
-            "Deployment targets. Defaults to all targets on create; unchanged on update when omitted.",
-        },
-        type: {
-          type: "string",
-          enum: ["encrypted", "plain", "sensitive"],
-          description:
-            "Env var type on create. Defaults to encrypted. Ignored on update.",
-        },
       },
       required: ["repoId", "key", "value"],
     }),
@@ -99,7 +84,7 @@ export const MCP_TOOLS_INFRA: McpToolDefinition[] = [
     name: "mogplex_delete_env_var",
     title: "Delete Mogplex Env Var",
     description:
-      "Delete every entry of an environment variable key from the Vercel project linked to a Mogplex repo.",
+      "Delete one environment variable from a Mogplex repository's sandbox settings, preserving other keys. Does not modify Vercel deployment variables or restart active sandboxes.",
     inputSchema: objectSchema({
       properties: {
         repoId: {
