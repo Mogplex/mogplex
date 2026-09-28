@@ -89,7 +89,7 @@ export function verifyResearchToken(token: string): ResearchClaims | null {
 export function codexResearchArgs(env: Record<string, string>): string[] {
   if (!env.MOGPLEX_RESEARCH_MCP_URL || !env.MOGPLEX_RESEARCH_TOKEN) return [];
   return [
-    `mcp_servers.mogplex_research.url=${JSON.stringify(env.MOGPLEX_RESEARCH_MCP_URL)}`,
-    'mcp_servers.mogplex_research.bearer_token_env_var="MOGPLEX_RESEARCH_TOKEN"',
+    `mcp_servers.mogplex.url=${JSON.stringify(env.MOGPLEX_RESEARCH_MCP_URL)}`,
+    'mcp_servers.mogplex.bearer_token_env_var="MOGPLEX_RESEARCH_TOKEN"',
   ].flatMap((value) => ["-c", value]);
 }

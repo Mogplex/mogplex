@@ -198,7 +198,14 @@ export async function setupMcpConfig(
   runtimeEnv: Record<string, string>,
   /** The run's ACP agent, resolved once by the route for setup and launch. */
   acpAgent: HarnessAcpAgent | null
-): Promise<{ mcpConfigPath: string; researchServerName?: string } | undefined> {
+): Promise<
+  | {
+      mcpConfigPath: string;
+      mcpServerNames: string[];
+      mogplexServerName?: string;
+    }
+  | undefined
+> {
   if (ctx.harnessId !== "claude-code" && !acpAgent) {
     return undefined;
   }
@@ -230,7 +237,8 @@ export async function setupMcpConfig(
     }
     return {
       mcpConfigPath: injection.mcpConfigPath,
-      researchServerName: injection.researchServerName,
+      mcpServerNames: injection.serverNames,
+      mogplexServerName: injection.mogplexServerName,
     };
   }
 

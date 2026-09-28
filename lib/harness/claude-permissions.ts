@@ -1,3 +1,5 @@
+import { MOGPLEX_READ_ONLY_TOOLS } from "./mogplex-tool-names";
+
 export type HarnessExecutionMode = "AUTO" | "YOLO" | "SAFE";
 
 const CLAUDE_SHARED_DISALLOWED_TOOLS = [
@@ -78,24 +80,30 @@ export function normalizeHarnessExecutionMode(
   return "AUTO";
 }
 
+/**
+ * `claude -p` has nobody to approve a tool, so every tool the run may use has
+ * to be allowed up front. SAFE allows only the read-only Mogplex tools; AUTO
+ * allows every server in the run's MCP config, as the native agent may call
+ * every connection without asking.
+ */
 export function buildClaudePermissionArgs(
   mode?: string | null,
-  researchServerName?: string
+  mcp: { mcpServerNames?: string[]; mogplexServerName?: string } = {}
 ) {
   const normalizedMode = normalizeHarnessExecutionMode(mode);
-  // Only grant the two read-only tools on the server we actually injected.
-  const researchTools = researchServerName
-    ? ["web_search", "web_fetch"].map(
-        (name) => `mcp__${researchServerName}__${name}`
-      )
-    : [];
+  const { mogplexServerName } = mcp;
 
   if (normalizedMode === "SAFE") {
+    const readOnlyTools = mogplexServerName
+      ? [...MOGPLEX_READ_ONLY_TOOLS].map(
+          (name) => `mcp__${mogplexServerName}__${name}`
+        )
+      : [];
     return withDisallowedTools([
       "--permission-mode",
       "plan",
-      ...(researchTools.length > 0
-        ? ["--allowedTools", researchTools.join(",")]
+      ...(readOnlyTools.length > 0
+        ? ["--allowedTools", readOnlyTools.join(",")]
         : []),
     ]);
   }
@@ -104,10 +112,15 @@ export function buildClaudePermissionArgs(
     return withDisallowedTools(["--dangerously-skip-permissions"]);
   }
 
+  const servers = new Set(mcp.mcpServerNames);
+  if (mogplexServerName) servers.add(mogplexServerName);
   return withDisallowedTools([
     "--permission-mode",
     "acceptEdits",
     "--allowedTools",
-    [...CLAUDE_AUTO_ALLOWED_TOOLS, ...researchTools].join(","),
+    [
+      ...CLAUDE_AUTO_ALLOWED_TOOLS,
+      ...[...servers].map((name) => `mcp__${name}`),
+    ].join(","),
   ]);
 }

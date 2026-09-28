@@ -8,7 +8,8 @@ import {
   codexResearchArgs,
   verifyResearchToken,
 } from "../../lib/harness/research-auth";
-import { createResearchMcpPost } from "../../lib/harness/research-mcp";
+import { createMogplexMcpPost } from "../../lib/harness/mogplex-mcp";
+import { webFetch, webSearch } from "../../lib/agents/tools/web";
 import { ALL_CAPABILITIES } from "../../lib/team-capabilities";
 import { isPublicRoutePath } from "../../lib/auth-route-policy";
 import { withEnv, withPatchedFetch } from "./helpers/agents-tools-fixtures";
@@ -19,11 +20,25 @@ const env = {
   NEXT_PUBLIC_APP_URL: "https://mogplex.com",
 };
 const context = { userId: "user-1", aiCallId: "call-1", id: "sandbox-1" };
+const run = {
+  userId: "user-1",
+  aiCallId: "call-1",
+  sandboxRecordId: "sandbox-1",
+  repoId: "repo-1",
+  teamId: null,
+  conversationId: null,
+};
+const authorized = async () => ({ run, capabilities: ALL_CAPABILITIES });
+const webTools = async () => ({
+  tools: { web_search: webSearch, web_fetch: webFetch },
+  cleanup: async () => undefined,
+});
 
 test("a real MCP HTTP client discovers and calls the harness research service", async () => {
   await withEnv(env, async () => {
-    const post = createResearchMcpPost({
-      authorizeRun: async () => ALL_CAPABILITIES,
+    const post = createMogplexMcpPost({
+      authorizeRun: authorized,
+      buildTools: webTools,
     });
     const server = createServer(async (incoming, outgoing) => {
       if (incoming.method !== "POST") {
@@ -122,7 +137,7 @@ test("harness credentials are run scoped and never include the platform key", as
 
 test("research MCP rejects missing or invalid credentials before run lookup", async () => {
   await withEnv(env, async () => {
-    const post = createResearchMcpPost({
+    const post = createMogplexMcpPost({
       authorizeRun: async () => {
         throw new Error("must not reach lookup");
       },
@@ -145,7 +160,7 @@ test("research MCP rejects missing or invalid credentials before run lookup", as
 test("research MCP rechecks run authorization and refuses inactive runs", async () => {
   await withEnv(env, async () => {
     const { MOGPLEX_RESEARCH_TOKEN: token } = buildHarnessResearchEnv(context);
-    const post = createResearchMcpPost({
+    const post = createMogplexMcpPost({
       authorizeRun: async (claims) => {
         assert.equal(claims.userId, "user-1");
         return null;
@@ -178,8 +193,9 @@ test("research MCP executes search through Exa and returns citations to harnesse
       async () => {
         const { MOGPLEX_RESEARCH_TOKEN: token } =
           buildHarnessResearchEnv(context);
-        const post = createResearchMcpPost({
-          authorizeRun: async () => ALL_CAPABILITIES,
+        const post = createMogplexMcpPost({
+          authorizeRun: authorized,
+          buildTools: webTools,
         });
         const call = async (
           method: string,
@@ -196,7 +212,7 @@ test("research MCP executes search through Exa and returns citations to harnesse
         };
         assert.equal(
           (await call("initialize")).result.serverInfo.name,
-          "mogplex-research"
+          "mogplex"
         );
         assert.deepEqual(
           (await call("tools/list")).result.tools.map(
@@ -229,8 +245,13 @@ test("research MCP executes search through Exa and returns citations to harnesse
             .error.code,
           -32602
         );
-        const deniedPost = createResearchMcpPost({
-          authorizeRun: async () => new Set(),
+        // A tool the run's capabilities leave out is not there to call.
+        const deniedPost = createMogplexMcpPost({
+          authorizeRun: authorized,
+          buildTools: async () => ({
+            tools: {},
+            cleanup: async () => undefined,
+          }),
         });
         const denied = await deniedPost(
           new Request("https://mogplex.com/api/harness-research/mcp", {
@@ -244,8 +265,77 @@ test("research MCP executes search through Exa and returns citations to harnesse
             }),
           })
         );
-        assert.equal((await denied.json()).error.code, -32003);
+        assert.equal((await denied.json()).error.code, -32602);
       }
     )
   );
+});
+
+test("the Mogplex MCP serves the run's native tools and marks only read-only ones", async () => {
+  await withEnv(env, async () => {
+    const { MOGPLEX_RESEARCH_TOKEN: token } = buildHarnessResearchEnv(context);
+    const { z } = await import("zod");
+    const builds: Array<{ run: unknown; capabilities: unknown }> = [];
+    let cleanups = 0;
+    const addMemory = {
+      description: "Save a memory",
+      inputSchema: z.object({ content: z.string() }),
+      execute: async (input: { content: string }) => ({ saved: input.content }),
+    };
+    const post = createMogplexMcpPost({
+      authorizeRun: authorized,
+      buildTools: async (buildRun, capabilities) => {
+        builds.push({ run: buildRun, capabilities });
+        return {
+          tools: { web_search: webSearch, add_memory: addMemory } as never,
+          cleanup: async () => {
+            cleanups += 1;
+          },
+        };
+      },
+    });
+    const call = async (method: string, params?: Record<string, unknown>) =>
+      (
+        await post(
+          new Request("https://mogplex.com/api/harness-research/mcp", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}` },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 7, method, params }),
+          })
+        )
+      ).json();
+
+    const listed = (await call("tools/list")).result.tools as Array<{
+      name: string;
+      annotations?: { readOnlyHint?: boolean };
+    }>;
+    assert.deepEqual(
+      listed.map((entry) => [entry.name, entry.annotations?.readOnlyHint]),
+      [
+        ["web_search", true],
+        ["add_memory", undefined],
+      ]
+    );
+
+    const saved = (
+      await call("tools/call", {
+        name: "add_memory",
+        arguments: { content: "Deploys go through the merge queue" },
+      })
+    ).result;
+    assert.equal(saved.isError, false);
+    assert.deepEqual(JSON.parse(saved.content[0].text), {
+      saved: "Deploys go through the merge queue",
+    });
+    assert.equal(
+      (await call("tools/call", { name: "add_memory", arguments: {} })).error
+        .code,
+      -32602
+    );
+
+    assert.deepEqual(builds[0], { run, capabilities: ALL_CAPABILITIES });
+    assert.equal(cleanups, builds.length, "every build is cleaned up");
+    assert.equal((await call("initialize")).result.serverInfo.name, "mogplex");
+    assert.equal(builds.length, 3, "initialize builds no tools");
+  });
 });

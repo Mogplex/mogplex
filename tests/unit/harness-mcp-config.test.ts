@@ -314,14 +314,14 @@ test("injectClaudeMcpConfig always writes even when no MCP connections are resol
   assert.ok(writes.some((w) => w.path === ".mogplex/.gitignore"));
 });
 
-test("Claude harness receives platform research without replacing a user connection", async () => {
+test("Claude harness gets the Mogplex tools beside a same-named user connection and may call both", async () => {
   const { injectClaudeMcpConfig } = await loadMcpConfigModule();
   const { sandbox, writes } = makeSandboxMock();
   const result = await injectClaudeMcpConfig(sandbox as never, {
     userId: "user-1",
     repoId: "repo-1",
     rootDirectory: null,
-    resolveConnections: async () => [makeConn({ name: "Mogplex Research" })],
+    resolveConnections: async () => [makeConn({ name: "Mogplex" })],
     resolveCredential: async () => "user-connection-token",
     researchEnv: {
       MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
@@ -332,27 +332,40 @@ test("Claude harness receives platform research without replacing a user connect
   const written = writes.find((entry) => entry.path.endsWith("mcp.json"));
   assert.ok(written);
   const servers = JSON.parse(written.content.toString()).mcpServers;
-  assert.equal(servers.mogplex_research.url, "https://mcp.example.com/http");
+  assert.equal(servers.mogplex.url, "https://mcp.example.com/http");
   assert.equal(
-    servers.mogplex_research_platform.url,
+    servers.mogplex_platform.url,
     "https://mogplex.com/api/harness-research/mcp"
   );
   assert.equal(
-    servers.mogplex_research_platform.headers.Authorization,
+    servers.mogplex_platform.headers.Authorization,
     "Bearer run-scoped-token"
   );
   assert.ok(result.ok);
-  assert.equal(result.researchServerName, "mogplex_research_platform");
-  for (const mode of ["AUTO", "SAFE"] as const) {
+  assert.equal(result.mogplexServerName, "mogplex_platform");
+  const allowedIn = (mode: "AUTO" | "SAFE") => {
     const { args } = HARNESSES["claude-code"].buildCommand("read docs", {
       mode,
       mcpConfigPath: result.mcpConfigPath,
-      researchServerName: result.researchServerName,
+      mcpServerNames: result.serverNames,
+      mogplexServerName: result.mogplexServerName,
     });
-    const allowed = args[args.indexOf("--allowedTools") + 1].split(",");
-    assert.ok(allowed.includes("mcp__mogplex_research_platform__web_search"));
-    assert.ok(allowed.includes("mcp__mogplex_research_platform__web_fetch"));
-    assert.ok(!allowed.includes("mcp__mogplex_research__web_search"));
+    return args[args.indexOf("--allowedTools") + 1].split(",");
+  };
+
+  // AUTO: every server in the config, the user's connection included.
+  const auto = allowedIn("AUTO");
+  assert.ok(auto.includes("mcp__mogplex"));
+  assert.ok(auto.includes("mcp__mogplex_platform"));
+
+  // SAFE: only the read-only Mogplex tools, on the platform server.
+  const safe = allowedIn("SAFE");
+  assert.ok(safe.includes("mcp__mogplex_platform__web_search"));
+  assert.ok(safe.includes("mcp__mogplex_platform__search_memories"));
+  assert.ok(!safe.includes("mcp__mogplex_platform__add_memory"));
+  assert.ok(!safe.some((name) => name.startsWith("mcp__mogplex__")));
+  assert.ok(!safe.includes("mcp__mogplex"));
+  for (const allowed of [auto, safe]) {
     assert.ok(!allowed.some((name) => name.includes("*")));
   }
 });
@@ -373,7 +386,7 @@ test("Claude research also works without a repository connection", async () => {
     },
   });
   assert.ok(result.ok);
-  assert.equal(result.researchServerName, "mogplex_research");
+  assert.equal(result.mogplexServerName, "mogplex");
 });
 
 test("injectClaudeMcpConfig returns ok:false on resolveConnections failure without throwing", async () => {

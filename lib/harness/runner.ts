@@ -20,7 +20,9 @@ type RunHarnessOpts = {
   cwd?: string;
   runtimeEnv?: Record<string, string>;
   mcpConfigPath?: string;
-  researchServerName?: string;
+  /** Every server in the MCP config, so Claude Code may call them. */
+  mcpServerNames?: string[];
+  mogplexServerName?: string;
   shouldCancel?: () => boolean | Promise<boolean>;
   /**
    * The ACP agent to launch, as the caller resolved it (see
@@ -129,7 +131,8 @@ export async function runHarness(
       resumeSessionId: opts?.resumeSessionId,
       mode: opts?.mode,
       mcpConfigPath: opts?.mcpConfigPath,
-      researchServerName: opts?.researchServerName,
+      mcpServerNames: opts?.mcpServerNames,
+      mogplexServerName: opts?.mogplexServerName,
     }));
     env = { ...authEnv, ...opts?.runtimeEnv };
     if (harnessId === "codex") {

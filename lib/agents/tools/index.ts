@@ -52,6 +52,7 @@ import {
   canUseConnectionTools,
   loadScopedConnections,
   cleanupMcpClients,
+  withoutHarnessRunConnections,
 } from "./connections";
 import type { RepoToolDefaults } from "./shared";
 
@@ -348,6 +349,12 @@ export async function buildTools(opts: {
   toolExecutionIdempotencyKey?: string | null;
   /** Current user-authored request, used only for pull request merge consent. */
   latestUserText?: string | null;
+  /**
+   * Leave out MCP server connections that only run as MCP. A sandbox harness
+   * starts those itself from `.mogplex/mcp.json`; it needs the tools that run
+   * here, which include a preset's API toolset.
+   */
+  skipMcpServerConnections?: boolean;
 }): Promise<{
   tools: Record<string, Tool>;
   connections: Connection[];
@@ -443,7 +450,10 @@ export async function buildTools(opts: {
     };
   }
 
-  const connections = await loadScopedConnections(opts.userId, opts.repoId);
+  const scoped = await loadScopedConnections(opts.userId, opts.repoId);
+  const connections = opts.skipMcpServerConnections
+    ? withoutHarnessRunConnections(scoped)
+    : scoped;
 
   const { dynamicTools, mcpCleanups, mcpToolNames, restToolNames } =
     await buildDynamicConnectionTools(connections, {

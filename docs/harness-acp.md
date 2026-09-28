@@ -29,9 +29,10 @@ delivery), and launches `node .mogplex/acp-bridge.mjs <run file>` under the same
 
 ## What ACP changes for Codex
 
-- **MCP servers.** Codex gets the user's runnable connections and the research
-  server from `.mogplex/mcp.json`, the same file Claude Code reads, passed in
-  `session/new`. Before ACP it got only the research server.
+- **MCP servers.** Codex gets the user's runnable connections and the
+  `mogplex` server (the native agent's own tools) from `.mogplex/mcp.json`, the
+  same file Claude Code reads, passed in `session/new`. Before ACP it got only
+  web research.
 - **Approvals.** Workers have nobody to ask, so the bridge decides every
   `session/request_permission` by run mode (`acpPermissionPolicy`). MCP tools
   are approved: ask-mode connections never reach a harness. Other requests are

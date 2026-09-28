@@ -205,10 +205,17 @@ clean page text. Preserve source URLs, validate provider responses and per-URL
 statuses, and distinguish provider errors from zero results. Request fresh
 crawls only when current page content is required.
 
-Claude Code and Codex sandbox harnesses use `/api/harness-research/mcp` with
-signed run-scoped tokens. Recheck run ownership, cancellation, sandbox binding,
-and current team capabilities on every request. Never copy the platform Exa key
-into a sandbox. Keep research tools inside automation approval gates.
+Claude Code and Codex sandbox harnesses get the native Mogplex agent's tools
+from `/api/harness-research/mcp`, injected as the `mogplex` server with a
+signed run-scoped token (`lib/harness/mogplex-mcp.ts`). It serves what
+`buildTools` gives the native agent, minus the tools the CLI has itself (shell,
+files, sandbox start/stop) and the MCP connections already in the run's
+`mcp.json`: research, memories, skills, GitHub, REST and API-toolset
+connections, and saved MCP servers. A harness must never have less than the
+native agent. Recheck run ownership, cancellation, sandbox binding, and current
+team capabilities on every request. Never copy the platform Exa key or a
+connection credential into a sandbox for a tool this server can run. Keep
+these tools inside automation approval gates.
 
 For new Exa features, consult the official build-with-exa skill and
 [Exa documentation](https://exa.ai/docs); ordinary documentation retrieval does

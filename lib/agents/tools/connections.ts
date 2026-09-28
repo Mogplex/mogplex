@@ -243,6 +243,20 @@ export function canUseConnectionTools(
   return false;
 }
 
+/**
+ * The connections a sandbox harness needs served from here: a plain MCP
+ * server runs in the harness from its mcp.json, but REST APIs and API
+ * toolsets (including a preset's toolset beside its MCP server) only run here.
+ */
+export function withoutHarnessRunConnections(
+  connections: Connection[]
+): Connection[] {
+  return connections.filter(
+    (conn) =>
+      conn.type !== "mcp_server" || Boolean(getConnectionApiToolset(conn))
+  );
+}
+
 /** Connections visible to this scope; a repoId narrows them to that repo. */
 export async function loadScopedConnections(
   userId: string,
