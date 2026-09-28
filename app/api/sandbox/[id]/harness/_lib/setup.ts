@@ -11,7 +11,8 @@ import {
   materializeBrowserAttachmentsForHarness,
   type BrowserHarnessAttachment,
 } from "@/lib/harness/browser-attachments";
-import type { HarnessId } from "@/lib/harness/config";
+import { resolveHarnessAcpAgent } from "@/lib/harness/acp/agent";
+import { getHarnessConfig, type HarnessId } from "@/lib/harness/config";
 import type { MemoryScope } from "@/lib/memories-client";
 import type { Sandbox } from "@vercel/sandbox";
 import type { HarnessRepoRecord, SandboxHarnessPostDeps } from "./types";
@@ -180,7 +181,9 @@ export async function setupGitWorkspace(
 }
 
 /**
- * Injects MCP server configuration for Claude Code harness runs.
+ * Writes the MCP config (the user's runnable connections plus the research
+ * server) for harnesses that read it: Claude Code's `--mcp-config`, and every
+ * harness driven through ACP, whose bridge passes it to `session/new`.
  */
 export async function setupMcpConfig(
   deps: Pick<
@@ -191,7 +194,10 @@ export async function setupMcpConfig(
   ctx: SandboxSetupContext,
   runtimeEnv: Record<string, string>
 ): Promise<{ mcpConfigPath: string; researchServerName?: string } | undefined> {
-  if (ctx.harnessId !== "claude-code") {
+  if (
+    ctx.harnessId !== "claude-code" &&
+    !resolveHarnessAcpAgent(ctx.harnessId)
+  ) {
     return undefined;
   }
 
@@ -211,7 +217,7 @@ export async function setupMcpConfig(
         conversationId: ctx.conversationId,
         repoId: ctx.repoId,
         eventType: "log",
-        message: `Loaded ${injection.serverCount} MCP server(s) for Claude Code`,
+        message: `Loaded ${injection.serverCount} MCP server(s) for ${getHarnessConfig(ctx.harnessId).name}`,
         payload: {
           stage: "mcp_config",
           outcome: "ok",

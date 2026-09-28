@@ -8,6 +8,9 @@ import { runHarness } from "../../lib/harness/runner";
 
 // Execute the launch request at the external sandbox boundary. The fixture
 // replaces only the paid CLI, not setpriv or the kernel's capability handling.
+// These cases pin the one-shot `codex exec` invocation; the ACP bridge launch
+// is covered in lib/harness/acp.
+const CLI_PATH = { MOGPLEX_HARNESS_ACP: "off" };
 const linuxOnly = {
   skip: process.platform !== "linux" && "Linux kernel required",
 };
@@ -76,6 +79,7 @@ test(
           mode: "AUTO",
           resumeSessionId: "fixture-session",
           runtimeEnv: { MOGPLEX_TEST_RUNTIME: "retained" },
+          platformEnv: CLI_PATH,
         }
       );
       assert.equal(command.exitCode, 0, await command.stderr());
@@ -134,7 +138,7 @@ for (const [mode, policy] of [
           "codex",
           "inspect",
           "fixture-key",
-          { cwd, mode }
+          { cwd, mode, platformEnv: CLI_PATH }
         );
         assert.equal(command.exitCode, 0, await command.stderr());
         const observed = JSON.parse(await command.stdout()) as {
@@ -167,6 +171,7 @@ test(
       await assert.rejects(
         runHarness(sandbox as never, "codex", "inspect", "fixture-key", {
           cwd,
+          platformEnv: CLI_PATH,
         }),
         { code: "ENOENT" }
       );

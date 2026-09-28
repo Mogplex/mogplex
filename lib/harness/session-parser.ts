@@ -1,4 +1,5 @@
 import type { HarnessId } from "@/lib/harness/config";
+import { parseAcpBridgeLine } from "./acp/protocol";
 
 const CODEX_SESSION_PATTERNS = [
   /\bsession id:\s*([\da-f-]{36})\b/i,
@@ -70,10 +71,17 @@ export function createHarnessSessionParser(harnessId: HarnessId) {
   let emittedSessionId: string | null = null;
 
   function nextSessionIdFromLine(line: string) {
+    // A run behind the ACP bridge reports the ACP session it opened, which is
+    // also the id `session/resume` takes on the next turn.
+    const acpEvent = parseAcpBridgeLine(line);
     const candidate =
-      harnessId === "claude-code"
-        ? extractClaudeSessionId(line)
-        : extractCodexSessionId(line);
+      acpEvent?.type === "session"
+        ? acpEvent.sessionId
+        : acpEvent
+          ? null
+          : harnessId === "claude-code"
+            ? extractClaudeSessionId(line)
+            : extractCodexSessionId(line);
     if (!candidate || candidate === emittedSessionId) return null;
     emittedSessionId = candidate;
     return candidate;

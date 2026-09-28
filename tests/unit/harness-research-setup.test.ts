@@ -85,3 +85,43 @@ test("sandbox environment and Claude MCP reuse one research credential across se
     }
   );
 });
+
+test("Codex gets the MCP config through ACP, and none when ACP is switched off", async () => {
+  const { setupMcpConfig } =
+    await import("../../app/api/sandbox/[id]/harness/_lib/setup");
+  const codex: SandboxSetupContext = { ...context, harnessId: "codex" };
+  const logged: string[] = [];
+  let injections = 0;
+  const deps = {
+    injectClaudeMcpConfig: async () => {
+      injections += 1;
+      return {
+        ok: true as const,
+        mcpConfigPath: ".mogplex/mcp.json",
+        serverCount: 2,
+        serverNames: ["linear", "mogplex_research"],
+        researchServerName: "mogplex_research",
+      };
+    },
+    getResolvedConnections: async () => [],
+    safeAppendAiCallEvent: async (event: { message: string }) => {
+      logged.push(event.message);
+      return null;
+    },
+  } as unknown as Parameters<typeof setupMcpConfig>[0];
+  const sandbox = {} as Parameters<typeof setupMcpConfig>[1];
+
+  await withEnv({ MOGPLEX_HARNESS_ACP: undefined }, async () => {
+    assert.deepEqual(await setupMcpConfig(deps, sandbox, codex, {}), {
+      mcpConfigPath: ".mogplex/mcp.json",
+      researchServerName: "mogplex_research",
+    });
+  });
+  assert.equal(injections, 1);
+  assert.deepEqual(logged, ["Loaded 2 MCP server(s) for Codex"]);
+
+  await withEnv({ MOGPLEX_HARNESS_ACP: "off" }, async () => {
+    assert.equal(await setupMcpConfig(deps, sandbox, codex, {}), undefined);
+  });
+  assert.equal(injections, 1);
+});

@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { HARNESSES, type HarnessConfig } from "../lib/harness/config";
+import { buildAcpAgentEnv, buildAcpRunConfig } from "../lib/harness/acp/launch";
+import { ACP_BRIDGE_SCRIPT } from "../lib/harness/acp/bridge-script";
+import { parseAcpBridgeLine } from "../lib/harness/acp/protocol";
 
 // Smoke test for the pinned harness CLI packages. CI proves a pin bump
 // compiles, but nothing executed the new binaries before they reached
@@ -160,6 +163,120 @@ async function smokeTestFreshPrompt(
   console.log(`[${harness.id}] headless prompt run passed`);
 }
 
+async function installPackage(
+  label: string,
+  spec: string,
+  prefix: string,
+  workspace: string
+) {
+  console.log(`[${label}] installing ${spec}`);
+  const install = await run(
+    "npm",
+    [
+      "install",
+      "--prefix",
+      prefix,
+      "--no-fund",
+      "--no-audit",
+      "--loglevel=error",
+      spec,
+    ],
+    { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspace }
+  );
+  if (install.timedOut || install.code !== 0) {
+    throw new SmokeFailure(
+      `[${label}] npm install ${spec} failed (code ${install.code}, timedOut ${install.timedOut}):\n${summarizeOutput(install)}`
+    );
+  }
+}
+
+/**
+ * Production runs this harness through its ACP agent behind the bridge, so
+ * run the same bridge against the pinned agent: one turn that also asks to
+ * resume an absent session, which must fall back to a fresh one.
+ */
+async function smokeTestAcpAgent(harness: HarnessConfig): Promise<void> {
+  const agent = harness.acp;
+  if (!agent) return;
+  const label = `${harness.id} acp`;
+  const prefix = await mkdtemp(
+    path.join(tmpdir(), `harness-smoke-${harness.id}-acp-`)
+  );
+  try {
+    const workspace = await createSmokeWorkspace(prefix);
+    await installPackage(
+      label,
+      `${agent.package}@${agent.version}`,
+      prefix,
+      workspace
+    );
+    const binPath = path.join(prefix, "node_modules", ".bin", agent.binary);
+    if (!process.env[harness.envVar]?.trim()) {
+      console.log(
+        `[${label}] SKIP prompt check: ${harness.envVar} is not set (install only)`
+      );
+      return;
+    }
+
+    // A gateway key needs its base URL; a direct key signs in to the provider.
+    const env: Record<string, string> = {
+      [harness.envVar]: process.env[harness.envVar] ?? "",
+      ...(process.env.OPENAI_BASE_URL
+        ? { OPENAI_BASE_URL: process.env.OPENAI_BASE_URL }
+        : {}),
+    };
+    const config = buildAcpRunConfig({
+      harnessId: harness.id,
+      agent: { ...agent, binary: binPath },
+      prompt: SMOKE_PROMPT,
+      cwd: workspace,
+      mode: "SAFE",
+      resumeSessionId: MISSING_SESSION_ID,
+      env,
+    });
+    // Keep the smoke's Codex state out of the runner's home directory.
+    const codexHome = path.join(prefix, "codex-home");
+    await mkdir(codexHome);
+    const bridgePath = path.join(prefix, "acp-bridge.mjs");
+    const runPath = path.join(prefix, "acp-run.json");
+    await writeFile(bridgePath, ACP_BRIDGE_SCRIPT);
+    await writeFile(runPath, JSON.stringify(config));
+    console.log(`[${label}] running one ACP turn through the bridge`);
+    const result = await run(process.execPath, [bridgePath, runPath], {
+      timeoutMs: PROMPT_TIMEOUT_MS,
+      cwd: workspace,
+      env: {
+        ...process.env,
+        ...buildAcpAgentEnv(harness.id, env, "SAFE"),
+        CODEX_HOME: codexHome,
+      },
+    });
+    const events = result.stdout.split("\n").map(parseAcpBridgeLine);
+    const done = events.find((event) => event?.type === "done");
+    const fellBack = events.some((event) => event?.type === "resume_failed");
+    if (
+      result.timedOut ||
+      result.code !== 0 ||
+      done?.type !== "done" ||
+      done.stopReason !== "end_turn" ||
+      !fellBack
+    ) {
+      throw new SmokeFailure(
+        `[${label}] bridge turn failed (code ${result.code}, timedOut ${result.timedOut}, resume fallback ${fellBack}):\n${summarizeOutput(result)}`
+      );
+    }
+    console.log(`[${label}] bridge turn passed`);
+  } finally {
+    // Codex may still be flushing session files as it exits.
+    await rm(prefix, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 200,
+    });
+  }
+}
+
 async function smokeTestHarness(harness: HarnessConfig): Promise<void> {
   const prefix = await mkdtemp(
     path.join(tmpdir(), `harness-smoke-${harness.id}-`)
@@ -172,26 +289,12 @@ async function smokeTestHarness(harness: HarnessConfig): Promise<void> {
     // bump PR.
     const workspace = await createSmokeWorkspace(prefix);
 
-    const spec = `${harness.package}@${harness.version}`;
-    console.log(`[${harness.id}] installing ${spec}`);
-    const install = await run(
-      "npm",
-      [
-        "install",
-        "--prefix",
-        prefix,
-        "--no-fund",
-        "--no-audit",
-        "--loglevel=error",
-        spec,
-      ],
-      { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspace }
+    await installPackage(
+      harness.id,
+      `${harness.package}@${harness.version}`,
+      prefix,
+      workspace
     );
-    if (install.timedOut || install.code !== 0) {
-      throw new SmokeFailure(
-        `[${harness.id}] npm install ${spec} failed (code ${install.code}, timedOut ${install.timedOut}):\n${summarizeOutput(install)}`
-      );
-    }
 
     const binPath = path.join(prefix, "node_modules", ".bin", harness.binary);
 
@@ -230,6 +333,7 @@ async function main(): Promise<number> {
   for (const harness of Object.values(HARNESSES)) {
     try {
       await smokeTestHarness(harness);
+      await smokeTestAcpAgent(harness);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error ?? "unknown");

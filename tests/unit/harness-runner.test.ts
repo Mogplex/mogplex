@@ -7,6 +7,10 @@ import {
   runHarness,
 } from "../../lib/harness/runner";
 
+// These cases pin the one-shot `codex exec` invocation, which the ACP kill
+// switch restores; lib/harness/acp covers the default ACP launch.
+const CLI_PATH = { MOGPLEX_HARNESS_ACP: "off" };
+
 test("runHarness honors cancellation before launching the detached harness command", async () => {
   const runCommandCalls: Array<{
     cmd: string;
@@ -125,7 +129,8 @@ test("runHarness reinstalls when the installed harness version does not match th
     sandbox as never,
     "codex",
     "ship it",
-    "sk-test"
+    "sk-test",
+    { platformEnv: CLI_PATH }
   );
 
   assert.equal(result.installed, true);
@@ -165,13 +170,19 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
     },
   } as const;
 
-  await runHarness(sandbox as never, "codex", "hello world", {
-    OPENAI_BASE_URL: "https://ai-gateway.vercel.sh/v1",
-    OPENAI_API_KEY: "gateway-key",
-    CODEX_API_KEY: "gateway-key",
-    MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
-    MOGPLEX_RESEARCH_TOKEN: "run-scoped-token",
-  });
+  await runHarness(
+    sandbox as never,
+    "codex",
+    "hello world",
+    {
+      OPENAI_BASE_URL: "https://ai-gateway.vercel.sh/v1",
+      OPENAI_API_KEY: "gateway-key",
+      CODEX_API_KEY: "gateway-key",
+      MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
+      MOGPLEX_RESEARCH_TOKEN: "run-scoped-token",
+    },
+    { platformEnv: CLI_PATH }
+  );
 
   const detachedCall = runCommandCalls.find((call) => call.detached);
   assert.ok(detachedCall);
