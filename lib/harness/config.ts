@@ -8,7 +8,8 @@ export type HarnessProvider = "anthropic" | "openai";
 
 /**
  * The Agent Client Protocol server Mogplex drives this harness through. When
- * present (and not switched off, see `lib/harness/acp/enabled.ts`), runs
+ * present (and not switched off, see `resolveHarnessAcpAgent` in
+ * `lib/harness/acp/agent.ts`), runs
  * launch this package behind the in-sandbox ACP bridge instead of the CLI's
  * one-shot `buildCommand` invocation.
  */

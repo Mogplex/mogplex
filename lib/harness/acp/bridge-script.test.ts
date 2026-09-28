@@ -107,6 +107,7 @@ type BridgeRun = {
   agentLog: Array<Record<string, unknown>>;
   exitCode: number | null;
   runPath: string;
+  stderr: string;
 };
 
 let workDir: string | null = null;
@@ -176,6 +177,11 @@ async function runBridge(
     },
   });
   let stdout = "";
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string) => {
     stdout += chunk;
@@ -198,6 +204,7 @@ async function runBridge(
     agentLog: parseLines(await readFile(logPath, "utf8")),
     exitCode,
     runPath,
+    stderr,
   };
 }
 
@@ -391,6 +398,16 @@ describe("ACP bridge script", () => {
       type: "session",
       sessionId: "fresh-session",
     });
+  });
+
+  it("should warn and start without MCP servers when the MCP config cannot be read", async () => {
+    const run = await runBridge({ mcpConfigPath: "/nonexistent/mcp.json" });
+
+    expect(run.exitCode).toBe(0);
+    expect(requestParams(run, "session/new")).toMatchObject({ mcpServers: [] });
+    expect(run.stderr).toContain(
+      "[acp-bridge] could not read MCP config /nonexistent/mcp.json"
+    );
   });
 
   it("should cancel the ACP turn when the harness command is stopped", async () => {

@@ -58,7 +58,14 @@ function emitUpdate(update) {
 function readMcpServers(path) {
   if (!path) return [];
   let config;
-  try { config = JSON.parse(readFileSync(path, "utf8")); } catch { return []; }
+  try {
+    config = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    // The run asked for these servers; say so instead of silently starting
+    // the agent without its connections.
+    process.stderr.write("[acp-bridge] could not read MCP config " + path + ": " + errorText(error) + "\n");
+    return [];
+  }
   const pairs = (record) => Object.entries(record || {}).map(([name, value]) => ({ name, value: String(value) }));
   return Object.entries(config.mcpServers || {}).map(([name, server]) =>
     server.type === "http" || server.type === "sse"

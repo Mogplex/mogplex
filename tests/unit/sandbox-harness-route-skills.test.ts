@@ -92,6 +92,7 @@ async function runHarness(input: {
   const checks: SkillSelectionInput[] = [];
   const deferred: Array<() => Promise<void>> = [];
   let harnessPrompt = "";
+  let harnessOpts: Record<string, unknown> = {};
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
@@ -119,9 +120,12 @@ async function runHarness(input: {
     runHarness: async (
       _sandbox: unknown,
       _harness: unknown,
-      prompt: string
+      prompt: string,
+      _auth: unknown,
+      opts: Record<string, unknown>
     ) => {
       harnessPrompt = prompt;
+      harnessOpts = opts;
       return {
         installed: false,
         installLogs: "",
@@ -135,6 +139,7 @@ async function runHarness(input: {
         },
       } as never;
     },
+    getResolvedConnections: async () => [],
     renewSandboxActivityLease: async () => 0,
     stopSandboxRecord: async () => null,
     touchSandboxLastActive: async () => {},
@@ -197,6 +202,7 @@ async function runHarness(input: {
     checks,
     deferred,
     harnessPrompt,
+    harnessOpts,
   };
 }
 
@@ -348,4 +354,27 @@ test("POST /api/sandbox/[id]/harness runs unchanged for a user without skills or
   } finally {
     console.warn = originalWarn;
   }
+});
+
+test("POST /api/sandbox/[id]/harness gives an ACP Codex run its MCP config and the same agent it set up for", async () => {
+  const { HARNESSES } = await import("../../lib/harness/config");
+  const { withEnv } = await import("./helpers/agents-tools-fixtures");
+  const noSkills = async () => ({ skills: [] });
+
+  const acp = await withEnv({ MOGPLEX_HARNESS_ACP: undefined }, () =>
+    runHarness({ prompt: "inspect", loadSkillCatalog: noSkills })
+  );
+  assert.equal(acp.status, 200);
+  assert.deepEqual(acp.harnessOpts.acpAgent, HARNESSES.codex.acp);
+  assert.equal(acp.harnessOpts.mcpConfigPath, ".mogplex/mcp.json");
+  assert.ok(acp.writes.some((file) => file.path.endsWith(".mogplex/mcp.json")));
+
+  const cli = await withEnv({ MOGPLEX_HARNESS_ACP: "off" }, () =>
+    runHarness({ prompt: "inspect", loadSkillCatalog: noSkills })
+  );
+  assert.equal(cli.harnessOpts.acpAgent, null);
+  assert.equal(cli.harnessOpts.mcpConfigPath, undefined);
+  assert.ok(
+    !cli.writes.some((file) => file.path.endsWith(".mogplex/mcp.json"))
+  );
 });

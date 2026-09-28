@@ -7,9 +7,8 @@ import {
   runHarness,
 } from "../../lib/harness/runner";
 
-// These cases pin the one-shot `codex exec` invocation, which the ACP kill
-// switch restores; lib/harness/acp covers the default ACP launch.
-const CLI_PATH = { MOGPLEX_HARNESS_ACP: "off" };
+// These cases pin the one-shot `codex exec` invocation (`acpAgent: null`);
+// lib/harness/acp covers the default ACP launch.
 
 test("runHarness honors cancellation before launching the detached harness command", async () => {
   const runCommandCalls: Array<{
@@ -130,7 +129,7 @@ test("runHarness reinstalls when the installed harness version does not match th
     "codex",
     "ship it",
     "sk-test",
-    { platformEnv: CLI_PATH }
+    { acpAgent: null }
   );
 
   assert.equal(result.installed, true);
@@ -181,7 +180,7 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
       MOGPLEX_RESEARCH_MCP_URL: "https://mogplex.com/api/harness-research/mcp",
       MOGPLEX_RESEARCH_TOKEN: "run-scoped-token",
     },
-    { platformEnv: CLI_PATH }
+    { acpAgent: null }
   );
 
   const detachedCall = runCommandCalls.find((call) => call.detached);

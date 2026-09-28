@@ -11,8 +11,11 @@ import {
   materializeBrowserAttachmentsForHarness,
   type BrowserHarnessAttachment,
 } from "@/lib/harness/browser-attachments";
-import { resolveHarnessAcpAgent } from "@/lib/harness/acp/agent";
-import { getHarnessConfig, type HarnessId } from "@/lib/harness/config";
+import {
+  getHarnessConfig,
+  type HarnessAcpAgent,
+  type HarnessId,
+} from "@/lib/harness/config";
 import type { MemoryScope } from "@/lib/memories-client";
 import type { Sandbox } from "@vercel/sandbox";
 import type { HarnessRepoRecord, SandboxHarnessPostDeps } from "./types";
@@ -192,12 +195,11 @@ export async function setupMcpConfig(
   >,
   sandbox: Sandbox,
   ctx: SandboxSetupContext,
-  runtimeEnv: Record<string, string>
+  runtimeEnv: Record<string, string>,
+  /** The run's ACP agent, resolved once by the route for setup and launch. */
+  acpAgent: HarnessAcpAgent | null
 ): Promise<{ mcpConfigPath: string; researchServerName?: string } | undefined> {
-  if (
-    ctx.harnessId !== "claude-code" &&
-    !resolveHarnessAcpAgent(ctx.harnessId)
-  ) {
+  if (ctx.harnessId !== "claude-code" && !acpAgent) {
     return undefined;
   }
 
