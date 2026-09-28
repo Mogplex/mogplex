@@ -70,7 +70,8 @@ test("sandbox environment and Claude MCP reuse one research credential across se
         },
         sandbox,
         context,
-        runtimeEnv
+        runtimeEnv,
+        null
       );
       const config = files.get(".mogplex/mcp.json")?.toString();
       assert.ok(config);
@@ -86,7 +87,7 @@ test("sandbox environment and Claude MCP reuse one research credential across se
   );
 });
 
-test("Codex gets the MCP config through ACP, and none when ACP is switched off", async () => {
+test("Codex gets the MCP config through ACP, and none on the CLI path", async () => {
   const { setupMcpConfig } =
     await import("../../app/api/sandbox/[id]/harness/_lib/setup");
   const codex: SandboxSetupContext = { ...context, harnessId: "codex" };
@@ -111,17 +112,17 @@ test("Codex gets the MCP config through ACP, and none when ACP is switched off",
   } as unknown as Parameters<typeof setupMcpConfig>[0];
   const sandbox = {} as Parameters<typeof setupMcpConfig>[1];
 
-  await withEnv({ MOGPLEX_HARNESS_ACP: undefined }, async () => {
-    assert.deepEqual(await setupMcpConfig(deps, sandbox, codex, {}), {
+  const { HARNESSES } = await import("../../lib/harness/config");
+  assert.deepEqual(
+    await setupMcpConfig(deps, sandbox, codex, {}, HARNESSES.codex.acp ?? null),
+    {
       mcpConfigPath: ".mogplex/mcp.json",
       researchServerName: "mogplex_research",
-    });
-  });
+    }
+  );
   assert.equal(injections, 1);
   assert.deepEqual(logged, ["Loaded 2 MCP server(s) for Codex"]);
 
-  await withEnv({ MOGPLEX_HARNESS_ACP: "off" }, async () => {
-    assert.equal(await setupMcpConfig(deps, sandbox, codex, {}), undefined);
-  });
+  assert.equal(await setupMcpConfig(deps, sandbox, codex, {}, null), undefined);
   assert.equal(injections, 1);
 });

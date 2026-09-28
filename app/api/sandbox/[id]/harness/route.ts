@@ -36,6 +36,7 @@ import {
   type SandboxSetupContext,
 } from "./_lib/setup";
 import { createHarnessStreamBody } from "./_lib/execution";
+import { resolveHarnessAcpAgent } from "@/lib/harness/acp/agent";
 import { setupAiCall, createFinalizeCancelledRun } from "./_lib/ai-call";
 import { setupAgentRuntime } from "./_lib/agent-runtime";
 import { setupSkillCatalog } from "./_lib/skill-catalog";
@@ -303,11 +304,14 @@ export function createSandboxHarnessPostHandler(
         setupCtx,
         runtimeEnv
       );
+      // Setup and launch must agree on whether this run goes through ACP.
+      const acpAgent = resolveHarnessAcpAgent(harnessId);
       const mcpConfig = await setupMcpConfig(
         deps,
         sandbox,
         setupCtx,
-        runtimeEnv
+        runtimeEnv,
+        acpAgent
       );
       // Reads top down as: who the agent is, the skills in play, the task.
       const skilled = await setupSkillCatalog(deps, sandbox, setupCtx, {
@@ -353,6 +357,7 @@ export function createSandboxHarnessPostHandler(
           cwd: executionRoot || undefined,
           runtimeEnv,
           ...mcpConfig,
+          acpAgent,
           shouldCancel: async () =>
             isCancellationRequested(await loadCurrentCall()),
         }
@@ -404,7 +409,7 @@ export function createSandboxHarnessPostHandler(
           conversationId: body.conversationId || null,
           repoId: record.repo_id || null,
           eventType: "log",
-          message: `Installed ${config.package}`,
+          message: `Installed ${acpAgent?.package ?? config.package}`,
           payload: {
             stage: "install",
             logs: truncateLogEvent(result.installLogs),

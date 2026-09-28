@@ -9,7 +9,7 @@ import {
   isHarnessInstalled,
   resolveHarnessInstallTarget,
 } from "./install";
-import type { HarnessId } from "./config";
+import type { HarnessAcpAgent, HarnessId } from "./config";
 import type { Sandbox, Command } from "@vercel/sandbox";
 import type { HarnessExecutionMode } from "./claude-permissions";
 
@@ -22,8 +22,12 @@ type RunHarnessOpts = {
   mcpConfigPath?: string;
   researchServerName?: string;
   shouldCancel?: () => boolean | Promise<boolean>;
-  /** Platform settings such as `MOGPLEX_HARNESS_ACP`; defaults to process.env. */
-  platformEnv?: Record<string, string | undefined>;
+  /**
+   * The ACP agent to launch, as the caller resolved it (see
+   * `resolveHarnessAcpAgent`), so setup and launch agree; null forces the
+   * CLI. Resolved from the environment when omitted.
+   */
+  acpAgent?: HarnessAcpAgent | null;
 };
 
 type RunHarnessResult = {
@@ -68,7 +72,10 @@ export async function runHarness(
   opts?: RunHarnessOpts
 ): Promise<RunHarnessResult> {
   const config = getHarnessConfig(harnessId);
-  const acpAgent = resolveHarnessAcpAgent(harnessId, opts?.platformEnv);
+  const acpAgent =
+    opts?.acpAgent === undefined
+      ? resolveHarnessAcpAgent(harnessId)
+      : opts.acpAgent;
   const installTarget = resolveHarnessInstallTarget(harnessId, acpAgent);
 
   let installed = false;

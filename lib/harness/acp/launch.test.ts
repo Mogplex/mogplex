@@ -146,7 +146,7 @@ describe("runHarness through ACP", () => {
         resumeSessionId: " earlier-session ",
         mcpConfigPath: ".mogplex/mcp.json",
         runtimeEnv: { MOGPLEX_TEST_RUNTIME: "kept" },
-        platformEnv: {},
+        acpAgent: HARNESSES.codex.acp,
       }
     );
 
@@ -205,10 +205,10 @@ describe("runHarness through ACP", () => {
     const { sandbox, calls } = fakeSandbox(true);
 
     await runHarness(sandbox as never, "codex", "one", GATEWAY_ENV, {
-      platformEnv: {},
+      acpAgent: HARNESSES.codex.acp,
     });
     await runHarness(sandbox as never, "codex", "two", GATEWAY_ENV, {
-      platformEnv: {},
+      acpAgent: HARNESSES.codex.acp,
     });
 
     const runPaths = calls
@@ -217,11 +217,11 @@ describe("runHarness through ACP", () => {
     expect(new Set(runPaths).size).toBe(2);
   });
 
-  it("should return to the Codex CLI when ACP is switched off", async () => {
+  it("should run the Codex CLI when the caller resolved no ACP agent", async () => {
     const { sandbox, calls } = fakeSandbox(false);
 
     await runHarness(sandbox as never, "codex", "Fix the bug", GATEWAY_ENV, {
-      platformEnv: { MOGPLEX_HARNESS_ACP: "off" },
+      acpAgent: null,
     });
 
     expect(
