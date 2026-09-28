@@ -68,8 +68,17 @@ export function buildPRReviewTools(config: {
   const reportReviewInputSchema = z
     .object({
       hasIssues: z.boolean(),
-      summary: z.string(),
-      commentBody: z.string().optional(),
+      summary: z
+        .string()
+        .describe(
+          "One to three sentences: the verdict and the most important reason."
+        ),
+      commentBody: z
+        .string()
+        .optional()
+        .describe(
+          "Only when there are no findings: supporting evidence as a short markdown bullet list."
+        ),
       affectedFiles: z.array(z.string()).max(20).optional(),
       findings: z.array(reviewFindingSchema).max(20).optional(),
     })

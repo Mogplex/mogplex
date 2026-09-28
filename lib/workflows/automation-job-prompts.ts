@@ -413,7 +413,7 @@ export function buildAutomationHarnessPrompt(input: {
     instructions.push(
       "Inspect only. Do not edit files, push commits, merge, or publish GitHub comments or reviews; Mogplex publishes the review after you finish.",
       `Your final non-empty line must be ${AUTOMATION_HARNESS_REVIEW_PREFIX} followed by one compact JSON object with this shape: {"hasIssues":true,"summary":"...","commentBody":"...","affectedFiles":["path"],"findings":[{"severity":"warning","title":"...","body":"...","path":"path","line":1}]}.`,
-      "Use hasIssues=false and an empty findings array only when there are no material issues."
+      "Use hasIssues=false when there are no material issues; list any non-blocking suggestions as findings with severity suggestion."
     );
   } else {
     instructions.push(

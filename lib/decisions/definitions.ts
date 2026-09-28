@@ -243,6 +243,124 @@ const memoryPromotionGate: DecisionDefinition = {
   },
 };
 
+/**
+ * Decisions that guard what Mogplex publishes on a pull request. The review
+ * model writes the text; these check its shape before it reaches GitHub and
+ * that a platform rewrite kept every claim. Both run on the platform's
+ * credential and are never billed to the account.
+ *
+ * Thresholds come from the 2026-09-28 replay of seven published reviews: a
+ * well-formatted control scored under 0.3 on every question, and each real
+ * review scored at least one problem at 0.82 or higher.
+ */
+/** Each key names one way published review text goes wrong. */
+export const REVIEW_FORMAT_PROBLEMS = [
+  "denseParagraph",
+  "processTalk",
+  "danglingReference",
+  "bareCode",
+] as const;
+
+export type ReviewFormatProblem = (typeof REVIEW_FORMAT_PROBLEMS)[number];
+
+export const REVIEW_FORMAT_ACT_THRESHOLD = 0.8;
+
+/** The problems whose probability reached the act threshold. */
+export function reviewFormatProblems(
+  answers: DecisionAnswers
+): ReviewFormatProblem[] {
+  return REVIEW_FORMAT_PROBLEMS.filter(
+    (key) => probability(answers[key]) >= REVIEW_FORMAT_ACT_THRESHOLD
+  );
+}
+
+const reviewFormat: DecisionDefinition = {
+  id: "review_format",
+  version: "2026-09-28.1",
+  // Acting means a platform-paid rewrite that a second check must accept,
+  // and the original is published whenever anything fails.
+  defaultMode: "enforce",
+  timeoutMs: 4000,
+  escalate: false,
+  questions: {
+    denseParagraph: {
+      type: "boolean",
+      instructions:
+        "Does review_markdown contain a paragraph of four or more sentences that covers several separate checks or findings, where a bullet list would be easier to scan?",
+    },
+    processTalk: {
+      type: "boolean",
+      instructions:
+        "Does review_markdown mention an internal tool or report field by name, such as reportReview, hasIssues, commentBody, or findings, or announce that a report was filed?",
+    },
+    danglingReference: {
+      type: "boolean",
+      instructions:
+        "Does review_markdown say that suggestions, notes, or details exist without stating what each one says?",
+    },
+    bareCode: {
+      type: "boolean",
+      instructions:
+        "Does review_markdown name file paths, functions, or code identifiers as plain text, without backtick code formatting?",
+    },
+  },
+  interpret(answers: DecisionAnswers) {
+    const problems = reviewFormatProblems(answers);
+    return {
+      verdict:
+        problems.length > 0
+          ? `rewrite:${problems.join(",")}`
+          : "well_formatted",
+      act: problems.length > 0,
+      uncertain: false,
+    };
+  },
+};
+
+/**
+ * The rewrite drops sentences about the review itself ("two suggestions are
+ * noted in the narrative"), so the keep question sets those aside. On the
+ * 2026-09-28 replay a faithful rewrite scored 0.86 on it, one missing a
+ * bullet 0.16; added and contradicting rewrites scored 0.92-0.98 on theirs.
+ */
+export const REVIEW_REWRITE_KEEPS_THRESHOLD = 0.7;
+export const REVIEW_REWRITE_DRIFT_CEILING = 0.2;
+
+const reviewRewriteFaithful: DecisionDefinition = {
+  id: "review_rewrite_faithful",
+  version: "2026-09-28.1",
+  defaultMode: "enforce",
+  timeoutMs: 4000,
+  escalate: false,
+  questions: {
+    keepsClaims: {
+      type: "boolean",
+      instructions:
+        "Setting aside sentences about the review itself, does rewritten keep every statement original makes about the code?",
+    },
+    addsClaims: {
+      type: "boolean",
+      instructions:
+        "Does rewritten state a claim, finding, or recommendation that original does not state?",
+    },
+    changesMeaning: {
+      type: "boolean",
+      instructions: "Does rewritten contradict original or change its verdict?",
+    },
+  },
+  interpret(answers: DecisionAnswers) {
+    const faithful =
+      probability(answers.keepsClaims) >= REVIEW_REWRITE_KEEPS_THRESHOLD &&
+      probability(answers.addsClaims) < REVIEW_REWRITE_DRIFT_CEILING &&
+      probability(answers.changesMeaning) < REVIEW_REWRITE_DRIFT_CEILING;
+    return {
+      verdict: faithful ? "faithful" : "unfaithful",
+      act: faithful,
+      uncertain: false,
+    };
+  },
+};
+
 export const DECISION_DEFINITIONS: Readonly<
   Record<DecisionId, DecisionDefinition>
 > = {
@@ -253,6 +371,8 @@ export const DECISION_DEFINITIONS: Readonly<
   memory_promotion_gate: memoryPromotionGate,
   skill_selection: skillSelection,
   memory_relevance: memoryRelevance,
+  review_format: reviewFormat,
+  review_rewrite_faithful: reviewRewriteFaithful,
 };
 
 export function getDecisionDefinition(id: DecisionId): DecisionDefinition {

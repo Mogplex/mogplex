@@ -20,6 +20,8 @@ Code acts.
 | `memory_promotion_gate` | Before memory promotion's extraction call | `shadow` | In `enforce`, skips extraction when the record holds nothing durable |
 | `skill_selection` | When a run or turn has skills in play, meaning a roster agent's linked skills, the user's skill catalog, or both: the sandbox harness route (`harness`), the native runner (`agent_run`), Control (`control`), and workspace chat (`chat`) | `shadow` | Records only. Linked skills are still all loaded and the catalog is still offered as an index; the row says which skills the task needed. `metadata.sources` tells a linked skill from a catalog one, `metadata.invoked` lists what the user named, and `baseline.loaded` against `baseline.offered` shows how much was delivered in full |
 | `memory_relevance` | Every Control turn that injects memories, beside the turn | `shadow` | Records only. The prompt is already built; the row says which injected memories bear on the request |
+| `review_format` | Every structured PR review, before the check run, native review, and timeline comment are published (`pr_review`) | `enforce` | A dense paragraph, tool or report-field chatter, a pointer to details that are not stated, or unformatted code sends the text to a platform model for a formatting rewrite. The rewrite is published only if `review_rewrite_faithful` accepts it |
+| `review_rewrite_faithful` | After a `review_format` rewrite | `enforce` | Accepts the rewrite. Anything else, including an outage, publishes the reviewer's original text |
 | `flow_classify` | Every automation Classify node | always acts | The run takes the answered branch. The question is authored in the flow graph |
 
 Questions, thresholds, and versions for the runtime's own decisions live in
@@ -102,7 +104,14 @@ Settings, Account (`PATCH /api/settings/decision-checks`).
   second opinion and no mode: `DECISIONS_DISABLED=1`, or an account that
   turned its checks off, makes it fail, not pass.
 - **Only add caution.** A decision can add an approval or a note. It can never
-  relax `policy.ts`, a protected-branch rule, or the shell guard.
+  relax `policy.ts`, a protected-branch rule, or the shell guard. The one
+  decision that changes output is `review_format`: it may replace the wording
+  of a published review, never its verdict, check conclusion, or a finding's
+  title, severity, path, or line, and only after `review_rewrite_faithful`
+  confirms the rewrite keeps every statement about the code.
+- **Free to the account.** Every call, including the `review_format` rewrite
+  (`anthropic/claude-sonnet-5`, `PR_REVIEW_REWRITE_MODEL` overrides it), runs
+  on the platform credential and is never debited from the account.
 - **Never end a run.** The agent execution policy forbids iteration budgets.
   `loop_check` records what it sees and nothing more.
 - **Second opinion on the uncertain band.** When a definition sets `escalate`
@@ -173,3 +182,13 @@ page, route renames, and UI copy scored 0.80 to 0.97, standing rules such as
 preference 0.3, and unrelated notes 0.02 to 0.07. Four skills scored 0.97 for
 the matching one and 0.05 to 0.13 for the rest, and all under 0.03 for an
 unrelated request. This shows the shape works; it is not calibration.
+
+Replay of seven published PR reviews for `review_format` (2026-09-28): the
+dense one-paragraph reviews scored 0.82 to 0.96 on `denseParagraph`, the ones
+that said "reportReview filed with hasIssues=false" 0.98 to 0.99 on
+`processTalk`, and a hand-formatted control stayed under 0.3 on every question,
+at about 250 ms and $0.00003 per check. For `review_rewrite_faithful`, a
+faithful rewrite of the densest review scored 0.87 on keeping its claims, while
+copies that dropped a bullet, added a recommendation, or flipped the verdict
+scored 0.16 on keeping, 0.94 on adding, and 0.98 on contradicting. The rewrite
+itself took about 13 s and 2,400 tokens.

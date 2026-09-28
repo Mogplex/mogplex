@@ -14,7 +14,9 @@ export type DecisionId =
   | "loop_check"
   | "memory_promotion_gate"
   | "skill_selection"
-  | "memory_relevance";
+  | "memory_relevance"
+  | "review_format"
+  | "review_rewrite_faithful";
 
 /**
  * Decisions whose questions are authored outside `definitions.ts`. A flow's

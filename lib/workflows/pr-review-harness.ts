@@ -14,6 +14,7 @@ import {
   buildPrReviewStatusHeading,
   buildReviewFindingsSections,
   demoteAgentMarkdownHeadings,
+  formatInlineCode,
   formatReviewFindingSeverityLabel,
   isInlinePublishableReviewFinding,
 } from "./pr-review-harness-formatting";
@@ -69,6 +70,24 @@ export function buildPrReviewInlineComments(findings: ReviewFinding[]) {
   });
 }
 
+/**
+ * The published narrative of a structured report comes only from the report.
+ * The model's closing chat message is not part of it: it restates the review
+ * as one paragraph and can mention suggestions it never filed.
+ */
+function buildStructuredReviewNarrative(reviewOutcome: ReviewOutcome | null) {
+  const summary = toOptionalString(reviewOutcome?.summary);
+  // With findings, the sections below carry the full review, so a
+  // commentBody that restates them would double-report.
+  if ((reviewOutcome?.findings.length ?? 0) > 0) {
+    return summary ?? toOptionalString(reviewOutcome?.commentBody);
+  }
+  const commentBody = toOptionalString(reviewOutcome?.commentBody);
+  if (!commentBody) return summary;
+  if (!summary || commentBody.includes(summary)) return commentBody;
+  return `${summary}\n\n${commentBody}`;
+}
+
 export function buildPrReviewCheckText(input: {
   harnessResult: PrReviewHarnessResult | null;
   fallbackText: string | null | undefined;
@@ -90,18 +109,11 @@ export function buildPrReviewCheckText(input: {
     parts.push(contractNote);
   }
 
-  // With a structured report the findings sections below already carry the
-  // full review, so a commentBody that restates them would double-report;
-  // lead with the short summary instead.
-  const preferSummaryNarrative =
-    input.harnessResult?.source === "structured" &&
-    (reviewOutcome?.findings.length ?? 0) > 0;
-  const narrative = preferSummaryNarrative
-    ? (toOptionalString(reviewOutcome?.summary) ??
-      toOptionalString(reviewOutcome?.commentBody) ??
-      toOptionalString(fallbackText))
-    : (toOptionalString(reviewOutcome?.commentBody) ??
-      toOptionalString(fallbackText));
+  const narrative =
+    input.harnessResult?.source === "structured"
+      ? buildStructuredReviewNarrative(reviewOutcome)
+      : (toOptionalString(reviewOutcome?.commentBody) ??
+        toOptionalString(fallbackText));
   if (narrative) {
     parts.push(demoteAgentMarkdownHeadings(narrative));
   }
@@ -109,8 +121,10 @@ export function buildPrReviewCheckText(input: {
   if ((reviewOutcome?.affectedFiles.length ?? 0) > 0) {
     parts.push(
       [
-        "Affected files:",
-        ...reviewOutcome!.affectedFiles.map((file) => `- ${file}`),
+        "**Affected files**",
+        ...reviewOutcome!.affectedFiles.map(
+          (file) => `- ${formatInlineCode(file)}`
+        ),
       ].join("\n")
     );
   }

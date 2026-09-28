@@ -360,11 +360,12 @@ test("createAutomationJobTask skips native GitHub review publishing when PR head
       // double-report the findings sections below.
       "Reviewer found one issue.",
       "",
-      "Affected files:",
-      "- src/widget.ts",
+      "**Affected files**",
+      "- `src/widget.ts`",
       "",
-      "Warnings",
-      "- Guard nullable widget lookup (src/widget.ts:L14)",
+      "**Warnings**",
+      "",
+      "- **Guard nullable widget lookup** (`src/widget.ts:L14`)",
       "  The widget can be undefined here.",
     ].join("\n"),
   });
