@@ -55,11 +55,21 @@ for (const preference of [null, "mogplex", "codex", "claude-code"] as const) {
         return preference;
       },
       async () => {},
-      async () => null
+      async () => null,
+      async (scope) => {
+        assert.equal(scope.channelId, "D1");
+        return { model_id: "openai/gpt-6-astra" };
+      }
     );
     assert.equal(result.runId, stored.id);
     assert.equal(stored.harness, preference ?? "mogplex");
     assert.equal(stored.metadata.harness_id, preference ?? "mogplex");
+    assert.equal(
+      stored.metadata.slack_model_id,
+      preference === null || preference === "mogplex"
+        ? "openai/gpt-6-astra"
+        : undefined
+    );
     assert.deepEqual(stored.metadata.slack_image_attachments, {
       teamId: "T1",
       files: [image],
@@ -118,7 +128,8 @@ test("Slack repository runs carry the channel's pinned roster agent", async () =
       }),
     async () => "codex",
     async () => {},
-    async () => "agent-7"
+    async () => "agent-7",
+    async () => null
   );
   assert.equal(result.runId, stored.id);
   assert.deepEqual(resolvedFor, { agentId: "agent-7", userId: stored.user_id });

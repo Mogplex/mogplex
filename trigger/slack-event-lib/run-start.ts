@@ -8,13 +8,17 @@ import {
   getSlackHarnessPreference,
 } from "@/lib/slack/harness-preferences";
 import { queueSlackRunDelivery } from "@/lib/slack/run-delivery-queue";
+import { getSlackModelPreference } from "@/lib/slack/model-preferences";
 
 export async function defaultStartRepoAgentRun(
   input: StartRepoAgentRunInput,
   startRun = startMogplexApiRun,
   getHarnessPreference = getSlackHarnessPreference,
   queueDelivery = queueSlackRunDelivery,
-  getAgentPreference = getSlackAgentPreference
+  getAgentPreference = getSlackAgentPreference,
+  getModelPreference: (
+    scope: Parameters<typeof getSlackModelPreference>[0]
+  ) => Promise<{ model_id: string } | null> = getSlackModelPreference
 ): Promise<StartRepoAgentRunResult> {
   const extraMetadata: Record<string, unknown> = {
     slack_task_title: input.taskTitle ?? input.prompt.split("\n")[0],
@@ -45,9 +49,10 @@ export async function defaultStartRepoAgentRun(
     channelId: input.slackContext.channelId,
     slackUserId: input.slackContext.slackUserId,
   };
-  const [savedHarness, agentId] = await Promise.all([
+  const [savedHarness, agentId, modelPreference] = await Promise.all([
     getHarnessPreference(preferenceScope),
     getAgentPreference(preferenceScope),
+    getModelPreference(preferenceScope),
   ]);
   const harness = savedHarness ?? "mogplex";
   const result = await startRun({
@@ -67,6 +72,9 @@ export async function defaultStartRepoAgentRun(
     origin: "slack",
     extraMetadata: {
       ...extraMetadata,
+      ...(harness === "mogplex" && modelPreference
+        ? { slack_model_id: modelPreference.model_id }
+        : {}),
       slack_guidance_enabled:
         harness === "mogplex" && Boolean(input.slackMessage),
     },

@@ -167,7 +167,16 @@ export async function runNativeMogplexAgent(
     control.signal.throwIfAborted();
     const context = await deps.loadContext(run, sandbox);
     await deps.ensureExecutionLease(run, sandbox, context.teamId);
-    const resolvedModel = await deps.resolveModel(run.user_id);
+    const fromSlack = run.metadata.run_origin === "slack";
+    const requestedModel =
+      fromSlack && typeof run.metadata.slack_model_id === "string"
+        ? run.metadata.slack_model_id
+        : null;
+    const resolvedModel = await deps.resolveModel(
+      run.user_id,
+      requestedModel,
+      fromSlack ? "slack" : "chat"
+    );
     const uiMessages = await deps.buildMessages(run);
     const agent = await buildAgentSystemSuffix(run, deps.resolveAgent);
     // Recorded beside the run and awaited in `finally`: it never delays the

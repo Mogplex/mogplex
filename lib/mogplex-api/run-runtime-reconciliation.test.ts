@@ -25,6 +25,7 @@ function fixture() {
   const notified: string[] = [];
   const events: string[] = [];
   const deps: RuntimeFinalizationDeps = {
+    cleanupSandbox: async () => {},
     loadRun: async () => run,
     loadCall: async () => call,
     finishCall: async (expected, status, error) => {
