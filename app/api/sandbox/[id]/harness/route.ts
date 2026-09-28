@@ -409,7 +409,7 @@ export function createSandboxHarnessPostHandler(
           conversationId: body.conversationId || null,
           repoId: record.repo_id || null,
           eventType: "log",
-          message: `Installed ${config.package}`,
+          message: `Installed ${acpAgent?.package ?? config.package}`,
           payload: {
             stage: "install",
             logs: truncateLogEvent(result.installLogs),
