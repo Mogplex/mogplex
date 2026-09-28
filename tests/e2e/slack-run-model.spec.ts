@@ -68,7 +68,7 @@ test("the model chosen in Slack is the model used by its repository run", async 
   const handler = createSlackWebhookPostHandler({
     getSigningSecret: () => secret,
     scheduleAfterResponse: (work) => {
-      delivered = work();
+      delivered = Promise.resolve(work());
     },
     dispatch: async (event) => {
       if (event.kind !== "command") throw new Error("Expected model command");
