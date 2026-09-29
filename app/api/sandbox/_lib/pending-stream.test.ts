@@ -91,6 +91,68 @@ describe("pending sandbox readiness stream", () => {
     );
   });
 
+  describe("a record whose VM is up but whose boot has not finished", () => {
+    const waitRequest = () =>
+      new Request("http://localhost/api/sandbox", {
+        headers: { [SANDBOX_READINESS_WAIT_HEADER]: "1" },
+      });
+    const bootingDeps = (status: string, waits: { count: number }) =>
+      ({
+        getActiveSandboxForRepo: async () => ({ ...record, status }),
+        resolveActiveSandboxState: async () => ({ kind: "running" }),
+        waitForSandboxReadiness: async () => {
+          waits.count += 1;
+          return {
+            kind: "ready",
+            snapshot: { id: record.id, user_id: "user-1", status: "running" },
+          };
+        },
+      }) as never;
+
+    it("should make a waiting caller wait out the boot", async () => {
+      for (const status of ["creating", "installing"]) {
+        const waits = { count: 0 };
+        const response = await maybeReturnExistingSandboxResponse(
+          bootingDeps(status, waits),
+          launch,
+          waitRequest()
+        );
+
+        expect(response?.headers.get("Content-Type")).toBe("text/event-stream");
+        expect(await response?.text()).toContain('"type":"ready"');
+        expect(waits.count).toBe(1);
+      }
+    });
+
+    it("should still answer a caller that does not wait with the record", async () => {
+      const waits = { count: 0 };
+      const response = await maybeReturnExistingSandboxResponse(
+        bootingDeps("installing", waits),
+        launch,
+        new Request("http://localhost/api/sandbox")
+      );
+
+      expect(response?.headers.get("Content-Type")).toContain(
+        "application/json"
+      );
+      expect(waits.count).toBe(0);
+    });
+
+    it("should hand back a record that finished booting without waiting", async () => {
+      const waits = { count: 0 };
+      const response = await maybeReturnExistingSandboxResponse(
+        bootingDeps("running", waits),
+        launch,
+        waitRequest()
+      );
+
+      expect(response?.headers.get("Content-Type")).toContain(
+        "application/json"
+      );
+      expect(waits.count).toBe(0);
+    });
+  });
+
   it("keeps an active cleanup collision pending until a fresh request resumes", async () => {
     const cleanupRecord = { ...record, status: "running" };
     const response = await maybeReturnExistingSandboxResponse(

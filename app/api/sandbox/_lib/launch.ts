@@ -13,7 +13,7 @@ import {
 } from "@/lib/sandbox/sandbox-name";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { SANDBOX_STREAM_SELECT } from "./constants";
-import { resolveLaunchRootDirectory } from "./utils";
+import { existingSandboxAnswer, resolveLaunchRootDirectory } from "./utils";
 import {
   resolveSandboxCreateContextOrResponse,
   loadSandboxLaunchRepoAccess,
@@ -185,11 +185,12 @@ export async function maybeReturnExistingSandboxResponse(
     }
   }
 
-  if (existingState.kind === "running") {
+  const answer = existingSandboxAnswer(existingState.kind, existing.status);
+  if (answer === "return") {
     return NextResponse.json({ sandbox: toSandboxClientRecord(existing) });
   }
 
-  if (existingState.kind === "pending") {
+  if (answer === "wait") {
     return requestsSandboxReadinessWait(request.headers)
       ? buildPendingSandboxWaitStreamResponse({
           record: existing,

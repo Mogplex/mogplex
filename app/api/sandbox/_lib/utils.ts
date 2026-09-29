@@ -95,3 +95,21 @@ export function resolveLaunchRootDirectory(input: {
   }
   return input.request.rootDirectory;
 }
+
+/**
+ * Whether an existing record is handed back as is or waited on; null leaves it
+ * to the recovery branches. The VM is up as soon as it exists, but the record
+ * stays creating or installing until its boot (clone, branch push, installs)
+ * finishes, so a booting record is waited on like a pending one. Otherwise a
+ * caller's work races the boot's own commands in the same VM.
+ */
+export function existingSandboxAnswer(
+  kind: string,
+  recordStatus: string
+): "return" | "wait" | null {
+  if (kind === "pending") return "wait";
+  if (kind !== "running") return null;
+  return recordStatus === "creating" || recordStatus === "installing"
+    ? "wait"
+    : "return";
+}
