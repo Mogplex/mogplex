@@ -140,6 +140,8 @@ export type AutomationAgentResult = {
   usage: AutomationAgentUsage | null;
   execution?: AutomationModelExecutionMetadata | null;
   aiCallId?: string | null;
+  /** The review's report passed the format check inside the run, so publishing does not check it again. */
+  reviewFormatPassed?: boolean;
 };
 
 // Carries the model id that actually executed. It can differ from the pinned

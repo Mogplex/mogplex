@@ -74,7 +74,12 @@ const FILED_REPORT = {
   totalUsage: { inputTokens: 1100, outputTokens: 30 },
 };
 
-async function runReview(replies: Array<unknown | Error>) {
+async function runReview(
+  replies: Array<unknown | Error>,
+  judgeReviewFormat?: (draft: {
+    reviewOutcome: { summary: string };
+  }) => Promise<readonly string[]>
+) {
   const { createAutomationAgentRunner } =
     await loadAutomationJobWorkflowModule();
   const { extractPrReviewHarnessResult, isPrReviewVerdictMissing } =
@@ -83,6 +88,9 @@ async function runReview(replies: Array<unknown | Error>) {
   const mockedGithubFetch = mockGithubPullRequestFetch([42]);
   try {
     const runAutomationAgent = createAutomationAgentRunner({
+      ...(judgeReviewFormat
+        ? { judgeReviewFormat: judgeReviewFormat as never }
+        : {}),
       generateText: async (input) => {
         calls.push(input as unknown as Captured);
         const reply = replies[calls.length - 1];
@@ -359,4 +367,44 @@ test("a repair whose own report is rejected leaves the review without a verdict 
   assert.equal(calls.length, 2);
   assert.equal(harness.source, "dropped_findings");
   assert.equal(verdictMissing, true);
+});
+
+test("a filed report the format check flags goes back to the reviewer, and its fix is published", async () => {
+  const fixed = {
+    ...FILED_REPORT,
+    steps: [
+      makeStep({
+        toolCalls: [
+          {
+            toolName: "reportReview",
+            input: {
+              ...(FILED_REPORT.steps[0].toolCalls[0].input as Record<
+                string,
+                unknown
+              >),
+              summary: "The retry path in `sandbox.ts` skips the check.",
+            },
+          },
+        ],
+      }),
+    ],
+  };
+  const judged: string[] = [];
+  const { calls, harness, result } = await runReview(
+    [FILED_REPORT, fixed],
+    async (draft) => {
+      judged.push(draft.reviewOutcome.summary);
+      return draft.reviewOutcome.summary.includes("`") ? [] : ["bareCode"];
+    }
+  );
+
+  assert.equal(calls.length, 2);
+  assert.match(String(calls[1].messages?.at(-1)?.content), /backticks/);
+  assert.deepEqual(Object.keys(calls[1].tools ?? {}), ["reportReview"]);
+  assert.equal(
+    harness.reviewOutcome.summary,
+    "The retry path in `sandbox.ts` skips the check."
+  );
+  assert.equal(judged.length, 2);
+  assert.equal(result.reviewFormatPassed, true);
 });

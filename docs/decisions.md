@@ -20,7 +20,7 @@ Code acts.
 | `memory_promotion_gate` | Before memory promotion's extraction call | `shadow` | In `enforce`, skips extraction when the record holds nothing durable |
 | `skill_selection` | When a run or turn has skills in play, meaning a roster agent's linked skills, the user's skill catalog, or both: the sandbox harness route (`harness`), the native runner (`agent_run`), Control (`control`), and workspace chat (`chat`) | `shadow` | Records only. Linked skills are still all loaded and the catalog is still offered as an index; the row says which skills the task needed. `metadata.sources` tells a linked skill from a catalog one, `metadata.invoked` lists what the user named, and `baseline.loaded` against `baseline.offered` shows how much was delivered in full |
 | `memory_relevance` | Every Control turn that injects memories, beside the turn | `shadow` | Records only. The prompt is already built; the row says which injected memories bear on the request |
-| `review_format` | Every structured PR review, before the check run, native review, and timeline comment are published (`pr_review`) | `enforce` | A dense paragraph, tool or report-field chatter, a pointer to details that are not stated, or unformatted code sends the text to a platform model for a formatting rewrite. The rewrite is published only if `review_rewrite_faithful` accepts it |
+| `review_format` | Every structured PR review: a native review's draft inside the run, and any review not already passed before the check run, native review, and timeline comment are published (`pr_review`) | `enforce` | A dense paragraph, tool or report-field chatter, a pointer to details that are not stated, or unformatted code. In a native review the reviewer that wrote the draft is told what is wrong and files its report again in the same conversation; its revision replaces the draft if it keeps the verdict and every finding. A review still flagged at publish time (a harness review, or a revision that did not fix it) goes to a platform model for a formatting rewrite, published only if `review_rewrite_faithful` accepts it |
 | `review_rewrite_faithful` | After a `review_format` rewrite | `enforce` | Accepts the rewrite. Anything else, including an outage, publishes the reviewer's original text |
 | `flow_classify` | Every automation Classify node | always acts | The run takes the answered branch. The question is authored in the flow graph |
 
@@ -105,13 +105,19 @@ Settings, Account (`PATCH /api/settings/decision-checks`).
   turned its checks off, makes it fail, not pass.
 - **Only add caution.** A decision can add an approval or a note. It can never
   relax `policy.ts`, a protected-branch rule, or the shell guard. The one
-  decision that changes output is `review_format`: it may replace the wording
-  of a published review, never its verdict, check conclusion, or a finding's
-  title, severity, path, or line, and only after `review_rewrite_faithful`
-  confirms the rewrite keeps every statement about the code.
-- **Free to the account.** Every call, including the `review_format` rewrite
-  (`anthropic/claude-sonnet-5`, `PR_REVIEW_REWRITE_MODEL` overrides it), runs
-  on the platform credential and is never debited from the account.
+  decision that changes output is `review_format`. It sends a flagged native
+  draft back to its reviewer, whose revision is accepted only when it keeps
+  the verdict and every finding; it can add findings the draft referred to
+  without stating, which no rewrite could supply. At publish time it may
+  replace the wording of a review, never its verdict, check conclusion, or a
+  finding's title, severity, path, or line, and only after
+  `review_rewrite_faithful` confirms the rewrite keeps every statement about
+  the code.
+- **Free to the account.** Every decision call, including the `review_format`
+  rewrite (`anthropic/claude-sonnet-5`, `PR_REVIEW_REWRITE_MODEL` overrides
+  it), runs on the platform credential and is never debited from the account.
+  A reviewer's revision is a turn of the review itself, on the review's model,
+  and is billed like the rest of the review.
 - **Never end a run.** The agent execution policy forbids iteration budgets.
   `loop_check` records what it sees and nothing more.
 - **Second opinion on the uncertain band.** When a definition sets `escalate`

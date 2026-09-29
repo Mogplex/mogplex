@@ -12,9 +12,14 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { decide } from "@/lib/decisions/decide";
-import { reviewFormatProblems } from "@/lib/decisions/definitions";
+import {
+  reviewFormatProblems,
+  type ReviewFormatProblem,
+} from "@/lib/decisions/definitions";
 import { resolveDecisionGateway } from "@/lib/decisions/evaluator";
 import type { DecisionScope } from "@/lib/decisions/types";
+import { metadataTeamId } from "./automation-job-classify";
+import type { JobContext } from "./automation-job-types";
 import { buildPrReviewCheckText } from "./pr-review-harness";
 import type {
   PrReviewHarnessResult,
@@ -117,6 +122,44 @@ function renderForJudging(harnessResult: PrReviewHarnessResult) {
   });
 }
 
+/** The account and repo a PR review's decisions are recorded under. */
+export function prReviewDecisionScope(
+  context: JobContext,
+  aiCallId: string | null
+): DecisionScope {
+  return {
+    surface: "pr_review",
+    userId: context.repo.user_id,
+    teamId:
+      metadataTeamId(context.metadata) ?? context.repo.product_team_id ?? null,
+    repoId: context.repo.id,
+    aiCallId,
+  };
+}
+
+/**
+ * What the format check found wrong with the review as it would be
+ * published. None when no platform credential exists; the check itself
+ * fails open.
+ */
+export async function findReviewFormatProblems(
+  harnessResult: PrReviewHarnessResult,
+  scope: DecisionScope,
+  metadata: Record<string, unknown>,
+  deps: Pick<PrReviewFormatDeps, "available" | "decide"> = defaultDeps
+): Promise<ReviewFormatProblem[]> {
+  if (!deps.available()) return [];
+  const format = await deps.decide(
+    "review_format",
+    { review_markdown: renderForJudging(harnessResult) },
+    scope,
+    { metadata }
+  );
+  return format.act && format.answers
+    ? reviewFormatProblems(format.answers)
+    : [];
+}
+
 /** Titles, paths, lines, and severities stay the reviewer's own. */
 function applyRewrite(
   harnessResult: PrReviewHarnessResult,
@@ -159,16 +202,15 @@ export async function polishPrReviewForPublish(
   }
 
   try {
-    const original = renderForJudging(harnessResult);
-    const format = await deps.decide(
-      "review_format",
-      { review_markdown: original },
+    const problems = await findReviewFormatProblems(
+      harnessResult,
       scope,
-      { metadata }
+      metadata,
+      deps
     );
-    if (!format.act || !format.answers) return harnessResult;
+    if (problems.length === 0) return harnessResult;
 
-    const problems = reviewFormatProblems(format.answers);
+    const original = renderForJudging(harnessResult);
     const rewritten = await deps.rewrite({
       outcome: harnessResult.reviewOutcome,
       problems,

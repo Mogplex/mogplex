@@ -19,8 +19,10 @@ import type {
 import { isPrReviewVerdictMissing } from "./pr-review-harness-extraction";
 import type { persistJobReviewFindings } from "./automation-job-persistence";
 import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
-import { metadataTeamId } from "./automation-job-classify";
-import { polishPrReviewForPublish } from "./pr-review-format-check";
+import {
+  polishPrReviewForPublish,
+  prReviewDecisionScope,
+} from "./pr-review-format-check";
 
 export type FinalizePrReviewSuccessResult =
   | {
@@ -163,22 +165,13 @@ export async function finalizePrReviewSuccess(
   }
 
   // Every surface below publishes the same checked text.
-  const publishedHarnessResult = await (
-    deps.polishPrReviewForPublish ?? polishPrReviewForPublish
-  )(
-    input.reviewHarnessResult,
-    {
-      surface: "pr_review",
-      userId: context.repo.user_id,
-      teamId:
-        metadataTeamId(context.metadata) ??
-        context.repo.product_team_id ??
-        null,
-      repoId: context.repo.id,
-      aiCallId: input.result.aiCallId ?? null,
-    },
-    { job_run_id: input.jobRunId, pr_number: reviewPrNumber }
-  );
+  const publishedHarnessResult = input.result.reviewFormatPassed
+    ? input.reviewHarnessResult
+    : await (deps.polishPrReviewForPublish ?? polishPrReviewForPublish)(
+        input.reviewHarnessResult,
+        prReviewDecisionScope(context, input.result.aiCallId ?? null),
+        { job_run_id: input.jobRunId, pr_number: reviewPrNumber }
+      );
   const publishedOutcome =
     publishedHarnessResult === input.reviewHarnessResult
       ? input.reviewOutcome

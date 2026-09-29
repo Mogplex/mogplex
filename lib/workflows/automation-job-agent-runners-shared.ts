@@ -24,7 +24,13 @@ import {
   type AutomationLanguageModel,
   type JobContext,
 } from "@/lib/workflows/automation-job-types";
+import type { ReviewFormatProblem } from "@/lib/decisions/definitions";
 import { resolveAutomationSkills } from "@/lib/workflows/automation-job-skills";
+import {
+  findReviewFormatProblems,
+  prReviewDecisionScope,
+} from "@/lib/workflows/pr-review-format-check";
+import type { PrReviewHarnessResult } from "@/lib/workflows/pr-review-harness-types";
 import { normalizeAutomationAssignmentType } from "@/lib/workflows/automation-job-utils";
 import { getAutomationGenerateTimeoutMs } from "@/lib/workflows/automation-model-defaults";
 
@@ -38,6 +44,11 @@ export type AutomationAgentDeps = {
   loadApprovalSpentWaitMs: typeof loadToolApprovalSpentWaitMs;
   /** The node's skills and its agent's attachments; never rejects. */
   resolveSkills: typeof resolveAutomationSkills;
+  /** The review_format check on a reviewer's draft; none when unavailable. */
+  judgeReviewFormat: (
+    draft: PrReviewHarnessResult,
+    context: JobContext
+  ) => Promise<readonly ReviewFormatProblem[]>;
 };
 
 export const defaultAutomationAgentDeps: AutomationAgentDeps = {
@@ -46,6 +57,11 @@ export const defaultAutomationAgentDeps: AutomationAgentDeps = {
   waitStore: supabaseWaitStore,
   loadApprovalSpentWaitMs: loadToolApprovalSpentWaitMs,
   resolveSkills: resolveAutomationSkills,
+  judgeReviewFormat: (draft, context) =>
+    findReviewFormatProblems(draft, prReviewDecisionScope(context, null), {
+      pr_number: context.metadata.pr_number ?? null,
+      stage: "reviewer_draft",
+    }),
 };
 
 // Applies the tool-approval gate when the flow agent node opted in via
