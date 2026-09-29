@@ -314,7 +314,7 @@ test("injectClaudeMcpConfig always writes even when no MCP connections are resol
   assert.ok(writes.some((w) => w.path === ".mogplex/.gitignore"));
 });
 
-test("Claude harness gets the Mogplex tools beside a same-named user connection and may call both", async () => {
+test("Claude harness gets the Mogplex tools beside a same-named user connection and may call both in every mode", async () => {
   const { injectClaudeMcpConfig } = await loadMcpConfigModule();
   const { sandbox, writes } = makeSandboxMock();
   const result = await injectClaudeMcpConfig(sandbox as never, {
@@ -353,18 +353,17 @@ test("Claude harness gets the Mogplex tools beside a same-named user connection 
     return args[args.indexOf("--allowedTools") + 1].split(",");
   };
 
-  // AUTO: every server in the config, the user's connection included.
+  // Every mode: every server in the config, the user's connection included,
+  // as Codex's ACP bridge approves every MCP call.
   const auto = allowedIn("AUTO");
-  assert.ok(auto.includes("mcp__mogplex"));
-  assert.ok(auto.includes("mcp__mogplex_platform"));
-
-  // SAFE: only the read-only Mogplex tools, on the platform server.
   const safe = allowedIn("SAFE");
-  assert.ok(safe.includes("mcp__mogplex_platform__web_search"));
-  assert.ok(safe.includes("mcp__mogplex_platform__search_memories"));
-  assert.ok(!safe.includes("mcp__mogplex_platform__add_memory"));
-  assert.ok(!safe.some((name) => name.startsWith("mcp__mogplex__")));
-  assert.ok(!safe.includes("mcp__mogplex"));
+  for (const allowed of [auto, safe]) {
+    assert.ok(allowed.includes("mcp__mogplex"));
+    assert.ok(allowed.includes("mcp__mogplex_platform"));
+  }
+  // SAFE still gets no file or shell tools.
+  assert.ok(!safe.includes("Edit"));
+  assert.ok(!safe.includes("Bash"));
   for (const allowed of [auto, safe]) {
     assert.ok(!allowed.some((name) => name.includes("*")));
   }
