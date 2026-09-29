@@ -5,6 +5,7 @@
  * the file-length cap).
  */
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
+import { launchSandboxInternally } from "@/lib/sandbox/internal-launch";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
 import type { SandboxRecord } from "@/lib/types";
 
@@ -127,22 +128,17 @@ export async function launchSandboxViaRoute(run: ExternalAgentRunRow) {
     };
   }
 
-  const { createSandboxPostHandler } = await import("@/app/api/sandbox/route");
-  const response = await createSandboxPostHandler()(
-    new Request("https://internal.mogplex/api/sandbox", {
-      method: "POST",
-      headers: buildInternalApiHeaders(run.user_id),
-      body: JSON.stringify({
-        repoId: run.repo_id,
-        baseBranch: run.base_branch,
-        workingBranch: run.working_branch,
-        createBranch: run.create_branch,
-        rootDirectory: run.root_directory,
-      }),
-    })
-  );
-
-  return readSandboxLaunchResponse(response);
+  const { recordId, sandboxId } = await launchSandboxInternally({
+    headers: buildInternalApiHeaders(run.user_id),
+    body: {
+      repoId: run.repo_id,
+      baseBranch: run.base_branch,
+      workingBranch: run.working_branch,
+      createBranch: run.create_branch,
+      rootDirectory: run.root_directory,
+    },
+  });
+  return { recordId, sandboxId };
 }
 
 export async function readSandboxLaunchResponse(
