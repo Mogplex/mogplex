@@ -1,4 +1,5 @@
 import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
+import { parseSseDataEvents } from "@/lib/sse-data-events";
 import type { SandboxRecord } from "@/lib/types";
 
 export type LaunchedSandbox = {
@@ -40,32 +41,6 @@ function toLaunchedSandbox(record: unknown): LaunchedSandbox | null {
         ? sandbox.root_directory
         : null,
   };
-}
-
-function parseSseDataEvents(buffer: string) {
-  const events: unknown[] = [];
-  let remaining = buffer;
-  let separatorIndex = remaining.indexOf("\n\n");
-  while (separatorIndex !== -1) {
-    const rawEvent = remaining.slice(0, separatorIndex);
-    remaining = remaining.slice(separatorIndex + 2);
-    const data = rawEvent
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice("data:".length).trimStart())
-      // SSE joins multiple data fields in one event with a newline.
-      .join("\n");
-    if (data) {
-      // A malformed event is skipped; the stream's terminal event decides.
-      try {
-        events.push(JSON.parse(data));
-      } catch {
-        // Not JSON.
-      }
-    }
-    separatorIndex = remaining.indexOf("\n\n");
-  }
-  return { events, remaining };
 }
 
 type ReadSandbox = { sandbox: LaunchedSandbox; ready: boolean };

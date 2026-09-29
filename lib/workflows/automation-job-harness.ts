@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { parseSseDataEvents } from "@/lib/sse-data-events";
 import { prepareHarnessFlowReports } from "./flow-report-sandbox";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createHarnessOutputRenderer } from "@/lib/harness/output-renderer";
@@ -23,33 +24,6 @@ import {
   launchAutofixSandbox,
   launchAutomationHarnessSandbox,
 } from "@/lib/workflows/automation-job-sandbox-setup";
-
-function parseAutomationHarnessSseEvents(buffer: string) {
-  const events: unknown[] = [];
-  let remaining = buffer;
-  let separatorIndex = remaining.indexOf("\n\n");
-
-  while (separatorIndex !== -1) {
-    const rawEvent = remaining.slice(0, separatorIndex);
-    remaining = remaining.slice(separatorIndex + 2);
-    const data = rawEvent
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice("data:".length).trimStart())
-      .join("\n");
-    if (data) {
-      try {
-        events.push(JSON.parse(data));
-      } catch {
-        // Ignore a malformed stream event; the terminal event still decides
-        // whether the harness run succeeded.
-      }
-    }
-    separatorIndex = remaining.indexOf("\n\n");
-  }
-
-  return { events, remaining };
-}
 
 async function attachAutomationHarnessAiCall(input: {
   aiCallId: string;
@@ -124,7 +98,7 @@ async function readAutomationHarnessStream(input: {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const parsed = parseAutomationHarnessSseEvents(buffer);
+    const parsed = parseSseDataEvents(buffer);
     buffer = parsed.remaining;
 
     for (const event of parsed.events) {
