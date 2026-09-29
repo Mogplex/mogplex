@@ -180,6 +180,12 @@ function usable(read: ReadSandbox): LaunchedSandbox | null {
  * it is running. A sandbox another run is still booting is waited on rather
  * than handed back half-made; when that wait closes without a usable sandbox,
  * it reattaches once through the same route, which then reads the settled row.
+ *
+ * Each attach waits up to the route's readiness timeout
+ * (`SANDBOX_READINESS_TIMEOUT_MS`, 10 minutes). A wait that times out ends with
+ * an `error` event and fails right away. A wait that closes early (a `warning`
+ * then close) reattaches, so an interrupted launch can take up to twice the
+ * timeout before it fails.
  */
 export async function launchSandboxInternally(input: {
   headers: HeadersInit;

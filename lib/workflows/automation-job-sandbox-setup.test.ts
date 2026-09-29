@@ -21,7 +21,10 @@ describe("autofixSandboxLaunchBody", () => {
   });
 
   it("should fall back from the pull request's base to the target, then the job repo", () => {
-    const body = (targetDefault: string | null, contextDefault: string | null) =>
+    const body = (
+      targetDefault: string | null,
+      contextDefault: string | null
+    ) =>
       autofixSandboxLaunchBody({
         contextRepo: { default_branch: contextDefault },
         pullRequest: { baseRef: "", headRef: "fix/login" },
