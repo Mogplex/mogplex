@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { normalizeStartRequest } from "./runs-normalize";
+import { MOGPLEX_API_RUN_MODES } from "./runs-types";
+
+const MODE_ERROR = `mode must be one of ${MOGPLEX_API_RUN_MODES.join(", ")}`;
 
 const normalize = (body: Record<string, unknown>) =>
   normalizeStartRequest({
@@ -14,6 +17,10 @@ const normalize = (body: Record<string, unknown>) =>
   }).normalized;
 
 describe("run mode normalization", () => {
+  it("should name every accepted mode when it refuses one", () => {
+    expect(MODE_ERROR).toBe("mode must be one of SAFE, AUTO, YOLO");
+  });
+
   it("should accept SAFE, AUTO, and YOLO in any case", () => {
     expect(normalize({ mode: "safe" }).mode).toBe("SAFE");
     expect(normalize({ mode: "Auto" }).mode).toBe("AUTO");
@@ -26,16 +33,12 @@ describe("run mode normalization", () => {
   });
 
   it("should refuse an unknown mode instead of running it as AUTO", () => {
-    expect(() => normalize({ mode: "SAF" })).toThrow(
-      "mode must be SAFE, AUTO, or YOLO"
-    );
+    expect(() => normalize({ mode: "SAF" })).toThrow(MODE_ERROR);
   });
 
   it("should refuse a mode that is not a string", () => {
     for (const mode of [0, true, ["SAFE"], { mode: "SAFE" }]) {
-      expect(() => normalize({ mode })).toThrow(
-        "mode must be SAFE, AUTO, or YOLO"
-      );
+      expect(() => normalize({ mode })).toThrow(MODE_ERROR);
     }
   });
 

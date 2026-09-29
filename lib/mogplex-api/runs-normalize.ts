@@ -127,7 +127,7 @@ function normalizeRunMode(value: unknown): string | null {
   if (mode !== null && RUN_MODES.has(mode)) return mode;
   throw new MogplexApiRunError(
     "BAD_REQUEST",
-    "mode must be SAFE, AUTO, or YOLO",
+    `mode must be one of ${MOGPLEX_API_RUN_MODES.join(", ")}`,
     400
   );
 }
