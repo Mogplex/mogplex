@@ -3,7 +3,7 @@ import type { ReviewFinding } from "@/lib/types";
 export type AutomationAgentReviewResult = {
   text: string;
   steps: Array<{
-    toolCalls?: Array<{ toolName: string; input: unknown }>;
+    toolCalls?: Array<{ toolName: string; input: unknown; invalid?: boolean }>;
     toolResults?: unknown[];
   }>;
 };
@@ -32,6 +32,7 @@ export type PrAutofixOutcome = {
 
 export type PrReviewContractSource =
   | "structured"
+  | "dropped_findings"
   | "legacy_post_comment"
   | "legacy_text";
 

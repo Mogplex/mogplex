@@ -240,7 +240,7 @@ export function normalizeAutomationAgentResult(result: {
       inputTokens?: number | null;
       outputTokens?: number | null;
     } | null;
-    toolCalls?: Array<{ toolName: string; input: unknown }>;
+    toolCalls?: Array<{ toolName: string; input: unknown; invalid?: boolean }>;
     toolResults?: unknown[];
   }>;
 }): AutomationAgentResult {
@@ -252,6 +252,7 @@ export function normalizeAutomationAgentResult(result: {
       toolCalls: (step.toolCalls || []).map((toolCall) => ({
         toolName: toolCall.toolName,
         input: toolCall.input,
+        ...(toolCall.invalid === true ? { invalid: true } : {}),
       })),
       toolResults: step.toolResults,
     })),

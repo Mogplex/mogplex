@@ -44,6 +44,8 @@ export type FlowSuccessFinalizationInput = {
   releasedScope: ReleasedAutomationScope;
   context: JobContext;
   finalResult: AutomationAgentResult;
+  /** The last review node's own result; the verdict is read from it. */
+  reviewResult?: AutomationAgentResult | null;
   autoMergeRequest: FlowAutoMergeRequest | null;
   observabilityError?: string | null;
   isPrReview: boolean;
@@ -70,6 +72,23 @@ export type FlowSuccessFinalizationInput = {
 };
 
 /**
+ * The verdict is the last review node's own; what the flow's fix nodes
+ * applied comes from the whole run.
+ */
+function extractFlowReviewResult(
+  finalResult: AutomationAgentResult,
+  reviewResult: AutomationAgentResult | null | undefined
+) {
+  const flow = extractPrReviewHarnessResult(finalResult);
+  if (!reviewResult) return flow;
+  const { autofix } = flow;
+  return {
+    ...extractPrReviewHarnessResult(reviewResult),
+    ...(autofix ? { autofix } : {}),
+  };
+}
+
+/**
  * Finalize a successful flow execution.
  *
  * Handles PR review completion, auto-merge, dispatch events, and memory.
@@ -83,6 +102,7 @@ export async function finalizeFlowSuccess(
     releasedScope,
     context,
     finalResult,
+    reviewResult,
     autoMergeRequest,
     observabilityError,
     isPrReview,
@@ -94,7 +114,7 @@ export async function finalizeFlowSuccess(
   } = input;
 
   const reviewHarnessResult = isPrReview
-    ? extractPrReviewHarnessResult(finalResult)
+    ? extractFlowReviewResult(finalResult, reviewResult)
     : null;
   const reviewOutcome = reviewHarnessResult?.reviewOutcome ?? null;
   const reviewCommentPosted = isPrReview

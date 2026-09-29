@@ -2,12 +2,27 @@ import type { ModelMessage, ToolSet } from "ai";
 import type { AutomationAgentResult } from "./automation-job-types";
 import { mergeAutomationAgentResults } from "./automation-job-metadata";
 import { AutomationModelExecutionError } from "./automation-model-execution-errors";
-
-export const REPORT_REVIEW_TOOL_NAME = "reportReview";
+import {
+  readReviewReportState,
+  REPORT_REVIEW_TOOL_NAME,
+  type ReviewReportState,
+} from "./pr-review-report-state";
 
 /** Asks for the record of the review that already happened, not a new one. */
 export const PR_REVIEW_REPORT_REPAIR_PROMPT =
   "You finished this review without calling reportReview, so nothing was recorded and the pull request has no verdict. Call reportReview now with the verdict and findings from the review you just did. Do not start a new review and do not call any other tool.";
+
+/** Asks for the findings a report claimed and then dropped. */
+export const PR_REVIEW_DROPPED_FINDINGS_PROMPT =
+  "Your review said it found issues, but no report you filed lists them, so the pull request has no verdict. Call reportReview now with every issue from the review you just did as an entry in findings, each with severity, title, body, and path; non-blocking ones are severity suggestion and can go with hasIssues=false. Do not start a new review and do not call any other tool.";
+
+const REPAIR_PROMPTS: Record<
+  Exclude<ReviewReportState["kind"], "filed">,
+  string
+> = {
+  missing: PR_REVIEW_REPORT_REPAIR_PROMPT,
+  dropped_findings: PR_REVIEW_DROPPED_FINDINGS_PROMPT,
+};
 
 const FORCED_REPORT_CHOICE = {
   type: "tool",
@@ -19,16 +34,6 @@ export type ReportRepairRequest = {
   toolChoice: typeof FORCED_REPORT_CHOICE | "auto";
   messages: ModelMessage[];
 };
-
-export function hasFiledReviewReport(
-  steps: AutomationAgentResult["steps"]
-): boolean {
-  return steps.some((step) =>
-    (step.toolCalls ?? []).some(
-      (toolCall) => toolCall.toolName === REPORT_REVIEW_TOOL_NAME
-    )
-  );
-}
 
 /**
  * The report tool alone, without its `execute`. A tool the SDK cannot run
@@ -49,6 +54,7 @@ export function buildReportRepairMessages(input: {
   prompt: string;
   responseMessages: ModelMessage[] | undefined;
   text: string;
+  request: string;
 }): ModelMessage[] {
   const transcript: ModelMessage[] = input.responseMessages?.length
     ? input.responseMessages
@@ -56,7 +62,7 @@ export function buildReportRepairMessages(input: {
   return [
     { role: "user", content: input.prompt },
     ...transcript,
-    { role: "user", content: PR_REVIEW_REPORT_REPAIR_PROMPT },
+    { role: "user", content: input.request },
   ];
 }
 
@@ -76,8 +82,9 @@ function isRejectedRequest(error: unknown): boolean {
 }
 
 /**
- * When a review ends without its structured report, ask the same model once
- * to file it from the work it already did. The report is forced where the
+ * When a review ends without a structured report it can trust (none was
+ * accepted, or the accepted one dropped the issues it claimed), ask the same
+ * model once to file it from the work it already did. The report is forced where the
  * provider allows it; a provider that rejects a forced tool choice is asked
  * again with the report as the only tool on offer. The reviewer's own closing
  * text is kept. This never fails a review that otherwise completed: if the
@@ -91,7 +98,8 @@ export async function fileMissingReviewReport(input: {
   tools: ToolSet;
   generate: (request: ReportRepairRequest) => Promise<AutomationAgentResult>;
 }): Promise<AutomationAgentResult> {
-  if (hasFiledReviewReport(input.result.steps)) return input.result;
+  const state = readReviewReportState(input.result.steps);
+  if (state.kind === "filed") return input.result;
   const tools = buildReportOnlyTools(input.tools);
   if (!tools) return input.result;
 
@@ -99,6 +107,7 @@ export async function fileMissingReviewReport(input: {
     prompt: input.prompt,
     responseMessages: input.responseMessages,
     text: input.result.text,
+    request: REPAIR_PROMPTS[state.kind],
   });
   const ask = (toolChoice: ReportRepairRequest["toolChoice"]) =>
     input.generate({ tools, toolChoice, messages });

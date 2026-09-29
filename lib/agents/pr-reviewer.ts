@@ -12,6 +12,8 @@ import {
   prepareGitHubTextFile,
   type GitHubFileContent,
 } from "@/lib/agents/github-file-content";
+import { isRecord } from "@/lib/workflows/pr-review-harness-utils";
+import { clearsReviewWithoutFindings } from "@/lib/workflows/pr-review-report-state";
 
 const PR_REVIEW_FILE_CONTENT_CHAR_LIMIT = GITHUB_FILE_CONTENT_CHAR_LIMIT;
 const PR_REVIEW_PATCH_CHAR_LIMIT = 4_000;
@@ -58,6 +60,8 @@ export function buildPRReviewTools(config: {
   const request = config.fetch ?? fetch;
   const contentOwner = config.headOwner ?? config.owner;
   const contentRepo = config.headRepo ?? config.repo;
+  let claimedIssues = false;
+  let acceptedReport: Record<string, unknown> | null = null;
   const reviewFindingSchema = z.object({
     severity: z.enum(["critical", "warning", "suggestion"]),
     title: z.string(),
@@ -65,7 +69,7 @@ export function buildPRReviewTools(config: {
     path: z.string().optional(),
     line: z.number().int().positive().optional(),
   });
-  const reportReviewInputSchema = z
+  const reportObjectSchema = z
     .object({
       hasIssues: z.boolean(),
       summary: z
@@ -88,10 +92,31 @@ export function buildPRReviewTools(config: {
           code: z.ZodIssueCode.custom,
           path: ["findings"],
           message:
-            "findings must include at least one entry when hasIssues=true",
+            "findings must include at least one entry when hasIssues=true. Call reportReview again with each issue as an entry in findings. Setting hasIssues=false without listing the issues leaves the review without a verdict.",
         });
       }
     });
+  // The claim is read before validation, so a report the schema rejects for
+  // any reason (a missing summary, an unknown severity) still counts; such
+  // reports never reach `execute`. The JSON schema the model sees is the
+  // object schema's own.
+  const reportReviewInputSchema = z.preprocess((input) => {
+    if (isRecord(input) && input.hasIssues === true) claimedIssues = true;
+    return input;
+  }, reportObjectSchema);
+
+  // Once a report has claimed issues, only an accepted report that lists
+  // findings can authorize a merge: none accepted means every claim was
+  // rejected, and one that clears the review has dropped them.
+  const droppedFindingsRefusal = () =>
+    claimedIssues &&
+    (acceptedReport === null || clearsReviewWithoutFindings(acceptedReport))
+      ? {
+          success: false as const,
+          error:
+            "Not merged: this review said it found issues but its report lists none. Report each issue as a finding.",
+        }
+      : null;
 
   const tools = {
     getPullRequest: tool({
@@ -222,7 +247,10 @@ export function buildPRReviewTools(config: {
       description:
         "Record the structured review result for workflow orchestration. Call exactly once after analysis.",
       inputSchema: reportReviewInputSchema,
-      execute: async (input) => input,
+      execute: async (input) => {
+        acceptedReport = input;
+        return input;
+      },
     }),
   };
 
@@ -236,6 +264,7 @@ export function buildPRReviewTools(config: {
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
+              droppedFindingsRefusal() ??
               mergePullRequestIfSafe({
                 githubToken: config.githubToken,
                 owner: config.owner,
@@ -252,6 +281,7 @@ export function buildPRReviewTools(config: {
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
+              droppedFindingsRefusal() ??
               queuePullRequestAutoMerge({
                 githubToken: config.githubToken,
                 owner: config.owner,

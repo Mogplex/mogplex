@@ -132,7 +132,9 @@ export type AutomationAgentUsage = {
 export type AutomationAgentResult = {
   text: string;
   steps: Array<{
-    toolCalls?: Array<{ toolName: string; input: unknown }>;
+    // `invalid` marks a call the SDK rejected (its input failed the tool's
+    // schema); the call is kept so a reader can tell what was attempted.
+    toolCalls?: Array<{ toolName: string; input: unknown; invalid?: boolean }>;
     toolResults?: unknown[];
   }>;
   usage: AutomationAgentUsage | null;

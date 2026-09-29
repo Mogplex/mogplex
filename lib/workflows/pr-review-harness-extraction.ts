@@ -10,6 +10,10 @@ import {
   toReviewFindings,
   toStringArray,
 } from "./pr-review-harness-utils";
+import {
+  readReviewReportState,
+  type ReviewReportState,
+} from "./pr-review-report-state";
 
 function extractLastToolInput(
   result: AutomationAgentReviewResult,
@@ -153,8 +157,9 @@ export function extractPrAutofixOutcome(
 
 /**
  * True when the reviewer finished without filing `reportReview` and nothing
- * else reported a problem. The "no issues" in that result is a default, not a
- * finding, so it must never be published as a clean verdict or allow a merge.
+ * else reported a problem, or filed one that dropped the issues it had
+ * claimed. The "no issues" in that result is a default, not a finding, so it
+ * must never be published as a clean verdict or allow a merge.
  */
 export function isPrReviewVerdictMissing(
   harnessResult: Pick<PrReviewHarnessResult, "source" | "reviewOutcome"> | null
@@ -166,22 +171,32 @@ export function isPrReviewVerdictMissing(
   );
 }
 
+function buildReportedHarnessResult(
+  result: AutomationAgentReviewResult,
+  reportState: Exclude<ReviewReportState, { kind: "missing" }>
+): PrReviewHarnessResult {
+  const { report } = reportState;
+  return {
+    source: reportState.kind === "filed" ? "structured" : "dropped_findings",
+    fallbackText: toOptionalString(result.text),
+    reviewOutcome: {
+      hasIssues: report.hasIssues === true,
+      summary: toOptionalString(report.summary) ?? result.text ?? "",
+      commentBody: toOptionalString(report.commentBody),
+      affectedFiles: toStringArray(report.affectedFiles),
+      findings: toReviewFindings(report.findings),
+    },
+  };
+}
+
 export function extractPrReviewHarnessResult(
   result: AutomationAgentReviewResult
 ): PrReviewHarnessResult {
-  const report = extractLastToolInput(result, "reportReview");
+  const reportState = readReviewReportState(result.steps);
   const autofix = extractPrAutofixOutcome(result);
-  if (report) {
+  if (reportState.kind !== "missing") {
     return {
-      source: "structured",
-      fallbackText: toOptionalString(result.text),
-      reviewOutcome: {
-        hasIssues: report.hasIssues === true,
-        summary: toOptionalString(report.summary) ?? result.text ?? "",
-        commentBody: toOptionalString(report.commentBody),
-        affectedFiles: toStringArray(report.affectedFiles),
-        findings: toReviewFindings(report.findings),
-      },
+      ...buildReportedHarnessResult(result, reportState),
       ...(autofix ? { autofix } : {}),
     };
   }
