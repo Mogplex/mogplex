@@ -93,7 +93,7 @@ describe("launchSandboxInternally", () => {
     const route = scripted(stale(), stale());
 
     await expect(launch(route.post)).rejects.toThrow(
-      "Sandbox did not become ready"
+      "Sandbox record-1 did not become ready"
     );
   });
 
@@ -118,7 +118,7 @@ describe("launchSandboxInternally", () => {
     const route = scripted(pending(), pending());
 
     await expect(launch(route.post)).rejects.toThrow(
-      "Sandbox did not become ready"
+      "Sandbox record-1 did not become ready"
     );
   });
 
