@@ -52,7 +52,23 @@ function parseSseDataEvents(buffer: string) {
   return { events, remaining };
 }
 
-type ReadSandbox = { sandbox: LaunchedSandbox; ready: boolean };
+type ReadSandbox = {
+  sandbox: LaunchedSandbox;
+  ready: boolean;
+  /** The record's status when the route reported one. */
+  status?: string;
+};
+
+/** A JSON record's status, as the agent tool path reads it. */
+function recordStatus(record: unknown): string | undefined {
+  if (!record || typeof record !== "object") return undefined;
+  const value = record as {
+    status?: unknown;
+    runtime_summary?: { status?: unknown };
+  };
+  const status = value.runtime_summary?.status ?? value.status;
+  return typeof status === "string" ? status : undefined;
+}
 
 async function readJsonSandbox(response: Response): Promise<ReadSandbox> {
   const payload = (await response.json()) as {
@@ -70,7 +86,14 @@ async function readJsonSandbox(response: Response): Promise<ReadSandbox> {
   if (!sandbox) {
     throw new Error("Sandbox launch response did not include a sandbox");
   }
-  return { sandbox, ready: true };
+  // The route can answer with a matching record that is not running, such as
+  // a paused sandbox found by name; only a running one is ready.
+  const status = recordStatus(payload.sandbox);
+  return {
+    sandbox,
+    ready: status === undefined || status === "running",
+    status,
+  };
 }
 
 type LaunchEvent = { type?: string; message?: string; sandbox?: unknown };
@@ -169,7 +192,7 @@ export async function launchSandboxInternally(input: {
   post?: PostSandbox;
 }): Promise<LaunchedSandbox> {
   const post = input.post ?? defaultPost;
-  const last: { sandbox: LaunchedSandbox | null } = { sandbox: null };
+  const last: { read: ReadSandbox | null } = { read: null };
   const attach = async () => {
     const headers = new Headers(input.headers);
     headers.set(SANDBOX_READINESS_WAIT_HEADER, "1");
@@ -182,7 +205,7 @@ export async function launchSandboxInternally(input: {
         })
       )
     );
-    last.sandbox = read.sandbox;
+    last.read = read;
     return usable(read);
   };
   // One bounded reattach, a second full POST, when the first attach does not
@@ -191,9 +214,11 @@ export async function launchSandboxInternally(input: {
   const sandbox = (await attach()) ?? (await attach());
   if (sandbox) return sandbox;
   // A failed launch never reaches the run row, so name the record here.
+  const read = last.read;
+  if (!read) throw new Error("Sandbox did not become ready");
+  const state =
+    read.status && read.status !== "running" ? ` (${read.status})` : "";
   throw new Error(
-    last.sandbox
-      ? `Sandbox ${last.sandbox.recordId} did not become ready`
-      : "Sandbox did not become ready"
+    `Sandbox ${read.sandbox.recordId} did not become ready${state}`
   );
 }
