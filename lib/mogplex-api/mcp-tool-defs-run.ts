@@ -55,7 +55,7 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
           type: "string",
           enum: [...MOGPLEX_API_RUN_MODES],
           description:
-            "Codex and Claude Code only. SAFE: the harness does not change the checkout (Claude Code plans, Codex runs read-only), but MCP connection and Mogplex tools stay callable and can change other systems. AUTO (default): edits files and runs commands in the sandbox. YOLO: skips every permission check.",
+            "Codex and Claude Code only. SAFE: the harness does not change the checkout (Claude Code plans, Codex runs read-only), but MCP connection and Mogplex tools stay callable and can change other systems. AUTO (default): edits files and runs commands in the sandbox. YOLO: runs without approval prompts; Claude Code still blocks its deny-listed tools and commands, such as curl, ssh, and reading .env files.",
         },
         idempotencyKey: {
           type: "string",
