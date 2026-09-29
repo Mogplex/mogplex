@@ -284,6 +284,7 @@ test("the Mogplex MCP serves the run's native tools and marks only read-only one
     };
     const post = createMogplexMcpPost({
       authorizeRun: authorized,
+      cacheTtlMs: 0,
       buildTools: async (buildRun, capabilities) => {
         builds.push({ run: buildRun, capabilities });
         return {
@@ -337,5 +338,80 @@ test("the Mogplex MCP serves the run's native tools and marks only read-only one
     assert.equal(cleanups, builds.length, "every build is cleaned up");
     assert.equal((await call("initialize")).result.serverInfo.name, "mogplex");
     assert.equal(builds.length, 3, "initialize builds no tools");
+  });
+});
+
+test("the Mogplex MCP answers with protocol errors when a build or a tool fails", async () => {
+  await withEnv(env, async () => {
+    const { MOGPLEX_RESEARCH_TOKEN: token } = buildHarnessResearchEnv(context);
+    const originalWarn = console.warn;
+    const warnings: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args);
+    };
+    try {
+      const request = (
+        params: Record<string, unknown>,
+        method = "tools/call"
+      ) =>
+        new Request("https://mogplex.com/api/harness-research/mcp", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 3, method, params }),
+        });
+
+      const unavailable = createMogplexMcpPost({
+        authorizeRun: authorized,
+        buildTools: async () => {
+          throw new Error("vault timeout for sk_live_secretvalue123456");
+        },
+      });
+      const failedBuild = await unavailable(request({}, "tools/list"));
+      assert.equal(failedBuild.status, 200);
+      assert.equal((await failedBuild.json()).error.code, -32603);
+
+      let cleanups = 0;
+      const broken = createMogplexMcpPost({
+        authorizeRun: authorized,
+        cacheTtlMs: 0,
+        buildTools: async () => ({
+          tools: {
+            crash: {
+              description: "Always fails",
+              inputSchema: (await import("zod")).z.object({}),
+              execute: async () => {
+                throw new Error("upstream 500");
+              },
+            },
+            nothing: {
+              description: "Returns nothing",
+              inputSchema: (await import("zod")).z.object({}),
+              execute: async () => undefined,
+            },
+          } as never,
+          cleanup: async () => {
+            cleanups += 1;
+          },
+        }),
+      });
+      const crashed = (
+        await (await broken(request({ name: "crash", arguments: {} }))).json()
+      ).result;
+      assert.equal(crashed.isError, true);
+      assert.equal(crashed.content[0].text, "crash failed.");
+      const empty = (
+        await (await broken(request({ name: "nothing", arguments: {} }))).json()
+      ).result;
+      assert.equal(empty.isError, false);
+      assert.equal(empty.content[0].text, "null");
+      assert.equal(cleanups, 2, "a failed call still releases its build");
+
+      const logged = JSON.stringify(warnings);
+      assert.match(logged, /tool build failed/);
+      assert.match(logged, /tool call failed/);
+      assert.ok(!logged.includes("sk_live_secretvalue123456"));
+    } finally {
+      console.warn = originalWarn;
+    }
   });
 });

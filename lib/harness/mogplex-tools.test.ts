@@ -29,6 +29,7 @@ describe("buildHarnessMogplexTools", () => {
         edit_file: tool,
         start_sandbox: tool,
         stop_sandbox: tool,
+        github_merge_pull_request: tool,
         web_search: tool,
         add_memory: tool,
         find_skills: tool,
