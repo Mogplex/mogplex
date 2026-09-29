@@ -12,7 +12,11 @@ import {
 } from "@/lib/interactive-runs";
 import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 import type { AiCall } from "@/lib/types";
-import type { ExternalAgentRunRow, MogplexApiRunHarness } from "./runs-types";
+import type {
+  AcceptedRunMode,
+  ExternalAgentRunRow,
+  MogplexApiRunHarness,
+} from "./runs-types";
 import { loadOwnedWorktree } from "@/lib/worktrees/store";
 
 async function getSupabaseAdmin() {
@@ -42,7 +46,7 @@ export type NormalizedStartRequest = {
   rootDirectory: string | null;
   conversationId: string | null;
   workspaceSessionId: string | null;
-  mode: string | null;
+  mode: AcceptedRunMode | null;
   worktreeId: string | null;
   agentId: string | null;
 };

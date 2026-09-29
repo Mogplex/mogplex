@@ -17,6 +17,7 @@ import {
   MOGPLEX_API_RUN_HARNESSES,
   LEGACY_CLI_RUN_MODES,
   MOGPLEX_API_RUN_MODES,
+  type AcceptedRunMode,
   type LegacyCliRunMode,
   type MogplexApiRunHarness,
   type MogplexApiRunMode,
@@ -48,7 +49,7 @@ export type NormalizedStartRequest = {
   rootDirectory: string | null;
   conversationId: string | null;
   workspaceSessionId: string | null;
-  mode: string | null;
+  mode: AcceptedRunMode | null;
   worktreeId: string | null;
   agentId: string | null;
 };
@@ -135,9 +136,7 @@ function hasRunMode(value: unknown) {
  * start a more permissive run. A released CLI's orchestration mode passes
  * through unchanged and runs as AUTO, as it always has.
  */
-function normalizeRunMode(
-  value: unknown
-): MogplexApiRunMode | LegacyCliRunMode | null {
+function normalizeRunMode(value: unknown): AcceptedRunMode | null {
   if (!hasRunMode(value)) return null;
   const trimmed = typeof value === "string" ? value.trim() : null;
   if (trimmed !== null && isLegacyCliRunMode(trimmed)) return trimmed;

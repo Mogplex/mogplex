@@ -31,6 +31,8 @@ export const LEGACY_CLI_RUN_MODES = [
   "repair",
 ] as const;
 export type LegacyCliRunMode = (typeof LEGACY_CLI_RUN_MODES)[number];
+/** A mode that passed validation: a harness mode, or a released CLI's. */
+export type AcceptedRunMode = MogplexApiRunMode | LegacyCliRunMode;
 
 export const MOGPLEX_API_RUN_STATUSES = [
   "pending",
