@@ -107,6 +107,22 @@ export function hashRequest(value: unknown) {
   return createHash("sha256").update(stableStringify(value)).digest("hex");
 }
 
+const RUN_MODES = new Set(["SAFE", "AUTO", "YOLO"]);
+
+/**
+ * A harness execution mode, or null for the default. An unknown mode is an
+ * error, never AUTO: a typo for SAFE must not start a more permissive run.
+ */
+function normalizeRunMode(value: unknown): string | null {
+  const mode = normalizeOptionalString(value)?.toUpperCase() ?? null;
+  if (mode === null || RUN_MODES.has(mode)) return mode;
+  throw new MogplexApiRunError(
+    "BAD_REQUEST",
+    "mode must be SAFE, AUTO, or YOLO",
+    400
+  );
+}
+
 export function normalizeStartRequest(input: {
   body: StartMogplexApiRunRequest;
   repo: OwnedRepoForRun;
@@ -163,7 +179,7 @@ export function normalizeStartRequest(input: {
     ),
     conversationId: normalizeOptionalString(input.body.conversationId),
     workspaceSessionId: normalizeOptionalString(input.body.workspaceSessionId),
-    mode: normalizeOptionalString(input.body.mode),
+    mode: normalizeRunMode(input.body.mode),
     worktreeId: normalizeOptionalString(input.body.worktreeId),
     agentId: normalizeOptionalString(input.body.agentId),
   };
