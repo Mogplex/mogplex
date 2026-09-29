@@ -62,6 +62,22 @@ export type StartMogplexApiRunRequest = {
   agentId?: unknown;
 };
 
+/** A start request after validation, shared by the normalizer and the store. */
+export type NormalizedStartRequest = {
+  repoId: string;
+  prompt: string;
+  harness: MogplexApiRunHarness;
+  baseBranch: string;
+  workingBranch: string;
+  createBranch: boolean;
+  rootDirectory: string | null;
+  conversationId: string | null;
+  workspaceSessionId: string | null;
+  mode: AcceptedRunMode | null;
+  worktreeId: string | null;
+  agentId: string | null;
+};
+
 export type ExternalAgentRunRow = {
   id: string;
   user_id: string;

@@ -31,12 +31,12 @@ import {
   buildRunMetadata,
   normalizeOptionalString,
   normalizeStartRequest,
-  type NormalizedStartRequest,
+  hashRequest,
 } from "./runs-normalize";
-import { hashRequest } from "./runs-normalize";
 import {
   MogplexApiRunError,
   type ExternalAgentRunRow,
+  type NormalizedStartRequest,
   type MogplexApiRunDetail,
 } from "./runs-types";
 

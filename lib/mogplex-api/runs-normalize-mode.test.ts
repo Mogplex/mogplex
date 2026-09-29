@@ -42,6 +42,19 @@ describe("run mode normalization", () => {
     expect(() => normalize({ mode: "SAF" })).toThrow(MODE_ERROR);
   });
 
+  it("should name the mode it refused", () => {
+    expect(() => normalize({ mode: "Single" })).toThrow(
+      `${MODE_ERROR} (got "Single")`
+    );
+    expect(() => normalize({ mode: 0 })).toThrow(`${MODE_ERROR} (got 0)`);
+  });
+
+  it("should not echo more than a short prefix of a rejected mode", () => {
+    expect(() => normalize({ mode: "x".repeat(500) })).toThrow(
+      `${MODE_ERROR} (got "${"x".repeat(39)}…)`
+    );
+  });
+
   it("should refuse a mode that is not a string", () => {
     for (const mode of [0, true, ["SAFE"], { mode: "SAFE" }]) {
       expect(() => normalize({ mode })).toThrow(MODE_ERROR);

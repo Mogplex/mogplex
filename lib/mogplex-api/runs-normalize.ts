@@ -20,6 +20,7 @@ import {
   type AcceptedRunMode,
   type LegacyCliRunMode,
   type MogplexApiRunHarness,
+  type NormalizedStartRequest,
   type MogplexApiRunMode,
   type StartMogplexApiRunRequest,
 } from "./runs-types";
@@ -37,21 +38,6 @@ type OwnedRepoForRun = {
 type ActiveSandboxForRun = {
   id: string;
   sandbox_id: string | null;
-};
-
-export type NormalizedStartRequest = {
-  repoId: string;
-  prompt: string;
-  harness: MogplexApiRunHarness;
-  baseBranch: string;
-  workingBranch: string;
-  createBranch: boolean;
-  rootDirectory: string | null;
-  conversationId: string | null;
-  workspaceSessionId: string | null;
-  mode: AcceptedRunMode | null;
-  worktreeId: string | null;
-  agentId: string | null;
 };
 
 export function normalizeOptionalString(value: unknown) {
@@ -124,6 +110,12 @@ function isLegacyCliRunMode(value: string): value is LegacyCliRunMode {
   return LEGACY_CLI_MODES.has(value);
 }
 
+/** The rejected mode as the 400 names it, bounded so a large body is not echoed. */
+function describeMode(value: unknown) {
+  const shown = JSON.stringify(value) ?? String(value);
+  return shown.length > 40 ? `${shown.slice(0, 40)}…` : shown;
+}
+
 /** Whether the request names a mode at all, whatever its type. */
 function hasRunMode(value: unknown) {
   if (value === undefined || value === null) return false;
@@ -144,7 +136,7 @@ function normalizeRunMode(value: unknown): AcceptedRunMode | null {
   if (mode !== null && isRunMode(mode)) return mode;
   throw new MogplexApiRunError(
     "BAD_REQUEST",
-    `mode must be one of ${MOGPLEX_API_RUN_MODES.join(", ")}`,
+    `mode must be one of ${MOGPLEX_API_RUN_MODES.join(", ")} (got ${describeMode(value)})`,
     400
   );
 }
