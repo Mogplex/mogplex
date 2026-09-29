@@ -9,6 +9,8 @@ export type SandboxReadinessSnapshot = {
   id: string;
   user_id: string;
   status: string;
+  /** Assigned once provisioning finishes; "pending" until then. */
+  sandbox_id?: string | null;
   health_status?: string | null;
   preview_url?: string | null;
   error?: string | null;
@@ -52,7 +54,7 @@ async function loadSandboxReadinessSnapshot(
   const { data, error } = await supabaseAdmin
     .from("sandboxes")
     .select(
-      "id, user_id, status, health_status, preview_url, error, last_boot_error"
+      "id, user_id, status, sandbox_id, health_status, preview_url, error, last_boot_error"
     )
     .eq("id", sandboxRecordId)
     .eq("user_id", userId)

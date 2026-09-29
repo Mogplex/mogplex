@@ -168,6 +168,29 @@ describe("pending sandbox readiness stream", () => {
     expect(body).toContain('"type":"ready"');
   });
 
+  it("gives the ready event the VM id a waiter could not see when it attached", async () => {
+    const response = buildPendingSandboxWaitStreamResponse({
+      record: { ...record, sandbox_id: "pending" },
+      userId: "user-1",
+      requestSignal: new AbortController().signal,
+      waitForReadiness: async () => ({
+        kind: "ready",
+        snapshot: {
+          id: record.id,
+          user_id: "user-1",
+          status: "running",
+          sandbox_id: "vm-assigned",
+        },
+      }),
+    });
+
+    const readyEvent = (await response.text())
+      .split("\n")
+      .find((line) => line.includes('"type":"ready"'));
+    expect(readyEvent).toContain('"sandbox_id":"vm-assigned"');
+    expect(readyEvent).not.toContain('"sandbox_id":"pending"');
+  });
+
   it("clears stale health diagnostics from a recovered ready sandbox", async () => {
     const response = buildPendingSandboxWaitStreamResponse({
       record: {

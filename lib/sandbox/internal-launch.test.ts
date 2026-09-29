@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { launchSandboxInternally } from "./internal-launch";
+import {
+  launchSandboxInternally,
+  readSandboxLaunchResponse,
+} from "./internal-launch";
 import { SANDBOX_READINESS_WAIT_HEADER } from "./readiness-contract";
 
 const record = (sandboxId: string) => ({
@@ -65,6 +68,35 @@ describe("launchSandboxInternally", () => {
     });
   });
 
+  it("should reattach rather than use a ready sandbox that still has no VM id", async () => {
+    // A waiter that attached while the record was still creating.
+    const route = scripted(
+      sse(
+        { type: "sandbox_created", sandbox: record("pending") },
+        { type: "ready", sandbox: record("pending") }
+      ),
+      Response.json({ sandbox: record("vm-1") })
+    );
+
+    await expect(launch(route.post)).resolves.toMatchObject({
+      sandboxId: "vm-1",
+    });
+    expect(route.requests).toHaveLength(2);
+  });
+
+  it("should never resolve with a pending VM id", async () => {
+    const stale = () =>
+      sse(
+        { type: "sandbox_created", sandbox: record("pending") },
+        { type: "ready", sandbox: record("pending") }
+      );
+    const route = scripted(stale(), stale());
+
+    await expect(launch(route.post)).rejects.toThrow(
+      "Sandbox did not become ready"
+    );
+  });
+
   it("should reattach once when the wait closes without the sandbox being ready", async () => {
     const route = scripted(
       sse(
@@ -109,5 +141,15 @@ describe("launchSandboxInternally", () => {
     );
 
     await expect(launch(route.post)).rejects.toThrow("Repository not found");
+  });
+});
+
+describe("readSandboxLaunchResponse", () => {
+  it("should settle on the last sandbox a resume stream named", async () => {
+    await expect(
+      readSandboxLaunchResponse(
+        sse({ type: "sandbox_created", sandbox: record("vm-resumed") })
+      )
+    ).resolves.toMatchObject({ recordId: "record-1", sandboxId: "vm-resumed" });
   });
 });

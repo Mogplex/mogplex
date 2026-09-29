@@ -52,10 +52,14 @@ function parseSseDataEvents(buffer: string) {
   return { events, remaining };
 }
 
-/** The ready sandbox, or null when the stream closed before it was ready. */
-async function readUntilReady(
-  response: Response
-): Promise<LaunchedSandbox | null> {
+type ReadSandbox = { sandbox: LaunchedSandbox; ready: boolean };
+
+/**
+ * Read a sandbox route response: JSON is a settled sandbox, a stream settles
+ * on `ready`. A stream that closes first yields the last sandbox it named,
+ * marked not ready.
+ */
+async function readSandboxResponse(response: Response): Promise<ReadSandbox> {
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     const payload = (await response.json()) as {
@@ -69,12 +73,11 @@ async function readUntilReady(
           : "Sandbox launch failed"
       );
     }
-    // With the readiness wait requested, JSON means a running sandbox.
     const sandbox = toLaunchedSandbox(payload.sandbox);
     if (!sandbox) {
       throw new Error("Sandbox launch response did not include a sandbox");
     }
-    return sandbox;
+    return { sandbox, ready: true };
   }
   if (!response.ok) {
     throw new Error(
@@ -106,20 +109,41 @@ async function readUntilReady(
         throw new Error(typed.message || "Sandbox launch failed");
       }
       latest = toLaunchedSandbox(typed.sandbox) ?? latest;
-      if (typed.type === "ready" && latest) return latest;
+      if (typed.type === "ready" && latest) {
+        return { sandbox: latest, ready: true };
+      }
     }
   }
   if (!latest) {
     throw new Error("Sandbox launch stream ended before a sandbox was ready");
   }
-  return null;
+  return { sandbox: latest, ready: false };
+}
+
+/**
+ * The sandbox a resume or launch response settles on, ready or not. Callers
+ * that need a running sandbox use `launchSandboxInternally` instead.
+ */
+export async function readSandboxLaunchResponse(
+  response: Response
+): Promise<LaunchedSandbox> {
+  return (await readSandboxResponse(response)).sandbox;
+}
+
+/** Usable only once it is ready and the VM has its id. */
+function usable(read: ReadSandbox): LaunchedSandbox | null {
+  return read.ready &&
+    read.sandbox.sandboxId &&
+    read.sandbox.sandboxId !== "pending"
+    ? read.sandbox
+    : null;
 }
 
 /**
  * Start or reuse the repo's sandbox through the sandbox route and wait until
  * it is running. A sandbox another run is still booting is waited on rather
- * than handed back half-made; when that wait asks the caller to reattach, it
- * does so once through the same route.
+ * than handed back half-made; when that wait closes without a usable sandbox,
+ * it reattaches once through the same route, which then reads the settled row.
  */
 export async function launchSandboxInternally(input: {
   headers: HeadersInit;
@@ -130,13 +154,15 @@ export async function launchSandboxInternally(input: {
   const attach = async () => {
     const headers = new Headers(input.headers);
     headers.set(SANDBOX_READINESS_WAIT_HEADER, "1");
-    return readUntilReady(
-      await post(
-        new Request("https://internal.mogplex/api/sandbox", {
-          method: "POST",
-          headers,
-          body: JSON.stringify(input.body),
-        })
+    return usable(
+      await readSandboxResponse(
+        await post(
+          new Request("https://internal.mogplex/api/sandbox", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(input.body),
+          })
+        )
       )
     );
   };

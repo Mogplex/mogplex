@@ -21,6 +21,9 @@ function mergeReadinessSnapshot(
   return {
     ...record,
     status: "running",
+    // The record was read when the waiter attached, often before the VM had
+    // an id; the snapshot carries the id it has now.
+    sandbox_id: snapshot.sandbox_id ?? record.sandbox_id,
     health_status: snapshot.health_status ?? null,
     preview_url: snapshot.preview_url ?? record.preview_url,
     error: snapshot.error ?? null,
