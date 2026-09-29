@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { flowGraphPayloadSchema } from "@/lib/mogplex-api/automation-request";
-import { MOGPLEX_API_RUN_MODES } from "@/lib/mogplex-api/runs-types";
+import {
+  MOGPLEX_API_RUN_HARNESSES,
+  MOGPLEX_API_RUN_MODES,
+} from "@/lib/mogplex-api/runs-types";
 
 export const limitSchema = z.number().int().min(1).max(200).optional();
 
@@ -163,7 +166,7 @@ export const startAgentRunArgsSchema = z
   .object({
     repoId: z.string().trim().min(1),
     prompt: z.string().trim().min(1).max(100_000),
-    harness: z.enum(["mogplex", "codex", "claude-code"]).optional(),
+    harness: z.enum(MOGPLEX_API_RUN_HARNESSES).optional(),
     baseBranch: z.string().trim().min(1).optional(),
     workingBranch: z.string().trim().min(1).optional(),
     createBranch: z.boolean().optional(),

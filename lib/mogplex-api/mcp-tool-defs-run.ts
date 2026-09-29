@@ -1,6 +1,6 @@
 import type { McpToolDefinition } from "./mcp-types";
 import { objectSchema, runIdProperty } from "./mcp-schemas";
-import { MOGPLEX_API_RUN_MODES } from "./runs-types";
+import { MOGPLEX_API_RUN_HARNESSES, MOGPLEX_API_RUN_MODES } from "./runs-types";
 
 /**
  * Tool definitions for Mogplex external agent runs.
@@ -24,7 +24,7 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
         },
         harness: {
           type: "string",
-          enum: ["mogplex", "codex", "claude-code"],
+          enum: [...MOGPLEX_API_RUN_HARNESSES],
           description: "Agent harness to run. Defaults to codex.",
         },
         baseBranch: {
