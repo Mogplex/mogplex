@@ -17,6 +17,7 @@ import {
   MOGPLEX_API_RUN_HARNESSES,
   MOGPLEX_API_RUN_MODES,
   type MogplexApiRunHarness,
+  type MogplexApiRunMode,
   type StartMogplexApiRunRequest,
 } from "./runs-types";
 
@@ -110,6 +111,10 @@ export function hashRequest(value: unknown) {
 
 const RUN_MODES: ReadonlySet<string> = new Set(MOGPLEX_API_RUN_MODES);
 
+function isRunMode(value: string): value is MogplexApiRunMode {
+  return RUN_MODES.has(value);
+}
+
 /** Whether the request names a mode at all, whatever its type. */
 function hasRunMode(value: unknown) {
   if (value === undefined || value === null) return false;
@@ -121,10 +126,10 @@ function hasRunMode(value: unknown) {
  * that is not a string, is an error, never AUTO: a typo for SAFE must not
  * start a more permissive run.
  */
-function normalizeRunMode(value: unknown): string | null {
+function normalizeRunMode(value: unknown): MogplexApiRunMode | null {
   if (!hasRunMode(value)) return null;
   const mode = typeof value === "string" ? value.trim().toUpperCase() : null;
-  if (mode !== null && RUN_MODES.has(mode)) return mode;
+  if (mode !== null && isRunMode(mode)) return mode;
   throw new MogplexApiRunError(
     "BAD_REQUEST",
     `mode must be one of ${MOGPLEX_API_RUN_MODES.join(", ")}`,

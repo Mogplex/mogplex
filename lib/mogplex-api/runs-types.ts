@@ -14,6 +14,7 @@ export type MogplexApiRunHarness = (typeof MOGPLEX_API_RUN_HARNESSES)[number];
 
 /** Execution modes a Codex or Claude Code run accepts. */
 export const MOGPLEX_API_RUN_MODES = ["SAFE", "AUTO", "YOLO"] as const;
+export type MogplexApiRunMode = (typeof MOGPLEX_API_RUN_MODES)[number];
 
 export const MOGPLEX_API_RUN_STATUSES = [
   "pending",
@@ -62,7 +63,7 @@ export type ExternalAgentRunRow = {
   root_directory: string | null;
   conversation_id: string | null;
   workspace_session_id: string | null;
-  mode: string | null;
+  mode: MogplexApiRunMode | null;
   agent_id: string | null;
   runtime_provider: string | null;
   runtime_run_id: string | null;
