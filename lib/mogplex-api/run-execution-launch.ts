@@ -12,12 +12,24 @@ export type SandboxRef = {
   sandboxId: string | null;
 };
 
-export async function readTextResponse(response: Response) {
-  try {
-    return await response.text();
-  } catch {
-    return "";
-  }
+/** The sandbox route body that launches a run's repo and branch. */
+export function runSandboxLaunchBody(
+  run: Pick<
+    ExternalAgentRunRow,
+    | "repo_id"
+    | "base_branch"
+    | "working_branch"
+    | "create_branch"
+    | "root_directory"
+  >
+) {
+  return {
+    repoId: run.repo_id,
+    baseBranch: run.base_branch,
+    workingBranch: run.working_branch,
+    createBranch: run.create_branch,
+    rootDirectory: run.root_directory,
+  };
 }
 
 export async function launchSandboxViaRoute(run: ExternalAgentRunRow) {
@@ -30,13 +42,7 @@ export async function launchSandboxViaRoute(run: ExternalAgentRunRow) {
 
   const { recordId, sandboxId } = await launchSandboxInternally({
     headers: buildInternalApiHeaders(run.user_id),
-    body: {
-      repoId: run.repo_id,
-      baseBranch: run.base_branch,
-      workingBranch: run.working_branch,
-      createBranch: run.create_branch,
-      rootDirectory: run.root_directory,
-    },
+    body: runSandboxLaunchBody(run),
   });
   return { recordId, sandboxId };
 }

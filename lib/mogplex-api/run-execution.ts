@@ -4,9 +4,9 @@ import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
 import { createSlackRunProgressReporter } from "@/lib/slack/run-progress-notify";
 import {
   launchSandboxViaRoute,
-  readTextResponse,
   type SandboxRef,
 } from "@/lib/mogplex-api/run-execution-launch";
+import { readTextResponse } from "@/lib/sandbox/internal-launch";
 import {
   finalizeFailedPass,
   finalizeHarnessPass,

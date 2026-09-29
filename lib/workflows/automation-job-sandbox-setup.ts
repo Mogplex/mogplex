@@ -19,6 +19,40 @@ export function buildAutofixSandboxInternalApiHeaders(
   });
 }
 
+type RepoBranch = Pick<JobContext["repo"], "id" | "default_branch">;
+
+/** The sandbox route body for an autofix: the pull request's head branch. */
+export function autofixSandboxLaunchBody(input: {
+  contextRepo: Pick<JobContext["repo"], "default_branch">;
+  pullRequest: Pick<PullRequestDetails, "baseRef" | "headRef">;
+  targetRepo: RepoBranch;
+}) {
+  return {
+    repoId: input.targetRepo.id,
+    baseBranch:
+      input.pullRequest.baseRef ||
+      input.targetRepo.default_branch ||
+      input.contextRepo.default_branch ||
+      "main",
+    workingBranch: input.pullRequest.headRef,
+    createBranch: false,
+  };
+}
+
+/** The sandbox route body for an automation harness run. */
+export function automationHarnessSandboxLaunchBody(
+  repo: RepoBranch,
+  branch?: { workingBranch: string; createBranch: boolean }
+) {
+  const baseBranch = repo.default_branch || "main";
+  return {
+    repoId: repo.id,
+    baseBranch,
+    workingBranch: branch?.workingBranch ?? baseBranch,
+    createBranch: branch?.createBranch ?? false,
+  };
+}
+
 export async function launchAutofixSandbox(input: {
   context: JobContext;
   pullRequest: PullRequestDetails;
@@ -28,16 +62,11 @@ export async function launchAutofixSandbox(input: {
 
   return launchSandboxInternally({
     headers: buildAutofixSandboxInternalApiHeaders(input.context),
-    body: {
-      repoId: input.targetRepo.id,
-      baseBranch:
-        input.pullRequest.baseRef ||
-        input.targetRepo.default_branch ||
-        input.context.repo.default_branch ||
-        "main",
-      workingBranch: input.pullRequest.headRef,
-      createBranch: false,
-    },
+    body: autofixSandboxLaunchBody({
+      contextRepo: input.context.repo,
+      pullRequest: input.pullRequest,
+      targetRepo: input.targetRepo,
+    }),
   });
 }
 
@@ -47,14 +76,8 @@ export async function launchAutomationHarnessSandbox(
 ) {
   "use step";
 
-  const baseBranch = context.repo.default_branch || "main";
   return launchSandboxInternally({
     headers: buildAutofixSandboxInternalApiHeaders(context),
-    body: {
-      repoId: context.repo.id,
-      baseBranch,
-      workingBranch: branch?.workingBranch ?? baseBranch,
-      createBranch: branch?.createBranch ?? false,
-    },
+    body: automationHarnessSandboxLaunchBody(context.repo, branch),
   });
 }

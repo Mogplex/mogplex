@@ -10,10 +10,8 @@ import {
   type JobContext,
   type PullRequestDetails,
 } from "@/lib/workflows/automation-job-types";
-import {
-  isRecord,
-  readTextResponse,
-} from "@/lib/workflows/automation-job-utils";
+import { isRecord } from "@/lib/workflows/automation-job-utils";
+import { readTextResponse } from "@/lib/sandbox/internal-launch";
 import {
   buildAutomationHarnessPrompt,
   parseAutomationHarnessReviewResult,

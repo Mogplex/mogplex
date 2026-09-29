@@ -25,14 +25,6 @@ export function splitRepoFullName(fullName: string) {
   return { owner, repo };
 }
 
-export async function readTextResponse(response: Response) {
-  try {
-    return await response.text();
-  } catch {
-    return "";
-  }
-}
-
 export function pickPreferredRepoVariant(repos: RepoVariant[]) {
   return (
     repos.find((repo) => !repo.root_directory && !repo.parent_repo_id) ||

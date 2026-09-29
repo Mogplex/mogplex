@@ -14,6 +14,15 @@ const defaultPost: PostSandbox = async (request) => {
   return createSandboxPostHandler()(request);
 };
 
+/** A response's body as text, or "" when it cannot be read. */
+export async function readTextResponse(response: Response) {
+  try {
+    return await response.text();
+  } catch {
+    return "";
+  }
+}
+
 function toLaunchedSandbox(record: unknown): LaunchedSandbox | null {
   if (!record || typeof record !== "object") return null;
   const sandbox = record as Partial<SandboxRecord> & {
@@ -138,7 +147,7 @@ async function readSandboxResponse(response: Response): Promise<ReadSandbox> {
     return readJsonSandbox(response);
   if (!response.ok) {
     throw new Error(
-      (await response.text().catch(() => "")) || "Sandbox launch failed"
+      (await readTextResponse(response)) || "Sandbox launch failed"
     );
   }
   if (!response.body) {
