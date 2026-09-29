@@ -12,6 +12,7 @@ import {
   prepareGitHubTextFile,
   type GitHubFileContent,
 } from "@/lib/agents/github-file-content";
+import { clearsReviewWithoutFindings } from "@/lib/workflows/pr-review-report-state";
 
 const PR_REVIEW_FILE_CONTENT_CHAR_LIMIT = GITHUB_FILE_CONTENT_CHAR_LIMIT;
 const PR_REVIEW_PATCH_CHAR_LIMIT = 4_000;
@@ -58,6 +59,8 @@ export function buildPRReviewTools(config: {
   const request = config.fetch ?? fetch;
   const contentOwner = config.headOwner ?? config.owner;
   const contentRepo = config.headRepo ?? config.repo;
+  let claimedIssues = false;
+  let acceptedReport: Record<string, unknown> | null = null;
   const reviewFindingSchema = z.object({
     severity: z.enum(["critical", "warning", "suggestion"]),
     title: z.string(),
@@ -83,15 +86,31 @@ export function buildPRReviewTools(config: {
       findings: z.array(reviewFindingSchema).max(20).optional(),
     })
     .superRefine((value, ctx) => {
+      // Runs for every report, including ones the schema rejects, which
+      // never reach `execute`.
+      if (value.hasIssues) claimedIssues = true;
       if (value.hasIssues && (!value.findings || value.findings.length === 0)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["findings"],
           message:
-            "findings must include at least one entry when hasIssues=true",
+            "findings must include at least one entry when hasIssues=true. Call reportReview again with each issue as an entry in findings. Setting hasIssues=false without listing the issues leaves the review without a verdict.",
         });
       }
     });
+
+  // A report that clears the review after an earlier one claimed issues has
+  // dropped them, so it cannot authorize a merge.
+  const droppedFindingsRefusal = () =>
+    claimedIssues &&
+    acceptedReport !== null &&
+    clearsReviewWithoutFindings(acceptedReport)
+      ? {
+          success: false as const,
+          error:
+            "Not merged: this review said it found issues but its report lists none. Report each issue as a finding.",
+        }
+      : null;
 
   const tools = {
     getPullRequest: tool({
@@ -222,7 +241,10 @@ export function buildPRReviewTools(config: {
       description:
         "Record the structured review result for workflow orchestration. Call exactly once after analysis.",
       inputSchema: reportReviewInputSchema,
-      execute: async (input) => input,
+      execute: async (input) => {
+        acceptedReport = input;
+        return input;
+      },
     }),
   };
 
@@ -236,6 +258,7 @@ export function buildPRReviewTools(config: {
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
+              droppedFindingsRefusal() ??
               mergePullRequestIfSafe({
                 githubToken: config.githubToken,
                 owner: config.owner,
@@ -252,6 +275,7 @@ export function buildPRReviewTools(config: {
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
+              droppedFindingsRefusal() ??
               queuePullRequestAutoMerge({
                 githubToken: config.githubToken,
                 owner: config.owner,

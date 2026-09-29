@@ -1,0 +1,47 @@
+import type { AutomationAgentReviewResult } from "./pr-review-harness-types";
+import { isRecord, toReviewFindings } from "./pr-review-harness-utils";
+
+export const REPORT_REVIEW_TOOL_NAME = "reportReview";
+
+export type ReviewReportState =
+  | { kind: "missing" }
+  | { kind: "filed"; report: Record<string, unknown> }
+  | { kind: "dropped_findings"; report: Record<string, unknown> };
+
+/** A report that clears the review: no issues and nothing listed. */
+export function clearsReviewWithoutFindings(
+  report: Record<string, unknown>
+): boolean {
+  return (
+    report.hasIssues !== true && toReviewFindings(report.findings).length === 0
+  );
+}
+
+/**
+ * The reviewer's report as the pipeline should trust it. Only calls the SDK
+ * accepted count as filed; a call whose input failed the schema was never
+ * recorded. A report that clears the review after an earlier call said there
+ * were issues has lost them: reviewers told that hasIssues=true needs
+ * findings sometimes flip hasIssues to false instead of listing them, and
+ * that report would otherwise publish as a clean verdict with its warnings
+ * gone. An earlier report that listed findings and a later one that clears
+ * them is treated the same way, since nothing says the findings were wrong.
+ */
+export function readReviewReportState(
+  steps: AutomationAgentReviewResult["steps"]
+): ReviewReportState {
+  let report: Record<string, unknown> | null = null;
+  let claimedIssues = false;
+  for (const step of steps) {
+    for (const toolCall of step.toolCalls ?? []) {
+      if (toolCall.toolName !== REPORT_REVIEW_TOOL_NAME) continue;
+      if (!isRecord(toolCall.input)) continue;
+      if (toolCall.input.hasIssues === true) claimedIssues = true;
+      if (toolCall.invalid !== true) report = toolCall.input;
+    }
+  }
+  if (!report) return { kind: "missing" };
+  return claimedIssues && clearsReviewWithoutFindings(report)
+    ? { kind: "dropped_findings", report }
+    : { kind: "filed", report };
+}

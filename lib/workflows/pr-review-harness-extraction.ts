@@ -10,6 +10,7 @@ import {
   toReviewFindings,
   toStringArray,
 } from "./pr-review-harness-utils";
+import { readReviewReportState } from "./pr-review-report-state";
 
 function extractLastToolInput(
   result: AutomationAgentReviewResult,
@@ -153,8 +154,9 @@ export function extractPrAutofixOutcome(
 
 /**
  * True when the reviewer finished without filing `reportReview` and nothing
- * else reported a problem. The "no issues" in that result is a default, not a
- * finding, so it must never be published as a clean verdict or allow a merge.
+ * else reported a problem, or filed one that dropped the issues it had
+ * claimed. The "no issues" in that result is a default, not a finding, so it
+ * must never be published as a clean verdict or allow a merge.
  */
 export function isPrReviewVerdictMissing(
   harnessResult: Pick<PrReviewHarnessResult, "source" | "reviewOutcome"> | null
@@ -169,11 +171,13 @@ export function isPrReviewVerdictMissing(
 export function extractPrReviewHarnessResult(
   result: AutomationAgentReviewResult
 ): PrReviewHarnessResult {
-  const report = extractLastToolInput(result, "reportReview");
+  const reportState = readReviewReportState(result.steps);
   const autofix = extractPrAutofixOutcome(result);
-  if (report) {
+  if (reportState.kind !== "missing") {
+    const { report } = reportState;
     return {
-      source: "structured",
+      source:
+        reportState.kind === "filed" ? "structured" : "dropped_findings",
       fallbackText: toOptionalString(result.text),
       reviewOutcome: {
         hasIssues: report.hasIssues === true,

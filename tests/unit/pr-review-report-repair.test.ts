@@ -243,3 +243,94 @@ test("a rejected forced report whose unforced ask also fails stays without a ver
   assert.equal(result.text, FORGOT_TO_REPORT.text);
   assert.equal(verdictMissing, true);
 });
+
+const CLAIM = "One warning and three suggestions, detailed in the comment.";
+
+// Webrenew/vmotif#1647: every report claimed issues without listing them, so
+// the SDK rejected each one and nothing was ever filed.
+const EVERY_REPORT_REJECTED = {
+  text: "Reviewed PR 42.",
+  steps: [
+    makeStep({
+      inputTokens: 900,
+      outputTokens: 40,
+      toolCalls: [
+        {
+          toolName: "reportReview",
+          input: { hasIssues: true, summary: CLAIM },
+          invalid: true,
+        },
+      ],
+    }),
+  ],
+  totalUsage: { inputTokens: 900, outputTokens: 40 },
+};
+
+// Mogplex/mogplex#535: after the rejections, the reviewer flipped hasIssues
+// to get a report accepted, and the findings were never listed anywhere.
+const DROPPED_FINDINGS = {
+  ...EVERY_REPORT_REJECTED,
+  steps: [
+    ...EVERY_REPORT_REJECTED.steps,
+    makeStep({
+      toolCalls: [
+        {
+          toolName: "reportReview",
+          input: { hasIssues: false, summary: CLAIM },
+        },
+      ],
+    }),
+  ],
+};
+
+test("a reviewer whose every report was rejected is asked for its report", async () => {
+  const { calls, harness, verdictMissing } = await runReview([
+    EVERY_REPORT_REJECTED,
+    FILED_REPORT,
+  ]);
+
+  assert.equal(calls.length, 2);
+  assert.match(String(calls[1].messages?.[2].content), /Call reportReview now/);
+  assert.equal(harness.source, "structured");
+  assert.equal(verdictMissing, false);
+});
+
+test("a reviewer that dropped the findings it claimed is asked to list them", async () => {
+  const { calls, harness, verdictMissing } = await runReview([
+    DROPPED_FINDINGS,
+    FILED_REPORT,
+  ]);
+
+  assert.equal(calls.length, 2);
+  assert.match(
+    String(calls[1].messages?.[2].content),
+    /no report you filed lists them/
+  );
+  assert.equal(harness.source, "structured");
+  assert.equal(verdictMissing, false);
+  assert.equal(harness.reviewOutcome.findings.length, 1);
+});
+
+test("a reviewer that clears the review again without listing anything stays without a verdict", async () => {
+  const clearedAgain = {
+    text: "",
+    steps: [
+      makeStep({
+        toolCalls: [
+          {
+            toolName: "reportReview",
+            input: { hasIssues: false, summary: CLAIM },
+          },
+        ],
+      }),
+    ],
+  };
+  const { calls, harness, verdictMissing } = await runReview([
+    DROPPED_FINDINGS,
+    clearedAgain,
+  ]);
+
+  assert.equal(calls.length, 2);
+  assert.equal(harness.source, "dropped_findings");
+  assert.equal(verdictMissing, true);
+});

@@ -86,7 +86,7 @@ export function makeStep(input: {
   text?: string;
   inputTokens?: number;
   outputTokens?: number;
-  toolCalls?: Array<{ toolName: string; input: unknown }>;
+  toolCalls?: Array<{ toolName: string; input: unknown; invalid?: boolean }>;
   toolResults?: unknown[];
 }) {
   return {

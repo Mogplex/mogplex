@@ -13,6 +13,8 @@ export function buildPrReviewContractNote(source: PrReviewContractSource) {
   switch (source) {
     case "legacy_post_comment":
       return "Note: Structured review output was missing, so Mogplex used the legacy review comment as fallback output.";
+    case "dropped_findings":
+      return "Note: The reviewer said it found issues but its report did not list them, so there is no verdict. The text below is its summary only. Rerun the review for a full result.";
     case "legacy_text":
       return "Note: The reviewer finished without filing its structured report, so there is no verdict. The text below is its closing summary only. Rerun the review for a full result.";
     case "structured":
