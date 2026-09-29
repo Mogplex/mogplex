@@ -139,17 +139,19 @@ describe("pending sandbox readiness stream", () => {
     });
 
     it("should hand back a record that finished booting without waiting", async () => {
-      const waits = { count: 0 };
-      const response = await maybeReturnExistingSandboxResponse(
-        bootingDeps("running", waits),
-        launch,
-        waitRequest()
-      );
+      for (const status of ["running", "pausing"]) {
+        const waits = { count: 0 };
+        const response = await maybeReturnExistingSandboxResponse(
+          bootingDeps(status, waits),
+          launch,
+          waitRequest()
+        );
 
-      expect(response?.headers.get("Content-Type")).toContain(
-        "application/json"
-      );
-      expect(waits.count).toBe(0);
+        expect(response?.headers.get("Content-Type")).toContain(
+          "application/json"
+        );
+        expect(waits.count).toBe(0);
+      }
     });
   });
 

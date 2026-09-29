@@ -7,6 +7,7 @@ import {
 } from "@/lib/vercel/target-resolution";
 import { buildLimitResponse, releaseLimitClaim } from "@/lib/request-limits";
 import { requestsSandboxReadinessWait } from "@/lib/sandbox/readiness-contract";
+import { isBootingSandboxStatus } from "@/lib/sandbox/statuses";
 import {
   buildSandboxName,
   buildSandboxReplacementName,
@@ -353,8 +354,7 @@ export function buildConcurrentSandboxLaunchResponse(input: {
   userId: string;
   request: Request;
 }) {
-  return input.record.status === "creating" ||
-    input.record.status === "installing"
+  return isBootingSandboxStatus(input.record.status)
     ? buildPendingSandboxWaitStreamResponse({
         record: input.record,
         userId: input.userId,
