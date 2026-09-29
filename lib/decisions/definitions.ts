@@ -245,9 +245,10 @@ const memoryPromotionGate: DecisionDefinition = {
 
 /**
  * Decisions that guard what Mogplex publishes on a pull request. The review
- * model writes the text; these check its shape before it reaches GitHub and
- * that a platform rewrite kept every claim. Both run on the platform's
- * credential and are never billed to the account.
+ * model writes the text; these check its shape before it reaches GitHub, so
+ * a native reviewer can fix its own draft, and that a platform rewrite kept
+ * every claim. Both run on the platform's credential and are never billed to
+ * the account.
  *
  * Thresholds come from the 2026-09-28 replay of seven published reviews: a
  * well-formatted control scored under 0.3 on every question, and each real
@@ -277,8 +278,9 @@ export function reviewFormatProblems(
 const reviewFormat: DecisionDefinition = {
   id: "review_format",
   version: "2026-09-28.1",
-  // Acting means a platform-paid rewrite that a second check must accept,
-  // and the original is published whenever anything fails.
+  // Acting sends a native draft back to its reviewer, or at publish time
+  // means a platform-paid rewrite that a second check must accept; the
+  // original is published whenever anything fails.
   defaultMode: "enforce",
   timeoutMs: 4000,
   escalate: false,

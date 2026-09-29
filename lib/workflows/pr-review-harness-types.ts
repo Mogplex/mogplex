@@ -2,6 +2,7 @@ import type { ReviewFinding } from "@/lib/types";
 
 export type AutomationAgentReviewResult = {
   text: string;
+  reviewFormatPassed?: boolean;
   steps: Array<{
     toolCalls?: Array<{ toolName: string; input: unknown; invalid?: boolean }>;
     toolResults?: unknown[];
@@ -40,6 +41,8 @@ export type PrReviewHarnessResult = {
   source: PrReviewContractSource;
   reviewOutcome: ReviewOutcome;
   fallbackText: string | null;
+  /** The report passed the format check inside the run; publishing does not check it again. */
+  formatPassed?: boolean;
   autofix?: PrAutofixOutcome | null;
 };
 

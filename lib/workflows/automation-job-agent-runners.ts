@@ -27,10 +27,8 @@ import {
   splitRepoFullName,
 } from "@/lib/workflows/automation-job-utils";
 import { normalizeAutomationAgentResult } from "@/lib/workflows/automation-job-metadata";
-import {
-  fileMissingReviewReport,
-  type ReportRepairRequest,
-} from "@/lib/workflows/pr-review-report-repair";
+import type { ReportRepairRequest } from "@/lib/workflows/pr-review-report-repair";
+import { finishPrReview } from "@/lib/workflows/pr-review-self-revision";
 import {
   appendToRunSpec,
   buildJobRunSpec,
@@ -314,13 +312,13 @@ export function createAutomationAgentRunner(
     });
     if (assignmentType !== "pr_review") return review.normalized;
 
-    // A reviewer that ends without its report leaves no verdict; ask for it.
-    return fileMissingReviewReport({
+    return finishPrReview({
       result: review.normalized,
       responseMessages: review.responseMessages,
       prompt: runSpec.prompt,
       tools,
       generate: async (request) => (await generate(request)).normalized,
+      judge: (draft) => deps.judgeReviewFormat(draft, context),
     });
   };
 }

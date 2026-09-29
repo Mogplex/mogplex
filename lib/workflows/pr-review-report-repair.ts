@@ -14,7 +14,7 @@ export const PR_REVIEW_REPORT_REPAIR_PROMPT =
 
 /** Asks for the findings a report claimed and then dropped. */
 export const PR_REVIEW_DROPPED_FINDINGS_PROMPT =
-  "Your review said it found issues, but no report you filed lists them, so the pull request has no verdict. Call reportReview now with every issue from the review you just did as an entry in findings, each with severity, title, body, and path; non-blocking ones are severity suggestion and can go with hasIssues=false. Do not start a new review and do not call any other tool.";
+  "Your review said it found issues, but no report you filed lists them, so the pull request has no verdict. Call reportReview now with every issue from the review you just did as an entry in findings, each with severity, title, body, and path; non-blocking ones are severity suggestion and can go with hasIssues=false. If you are sure there are no issues after all, report that, and the review will be published as incomplete. Do not start a new review and do not call any other tool.";
 
 const REPAIR_PROMPTS: Record<
   Exclude<ReviewReportState["kind"], "filed">,
@@ -81,50 +81,70 @@ function isRejectedRequest(error: unknown): boolean {
   );
 }
 
-/**
- * When a review ends without a structured report it can trust (none was
- * accepted, or the accepted one dropped the issues it claimed), ask the same
- * model once to file it from the work it already did. The report is forced where the
- * provider allows it; a provider that rejects a forced tool choice is asked
- * again with the report as the only tool on offer. The reviewer's own closing
- * text is kept. This never fails a review that otherwise completed: if the
- * request cannot be made or throws, the result is returned as it was and is
- * published as incomplete.
- */
-export async function fileMissingReviewReport(input: {
+export type ReviewerFollowUp = {
   result: AutomationAgentResult;
   responseMessages: ModelMessage[] | undefined;
   prompt: string;
   tools: ToolSet;
   generate: (request: ReportRepairRequest) => Promise<AutomationAgentResult>;
-}): Promise<AutomationAgentResult> {
-  const state = readReviewReportState(input.result.steps);
-  if (state.kind === "filed") return input.result;
+};
+
+/**
+ * Continues the reviewer's own conversation with one request whose only
+ * possible answer is a report. The report is forced where the provider
+ * allows it; a provider that rejects a forced tool choice is asked again with
+ * the report as the only tool on offer. Returns the review with the answer
+ * appended and the reviewer's closing text kept, or null when the toolset has
+ * no report tool. Throws when the model call fails.
+ */
+export async function askReviewerForReport(
+  input: ReviewerFollowUp & { request: string }
+): Promise<AutomationAgentResult | null> {
   const tools = buildReportOnlyTools(input.tools);
-  if (!tools) return input.result;
+  if (!tools) return null;
 
   const messages = buildReportRepairMessages({
     prompt: input.prompt,
     responseMessages: input.responseMessages,
     text: input.result.text,
-    request: REPAIR_PROMPTS[state.kind],
+    request: input.request,
   });
   const ask = (toolChoice: ReportRepairRequest["toolChoice"]) =>
     input.generate({ tools, toolChoice, messages });
+  const answer = await ask(FORCED_REPORT_CHOICE).catch((error: unknown) => {
+    if (!isRejectedRequest(error)) throw error;
+    console.warn(
+      "[pr-review] provider rejected a forced report; asking without forcing",
+      { error }
+    );
+    return ask("auto");
+  });
+  return {
+    ...mergeAutomationAgentResults([input.result, answer]),
+    text: input.result.text,
+  };
+}
+
+/**
+ * When a review ends without a structured report it can trust (none was
+ * accepted, or the accepted one dropped the issues it claimed), ask the same
+ * model once to file it from the work it already did. This never fails a
+ * review that otherwise completed: if the request cannot be made or throws,
+ * the result is returned as it was and is published as incomplete.
+ */
+export async function fileMissingReviewReport(
+  input: ReviewerFollowUp
+): Promise<AutomationAgentResult> {
+  const state = readReviewReportState(input.result.steps);
+  if (state.kind === "filed") return input.result;
 
   try {
-    const repair = await ask(FORCED_REPORT_CHOICE).catch((error: unknown) => {
-      if (!isRejectedRequest(error)) throw error;
-      console.warn(
-        "[pr-review] provider rejected a forced report; asking without forcing",
-        { error }
-      );
-      return ask("auto");
-    });
-    return {
-      ...mergeAutomationAgentResults([input.result, repair]),
-      text: input.result.text,
-    };
+    return (
+      (await askReviewerForReport({
+        ...input,
+        request: REPAIR_PROMPTS[state.kind],
+      })) ?? input.result
+    );
   } catch (error) {
     console.warn("[pr-review] could not recover the missing review report", {
       error,
