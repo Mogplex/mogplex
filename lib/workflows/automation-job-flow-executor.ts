@@ -143,6 +143,7 @@ export type FlowExecutorDeps = {
 export type FlowExecutionSuccess = {
   success: true;
   result: AutomationAgentResult;
+  reviewResult: AutomationAgentResult | null;
   autoMergeRequest: FlowAutoMergeRequest | null;
   observabilityError: string | null;
 };
@@ -486,6 +487,7 @@ export async function executeResolvedFlow(input: {
     result: mergeAutomationAgentResults(
       state.results as AutomationAgentResult[]
     ),
+    reviewResult: state.reviewResult,
     autoMergeRequest: state.autoMergeRequest,
     observabilityError: state.observabilityError,
   };

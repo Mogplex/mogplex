@@ -44,6 +44,8 @@ export type FlowSuccessFinalizationInput = {
   releasedScope: ReleasedAutomationScope;
   context: JobContext;
   finalResult: AutomationAgentResult;
+  /** The last review node's own result; the verdict is read from it. */
+  reviewResult?: AutomationAgentResult | null;
   autoMergeRequest: FlowAutoMergeRequest | null;
   observabilityError?: string | null;
   isPrReview: boolean;
@@ -83,6 +85,7 @@ export async function finalizeFlowSuccess(
     releasedScope,
     context,
     finalResult,
+    reviewResult,
     autoMergeRequest,
     observabilityError,
     isPrReview,
@@ -94,7 +97,7 @@ export async function finalizeFlowSuccess(
   } = input;
 
   const reviewHarnessResult = isPrReview
-    ? extractPrReviewHarnessResult(finalResult)
+    ? extractPrReviewHarnessResult(reviewResult ?? finalResult)
     : null;
   const reviewOutcome = reviewHarnessResult?.reviewOutcome ?? null;
   const reviewCommentPosted = isPrReview

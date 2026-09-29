@@ -8,7 +8,10 @@
  */
 
 import type { FlowGraph } from "@/lib/types";
-import type { FlowExecutionToken } from "@/lib/workflows/automation-job-types";
+import type {
+  AutomationAgentResult,
+  FlowExecutionToken,
+} from "@/lib/workflows/automation-job-types";
 import { FAILURE_HANDLE_ID, getOutgoingEdges } from "@/lib/flows/graph";
 import type { FlowReportHandoff } from "./flow-report-handoff";
 
@@ -49,6 +52,14 @@ export type FlowRunState = {
   /** Aggregated agent results */
   results: unknown[];
 
+  /**
+   * The last review node's own result. The flow's verdict comes from it, not
+   * from the merged transcript: a later review node re-reviews what an
+   * earlier one reported, and its clean report must not read as one that
+   * dropped the earlier node's findings.
+   */
+  reviewResult: AutomationAgentResult | null;
+
   /** First observability error encountered */
   observabilityError: string | null;
 
@@ -86,6 +97,7 @@ export function createFlowRunState(input: {
     incomingCounts,
     processed: new Set(),
     results: [],
+    reviewResult: null,
     observabilityError: null,
     autoMergeRequest: null,
     expectedTriggerHeadSha: input.initialHeadSha,

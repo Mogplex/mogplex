@@ -476,7 +476,9 @@ export async function executeFlowAgentNode(
 
   const handoffText = JSON.stringify(handoff);
   state.outputs.set(node.id, { label, text: handoffText, handoff });
-  state.results.push({ ...result, text: handoff.summary });
+  const nodeResult = { ...result, text: handoff.summary };
+  state.results.push(nodeResult);
+  if (nodeRole === "review") state.reviewResult = nodeResult;
 
   return {
     ok: true as const,
