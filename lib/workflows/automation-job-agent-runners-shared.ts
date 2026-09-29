@@ -44,11 +44,11 @@ export type AutomationAgentDeps = {
   loadApprovalSpentWaitMs: typeof loadToolApprovalSpentWaitMs;
   /** The node's skills and its agent's attachments; never rejects. */
   resolveSkills: typeof resolveAutomationSkills;
-  /** The review_format check on a reviewer's draft; none when unavailable. */
+  /** The review_format check on a reviewer's draft; null when it did not run. */
   judgeReviewFormat: (
     draft: PrReviewHarnessResult,
     context: JobContext
-  ) => Promise<readonly ReviewFormatProblem[]>;
+  ) => Promise<readonly ReviewFormatProblem[] | null>;
 };
 
 export const defaultAutomationAgentDeps: AutomationAgentDeps = {

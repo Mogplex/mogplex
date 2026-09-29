@@ -198,6 +198,113 @@ describe("reviseFlaggedReview", () => {
     expect(result).toBe(draft);
   });
 
+  it("should keep the draft when the revision flips the verdict but keeps its findings", async () => {
+    const draft = reported({
+      hasIssues: true,
+      summary: "One warning; reportReview filed.",
+      findings: [warning],
+    });
+    const { judge } = judgeFlagging(/reportReview/, ["processTalk"]);
+    const { generate } = reviewer([
+      reported({
+        hasIssues: false,
+        summary: "Approve with one note.",
+        findings: [warning],
+      }),
+    ]);
+
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: draft,
+      generate,
+      judge,
+    });
+
+    expect(result).toBe(draft);
+  });
+
+  it("should keep the draft when the revision swaps a finding for another", async () => {
+    const draft = reported({
+      hasIssues: true,
+      summary: "One warning; reportReview filed.",
+      findings: [warning],
+    });
+    const { judge } = judgeFlagging(/reportReview/, ["processTalk"]);
+    const { generate } = reviewer([
+      reported({
+        hasIssues: true,
+        summary: "One warning.",
+        findings: [{ ...warning, path: "src/other.ts" }],
+      }),
+    ]);
+
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: draft,
+      generate,
+      judge,
+    });
+
+    expect(result).toBe(draft);
+  });
+
+  it("should accept a revision that rewords a finding it keeps", async () => {
+    const draft = reported({
+      hasIssues: true,
+      summary: "One warning; reportReview filed.",
+      findings: [warning],
+    });
+    const { judge } = judgeFlagging(/reportReview/, ["processTalk"]);
+    const { generate } = reviewer([
+      reported({
+        hasIssues: true,
+        summary: "One warning.",
+        findings: [{ ...warning, title: "Guard the nullable `lookup()`" }],
+      }),
+    ]);
+
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: draft,
+      generate,
+      judge,
+    });
+
+    expect(published(result).findings[0]?.title).toBe(
+      "Guard the nullable `lookup()`"
+    );
+    expect(result.reviewFormatPassed).toBe(true);
+  });
+
+  it("should leave a draft the check did not judge unmarked and unrevised", async () => {
+    const { generate, requests } = reviewer([listedRevision]);
+
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: danglingDraft,
+      generate,
+      judge: async () => null,
+    });
+
+    expect(requests).toEqual([]);
+    expect(result).toBe(danglingDraft);
+  });
+
+  it("should not mark a revision the check could not judge again", async () => {
+    let judgments = 0;
+    const { generate } = reviewer([listedRevision]);
+
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: danglingDraft,
+      generate,
+      judge: async () => (++judgments === 1 ? ["danglingReference"] : null),
+    });
+
+    expect(published(result).findings).toHaveLength(1);
+    expect(result.reviewFormatPassed).toBeUndefined();
+  });
+
   it("should keep the draft when the revised report is rejected", async () => {
     const { judge } = judgeFlagging(/detailed/);
     const { generate } = reviewer([

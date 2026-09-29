@@ -8,6 +8,7 @@ import {
 import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 import type { JobContext } from "./automation-job-types";
 import {
+  findReviewFormatProblems,
   polishPrReviewForPublish,
   type PrReviewFormatDeps,
   type PrReviewRewrite,
@@ -57,11 +58,20 @@ const withFinding: PrReviewHarnessResult = {
   },
 };
 
-function handle(id: DecisionId, act: boolean, answers = {}): DecisionHandle {
+const ENFORCED: Pick<DecisionHandle, "mode" | "status"> = {
+  mode: "enforce",
+  status: "ok",
+};
+
+function handle(
+  id: DecisionId,
+  act: boolean,
+  answers = {},
+  judged = ENFORCED
+): DecisionHandle {
   return {
     id,
-    mode: "enforce",
-    status: "ok",
+    ...judged,
     verdict: act ? "act" : "pass",
     act,
     escalated: false,
@@ -255,6 +265,78 @@ describe("polishPrReviewForPublish", () => {
 
     expect(unavailable.calls).toHaveLength(0);
     expect(legacy.calls).toHaveLength(0);
+  });
+});
+
+describe("findReviewFormatProblems", () => {
+  const judge = (
+    judged: Pick<DecisionHandle, "mode" | "status">,
+    act = false,
+    available = true
+  ) =>
+    findReviewFormatProblems(
+      denseClean,
+      scope,
+      {},
+      {
+        available: () => available,
+        decide: async (id) => handle(id, act, flagged, judged),
+      }
+    );
+
+  it("should name the problems of text it judged and flagged", async () => {
+    await expect(
+      judge({ mode: "enforce", status: "ok" }, true)
+    ).resolves.toEqual(["denseParagraph", "danglingReference"]);
+  });
+
+  it("should pass text it judged and did not flag", async () => {
+    await expect(judge({ mode: "enforce", status: "ok" })).resolves.toEqual([]);
+  });
+
+  it("should never report a pass for text it did not judge", async () => {
+    await expect(
+      judge({ mode: "enforce", status: "unavailable" })
+    ).resolves.toBeNull();
+    await expect(judge({ mode: "off", status: "off" })).resolves.toBeNull();
+    await expect(judge({ mode: "shadow", status: "ok" })).resolves.toBeNull();
+    await expect(
+      judge({ mode: "enforce", status: "ok" }, false, false)
+    ).resolves.toBeNull();
+  });
+});
+
+describe("polishPrReviewForPublish and a review passed inside the run", () => {
+  it("should publish it without checking it again", async () => {
+    const { deps, calls } = makeDeps({ formatActs: true });
+    const passed = { ...denseClean, formatPassed: true };
+
+    await expect(
+      polishPrReviewForPublish(passed, scope, {}, deps)
+    ).resolves.toBe(passed);
+    expect(calls).toEqual([]);
+  });
+
+  it("should read the pass from the reviewer's result", () => {
+    const reported = {
+      text: "Done.",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolName: "reportReview",
+              input: { hasIssues: false, summary: "Fine." },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      extractPrReviewHarnessResult({ ...reported, reviewFormatPassed: true })
+        .formatPassed
+    ).toBe(true);
+    expect(extractPrReviewHarnessResult(reported).formatPassed).toBeUndefined();
   });
 });
 

@@ -4,7 +4,6 @@ import { getPrReviewAutoMergeBlockReason } from "./automation-job-auto-merge";
 import {
   finalizePrReviewSuccess,
   type FinalizePrReviewSuccessContext,
-  type FinalizePrReviewSuccessDeps,
 } from "./automation-job-pr-review-finalize";
 import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 import type { JobContext } from "./automation-job-types";
@@ -205,10 +204,7 @@ function makeFinalizeContext() {
   return { ctx, published };
 }
 
-async function finalize(
-  result: typeof unreported & { reviewFormatPassed?: boolean },
-  polishPrReviewForPublish?: FinalizePrReviewSuccessDeps["polishPrReviewForPublish"]
-) {
+async function finalize(result: typeof unreported) {
   const { ctx, published } = makeFinalizeContext();
   const reviewHarnessResult = extractPrReviewHarnessResult(result);
   const outcome = await finalizePrReviewSuccess(
@@ -226,7 +222,6 @@ async function finalize(
         count: 0,
         error: null,
       }),
-      polishPrReviewForPublish,
     },
     ctx
   );
@@ -253,21 +248,5 @@ describe("finalizePrReviewSuccess and a review without a verdict", () => {
       ok: true,
       reviewReason: PR_REVIEW_REASON_CODES.noFindings,
     });
-  });
-});
-
-describe("finalizePrReviewSuccess and a report checked inside the run", () => {
-  it("should publish a report that passed inside the run without checking it again", async () => {
-    const checked: unknown[] = [];
-    const polish: FinalizePrReviewSuccessDeps["polishPrReviewForPublish"] =
-      async (harnessResult) => {
-        checked.push(harnessResult);
-        return harnessResult;
-      };
-
-    await finalize({ ...reportedClean, reviewFormatPassed: true }, polish);
-    await finalize(reportedClean, polish);
-
-    expect(checked).toHaveLength(1);
   });
 });

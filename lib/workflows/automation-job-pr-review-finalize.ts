@@ -165,13 +165,13 @@ export async function finalizePrReviewSuccess(
   }
 
   // Every surface below publishes the same checked text.
-  const publishedHarnessResult = input.result.reviewFormatPassed
-    ? input.reviewHarnessResult
-    : await (deps.polishPrReviewForPublish ?? polishPrReviewForPublish)(
-        input.reviewHarnessResult,
-        prReviewDecisionScope(context, input.result.aiCallId ?? null),
-        { job_run_id: input.jobRunId, pr_number: reviewPrNumber }
-      );
+  const publishedHarnessResult = await (
+    deps.polishPrReviewForPublish ?? polishPrReviewForPublish
+  )(
+    input.reviewHarnessResult,
+    prReviewDecisionScope(context, input.result.aiCallId ?? null),
+    { job_run_id: input.jobRunId, pr_number: reviewPrNumber }
+  );
   const publishedOutcome =
     publishedHarnessResult === input.reviewHarnessResult
       ? input.reviewOutcome

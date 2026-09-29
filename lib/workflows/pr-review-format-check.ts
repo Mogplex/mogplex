@@ -11,7 +11,7 @@
 
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { decide } from "@/lib/decisions/decide";
+import { decide, type DecisionHandle } from "@/lib/decisions/decide";
 import {
   reviewFormatProblems,
   type ReviewFormatProblem,
@@ -139,25 +139,34 @@ export function prReviewDecisionScope(
 
 /**
  * What the format check found wrong with the review as it would be
- * published. None when no platform credential exists; the check itself
- * fails open.
+ * published, or null when it did not judge the text: no platform credential,
+ * checks off for the account, an evaluator outage, or a mode that does not
+ * act. Null is never a pass.
  */
 export async function findReviewFormatProblems(
   harnessResult: PrReviewHarnessResult,
   scope: DecisionScope,
   metadata: Record<string, unknown>,
   deps: Pick<PrReviewFormatDeps, "available" | "decide"> = defaultDeps
-): Promise<ReviewFormatProblem[]> {
-  if (!deps.available()) return [];
+): Promise<ReviewFormatProblem[] | null> {
+  if (!deps.available()) return null;
   const format = await deps.decide(
     "review_format",
     { review_markdown: renderForJudging(harnessResult) },
     scope,
     { metadata }
   );
+  if (!judgedTheText(format)) return null;
   return format.act && format.answers
     ? reviewFormatProblems(format.answers)
     : [];
+}
+
+function judgedTheText(format: Pick<DecisionHandle, "status" | "mode">) {
+  return (
+    format.status === "ok" &&
+    (format.mode === "enforce" || format.mode === "advise")
+  );
 }
 
 /** Titles, paths, lines, and severities stay the reviewer's own. */
@@ -187,6 +196,18 @@ function applyRewrite(
   };
 }
 
+/** A structured review not already passed inside the run, with a credential to check it. */
+function needsPublishCheck(
+  harnessResult: PrReviewHarnessResult | null,
+  deps: Pick<PrReviewFormatDeps, "available">
+): harnessResult is PrReviewHarnessResult {
+  return (
+    harnessResult?.source === "structured" &&
+    harnessResult.formatPassed !== true &&
+    deps.available()
+  );
+}
+
 /**
  * Returns the result to publish: the input unchanged unless the format check
  * flagged it and a faithful rewrite exists.
@@ -197,9 +218,7 @@ export async function polishPrReviewForPublish(
   metadata: Record<string, unknown> = {},
   deps: PrReviewFormatDeps = defaultDeps
 ): Promise<PrReviewHarnessResult | null> {
-  if (harnessResult?.source !== "structured" || !deps.available()) {
-    return harnessResult;
-  }
+  if (!needsPublishCheck(harnessResult, deps)) return harnessResult;
 
   try {
     const problems = await findReviewFormatProblems(
@@ -208,7 +227,7 @@ export async function polishPrReviewForPublish(
       metadata,
       deps
     );
-    if (problems.length === 0) return harnessResult;
+    if (!problems?.length) return harnessResult;
 
     const original = renderForJudging(harnessResult);
     const rewritten = await deps.rewrite({

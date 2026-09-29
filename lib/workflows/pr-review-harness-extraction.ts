@@ -179,6 +179,7 @@ function buildReportedHarnessResult(
   return {
     source: reportState.kind === "filed" ? "structured" : "dropped_findings",
     fallbackText: toOptionalString(result.text),
+    ...(result.reviewFormatPassed === true ? { formatPassed: true } : {}),
     reviewOutcome: {
       hasIssues: report.hasIssues === true,
       summary: toOptionalString(report.summary) ?? result.text ?? "",

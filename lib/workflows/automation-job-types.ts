@@ -140,7 +140,7 @@ export type AutomationAgentResult = {
   usage: AutomationAgentUsage | null;
   execution?: AutomationModelExecutionMetadata | null;
   aiCallId?: string | null;
-  /** The review's report passed the format check inside the run, so publishing does not check it again. */
+  /** The review's report was judged and passed the format check inside the run, so publishing does not check it again. */
   reviewFormatPassed?: boolean;
 };
 

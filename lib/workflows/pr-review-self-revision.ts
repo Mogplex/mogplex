@@ -1,6 +1,7 @@
 import type { ReviewFormatProblem } from "@/lib/decisions/definitions";
 import type { AutomationAgentResult } from "./automation-job-types";
 import { extractPrReviewHarnessResult } from "./pr-review-harness-extraction";
+import type { ReviewFinding } from "@/lib/types";
 import type { PrReviewHarnessResult } from "./pr-review-harness-types";
 import {
   askReviewerForReport,
@@ -31,22 +32,47 @@ export function buildReviewRevisionRequest(
     "Mogplex checked the review you filed before publishing it and found these problems:",
     ...problems.map((problem) => `- ${REVIEW_FORMAT_FEEDBACK[problem]}`),
     `The report you filed: ${JSON.stringify(report)}`,
-    "Call reportReview again with the corrected review. Keep your verdict and every finding. Do not start a new review and do not call any other tool.",
+    "Call reportReview again with the corrected review. Keep your verdict (hasIssues) and every finding with its severity, path, and line; add any you referred to without stating. Do not start a new review and do not call any other tool.",
   ].join("\n");
 }
 
+/** Null when the check did not judge the text; that is never a pass. */
 export type ReviewFormatJudge = (
   harnessResult: PrReviewHarnessResult
-) => Promise<readonly ReviewFormatProblem[]>;
+) => Promise<readonly ReviewFormatProblem[] | null>;
 
-/** The revision replaces the draft only if it is a report the pipeline trusts and keeps every finding. */
+/** What identifies a finding across a formatting fix, which may reword its title and body. */
+function findingKey(finding: ReviewFinding) {
+  return JSON.stringify([finding.severity, finding.path, finding.line]);
+}
+
+function keepsEveryFinding(draft: ReviewFinding[], revised: ReviewFinding[]) {
+  const remaining = revised.map(findingKey);
+  return draft.every((finding) => {
+    const index = remaining.indexOf(findingKey(finding));
+    if (index === -1) return false;
+    remaining.splice(index, 1);
+    return true;
+  });
+}
+
+/**
+ * The revision replaces the draft only if it is a report the pipeline
+ * trusts, keeps the verdict, and keeps every finding. It may add findings:
+ * that is how a draft that mentioned suggestions without stating them gets
+ * fixed.
+ */
 function acceptsRevision(
   draft: PrReviewHarnessResult,
   revised: PrReviewHarnessResult
 ): boolean {
   return (
     revised.source === "structured" &&
-    revised.reviewOutcome.findings.length >= draft.reviewOutcome.findings.length
+    revised.reviewOutcome.hasIssues === draft.reviewOutcome.hasIssues &&
+    keepsEveryFinding(
+      draft.reviewOutcome.findings,
+      revised.reviewOutcome.findings
+    )
   );
 }
 
@@ -56,12 +82,13 @@ function acceptsRevision(
  * reviewer that wrote it is told what is wrong and files it again. Only the
  * author can fix some problems: a review that mentions suggestions without
  * stating them needs the suggestions, which no rewrite of the text can
- * supply. A result whose report passed, as drafted or as revised, carries
- * `reviewFormatPassed` so publishing does not judge it again.
+ * supply. A result whose report the check judged and passed, as drafted or
+ * as revised, carries `reviewFormatPassed` so publishing does not judge it
+ * again.
  *
- * Never fails the review: a check or revision that fails, or a revision that
- * loses the verdict or a finding, leaves the draft as it was, and publishing
- * still runs the platform rewrite on it.
+ * Never fails the review: a check that did not run, a revision that fails,
+ * or a revision that loses the verdict or a finding leaves the draft
+ * unmarked, and publishing checks it again and can still rewrite it.
  */
 export async function reviseFlaggedReview(
   input: ReviewerFollowUp & { judge: ReviewFormatJudge }
@@ -72,6 +99,7 @@ export async function reviseFlaggedReview(
 
   try {
     const problems = await input.judge(draft);
+    if (!problems) return input.result;
     if (problems.length === 0) {
       return { ...input.result, reviewFormatPassed: true };
     }
@@ -83,7 +111,7 @@ export async function reviseFlaggedReview(
     const revised = extractPrReviewHarnessResult(revision);
     if (!acceptsRevision(draft, revised)) return input.result;
     const remaining = await input.judge(revised);
-    return remaining.length === 0
+    return remaining?.length === 0
       ? { ...revision, reviewFormatPassed: true }
       : revision;
   } catch (error) {
