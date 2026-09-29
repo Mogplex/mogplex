@@ -30,18 +30,21 @@ export function clearsReviewWithoutFindings(
 export function readReviewReportState(
   steps: AutomationAgentReviewResult["steps"]
 ): ReviewReportState {
-  let report: Record<string, unknown> | null = null;
-  let claimedIssues = false;
-  for (const step of steps) {
-    for (const toolCall of step.toolCalls ?? []) {
-      if (toolCall.toolName !== REPORT_REVIEW_TOOL_NAME) continue;
-      if (!isRecord(toolCall.input)) continue;
-      if (toolCall.input.hasIssues === true) claimedIssues = true;
-      if (toolCall.invalid !== true) report = toolCall.input;
-    }
-  }
+  const calls = reportCalls(steps);
+  const claimedIssues = calls.some((call) => call.input.hasIssues === true);
+  const report = calls.findLast((call) => !call.invalid)?.input;
   if (!report) return { kind: "missing" };
   return claimedIssues && clearsReviewWithoutFindings(report)
     ? { kind: "dropped_findings", report }
     : { kind: "filed", report };
+}
+
+function reportCalls(steps: AutomationAgentReviewResult["steps"]) {
+  return steps.flatMap((step) =>
+    (step.toolCalls ?? []).flatMap((toolCall) =>
+      toolCall.toolName === REPORT_REVIEW_TOOL_NAME && isRecord(toolCall.input)
+        ? [{ input: toolCall.input, invalid: toolCall.invalid === true }]
+        : []
+    )
+  );
 }

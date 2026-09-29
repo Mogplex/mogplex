@@ -10,7 +10,10 @@ import {
   toReviewFindings,
   toStringArray,
 } from "./pr-review-harness-utils";
-import { readReviewReportState } from "./pr-review-report-state";
+import {
+  readReviewReportState,
+  type ReviewReportState,
+} from "./pr-review-report-state";
 
 function extractLastToolInput(
   result: AutomationAgentReviewResult,
@@ -168,24 +171,32 @@ export function isPrReviewVerdictMissing(
   );
 }
 
+function buildReportedHarnessResult(
+  result: AutomationAgentReviewResult,
+  reportState: Exclude<ReviewReportState, { kind: "missing" }>
+): PrReviewHarnessResult {
+  const { report } = reportState;
+  return {
+    source: reportState.kind === "filed" ? "structured" : "dropped_findings",
+    fallbackText: toOptionalString(result.text),
+    reviewOutcome: {
+      hasIssues: report.hasIssues === true,
+      summary: toOptionalString(report.summary) ?? result.text ?? "",
+      commentBody: toOptionalString(report.commentBody),
+      affectedFiles: toStringArray(report.affectedFiles),
+      findings: toReviewFindings(report.findings),
+    },
+  };
+}
+
 export function extractPrReviewHarnessResult(
   result: AutomationAgentReviewResult
 ): PrReviewHarnessResult {
   const reportState = readReviewReportState(result.steps);
   const autofix = extractPrAutofixOutcome(result);
   if (reportState.kind !== "missing") {
-    const { report } = reportState;
     return {
-      source:
-        reportState.kind === "filed" ? "structured" : "dropped_findings",
-      fallbackText: toOptionalString(result.text),
-      reviewOutcome: {
-        hasIssues: report.hasIssues === true,
-        summary: toOptionalString(report.summary) ?? result.text ?? "",
-        commentBody: toOptionalString(report.commentBody),
-        affectedFiles: toStringArray(report.affectedFiles),
-        findings: toReviewFindings(report.findings),
-      },
+      ...buildReportedHarnessResult(result, reportState),
       ...(autofix ? { autofix } : {}),
     };
   }
