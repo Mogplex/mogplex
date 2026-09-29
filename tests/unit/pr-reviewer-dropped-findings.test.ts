@@ -83,6 +83,26 @@ for (const name of ["mergePullRequest", "queuePullRequestForMerge"]) {
     assert.deepEqual(github.urls, []);
   });
 
+  test(`${name} refuses after an issue report the base schema rejected`, async () => {
+    const github = recordGithubRequests();
+    const tools = await buildTools(github.fetch);
+    const malformed = {
+      hasIssues: true,
+      summary: CLAIM,
+      findings: [{ severity: "blocker", title: "Retry", body: "Unchecked." }],
+    };
+    assert.equal(await fileReport(tools, malformed), false);
+    assert.equal(
+      await fileReport(tools, { hasIssues: false, summary: CLAIM }),
+      true
+    );
+
+    const outcome = await toolOf(tools, name).execute({});
+
+    assert.equal(outcome.success, false);
+    assert.deepEqual(github.urls, []);
+  });
+
   test(`${name} proceeds before any report when nothing claimed issues`, async () => {
     const github = recordGithubRequests();
     const tools = await buildTools(github.fetch);
@@ -122,4 +142,22 @@ test("the rejection tells the reviewer to list the findings, not to clear the re
     String(parsed.error),
     /Setting hasIssues=false without listing the issues leaves the review without a verdict/
   );
+});
+
+test("the report schema the model sees still requires a summary and names every severity", async () => {
+  const { asSchema } = await import("ai");
+  const tools = await buildTools(recordGithubRequests().fetch);
+  const schema = (await asSchema(toolOf(tools, "reportReview").inputSchema)
+    .jsonSchema) as {
+    required?: string[];
+    properties: {
+      findings: { items: { properties: Record<string, unknown> } };
+    };
+  };
+
+  assert.deepEqual(schema.required, ["hasIssues", "summary"]);
+  assert.deepEqual(schema.properties.findings.items.properties.severity, {
+    type: "string",
+    enum: ["critical", "warning", "suggestion"],
+  });
 });

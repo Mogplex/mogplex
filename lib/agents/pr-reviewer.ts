@@ -12,6 +12,7 @@ import {
   prepareGitHubTextFile,
   type GitHubFileContent,
 } from "@/lib/agents/github-file-content";
+import { isRecord } from "@/lib/workflows/pr-review-harness-utils";
 import { clearsReviewWithoutFindings } from "@/lib/workflows/pr-review-report-state";
 
 const PR_REVIEW_FILE_CONTENT_CHAR_LIMIT = GITHUB_FILE_CONTENT_CHAR_LIMIT;
@@ -68,7 +69,7 @@ export function buildPRReviewTools(config: {
     path: z.string().optional(),
     line: z.number().int().positive().optional(),
   });
-  const reportReviewInputSchema = z
+  const reportObjectSchema = z
     .object({
       hasIssues: z.boolean(),
       summary: z
@@ -86,11 +87,6 @@ export function buildPRReviewTools(config: {
       findings: z.array(reviewFindingSchema).max(20).optional(),
     })
     .superRefine((value, ctx) => {
-      // Runs for reports the schema rejects here, which never reach
-      // `execute`. Zod skips it for input missing a required field, so a
-      // malformed claim goes unseen; the published verdict does not depend
-      // on this, because readReviewReportState reads the raw tool calls.
-      if (value.hasIssues) claimedIssues = true;
       if (value.hasIssues && (!value.findings || value.findings.length === 0)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -100,6 +96,14 @@ export function buildPRReviewTools(config: {
         });
       }
     });
+  // The claim is read before validation, so a report the schema rejects for
+  // any reason (a missing summary, an unknown severity) still counts; such
+  // reports never reach `execute`. The JSON schema the model sees is the
+  // object schema's own.
+  const reportReviewInputSchema = z.preprocess((input) => {
+    if (isRecord(input) && input.hasIssues === true) claimedIssues = true;
+    return input;
+  }, reportObjectSchema);
 
   // Once a report has claimed issues, only an accepted report that lists
   // findings can authorize a merge: none accepted means every claim was

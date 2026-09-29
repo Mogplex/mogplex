@@ -26,7 +26,11 @@ export function clearsReviewWithoutFindings(
  * hasIssues to false instead of listing them, and that report would
  * otherwise publish as a clean verdict with its warnings gone. A report that
  * listed findings followed by one that clears them is treated the same way,
- * since nothing says the findings were wrong.
+ * since nothing says the findings were wrong. The rule is about lost
+ * findings, not the verdict: an accepted report that lists findings (say,
+ * hasIssues=false with suggestions) has lost nothing, so a claim before or
+ * after it leaves it filed. Steps are one review session's, including its
+ * follow-ups; a flow's later review node is judged on its own steps.
  */
 export function readReviewReportState(
   steps: AutomationAgentReviewResult["steps"]
