@@ -15,7 +15,9 @@ import type { ApiKeyAuth } from "@/lib/auth/api-key";
 import {
   MogplexApiRunError,
   MOGPLEX_API_RUN_HARNESSES,
+  LEGACY_CLI_RUN_MODES,
   MOGPLEX_API_RUN_MODES,
+  type LegacyCliRunMode,
   type MogplexApiRunHarness,
   type MogplexApiRunMode,
   type StartMogplexApiRunRequest,
@@ -115,6 +117,12 @@ function isRunMode(value: string): value is MogplexApiRunMode {
   return RUN_MODES.has(value);
 }
 
+const LEGACY_CLI_MODES: ReadonlySet<string> = new Set(LEGACY_CLI_RUN_MODES);
+
+function isLegacyCliRunMode(value: string): value is LegacyCliRunMode {
+  return LEGACY_CLI_MODES.has(value);
+}
+
 /** Whether the request names a mode at all, whatever its type. */
 function hasRunMode(value: unknown) {
   if (value === undefined || value === null) return false;
@@ -124,11 +132,16 @@ function hasRunMode(value: unknown) {
 /**
  * A harness execution mode, or null for the default. An unknown mode, or one
  * that is not a string, is an error, never AUTO: a typo for SAFE must not
- * start a more permissive run.
+ * start a more permissive run. A released CLI's orchestration mode passes
+ * through unchanged and runs as AUTO, as it always has.
  */
-function normalizeRunMode(value: unknown): MogplexApiRunMode | null {
+function normalizeRunMode(
+  value: unknown
+): MogplexApiRunMode | LegacyCliRunMode | null {
   if (!hasRunMode(value)) return null;
-  const mode = typeof value === "string" ? value.trim().toUpperCase() : null;
+  const trimmed = typeof value === "string" ? value.trim() : null;
+  if (trimmed !== null && isLegacyCliRunMode(trimmed)) return trimmed;
+  const mode = trimmed === null ? null : trimmed.toUpperCase();
   if (mode !== null && isRunMode(mode)) return mode;
   throw new MogplexApiRunError(
     "BAD_REQUEST",

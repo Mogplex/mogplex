@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeStartRequest } from "./runs-normalize";
-import { MOGPLEX_API_RUN_MODES } from "./runs-types";
+import { LEGACY_CLI_RUN_MODES, MOGPLEX_API_RUN_MODES } from "./runs-types";
 
 const MODE_ERROR = `mode must be one of ${MOGPLEX_API_RUN_MODES.join(", ")}`;
 
@@ -25,6 +25,12 @@ describe("run mode normalization", () => {
     expect(normalize({ mode: "safe" }).mode).toBe("SAFE");
     expect(normalize({ mode: "Auto" }).mode).toBe("AUTO");
     expect(normalize({ mode: "YOLO" }).mode).toBe("YOLO");
+  });
+
+  it("should keep accepting the orchestration modes released CLIs send", () => {
+    for (const mode of LEGACY_CLI_RUN_MODES) {
+      expect(normalize({ mode }).mode).toBe(mode);
+    }
   });
 
   it("should leave the mode unset when none is given", () => {

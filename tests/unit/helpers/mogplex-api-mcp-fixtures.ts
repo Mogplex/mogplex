@@ -29,6 +29,7 @@ export function buildRun(
     worktreeId: null,
     repoId: "repo-1",
     agentId: null,
+    mode: null,
     harness: "codex",
     status: "pending",
     branch: {
