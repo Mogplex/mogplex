@@ -77,7 +77,7 @@ export type FlowSuccessFinalizationInput = {
  */
 function extractFlowReviewResult(
   finalResult: AutomationAgentResult,
-  reviewResult: AutomationAgentResult | null
+  reviewResult: AutomationAgentResult | null | undefined
 ) {
   const flow = extractPrReviewHarnessResult(finalResult);
   if (!reviewResult) return flow;
@@ -114,7 +114,7 @@ export async function finalizeFlowSuccess(
   } = input;
 
   const reviewHarnessResult = isPrReview
-    ? extractFlowReviewResult(finalResult, reviewResult ?? null)
+    ? extractFlowReviewResult(finalResult, reviewResult)
     : null;
   const reviewOutcome = reviewHarnessResult?.reviewOutcome ?? null;
   const reviewCommentPosted = isPrReview

@@ -38,6 +38,7 @@ import { resolveAutomationModel } from "@/lib/workflows/automation-job-model-res
 import {
   emitToOutgoing,
   noteObservabilityError,
+  recordFlowNodeResult,
 } from "@/lib/workflows/automation-job-flow-run-state";
 import {
   executeEditRoleNode,
@@ -476,9 +477,7 @@ export async function executeFlowAgentNode(
 
   const handoffText = JSON.stringify(handoff);
   state.outputs.set(node.id, { label, text: handoffText, handoff });
-  const nodeResult = { ...result, text: handoff.summary };
-  state.results.push(nodeResult);
-  if (nodeRole === "review") state.reviewResult = nodeResult;
+  recordFlowNodeResult(state, { ...result, text: handoff.summary }, nodeRole);
 
   return {
     ok: true as const,

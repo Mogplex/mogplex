@@ -332,7 +332,7 @@ export async function runAutomationJob(
       releasedScope: input.releasedScope,
       context,
       finalResult: flowExecution.result,
-      reviewResult: flowExecution.reviewResult ?? null,
+      reviewResult: flowExecution.reviewResult,
       autoMergeRequest: flowExecution.autoMergeRequest ?? null,
       observabilityError: flowExecution.observabilityError,
       isPrReview,

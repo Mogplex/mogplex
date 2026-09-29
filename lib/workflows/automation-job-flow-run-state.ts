@@ -74,6 +74,16 @@ export type FlowRunState = {
   expectedTriggerHeadSha: string | null;
 };
 
+/** Adds an agent node's result; a review node's also becomes the verdict. */
+export function recordFlowNodeResult(
+  state: FlowRunState,
+  result: AutomationAgentResult,
+  role: string | null
+) {
+  state.results.push(result);
+  if (role === "review") state.reviewResult = result;
+}
+
 /**
  * Creates an initialized flow-run state container.
  */
