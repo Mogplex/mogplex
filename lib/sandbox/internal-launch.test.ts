@@ -122,6 +122,33 @@ describe("launchSandboxInternally", () => {
     );
   });
 
+  it("should close the route's stream once the sandbox is ready", async () => {
+    let cancelled = false;
+    const encoder = new TextEncoder();
+    const open = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: "ready", sandbox: record("vm-1") })}\n\n`
+            )
+          );
+          // Left open: a route that keeps streaming past ready.
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }),
+      { headers: { "Content-Type": "text/event-stream" } }
+    );
+    const route = scripted(open);
+
+    await expect(launch(route.post)).resolves.toMatchObject({
+      sandboxId: "vm-1",
+    });
+    expect(cancelled).toBe(true);
+  });
+
   it("should surface the route's boot error", async () => {
     const route = scripted(
       sse(

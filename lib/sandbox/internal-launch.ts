@@ -95,17 +95,22 @@ async function readStreamSandbox(
   const decoder = new TextDecoder();
   const state: { latest: LaunchedSandbox | null } = { latest: null };
   let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parsed = parseSseDataEvents(buffer);
-    buffer = parsed.remaining;
-    for (const event of parsed.events as Array<LaunchEvent | null>) {
-      if (applyLaunchEvent(event, state) && state.latest) {
-        return { sandbox: state.latest, ready: true };
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parsed = parseSseDataEvents(buffer);
+      buffer = parsed.remaining;
+      for (const event of parsed.events as Array<LaunchEvent | null>) {
+        if (applyLaunchEvent(event, state) && state.latest) {
+          return { sandbox: state.latest, ready: true };
+        }
       }
     }
+  } finally {
+    // Settling early must not leave the route's stream open.
+    await reader.cancel().catch(() => undefined);
   }
   if (!state.latest) {
     throw new Error("Sandbox launch stream ended before a sandbox was ready");
