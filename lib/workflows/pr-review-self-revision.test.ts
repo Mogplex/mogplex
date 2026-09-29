@@ -1,5 +1,5 @@
 import { tool } from "ai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { ReviewFormatProblem } from "@/lib/decisions/definitions";
 import type { AutomationAgentResult } from "./automation-job-types";
@@ -278,6 +278,7 @@ describe("reviseFlaggedReview", () => {
 
   it("should leave a draft the check did not judge unmarked and unrevised", async () => {
     const { generate, requests } = reviewer([listedRevision]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const result = await reviseFlaggedReview({
       ...followUp,
@@ -288,6 +289,9 @@ describe("reviseFlaggedReview", () => {
 
     expect(requests).toEqual([]);
     expect(result).toBe(danglingDraft);
+    // Not judging is a normal outcome, not a failed revision.
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("should not mark a revision the check could not judge again", async () => {
