@@ -166,6 +166,9 @@ export async function launchSandboxInternally(input: {
       )
     );
   };
+  // One bounded reattach, a second full POST, when the first attach does not
+  // yield a usable sandbox: the agent tool path in sandbox-resolution.ts does
+  // the same.
   const sandbox = (await attach()) ?? (await attach());
   if (!sandbox) throw new Error("Sandbox did not become ready");
   return sandbox;
