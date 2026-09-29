@@ -1,4 +1,5 @@
 import { createHarnessOutputRenderer } from "@/lib/harness/output-renderer";
+import { parseSseDataEvents } from "@/lib/sse-data-events";
 import type { HarnessRenderChunk } from "@/lib/harness/output-renderer";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
 import { safeAppendAiCallEvent } from "@/lib/interactive-runs";
@@ -44,24 +45,6 @@ type HarnessStreamEvent = {
   stream?: string;
   data?: string;
 };
-
-function parseSseDataEvents(buffer: string) {
-  const events: unknown[] = [];
-  let remaining = buffer;
-  let separatorIndex = remaining.indexOf("\n\n");
-  while (separatorIndex !== -1) {
-    const rawEvent = remaining.slice(0, separatorIndex);
-    remaining = remaining.slice(separatorIndex + 2);
-    const data = rawEvent
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice("data:".length).trimStart())
-      .join("\n");
-    if (data) events.push(JSON.parse(data));
-    separatorIndex = remaining.indexOf("\n\n");
-  }
-  return { events, remaining };
-}
 
 function eventContext(run: ExternalAgentRunRow) {
   return {

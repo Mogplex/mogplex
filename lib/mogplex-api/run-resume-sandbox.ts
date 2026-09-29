@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import type { ExternalAgentRunRow } from "./runs-types";
 import type { SandboxRef } from "./run-execution-launch";
-import { readSandboxLaunchResponse } from "./run-execution-launch";
+import { readSandboxLaunchResponse } from "@/lib/sandbox/internal-launch";
 
 type ResumeSandboxDeps = {
   client: Pick<SupabaseClient, "from">;
@@ -63,5 +63,6 @@ export async function resumeRunSandbox(
     }),
     record.id
   );
-  return readSandboxLaunchResponse(response);
+  const { recordId, sandboxId } = await readSandboxLaunchResponse(response);
+  return { recordId, sandboxId };
 }

@@ -4,9 +4,9 @@ import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
 import { createSlackRunProgressReporter } from "@/lib/slack/run-progress-notify";
 import {
   launchSandboxViaRoute,
-  readTextResponse,
   type SandboxRef,
 } from "@/lib/mogplex-api/run-execution-launch";
+import { readTextResponse } from "@/lib/sandbox/internal-launch";
 import {
   finalizeFailedPass,
   finalizeHarnessPass,
@@ -137,6 +137,17 @@ const defaultExecutionDeps: ExternalAgentRunExecutionDeps = {
   createProgress: createSlackRunProgressReporter,
 };
 
+function terminalResult(
+  run: ExternalAgentRunRow
+): ExternalAgentRunExecutionResult {
+  return {
+    success: run.status === "success",
+    runId: run.id,
+    status: run.status,
+    error: run.error,
+  };
+}
+
 export async function executeExternalAgentRun(
   payload: ExternalAgentRunExecutionPayload,
   overrides: Partial<ExternalAgentRunExecutionDeps> = {}
@@ -168,12 +179,7 @@ export async function executeExternalAgentRun(
         error
       );
     }
-    return {
-      success: run.status === "success",
-      runId: run.id,
-      status: run.status,
-      error: run.error,
-    };
+    return terminalResult(run);
   }
 
   const progress = deps.createProgress(run);
@@ -185,6 +191,12 @@ export async function executeExternalAgentRun(
       next: "Inspect the repository and your request.",
     });
     const sandbox = await deps.launchSandbox(run);
+    // A launch can wait minutes for a sandbox another run is booting. A run
+    // cancelled meanwhile stays cancelled instead of being revived here.
+    const current = await deps.loadRun(run.id, run.user_id);
+    if (current && TERMINAL_RUN_STATUSES.has(current.status)) {
+      return terminalResult(current);
+    }
     run = await deps.updateRun(run.user_id, run.id, {
       sandbox_record_id: sandbox.recordId,
       sandbox_id: sandbox.sandboxId,

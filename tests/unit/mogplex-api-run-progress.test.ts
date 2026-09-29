@@ -111,3 +111,17 @@ test("external harness progress rejects harness error events", async () => {
     /sandbox failed/
   );
 });
+
+test("external harness progress skips a malformed stream event", async () => {
+  const response = new Response(
+    `data: {not json\n\ndata: ${JSON.stringify({ type: "done", exitCode: 0 })}\n\n`
+  );
+
+  await assert.doesNotReject(
+    readExternalHarnessProgress({
+      response,
+      run: buildRunRow({ harness: "codex" }),
+      appendEvent: async () => null,
+    })
+  );
+});

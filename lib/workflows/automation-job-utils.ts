@@ -4,11 +4,10 @@
  */
 
 import type {
-  AutomationSandboxRef,
   RepoVariant,
   AutomationAgentResult,
 } from "@/lib/workflows/automation-job-types";
-import type { ReviewFinding, SandboxRecord } from "@/lib/types";
+import type { ReviewFinding } from "@/lib/types";
 
 export function sumNullableNumbers(
   values: Array<number | null | undefined>
@@ -24,55 +23,6 @@ export function splitRepoFullName(fullName: string) {
   const [owner, repo] = fullName.split("/");
   if (!owner || !repo) return null;
   return { owner, repo };
-}
-
-export function extractSandboxRef(
-  record: unknown
-): AutomationSandboxRef | null {
-  if (!record || typeof record !== "object") return null;
-  const sandbox = record as Partial<SandboxRecord> & {
-    runtime_summary?: { sandbox_id?: string | null };
-  };
-  if (typeof sandbox.id !== "string") return null;
-  return {
-    recordId: sandbox.id,
-    sandboxId:
-      typeof sandbox.sandbox_id === "string"
-        ? sandbox.sandbox_id
-        : (sandbox.runtime_summary?.sandbox_id ?? null),
-    rootDirectory:
-      typeof sandbox.root_directory === "string"
-        ? sandbox.root_directory
-        : null,
-  };
-}
-
-export function parseSseDataEvents(buffer: string) {
-  const events: unknown[] = [];
-  let remaining = buffer;
-  let separatorIndex = remaining.indexOf("\n\n");
-  while (separatorIndex !== -1) {
-    const rawEvent = remaining.slice(0, separatorIndex);
-    remaining = remaining.slice(separatorIndex + 2);
-    const data = rawEvent
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice("data:".length).trimStart())
-      .join("\n");
-    if (data) {
-      events.push(JSON.parse(data));
-    }
-    separatorIndex = remaining.indexOf("\n\n");
-  }
-  return { events, remaining };
-}
-
-export async function readTextResponse(response: Response) {
-  try {
-    return await response.text();
-  } catch {
-    return "";
-  }
 }
 
 export function pickPreferredRepoVariant(repos: RepoVariant[]) {

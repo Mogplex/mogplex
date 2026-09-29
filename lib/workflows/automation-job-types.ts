@@ -8,6 +8,7 @@ import type { FlowGraph } from "@/lib/types";
 import type { BackgroundRuntimeProvider } from "@/lib/runtime-providers";
 import type { AutomationScope } from "@/lib/workflows/automation-guardrails";
 import type { ResolvedUserLanguageModel } from "@/lib/ai-model-resolver";
+import type { LaunchedSandbox } from "@/lib/sandbox/internal-launch";
 
 export type AutomationJobInput = {
   jobRunId: string;
@@ -158,11 +159,8 @@ export type PullRequestDetails = {
   baseRepoFullName: string;
 };
 
-export type AutomationSandboxRef = {
-  recordId: string;
-  sandboxId: string | null;
-  rootDirectory: string | null;
-};
+/** An automation's sandbox is whatever the shared internal launcher returns. */
+export type AutomationSandboxRef = LaunchedSandbox;
 
 export type AutofixSandboxRecord = {
   sandbox_id: string;

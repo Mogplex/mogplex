@@ -21,6 +21,9 @@ function mergeReadinessSnapshot(
   return {
     ...record,
     status: "running",
+    // The record was read when the waiter attached, often before the VM had
+    // an id; the snapshot carries the id it has now.
+    sandbox_id: snapshot.sandbox_id ?? record.sandbox_id,
     health_status: snapshot.health_status ?? null,
     preview_url: snapshot.preview_url ?? record.preview_url,
     error: snapshot.error ?? null,
@@ -78,8 +81,9 @@ export function buildPendingSandboxWaitStreamResponse(input: {
         if (result.kind === "failed") {
           emit({ type: "error", message: result.message, phase: "create" });
         } else if (result.kind === "retry") {
-          // The agent caller sees sandbox_created followed by a clean close and
-          // performs its single bounded reattach through the same route.
+          // Callers see sandbox_created followed by a clean close and make
+          // their single bounded reattach through the same route: the agent
+          // tool path and the internal launcher (lib/sandbox/internal-launch).
           emit({ type: "warning", message: result.message });
         } else {
           emit({
