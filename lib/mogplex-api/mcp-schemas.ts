@@ -168,6 +168,7 @@ export const startAgentRunArgsSchema = z
     createBranch: z.boolean().optional(),
     rootDirectory: z.string().trim().min(1).nullable().optional(),
     agentId: z.string().trim().min(1).optional(),
+    mode: z.enum(["SAFE", "AUTO", "YOLO"]).optional(),
     idempotencyKey: z.string().trim().min(1).max(200).optional(),
   })
   .strict();

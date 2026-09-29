@@ -50,6 +50,12 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
           description:
             "Roster agent id from mogplex_list_agents, or preset:<NAME>. The run loads that agent's system prompt, rules, and skills.",
         },
+        mode: {
+          type: "string",
+          enum: ["SAFE", "AUTO", "YOLO"],
+          description:
+            "Codex and Claude Code only. SAFE: the harness does not change the checkout (Claude Code plans, Codex runs read-only), but MCP connection and Mogplex tools stay callable and can change other systems. AUTO (default): edits files and runs commands in the sandbox. YOLO: skips every permission check.",
+        },
         idempotencyKey: {
           type: "string",
           maxLength: 200,
