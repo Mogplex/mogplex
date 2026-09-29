@@ -46,29 +46,20 @@ function parseSseDataEvents(buffer: string) {
       .map((line) => line.slice("data:".length).trimStart())
       // SSE joins multiple data fields in one event with a newline.
       .join("\n");
-    if (data) events.push(JSON.parse(data));
+    if (data) {
+      // A malformed event is skipped; the stream's terminal event decides.
+      try {
+        events.push(JSON.parse(data));
+      } catch {
+        // Not JSON.
+      }
+    }
     separatorIndex = remaining.indexOf("\n\n");
   }
   return { events, remaining };
 }
 
-type ReadSandbox = {
-  sandbox: LaunchedSandbox;
-  ready: boolean;
-  /** The record's status when the route reported one. */
-  status?: string;
-};
-
-/** A JSON record's status, as the agent tool path reads it. */
-function recordStatus(record: unknown): string | undefined {
-  if (!record || typeof record !== "object") return undefined;
-  const value = record as {
-    status?: unknown;
-    runtime_summary?: { status?: unknown };
-  };
-  const status = value.runtime_summary?.status ?? value.status;
-  return typeof status === "string" ? status : undefined;
-}
+type ReadSandbox = { sandbox: LaunchedSandbox; ready: boolean };
 
 async function readJsonSandbox(response: Response): Promise<ReadSandbox> {
   const payload = (await response.json()) as {
@@ -86,14 +77,9 @@ async function readJsonSandbox(response: Response): Promise<ReadSandbox> {
   if (!sandbox) {
     throw new Error("Sandbox launch response did not include a sandbox");
   }
-  // The route can answer with a matching record that is not running, such as
-  // a paused sandbox found by name; only a running one is ready.
-  const status = recordStatus(payload.sandbox);
-  return {
-    sandbox,
-    ready: status === undefined || status === "running",
-    status,
-  };
+  // A matching record the route resumes by name can still read "paused"; the
+  // harness route resumes a paused VM, so only a pending VM id is unusable.
+  return { sandbox, ready: true };
 }
 
 type LaunchEvent = { type?: string; message?: string; sandbox?: unknown };
@@ -192,7 +178,7 @@ export async function launchSandboxInternally(input: {
   post?: PostSandbox;
 }): Promise<LaunchedSandbox> {
   const post = input.post ?? defaultPost;
-  const last: { read: ReadSandbox | null } = { read: null };
+  const last: { sandbox: LaunchedSandbox | null } = { sandbox: null };
   const attach = async () => {
     const headers = new Headers(input.headers);
     headers.set(SANDBOX_READINESS_WAIT_HEADER, "1");
@@ -205,7 +191,7 @@ export async function launchSandboxInternally(input: {
         })
       )
     );
-    last.read = read;
+    last.sandbox = read.sandbox;
     return usable(read);
   };
   // One bounded reattach, a second full POST, when the first attach does not
@@ -214,11 +200,9 @@ export async function launchSandboxInternally(input: {
   const sandbox = (await attach()) ?? (await attach());
   if (sandbox) return sandbox;
   // A failed launch never reaches the run row, so name the record here.
-  const read = last.read;
-  if (!read) throw new Error("Sandbox did not become ready");
-  const state =
-    read.status && read.status !== "running" ? ` (${read.status})` : "";
   throw new Error(
-    `Sandbox ${read.sandbox.recordId} did not become ready${state}`
+    last.sandbox
+      ? `Sandbox ${last.sandbox.recordId} did not become ready`
+      : "Sandbox did not become ready"
   );
 }

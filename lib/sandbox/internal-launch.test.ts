@@ -149,20 +149,26 @@ describe("launchSandboxInternally", () => {
     expect(cancelled).toBe(true);
   });
 
-  it("should not use a matching record the route returns while it is paused", async () => {
-    const paused = () =>
-      Response.json({ sandbox: { ...record("vm-1"), status: "paused" } });
-    const route = scripted(paused(), paused());
-
-    await expect(launch(route.post)).rejects.toThrow(
-      "Sandbox record-1 did not become ready (paused)"
+  it("should use a paused record the route resumes by name", async () => {
+    const route = scripted(
+      Response.json({ sandbox: { ...record("vm-1"), status: "paused" } })
     );
-    expect(route.requests).toHaveLength(2);
+
+    await expect(launch(route.post)).resolves.toMatchObject({
+      sandboxId: "vm-1",
+    });
+    expect(route.requests).toHaveLength(1);
   });
 
-  it("should use a running record the route returns", async () => {
+  it("should skip a malformed stream event and settle on ready", async () => {
     const route = scripted(
-      Response.json({ sandbox: { ...record("vm-1"), status: "running" } })
+      new Response(
+        [
+          "data: {not json",
+          `data: ${JSON.stringify({ type: "ready", sandbox: record("vm-1") })}`,
+        ].join("\n\n") + "\n\n",
+        { headers: { "Content-Type": "text/event-stream" } }
+      )
     );
 
     await expect(launch(route.post)).resolves.toMatchObject({
