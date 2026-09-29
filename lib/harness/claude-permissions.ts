@@ -1,5 +1,3 @@
-import { MOGPLEX_READ_ONLY_TOOLS } from "./mogplex-tool-names";
-
 export type HarnessExecutionMode = "AUTO" | "YOLO" | "SAFE";
 
 const CLAUDE_SHARED_DISALLOWED_TOOLS = [
@@ -82,29 +80,24 @@ export function normalizeHarnessExecutionMode(
 
 /**
  * `claude -p` has nobody to approve a tool, so every tool the run may use has
- * to be allowed up front. SAFE allows only the read-only Mogplex tools; AUTO
- * allows every server in the run's MCP config, as the native agent may call
- * every connection without asking.
+ * to be allowed up front. Every mode allows every server in the run's MCP
+ * config, as Codex's ACP bridge approves every MCP call and the native agent
+ * calls every connection without asking. SAFE still plans instead of editing.
  */
 export function buildClaudePermissionArgs(
   mode?: string | null,
   mcp: { mcpServerNames?: string[]; mogplexServerName?: string } = {}
 ) {
   const normalizedMode = normalizeHarnessExecutionMode(mode);
-  const { mogplexServerName } = mcp;
+  const servers = new Set(mcp.mcpServerNames);
+  if (mcp.mogplexServerName) servers.add(mcp.mogplexServerName);
+  const mcpTools = [...servers].map((name) => `mcp__${name}`);
 
   if (normalizedMode === "SAFE") {
-    const readOnlyTools = mogplexServerName
-      ? [...MOGPLEX_READ_ONLY_TOOLS].map(
-          (name) => `mcp__${mogplexServerName}__${name}`
-        )
-      : [];
     return withDisallowedTools([
       "--permission-mode",
       "plan",
-      ...(readOnlyTools.length > 0
-        ? ["--allowedTools", readOnlyTools.join(",")]
-        : []),
+      ...(mcpTools.length > 0 ? ["--allowedTools", mcpTools.join(",")] : []),
     ]);
   }
 
@@ -112,15 +105,10 @@ export function buildClaudePermissionArgs(
     return withDisallowedTools(["--dangerously-skip-permissions"]);
   }
 
-  const servers = new Set(mcp.mcpServerNames);
-  if (mogplexServerName) servers.add(mogplexServerName);
   return withDisallowedTools([
     "--permission-mode",
     "acceptEdits",
     "--allowedTools",
-    [
-      ...CLAUDE_AUTO_ALLOWED_TOOLS,
-      ...[...servers].map((name) => `mcp__${name}`),
-    ].join(","),
+    [...CLAUDE_AUTO_ALLOWED_TOOLS, ...mcpTools].join(","),
   ]);
 }

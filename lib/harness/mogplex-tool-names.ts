@@ -14,7 +14,7 @@ export const HARNESS_LOCAL_TOOLS: ReadonlySet<string> = new Set([
   "stop_sandbox",
 ]);
 
-/** Mogplex tools that only read. SAFE runs may call these and nothing else. */
+/** Mogplex tools that only read; the MCP server marks them read-only. */
 export const MOGPLEX_READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "web_search",
   "web_fetch",
