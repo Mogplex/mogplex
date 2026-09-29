@@ -5,6 +5,7 @@
  */
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { launchSandboxInternally } from "@/lib/sandbox/internal-launch";
+import { PENDING_SANDBOX_ID } from "@/lib/sandbox/readiness-contract";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
 
 export type SandboxRef = {
@@ -33,7 +34,11 @@ export function runSandboxLaunchBody(
 }
 
 export async function launchSandboxViaRoute(run: ExternalAgentRunRow) {
-  if (run.sandbox_record_id && run.sandbox_id && run.sandbox_id !== "pending") {
+  if (
+    run.sandbox_record_id &&
+    run.sandbox_id &&
+    run.sandbox_id !== PENDING_SANDBOX_ID
+  ) {
     return {
       recordId: run.sandbox_record_id,
       sandboxId: run.sandbox_id,

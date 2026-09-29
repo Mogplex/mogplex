@@ -81,8 +81,9 @@ export function buildPendingSandboxWaitStreamResponse(input: {
         if (result.kind === "failed") {
           emit({ type: "error", message: result.message, phase: "create" });
         } else if (result.kind === "retry") {
-          // The agent caller sees sandbox_created followed by a clean close and
-          // performs its single bounded reattach through the same route.
+          // Callers see sandbox_created followed by a clean close and make
+          // their single bounded reattach through the same route: the agent
+          // tool path and the internal launcher (lib/sandbox/internal-launch).
           emit({ type: "warning", message: result.message });
         } else {
           emit({

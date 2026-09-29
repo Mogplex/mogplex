@@ -1,4 +1,7 @@
-import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
+import {
+  PENDING_SANDBOX_ID,
+  SANDBOX_READINESS_WAIT_HEADER,
+} from "@/lib/sandbox/readiness-contract";
 import { parseSseDataEvents } from "@/lib/sse-data-events";
 import type { SandboxRecord } from "@/lib/types";
 
@@ -145,7 +148,7 @@ export async function readSandboxLaunchResponse(
 function usable(read: ReadSandbox): LaunchedSandbox | null {
   return read.ready &&
     read.sandbox.sandboxId &&
-    read.sandbox.sandboxId !== "pending"
+    read.sandbox.sandboxId !== PENDING_SANDBOX_ID
     ? read.sandbox
     : null;
 }

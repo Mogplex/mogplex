@@ -332,3 +332,32 @@ test("buildExternalAgentHarnessRequestBody forwards the roster agent so the harn
     false
   );
 });
+
+test("executeExternalAgentRun leaves a run cancelled during the sandbox launch cancelled", async () => {
+  let currentRun = buildRunRow({ sandbox_record_id: null, sandbox_id: null });
+  const updates: Array<Partial<ExternalAgentRunRow>> = [];
+
+  const result = await executeExternalAgentRun(
+    { runId: "run-1", userId: "user-123" },
+    {
+      loadRun: async () => currentRun,
+      updateRun: async (_userId, _runId, update) => {
+        updates.push(update);
+        currentRun = { ...currentRun, ...update };
+        return currentRun;
+      },
+      launchSandbox: async () => {
+        currentRun = { ...currentRun, status: "cancelled" };
+        return { recordId: "sandbox-record-1", sandboxId: "sbx_123" };
+      },
+      runHarness: async () => {
+        throw new Error("runHarness should not run");
+      },
+      loadAiCall: async () => buildAiCall(),
+    }
+  );
+
+  assert.equal(result.status, "cancelled");
+  assert.equal(result.success, false);
+  assert.deepEqual(updates, []);
+});
