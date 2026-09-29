@@ -5,6 +5,8 @@ import type { Capability } from "@/lib/team-capabilities";
 import { verifyResearchToken, type ResearchClaims } from "./research-auth";
 import { buildHarnessMogplexTools, type HarnessToolRun } from "./mogplex-tools";
 import { MOGPLEX_READ_ONLY_TOOLS } from "./mogplex-tool-names";
+import { createToolBuildCache } from "./mogplex-tool-cache";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 
 const requestSchema = z.object({
   jsonrpc: z.literal("2.0"),
@@ -33,7 +35,25 @@ export type MogplexMcpDeps = {
     run: HarnessToolRun,
     capabilities: ReadonlySet<Capability>
   ) => Promise<BuiltTools>;
+  /** How long one run's build is reused across its requests. */
+  cacheTtlMs?: number;
 };
+
+const TOOL_BUILD_TTL_MS = 60_000;
+
+/** Same run, same capabilities: the same tool set. */
+function buildKey(run: HarnessToolRun, capabilities: ReadonlySet<Capability>) {
+  return `${run.aiCallId}:${[...capabilities].sort().join(",")}`;
+}
+
+function logFailure(stage: string, name: string | null, error: unknown) {
+  console.warn(`[mogplex-mcp] ${stage} failed`, {
+    tool: name,
+    error: redactSecretsInText(
+      error instanceof Error ? error.message : String(error)
+    ).slice(0, 500),
+  });
+}
 
 async function listTools(tools: Record<string, Tool>) {
   return Promise.all(
@@ -58,13 +78,14 @@ async function callTool(
   const input = schema.validate
     ? await schema.validate(args ?? {})
     : { success: true as const, value: args ?? {} };
-  if (!input.success) return null;
-  return tool.execute!(input.value, {
+  if (!input.success) return { valid: false as const };
+  const output: unknown = await tool.execute!(input.value, {
     toolCallId,
     messages: [],
     context: {},
     abortSignal: signal,
   });
+  return { valid: true as const, output: output ?? null };
 }
 
 /**
@@ -74,6 +95,7 @@ async function callTool(
  */
 export function createMogplexMcpPost(deps: MogplexMcpDeps) {
   const build = deps.buildTools ?? buildHarnessMogplexTools;
+  const cache = createToolBuildCache(deps.cacheTtlMs ?? TOOL_BUILD_TTL_MS);
   return async (request: Request): Promise<Response> => {
     const reply = (body: unknown, status = 200) =>
       Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -121,31 +143,40 @@ export function createMogplexMcpPost(deps: MogplexMcpDeps) {
     if (method !== "tools/list" && method !== "tools/call")
       return error(-32601, "Method not found");
 
-    const { tools, cleanup } = await build(
-      authorized.run,
-      authorized.capabilities
-    );
+    const { run, capabilities } = authorized;
+    let borrowed: Awaited<ReturnType<typeof cache.acquire>>;
+    try {
+      borrowed = await cache.acquire(buildKey(run, capabilities), () =>
+        build(run, capabilities)
+      );
+    } catch (buildError) {
+      logFailure("tool build", null, buildError);
+      return error(-32603, "Mogplex tools are unavailable right now");
+    }
+    const { tools } = borrowed;
     try {
       if (method === "tools/list")
         return result({ tools: await listTools(tools) });
       const name = typeof params?.name === "string" ? params.name : "";
       const tool = Object.hasOwn(tools, name) ? tools[name] : undefined;
       if (!tool?.execute) return error(-32602, "Unknown tool");
-      let output: unknown;
+      let called: Awaited<ReturnType<typeof callTool>>;
       try {
-        output = await callTool(
+        called = await callTool(
           tool,
           params?.arguments,
           String(id),
           request.signal
         );
-      } catch {
+      } catch (toolError) {
+        logFailure("tool call", name, toolError);
         return result({
           content: [{ type: "text", text: `${name} failed.` }],
           isError: true,
         });
       }
-      if (output === null) return error(-32602, "Invalid tool arguments");
+      if (!called.valid) return error(-32602, "Invalid tool arguments");
+      const { output } = called;
       return result({
         content: [{ type: "text", text: JSON.stringify(output) }],
         isError: Boolean(
@@ -153,7 +184,7 @@ export function createMogplexMcpPost(deps: MogplexMcpDeps) {
         ),
       });
     } finally {
-      await cleanup().catch(() => undefined);
+      borrowed.release();
     }
   };
 }

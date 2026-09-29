@@ -1,6 +1,6 @@
 /**
- * Native tools a harness CLI already has in its own form (shell, files) or
- * must not hold (stopping the sandbox it runs in). Everything else the native
+ * Native tools a harness is not served: ones its CLI already has in its own
+ * form (shell, files) or that cannot work for it. Everything else the native
  * Mogplex agent gets is served to the harness over the run's MCP server.
  */
 export const HARNESS_LOCAL_TOOLS: ReadonlySet<string> = new Set([
@@ -10,8 +10,12 @@ export const HARNESS_LOCAL_TOOLS: ReadonlySet<string> = new Set([
   "list_files",
   "write_file",
   "edit_file",
+  // It would stop or replace the sandbox the harness is running in.
   "start_sandbox",
   "stop_sandbox",
+  // Its consent check reads the user's own message in a chat turn, which a
+  // harness request does not carry, so every call would be refused.
+  "github_merge_pull_request",
 ]);
 
 /** Mogplex tools that only read. SAFE runs may call these and nothing else. */
