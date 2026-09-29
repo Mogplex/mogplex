@@ -115,3 +115,27 @@ test("startMogplexApiRun hashes the agent into the request so a different agent 
       error.code === "IDEMPOTENCY_CONFLICT"
   );
 });
+
+test("startMogplexApiRun stores the canonical mode and reports it on the run", async () => {
+  let insertedMode: string | null | undefined;
+  const result = await startMogplexApiRun({
+    user: buildUser(),
+    idempotencyKey: "idem-mode",
+    body: {
+      repoId: "repo-1",
+      prompt: "Review the router",
+      harness: "claude-code",
+      mode: "safe",
+    },
+    deps: buildStartDeps({
+      insertRun: async (input) => {
+        insertedMode = input.normalized.mode;
+        return buildRunRow({ mode: input.normalized.mode });
+      },
+      markRunQueued: async () => buildRunRow({ mode: "SAFE" }),
+    }),
+  });
+
+  assert.equal(insertedMode, "SAFE");
+  assert.equal(result.run.mode, "SAFE");
+});

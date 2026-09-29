@@ -82,7 +82,9 @@ export function normalizeHarnessExecutionMode(
  * `claude -p` has nobody to approve a tool, so every tool the run may use has
  * to be allowed up front. Every mode allows every server in the run's MCP
  * config, as Codex's ACP bridge approves every MCP call and the native agent
- * calls every connection without asking. SAFE still plans instead of editing.
+ * calls every connection without asking. SAFE still plans instead of editing,
+ * but plan mode does not screen pre-approved MCP tools, so a connection that
+ * writes can still write in SAFE.
  */
 export function buildClaudePermissionArgs(
   mode?: string | null,

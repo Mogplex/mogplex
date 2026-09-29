@@ -15,7 +15,13 @@ import type { ApiKeyAuth } from "@/lib/auth/api-key";
 import {
   MogplexApiRunError,
   MOGPLEX_API_RUN_HARNESSES,
+  LEGACY_CLI_RUN_MODES,
+  MOGPLEX_API_RUN_MODES,
+  type AcceptedRunMode,
+  type LegacyCliRunMode,
   type MogplexApiRunHarness,
+  type NormalizedStartRequest,
+  type MogplexApiRunMode,
   type StartMogplexApiRunRequest,
 } from "./runs-types";
 
@@ -32,21 +38,6 @@ type OwnedRepoForRun = {
 type ActiveSandboxForRun = {
   id: string;
   sandbox_id: string | null;
-};
-
-export type NormalizedStartRequest = {
-  repoId: string;
-  prompt: string;
-  harness: MogplexApiRunHarness;
-  baseBranch: string;
-  workingBranch: string;
-  createBranch: boolean;
-  rootDirectory: string | null;
-  conversationId: string | null;
-  workspaceSessionId: string | null;
-  mode: string | null;
-  worktreeId: string | null;
-  agentId: string | null;
 };
 
 export function normalizeOptionalString(value: unknown) {
@@ -107,6 +98,55 @@ export function hashRequest(value: unknown) {
   return createHash("sha256").update(stableStringify(value)).digest("hex");
 }
 
+const RUN_MODES: ReadonlySet<string> = new Set(MOGPLEX_API_RUN_MODES);
+
+function isRunMode(value: string): value is MogplexApiRunMode {
+  return RUN_MODES.has(value);
+}
+
+const LEGACY_CLI_MODES: ReadonlySet<string> = new Set(LEGACY_CLI_RUN_MODES);
+
+function isLegacyCliRunMode(value: string): value is LegacyCliRunMode {
+  return LEGACY_CLI_MODES.has(value);
+}
+
+/** The rejected mode as the 400 names it, bounded so a large body is not echoed. */
+function describeMode(value: unknown) {
+  const MAX_SHOWN = 40;
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  const chars = Array.from(text ?? String(value));
+  const shown =
+    chars.length > MAX_SHOWN ? `${chars.slice(0, MAX_SHOWN).join("")}…` : text;
+  return typeof value === "string" ? `"${shown}"` : shown;
+}
+
+/** Whether the request names a mode at all, whatever its type. */
+function hasRunMode(value: unknown) {
+  if (value === undefined || value === null) return false;
+  return typeof value !== "string" || value.trim() !== "";
+}
+
+/**
+ * A harness execution mode, or null for the default. An unknown mode, or one
+ * that is not a string, is an error, never AUTO: a typo for SAFE must not
+ * start a more permissive run. A released CLI's orchestration mode passes
+ * through unchanged and runs as AUTO, as it always has. Those are matched
+ * exactly, in the lower case the CLI sends, so the stored value stays one of
+ * `LEGACY_CLI_RUN_MODES`; SAFE, AUTO, and YOLO are matched in any case.
+ */
+function normalizeRunMode(value: unknown): AcceptedRunMode | null {
+  if (!hasRunMode(value)) return null;
+  const trimmed = typeof value === "string" ? value.trim() : null;
+  if (trimmed !== null && isLegacyCliRunMode(trimmed)) return trimmed;
+  const mode = trimmed === null ? null : trimmed.toUpperCase();
+  if (mode !== null && isRunMode(mode)) return mode;
+  throw new MogplexApiRunError(
+    "BAD_REQUEST",
+    `mode must be one of ${MOGPLEX_API_RUN_MODES.join(", ")} (got ${describeMode(value)})`,
+    400
+  );
+}
+
 export function normalizeStartRequest(input: {
   body: StartMogplexApiRunRequest;
   repo: OwnedRepoForRun;
@@ -126,7 +166,7 @@ export function normalizeStartRequest(input: {
   }
 
   const harness = assertValidHarness(input.body.harness);
-  if (harness === "mogplex" && normalizeOptionalString(input.body.mode)) {
+  if (harness === "mogplex" && hasRunMode(input.body.mode)) {
     throw new MogplexApiRunError(
       "BAD_REQUEST",
       "CLI execution modes are not supported by the Mogplex harness",
@@ -163,7 +203,7 @@ export function normalizeStartRequest(input: {
     ),
     conversationId: normalizeOptionalString(input.body.conversationId),
     workspaceSessionId: normalizeOptionalString(input.body.workspaceSessionId),
-    mode: normalizeOptionalString(input.body.mode),
+    mode: normalizeRunMode(input.body.mode),
     worktreeId: normalizeOptionalString(input.body.worktreeId),
     agentId: normalizeOptionalString(input.body.agentId),
   };

@@ -12,7 +12,7 @@ import {
 } from "@/lib/interactive-runs";
 import { ACTIVE_SANDBOX_STATUSES } from "@/lib/sandbox/statuses";
 import type { AiCall } from "@/lib/types";
-import type { ExternalAgentRunRow, MogplexApiRunHarness } from "./runs-types";
+import type { ExternalAgentRunRow, NormalizedStartRequest } from "./runs-types";
 import { loadOwnedWorktree } from "@/lib/worktrees/store";
 
 async function getSupabaseAdmin() {
@@ -30,21 +30,6 @@ type OwnedRepoForRun = {
 type ActiveSandboxForRun = {
   id: string;
   sandbox_id: string | null;
-};
-
-export type NormalizedStartRequest = {
-  repoId: string;
-  prompt: string;
-  harness: MogplexApiRunHarness;
-  baseBranch: string;
-  workingBranch: string;
-  createBranch: boolean;
-  rootDirectory: string | null;
-  conversationId: string | null;
-  workspaceSessionId: string | null;
-  mode: string | null;
-  worktreeId: string | null;
-  agentId: string | null;
 };
 
 export type InsertExternalAgentRunInput = {

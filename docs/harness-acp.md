@@ -42,7 +42,11 @@ delivery), and launches `node .mogplex/acp-bridge.mjs <run file>` under the same
   differently" option and sends the decline as the next message, so the run
   continues the way `approval_policy="never"` did.
 - **Modes.** SAFE, AUTO, and YOLO map to codex-acp's `read-only`,
-  `workspace-write`, and `agent-full-access` modes.
+  `workspace-write`, and `agent-full-access` modes. SAFE keeps the harness from
+  changing the checkout itself; it does not screen MCP tools, which run in
+  every mode for Codex and Claude Code alike. A connection or Mogplex tool that
+  writes (a GitHub issue, a memory, a stdio server with filesystem access) can
+  still change things in SAFE.
 
 ## Credentials
 

@@ -31,12 +31,12 @@ import {
   buildRunMetadata,
   normalizeOptionalString,
   normalizeStartRequest,
-  type NormalizedStartRequest,
+  hashRequest,
 } from "./runs-normalize";
-import { hashRequest } from "./runs-normalize";
 import {
   MogplexApiRunError,
   type ExternalAgentRunRow,
+  type NormalizedStartRequest,
   type MogplexApiRunDetail,
 } from "./runs-types";
 
@@ -185,6 +185,7 @@ export function presentMogplexApiRun(row: ExternalAgentRunRow) {
     },
     rootDirectory: row.root_directory,
     agentId: row.agent_id ?? null,
+    mode: row.mode ?? null,
     eventsUrl: `/api/v1/mogplex/runs/${row.id}/events`,
     cancelUrl: `/api/v1/mogplex/runs/${row.id}/cancel`,
     createdAt: row.created_at,

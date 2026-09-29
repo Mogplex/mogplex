@@ -12,6 +12,31 @@ export const MOGPLEX_API_RUN_HARNESSES = [
 ] as const;
 export type MogplexApiRunHarness = (typeof MOGPLEX_API_RUN_HARNESSES)[number];
 
+/** Execution modes a Codex or Claude Code run accepts. */
+export const MOGPLEX_API_RUN_MODES = ["SAFE", "AUTO", "YOLO"] as const;
+export type MogplexApiRunMode = (typeof MOGPLEX_API_RUN_MODES)[number];
+
+/**
+ * Orchestration modes that released Mogplex CLIs send under the same `mode`
+ * key: `StartRunCommand.mode` in mogplex-cli's packages/tui/src/contracts/
+ * commands.ts, checked against v0.3.11. The harness runs them as AUTO. They are
+ * stored unchanged, as before modes were validated, so those clients and their
+ * idempotent replays keep working. Not documented and
+ * not offered to new callers. A mode the CLI adds later is refused until it is
+ * listed here.
+ */
+export const LEGACY_CLI_RUN_MODES = [
+  "single",
+  "multi_agent",
+  "council",
+  "review",
+  "test",
+  "repair",
+] as const;
+export type LegacyCliRunMode = (typeof LEGACY_CLI_RUN_MODES)[number];
+/** A mode that passed validation: a harness mode, or a released CLI's. */
+export type AcceptedRunMode = MogplexApiRunMode | LegacyCliRunMode;
+
 export const MOGPLEX_API_RUN_STATUSES = [
   "pending",
   "streaming",
@@ -38,6 +63,22 @@ export type StartMogplexApiRunRequest = {
   worktreeId?: unknown;
   /** Roster agent id or `preset:<NAME>` whose instructions shape the run. */
   agentId?: unknown;
+};
+
+/** A start request after validation, shared by the normalizer and the store. */
+export type NormalizedStartRequest = {
+  repoId: string;
+  prompt: string;
+  harness: MogplexApiRunHarness;
+  baseBranch: string;
+  workingBranch: string;
+  createBranch: boolean;
+  rootDirectory: string | null;
+  conversationId: string | null;
+  workspaceSessionId: string | null;
+  mode: AcceptedRunMode | null;
+  worktreeId: string | null;
+  agentId: string | null;
 };
 
 export type ExternalAgentRunRow = {
@@ -91,6 +132,8 @@ export type MogplexApiRunDetail = {
   };
   rootDirectory: string | null;
   agentId: string | null;
+  /** The execution mode the run was started with, or null for the default. */
+  mode: string | null;
   eventsUrl: string;
   cancelUrl: string;
   createdAt: string;
