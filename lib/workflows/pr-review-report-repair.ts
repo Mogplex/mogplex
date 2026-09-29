@@ -14,7 +14,7 @@ export const PR_REVIEW_REPORT_REPAIR_PROMPT =
 
 /** Asks for the findings a report claimed and then dropped. */
 export const PR_REVIEW_DROPPED_FINDINGS_PROMPT =
-  "Your review said it found issues, but no report you filed lists them, so the pull request has no verdict. Call reportReview now with every issue from the review you just did as an entry in findings, each with severity, title, body, and path; non-blocking ones are severity suggestion and can go with hasIssues=false. Do not start a new review and do not call any other tool.";
+  "Your review said it found issues, but no report you filed lists them, so the pull request has no verdict. Call reportReview now with every issue from the review you just did as an entry in findings, each with severity, title, body, and path; non-blocking ones are severity suggestion and can go with hasIssues=false. If you are sure there are no issues after all, report that, and the review will be published as incomplete. Do not start a new review and do not call any other tool.";
 
 const REPAIR_PROMPTS: Record<
   Exclude<ReviewReportState["kind"], "filed">,

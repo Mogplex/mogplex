@@ -120,7 +120,11 @@ export async function reviseFlaggedReview(
   }
 }
 
-/** Asks for a missing report, then has the reviewer fix what the format check flags. */
+/**
+ * Asks for a missing report, then has the reviewer fix what the format check
+ * flags. Both follow-ups continue the review's own transcript; a repair turn
+ * is not in it, so the revision request quotes the report the reviewer filed.
+ */
 export async function finishPrReview(
   input: ReviewerFollowUp & { judge: ReviewFormatJudge }
 ): Promise<AutomationAgentResult> {

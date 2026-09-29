@@ -57,8 +57,11 @@ export const defaultAutomationAgentDeps: AutomationAgentDeps = {
   waitStore: supabaseWaitStore,
   loadApprovalSpentWaitMs: loadToolApprovalSpentWaitMs,
   resolveSkills: resolveAutomationSkills,
+  // A flow run carries its job run id in metadata; a standalone review's is
+  // not in its context, and its rows are found by repo, PR, and time.
   judgeReviewFormat: (draft, context) =>
     findReviewFormatProblems(draft, prReviewDecisionScope(context, null), {
+      job_run_id: context.metadata.flow_job_run_id ?? null,
       pr_number: context.metadata.pr_number ?? null,
       stage: "reviewer_draft",
     }),

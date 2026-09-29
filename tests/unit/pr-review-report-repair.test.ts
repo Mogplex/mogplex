@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { AutomationAgentDeps } from "../../lib/workflows/automation-job-agent-runners-shared";
 import test from "node:test";
 import {
   loadAutomationJobWorkflowModule,
@@ -76,9 +77,7 @@ const FILED_REPORT = {
 
 async function runReview(
   replies: Array<unknown | Error>,
-  judgeReviewFormat?: (draft: {
-    reviewOutcome: { summary: string };
-  }) => Promise<readonly string[]>
+  judgeReviewFormat?: AutomationAgentDeps["judgeReviewFormat"]
 ) {
   const { createAutomationAgentRunner } =
     await loadAutomationJobWorkflowModule();
@@ -88,9 +87,7 @@ async function runReview(
   const mockedGithubFetch = mockGithubPullRequestFetch([42]);
   try {
     const runAutomationAgent = createAutomationAgentRunner({
-      ...(judgeReviewFormat
-        ? { judgeReviewFormat: judgeReviewFormat as never }
-        : {}),
+      ...(judgeReviewFormat ? { judgeReviewFormat } : {}),
       generateText: async (input) => {
         calls.push(input as unknown as Captured);
         const reply = replies[calls.length - 1];
