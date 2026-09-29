@@ -12,6 +12,9 @@ export const MOGPLEX_API_RUN_HARNESSES = [
 ] as const;
 export type MogplexApiRunHarness = (typeof MOGPLEX_API_RUN_HARNESSES)[number];
 
+/** Execution modes a Codex or Claude Code run accepts. */
+export const MOGPLEX_API_RUN_MODES = ["SAFE", "AUTO", "YOLO"] as const;
+
 export const MOGPLEX_API_RUN_STATUSES = [
   "pending",
   "streaming",

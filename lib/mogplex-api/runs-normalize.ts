@@ -15,6 +15,7 @@ import type { ApiKeyAuth } from "@/lib/auth/api-key";
 import {
   MogplexApiRunError,
   MOGPLEX_API_RUN_HARNESSES,
+  MOGPLEX_API_RUN_MODES,
   type MogplexApiRunHarness,
   type StartMogplexApiRunRequest,
 } from "./runs-types";
@@ -107,15 +108,23 @@ export function hashRequest(value: unknown) {
   return createHash("sha256").update(stableStringify(value)).digest("hex");
 }
 
-const RUN_MODES = new Set(["SAFE", "AUTO", "YOLO"]);
+const RUN_MODES: ReadonlySet<string> = new Set(MOGPLEX_API_RUN_MODES);
+
+/** Whether the request names a mode at all, whatever its type. */
+function hasRunMode(value: unknown) {
+  if (value === undefined || value === null) return false;
+  return typeof value !== "string" || value.trim() !== "";
+}
 
 /**
- * A harness execution mode, or null for the default. An unknown mode is an
- * error, never AUTO: a typo for SAFE must not start a more permissive run.
+ * A harness execution mode, or null for the default. An unknown mode, or one
+ * that is not a string, is an error, never AUTO: a typo for SAFE must not
+ * start a more permissive run.
  */
 function normalizeRunMode(value: unknown): string | null {
-  const mode = normalizeOptionalString(value)?.toUpperCase() ?? null;
-  if (mode === null || RUN_MODES.has(mode)) return mode;
+  if (!hasRunMode(value)) return null;
+  const mode = typeof value === "string" ? value.trim().toUpperCase() : null;
+  if (mode !== null && RUN_MODES.has(mode)) return mode;
   throw new MogplexApiRunError(
     "BAD_REQUEST",
     "mode must be SAFE, AUTO, or YOLO",
@@ -142,7 +151,7 @@ export function normalizeStartRequest(input: {
   }
 
   const harness = assertValidHarness(input.body.harness);
-  if (harness === "mogplex" && normalizeOptionalString(input.body.mode)) {
+  if (harness === "mogplex" && hasRunMode(input.body.mode)) {
     throw new MogplexApiRunError(
       "BAD_REQUEST",
       "CLI execution modes are not supported by the Mogplex harness",

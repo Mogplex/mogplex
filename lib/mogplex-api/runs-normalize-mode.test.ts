@@ -30,4 +30,20 @@ describe("run mode normalization", () => {
       "mode must be SAFE, AUTO, or YOLO"
     );
   });
+
+  it("should refuse a mode that is not a string", () => {
+    for (const mode of [0, true, ["SAFE"], { mode: "SAFE" }]) {
+      expect(() => normalize({ mode })).toThrow(
+        "mode must be SAFE, AUTO, or YOLO"
+      );
+    }
+  });
+
+  it("should refuse any mode, of any type, for the Mogplex harness", () => {
+    for (const mode of ["SAFE", 0, ["SAFE"]]) {
+      expect(() =>
+        normalize({ harness: "mogplex", createBranch: true, mode })
+      ).toThrow("CLI execution modes");
+    }
+  });
 });

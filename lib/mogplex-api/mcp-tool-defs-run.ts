@@ -1,5 +1,6 @@
 import type { McpToolDefinition } from "./mcp-types";
 import { objectSchema, runIdProperty } from "./mcp-schemas";
+import { MOGPLEX_API_RUN_MODES } from "./runs-types";
 
 /**
  * Tool definitions for Mogplex external agent runs.
@@ -52,7 +53,7 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
         },
         mode: {
           type: "string",
-          enum: ["SAFE", "AUTO", "YOLO"],
+          enum: [...MOGPLEX_API_RUN_MODES],
           description:
             "Codex and Claude Code only. SAFE: the harness does not change the checkout (Claude Code plans, Codex runs read-only), but MCP connection and Mogplex tools stay callable and can change other systems. AUTO (default): edits files and runs commands in the sandbox. YOLO: skips every permission check.",
         },
