@@ -198,6 +198,36 @@ describe("reviseFlaggedReview", () => {
     expect(result).toBe(draft);
   });
 
+  it("should keep the draft when the revised report is rejected", async () => {
+    const { judge } = judgeFlagging(/detailed/);
+    const { generate } = reviewer([
+      {
+        text: "",
+        steps: [
+          {
+            toolCalls: [
+              {
+                toolName: "reportReview",
+                input: { hasIssues: true, summary: "Three suggestions." },
+                invalid: true,
+              },
+            ],
+          },
+        ],
+        usage: null,
+      },
+    ]);
+
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: danglingDraft,
+      generate,
+      judge,
+    });
+
+    expect(result).toBe(danglingDraft);
+  });
+
   it("should keep the draft when the reviewer cannot be asked or the check fails", async () => {
     const { judge } = judgeFlagging(/detailed/);
     const failing = reviewer([new Error("model unavailable")]);
