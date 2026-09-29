@@ -211,7 +211,7 @@ test("runHarness accepts a full auth env payload for gateway-backed execution", 
   assert.equal(detachedCall.args?.includes("gateway-key"), false);
   assert.ok(
     detachedCall.args?.includes(
-      'mcp_servers.mogplex_research.bearer_token_env_var="MOGPLEX_RESEARCH_TOKEN"'
+      'mcp_servers.mogplex.bearer_token_env_var="MOGPLEX_RESEARCH_TOKEN"'
     )
   );
   assert.equal(

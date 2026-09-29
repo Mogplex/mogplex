@@ -243,7 +243,7 @@ export type InjectClaudeMcpConfigResult =
       mcpConfigPath: string;
       serverCount: number;
       serverNames: string[];
-      researchServerName?: string;
+      mogplexServerName?: string;
     }
   | { ok: false; error: string };
 
@@ -277,17 +277,17 @@ export async function injectClaudeMcpConfig(
       opts.resolveCredential,
       { userId: opts.userId }
     );
-    let researchServerName: string | undefined;
+    let mogplexServerName: string | undefined;
     if (
       opts.researchEnv?.MOGPLEX_RESEARCH_TOKEN &&
       opts.researchEnv.MOGPLEX_RESEARCH_MCP_URL
     ) {
       const name = uniqueKey(
-        "mogplex_research",
+        "mogplex",
         new Set(Object.keys(mcpConfig.mcpServers)),
         "platform"
       );
-      researchServerName = name;
+      mogplexServerName = name;
       mcpConfig.mcpServers[name] = {
         type: "http",
         url: opts.researchEnv.MOGPLEX_RESEARCH_MCP_URL,
@@ -307,7 +307,7 @@ export async function injectClaudeMcpConfig(
       mcpConfigPath,
       serverCount: serverNames.length,
       serverNames,
-      researchServerName,
+      mogplexServerName,
     };
   } catch (err) {
     return {

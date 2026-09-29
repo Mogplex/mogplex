@@ -75,7 +75,7 @@ test("sandbox environment and Claude MCP reuse one research credential across se
       );
       const config = files.get(".mogplex/mcp.json")?.toString();
       assert.ok(config);
-      const server = JSON.parse(config).mcpServers.mogplex_research;
+      const server = JSON.parse(config).mcpServers.mogplex;
       assert.equal(server.headers.Authorization, `Bearer ${token}`);
       assert.equal(server.url, runtimeEnv.MOGPLEX_RESEARCH_MCP_URL);
       assert.equal(
@@ -100,8 +100,8 @@ test("Codex gets the MCP config through ACP, and none on the CLI path", async ()
         ok: true as const,
         mcpConfigPath: ".mogplex/mcp.json",
         serverCount: 2,
-        serverNames: ["linear", "mogplex_research"],
-        researchServerName: "mogplex_research",
+        serverNames: ["linear", "mogplex"],
+        mogplexServerName: "mogplex",
       };
     },
     getResolvedConnections: async () => [],
@@ -117,7 +117,8 @@ test("Codex gets the MCP config through ACP, and none on the CLI path", async ()
     await setupMcpConfig(deps, sandbox, codex, {}, HARNESSES.codex.acp ?? null),
     {
       mcpConfigPath: ".mogplex/mcp.json",
-      researchServerName: "mogplex_research",
+      mcpServerNames: ["linear", "mogplex"],
+      mogplexServerName: "mogplex",
     }
   );
   assert.equal(injections, 1);

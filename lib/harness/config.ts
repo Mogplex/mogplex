@@ -34,7 +34,8 @@ export type HarnessConfig = {
       resumeSessionId?: string | null;
       mode?: HarnessExecutionMode;
       mcpConfigPath?: string;
-      researchServerName?: string;
+      mcpServerNames?: string[];
+      mogplexServerName?: string;
     }
   ) => { cmd: string; args: string[] };
   timeoutMs: number;
@@ -77,7 +78,10 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
               ]
             : ["-p", prompt, "--verbose", "--output-format", "stream-json"]),
         ...mcpArgs,
-        ...buildClaudePermissionArgs(opts?.mode, opts?.researchServerName),
+        ...buildClaudePermissionArgs(opts?.mode, {
+          mcpServerNames: opts?.mcpServerNames,
+          mogplexServerName: opts?.mogplexServerName,
+        }),
       ];
       return { cmd: "claude", args };
     },

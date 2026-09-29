@@ -1,4 +1,5 @@
-import { createResearchMcpPost } from "@/lib/harness/research-mcp";
+import { createMogplexMcpPost } from "@/lib/harness/mogplex-mcp";
+import { harnessToolRunFromCall } from "@/lib/harness/mogplex-tools";
 import { loadOwnedAiCall } from "@/lib/interactive-runs";
 import { isActiveResearchRun } from "@/lib/harness/research-auth";
 import {
@@ -7,15 +8,17 @@ import {
 } from "@/lib/team-capabilities";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Connection and GitHub tools run here for the harness, not only search.
+export const maxDuration = 300;
 
-export const POST = createResearchMcpPost({
+export const POST = createMogplexMcpPost({
   async authorizeRun(claims) {
-    const run = await loadOwnedAiCall(claims.userId, claims.aiCallId);
-    if (!isActiveResearchRun(run, claims)) return null;
-    const teamId = run.metadata?.product_team_id;
-    return typeof teamId === "string"
-      ? resolveMemberCapabilities(claims.userId, teamId)
+    const call = await loadOwnedAiCall(claims.userId, claims.aiCallId);
+    if (!isActiveResearchRun(call, claims)) return null;
+    const run = harnessToolRunFromCall(claims, call);
+    const capabilities = run.teamId
+      ? await resolveMemberCapabilities(claims.userId, run.teamId)
       : ALL_CAPABILITIES;
+    return { run, capabilities };
   },
 });
