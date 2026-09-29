@@ -18,9 +18,12 @@ export type MogplexApiRunMode = (typeof MOGPLEX_API_RUN_MODES)[number];
 
 /**
  * Orchestration modes that released Mogplex CLIs send under the same `mode`
- * key (`mogplex-cli` StartRunCommand). The harness runs them as AUTO. They are
+ * key: `StartRunCommand.mode` in mogplex-cli's packages/tui/src/contracts/
+ * commands.ts, checked against v0.3.11. The harness runs them as AUTO. They are
  * stored unchanged, as before modes were validated, so those clients and their
- * idempotent replays keep working. Not documented and not offered to new callers.
+ * idempotent replays keep working. Not documented and
+ * not offered to new callers. A mode the CLI adds later is refused until it is
+ * listed here.
  */
 export const LEGACY_CLI_RUN_MODES = [
   "single",

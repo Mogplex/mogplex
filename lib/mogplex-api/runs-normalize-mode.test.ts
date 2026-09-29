@@ -33,6 +33,12 @@ describe("run mode normalization", () => {
     }
   });
 
+  it("should truncate a rejected mode by character, not by code unit", () => {
+    expect(() => normalize({ mode: "🙂".repeat(50) })).toThrow(
+      `${MODE_ERROR} (got "${"🙂".repeat(40)}…")`
+    );
+  });
+
   it("should leave the mode unset when none is given", () => {
     expect(normalize({}).mode).toBeNull();
     expect(normalize({ mode: "  " }).mode).toBeNull();
@@ -51,7 +57,7 @@ describe("run mode normalization", () => {
 
   it("should not echo more than a short prefix of a rejected mode", () => {
     expect(() => normalize({ mode: "x".repeat(500) })).toThrow(
-      `${MODE_ERROR} (got "${"x".repeat(39)}…)`
+      `${MODE_ERROR} (got "${"x".repeat(40)}…")`
     );
   });
 

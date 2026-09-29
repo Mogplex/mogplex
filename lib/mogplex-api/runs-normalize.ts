@@ -112,8 +112,12 @@ function isLegacyCliRunMode(value: string): value is LegacyCliRunMode {
 
 /** The rejected mode as the 400 names it, bounded so a large body is not echoed. */
 function describeMode(value: unknown) {
-  const shown = JSON.stringify(value) ?? String(value);
-  return shown.length > 40 ? `${shown.slice(0, 40)}…` : shown;
+  const MAX_SHOWN = 40;
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  const chars = Array.from(text ?? String(value));
+  const shown =
+    chars.length > MAX_SHOWN ? `${chars.slice(0, MAX_SHOWN).join("")}…` : text;
+  return typeof value === "string" ? `"${shown}"` : shown;
 }
 
 /** Whether the request names a mode at all, whatever its type. */
@@ -126,7 +130,9 @@ function hasRunMode(value: unknown) {
  * A harness execution mode, or null for the default. An unknown mode, or one
  * that is not a string, is an error, never AUTO: a typo for SAFE must not
  * start a more permissive run. A released CLI's orchestration mode passes
- * through unchanged and runs as AUTO, as it always has.
+ * through unchanged and runs as AUTO, as it always has. Those are matched
+ * exactly, in the lower case the CLI sends, so the stored value stays one of
+ * `LEGACY_CLI_RUN_MODES`; SAFE, AUTO, and YOLO are matched in any case.
  */
 function normalizeRunMode(value: unknown): AcceptedRunMode | null {
   if (!hasRunMode(value)) return null;
