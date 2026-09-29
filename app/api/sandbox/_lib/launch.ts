@@ -7,13 +7,14 @@ import {
 } from "@/lib/vercel/target-resolution";
 import { buildLimitResponse, releaseLimitClaim } from "@/lib/request-limits";
 import { requestsSandboxReadinessWait } from "@/lib/sandbox/readiness-contract";
+import { isBootingSandboxStatus } from "@/lib/sandbox/statuses";
 import {
   buildSandboxName,
   buildSandboxReplacementName,
 } from "@/lib/sandbox/sandbox-name";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { SANDBOX_STREAM_SELECT } from "./constants";
-import { resolveLaunchRootDirectory } from "./utils";
+import { existingSandboxAnswer, resolveLaunchRootDirectory } from "./utils";
 import {
   resolveSandboxCreateContextOrResponse,
   loadSandboxLaunchRepoAccess,
@@ -185,11 +186,12 @@ export async function maybeReturnExistingSandboxResponse(
     }
   }
 
-  if (existingState.kind === "running") {
+  const answer = existingSandboxAnswer(existingState.kind, existing.status);
+  if (answer === "return") {
     return NextResponse.json({ sandbox: toSandboxClientRecord(existing) });
   }
 
-  if (existingState.kind === "pending") {
+  if (answer === "wait") {
     return requestsSandboxReadinessWait(request.headers)
       ? buildPendingSandboxWaitStreamResponse({
           record: existing,
@@ -352,8 +354,7 @@ export function buildConcurrentSandboxLaunchResponse(input: {
   userId: string;
   request: Request;
 }) {
-  return input.record.status === "creating" ||
-    input.record.status === "installing"
+  return isBootingSandboxStatus(input.record.status)
     ? buildPendingSandboxWaitStreamResponse({
         record: input.record,
         userId: input.userId,

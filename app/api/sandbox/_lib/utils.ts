@@ -3,6 +3,8 @@ import { isValidSandboxRootDirectory } from "@/lib/sandbox/launch-config";
 import type { SandboxEvent } from "@/lib/sandbox/events";
 import type { ResolvedSandboxLaunchRequest } from "@/lib/sandbox/launch-config";
 import type { SandboxInstance, SandboxRepoRecord } from "./types";
+import { isBootingSandboxStatus } from "@/lib/sandbox/statuses";
+import type { ActiveSandboxStateResult } from "@/lib/sandbox/liveness";
 
 export function sseEncode(event: SandboxEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
@@ -94,4 +96,33 @@ export function resolveLaunchRootDirectory(input: {
     return input.repo.root_directory ?? null;
   }
   return input.request.rootDirectory;
+}
+
+/**
+ * Whether an existing record is handed back as is or waited on; null leaves it
+ * to the recovery branches. The VM is up as soon as it exists, but the record
+ * stays creating or installing until its boot (clone, branch push, installs)
+ * finishes, so a booting record is waited on like a pending one. Otherwise a
+ * caller's work races the boot's own commands in the same VM.
+ */
+export function existingSandboxAnswer(
+  kind: ActiveSandboxStateResult["kind"],
+  recordStatus: string
+): "return" | "wait" | null {
+  switch (kind) {
+    case "pending":
+      return "wait";
+    case "running":
+      return isBootingSandboxStatus(recordStatus) ? "wait" : "return";
+    case "cleanup_pending":
+    case "stale_pending":
+    case "stopped":
+    case "unresolvable":
+      return null;
+    default: {
+      // A new state must be decided here, not fall through to retirement.
+      const unhandled: never = kind;
+      return unhandled;
+    }
+  }
 }
