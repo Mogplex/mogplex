@@ -334,3 +334,29 @@ test("a reviewer that clears the review again without listing anything stays wit
   assert.equal(harness.source, "dropped_findings");
   assert.equal(verdictMissing, true);
 });
+
+test("a repair whose own report is rejected leaves the review without a verdict and is not asked again", async () => {
+  const rejectedRepair = {
+    text: "",
+    steps: [
+      makeStep({
+        toolCalls: [
+          {
+            toolName: "reportReview",
+            input: { hasIssues: true, summary: CLAIM },
+            invalid: true,
+          },
+        ],
+      }),
+    ],
+  };
+  const { calls, harness, verdictMissing } = await runReview([
+    DROPPED_FINDINGS,
+    rejectedRepair,
+    FILED_REPORT,
+  ]);
+
+  assert.equal(calls.length, 2);
+  assert.equal(harness.source, "dropped_findings");
+  assert.equal(verdictMissing, true);
+});

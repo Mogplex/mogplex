@@ -69,6 +69,29 @@ for (const name of ["mergePullRequest", "queuePullRequestForMerge"]) {
     assert.deepEqual(github.urls, []);
   });
 
+  test(`${name} refuses a review whose every issue report was rejected`, async () => {
+    const github = recordGithubRequests();
+    const tools = await buildTools(github.fetch);
+    assert.equal(
+      await fileReport(tools, { hasIssues: true, summary: CLAIM }),
+      false
+    );
+
+    const outcome = await toolOf(tools, name).execute({});
+
+    assert.equal(outcome.success, false);
+    assert.deepEqual(github.urls, []);
+  });
+
+  test(`${name} proceeds before any report when nothing claimed issues`, async () => {
+    const github = recordGithubRequests();
+    const tools = await buildTools(github.fetch);
+
+    await toolOf(tools, name).execute({});
+
+    assert.ok(github.urls.some((url) => url.endsWith("/pulls/42")));
+  });
+
   test(`${name} proceeds when the clean report lists its suggestions`, async () => {
     const github = recordGithubRequests();
     const tools = await buildTools(github.fetch);

@@ -86,8 +86,10 @@ export function buildPRReviewTools(config: {
       findings: z.array(reviewFindingSchema).max(20).optional(),
     })
     .superRefine((value, ctx) => {
-      // Runs for every report, including ones the schema rejects, which
-      // never reach `execute`.
+      // Runs for reports the schema rejects here, which never reach
+      // `execute`. Zod skips it for input missing a required field, so a
+      // malformed claim goes unseen; the published verdict does not depend
+      // on this, because readReviewReportState reads the raw tool calls.
       if (value.hasIssues) claimedIssues = true;
       if (value.hasIssues && (!value.findings || value.findings.length === 0)) {
         ctx.addIssue({
@@ -99,12 +101,12 @@ export function buildPRReviewTools(config: {
       }
     });
 
-  // A report that clears the review after an earlier one claimed issues has
-  // dropped them, so it cannot authorize a merge.
+  // Once a report has claimed issues, only an accepted report that lists
+  // findings can authorize a merge: none accepted means every claim was
+  // rejected, and one that clears the review has dropped them.
   const droppedFindingsRefusal = () =>
     claimedIssues &&
-    acceptedReport !== null &&
-    clearsReviewWithoutFindings(acceptedReport)
+    (acceptedReport === null || clearsReviewWithoutFindings(acceptedReport))
       ? {
           success: false as const,
           error:

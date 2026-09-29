@@ -20,12 +20,13 @@ export function clearsReviewWithoutFindings(
 /**
  * The reviewer's report as the pipeline should trust it. Only calls the SDK
  * accepted count as filed; a call whose input failed the schema was never
- * recorded. A report that clears the review after an earlier call said there
- * were issues has lost them: reviewers told that hasIssues=true needs
- * findings sometimes flip hasIssues to false instead of listing them, and
- * that report would otherwise publish as a clean verdict with its warnings
- * gone. An earlier report that listed findings and a later one that clears
- * them is treated the same way, since nothing says the findings were wrong.
+ * recorded. A report that clears the review when any call in the run,
+ * accepted or rejected, before or after it, said there were issues has lost
+ * them: reviewers told that hasIssues=true needs findings sometimes flip
+ * hasIssues to false instead of listing them, and that report would
+ * otherwise publish as a clean verdict with its warnings gone. A report that
+ * listed findings followed by one that clears them is treated the same way,
+ * since nothing says the findings were wrong.
  */
 export function readReviewReportState(
   steps: AutomationAgentReviewResult["steps"]
