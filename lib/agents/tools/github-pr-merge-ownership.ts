@@ -126,35 +126,70 @@ function botLogin(login: string) {
 
 type RulesetRule = {
   type?: string;
-  parameters?: { required_approving_review_count?: number };
+  parameters?: {
+    required_approving_review_count?: number;
+    require_code_owner_review?: boolean;
+    required_reviewers?: Array<{ minimum_approvals?: number }>;
+  };
 };
 
-/**
- * Whether an active ruleset on the branch requires an approving review.
- * Readable with read access; an unreadable answer counts as "not confirmed".
- */
-export async function rulesetRequiresReview(input: {
+const RULES_PER_PAGE = 100;
+/** Bounds the read against a misbehaving API, not a product limit. */
+const MAX_RULE_PAGES = 10;
+
+/** A pull request rule that makes a person approve before merging. */
+function requiresApproval(rule: RulesetRule) {
+  if (rule.type !== "pull_request") return false;
+  const parameters = rule.parameters ?? {};
+  return (
+    (parameters.required_approving_review_count ?? 0) > 0 ||
+    parameters.require_code_owner_review === true ||
+    (parameters.required_reviewers ?? []).some(
+      (reviewer) => (reviewer.minimum_approvals ?? 0) > 0
+    )
+  );
+}
+
+type RulesInput = {
   githubToken: string;
   owner: string;
   repo: string;
   branch: string;
   fetchImpl?: typeof fetch;
-}) {
+};
+
+/** One page of the branch's active rules, or null when it can't be read. */
+async function loadRulePage(input: RulesInput, page: number) {
   const doFetch = input.fetchImpl ?? fetch;
-  const res = await doFetch(
-    `https://api.github.com/repos/${input.owner}/${input.repo}/rules/branches/${encodeURIComponent(input.branch)}`,
-    { headers: githubHeaders(input.githubToken) }
-  );
-  if (!res.ok) return false;
-  const rules = (await res.json().catch(() => [])) as RulesetRule[];
-  return (
-    Array.isArray(rules) &&
-    rules.some(
-      (rule) =>
-        rule.type === "pull_request" &&
-        (rule.parameters?.required_approving_review_count ?? 0) > 0
-    )
-  );
+  const url = `https://api.github.com/repos/${input.owner}/${input.repo}/rules/branches/${encodeURIComponent(input.branch)}?per_page=${RULES_PER_PAGE}&page=${page}`;
+  try {
+    const res = await doFetch(url, {
+      headers: githubHeaders(input.githubToken),
+    });
+    if (!res.ok) return null;
+    const rules: unknown = await res.json();
+    return Array.isArray(rules) ? (rules as RulesetRule[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether an active ruleset on the branch requires a person's approval:
+ * an approval count, code-owner review, or named reviewers. GitHub returns
+ * only enforced rules here, readable with read access; an unreadable answer
+ * counts as "not confirmed". Ruleset bypass actors are invisible to readers,
+ * so a bypass granted to the app is outside this check, as it is for classic
+ * branch protection.
+ */
+export async function rulesetRequiresReview(input: RulesInput) {
+  for (let page = 1; page <= MAX_RULE_PAGES; page += 1) {
+    const rules = await loadRulePage(input, page);
+    if (!rules) return false;
+    if (rules.some(requiresApproval)) return true;
+    if (rules.length < RULES_PER_PAGE) return false;
+  }
+  return false;
 }
 
 type MergeAuthorLoaders = {

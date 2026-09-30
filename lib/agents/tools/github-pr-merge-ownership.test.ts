@@ -182,6 +182,53 @@ describe("rulesetRequiresReview", () => {
     ).resolves.toBe(false);
   });
 
+  it("should honor code-owner and named-reviewer requirements", async () => {
+    for (const parameters of [
+      { require_code_owner_review: true },
+      { required_reviewers: [{ minimum_approvals: 1 }] },
+    ]) {
+      await expect(
+        rulesetRequiresReview({
+          ...input,
+          fetchImpl: respond([{ type: "pull_request", parameters }]),
+        })
+      ).resolves.toBe(true);
+    }
+  });
+
+  it("should find a review requirement past the first page of rules", async () => {
+    const filler = Array.from({ length: 100 }, () => ({ type: "deletion" }));
+    const pages: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      pages.push(new URL(url).searchParams.get("page") ?? "");
+      return Response.json(
+        pages.length === 1
+          ? filler
+          : [
+              {
+                type: "pull_request",
+                parameters: { required_approving_review_count: 2 },
+              },
+            ]
+      );
+    }) as unknown as typeof fetch;
+
+    await expect(rulesetRequiresReview({ ...input, fetchImpl })).resolves.toBe(
+      true
+    );
+    expect(pages).toEqual(["1", "2"]);
+  });
+
+  it("should treat a network failure as no confirmed requirement", async () => {
+    const fetchImpl = (async () => {
+      throw new Error("socket hang up");
+    }) as unknown as typeof fetch;
+
+    await expect(rulesetRequiresReview({ ...input, fetchImpl })).resolves.toBe(
+      false
+    );
+  });
+
   it("should treat unreadable rules as no confirmed requirement", async () => {
     await expect(
       rulesetRequiresReview({ ...input, fetchImpl: respond({}, 404) })
