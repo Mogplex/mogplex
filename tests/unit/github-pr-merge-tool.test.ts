@@ -272,10 +272,19 @@ test("github_merge_pull_request audits an attempt on a repository without an ins
   ]);
 });
 
-test("github_merge_pull_request audits an attempt whose installation lookup fails", async () => {
-  assert.deepEqual(await auditedTeamMerge(mergeFetch([]), null), [
-    mergeAuditEvent("installation_lookup_failed"),
-  ]);
+test("github_merge_pull_request audits why an installation lookup failed", async () => {
+  const originalError = console.error;
+  console.error = () => undefined;
+  try {
+    assert.deepEqual(await auditedTeamMerge(mergeFetch([]), null), [
+      mergeAuditEvent(
+        "installation_lookup_failed",
+        "Failed to load GitHub installations: database unavailable"
+      ),
+    ]);
+  } finally {
+    console.error = originalError;
+  }
 });
 
 test("github_merge_pull_request logs a solo merge attempt instead of a team audit event", async () => {

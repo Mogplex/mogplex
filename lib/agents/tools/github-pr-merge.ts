@@ -182,14 +182,16 @@ export function createGithubPullRequestMergeTool(
           userId: options.userId,
           owner: target.owner,
         });
-      } catch {
+      } catch (error) {
+        console.error("[github-merge] installation lookup failed", error);
         await recordMergeAttempt(options, {
           ...attempt,
           decision: "installation_lookup_failed",
+          error: error instanceof Error ? error.message : String(error),
         });
         return {
           error:
-            "GitHub pull request merging is temporarily unavailable. Check the repository connection, then retry.",
+            "GitHub pull request merging is temporarily unavailable because Mogplex could not load its GitHub connection. Retry in a moment.",
         };
       }
       if (!githubToken) {

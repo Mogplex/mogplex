@@ -255,10 +255,11 @@ async function resolveStatusToken(input: {
       : {
           error: `GitHub pull request status is unavailable for ${input.target.owner}/${input.target.repo}. Connect that repository, then retry.`,
         };
-  } catch {
+  } catch (error) {
+    console.error("[github-pr-status] installation lookup failed", error);
     return {
       error:
-        "GitHub pull request status is temporarily unavailable. Check the repository connection, then retry.",
+        "GitHub pull request status is temporarily unavailable because Mogplex could not load its GitHub connection. Retry in a moment.",
     };
   }
 }
