@@ -26,7 +26,7 @@ type MergeInput = {
   fetchImpl?: typeof fetch;
 };
 
-function githubHeaders(token: string) {
+export function githubHeaders(token: string) {
   return {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",

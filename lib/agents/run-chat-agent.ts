@@ -51,6 +51,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export type RunChatAgentInput = ChatAgentContext & {
   messages: RunChatAgentMessage[];
+  /** The user's latest message; Slack run finalization reads it. */
   latestUserText: string;
   model?: string | null;
   systemSuffix?: string | null;

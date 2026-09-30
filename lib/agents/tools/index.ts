@@ -39,10 +39,6 @@ import {
   createGithubIssueUpdateTool,
 } from "./github-issue-mutation";
 import { createGithubPullRequestMergeTool } from "./github-pr-merge";
-import {
-  deriveGithubRequestMutationAuthorizations,
-  type GithubRequestMutationAuthorizations,
-} from "./github-mutation-authorization";
 import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { createSkillTools } from "./skills";
@@ -59,19 +55,19 @@ import type { RepoToolDefaults } from "./shared";
 export * from "./public";
 export { filterToolsByCapability, TOOL_CAPABILITY } from "./tool-capabilities";
 
-const EMPTY_GITHUB_REQUEST_AUTHORIZATIONS: GithubRequestMutationAuthorizations =
-  {
-    pullRequestMerge: null,
-  };
-
 /** Sandbox-backed reads are a bash-class capability, not a GitHub API one. */
 const SANDBOX_FILE_READ_TOOLS = new Set(["read_file", "list_files"]);
 
-function githubRequestAuthorizations(
-  value: GithubRequestMutationAuthorizations | undefined
-) {
-  return value ?? EMPTY_GITHUB_REQUEST_AUTHORIZATIONS;
-}
+/** The run these tools serve: execution transport and audit identity. */
+type StaticToolRunContext = {
+  sandboxExecution?: SandboxCommandExecution;
+  /** The team the run belongs to, so its checks follow the team's setting. */
+  teamId?: string | null;
+  /** The agent turn, for audit correlation. */
+  aiCallId?: string | null;
+  /** The external event (e.g. Slack) that started the turn, if any. */
+  requestId?: string | null;
+};
 
 export function buildStaticTools(
   sandboxId?: string,
@@ -88,20 +84,15 @@ export function buildStaticTools(
   capabilities: ReadonlySet<Capability> = ALL_CAPABILITIES,
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
   githubPrSearchOptions?: GithubPrSearchOptions,
-  githubRequestMutationAuthorizations?: GithubRequestMutationAuthorizations,
-  sandboxExecution?: SandboxCommandExecution,
-  /** The team the run belongs to, so its checks follow the team's setting. */
-  teamId?: string | null
+  runContext: StaticToolRunContext = {}
 ) {
+  const { sandboxExecution, teamId, aiCallId, requestId } = runContext;
   // Do not infer sandbox memory scope; buildTools supplies it explicitly.
   const memoryTools = userId
     ? createMemoryTools(userId, repoId, memoryContext ?? {})
     : {};
   // The user's own skills, narrowed by the repo the run is working in.
   const skillTools = userId ? createSkillTools({ userId, repoId }) : {};
-  const requestAuthorizations = githubRequestAuthorizations(
-    githubRequestMutationAuthorizations
-  );
   const all = {
     virtual_exec: virtualExecTool,
     web_fetch: webFetch,
@@ -160,7 +151,14 @@ export function buildStaticTools(
           }),
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,
-            authorization: requestAuthorizations.pullRequestMerge,
+            teamId,
+            aiCallId,
+            requestId,
+            contextRepo: {
+              id: repoId,
+              owner: repoDefaults?.owner,
+              repo: repoDefaults?.repo,
+            },
           }),
         }
       : {}),
@@ -335,6 +333,8 @@ export async function buildTools(opts: {
   repoBaseBranch?: string;
   workspaceSessionId?: string | null;
   conversationId?: string | null;
+  /** The agent turn these tools serve, for audit correlation. */
+  aiCallId?: string | null;
   /** Team scope, if the caller is acting inside a team. Null = solo. */
   teamId?: string | null;
   /**
@@ -347,8 +347,6 @@ export async function buildTools(opts: {
    * durably deduplicated within this scope.
    */
   toolExecutionIdempotencyKey?: string | null;
-  /** Current user-authored request, used only for pull request merge consent. */
-  latestUserText?: string | null;
   /**
    * Leave out MCP server connections that only run as MCP. A sandbox harness
    * starts those itself from `.mogplex/mcp.json`; it needs the tools that run
@@ -403,13 +401,12 @@ export async function buildTools(opts: {
       oauthToken: githubPrSearchOAuthToken,
       userId: opts.userId,
     },
-    deriveGithubRequestMutationAuthorizations({
-      userText: opts.latestUserText,
-      repoOwner: opts.repoOwner,
-      repoName: opts.repoName,
-    }),
-    opts.sandboxExecution,
-    opts.teamId ?? null
+    {
+      sandboxExecution: opts.sandboxExecution,
+      teamId: opts.teamId ?? null,
+      aiCallId: opts.aiCallId ?? null,
+      requestId: opts.toolExecutionIdempotencyKey ?? null,
+    }
   );
 
   const emptyCleanup = async () => undefined;

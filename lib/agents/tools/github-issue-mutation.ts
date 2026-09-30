@@ -70,10 +70,11 @@ async function resolveIssueMutationContext(input: {
       userId: input.userId,
       owner: target.owner,
     });
-  } catch {
+  } catch (error) {
+    console.error("[github-issue] installation lookup failed", error);
     return {
       error:
-        "GitHub issue changes are temporarily unavailable. Check the repository connection, then retry.",
+        "GitHub issue changes are temporarily unavailable because Mogplex could not load its GitHub connection. Retry in a moment.",
     };
   }
   if (!githubToken) {

@@ -31,11 +31,6 @@ export {
   createGithubIssueUpdateTool,
 } from "./github-issue-mutation";
 export { createGithubPullRequestMergeTool } from "./github-pr-merge";
-export {
-  deriveGithubRequestMutationAuthorizations,
-  type GithubPullRequestMergeAuthorization,
-  type GithubRequestMutationAuthorizations,
-} from "./github-mutation-authorization";
 export { createGithubPullRequestStatusTool } from "./github-pr-status";
 export { createMemoryTools, type MemoryToolContext } from "./memory";
 export { createSkillTools, type SkillToolContext } from "./skills";

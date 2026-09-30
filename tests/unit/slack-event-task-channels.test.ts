@@ -152,7 +152,11 @@ test("continues bound channel thread replies without a fresh app mention", async
     systemSuffix ?? "",
     /Resolve a short confirmation against the most recent concrete proposed action/
   );
-  assert.match(systemSuffix ?? "", /perform an issue edit or comment directly/);
+  assert.ok(
+    systemSuffix?.includes(
+      "perform an issue edit, comment, or pull request merge directly"
+    )
+  );
   assert.match(
     systemSuffix ?? "",
     /call start_repo_agent_run when the approved action is a code fix/

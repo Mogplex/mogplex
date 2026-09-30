@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveGithubRequestMutationAuthorizations } from "@/lib/agents/tools/github-mutation-authorization";
 import {
   createTestGithubAppPrivateKey,
   loadToolsModule,
@@ -40,47 +39,26 @@ test("shared issue tools execute contextual follow-ups without sentence-shaped g
               });
             },
             async () => {
-              for (const userText of [
-                "In the issue, make sure it includes the home page too",
-                "Explicit authorization granted",
-                "Update acme/widgets issue #42 to include the home page too",
-                "Update issue acme/widgets#42 to include the home page too",
-              ]) {
-                const tools = buildStaticTools(
-                  undefined,
-                  "user-1",
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  deriveGithubRequestMutationAuthorizations({ userText })
-                );
-                const result = await tools.github_update_issue!.execute!(
-                  {
-                    owner: "acme",
-                    repo: "widgets",
-                    number: 42,
-                    body: "Existing criteria\n- Include the home page.",
-                  },
-                  { toolCallId: "update", messages: [], context: undefined }
-                );
-                assert.equal((result as { ok?: boolean }).ok, true, userText);
-              }
+              const tools = buildStaticTools(undefined, "user-1");
+              const result = await tools.github_update_issue!.execute!(
+                {
+                  owner: "acme",
+                  repo: "widgets",
+                  number: 42,
+                  body: "Existing criteria\n- Include the home page.",
+                },
+                { toolCallId: "update", messages: [], context: undefined }
+              );
+              assert.equal((result as { ok?: boolean }).ok, true);
             }
           );
         }
       );
     }
   );
-  assert.deepEqual(
-    writes,
-    Array.from({ length: 4 }, () => ({
-      body: "Existing criteria\n- Include the home page.",
-    }))
-  );
+  assert.deepEqual(writes, [
+    { body: "Existing criteria\n- Include the home page." },
+  ]);
 });
 
 test("team capability restrictions still remove issue write tools", async () => {

@@ -75,7 +75,6 @@ export async function loadNativeRunContext(
     // This is the full repo agent; the Slack router intentionally hides bash.
     surface: "chat" as const,
     enableTools: true,
-    latestUserText: run.prompt,
     toolExecutionIdempotencyKey: run.ai_call_id,
   };
 }
