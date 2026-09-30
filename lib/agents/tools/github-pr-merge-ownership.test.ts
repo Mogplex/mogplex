@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   loadPullRequestOwnership,
   mergeAuthorBasis,
+  rulesetRequiresReview,
   type PullRequestOwnership,
 } from "./github-pr-merge-ownership";
 
@@ -22,12 +23,16 @@ function ownership(
     authorLogin: "mallory",
     authorIsBot: false,
     reviewDecision: null,
+    baseRefName: "main",
     url: "https://github.com/acme/widgets/pull/84",
     ...overrides,
   };
 }
 
-const userLogin = (login: string | null) => async () => login;
+const userLogin = (login: string | null, rulesetReview = false) => ({
+  userGithubLogin: async () => login,
+  rulesetRequiresReview: async () => rulesetReview,
+});
 
 describe("mergeAuthorBasis", () => {
   it("should allow a PR the Mogplex app opened", async () => {
@@ -66,6 +71,22 @@ describe("mergeAuthorBasis", () => {
     ).resolves.toBeNull();
   });
 
+  it("should match the app when GITHUB_APP_NAME carries the [bot] suffix", async () => {
+    process.env.GITHUB_APP_NAME = "mogplex[bot]";
+    await expect(
+      mergeAuthorBasis(
+        ownership({ authorLogin: "mogplex", authorIsBot: true }),
+        userLogin(null)
+      )
+    ).resolves.toBe("mogplex_author");
+  });
+
+  it("should defer someone else's PR to a review a ruleset requires", async () => {
+    await expect(
+      mergeAuthorBasis(ownership(), userLogin("charles", true))
+    ).resolves.toBe("human_review");
+  });
+
   it("should defer someone else's PR to a required human review", async () => {
     await expect(
       mergeAuthorBasis(
@@ -92,6 +113,7 @@ describe("loadPullRequestOwnership", () => {
             pullRequest: {
               url: "https://github.com/acme/widgets/pull/84",
               reviewDecision: "APPROVED",
+              baseRefName: "main",
               author: { __typename: "Bot", login: "mogplex" },
             },
           },
@@ -104,6 +126,7 @@ describe("loadPullRequestOwnership", () => {
       authorLogin: "mogplex",
       authorIsBot: true,
       reviewDecision: "APPROVED",
+      baseRefName: "main",
       url: "https://github.com/acme/widgets/pull/84",
     });
   });
@@ -118,5 +141,50 @@ describe("loadPullRequestOwnership", () => {
     await expect(
       loadPullRequestOwnership({ ...input, fetchImpl })
     ).rejects.toThrow("Could not resolve to a PullRequest");
+  });
+});
+
+describe("rulesetRequiresReview", () => {
+  const input = {
+    githubToken: "t",
+    owner: "acme",
+    repo: "widgets",
+    branch: "main",
+  };
+  const respond = (body: unknown, status = 200) =>
+    (async () => Response.json(body, { status })) as unknown as typeof fetch;
+
+  it("should see an approving-review requirement in the branch rules", async () => {
+    await expect(
+      rulesetRequiresReview({
+        ...input,
+        fetchImpl: respond([
+          {
+            type: "pull_request",
+            parameters: { required_approving_review_count: 1 },
+          },
+        ]),
+      })
+    ).resolves.toBe(true);
+  });
+
+  it("should not count a pull request rule that needs no approvals", async () => {
+    await expect(
+      rulesetRequiresReview({
+        ...input,
+        fetchImpl: respond([
+          {
+            type: "pull_request",
+            parameters: { required_approving_review_count: 0 },
+          },
+        ]),
+      })
+    ).resolves.toBe(false);
+  });
+
+  it("should treat unreadable rules as no confirmed requirement", async () => {
+    await expect(
+      rulesetRequiresReview({ ...input, fetchImpl: respond({}, 404) })
+    ).resolves.toBe(false);
   });
 });

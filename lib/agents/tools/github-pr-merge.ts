@@ -12,6 +12,7 @@ import {
 import {
   loadPullRequestOwnership,
   mergeAuthorBasis,
+  rulesetRequiresReview,
   type MergeAuthorBasis,
 } from "./github-pr-merge-ownership";
 
@@ -221,15 +222,19 @@ async function authorizeMergeAuthor(
   const pr = `${input.owner}/${input.repo}#${input.number}`;
   try {
     const ownership = await loadPullRequestOwnership(input);
-    const basis = await mergeAuthorBasis(ownership, loadUserGithubLogin);
+    const basis = await mergeAuthorBasis(ownership, {
+      userGithubLogin: loadUserGithubLogin,
+      rulesetRequiresReview: (branch) =>
+        rulesetRequiresReview({ ...input, branch }),
+    });
     if (basis) return { basis };
     const author = ownership.authorLogin ?? "someone else";
     const where = ownership.url ? ` at ${ownership.url}` : "";
     return {
-      error: `${pr} was opened by ${author}, and the repository does not require a human review, so Mogplex merges it only when you or Mogplex opened it. Merge it on GitHub${where}.`,
+      error: `${pr} was opened by ${author}, and Mogplex could not confirm the repository requires a human review, so it merges only pull requests you or Mogplex opened. Merge it on GitHub${where}.`,
       audit: {
         decision: "needs_user_merge",
-        error: `author ${author} without a required review`,
+        error: `author ${author} without a confirmed review requirement`,
       },
     };
   } catch (error) {
@@ -362,7 +367,7 @@ export function createGithubPullRequestMergeTool(
       );
       if ("error" in author) {
         await recordMergeAttempt(options, { ...attempt, ...author.audit });
-        return { ok: false, merged: false, queued: false, error: author.error };
+        return { error: author.error };
       }
       const result = await attemptMerge({
         ...attempt,
