@@ -12,7 +12,11 @@ type GithubPullRequestMergeOptions = {
   userId?: string | null;
   /** Team scope; merge attempts in a team land in its audit log. */
   teamId?: string | null;
-  /** The agent turn and context repo, so an audit row joins to its run. */
+  /**
+   * The agent turn and context repo, so an audit row joins to its run. Slack
+   * conversational turns record their ai_call after the run, so their rows
+   * join through `requestId` (the Slack event identity) instead.
+   */
   aiCallId?: string | null;
   repoId?: string | null;
   /** The external event (e.g. Slack) that started the turn, if any. */

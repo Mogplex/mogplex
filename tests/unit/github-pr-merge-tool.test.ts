@@ -17,19 +17,22 @@ const GITHUB_APP_ENV = {
   GITHUB_APP_PRIVATE_KEY: createTestGithubAppPrivateKey(),
 };
 
+/** `null` logins makes the installation lookup itself fail. */
 async function withInstallations(
-  logins: string[],
+  logins: string[] | null,
   callback: () => Promise<void>
 ) {
   await withEnv(GITHUB_APP_ENV, async () => {
     await withPatchedGithubInstallations(
-      {
-        data: logins.map((login) => ({
-          installation_id: 321,
-          account_login: login,
-        })),
-        error: null,
-      },
+      logins
+        ? {
+            data: logins.map((login) => ({
+              installation_id: 321,
+              account_login: login,
+            })),
+            error: null,
+          }
+        : { data: null, error: { message: "database unavailable" } },
       callback
     );
   });
@@ -182,7 +185,7 @@ type MergeExecute = (input: {
 /** Runs one team-scoped merge and returns the audit events it recorded. */
 async function auditedTeamMerge(
   fetchImpl: ReturnType<typeof mergeFetch>,
-  installedLogins = ["acme"]
+  installedLogins: string[] | null = ["acme"]
 ) {
   const events: RecordTeamAuditEventInput[] = [];
   await withInstallations(installedLogins, async () => {
@@ -256,4 +259,60 @@ test("github_merge_pull_request audits an attempt on a repository without an ins
   assert.deepEqual(await auditedTeamMerge(mergeFetch([]), []), [
     mergeAuditEvent("no_installation"),
   ]);
+});
+
+test("github_merge_pull_request audits an attempt whose installation lookup fails", async () => {
+  assert.deepEqual(await auditedTeamMerge(mergeFetch([]), null), [
+    mergeAuditEvent("installation_lookup_failed"),
+  ]);
+});
+
+test("github_merge_pull_request logs a solo merge attempt instead of a team audit event", async () => {
+  const logged: unknown[][] = [];
+  const auditEvents: unknown[] = [];
+  const originalInfo = console.info;
+  console.info = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    await withAcmeInstallation(async () => {
+      await withPatchedFetch(mergeFetch([]), async () => {
+        const { createGithubPullRequestMergeTool } = await loadToolsModule();
+        const tool = createGithubPullRequestMergeTool({
+          userId: "user-1",
+          requestId: "slack:T1:Ev1",
+          recordAuditEvent: async (event) => {
+            auditEvents.push(event);
+            return { ok: true };
+          },
+        }) as unknown as { execute: MergeExecute };
+        await tool.execute({
+          owner: "acme",
+          repo: "widgets",
+          number: 84,
+          expectedHeadSha: REVIEWED_HEAD_SHA,
+        });
+      });
+    });
+  } finally {
+    console.info = originalInfo;
+  }
+
+  assert.deepEqual(auditEvents, []);
+  assert.deepEqual(
+    logged.filter(([label]) => label === "[github-merge] attempt"),
+    [
+      [
+        "[github-merge] attempt",
+        {
+          userId: "user-1",
+          aiCallId: null,
+          requestId: "slack:T1:Ev1",
+          target: "acme/widgets#84",
+          decision: "merged",
+          head_sha: REVIEWED_HEAD_SHA,
+        },
+      ],
+    ]
+  );
 });
