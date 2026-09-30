@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { mergePullRequestIfSafe } from "@/lib/github-merge";
+import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
 import { defineTool } from "./shared";
 import {
   findInstallationToken,
@@ -9,7 +10,43 @@ import {
 
 type GithubPullRequestMergeOptions = {
   userId?: string | null;
+  /** Team scope; every merge attempt in a team lands in its audit log. */
+  teamId?: string | null;
+  recordAuditEvent?: typeof recordTeamAuditEvent;
 };
+
+type MergeAttempt = {
+  owner: string;
+  repo: string;
+  number: number;
+  expectedHeadSha: string;
+  merged: boolean;
+  queued: boolean;
+  error?: string;
+};
+
+function auditMergeAttempt(
+  options: GithubPullRequestMergeOptions,
+  attempt: MergeAttempt
+) {
+  if (!options.teamId || !options.userId) return;
+  deferTeamAuditEvent(options.recordAuditEvent ?? recordTeamAuditEvent, {
+    productTeamId: options.teamId,
+    actorUserId: options.userId,
+    action: "github.pull_request.merge",
+    decisionCode: attempt.merged
+      ? "merged"
+      : attempt.queued
+        ? "auto_merge_queued"
+        : "not_merged",
+    targetType: "github_pull_request",
+    targetId: `${attempt.owner}/${attempt.repo}#${attempt.number}`,
+    payload: {
+      head_sha: attempt.expectedHeadSha,
+      ...(attempt.error ? { error: attempt.error } : {}),
+    },
+  });
+}
 
 const githubPullRequestMergeParams = z
   .object({
@@ -39,6 +76,18 @@ function normalizePullRequestTarget(input: { owner: string; repo: string }) {
   return { owner: owner.value, repo: repo.value };
 }
 
+/**
+ * Squash-merges a pull request the user asked to merge.
+ *
+ * Consent comes from the conversation, the same as issue edits (#525): the
+ * tool never parses the user's wording, so "merge it" or a "yes" to a
+ * proposed merge works. The accepted residual risk is that a prompt-injected
+ * model could call it; the prompt rules treat PR, issue, file, and tool
+ * content as evidence, never authorization. What bounds that risk here is
+ * structural: the user's own GitHub installation, the exact head SHA, branch
+ * protection with auto-merge instead of bypass, team capability filtering,
+ * and a team audit event for every attempt.
+ */
 export function createGithubPullRequestMergeTool(
   options: GithubPullRequestMergeOptions = {}
 ) {
@@ -89,6 +138,13 @@ export function createGithubPullRequestMergeTool(
           commitTitle,
         });
         const ok = outcome.merged || outcome.queued === true;
+        auditMergeAttempt(options, {
+          ...target,
+          number,
+          expectedHeadSha,
+          merged: outcome.merged,
+          queued: outcome.queued === true,
+        });
         return {
           ok,
           repo: `${target.owner}/${target.repo}`,
@@ -99,16 +155,25 @@ export function createGithubPullRequestMergeTool(
           sha: outcome.sha ?? null,
         };
       } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "GitHub pull request merge failed.";
+        auditMergeAttempt(options, {
+          ...target,
+          number,
+          expectedHeadSha,
+          merged: false,
+          queued: false,
+          error: message,
+        });
         return {
           ok: false,
           repo: `${target.owner}/${target.repo}`,
           pullRequestNumber: number,
           merged: false,
           queued: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "GitHub pull request merge failed.",
+          error: message,
         };
       }
     },

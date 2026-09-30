@@ -181,7 +181,6 @@ export async function exercise(
             workspaceSessionId: null,
             surface: "chat",
             enableTools: true,
-            latestUserText: run.prompt,
             toolExecutionIdempotencyKey: call.id,
           };
         },

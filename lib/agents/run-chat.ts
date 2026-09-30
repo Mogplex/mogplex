@@ -68,8 +68,6 @@ export type ChatAgentContext = {
    * event handler retries the same turn.
    */
   toolExecutionIdempotencyKey?: string | null;
-  /** Latest user-authored text; never model- or tool-authored. */
-  latestUserText?: string | null;
   /**
    * Active team scope, if the request was made inside one. Solo turns leave
    * this null/undefined. Threaded into both buildTools (for capability

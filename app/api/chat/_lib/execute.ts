@@ -110,7 +110,6 @@ export async function executeChatRequest(input: {
         enableTools: input.body.enableTools,
         teamId,
         aiCallId: activeCall.id,
-        latestUserText,
       },
       resolvedModel: input.resolvedModel,
       uiMessages: modelMessages as Parameters<

@@ -141,6 +141,7 @@ export function buildStaticTools(
           }),
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,
+            teamId,
           }),
         }
       : {}),
