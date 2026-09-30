@@ -240,6 +240,24 @@ describe("rulesetRequiresReview", () => {
     warn.mockRestore();
   });
 
+  it("should encode every path segment of the rules URL", async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      urls.push(url);
+      return Response.json([]);
+    }) as unknown as typeof fetch;
+
+    await rulesetRequiresReview({
+      ...input,
+      owner: "acme/evil",
+      branch: "release/1.0",
+      fetchImpl,
+    });
+    expect(new URL(urls[0] ?? "").pathname).toBe(
+      "/repos/acme%2Fevil/widgets/rules/branches/release%2F1.0"
+    );
+  });
+
   it("should treat unreadable rules as no confirmed requirement", async () => {
     await expect(
       rulesetRequiresReview({ ...input, fetchImpl: respond({}, 404) })

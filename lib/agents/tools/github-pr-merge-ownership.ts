@@ -173,7 +173,10 @@ function unreadableRules(input: RulesInput, reason: string) {
 /** One page of the branch's active rules, or null when it can't be read. */
 async function loadRulePage(input: RulesInput, page: number) {
   const doFetch = input.fetchImpl ?? fetch;
-  const url = `https://api.github.com/repos/${input.owner}/${input.repo}/rules/branches/${encodeURIComponent(input.branch)}?per_page=${RULES_PER_PAGE}&page=${page}`;
+  const path = [input.owner, input.repo, "rules", "branches", input.branch]
+    .map(encodeURIComponent)
+    .join("/");
+  const url = `https://api.github.com/repos/${path}?per_page=${RULES_PER_PAGE}&page=${page}`;
   try {
     const res = await doFetch(url, {
       headers: githubHeaders(input.githubToken),
@@ -207,6 +210,7 @@ export async function rulesetRequiresReview(input: RulesInput) {
     if (rules.some(requiresApproval)) return true;
     if (rules.length < RULES_PER_PAGE) return false;
   }
+  unreadableRules(input, `more than ${MAX_RULE_PAGES} pages of rules`);
   return false;
 }
 
