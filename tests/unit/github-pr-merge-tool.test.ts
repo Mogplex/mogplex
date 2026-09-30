@@ -353,3 +353,39 @@ test("github_merge_pull_request audits an unparseable merge target", async () =>
   assert.equal(event?.decisionCode, "invalid_target");
   assert.equal(event?.targetId, "acme/evil/widgets#84");
 });
+
+test("github_merge_pull_request reports a merge audit row that could not be written", async () => {
+  const reported: unknown[] = [];
+  const originalError = console.error;
+  console.error = () => undefined;
+  try {
+    await withAcmeInstallation(async () => {
+      await withPatchedFetch(mergeFetch([]), async () => {
+        const { createGithubPullRequestMergeTool } = await loadToolsModule();
+        const tool = createGithubPullRequestMergeTool({
+          userId: "user-1",
+          teamId: "team-1",
+          recordAuditEvent: async () => ({ ok: false, error: "insert failed" }),
+          reportAuditFailure: (extra) => reported.push(extra),
+        }) as unknown as { execute: MergeExecute };
+        await tool.execute({
+          owner: "acme",
+          repo: "widgets",
+          number: 84,
+          expectedHeadSha: REVIEWED_HEAD_SHA,
+        });
+      });
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.deepEqual(reported, [
+    {
+      teamId: "team-1",
+      target: "acme/widgets#84",
+      decision: "merged",
+      error: "insert failed",
+    },
+  ]);
+});

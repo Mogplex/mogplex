@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { mergePullRequestIfSafe } from "@/lib/github-merge";
 import { recordTeamAuditEvent } from "@/lib/team-audit";
@@ -23,7 +24,16 @@ type GithubPullRequestMergeOptions = {
   /** The external event (e.g. Slack) that started the turn, if any. */
   requestId?: string | null;
   recordAuditEvent?: typeof recordTeamAuditEvent;
+  /** Surfaces a lost merge audit row; defaults to a Sentry warning. */
+  reportAuditFailure?: (extra: Record<string, unknown>) => void;
 };
+
+function reportAuditFailureToSentry(extra: Record<string, unknown>) {
+  Sentry.captureMessage("github merge audit event was not recorded", {
+    level: "warning",
+    extra,
+  });
+}
 
 type MergeDecision =
   | "merged"
@@ -82,8 +92,11 @@ async function recordMergeAttempt(
     return;
   }
   const record = options.recordAuditEvent ?? recordTeamAuditEvent;
+  const reportFailure =
+    options.reportAuditFailure ?? reportAuditFailureToSentry;
+  let failure: string | null;
   try {
-    await record({
+    const result = await record({
       productTeamId: options.teamId,
       actorUserId: options.userId,
       action: "github.pull_request.merge",
@@ -97,9 +110,18 @@ async function recordMergeAttempt(
       },
       payload,
     });
+    failure = result.ok ? null : result.error;
   } catch (error) {
-    console.error("[github-merge] failed to record merge audit event", error);
+    failure = error instanceof Error ? error.message : String(error);
   }
+  if (failure === null) return;
+  console.error("[github-merge] failed to record merge audit event", failure);
+  reportFailure({
+    teamId: options.teamId,
+    target: targetId,
+    decision: attempt.decision,
+    error: failure,
+  });
 }
 
 const githubPullRequestMergeParams = z
@@ -140,8 +162,11 @@ function normalizePullRequestTarget(input: { owner: string; repo: string }) {
  * content as evidence, never authorization. What bounds that risk here is
  * structural: the user's own GitHub installation, the exact head SHA, branch
  * protection with auto-merge instead of bypass, and team capability
- * filtering. Every authenticated attempt is recorded, including refusals
- * before GitHub is called and unparseable targets. An opt-in approval backstop is tracked in #546.
+ * filtering. On a repo without branch protection only the prompt rules stand
+ * in the way, since an attacker's PR exposes its own head SHA. Every
+ * authenticated attempt is recorded, including refusals before GitHub is
+ * called and unparseable targets. An opt-in approval backstop is tracked in
+ * #546.
  */
 export function createGithubPullRequestMergeTool(
   options: GithubPullRequestMergeOptions = {}
