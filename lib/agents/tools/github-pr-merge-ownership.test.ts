@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadPullRequestOwnership,
   mergeAuthorBasis,
@@ -186,6 +186,7 @@ describe("rulesetRequiresReview", () => {
     for (const parameters of [
       { require_code_owner_review: true },
       { required_reviewers: [{ minimum_approvals: 1 }] },
+      { require_last_push_approval: true },
     ]) {
       await expect(
         rulesetRequiresReview({
@@ -219,14 +220,24 @@ describe("rulesetRequiresReview", () => {
     expect(pages).toEqual(["1", "2"]);
   });
 
-  it("should treat a network failure as no confirmed requirement", async () => {
+  it("should treat a network failure as no confirmed requirement, and log it", async () => {
     const fetchImpl = (async () => {
       throw new Error("socket hang up");
     }) as unknown as typeof fetch;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     await expect(rulesetRequiresReview({ ...input, fetchImpl })).resolves.toBe(
       false
     );
+    expect(warn).toHaveBeenCalledWith(
+      "[github-merge] branch rules unreadable",
+      {
+        repo: "acme/widgets",
+        branch: "main",
+        reason: "socket hang up",
+      }
+    );
+    warn.mockRestore();
   });
 
   it("should treat unreadable rules as no confirmed requirement", async () => {

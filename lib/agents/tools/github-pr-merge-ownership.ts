@@ -129,6 +129,7 @@ type RulesetRule = {
   parameters?: {
     required_approving_review_count?: number;
     require_code_owner_review?: boolean;
+    require_last_push_approval?: boolean;
     required_reviewers?: Array<{ minimum_approvals?: number }>;
   };
 };
@@ -144,6 +145,7 @@ function requiresApproval(rule: RulesetRule) {
   return (
     (parameters.required_approving_review_count ?? 0) > 0 ||
     parameters.require_code_owner_review === true ||
+    parameters.require_last_push_approval === true ||
     (parameters.required_reviewers ?? []).some(
       (reviewer) => (reviewer.minimum_approvals ?? 0) > 0
     )
@@ -158,6 +160,16 @@ type RulesInput = {
   fetchImpl?: typeof fetch;
 };
 
+/** Logged so a transient read failure is told apart from no requirement. */
+function unreadableRules(input: RulesInput, reason: string) {
+  console.warn("[github-merge] branch rules unreadable", {
+    repo: `${input.owner}/${input.repo}`,
+    branch: input.branch,
+    reason,
+  });
+  return null;
+}
+
 /** One page of the branch's active rules, or null when it can't be read. */
 async function loadRulePage(input: RulesInput, page: number) {
   const doFetch = input.fetchImpl ?? fetch;
@@ -166,17 +178,23 @@ async function loadRulePage(input: RulesInput, page: number) {
     const res = await doFetch(url, {
       headers: githubHeaders(input.githubToken),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return unreadableRules(input, `HTTP ${res.status}`);
     const rules: unknown = await res.json();
-    return Array.isArray(rules) ? (rules as RulesetRule[]) : null;
-  } catch {
-    return null;
+    return Array.isArray(rules)
+      ? (rules as RulesetRule[])
+      : unreadableRules(input, "unexpected response body");
+  } catch (error) {
+    return unreadableRules(
+      input,
+      error instanceof Error ? error.message : String(error)
+    );
   }
 }
 
 /**
  * Whether an active ruleset on the branch requires a person's approval:
- * an approval count, code-owner review, or named reviewers. GitHub returns
+ * an approval count, code-owner review, named reviewers, or approval of the
+ * most recent push. GitHub returns
  * only enforced rules here, readable with read access; an unreadable answer
  * counts as "not confirmed". Ruleset bypass actors are invisible to readers,
  * so a bypass granted to the app is outside this check, as it is for classic
