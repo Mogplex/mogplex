@@ -151,7 +151,6 @@ function buildToolsInput(context: ChatAgentContext) {
     conversationId: context.conversationId ?? null,
     teamId: context.teamId ?? null,
     toolExecutionIdempotencyKey: context.toolExecutionIdempotencyKey ?? null,
-    latestUserText: context.latestUserText,
   };
 }
 

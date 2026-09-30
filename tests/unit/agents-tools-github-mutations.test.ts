@@ -293,7 +293,7 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
   });
 });
 
-test("github_merge_pull_request safely merges a PR in another installed repository", async () => {
+test("github_merge_pull_request merges a conversation-resolved PR without sentence-shaped consent", async () => {
   const calls: Array<{ method: string; path: string; body?: unknown }> = [];
 
   await withAcmeInstallation(async () => {
@@ -324,15 +324,11 @@ test("github_merge_pull_request safely merges a PR in another installed reposito
         });
       },
       async () => {
-        const { createGithubPullRequestMergeTool } = await loadToolsModule();
-        const tool = createGithubPullRequestMergeTool({
-          userId: "user-1",
-          authorization: {
-            owner: "acme",
-            repo: "widgets",
-            number: 84,
-          },
-        }) as unknown as {
+        // The target comes from the conversation (e.g. "merge it" after the
+        // PR was opened); the tool itself never parses the user's wording.
+        const { buildStaticTools } = await loadToolsModule();
+        const tool = buildStaticTools(undefined, "user-1")
+          .github_merge_pull_request as unknown as {
           execute: (input: {
             owner: string;
             repo: string;
@@ -379,11 +375,9 @@ test("github_merge_pull_request safely merges a PR in another installed reposito
   ]);
 });
 
-test("github_merge_pull_request rejects a model-selected target without request consent", async () => {
+test("github_merge_pull_request refuses to merge without an authenticated user", async () => {
   const { createGithubPullRequestMergeTool } = await loadToolsModule();
-  const tool = createGithubPullRequestMergeTool({
-    userId: "user-1",
-  }) as unknown as {
+  const tool = createGithubPullRequestMergeTool() as unknown as {
     execute: (input: {
       owner: string;
       repo: string;
@@ -398,5 +392,5 @@ test("github_merge_pull_request rejects a model-selected target without request 
     number: 84,
     expectedHeadSha: "4928f94e852191d761352294ae1eabfa34b7d0ab",
   });
-  assert.match(result.error ?? "", /not explicitly authorized/i);
+  assert.ok(result.error?.includes("not authenticated"), result.error);
 });

@@ -39,10 +39,6 @@ import {
   createGithubIssueUpdateTool,
 } from "./github-issue-mutation";
 import { createGithubPullRequestMergeTool } from "./github-pr-merge";
-import {
-  deriveGithubRequestMutationAuthorizations,
-  type GithubRequestMutationAuthorizations,
-} from "./github-mutation-authorization";
 import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { createSkillTools } from "./skills";
@@ -59,19 +55,8 @@ import type { RepoToolDefaults } from "./shared";
 export * from "./public";
 export { filterToolsByCapability, TOOL_CAPABILITY } from "./tool-capabilities";
 
-const EMPTY_GITHUB_REQUEST_AUTHORIZATIONS: GithubRequestMutationAuthorizations =
-  {
-    pullRequestMerge: null,
-  };
-
 /** Sandbox-backed reads are a bash-class capability, not a GitHub API one. */
 const SANDBOX_FILE_READ_TOOLS = new Set(["read_file", "list_files"]);
-
-function githubRequestAuthorizations(
-  value: GithubRequestMutationAuthorizations | undefined
-) {
-  return value ?? EMPTY_GITHUB_REQUEST_AUTHORIZATIONS;
-}
 
 export function buildStaticTools(
   sandboxId?: string,
@@ -88,7 +73,6 @@ export function buildStaticTools(
   capabilities: ReadonlySet<Capability> = ALL_CAPABILITIES,
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
   githubPrSearchOptions?: GithubPrSearchOptions,
-  githubRequestMutationAuthorizations?: GithubRequestMutationAuthorizations,
   sandboxExecution?: SandboxCommandExecution,
   /** The team the run belongs to, so its checks follow the team's setting. */
   teamId?: string | null
@@ -99,9 +83,6 @@ export function buildStaticTools(
     : {};
   // The user's own skills, narrowed by the repo the run is working in.
   const skillTools = userId ? createSkillTools({ userId, repoId }) : {};
-  const requestAuthorizations = githubRequestAuthorizations(
-    githubRequestMutationAuthorizations
-  );
   const all = {
     virtual_exec: virtualExecTool,
     web_fetch: webFetch,
@@ -160,7 +141,6 @@ export function buildStaticTools(
           }),
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,
-            authorization: requestAuthorizations.pullRequestMerge,
           }),
         }
       : {}),
@@ -347,8 +327,6 @@ export async function buildTools(opts: {
    * durably deduplicated within this scope.
    */
   toolExecutionIdempotencyKey?: string | null;
-  /** Current user-authored request, used only for pull request merge consent. */
-  latestUserText?: string | null;
   /**
    * Leave out MCP server connections that only run as MCP. A sandbox harness
    * starts those itself from `.mogplex/mcp.json`; it needs the tools that run
@@ -403,11 +381,6 @@ export async function buildTools(opts: {
       oauthToken: githubPrSearchOAuthToken,
       userId: opts.userId,
     },
-    deriveGithubRequestMutationAuthorizations({
-      userText: opts.latestUserText,
-      repoOwner: opts.repoOwner,
-      repoName: opts.repoName,
-    }),
     opts.sandboxExecution,
     opts.teamId ?? null
   );
