@@ -58,6 +58,17 @@ export { filterToolsByCapability, TOOL_CAPABILITY } from "./tool-capabilities";
 /** Sandbox-backed reads are a bash-class capability, not a GitHub API one. */
 const SANDBOX_FILE_READ_TOOLS = new Set(["read_file", "list_files"]);
 
+/** The run these tools serve: execution transport and audit identity. */
+type StaticToolRunContext = {
+  sandboxExecution?: SandboxCommandExecution;
+  /** The team the run belongs to, so its checks follow the team's setting. */
+  teamId?: string | null;
+  /** The agent turn, for audit correlation. */
+  aiCallId?: string | null;
+  /** The external event (e.g. Slack) that started the turn, if any. */
+  requestId?: string | null;
+};
+
 export function buildStaticTools(
   sandboxId?: string,
   userId?: string,
@@ -73,12 +84,9 @@ export function buildStaticTools(
   capabilities: ReadonlySet<Capability> = ALL_CAPABILITIES,
   onDenied?: (toolName: string, requiredCapability: Capability | null) => void,
   githubPrSearchOptions?: GithubPrSearchOptions,
-  sandboxExecution?: SandboxCommandExecution,
-  /** The team the run belongs to, so its checks follow the team's setting. */
-  teamId?: string | null,
-  /** The agent turn these tools serve, for audit correlation. */
-  aiCallId?: string | null
+  runContext: StaticToolRunContext = {}
 ) {
+  const { sandboxExecution, teamId, aiCallId, requestId } = runContext;
   // Do not infer sandbox memory scope; buildTools supplies it explicitly.
   const memoryTools = userId
     ? createMemoryTools(userId, repoId, memoryContext ?? {})
@@ -145,6 +153,7 @@ export function buildStaticTools(
             userId,
             teamId,
             aiCallId,
+            requestId,
             repoId,
           }),
         }
@@ -388,9 +397,12 @@ export async function buildTools(opts: {
       oauthToken: githubPrSearchOAuthToken,
       userId: opts.userId,
     },
-    opts.sandboxExecution,
-    opts.teamId ?? null,
-    opts.aiCallId ?? null
+    {
+      sandboxExecution: opts.sandboxExecution,
+      teamId: opts.teamId ?? null,
+      aiCallId: opts.aiCallId ?? null,
+      requestId: opts.toolExecutionIdempotencyKey ?? null,
+    }
   );
 
   const emptyCleanup = async () => undefined;

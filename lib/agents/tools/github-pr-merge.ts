@@ -15,6 +15,8 @@ type GithubPullRequestMergeOptions = {
   /** The agent turn and context repo, so an audit row joins to its run. */
   aiCallId?: string | null;
   repoId?: string | null;
+  /** The external event (e.g. Slack) that started the turn, if any. */
+  requestId?: string | null;
   recordAuditEvent?: typeof recordTeamAuditEvent;
 };
 
@@ -52,6 +54,7 @@ function recordMergeAttempt(
     console.info("[github-merge] attempt", {
       userId: options.userId,
       aiCallId: options.aiCallId ?? null,
+      requestId: options.requestId ?? null,
       target: targetId,
       decision: attempt.decision,
       ...payload,
@@ -68,6 +71,7 @@ function recordMergeAttempt(
     correlations: {
       aiCallId: options.aiCallId ?? null,
       repoId: options.repoId ?? null,
+      requestId: options.requestId ?? null,
     },
     payload,
   });

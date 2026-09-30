@@ -193,6 +193,7 @@ async function auditedTeamMerge(
         teamId: "team-1",
         aiCallId: "call-1",
         repoId: "repo-1",
+        requestId: "slack:T1:Ev1",
         recordAuditEvent: async (event) => {
           events.push(event);
           return { ok: true };
@@ -217,7 +218,11 @@ function mergeAuditEvent(decisionCode: string, error?: string) {
     decisionCode,
     targetType: "github_pull_request",
     targetId: "acme/widgets#84",
-    correlations: { aiCallId: "call-1", repoId: "repo-1" },
+    correlations: {
+      aiCallId: "call-1",
+      repoId: "repo-1",
+      requestId: "slack:T1:Ev1",
+    },
     payload: {
       head_sha: REVIEWED_HEAD_SHA,
       ...(error ? { error } : {}),
