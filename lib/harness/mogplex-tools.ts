@@ -76,6 +76,7 @@ export async function buildHarnessMogplexTools(
     repoBranch: row?.working_branch ?? undefined,
     repoBaseBranch: row?.base_branch ?? undefined,
     conversationId: run.conversationId,
+    aiCallId: run.aiCallId,
     teamId: run.teamId,
     capabilities,
     skipMcpServerConnections: true,

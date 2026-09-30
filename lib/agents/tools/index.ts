@@ -75,7 +75,9 @@ export function buildStaticTools(
   githubPrSearchOptions?: GithubPrSearchOptions,
   sandboxExecution?: SandboxCommandExecution,
   /** The team the run belongs to, so its checks follow the team's setting. */
-  teamId?: string | null
+  teamId?: string | null,
+  /** The agent turn these tools serve, for audit correlation. */
+  aiCallId?: string | null
 ) {
   // Do not infer sandbox memory scope; buildTools supplies it explicitly.
   const memoryTools = userId
@@ -142,6 +144,8 @@ export function buildStaticTools(
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,
             teamId,
+            aiCallId,
+            repoId,
           }),
         }
       : {}),
@@ -316,6 +320,8 @@ export async function buildTools(opts: {
   repoBaseBranch?: string;
   workspaceSessionId?: string | null;
   conversationId?: string | null;
+  /** The agent turn these tools serve, for audit correlation. */
+  aiCallId?: string | null;
   /** Team scope, if the caller is acting inside a team. Null = solo. */
   teamId?: string | null;
   /**
@@ -383,7 +389,8 @@ export async function buildTools(opts: {
       userId: opts.userId,
     },
     opts.sandboxExecution,
-    opts.teamId ?? null
+    opts.teamId ?? null,
+    opts.aiCallId ?? null
   );
 
   const emptyCleanup = async () => undefined;

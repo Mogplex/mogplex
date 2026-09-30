@@ -10,41 +10,66 @@ import {
 
 type GithubPullRequestMergeOptions = {
   userId?: string | null;
-  /** Team scope; every merge attempt in a team lands in its audit log. */
+  /** Team scope; merge attempts in a team land in its audit log. */
   teamId?: string | null;
+  /** The agent turn and context repo, so an audit row joins to its run. */
+  aiCallId?: string | null;
+  repoId?: string | null;
   recordAuditEvent?: typeof recordTeamAuditEvent;
 };
+
+type MergeDecision =
+  | "merged"
+  | "auto_merge_queued"
+  | "not_merged"
+  | "no_installation"
+  | "installation_lookup_failed";
 
 type MergeAttempt = {
   owner: string;
   repo: string;
   number: number;
   expectedHeadSha: string;
-  merged: boolean;
-  queued: boolean;
+  decision: MergeDecision;
   error?: string;
 };
 
-function auditMergeAttempt(
+/**
+ * Records an authenticated merge attempt, whether or not it reached GitHub.
+ * Team scope writes a team audit event; solo scope has no team audit log, so
+ * it gets a structured log line alongside the run's own tool-call record.
+ */
+function recordMergeAttempt(
   options: GithubPullRequestMergeOptions,
   attempt: MergeAttempt
 ) {
-  if (!options.teamId || !options.userId) return;
+  const targetId = `${attempt.owner}/${attempt.repo}#${attempt.number}`;
+  const payload = {
+    head_sha: attempt.expectedHeadSha,
+    ...(attempt.error ? { error: attempt.error } : {}),
+  };
+  if (!options.teamId) {
+    console.info("[github-merge] attempt", {
+      userId: options.userId,
+      aiCallId: options.aiCallId ?? null,
+      target: targetId,
+      decision: attempt.decision,
+      ...payload,
+    });
+    return;
+  }
   deferTeamAuditEvent(options.recordAuditEvent ?? recordTeamAuditEvent, {
     productTeamId: options.teamId,
     actorUserId: options.userId,
     action: "github.pull_request.merge",
-    decisionCode: attempt.merged
-      ? "merged"
-      : attempt.queued
-        ? "auto_merge_queued"
-        : "not_merged",
+    decisionCode: attempt.decision,
     targetType: "github_pull_request",
-    targetId: `${attempt.owner}/${attempt.repo}#${attempt.number}`,
-    payload: {
-      head_sha: attempt.expectedHeadSha,
-      ...(attempt.error ? { error: attempt.error } : {}),
+    targetId,
+    correlations: {
+      aiCallId: options.aiCallId ?? null,
+      repoId: options.repoId ?? null,
     },
+    payload,
   });
 }
 
@@ -85,8 +110,9 @@ function normalizePullRequestTarget(input: { owner: string; repo: string }) {
  * model could call it; the prompt rules treat PR, issue, file, and tool
  * content as evidence, never authorization. What bounds that risk here is
  * structural: the user's own GitHub installation, the exact head SHA, branch
- * protection with auto-merge instead of bypass, team capability filtering,
- * and a team audit event for every attempt.
+ * protection with auto-merge instead of bypass, and team capability
+ * filtering. Every authenticated attempt is recorded, including refusals
+ * before GitHub is called. An opt-in approval backstop is tracked in #546.
  */
 export function createGithubPullRequestMergeTool(
   options: GithubPullRequestMergeOptions = {}
@@ -110,6 +136,7 @@ export function createGithubPullRequestMergeTool(
             "GitHub pull request merging is unavailable because the current user is not authenticated.",
         };
       }
+      const attempt = { ...target, number, expectedHeadSha };
       let githubToken: string | null;
       try {
         githubToken = await findInstallationToken({
@@ -117,12 +144,20 @@ export function createGithubPullRequestMergeTool(
           owner: target.owner,
         });
       } catch {
+        recordMergeAttempt(options, {
+          ...attempt,
+          decision: "installation_lookup_failed",
+        });
         return {
           error:
             "GitHub pull request merging is temporarily unavailable. Check the repository connection, then retry.",
         };
       }
       if (!githubToken) {
+        recordMergeAttempt(options, {
+          ...attempt,
+          decision: "no_installation",
+        });
         return {
           error: `GitHub pull request merging is unavailable for ${target.owner}/${target.repo}. Connect that repository with pull request write access, then retry.`,
         };
@@ -138,12 +173,14 @@ export function createGithubPullRequestMergeTool(
           commitTitle,
         });
         const ok = outcome.merged || outcome.queued === true;
-        auditMergeAttempt(options, {
-          ...target,
-          number,
-          expectedHeadSha,
-          merged: outcome.merged,
-          queued: outcome.queued === true,
+        recordMergeAttempt(options, {
+          ...attempt,
+          decision: outcome.merged
+            ? "merged"
+            : outcome.queued === true
+              ? "auto_merge_queued"
+              : "not_merged",
+          ...(ok ? {} : { error: outcome.reason }),
         });
         return {
           ok,
@@ -159,12 +196,9 @@ export function createGithubPullRequestMergeTool(
           error instanceof Error
             ? error.message
             : "GitHub pull request merge failed.";
-        auditMergeAttempt(options, {
-          ...target,
-          number,
-          expectedHeadSha,
-          merged: false,
-          queued: false,
+        recordMergeAttempt(options, {
+          ...attempt,
+          decision: "not_merged",
           error: message,
         });
         return {
