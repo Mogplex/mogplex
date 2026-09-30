@@ -49,6 +49,8 @@ type MergeStubState = {
   author?: { __typename: "Bot" | "User"; login: string };
   reviewDecision?: string | null;
   ownershipStatus?: number;
+  /** Approvals an active ruleset on `main` requires; none by default. */
+  rulesetReviewCount?: number;
 };
 
 function pullResponse(pull: MergeStubState) {
@@ -73,6 +75,7 @@ function ownershipResponse(pull: MergeStubState) {
         pullRequest: {
           url: "https://github.com/acme/widgets/pull/84",
           reviewDecision: pull.reviewDecision ?? null,
+          baseRefName: "main",
           author: pull.author ?? { __typename: "Bot", login: "mogplex-test" },
         },
       },
@@ -103,6 +106,20 @@ export function mergeFetch(calls: MergeFetchCall[], pull: MergeStubState = {}) {
     }
     if (pathname === "/repos/acme/widgets/pulls/84") return pullResponse(pull);
     if (pathname === "/graphql") return graphqlResponse(pull, body);
+    if (pathname === "/repos/acme/widgets/rules/branches/main") {
+      return Response.json(
+        pull.rulesetReviewCount
+          ? [
+              {
+                type: "pull_request",
+                parameters: {
+                  required_approving_review_count: pull.rulesetReviewCount,
+                },
+              },
+            ]
+          : []
+      );
+    }
     return Response.json({
       merged: true,
       sha: "6a6add1716c3fd2dc8ca76600638b445df6a7a07",

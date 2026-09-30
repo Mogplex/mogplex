@@ -39,12 +39,11 @@ test("github_merge_pull_request refuses someone else's PR when the repo requires
 
   assert.deepEqual(events, [
     mergeAuditEvent("needs_user_merge", {
-      error: "author mallory without a required review",
+      error: "author mallory without a confirmed review requirement",
     }),
   ]);
   assert.equal(requestLines(calls).includes(MERGE_CALL), false);
-  const { ok, error } = result as { ok: boolean; error: string };
-  assert.equal(ok, false);
+  const { error } = result as { error: string };
   assert.ok(
     error.includes("https://github.com/acme/widgets/pull/84"),
     "the refusal should send the user to GitHub"
@@ -68,6 +67,22 @@ test("github_merge_pull_request leaves someone else's PR to a required human rev
     mergeFetch([], {
       author: { __typename: "User", login: "mallory" },
       reviewDecision: "REVIEW_REQUIRED",
+      mergeableState: "blocked",
+    }),
+    ["acme"],
+    { userGithubLogin: "charles" }
+  );
+
+  assert.deepEqual(events, [
+    mergeAuditEvent("auto_merge_queued", { basis: "human_review" }),
+  ]);
+});
+
+test("github_merge_pull_request leaves someone else's PR to a review a ruleset requires", async () => {
+  const events = await auditedTeamMerge(
+    mergeFetch([], {
+      author: { __typename: "User", login: "mallory" },
+      rulesetReviewCount: 1,
       mergeableState: "blocked",
     }),
     ["acme"],
