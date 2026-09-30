@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findProfileGithubLogin } from "@/lib/github-profile-login";
 import {
   findProfileIdByEmail,
   getSlackUserMapping,
@@ -37,23 +37,7 @@ export function resolveKnownSlackAttribution(input: {
 }
 
 export async function findProfileGithubUsername(profileId: string | null) {
-  if (!profileId) return null;
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("github_username")
-    .eq("id", profileId)
-    .maybeSingle();
-  if (error) {
-    console.warn("[slack-event] github username lookup failed", {
-      profileId,
-      error,
-    });
-    return null;
-  }
-  const githubUsername = data?.github_username;
-  return typeof githubUsername === "string" && githubUsername.trim()
-    ? githubUsername.trim()
-    : null;
+  return findProfileGithubLogin(profileId, "slack-event");
 }
 
 export async function defaultResolveSlackAttribution(

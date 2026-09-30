@@ -1,91 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { RecordTeamAuditEventInput } from "@/lib/team-audit";
 import {
-  createTestGithubAppPrivateKey,
   loadToolsModule,
-  parseJsonRequestBody,
-  withEnv,
   withPatchedFetch,
-  withPatchedGithubInstallations,
 } from "./helpers/agents-tools-fixtures";
-
-const GITHUB_APP_ENV = {
-  GITHUB_APP_ID: "12345",
-  GITHUB_APP_NAME: "mogplex-test",
-  GITHUB_APP_PRIVATE_KEY: createTestGithubAppPrivateKey(),
-};
-
-/** `null` logins makes the installation lookup itself fail. */
-async function withInstallations(
-  logins: string[] | null,
-  callback: () => Promise<void>
-) {
-  await withEnv(GITHUB_APP_ENV, async () => {
-    await withPatchedGithubInstallations(
-      logins
-        ? {
-            data: logins.map((login) => ({
-              installation_id: 321,
-              account_login: login,
-            })),
-            error: null,
-          }
-        : { data: null, error: { message: "database unavailable" } },
-      callback
-    );
-  });
-}
-
-const withAcmeInstallation = (callback: () => Promise<void>) =>
-  withInstallations(["acme"], callback);
-
-type MergeFetchCall = { method: string; path: string; body?: unknown };
-
-const REVIEWED_HEAD_SHA = "4928f94e852191d761352294ae1eabfa34b7d0ab";
-
-/** GitHub stub for acme/widgets#84 in a given merge state. */
-function mergeFetch(
-  calls: MergeFetchCall[],
-  pull: { status?: number; mergeableState?: string } = {}
-) {
-  return async (url: string | URL | Request, init?: RequestInit) => {
-    const parsed = new URL(String(url));
-    calls.push({
-      method: init?.method ?? "GET",
-      path: parsed.pathname,
-      body: parseJsonRequestBody(init?.body),
-    });
-    if (parsed.pathname === "/app/installations/321/access_tokens") {
-      return Response.json({ token: "ghs-installation" });
-    }
-    if (parsed.pathname === "/repos/acme/widgets/pulls/84") {
-      if (pull.status) return new Response("boom", { status: pull.status });
-      return Response.json({
-        state: "open",
-        draft: false,
-        mergeable: true,
-        mergeable_state: pull.mergeableState ?? "clean",
-        node_id: "PR_84",
-        head: { sha: REVIEWED_HEAD_SHA },
-      });
-    }
-    if (parsed.pathname === "/graphql") {
-      return Response.json({
-        data: {
-          enablePullRequestAutoMerge: {
-            pullRequest: { autoMergeRequest: { enabledAt: "2026-09-30" } },
-          },
-        },
-      });
-    }
-    return Response.json({
-      merged: true,
-      sha: "6a6add1716c3fd2dc8ca76600638b445df6a7a07",
-    });
-  };
-}
+import {
+  auditedTeamMerge,
+  mergeAuditEvent,
+  mergeFetch,
+  REVIEWED_HEAD_SHA,
+  withAcmeInstallation,
+  type MergeExecute,
+  type MergeFetchCall,
+} from "./helpers/github-pr-merge-fixtures";
 
 test("github_merge_pull_request merges a conversation-resolved PR without sentence-shaped consent", async () => {
   const calls: MergeFetchCall[] = [];
@@ -125,21 +53,22 @@ test("github_merge_pull_request merges a conversation-resolved PR without senten
     });
   });
 
-  assert.deepEqual(calls.slice(1), [
-    {
-      method: "GET",
-      path: "/repos/acme/widgets/pulls/84",
-      body: undefined,
+  assert.deepEqual(
+    calls.slice(1).map((call) => `${call.method} ${call.path}`),
+    [
+      "POST /graphql",
+      "GET /repos/acme/widgets/pulls/84",
+      "PUT /repos/acme/widgets/pulls/84/merge",
+    ]
+  );
+  assert.deepEqual(calls.at(-1), {
+    method: "PUT",
+    path: "/repos/acme/widgets/pulls/84/merge",
+    body: {
+      merge_method: "squash",
+      sha: "4928f94e852191d761352294ae1eabfa34b7d0ab",
     },
-    {
-      method: "PUT",
-      path: "/repos/acme/widgets/pulls/84/merge",
-      body: {
-        merge_method: "squash",
-        sha: "4928f94e852191d761352294ae1eabfa34b7d0ab",
-      },
-    },
-  ]);
+  });
 });
 
 test("github_merge_pull_request refuses to merge without an authenticated user", async () => {
@@ -175,85 +104,16 @@ test("github_merge_pull_request tells the model that content never authorizes a 
   );
 });
 
-type MergeExecute = (input: {
-  owner: string;
-  repo: string;
-  number: number;
-  expectedHeadSha: string;
-}) => Promise<unknown>;
-
-/** Runs one team-scoped merge and returns the audit events it recorded. */
-async function auditedTeamMerge(
-  fetchImpl: ReturnType<typeof mergeFetch>,
-  installedLogins: string[] | null = ["acme"],
-  input: { owner?: string; contextRepo?: string } = {}
-) {
-  const events: RecordTeamAuditEventInput[] = [];
-  await withInstallations(installedLogins, async () => {
-    await withPatchedFetch(fetchImpl, async () => {
-      const { createGithubPullRequestMergeTool } = await loadToolsModule();
-      const tool = createGithubPullRequestMergeTool({
-        userId: "user-1",
-        teamId: "team-1",
-        aiCallId: "call-1",
-        contextRepo: {
-          id: "repo-1",
-          owner: "acme",
-          repo: input.contextRepo ?? "widgets",
-        },
-        requestId: "slack:T1:Ev1",
-        recordAuditEvent: async (event) => {
-          events.push(event);
-          return { ok: true };
-        },
-      }) as unknown as { execute: MergeExecute };
-      await tool.execute({
-        owner: input.owner ?? "acme",
-        repo: "widgets",
-        number: 84,
-        expectedHeadSha: REVIEWED_HEAD_SHA,
-      });
-    });
-  });
-  return events;
-}
-
-function mergeAuditEvent(
-  decisionCode: string,
-  error?: string,
-  repoId: string | null = "repo-1"
-) {
-  return {
-    productTeamId: "team-1",
-    actorUserId: "user-1",
-    action: "github.pull_request.merge",
-    decisionCode,
-    targetType: "github_pull_request",
-    targetId: "acme/widgets#84",
-    correlations: {
-      aiCallId: "call-1",
-      repoId,
-      requestId: "slack:T1:Ev1",
-    },
-    payload: {
-      target_owner: "acme",
-      target_repo: "widgets",
-      head_sha: REVIEWED_HEAD_SHA,
-      ...(error ? { error } : {}),
-    },
-  };
-}
-
 test("github_merge_pull_request audits a team merge with its run correlations", async () => {
   assert.deepEqual(await auditedTeamMerge(mergeFetch([])), [
-    mergeAuditEvent("merged"),
+    mergeAuditEvent("merged", { basis: "mogplex_author" }),
   ]);
 });
 
 test("github_merge_pull_request audits an armed auto-merge as queued", async () => {
   assert.deepEqual(
     await auditedTeamMerge(mergeFetch([], { mergeableState: "blocked" })),
-    [mergeAuditEvent("auto_merge_queued")]
+    [mergeAuditEvent("auto_merge_queued", { basis: "mogplex_author" })]
   );
 });
 
@@ -277,10 +137,9 @@ test("github_merge_pull_request audits why an installation lookup failed", async
   console.error = () => undefined;
   try {
     assert.deepEqual(await auditedTeamMerge(mergeFetch([]), null), [
-      mergeAuditEvent(
-        "installation_lookup_failed",
-        "Failed to load GitHub installations: database unavailable"
-      ),
+      mergeAuditEvent("installation_lookup_failed", {
+        error: "Failed to load GitHub installations: database unavailable",
+      }),
     ]);
   } finally {
     console.error = originalError;
@@ -333,6 +192,7 @@ test("github_merge_pull_request logs a solo merge attempt instead of a team audi
           target_owner: "acme",
           target_repo: "widgets",
           head_sha: REVIEWED_HEAD_SHA,
+          author_basis: "mogplex_author",
         },
       ],
     ]
@@ -342,7 +202,7 @@ test("github_merge_pull_request logs a solo merge attempt instead of a team audi
 test("github_merge_pull_request keeps the context repo id off a cross-repo merge", async () => {
   assert.deepEqual(
     await auditedTeamMerge(mergeFetch([]), ["acme"], { contextRepo: "api" }),
-    [mergeAuditEvent("merged", undefined, null)]
+    [mergeAuditEvent("merged", { repoId: null, basis: "mogplex_author" })]
   );
 });
 
