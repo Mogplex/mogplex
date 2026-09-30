@@ -154,7 +154,11 @@ export function buildStaticTools(
             teamId,
             aiCallId,
             requestId,
-            repoId,
+            contextRepo: {
+              id: repoId,
+              owner: repoDefaults?.owner,
+              repo: repoDefaults?.repo,
+            },
           }),
         }
       : {}),

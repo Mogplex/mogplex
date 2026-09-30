@@ -185,7 +185,8 @@ type MergeExecute = (input: {
 /** Runs one team-scoped merge and returns the audit events it recorded. */
 async function auditedTeamMerge(
   fetchImpl: ReturnType<typeof mergeFetch>,
-  installedLogins: string[] | null = ["acme"]
+  installedLogins: string[] | null = ["acme"],
+  input: { owner?: string; contextRepo?: string } = {}
 ) {
   const events: RecordTeamAuditEventInput[] = [];
   await withInstallations(installedLogins, async () => {
@@ -195,7 +196,11 @@ async function auditedTeamMerge(
         userId: "user-1",
         teamId: "team-1",
         aiCallId: "call-1",
-        repoId: "repo-1",
+        contextRepo: {
+          id: "repo-1",
+          owner: "acme",
+          repo: input.contextRepo ?? "widgets",
+        },
         requestId: "slack:T1:Ev1",
         recordAuditEvent: async (event) => {
           events.push(event);
@@ -203,7 +208,7 @@ async function auditedTeamMerge(
         },
       }) as unknown as { execute: MergeExecute };
       await tool.execute({
-        owner: "acme",
+        owner: input.owner ?? "acme",
         repo: "widgets",
         number: 84,
         expectedHeadSha: REVIEWED_HEAD_SHA,
@@ -213,7 +218,11 @@ async function auditedTeamMerge(
   return events;
 }
 
-function mergeAuditEvent(decisionCode: string, error?: string) {
+function mergeAuditEvent(
+  decisionCode: string,
+  error?: string,
+  repoId: string | null = "repo-1"
+) {
   return {
     productTeamId: "team-1",
     actorUserId: "user-1",
@@ -223,10 +232,12 @@ function mergeAuditEvent(decisionCode: string, error?: string) {
     targetId: "acme/widgets#84",
     correlations: {
       aiCallId: "call-1",
-      repoId: "repo-1",
+      repoId,
       requestId: "slack:T1:Ev1",
     },
     payload: {
+      target_owner: "acme",
+      target_repo: "widgets",
       head_sha: REVIEWED_HEAD_SHA,
       ...(error ? { error } : {}),
     },
@@ -310,9 +321,26 @@ test("github_merge_pull_request logs a solo merge attempt instead of a team audi
           requestId: "slack:T1:Ev1",
           target: "acme/widgets#84",
           decision: "merged",
+          target_owner: "acme",
+          target_repo: "widgets",
           head_sha: REVIEWED_HEAD_SHA,
         },
       ],
     ]
   );
+});
+
+test("github_merge_pull_request keeps the context repo id off a cross-repo merge", async () => {
+  assert.deepEqual(
+    await auditedTeamMerge(mergeFetch([]), ["acme"], { contextRepo: "api" }),
+    [mergeAuditEvent("merged", undefined, null)]
+  );
+});
+
+test("github_merge_pull_request audits an unparseable merge target", async () => {
+  const [event] = await auditedTeamMerge(mergeFetch([]), ["acme"], {
+    owner: "acme/evil",
+  });
+  assert.equal(event?.decisionCode, "invalid_target");
+  assert.equal(event?.targetId, "acme/evil/widgets#84");
 });

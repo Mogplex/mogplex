@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { mergePullRequestIfSafe } from "@/lib/github-merge";
-import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
+import { recordTeamAuditEvent } from "@/lib/team-audit";
 import { defineTool } from "./shared";
 import {
   findInstallationToken,
@@ -13,12 +13,13 @@ type GithubPullRequestMergeOptions = {
   /** Team scope; merge attempts in a team land in its audit log. */
   teamId?: string | null;
   /**
-   * The agent turn and context repo, so an audit row joins to its run. Slack
-   * conversational turns record their ai_call after the run, so their rows
-   * join through `requestId` (the Slack event identity) instead.
+   * The agent turn, so an audit row joins to its run. Slack conversational
+   * turns record their ai_call after the run, so their rows join through
+   * `requestId` (the Slack event identity) instead.
    */
   aiCallId?: string | null;
-  repoId?: string | null;
+  /** The run's repo; an audit row carries its id only when it is the target. */
+  contextRepo?: { id?: string | null; owner?: string; repo?: string };
   /** The external event (e.g. Slack) that started the turn, if any. */
   requestId?: string | null;
   recordAuditEvent?: typeof recordTeamAuditEvent;
@@ -29,7 +30,8 @@ type MergeDecision =
   | "auto_merge_queued"
   | "not_merged"
   | "no_installation"
-  | "installation_lookup_failed";
+  | "installation_lookup_failed"
+  | "invalid_target";
 
 type MergeAttempt = {
   owner: string;
@@ -40,17 +42,31 @@ type MergeAttempt = {
   error?: string;
 };
 
+function contextRepoIdFor(
+  options: GithubPullRequestMergeOptions,
+  attempt: MergeAttempt
+) {
+  const context = options.contextRepo;
+  const isTarget =
+    context?.owner?.toLowerCase() === attempt.owner.toLowerCase() &&
+    context?.repo?.toLowerCase() === attempt.repo.toLowerCase();
+  return isTarget ? (context?.id ?? null) : null;
+}
+
 /**
  * Records an authenticated merge attempt, whether or not it reached GitHub.
- * Team scope writes a team audit event; solo scope has no team audit log, so
- * it gets a structured log line alongside the run's own tool-call record.
+ * Team scope writes a team audit event, awaited because it is the record of
+ * a consequential action; solo scope has no team audit log, so it gets a
+ * structured log line alongside the run's own tool-call record.
  */
-function recordMergeAttempt(
+async function recordMergeAttempt(
   options: GithubPullRequestMergeOptions,
   attempt: MergeAttempt
 ) {
   const targetId = `${attempt.owner}/${attempt.repo}#${attempt.number}`;
   const payload = {
+    target_owner: attempt.owner,
+    target_repo: attempt.repo,
     head_sha: attempt.expectedHeadSha,
     ...(attempt.error ? { error: attempt.error } : {}),
   };
@@ -65,20 +81,25 @@ function recordMergeAttempt(
     });
     return;
   }
-  deferTeamAuditEvent(options.recordAuditEvent ?? recordTeamAuditEvent, {
-    productTeamId: options.teamId,
-    actorUserId: options.userId,
-    action: "github.pull_request.merge",
-    decisionCode: attempt.decision,
-    targetType: "github_pull_request",
-    targetId,
-    correlations: {
-      aiCallId: options.aiCallId ?? null,
-      repoId: options.repoId ?? null,
-      requestId: options.requestId ?? null,
-    },
-    payload,
-  });
+  const record = options.recordAuditEvent ?? recordTeamAuditEvent;
+  try {
+    await record({
+      productTeamId: options.teamId,
+      actorUserId: options.userId,
+      action: "github.pull_request.merge",
+      decisionCode: attempt.decision,
+      targetType: "github_pull_request",
+      targetId,
+      correlations: {
+        aiCallId: options.aiCallId ?? null,
+        repoId: contextRepoIdFor(options, attempt),
+        requestId: options.requestId ?? null,
+      },
+      payload,
+    });
+  } catch (error) {
+    console.error("[github-merge] failed to record merge audit event", error);
+  }
 }
 
 const githubPullRequestMergeParams = z
@@ -120,7 +141,7 @@ function normalizePullRequestTarget(input: { owner: string; repo: string }) {
  * structural: the user's own GitHub installation, the exact head SHA, branch
  * protection with auto-merge instead of bypass, and team capability
  * filtering. Every authenticated attempt is recorded, including refusals
- * before GitHub is called. An opt-in approval backstop is tracked in #546.
+ * before GitHub is called and unparseable targets. An opt-in approval backstop is tracked in #546.
  */
 export function createGithubPullRequestMergeTool(
   options: GithubPullRequestMergeOptions = {}
@@ -136,13 +157,23 @@ export function createGithubPullRequestMergeTool(
       expectedHeadSha,
       commitTitle,
     }: z.infer<typeof githubPullRequestMergeParams>) => {
-      const target = normalizePullRequestTarget({ owner, repo });
-      if ("error" in target) return { error: target.error };
       if (!options.userId) {
         return {
           error:
             "GitHub pull request merging is unavailable because the current user is not authenticated.",
         };
+      }
+      const target = normalizePullRequestTarget({ owner, repo });
+      if ("error" in target) {
+        await recordMergeAttempt(options, {
+          owner,
+          repo,
+          number,
+          expectedHeadSha,
+          decision: "invalid_target",
+          error: target.error,
+        });
+        return { error: target.error };
       }
       const attempt = { ...target, number, expectedHeadSha };
       let githubToken: string | null;
@@ -152,7 +183,7 @@ export function createGithubPullRequestMergeTool(
           owner: target.owner,
         });
       } catch {
-        recordMergeAttempt(options, {
+        await recordMergeAttempt(options, {
           ...attempt,
           decision: "installation_lookup_failed",
         });
@@ -162,7 +193,7 @@ export function createGithubPullRequestMergeTool(
         };
       }
       if (!githubToken) {
-        recordMergeAttempt(options, {
+        await recordMergeAttempt(options, {
           ...attempt,
           decision: "no_installation",
         });
@@ -181,7 +212,7 @@ export function createGithubPullRequestMergeTool(
           commitTitle,
         });
         const ok = outcome.merged || outcome.queued === true;
-        recordMergeAttempt(options, {
+        await recordMergeAttempt(options, {
           ...attempt,
           decision: outcome.merged
             ? "merged"
@@ -204,7 +235,7 @@ export function createGithubPullRequestMergeTool(
           error instanceof Error
             ? error.message
             : "GitHub pull request merge failed.";
-        recordMergeAttempt(options, {
+        await recordMergeAttempt(options, {
           ...attempt,
           decision: "not_merged",
           error: message,
