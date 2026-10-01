@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { setupControlSidebar } from "./helpers/control-sidebar-fixture";
 import { scopedPath } from "./helpers/auth";
-import type { RunWorkspaceContext } from "@/lib/run-workspace/types";
+import type {
+  RunWorkspaceContext,
+  RunWorkspaceEvent,
+} from "@/lib/run-workspace/types";
 
 test("Slack conversation opens its recorded run in Control and survives reload without launching work", async ({
   page,
-}) => {
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
   const { sessions, sidebar } = await setupControlSidebar(page);
   const runId = "00000000-0000-4000-8000-000000000901";
   sessions[0].external_run_id = runId;
@@ -31,10 +35,40 @@ test("Slack conversation opens its recorded run in Control and survives reload w
   await page.route("**/api/runs/*/workspace", (route) =>
     route.fulfill({ json: context })
   );
+  const events: RunWorkspaceEvent[] = [
+    {
+      id: "e1",
+      type: "log",
+      message: "The mobile hero needs a smaller gutter.",
+      payload: { kind: "assistant_delta" },
+      toolName: null,
+      createdAt: "2026-09-05T00:00:00Z",
+    },
+    {
+      id: "e2",
+      type: "tool_started",
+      message: null,
+      payload: { toolCallId: "read-1", input: { path: "app/page.tsx" } },
+      toolName: "read_file",
+      createdAt: "2026-09-05T00:00:01Z",
+    },
+    {
+      id: "e3",
+      type: "tool_finished",
+      message: null,
+      payload: {
+        toolCallId: "read-1",
+        state: "done",
+        output: "Hero source loaded",
+      },
+      toolName: "read_file",
+      createdAt: "2026-09-05T00:00:02Z",
+    },
+  ];
   await page.route("**/api/runs/*/stream?*", (route) =>
     route.fulfill({
       contentType: "text/event-stream",
-      body: `event: run\ndata: ${JSON.stringify(context)}\n\nevent: log\ndata: ${JSON.stringify({ id: "e1", type: "log", message: "The mobile hero needs a smaller gutter.", payload: { kind: "assistant_delta" }, toolName: null, createdAt: "2026-09-05T00:00:00Z" })}\n\nevent: replay_complete\ndata: {}\n\n`,
+      body: `event: run\ndata: ${JSON.stringify(context)}\n\n${events.map((event) => `event: log\ndata: ${JSON.stringify(event)}\n\n`).join("")}event: replay_complete\ndata: {}\n\n`,
     })
   );
   const mutations: string[] = [];
@@ -55,6 +89,27 @@ test("Slack conversation opens its recorded run in Control and survives reload w
   await expect(conversation).toContainText(
     "The mobile hero needs a smaller gutter."
   );
+  const transcript = conversation.getByRole("log", { name: "Conversation" });
+  await expect(transcript).toBeVisible();
+  await expect(transcript.getByText("YOU", { exact: true })).toBeVisible();
+  await expect(transcript.getByText("MOGPLEX", { exact: true })).toBeVisible();
+  const activity = transcript.getByTestId("tool-activity");
+  await expect(activity).toContainText("Reading file");
+  await expect(activity).toContainText("Complete");
+  await activity.locator("summary").click();
+  await expect(activity.locator("pre")).toHaveText("app/page.tsx");
+  const response = transcript.getByText(
+    "The mobile hero needs a smaller gutter.",
+    { exact: true }
+  );
+  await expect(response).toHaveCSS("font-size", "14px");
+  const transcriptContent = transcript.locator(":scope > div").first();
+  expect((await transcriptContent.boundingBox())?.width).toBeLessThanOrEqual(
+    1024
+  );
+  await conversation.screenshot({
+    path: testInfo.outputPath("control-external-chat.png"),
+  });
   await expect(
     conversation.getByText("Run failed", { exact: true })
   ).toBeVisible();

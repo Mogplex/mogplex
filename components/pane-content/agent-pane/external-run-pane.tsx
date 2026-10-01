@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { UIMessage } from "ai";
 import { useParams } from "next/navigation";
 import { useConversationsStore } from "@/hooks/use-conversations";
 import { useSessionsStore } from "@/hooks/use-sessions";
@@ -15,11 +16,12 @@ import { useExternalRun } from "./use-external-run";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { fetchJsonObject } from "@/lib/client-fetch";
 
-export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspaceHref }: {
+export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspaceHref, renderTranscript }: {
   pane: PaneNode & { externalRunId: string };
   onStreamingChange: (value: boolean) => void;
   onUpdatePane?: (updates: Partial<PaneNode>) => void;
   workspaceHref?: string;
+  renderTranscript?: (messages: UIMessage[], running: boolean) => ReactNode;
 }) {
   const { scope } = useParams<{ scope: string }>();
   const { user } = useUser();
@@ -33,7 +35,7 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspa
   const messages = useMemo(() => [...projectRunTranscript(pane.externalRunId, context?.prompt ?? "Loading request…", events, status),
     ...(context?.guidance ?? []).map(item => ({ id: item.id, role: "user" as const, parts: [{ type: "text" as const, text: `${item.body}\n(${item.status === "received" ? "Saved for the next agent step" : item.status === "delivered" ? "Delivered to agent" : "Not applied before the run stopped"})` }] }))], [context?.prompt, context?.guidance, events, pane.externalRunId, status]);
   useEffect(() => { onStreamingChange(running); return () => onStreamingChange(false); }, [running, onStreamingChange]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [events]);
+  useEffect(() => { if (!renderTranscript) endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [events, renderTranscript]);
 
   async function sendGuidance() {
     if (!text.trim() || sending) return;
@@ -90,7 +92,7 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspa
       <span className="text-muted-foreground">{connection}</span>
       <a className="ml-auto underline" href={scopedHref(scope, `/runs/${pane.externalRunId}?view=details`)}>Run details</a>
     </div>
-    <ChatMessageList messages={messages} localMsgs={[]} liveConversationRuns={[]} activeCallEvents={[]} isAgentRunning={running} endRef={endRef} />
+    {renderTranscript ? renderTranscript(messages, running) : <ChatMessageList messages={messages} localMsgs={[]} liveConversationRuns={[]} activeCallEvents={[]} isAgentRunning={running} endRef={endRef} />}
     {error && <div role="alert" className="px-2 py-1 text-accent-red">{error}</div>}
     {receipt && <div role="status" className="px-2 py-1 text-xs">{receipt}</div>}
     {running && context?.canGuide ? <form className="border-border space-y-2 border-t p-2" onSubmit={event => { event.preventDefault(); void sendGuidance(); }}>

@@ -1,10 +1,23 @@
 "use client";
 import { useParams } from "next/navigation";
+import type { UIMessage } from "ai";
 import { ExternalRunPane } from "@/components/pane-content/agent-pane/external-run-pane";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { scopedHref } from "@/lib/scoped-href";
+import { buildCombinedTimeline } from "./build-combined-timeline";
+import { Timeline } from "./timeline";
 
 const reportStreaming = () => {};
+
+function renderControlTranscript(messages: UIMessage[], running: boolean) {
+  return <Timeline
+    events={buildCombinedTimeline([], messages)}
+    worktrees={[]}
+    getWorktree={() => undefined}
+    onApprove={() => {}}
+    pending={running}
+  />;
+}
 
 /** Show the original durable run; selecting a Slack conversation never launches work. */
 export function ExternalRunConversation({ session }: {
@@ -26,6 +39,7 @@ export function ExternalRunConversation({ session }: {
       }}
       onStreamingChange={reportStreaming}
       workspaceHref={workspaceHref}
+      renderTranscript={renderControlTranscript}
     />
   </div>;
 }
