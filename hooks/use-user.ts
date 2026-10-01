@@ -44,6 +44,8 @@ export function useUser() {
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     mutate({ user: null });
+    // Reload the document to discard the previous user's in-memory workspace state.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/login";
   };
 
