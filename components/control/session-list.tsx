@@ -14,6 +14,8 @@ import { useCommandPalette } from "@/components/command-palette-provider";
 import {
   assignProjectColors,
   groupSessionsByProject,
+  UNLINKED_GROUP_NAME,
+  UNLINKED_SESSION_DESCRIPTION,
   type SessionGroup,
 } from "@/lib/control/session-groups";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
@@ -65,7 +67,7 @@ function sortGroups(
       ),
     }))
     .sort((a, b) => {
-      // General always trails named projects, matching the recent ordering.
+      // Unlinked always trails named projects, matching the recent ordering.
       if (a.project === null) return 1;
       if (b.project === null) return -1;
       return a.name.localeCompare(b.name);
@@ -108,7 +110,7 @@ function SessionRow({
         ) : null}
         <span className="min-w-0 flex-1">
           <span className="block truncate">{session.title}</span>
-          {showProject ? <span className="block truncate text-xs font-normal text-ink-400">{session.project ?? "General"}</span> : null}
+          {showProject ? <span title={session.repo_id ? undefined : UNLINKED_SESSION_DESCRIPTION} className="block truncate text-xs font-normal text-ink-400">{session.repo_id ? session.project : UNLINKED_GROUP_NAME}</span> : null}
         </span>
         <span className="ml-auto shrink-0 text-xs text-ink-400">
           {formatAge(session.updated_at)}
@@ -160,6 +162,7 @@ function ProjectGroupSection({
         <button
           type="button"
           aria-expanded={open}
+          title={group.project === null ? UNLINKED_SESSION_DESCRIPTION : undefined}
           onClick={() => setOpen((current) => !current)}
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-ink-200 transition-colors hover:bg-ink-800"
         >

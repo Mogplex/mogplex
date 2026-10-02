@@ -72,4 +72,12 @@ describe("previous-release database contracts", () => {
       checkSchemaCompatibility(queryable, "verify")
     ).rejects.toThrow();
   });
+  it("rejects a migration that guesses a repository for an unmatched legacy project", async () => {
+    await db.exec(`update public.control_sessions
+      set repo_id = (select id from public.repos limit 1)
+      where title = 'Unlinked planning'`);
+    await expect(
+      checkSchemaCompatibility(queryable, "verify")
+    ).rejects.toThrow();
+  });
 });

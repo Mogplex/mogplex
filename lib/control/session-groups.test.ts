@@ -1,9 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { GENERAL_GROUP_NAME, projectColorClass } from "./session-groups";
+import {
+  UNLINKED_GROUP_NAME,
+  groupSessionsByProject,
+  projectColorClass,
+} from "./session-groups";
+
+it("groups named but unlinked sessions separately from a linked repository", () => {
+  const updated_at = "2026-10-02T12:00:00Z";
+  const groups = groupSessionsByProject([
+    { id: "linked", repo_id: "repo", project: "acme/widgets", updated_at },
+    { id: "legacy", repo_id: null, project: "acme/widgets", updated_at },
+    { id: "ambiguous", project: "widgets", updated_at },
+  ]);
+  expect(
+    groups.map((group) => [
+      group.name,
+      group.project,
+      group.sessions.map((s) => s.id),
+    ])
+  ).toEqual([
+    ["acme/widgets", "acme/widgets", ["linked"]],
+    ["Unlinked", null, ["legacy", "ambiguous"]],
+  ]);
+});
+
+it.each([undefined, null, "", " "])(
+  "keeps a saved binding with label %j out of Unlinked",
+  (project) => {
+    const [group] = groupSessionsByProject([
+      {
+        id: "bound",
+        repo_id: "unavailable",
+        project,
+        updated_at: "2026-10-02T12:00:00Z",
+      },
+    ]);
+    expect(group.name).toBe("Linked repository");
+    expect(group.project).not.toBeNull();
+  }
+);
 
 describe("project identity colors", () => {
-  it("uses a neutral marker for the unassigned General group", () => {
-    expect(projectColorClass(GENERAL_GROUP_NAME)).toBe("bg-project-neutral");
+  it("uses a neutral marker for the Unlinked group", () => {
+    expect(projectColorClass(UNLINKED_GROUP_NAME)).toBe("bg-project-neutral");
   });
 
   it("keeps each named project's Geist color independent of list order", () => {

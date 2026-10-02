@@ -55,6 +55,22 @@ export async function checkSchemaCompatibility(
       pinned: true,
       archived: true,
     });
+    const legacy = await client
+      .from("control_sessions")
+      .select("repo_id,project,messages,pinned,archived")
+      .eq("user_id", BEFORE_USER)
+      .eq("title", "Unlinked planning")
+      .single();
+    assert.equal(legacy.error, null, JSON.stringify(legacy.error));
+    assert.deepEqual(legacy.data, {
+      repo_id: null,
+      project: "unmatched-planning-project",
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "Saved plan" }] },
+      ],
+      pinned: false,
+      archived: false,
+    });
     const activeControl = await client
       .from("ai_calls")
       .select("status,conversation_id,metadata")
@@ -154,6 +170,14 @@ export async function checkSchemaCompatibility(
     archived: true,
   });
   assert.equal(conversation.error, null, JSON.stringify(conversation.error));
+  const legacy = await client.from("control_sessions").insert({
+    user_id: userId,
+    repo_id: null,
+    project: "unmatched-planning-project",
+    title: "Unlinked planning",
+    messages: [{ role: "user", parts: [{ type: "text", text: "Saved plan" }] }],
+  });
+  assert.equal(legacy.error, null, JSON.stringify(legacy.error));
   const call = await client.from("ai_calls").insert({
     id: userId,
     user_id: userId,

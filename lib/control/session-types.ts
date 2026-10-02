@@ -3,7 +3,7 @@ import type { UIMessage } from "ai";
 export type ControlSessionSummary = {
   id: string;
   title: string;
-  /** Project the session belongs to; null groups under "General". */
+  /** Stored project label; sessions without repo_id group under "Unlinked". */
   project: string | null;
   /** Exact connected repository used for agent and sandbox context. */
   repo_id: string | null;

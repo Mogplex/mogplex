@@ -15,7 +15,7 @@ test("repoProjectName uses the unambiguous full repository name", () => {
   assert.equal(repoProjectName({ full_name: "acme/widgets" }), "acme/widgets");
 });
 
-test("resolveControlSessionRepo prefers repo id and safely restores legacy names", () => {
+test("resolveControlSessionRepo uses saved repo ids and never guesses legacy names", () => {
   const repos = [
     { id: "r1", name: "widgets", full_name: "acme/widgets" },
     { id: "r2", name: "api", full_name: "acme/api" },
@@ -23,13 +23,10 @@ test("resolveControlSessionRepo prefers repo id and safely restores legacy names
 
   assert.equal(resolveControlSessionRepo({ repo_id: "r2" }, repos)?.id, "r2");
   assert.equal(
-    resolveControlSessionRepo({ project: "acme/widgets" }, repos)?.id,
-    "r1"
+    resolveControlSessionRepo({ project: "acme/widgets" }, repos),
+    null
   );
-  assert.equal(
-    resolveControlSessionRepo({ project: "widgets" }, repos)?.id,
-    "r1"
-  );
+  assert.equal(resolveControlSessionRepo({ project: "widgets" }, repos), null);
   assert.equal(
     resolveControlSessionRepo({ project: "widgets" }, [
       ...repos,
@@ -39,29 +36,29 @@ test("resolveControlSessionRepo prefers repo id and safely restores legacy names
   );
 });
 
-test("controlSessionProjectName normalizes unambiguous legacy groups", () => {
+test("controlSessionProjectName canonicalizes saved bindings and clears unlinked labels", () => {
   const repos = [
     { id: "r1", name: "widgets", full_name: "acme/widgets" },
     { id: "r2", name: "api", full_name: "acme/api" },
   ];
 
   assert.equal(
-    controlSessionProjectName({ project: "widgets" }, repos),
+    controlSessionProjectName({ repo_id: "r1", project: "widgets" }, repos),
     "acme/widgets"
   );
   assert.equal(
     controlSessionProjectName({ project: "custom-project" }, repos),
-    "custom-project"
+    null
   );
   assert.equal(controlSessionProjectName({ project: "   " }, repos), null);
 
   const sessions = [
-    { id: "legacy", project: "widgets" },
+    { id: "legacy", repo_id: "r1", project: "widgets" },
     { id: "custom", project: "custom-project" },
   ];
   assert.deepEqual(canonicalizeControlSessionProjects(sessions, repos), [
-    { id: "legacy", project: "acme/widgets" },
-    sessions[1],
+    { id: "legacy", repo_id: "r1", project: "acme/widgets" },
+    { id: "custom", project: null },
   ]);
 });
 
