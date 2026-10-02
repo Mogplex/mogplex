@@ -1,7 +1,22 @@
 import { redirect } from "next/navigation"
+import { cookies } from "next/headers"
 import { scopedHref } from "@/lib/scoped-href"
+import AgentRosterPage from "./roster/page"
+import { RouteErrorFixture } from "@/tests/support/route-error-fixture"
 
-export default async function AgentsPage({ params }: { params: Promise<{ scope: string }> }) {
+export default async function AgentsPage({ params, searchParams }: {
+  params: Promise<{ scope: string }>
+  searchParams: Promise<{ routeError?: string }>
+}) {
   const { scope } = await params
+  if (process.env.PLAYWRIGHT === "1" && (await searchParams).routeError === "server") {
+    if ((await cookies()).get("mogplex-e2e-route-recovered")?.value !== "1") {
+      throw new Error("Private server database fixture failure")
+    }
+    return <AgentRosterPage />
+  }
+  if (process.env.PLAYWRIGHT === "1" && (await searchParams).routeError === "1") {
+    return <RouteErrorFixture><AgentRosterPage /></RouteErrorFixture>
+  }
   redirect(scopedHref(scope, "/agents/roster"))
 }
