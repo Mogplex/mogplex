@@ -317,3 +317,24 @@ test("should put an approval gate on an ask connection's tools and leave the res
   assert.match(systemPrompt, /pauses for the user's approval/);
   assert.doesNotMatch(systemPrompt, /not loaded/);
 });
+
+test("production Control turn tools require approval before opening a PR", () => {
+  const { tools } = buildControlTurnTools({
+    toolContext: {
+      userId: "user-1",
+      githubToken: "fixture-token",
+      repoBranch: "feat/work",
+      controlMode: "run",
+    },
+    promptContext: { repoFullName: "acme/widgets", controlMode: "run" },
+    connectionTools: {
+      tools: {},
+      connections: [],
+      askToolNames: new Set(),
+      cleanup: async () => undefined,
+    },
+    enableTools: true,
+  });
+  assert.ok(tools);
+  assert.equal(typeof tools.open_pr.needsApproval, "function");
+});

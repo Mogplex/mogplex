@@ -24,7 +24,6 @@ export {
   wrapWithPolicy,
   wrapToolsWithPolicy,
   getApprovalRequiredTools,
-  hasPendingApproval,
   type PolicyCheckResult,
   type PolicyDeniedResponse,
   type PolicyApprovalDeps,
