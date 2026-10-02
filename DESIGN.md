@@ -84,10 +84,12 @@ change when those defaults change. Do not copy its literal colors into component
 Dense layouts are appropriate when they preserve readable context and actions.
 At narrow widths, rearrange or collapse panels deliberately instead of shrinking
 text and controls. Keep motion tied to state feedback and respect reduced motion.
-Desktop page and dashboard scrolling suppress vertical overscroll for fine
-pointers. Touch keeps native overscroll behavior; horizontal navigation gestures
-remain available. Nested run details and agent reports contain vertical scrolling
-so reaching their ends does not move the surrounding page.
+Page and dashboard scrolling suppress vertical overscroll on devices whose
+primary pointer is fine, including touchscreen laptops. Coarse-pointer devices
+keep native overscroll; horizontal navigation gestures remain available. The
+root background matches the page theme behind native touch overscroll. Nested
+run details and agent reports contain vertical scrolling so reaching their ends
+does not move the surrounding page.
 The former generated `DESIGN.json` remains a historical archive, not an active
 token source or required companion to this guide.
 

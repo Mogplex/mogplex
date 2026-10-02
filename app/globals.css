@@ -225,6 +225,7 @@
     scrollbar-color: var(--border) transparent;
   }
   html {
+    /* Keep the reveal area behind native touch overscroll in the page theme. */
     @apply bg-background;
   }
   body {
