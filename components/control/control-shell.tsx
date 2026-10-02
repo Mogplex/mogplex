@@ -152,7 +152,11 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     deepLinkTarget: searchParams.get("mission"),
     chatPending,
   });
-  const archive = useSessionArchive({ setSessionArchived, reserveArchiveSession });
+  const archiveState = useSessionArchive({ setSessionArchived, reserveArchiveSession });
+  const archive = {
+    ...archiveState,
+    sessions: canonicalizeControlSessionProjects(archiveState.sessions, repos),
+  };
   const displaySessions = useMemo(
     () => canonicalizeControlSessionProjects(sessions, repos),
     [repos, sessions]

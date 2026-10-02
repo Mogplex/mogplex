@@ -5,6 +5,7 @@
  */
 
 import { isUuid } from "@/lib/uuid";
+import { LINKED_GROUP_NAME } from "@/lib/control/session-groups";
 
 type ProjectRepo = {
   id: string;
@@ -57,7 +58,7 @@ export function controlSessionProjectName<T extends ProjectRepo>(
   return (
     (resolveControlSessionRepo(session, repos)?.full_name ??
       session.project?.trim()) ||
-    null
+    LINKED_GROUP_NAME
   );
 }
 

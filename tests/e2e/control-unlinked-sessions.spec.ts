@@ -67,6 +67,13 @@ test("unlinked legacy sessions show truthful repository context and retain saved
           title: "Archived legacy investigation",
           archived: true,
         },
+        {
+          ...sessions[1],
+          id: "bound-archive",
+          project: "widgets",
+          title: "Archived linked investigation",
+          archived: true,
+        },
       ]);
     }
     return fulfillJson(
@@ -121,4 +128,9 @@ test("unlinked legacy sessions show truthful repository context and retain saved
     "title",
     "This session has no linked repository. Start a new mission to link one."
   );
+  await expect(
+    page
+      .getByRole("complementary", { name: "Sessions" })
+      .getByText("acme/widgets", { exact: true })
+  ).toBeVisible();
 });

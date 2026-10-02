@@ -17,7 +17,8 @@ export type SessionGroup<T extends SessionGroupInput> = {
   sessions: T[];
 };
 
-export const GENERAL_GROUP_NAME = "Unlinked";
+export const UNLINKED_GROUP_NAME = "Unlinked";
+export const LINKED_GROUP_NAME = "Linked repository";
 export const UNLINKED_SESSION_DESCRIPTION =
   "This session has no linked repository. Start a new mission to link one.";
 
@@ -43,7 +44,7 @@ function projectColorSlot(name: string): number {
 
 /** Stable categorical color, independent of sorting and runtime status. */
 export function projectColorClass(name: string): string {
-  if (name === GENERAL_GROUP_NAME) return NEUTRAL_COLOR;
+  if (name === UNLINKED_GROUP_NAME) return NEUTRAL_COLOR;
   return PROJECT_COLORS[projectColorSlot(name)];
 }
 
@@ -58,7 +59,7 @@ export function assignProjectColors(names: string[]): Map<string, string> {
   const colors = new Map<string, string>();
   const taken = new Set<number>();
   for (const name of [...new Set(names)].sort()) {
-    if (name === GENERAL_GROUP_NAME) {
+    if (name === UNLINKED_GROUP_NAME) {
       colors.set(name, NEUTRAL_COLOR);
       continue;
     }
@@ -83,7 +84,9 @@ export function groupSessionsByProject<T extends SessionGroupInput>(
 ): SessionGroup<T>[] {
   const byProject = new Map<string | null, T[]>();
   for (const session of sessions) {
-    const key = session.repo_id ? session.project?.trim() || null : null;
+    const key = session.repo_id
+      ? session.project?.trim() || LINKED_GROUP_NAME
+      : null;
     const list = byProject.get(key) ?? [];
     list.push(session);
     byProject.set(key, list);
@@ -97,7 +100,7 @@ export function groupSessionsByProject<T extends SessionGroupInput>(
 
   const groups: SessionGroup<T>[] = [...byProject.entries()].map(
     ([project, list]) => ({
-      name: project ?? GENERAL_GROUP_NAME,
+      name: project ?? UNLINKED_GROUP_NAME,
       project,
       sessions: [...list].sort(
         (a, b) =>

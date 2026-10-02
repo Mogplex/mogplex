@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  GENERAL_GROUP_NAME,
+  UNLINKED_GROUP_NAME,
   assignProjectColors,
   groupSessionsByProject,
   projectColorClass,
@@ -27,7 +27,7 @@ test("groupSessionsByProject clusters sessions under their project", () => {
     [
       ["t3chat", ["b", "a"]],
       ["lawn", ["c"]],
-      [GENERAL_GROUP_NAME, ["d"]],
+      [UNLINKED_GROUP_NAME, ["d"]],
     ]
   );
 });
@@ -42,7 +42,7 @@ test("groupSessionsByProject sorts groups by latest activity, General last", () 
   // General has the newest session but still sorts last.
   assert.deepEqual(
     groups.map((g) => g.name),
-    ["beta", "alpha", GENERAL_GROUP_NAME]
+    ["beta", "alpha", UNLINKED_GROUP_NAME]
   );
 });
 
@@ -72,10 +72,10 @@ test("assignProjectColors gives colliding project names distinct colors", () => 
     "fixture must collide for this test to mean anything"
   );
 
-  const colors = assignProjectColors([...names, GENERAL_GROUP_NAME]);
+  const colors = assignProjectColors([...names, UNLINKED_GROUP_NAME]);
 
   assert.equal(new Set(names.map((name) => colors.get(name))).size, 3);
-  assert.equal(colors.get(GENERAL_GROUP_NAME), "bg-project-neutral");
+  assert.equal(colors.get(UNLINKED_GROUP_NAME), "bg-project-neutral");
   // The first claimant keeps its hashed color, so colors stay stable.
   assert.equal(colors.get(names[1]), projectColorClass(names[1]));
 });

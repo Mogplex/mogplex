@@ -1,7 +1,7 @@
 "use client";
 
 import { Archive, Undo } from "iconoir-react";
-import { GENERAL_GROUP_NAME, UNLINKED_SESSION_DESCRIPTION } from "@/lib/control/session-groups";
+import { UNLINKED_GROUP_NAME, UNLINKED_SESSION_DESCRIPTION } from "@/lib/control/session-groups";
 import type { SessionArchiveControls } from "./use-session-archive";
 
 export function SessionArchiveList({ archive }: { archive: SessionArchiveControls }) {
@@ -18,7 +18,7 @@ export function SessionArchiveList({ archive }: { archive: SessionArchiveControl
         <Archive className="size-4 shrink-0 text-ink-400" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] text-ink-200" title={session.title}>{session.title}</div>
-          <div title={session.repo_id ? undefined : UNLINKED_SESSION_DESCRIPTION} className="truncate text-xs text-ink-400">{session.repo_id ? session.project : GENERAL_GROUP_NAME}</div>
+          <div title={session.repo_id ? undefined : UNLINKED_SESSION_DESCRIPTION} className="truncate text-xs text-ink-400">{session.repo_id ? session.project : UNLINKED_GROUP_NAME}</div>
         </div>
         <button type="button" aria-label={`Restore ${session.title}`} title="Restore chat" disabled={archive.busy || archive.loading} onClick={() => void archive.restore(session)} className="grid size-8 shrink-0 place-items-center rounded-md text-ink-400 hover:bg-ink-800 hover:text-ink-100 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring">
           <Undo className="size-4" aria-hidden="true" />

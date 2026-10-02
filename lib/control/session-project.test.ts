@@ -46,7 +46,7 @@ describe("durable Control repository identity", () => {
     ).toBe("old-name");
     expect(
       controlSessionProjectName({ repo_id: "deleted", project: " " }, repos)
-    ).toBeNull();
+    ).toBe("Linked repository");
     const result = canonicalizeControlSessionProjects([legacy, linked], repos);
     expect(result).toEqual([{ ...legacy, project: null }, linked]);
     expect(result[1]).toBe(linked);
