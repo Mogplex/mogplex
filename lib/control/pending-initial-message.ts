@@ -13,6 +13,8 @@ export type PendingInitialMessage = {
   text: string;
   options: ComposerSendOptions;
   failed?: boolean;
+  attachmentsMissing?: boolean;
+  recovered?: boolean;
   queuedAt?: number;
 };
 export type PendingMessageStorage = Pick<
@@ -53,17 +55,28 @@ export async function loadPendingInitialMessage(
       !Array.isArray(pending.options?.files)
     )
       return null;
-    const files = await Promise.all(
+    const restoredFiles = await Promise.all(
       pending.options.files.map(async (file) => {
         if (!file.url.startsWith(ATTACHMENT_PREFIX)) return file;
-        const url = await attachments.get(
-          file.url.slice(ATTACHMENT_PREFIX.length)
-        );
-        if (!url) throw new Error("Could not restore the attachment");
-        return { ...file, url };
+        try {
+          const url = await attachments.get(
+            file.url.slice(ATTACHMENT_PREFIX.length)
+          );
+          return url ? { ...file, url } : null;
+        } catch {
+          return null;
+        }
       })
     );
-    return { ...pending, options: { ...pending.options, files } };
+    const files = restoredFiles.filter((file) => file !== null);
+    const attachmentsMissing = files.length !== restoredFiles.length;
+    return {
+      ...pending,
+      ...(attachmentsMissing
+        ? { failed: true, attachmentsMissing: true, recovered: !pending.failed }
+        : {}),
+      options: { ...pending.options, files },
+    };
   } catch {
     return null;
   }
@@ -76,7 +89,13 @@ export async function removePendingInitialMessage(
   const value = storage.getItem(`${STORAGE_PREFIX}${missionId}`);
   storage.removeItem(`${STORAGE_PREFIX}${missionId}`);
   if (!value) return;
-  const stored = JSON.parse(value) as PendingInitialMessage;
+  let stored: PendingInitialMessage;
+  try {
+    stored = JSON.parse(value) as PendingInitialMessage;
+  } catch {
+    return;
+  }
+  if (!Array.isArray(stored.options?.files)) return;
   await Promise.allSettled(
     stored.options.files
       .filter((file) => file.url.startsWith(ATTACHMENT_PREFIX))

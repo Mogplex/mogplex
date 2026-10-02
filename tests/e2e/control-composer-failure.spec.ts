@@ -99,8 +99,6 @@ test("a failed first message survives reload and Retry sends it with its attachm
   page,
 }) => {
   await mockRecoveryChrome(page);
-  const pageErrors: string[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
   let created = false;
   const stored = {
     ...recoverySession,
@@ -157,22 +155,7 @@ test("a failed first message survives reload and Retry sends it with its attachm
     page
       .getByRole("alert")
       .filter({ hasText: "Your first message was not sent" })
-  )
-    .toContainText("Your first message was not sent")
-    .catch(async (error) => {
-      throw new Error(
-        JSON.stringify({
-          message: error.message,
-          pageErrors,
-          requests,
-          storage: await page.evaluate(() =>
-            sessionStorage.getItem(
-              "mogplex.control.pendingInitial.first-message-session"
-            )
-          ),
-        })
-      );
-    });
+  ).toContainText("Your first message was not sent");
   const savedDraft = await page.evaluate(() =>
     sessionStorage.getItem(
       "mogplex.control.pendingInitial.first-message-session"
@@ -186,6 +169,7 @@ test("a failed first message survives reload and Retry sends it with its attachm
       .getByRole("alert")
       .filter({ hasText: "Your first message was not sent" })
   ).toContainText("Your first message was not sent");
+  expect(requests.length).toBe(1);
   blocked = false;
   const before = requests.length;
   await page

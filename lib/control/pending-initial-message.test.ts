@@ -83,4 +83,47 @@ it("keeps the prompt and attachment references across a storage round trip until
   expect(
     await loadPendingInitialMessage(storage, "bad", attachments)
   ).toBeNull();
+  await expect(
+    removePendingInitialMessage(storage, "bad", attachments)
+  ).resolves.toBeUndefined();
+});
+
+it("preserves the saved text when an attachment cannot be restored", async () => {
+  const pending: PendingInitialMessage = {
+    missionId: "evicted",
+    text: "Keep the saved request",
+    options: {
+      model: "test/model",
+      mode: "run",
+      permissions: "Skip Permissions",
+      files: [
+        {
+          id: "missing",
+          type: "file",
+          mediaType: "text/plain",
+          filename: "context.txt",
+          url: "mogplex-pending-attachment:evicted:missing",
+        },
+      ],
+    },
+  };
+  const storage = {
+    getItem: () => JSON.stringify(pending),
+    setItem: () => {},
+    removeItem: () => {},
+  };
+  const attachments = {
+    put: async () => {},
+    get: async () => null,
+    remove: async () => {},
+  };
+  const restored = await loadPendingInitialMessage(
+    storage,
+    "evicted",
+    attachments
+  );
+  expect(restored?.text).toBe(pending.text);
+  expect(restored?.options.files).toEqual([]);
+  expect(restored?.failed).toBe(true);
+  expect(restored?.attachmentsMissing).toBe(true);
 });

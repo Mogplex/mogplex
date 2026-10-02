@@ -484,7 +484,7 @@ export function Composer({
                   modelSaving || modelsLoading || !modelId || (!value.trim() && files.length === 0)
                 }
                 className={`flex size-9 items-center justify-center rounded-full transition-colors ${
-                  !modelSaving && (value.trim() || files.length > 0)
+                  !modelSaving && !modelsLoading && modelId && (value.trim() || files.length > 0)
                     ? "bg-primary text-primary-foreground hover:bg-brand-accent-hover"
                     : "cursor-not-allowed bg-ink-800 text-ink-600"
                 }`}

@@ -42,7 +42,12 @@ export function usePendingInitialMessage({
   const pendingRef = useRef<PendingInitialMessage | null>(null);
   const sendingRef = useRef(new Set<string>());
   const queue = useCallback(async (next: PendingInitialMessage) => {
-    const queued = { ...next, failed: false, queuedAt: Date.now() };
+    const queued = {
+      ...next,
+      failed: false,
+      recovered: false,
+      queuedAt: Date.now(),
+    };
     pendingRef.current = queued;
     try {
       await savePendingInitialMessage(window.sessionStorage, queued);
@@ -61,7 +66,18 @@ export function usePendingInitialMessage({
       return;
     let current = true;
     void loadPendingInitialMessage(window.sessionStorage, selectedMissionId)
-      .then((stored) => (current && stored ? queue(stored) : undefined))
+      .then((stored) => {
+        if (!current || !stored) return undefined;
+        // A reload cannot establish whether the server accepted the previous
+        // request. Keep it recoverable and let Retry explicitly resend it.
+        pendingRef.current = stored;
+        setPending({
+          ...stored,
+          failed: true,
+          recovered: Boolean(stored.recovered || !stored.failed),
+        });
+        return undefined;
+      })
       .catch(() => undefined);
     return () => {
       current = false;
@@ -79,11 +95,11 @@ export function usePendingInitialMessage({
       );
     };
     if (status !== "ready") {
+      if (sendingRef.current.has(pending.missionId)) return;
       const deadline = createPendingInitialMessageDeadline(
         failed,
         pending.queuedAt
       );
-      deadline.updateStatus(status);
       return deadline.cancel;
     }
     if (sendingRef.current.has(pending.missionId)) return;
@@ -147,14 +163,20 @@ export function usePendingInitialMessage({
     )
       return;
     clearChatError();
-    await queue(stored).catch(() => undefined);
+    await queue({ ...stored, attachmentsMissing: false }).catch(
+      () => undefined
+    );
   }, [selectedMissionId, clearChatError, queue]);
   return {
     queue,
     retry,
     error:
       pending?.missionId === selectedMissionId && pending.failed
-        ? FIRST_MESSAGE_FAILURE
+        ? pending.attachmentsMissing
+          ? `${pending.recovered ? "We saved your first message" : FIRST_MESSAGE_FAILURE}. We could not load some files. Retry sends your saved text and available files.`
+          : pending.recovered
+            ? "We saved your first message. Retry sends it again."
+            : FIRST_MESSAGE_FAILURE
         : null,
   };
 }
