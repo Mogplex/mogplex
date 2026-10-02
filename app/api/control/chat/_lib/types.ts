@@ -1,3 +1,4 @@
+import type { MissionPermissions } from "@/lib/control/types";
 import type { createAiCall } from "@/lib/interactive-runs";
 import type { UIMessage } from "ai";
 
@@ -43,7 +44,7 @@ export type ControlChatRequestBody = {
   missionTitle?: string | null;
   scope?: string | null;
   target?: string | null;
-  permissions?: string | null;
+  permissions?: MissionPermissions | null;
   mode?: "plan" | "run" | null;
 };
 
