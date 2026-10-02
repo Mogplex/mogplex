@@ -117,6 +117,10 @@ async function selectAiCallZombies(
         row.metadata?.surface === "control" && !row.metadata.control_runtime
     )
     .map((row) => row.id);
+  for (const id of legacyIds) {
+    const call = unique.get(id)!;
+    call.metadata = { ...call.metadata, control_runtime: "request" };
+  }
   if (legacyIds.length > 0) {
     const { data: continuations, error } = await client
       .from("control_continuations")

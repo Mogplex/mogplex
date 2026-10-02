@@ -365,14 +365,15 @@ export function isStaleLiveInteractiveCall(
 
   // Control is identified by server-owned metadata, not call type: newer
   // coordinator calls are agents, while older calls were recorded as chats.
-  // Hosted follow-ups have a longer deadline than the browser route.
+  // Hosted follow-ups have a longer deadline than the browser route. Unknown
+  // legacy runtimes stay visible until the reaper resolves their saved ticket.
   const threshold =
     call.metadata?.prepared === true
       ? PREPARED_HARNESS_STALE_THRESHOLD_MS
       : call.metadata?.surface === "control"
-        ? call.metadata.control_runtime === "background"
-          ? ACTIVE_CONTROL_BACKGROUND_STALE_THRESHOLD_MS
-          : ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS
+        ? call.metadata.control_runtime === "request"
+          ? ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS
+          : ACTIVE_CONTROL_BACKGROUND_STALE_THRESHOLD_MS
         : call.type === "chat"
           ? ACTIVE_CHAT_STALE_THRESHOLD_MS
           : ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS;

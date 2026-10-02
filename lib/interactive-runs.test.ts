@@ -171,19 +171,31 @@ describe("Control turn staleness", () => {
     (type) => {
       expect(
         isStaleLiveInteractiveCall(
-          call(15 * 60_000, { surface: "control" }, type),
+          call(
+            15 * 60_000,
+            { surface: "control", control_runtime: "request" },
+            type
+          ),
           now
         )
       ).toBe(true);
       expect(
         isStaleLiveInteractiveCall(
-          call(859_999, { surface: "control" }, type),
+          call(
+            859_999,
+            { surface: "control", control_runtime: "request" },
+            type
+          ),
           now
         )
       ).toBe(false);
       expect(
         isStaleLiveInteractiveCall(
-          call(860_000, { surface: "control" }, type),
+          call(
+            860_000,
+            { surface: "control", control_runtime: "request" },
+            type
+          ),
           now
         )
       ).toBe(true);
@@ -209,6 +221,15 @@ describe("Control turn staleness", () => {
         call(1_860_000, { surface: "control", control_runtime: "background" }),
         now
       )
+    ).toBe(true);
+  });
+
+  it("keeps a legacy hosted turn visible while the reaper resolves its runtime", () => {
+    expect(
+      isStaleLiveInteractiveCall(call(15 * 60_000, { surface: "control" }), now)
+    ).toBe(false);
+    expect(
+      isStaleLiveInteractiveCall(call(1_860_000, { surface: "control" }), now)
     ).toBe(true);
   });
 
