@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
+  ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS,
   ACTIVE_CHAT_STALE_THRESHOLD_MS,
   ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS,
   PREPARED_HARNESS_STALE_THRESHOLD_MS,
@@ -25,18 +26,9 @@ type AiCallZombieRow = {
   metadata: Record<string, unknown> | null;
 };
 
-/**
- * Two scoped queries instead of one big union:
- *
- *   - chat:        type='chat',     started_at < now() - 30 min
- *   - interactive: type != 'chat',  started_at < now() - 6 hr
- *
- * Doing it this way means a flood of long-running agent runs (5m–6h old
- * but legitimately live) cannot crowd newly-stale chat rows out of the
- * single 200-row page — the chat-unblock behaviour the launch flow
- * depends on stays prompt regardless of agent volume. Each scan also
- * uses its own exact SQL cutoff so the per-row predicate is mostly
- * defence-in-depth.
+/** Separate scans keep long-running workers from crowding out dead browser
+ * turns. Control has its own metadata-based scan because its calls may be
+ * recorded as either chat or agent. The predicate checks the hosted deadline.
  */
 type AiCallSelectResult =
   | { ok: true; rows: AiCallZombieRow[] }
@@ -46,6 +38,9 @@ async function selectAiCallZombies(
   now: number,
   client: typeof supabaseAdmin
 ): Promise<AiCallSelectResult> {
+  const controlCutoffIso = new Date(
+    now - ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS
+  ).toISOString();
   const chatCutoffIso = new Date(
     now - ACTIVE_CHAT_STALE_THRESHOLD_MS
   ).toISOString();
@@ -59,33 +54,44 @@ async function selectAiCallZombies(
   const selection =
     "id, type, status, started_at, user_id, conversation_id, repo_id, metadata";
 
-  const [chatResult, interactiveResult, preparedResult] = await Promise.all([
-    client
-      .from("ai_calls")
-      .select(selection)
-      .eq("type", "chat")
-      .in("status", ["pending", "streaming"])
-      .lt("started_at", chatCutoffIso)
-      .order("started_at", { ascending: true })
-      .limit(AI_CALL_CHAT_PAGE_LIMIT),
-    client
-      .from("ai_calls")
-      .select(selection)
-      .neq("type", "chat")
-      .in("status", ["pending", "streaming"])
-      .lt("started_at", interactiveCutoffIso)
-      .order("started_at", { ascending: true })
-      .limit(AI_CALL_INTERACTIVE_PAGE_LIMIT),
-    client
-      .from("ai_calls")
-      .select(selection)
-      .in("status", ["pending", "streaming"])
-      .contains("metadata", { prepared: true })
-      .lt("started_at", preparedCutoffIso)
-      .order("started_at", { ascending: true })
-      .limit(AI_CALL_INTERACTIVE_PAGE_LIMIT),
-  ]);
+  const [controlResult, chatResult, interactiveResult, preparedResult] =
+    await Promise.all([
+      client
+        .from("ai_calls")
+        .select(selection)
+        .contains("metadata", { surface: "control" })
+        .in("status", ["pending", "streaming"])
+        .lt("started_at", controlCutoffIso)
+        .order("started_at", { ascending: true })
+        .limit(AI_CALL_CHAT_PAGE_LIMIT),
+      client
+        .from("ai_calls")
+        .select(selection)
+        .eq("type", "chat")
+        .in("status", ["pending", "streaming"])
+        .lt("started_at", chatCutoffIso)
+        .order("started_at", { ascending: true })
+        .limit(AI_CALL_CHAT_PAGE_LIMIT),
+      client
+        .from("ai_calls")
+        .select(selection)
+        .neq("type", "chat")
+        .in("status", ["pending", "streaming"])
+        .lt("started_at", interactiveCutoffIso)
+        .order("started_at", { ascending: true })
+        .limit(AI_CALL_INTERACTIVE_PAGE_LIMIT),
+      client
+        .from("ai_calls")
+        .select(selection)
+        .in("status", ["pending", "streaming"])
+        .contains("metadata", { prepared: true })
+        .lt("started_at", preparedCutoffIso)
+        .order("started_at", { ascending: true })
+        .limit(AI_CALL_INTERACTIVE_PAGE_LIMIT),
+    ]);
 
+  if (controlResult.error)
+    return { ok: false, error: controlResult.error.message };
   if (chatResult.error) return { ok: false, error: chatResult.error.message };
   if (interactiveResult.error)
     return { ok: false, error: interactiveResult.error.message };
@@ -94,11 +100,35 @@ async function selectAiCallZombies(
 
   const unique = new Map<string, AiCallZombieRow>();
   for (const row of [
+    ...((controlResult.data ?? []) as AiCallZombieRow[]),
     ...((chatResult.data ?? []) as AiCallZombieRow[]),
     ...((interactiveResult.data ?? []) as AiCallZombieRow[]),
     ...((preparedResult.data ?? []) as AiCallZombieRow[]),
   ]) {
     unique.set(row.id, row);
+  }
+
+  // Retained Trigger workers predate control_runtime. Their durable ticket
+  // identifies the hosted execution without trusting client metadata or
+  // shortening the lifetime of a still-running previous-release worker.
+  const legacyIds = [...unique.values()]
+    .filter(
+      (row) =>
+        row.metadata?.surface === "control" && !row.metadata.control_runtime
+    )
+    .map((row) => row.id);
+  if (legacyIds.length > 0) {
+    const { data: continuations, error } = await client
+      .from("control_continuations")
+      .select("resume_ai_call_id, user_id")
+      .in("resume_ai_call_id", legacyIds);
+    if (error) return { ok: false, error: error.message };
+    for (const ticket of continuations ?? []) {
+      const call = unique.get(ticket.resume_ai_call_id);
+      if (call && call.user_id === ticket.user_id) {
+        call.metadata = { ...call.metadata, control_runtime: "background" };
+      }
+    }
   }
 
   return {
@@ -146,7 +176,7 @@ export async function reapStaleAiCalls(
     const ageMs = safeAgeMs(row.started_at, now);
     const completedAt = new Date(now).toISOString();
 
-    const { error: updateError } = await client
+    const { data: updated, error: updateError } = await client
       .from("ai_calls")
       .update({
         status: "failed",
@@ -154,7 +184,9 @@ export async function reapStaleAiCalls(
         completed_at: completedAt,
       })
       .eq("id", row.id)
-      .in("status", ["pending", "streaming"]);
+      .in("status", ["pending", "streaming"])
+      .select("id")
+      .maybeSingle();
 
     if (updateError) {
       console.error("[zombie-reaper] failed to mark ai_call as failed", {
@@ -163,6 +195,8 @@ export async function reapStaleAiCalls(
       });
       continue;
     }
+
+    if (!updated) continue; // Another reaper or finalizer already finished it.
 
     // Best-effort terminal event so the observability pane shows the
     // reap explicitly rather than a silent status flip.

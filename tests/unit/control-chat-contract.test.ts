@@ -18,6 +18,7 @@ test("control run metadata keeps client resource hints non-authoritative", () =>
     "team-1"
   );
 
+  assert.equal(metadata.control_runtime, "request");
   assert.equal(metadata.sandbox_id, null);
   assert.equal(metadata.sandbox_hint_id, "client-sandbox-hint");
   assert.equal(metadata.mission_id, null);

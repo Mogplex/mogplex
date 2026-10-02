@@ -311,10 +311,12 @@ export async function resolveControlPromptWorktrees(
  */
 export function buildControlChatRunMetadata(
   body: ControlChatRequestBody,
-  teamId: string | null
+  teamId: string | null,
+  runtime: "request" | "background" = "request"
 ): ControlChatRunMetadata {
   return {
     surface: "control",
+    control_runtime: runtime,
     sandbox_id: null,
     sandbox_hint_id: nullable(body.sandboxId),
     sandbox_runtime_id: null,

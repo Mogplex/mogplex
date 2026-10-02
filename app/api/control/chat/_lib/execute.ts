@@ -11,7 +11,7 @@ import { prepareControlExecutionHistory } from "./execution-history";
 import type { ControlBackgroundExecution } from "@/lib/control/background-context";
 import { saveControlTranscript } from "@/lib/control/transcript-store";
 import { persistedControlStream } from "@/lib/control/persisted-stream";
-import { createAiCall } from "@/lib/interactive-runs";
+import { createControlAiCall } from "./start-call";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import {
   createAgentUserFacingOutputTransform,
@@ -30,7 +30,6 @@ import { loadControlKnowledgeContext } from "./knowledge-context";
 import { buildControlPromptContext } from "./prompt-context";
 import {
   getControlChatRunScope,
-  buildControlChatRunMetadata,
   buildControlGatewayContext,
   resolveControlToolSandboxId,
   resolveControlPromptSandboxContext,
@@ -81,17 +80,7 @@ export async function executeControlChatRequest(input: {
 
   try {
     await input.background?.assertCurrent();
-    aiCall = await createAiCall({
-      userId: input.userId,
-      type: "agent",
-      model: input.resolvedModel,
-      conversationId: scope.conversationId,
-      repoId: scope.repoId,
-      limitClaimId: input.limitClaimId,
-      startedAt: input.callStartedAt,
-      status: "pending",
-      metadata: buildControlChatRunMetadata(input.body, teamId),
-    });
+    aiCall = await createControlAiCall(input, teamId);
     const activeCall = aiCall;
     await input.background?.onAiCallStarted(activeCall.id);
 
