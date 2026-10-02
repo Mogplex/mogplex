@@ -1,3 +1,4 @@
+import { wrapControlSideEffects } from "@/lib/control/tool-idempotency";
 import { guardControlBackgroundTools } from "@/lib/control/background-context";
 import { gateConnectionTools } from "@/lib/agents/orchestrator/connection-approval";
 import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
@@ -177,7 +178,10 @@ export function buildControlTurnTools(input: {
   const tools = input.enableTools
     ? serializeSandboxCommandTools(
         guardControlBackgroundTools(
-          wrapToolsWithPolicy(rawTools, input.toolContext),
+          wrapToolsWithPolicy(
+            wrapControlSideEffects(rawTools, input.toolContext),
+            input.toolContext
+          ),
           input.assertCurrent
         )
       )
