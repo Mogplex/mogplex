@@ -48,3 +48,15 @@ it("shows a created session even when history has failed to load", () => {
     })
   ).toBe("mission");
 });
+
+it("keeps loaded sessions usable when a background refresh fails", () => {
+  expect(
+    resolveSessionListState({ loaded: true, error: "Unavailable", count: 2 })
+  ).toBe("ready");
+  expect(
+    resolveSessionListState({ loaded: true, error: "Unavailable", count: 0 })
+  ).toBe("error");
+  expect(
+    resolveSessionListState({ loaded: false, error: "Unavailable", count: 1 })
+  ).toBe("ready");
+});

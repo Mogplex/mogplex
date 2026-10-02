@@ -375,6 +375,7 @@ export function SessionList({
       </div>
       {archive.busy ? <p role="status" className="px-4 pb-2 text-xs text-ink-400">Updating chats…</p> : null}
       <nav className="flex-1 overflow-y-auto px-2 pb-3 text-[13px]">
+        {listState === "ready" && loadState?.error ? <div role="alert" className="px-4 py-3 text-xs text-accent-amber">{loadState.error}<button type="button" onClick={loadState.onRetry} className="mt-2 block underline underline-offset-2">Retry</button></div> : null}
         {listState === "loading" ? <div role="status" aria-label="Loading sessions" className="space-y-3 p-3"><span className="sr-only">Loading sessions</span>{[1, 2, 3].map(row => <div key={row} className="bg-ink-800 h-8 animate-pulse rounded-md" />)}</div> : listState === "error" ? <div role="alert" className="px-4 py-3 text-xs text-accent-amber">{loadState?.error}<button type="button" onClick={loadState?.onRetry} className="mt-2 block underline underline-offset-2">Retry</button></div> : listState === "empty" ? (
           <p className="px-2 py-6 text-center text-[11px] text-ink-400">
             No sessions yet. Start one from the composer.

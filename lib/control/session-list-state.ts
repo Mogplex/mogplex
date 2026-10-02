@@ -9,6 +9,8 @@ export function resolveSessionListState({
   error: string | null;
   count: number;
 }): "loading" | "error" | "empty" | "ready" {
+  // Keep existing rows usable while a refresh is pending or failed.
+  if (count > 0) return "ready";
   if (error) return "error";
   if (!loaded) return "loading";
   return count === 0 ? "empty" : "ready";
