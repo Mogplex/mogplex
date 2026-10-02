@@ -81,7 +81,11 @@ export function parseControlSessionRepoId(
  * Default picker selection: the favorite repo when one exists, else the first
  * repo, else "new" (create a new project) when no repos are connected.
  */
-export function defaultProjectChoice(repos: ProjectRepo[]): string {
+export function defaultProjectChoice(
+  repos: ProjectRepo[],
+  loading = false
+): string | null {
+  if (loading) return null;
   const preferred = repos.find((repo) => repo.is_favorite) ?? repos[0];
   return preferred?.id ?? "new";
 }

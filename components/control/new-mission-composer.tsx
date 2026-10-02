@@ -38,6 +38,7 @@ const CREATABLE_AVAILABILITY = new Set(["available", "unverified"]);
 
 type Props = {
   repos: Repo[];
+  reposLoading?: boolean;
   /**
    * Repo the picker follows until the user changes it. Reactive on purpose:
    * repos load async, so the resolved id can arrive after first render.
@@ -55,6 +56,7 @@ type Props = {
 
 export function NewMissionComposer({
   repos,
+  reposLoading = false,
   preferredRepoId,
   onCancel,
   onCreate,
@@ -70,7 +72,7 @@ export function NewMissionComposer({
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { modelIds, defaultModelId } = useModels("control");
+  const { modelIds, defaultModelId, isLoading: modelsLoading } = useModels("control");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const { isDraggingFiles, addFiles, dropZoneProps } = useControlFileDrop({
     existingCount: files.length,
@@ -86,7 +88,7 @@ export function NewMissionComposer({
   const modelId = selectedModel ?? defaultModelId ?? modelIds[0] ?? null;
 
   const selectedRepoId =
-    choice ?? preferredRepoId ?? defaultProjectChoice(repos);
+    reposLoading ? null : choice ?? preferredRepoId ?? defaultProjectChoice(repos);
   const effectiveNewProjectName =
     newProjectName.trim() || deriveProjectName(text);
   const {
@@ -110,7 +112,7 @@ export function NewMissionComposer({
       !ownerLogin ||
       !nameValidation.ok ||
       !CREATABLE_AVAILABILITY.has(availability));
-  const submitDisabled = !hasMissionInput || newProjectBlocked || submitting;
+  const submitDisabled = !hasMissionInput || newProjectBlocked || submitting || reposLoading || modelsLoading || !modelId;
 
   const cyclePermissions = useCallback(() => {
     setPermissionsIdx((i) => (i + 1) % MISSION_PERMISSION_OPTIONS.length);
@@ -239,6 +241,7 @@ export function NewMissionComposer({
               Project
             </label>
             <ProjectCombobox
+              loading={reposLoading}
               repos={repos}
               value={selectedRepoId}
               newProjectValue={NEW_PROJECT}
@@ -338,6 +341,7 @@ export function NewMissionComposer({
               modelIds={modelIds}
               onSelect={setSelectedModel}
               disabled={false}
+              loading={modelsLoading}
             />
 
             <div className="ml-auto flex items-center gap-2">

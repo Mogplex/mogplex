@@ -14,9 +14,11 @@ export function ProjectCombobox({
   value,
   newProjectValue,
   onValueChange,
+  loading = false,
 }: {
   repos: Repo[];
-  value: string;
+  value: string | null;
+  loading?: boolean;
   newProjectValue: string;
   onValueChange: (value: string) => void;
 }) {
@@ -25,7 +27,7 @@ export function ProjectCombobox({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedRepo = repos.find((repo) => repo.id === value);
-  const selectedLabel = selectedRepo?.full_name ?? "New project…";
+  const selectedLabel = loading ? "Loading projects…" : selectedRepo?.full_name ?? "New project…";
   const query = search.trim().toLowerCase();
   const matchingRepos = repos.filter((repo) =>
     `${repo.full_name} ${repo.owner ?? ""} ${repo.name ?? ""}`
@@ -91,6 +93,7 @@ export function ProjectCombobox({
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
+          disabled={loading}
           type="button"
           id="control-project"
           role="combobox"

@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import {
+  mockRecoveryChrome,
+  recoverySession,
+  recoveryStream,
+} from "./helpers/control-recovery-fixtures";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
@@ -88,4 +93,119 @@ test("control composer keeps text and attachments when a follow-up send fails", 
   ).toBeVisible();
   await expect(composer).toHaveValue("Retry this exact request");
   await expect(page.getByText("retry-context.txt")).toBeVisible();
+});
+
+test("a failed first message survives reload and Retry sends it with its attachments once", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  let created = false;
+  const stored = {
+    ...recoverySession,
+    id: "first-message-session",
+    messages: [] as unknown[],
+  };
+  await page.route("**/api/control/sessions**", (route) => {
+    const method = route.request().method();
+    if (method === "POST") {
+      created = true;
+      return fulfillJson(route, stored);
+    }
+    if (method === "PUT") {
+      stored.messages = route.request().postDataJSON().messages;
+      return fulfillJson(route, { ok: true, session: stored });
+    }
+    return fulfillJson(
+      route,
+      new URL(route.request().url()).searchParams.has("id")
+        ? stored
+        : created
+          ? [stored]
+          : []
+    );
+  });
+  let blocked = true;
+  const requests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/control/chat", (route) => {
+    requests.push(route.request().postDataJSON());
+    if (blocked) return route.abort("failed");
+    return route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: recoveryStream(),
+    });
+  });
+  await page.goto(scopedPath("control"));
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Keep my first request");
+  await page
+    .locator('input[type="file"]')
+    .last()
+    .setInputFiles({
+      name: "first-context.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.alloc(4 * 1024 * 1024, 65),
+    });
+  await page.getByRole("button", { name: "Start mission" }).click();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Your first message was not sent" })
+  )
+    .toContainText("Your first message was not sent")
+    .catch(async (error) => {
+      throw new Error(
+        JSON.stringify({
+          message: error.message,
+          pageErrors,
+          requests,
+          storage: await page.evaluate(() =>
+            sessionStorage.getItem(
+              "mogplex.control.pendingInitial.first-message-session"
+            )
+          ),
+        })
+      );
+    });
+  const savedDraft = await page.evaluate(() =>
+    sessionStorage.getItem(
+      "mogplex.control.pendingInitial.first-message-session"
+    )
+  );
+  expect(savedDraft).not.toBeNull();
+  expect(savedDraft!.length).toBeLessThan(2_000);
+  await page.reload();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Your first message was not sent" })
+  ).toContainText("Your first message was not sent");
+  blocked = false;
+  const before = requests.length;
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "Your first message was not sent" })
+    .getByRole("button", { name: "Retry" })
+    .click();
+  await expect(
+    page.getByText("Request recovered.", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Keep my first request", { exact: true })
+  ).toHaveCount(1);
+  expect(requests.length).toBe(before + 1);
+  expect(JSON.stringify(requests.at(-1))).toContain("first-context.txt");
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem(
+        "mogplex.control.pendingInitial.first-message-session"
+      )
+    )
+  ).toBeNull();
 });

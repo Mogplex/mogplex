@@ -16,6 +16,7 @@ import {
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 import { loadControlSessionList } from "./session-list-data";
+import { ClientFetchError, fetchJsonObject } from "@/lib/client-fetch";
 
 const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
 const SESSION_EVENTS = [
@@ -48,6 +49,11 @@ export function useControlSessions({
 }) {
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const failedSelectionRef = useRef<string | null>(null);
+  const restoreInFlightRef = useRef(false);
+  const listRequestRef = useRef(0);
   const updatedAtBySessionRef = useRef(new Map<string, string>());
   const mutationRevisionRef = useRef(0);
   const removedSessionIdsRef = useRef(new Set<string>());
@@ -63,11 +69,25 @@ export function useControlSessions({
     if (!sessionId || chatPending) return;
     const requestRevision = ++refreshRevisionRef.current;
     const mutationRevision = mutationRevisionRef.current;
-    const res = await fetch(
-      `/api/control/sessions?id=${encodeURIComponent(sessionId)}`
-    );
-    if (!res.ok) return;
-    const record = (await res.json()) as ControlSessionRecord;
+    let record: ControlSessionRecord;
+    try {
+      record = await fetchJsonObject<ControlSessionRecord>(
+        `/api/control/sessions?id=${encodeURIComponent(sessionId)}`,
+        "Could not load this chat. Try again."
+      );
+    } catch (error) {
+      if (requestRevision === refreshRevisionRef.current) {
+        failedSelectionRef.current = sessionId;
+        setSelectionError(
+          error instanceof ClientFetchError && error.status === 404
+            ? "That session no longer exists"
+            : error instanceof ClientFetchError
+              ? error.message
+              : "Could not load this chat. Try again."
+        );
+      }
+      return;
+    }
     if (
       requestRevision !== refreshRevisionRef.current ||
       mutationRevision !== mutationRevisionRef.current ||
@@ -101,8 +121,21 @@ export function useControlSessions({
 
   const refreshList = useCallback(async () => {
     const revision = mutationRevisionRef.current;
-    const fetched = await loadControlSessionList().catch(() => null);
-    if (!fetched) return;
+    const request = ++listRequestRef.current;
+    setSessionsError(null);
+    let fetched: ControlSessionSummary[];
+    try {
+      fetched = await loadControlSessionList();
+    } catch (error) {
+      if (request === listRequestRef.current)
+        setSessionsError(
+          error instanceof ClientFetchError
+            ? error.message
+            : "Could not load chats. Try again."
+        );
+      return;
+    }
+    if (request !== listRequestRef.current) return;
     setSessionsLoaded(true);
     for (const session of fetched) {
       if (!updatedAtBySessionRef.current.has(session.id)) {
@@ -132,14 +165,32 @@ export function useControlSessions({
   const selectSession = useCallback(
     async (id: string) => {
       const revision = ++selectionRevisionRef.current;
-      const res = await fetch(`/api/control/sessions?id=${id}`);
-      if (!res.ok) return;
-      const record = (await res.json()) as ControlSessionRecord;
+      let record: ControlSessionRecord;
+      try {
+        record = await fetchJsonObject<ControlSessionRecord>(
+          `/api/control/sessions?id=${encodeURIComponent(id)}`,
+          "Could not load this chat. Try again."
+        );
+        if (record.id !== id || !Array.isArray(record.messages))
+          throw new Error("Invalid session");
+      } catch (error) {
+        if (revision === selectionRevisionRef.current) {
+          failedSelectionRef.current = id;
+          setSelectionError(
+            error instanceof ClientFetchError && error.status === 404
+              ? "That session no longer exists"
+              : error instanceof ClientFetchError
+                ? error.message
+                : "Could not load this chat. Try again."
+          );
+        }
+        return false;
+      }
       if (
         revision !== selectionRevisionRef.current ||
         removedSessionIdsRef.current.has(id)
       )
-        return;
+        return false;
       const hydrated = setSessionMessages(record.id, record.messages ?? []);
       if (hydrated) {
         updatedAtBySessionRef.current.set(record.id, record.updated_at);
@@ -147,6 +198,9 @@ export function useControlSessions({
       selectedIdRef.current = record.id;
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
+      failedSelectionRef.current = null;
+      setSelectionError(null);
+      return true;
     },
     [setSessionId, setSessionMessages]
   );
@@ -155,7 +209,12 @@ export function useControlSessions({
   // chat. Global navigation returns to bare /control, so relying on the query
   // string alone would strand persisted follow-up turns behind an empty view.
   useEffect(() => {
-    if (restoredSelectionRef.current || !sessionsLoaded) return;
+    if (
+      restoredSelectionRef.current ||
+      restoreInFlightRef.current ||
+      !sessionsLoaded
+    )
+      return;
     const remembered = window.localStorage.getItem(LAST_CONTROL_SESSION_KEY);
     const target =
       (deepLinkTarget && sessions.some((entry) => entry.id === deepLinkTarget)
@@ -166,10 +225,18 @@ export function useControlSessions({
         : null) ??
       sessions[0]?.id ??
       null;
-    restoredSelectionRef.current = true;
-    if (!target || target === sessionId) return;
-
-    void selectSession(target);
+    if (!target || target === sessionId) {
+      restoredSelectionRef.current = true;
+      return;
+    }
+    restoreInFlightRef.current = true;
+    void selectSession(target)
+      .then((selected) => {
+        if (selected) restoredSelectionRef.current = true;
+      })
+      .finally(() => {
+        restoreInFlightRef.current = false;
+      });
   }, [sessions, sessionsLoaded, deepLinkTarget, selectSession, sessionId]);
 
   const createSession = useCallback(
@@ -401,6 +468,13 @@ export function useControlSessions({
     setSessionArchived,
     sessions,
     sessionsLoaded,
+    sessionsError,
+    selectionError,
+    retryList: refreshList,
+    retrySelection: () =>
+      sessionId && failedSelectionRef.current
+        ? selectSession(failedSelectionRef.current)
+        : refreshList(),
     selectSession,
     createSession,
     updateSession,

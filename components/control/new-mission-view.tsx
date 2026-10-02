@@ -8,6 +8,8 @@ import { SessionList } from "./session-list";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import type { NewSessionTarget } from "./session-list-actions";
 import type { SessionArchiveControls } from "./use-session-archive";
+import type { SessionLoadState } from "./session-list";
+import { ControlConversationLoading, ControlErrorBanner } from "./control-load-state";
 
 /**
  * Standalone view shown when there is no mission selected (fresh load or the
@@ -27,6 +29,11 @@ export function NewMissionView({
   preferredRepoId,
   composerKey,
   archive,
+  reposLoading,
+  loadState,
+  loading = false,
+  selectionError,
+  retrySelection,
 }: {
   repos: Repo[];
   sessions: ControlSessionSummary[];
@@ -49,10 +56,16 @@ export function NewMissionView({
   /** Changes whenever a new session is requested, resetting the composer. */
   composerKey: number;
   archive: SessionArchiveControls;
+  reposLoading: boolean;
+  loadState: SessionLoadState;
+  loading?: boolean;
+  selectionError: string | null;
+  retrySelection: () => void;
 }) {
   return (
     <div className="app-control-shell flex h-full overflow-hidden">
       <SessionList
+        loadState={loadState}
         sessions={sessions}
         selectedId={sessionId}
         workingIds={workingIds}
@@ -76,13 +89,15 @@ export function NewMissionView({
             Orchestrator
           </span>
         </div>
-        <NewMissionComposer
+        <ControlErrorBanner message={selectionError} onRetry={retrySelection} />
+        {loading ? <ControlConversationLoading /> : <NewMissionComposer
           key={composerKey}
           repos={repos}
+          reposLoading={reposLoading}
           preferredRepoId={preferredRepoId}
           onCancel={canCancel ? onCancel : undefined}
           onCreate={onCreate}
-        />
+        />}
       </main>
     </div>
   );

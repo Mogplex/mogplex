@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -115,11 +114,13 @@ export function ModelChip({
   modelIds,
   onSelect,
   disabled,
+  loading = false,
 }: {
   modelId: string | null;
   modelIds: string[];
   onSelect: (modelId: string) => void;
   disabled: boolean;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -150,7 +151,7 @@ export function ModelChip({
     <div className="relative">
       <button
         ref={btnRef}
-        disabled={disabled}
+        disabled={disabled || loading}
         onClick={() => {
           setOpen((o) => {
             if (!o && btnRef.current) {
@@ -172,10 +173,10 @@ export function ModelChip({
             className="size-4 border-0"
           />
         ) : null}
-        {modelId ? shortModelName(modelId) : "Model"}
+        {loading ? "Loading models…" : modelId ? shortModelName(modelId) : "Model"}
         <NavArrowDown className="size-3 text-ink-400" strokeWidth={2} />
       </button>
-      {open &&
+      {open && !loading &&
         menuPos &&
         createPortal(
           <div
@@ -238,7 +239,7 @@ export function Composer({
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const { modelIds, defaultModelId, contextLimits } = useModels("control");
+  const { modelIds, defaultModelId, contextLimits, isLoading: modelsLoading } = useModels("control");
   const [selectedModel, setSelectedModel] = useState<string | null>(
     initialModelId
   );
@@ -292,7 +293,7 @@ export function Composer({
   );
 
   const handleSend = useCallback(async () => {
-    if ((value.trim() || files.length > 0) && !pending && !archiving && !modelSaving) {
+    if ((value.trim() || files.length > 0) && !pending && !archiving && !modelSaving && !modelsLoading && modelId) {
       const draft = { text: value, files: [...files] };
       onChange("");
       setFiles([]);
@@ -322,6 +323,7 @@ export function Composer({
     pending,
     archiving,
     modelSaving,
+    modelsLoading,
     modelId,
     permissionsIdx,
     onSend,
@@ -431,6 +433,7 @@ export function Composer({
             }}
           />
           <ModelChip
+            loading={modelsLoading}
             modelId={modelId}
             modelIds={modelIds}
             onSelect={(nextModelId) => void selectModel(nextModelId)}
@@ -478,7 +481,7 @@ export function Composer({
                 aria-label="Send"
                 onClick={() => void handleSend()}
                 disabled={
-                  modelSaving || (!value.trim() && files.length === 0)
+                  modelSaving || modelsLoading || !modelId || (!value.trim() && files.length === 0)
                 }
                 className={`flex size-9 items-center justify-center rounded-full transition-colors ${
                   !modelSaving && (value.trim() || files.length > 0)

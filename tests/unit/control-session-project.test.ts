@@ -166,3 +166,8 @@ test("resolveNewSessionRepoId resolves a project group by id or by name", () => 
     null
   );
 });
+
+test("project loading never selects project creation from an empty pending list", () => {
+  assert.equal(defaultProjectChoice([], true), null);
+  assert.equal(defaultProjectChoice([], false), "new");
+});

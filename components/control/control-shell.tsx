@@ -9,10 +9,11 @@ import type { ComposerSendOptions } from "./composer";
 import {
   CONTROL_VIEW_EVENT,
   approveMissionEvent,
-  generateMissionId,
 } from "@/lib/control/utils";
 import { resolveCommitPushBranch } from "@/lib/control/commit-push-branch";
-import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
+import { resolveShellView } from "@/lib/control/shell-view";
+import { ControlErrorBanner } from "./control-load-state";
+import { useControlShareActions } from "./use-control-share-actions";
 import { scopedHref } from "@/lib/scoped-href";
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
 import { useRepos } from "@/hooks/use-repos";
@@ -41,7 +42,6 @@ import {
 } from "@/lib/control/session-project";
 import { useControlWorktrees } from "./use-control-worktrees";
 import { WorktreesPanel } from "./worktrees-panel";
-import { downloadTextFile } from "./download-text-file";
 import { useControlChats } from "./use-control-chats";
 import { useControlChatError } from "./use-control-chat-error";
 import { useControlChatComposer } from "./use-control-chat-composer";
@@ -132,10 +132,11 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       ),
     [sandboxesById]
   );
-  const { repos, mutate: mutateRepos } = useRepos();
+  const { repos, isLoading: reposLoading, mutate: mutateRepos } = useRepos();
   const {
     sessions,
     sessionsLoaded,
+    sessionsError, selectionError, retryList, retrySelection,
     selectSession,
     createSession,
     updateSession,
@@ -201,14 +202,15 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   useEffect(() => {
     persistRef.current = persistSession;
   }, [persistSession]);
-  const pendingInitialMessageRef = usePendingInitialMessage({
-    selectedMissionId,
+  const initialMessage = usePendingInitialMessage({
+    selectedMissionId: sessionId ?? "",
     status,
     sendMessage,
-    onError: (message) => setChatError(message),
+    getChatError: getActiveChatError, clearChatError: clearActiveChatError, messages,
     requestContext,
   });
 
+  const queueInitialMessage = initialMessage.queue;
   const handleSend = useControlSend({
     sendMessage,
     setChatError,
@@ -232,7 +234,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           (current) => [createdRepo, ...(current ?? []).filter((repo) => repo.id !== createdRepo.id)],
           { revalidate: false }
         );
-      const id = generateMissionId();
       const missionTitle =
         text.slice(0, 80) || options.files[0]?.filename || "New mission";
       const createdSessionId = await createSession(
@@ -249,6 +250,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           );
         return false;
       }
+      const id = createdSessionId;
       const newMissionObj: Mission = {
         id,
         title: missionTitle.slice(0, 80),
@@ -270,14 +272,14 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       setSelectedMissionId(id);
       closeNewSession();
       setChatError(null);
-      pendingInitialMessageRef.current = { missionId: id, text, options };
+      await queueInitialMessage({ missionId: id, text, options });
       return true;
     },
     [
       closeNewSession,
       createSession,
       mutateRepos,
-      pendingInitialMessageRef,
+      queueInitialMessage,
       repos,
       setChatError,
     ]
@@ -292,7 +294,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       : null;
   const hasSession = Boolean(sessionId || mission);
   const chatError =
-    localChatError ?? activeChatError?.message ?? persistError ?? null;
+    initialMessage.error ?? localChatError ?? activeChatError?.message ?? persistError ?? null;
 
   const { selectModel, sendInstruction } = useControlComposerActions({
     updateSession,
@@ -309,23 +311,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     sessionsLoaded,
   });
 
-  const handleCopyLink = useCallback(() => {
-    const target = sessionId ?? selectedMissionId;
-    if (!target) return;
-    const url = `${window.location.origin}${scopedHref(scope, "/control")}?mission=${target}`;
-    void navigator.clipboard.writeText(url);
-  }, [sessionId, selectedMissionId, scope]);
-
-  const handleExportTranscript = useCallback(() => {
-    if (messages.length === 0) return;
-    const title = activeSession?.title ?? mission?.title ?? "control-session";
-    const slug =
-      title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "") || "control-session";
-    downloadTextFile(`${slug}.md`, buildTranscriptMarkdown(title, messages));
-  }, [messages, activeSession?.title, mission?.title]);
+  const { handleCopyLink, handleExportTranscript } = useControlShareActions({ sessionId: sessionId ?? selectedMissionId, scope, title: activeSession?.title ?? mission?.title ?? "control-session", messages });
 
   useEffect(() => {
     const listener = () => setView("sandboxes");
@@ -333,9 +319,12 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     return () => window.removeEventListener(CONTROL_VIEW_EVENT, listener);
   }, []);
 
-  if (newMission || (!mission && !sessionId)) {
+  const shellView = resolveShellView({ newMission, hasMission: Boolean(mission), sessionId, sessionsLoaded, restoring: sessions.length > 0 && !sessionId && !selectionError });
+  const loadState = { loaded: sessionsLoaded, error: sessionsError, onRetry: () => void retryList() };
+  if (shellView !== "mission") {
     return (
       <NewMissionView
+        loading={shellView === "loading"} reposLoading={reposLoading} loadState={loadState} selectionError={selectionError} retrySelection={() => void retrySelection()}
         repos={repos}
         sessions={displaySessions}
         sessionId={sessionId}
@@ -356,6 +345,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   return (
     <div className="app-control-shell bg-ink-950 text-ink-100 flex h-full overflow-hidden">
       <SessionList
+        loadState={loadState}
         sessions={displaySessions}
         selectedId={sessionId}
         workingIds={runningSessionIds}
@@ -416,7 +406,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
             <SandboxesPanel
               sandboxes={sandboxes}
               loading={sandboxesLoading}
-              hasRepository={Boolean(activeRepo)}
+              hasRepository={Boolean(activeRepo)} repositoryLoading={reposLoading}
               selectedSandboxId={activeSandbox?.id ?? null}
               focusSandboxId={focusSandboxId}
               onClearFocus={() => setFocusSandboxId(null)}
@@ -462,13 +452,8 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                     />
                   }
                 />
-                {chatError && (
-                  <div className="mx-auto w-full max-w-[67rem] px-4 py-2 sm:px-6">
-                    <div className="border-accent-amber/30 bg-accent-amber/5 text-accent-amber rounded border px-3 py-2 text-xs">
-                      {chatError}
-                    </div>
-                  </div>
-                )}
+                <ControlErrorBanner message={selectionError} onRetry={() => void retrySelection()} />
+                <ControlErrorBanner message={chatError} onRetry={initialMessage.error ? initialMessage.retry : undefined} />
                 <TurnProgress messages={messages} status={status} workers={controlWorkers.workers} />
                 <TerminalActivity key={messages.findLast((message) => message.role === "user")?.id ?? activeChatId} messages={terminalMessages} />
                 <Composer
