@@ -59,13 +59,23 @@ export const defaultAutomationAgentDeps: AutomationAgentDeps = {
   resolveSkills: resolveAutomationSkills,
   // A flow run carries its job run id in metadata; a standalone review's is
   // not in its context, and its rows are found by repo, PR, and time.
-  judgeReviewFormat: (draft, context) =>
-    findReviewFormatProblems(draft, prReviewDecisionScope(context, null), {
+  judgeReviewFormat: (draft, context) => {
+    const decision = buildReviewerDraftDecisionContext(context);
+    return findReviewFormatProblems(draft, decision.scope, decision.metadata);
+  },
+};
+
+/** Scope and tracing metadata shared by the default in-run format judge. */
+export function buildReviewerDraftDecisionContext(context: JobContext) {
+  return {
+    scope: prReviewDecisionScope(context, null),
+    metadata: {
       job_run_id: context.metadata.flow_job_run_id ?? null,
       pr_number: context.metadata.pr_number ?? null,
       stage: "reviewer_draft",
-    }),
-};
+    },
+  };
+}
 
 // Applies the tool-approval gate when the flow agent node opted in via
 // requireApproval (stamped onto metadata by the agent-node executor).
