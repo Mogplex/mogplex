@@ -20,7 +20,7 @@ export function ProjectCombobox({
   value: string | null;
   loading?: boolean;
   newProjectValue: string;
-  onValueChange: (value: string) => void;
+  onValueChange: (value: string, projectName?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -34,7 +34,10 @@ export function ProjectCombobox({
       .toLowerCase()
       .includes(query)
   );
-  const showNewProject = "new project".includes(query);
+  const showNewProject = !query || !repos.some((repo) =>
+    repo.full_name.toLowerCase() === query ||
+    (repo.name?.trim() || repo.full_name.split("/").at(-1))?.toLowerCase() === query
+  );
   const optionValues = [
     ...matchingRepos.map((repo) => repo.id),
     ...(showNewProject ? [newProjectValue] : []),
@@ -46,7 +49,7 @@ export function ProjectCombobox({
   };
 
   const selectProject = (nextValue: string) => {
-    onValueChange(nextValue);
+    onValueChange(nextValue, nextValue === newProjectValue ? search.trim() : undefined);
     handleOpenChange(false);
   };
 
@@ -180,7 +183,9 @@ export function ProjectCombobox({
               role="option"
               type="button"
             >
-              <span className="min-w-0 flex-1 truncate">New project…</span>
+              <span className="min-w-0 flex-1 truncate">
+                {query ? `Create project "${search.trim()}"` : "New project…"}
+              </span>
               {value === newProjectValue ? (
                 <Check
                   aria-label="Selected"

@@ -249,7 +249,10 @@ export function NewMissionComposer({
               repos={repos}
               value={selectedRepoId}
               newProjectValue={NEW_PROJECT}
-              onValueChange={setChoice}
+              onValueChange={(nextChoice, projectName) => {
+                setChoice(nextChoice);
+                if (projectName) setNewProjectName(projectName);
+              }}
             />
             {selectedRepoId === NEW_PROJECT ? (
               <NewProjectFields

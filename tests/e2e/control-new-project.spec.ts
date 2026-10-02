@@ -1,9 +1,75 @@
 import { expect, test } from "@playwright/test";
+import type { Repo } from "@/lib/types";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
   mockBaseChrome,
 } from "./helpers/automation-control-plane-fixtures";
+
+test("project search offers creation with the typed name and hides it for an exact match", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  const repo: Repo = {
+    id: "repo-1",
+    user_id: "user-1",
+    full_name: "acme/widgets",
+    owner: "acme",
+    name: "",
+    default_branch: "main",
+    created_at: "2026-09-01T00:00:00Z",
+  };
+  await page.route("**/api/repos**", (route) => fulfillJson(route, [repo]));
+  await page.route("**/api/github/owners", (route) =>
+    fulfillJson(route, [
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: null,
+        scope_label: "Personal",
+        source: "oauth",
+      },
+    ])
+  );
+  await page.route("**/api/github/repos/availability**", (route) =>
+    fulfillJson(route, { availability: "available" })
+  );
+  await page.goto(scopedPath("control"));
+  const picker = page.getByRole("combobox", { name: "Project", exact: true });
+  await picker.click();
+  const search = page.getByRole("textbox", { name: "Search projects" });
+  await search.fill("  invoices  ");
+  await expect(
+    page.getByRole("option", { name: 'Create project "invoices"' })
+  ).toBeVisible();
+  await search.press("Enter");
+  await expect(page.getByLabel("New project name")).toHaveValue("invoices");
+  await picker.click();
+  await search.fill("WIDGETS");
+  await expect(
+    page.getByRole("option", { name: "acme/widgets" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /Create project/ })
+  ).toHaveCount(0);
+  await search.fill("acme/widgets");
+  await expect(
+    page.getByRole("option", { name: /Create project/ })
+  ).toHaveCount(0);
+  await search.fill("wid");
+  await expect(
+    page.getByRole("option", { name: 'Create project "wid"' })
+  ).toBeVisible();
+  await page.getByRole("option", { name: 'Create project "wid"' }).click();
+  await expect(page.getByLabel("New project name")).toHaveValue("wid");
+});
 
 test("new mission validates and creates an org-scoped project before starting", async ({
   page,
@@ -78,6 +144,7 @@ test("new mission validates and creates an org-scoped project before starting", 
   let sessionAttempts = 0;
   await page.route("**/api/control/sessions**", (route) => {
     const request = route.request();
+    if (request.method() === "GET") return fulfillJson(route, []);
     if (request.method() !== "POST") return route.continue();
     sessionAttempts += 1;
     if (sessionAttempts === 1) {
