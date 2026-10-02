@@ -84,7 +84,7 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-function hashToolInput(input: unknown): string {
+export function hashToolInput(input: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(canonicalize(input)) ?? "null")
     .digest("hex");

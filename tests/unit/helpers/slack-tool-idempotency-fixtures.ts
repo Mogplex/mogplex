@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { ToolSet } from "ai";
+import { jsonSchema } from "ai";
 import type {
   SlackToolExecutionRecord,
   SlackToolExecutionStore,
@@ -64,7 +65,7 @@ export function createMemoryStore() {
 export function executableTool(execute: (input: unknown) => unknown) {
   return {
     description: "test tool",
-    inputSchema: {},
+    inputSchema: jsonSchema<Record<string, unknown>>({ type: "object" }),
     execute,
   };
 }

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Chat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, validateUIMessages, type UIMessage } from "ai";
 import { createControlApprovalSubmission } from "@/lib/control/approval-submission";
+import { CONTROL_TURN_RUNNING_MESSAGE } from "@/lib/control/turn-conflict";
 
 function isRunning(chat: Chat<UIMessage>) {
   return chat.status === "submitted" || chat.status === "streaming";
@@ -21,6 +22,19 @@ export class ControlChatRegistry {
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly transport = new DefaultChatTransport<UIMessage>({
     api: "/api/control/chat",
+    fetch: async (...args) => {
+      const response = await globalThis.fetch(...args);
+      if (response.status === 409) {
+        const body = await response
+          .clone()
+          .json()
+          .catch(() => null);
+        if (body?.error === CONTROL_TURN_RUNNING_MESSAGE) {
+          throw new Error(CONTROL_TURN_RUNNING_MESSAGE);
+        }
+      }
+      return response;
+    },
   });
 
   constructor(
@@ -83,7 +97,15 @@ export class ControlChatRegistry {
       transport: this.transport,
       sendAutomaticallyWhen: approvals.shouldSubmit,
       onFinish: ({ messages }) => {
+        // The SDK also finishes HTTP failures. A rejected turn must never
+        // persist its stale transcript over the turn that won admission.
+        if (chat.error?.message === CONTROL_TURN_RUNNING_MESSAGE) return;
         void this.persistFinishedMessages(sessionId, messages);
+      },
+      onError: (error) => {
+        if (error.message === CONTROL_TURN_RUNNING_MESSAGE) {
+          void this.refreshConflictedTranscript(sessionId, chat, error);
+        }
       },
     });
     const sendMessage = chat.sendMessage;
@@ -118,6 +140,39 @@ export class ControlChatRegistry {
       for (const unsubscribe of unsubscribers) unsubscribe();
     });
     return chat;
+  }
+
+  private async refreshConflictedTranscript(
+    sessionId: string,
+    chat: Chat<UIMessage>,
+    error: Error
+  ) {
+    const rejectedMessages = chat.messages;
+    try {
+      const response = await fetch(
+        `/api/control/sessions?id=${encodeURIComponent(sessionId)}`,
+        { cache: "no-store" }
+      );
+      if (!response.ok) throw new Error("Could not refresh this conversation.");
+      const session = await response.json();
+      const messages = await validateUIMessages({ messages: session.messages });
+      if (
+        this.chats.get(sessionId) !== chat ||
+        chat.messages !== rejectedMessages ||
+        chat.error !== error ||
+        isRunning(chat) ||
+        this.persisting.has(sessionId) ||
+        this.persistFailed.has(sessionId)
+      )
+        return;
+      chat.messages = messages;
+      this.hydrated.add(sessionId);
+    } catch (refreshError) {
+      console.error("[control] could not refresh conflicted conversation", {
+        sessionId,
+        error: refreshError,
+      });
+    }
   }
 
   hydrate(sessionId: string, messages: UIMessage[]) {

@@ -55,6 +55,46 @@ export async function checkSchemaCompatibility(
       pinned: true,
       archived: true,
     });
+    const activeControl = await client
+      .from("ai_calls")
+      .select("status,conversation_id,metadata")
+      .eq("id", BEFORE_USER)
+      .single();
+    assert.equal(
+      activeControl.error,
+      null,
+      JSON.stringify(activeControl.error)
+    );
+    assert.deepEqual(activeControl.data, {
+      status: "streaming",
+      conversation_id: BEFORE_USER,
+      metadata: { surface: "control", compatibility: true },
+    });
+    const progress = await client
+      .from("ai_calls")
+      .update({
+        metadata: {
+          surface: "control",
+          compatibility: true,
+          progress: "retained-worker",
+        },
+      })
+      .eq("id", BEFORE_USER);
+    assert.equal(progress.error, null, JSON.stringify(progress.error));
+    const finished = await client
+      .from("ai_calls")
+      .update({ status: "success" })
+      .eq("id", BEFORE_USER);
+    assert.equal(finished.error, null, JSON.stringify(finished.error));
+    const nextControl = await client.from("ai_calls").insert({
+      user_id: BEFORE_USER,
+      conversation_id: BEFORE_USER,
+      type: "agent",
+      model: "fixture",
+      status: "pending",
+      metadata: { surface: "control" },
+    });
+    assert.equal(nextControl.error, null, JSON.stringify(nextControl.error));
     const run = await client
       .from("external_agent_runs")
       .select("status,metadata")
@@ -119,6 +159,9 @@ export async function checkSchemaCompatibility(
     user_id: userId,
     type: "agent",
     model: "fixture",
+    conversation_id: userId,
+    status: "streaming",
+    metadata: { surface: "control", compatibility: true },
   });
   assert.equal(call.error, null, JSON.stringify(call.error));
   const externalRun = await client.from("external_agent_runs").insert({

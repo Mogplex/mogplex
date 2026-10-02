@@ -68,6 +68,16 @@ async function getSupabaseAdmin() {
   return mod.supabaseAdmin;
 }
 
+export class AiCallPersistenceError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string
+  ) {
+    super(message);
+    this.name = "AiCallPersistenceError";
+  }
+}
+
 export async function createAiCall(input: {
   userId: string;
   type: AiCallType;
@@ -105,7 +115,10 @@ export async function createAiCall(input: {
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message || "Failed to create ai_call");
+    throw new AiCallPersistenceError(
+      error?.message || "Failed to create ai_call",
+      error?.code
+    );
   }
 
   return data as AiCall;

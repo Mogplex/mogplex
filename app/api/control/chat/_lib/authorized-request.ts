@@ -25,6 +25,10 @@ import {
   sanitizeAgentUserFacingError,
 } from "@/lib/agents/user-facing-output";
 import type { ControlChatRequestBody, ControlStartupFailure } from "./types";
+import {
+  CONTROL_TURN_RUNNING_MESSAGE,
+  isControlTurnConflict,
+} from "@/lib/control/turn-conflict";
 
 /**
  * POST handler for the Control chat endpoint.
@@ -157,6 +161,13 @@ export async function runAuthorizedControlChat(
       limitClaimId,
       message: internalMessage,
     });
+
+    if (isControlTurnConflict(error)) {
+      return Response.json(
+        { error: CONTROL_TURN_RUNNING_MESSAGE },
+        { status: 409 }
+      );
+    }
 
     if (isModelAllowlistUnavailableError(error)) {
       return Response.json(
