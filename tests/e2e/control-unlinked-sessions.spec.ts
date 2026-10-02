@@ -57,7 +57,18 @@ test("unlinked legacy sessions show truthful repository context and retain saved
     fulfillJson(route, { connections: [] })
   );
   await page.route("**/api/control/sessions**", (route) => {
-    const id = new URL(route.request().url()).searchParams.get("id");
+    const params = new URL(route.request().url()).searchParams;
+    const id = params.get("id");
+    if (params.get("archived") === "true") {
+      return fulfillJson(route, [
+        {
+          ...sessions[0],
+          id: "archive",
+          title: "Archived legacy investigation",
+          archived: true,
+        },
+      ]);
+    }
     return fulfillJson(
       route,
       id ? sessions.find((session) => session.id === id) : sessions
@@ -99,4 +110,15 @@ test("unlinked legacy sessions show truthful repository context and retain saved
   await expect(
     page.getByRole("menuitem", { name: "View on GitHub" })
   ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "Archived chats", exact: true })
+    .click();
+  await expect(
+    page.getByText("Archived legacy investigation", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText("Unlinked", { exact: true })).toHaveAttribute(
+    "title",
+    "This session has no linked repository. Start a new mission to link one."
+  );
 });
