@@ -16,6 +16,7 @@ import {
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 import { loadControlSessionList } from "./session-list-data";
+import { controlSelectionFailure } from "@/lib/control/session-list-state";
 import { ClientFetchError, fetchJsonObject } from "@/lib/client-fetch";
 
 const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
@@ -52,6 +53,7 @@ export function useControlSessions({
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const failedSelectionRef = useRef<string | null>(null);
+  const missingSelectionRef = useRef(false);
   const restoreInFlightRef = useRef(false);
   const listRequestRef = useRef(0);
   const updatedAtBySessionRef = useRef(new Map<string, string>());
@@ -78,13 +80,9 @@ export function useControlSessions({
     } catch (error) {
       if (requestRevision === refreshRevisionRef.current) {
         failedSelectionRef.current = sessionId;
-        setSelectionError(
-          error instanceof ClientFetchError && error.status === 404
-            ? "That session no longer exists"
-            : error instanceof ClientFetchError
-              ? error.message
-              : "Could not load this chat. Try again."
-        );
+        const { missing, message } = controlSelectionFailure(error);
+        missingSelectionRef.current = missing;
+        setSelectionError(message);
       }
       return;
     }
@@ -151,6 +149,14 @@ export function useControlSessions({
       return;
     }
     setSessions(fetched);
+    if (
+      missingSelectionRef.current &&
+      !fetched.some((entry) => entry.id === failedSelectionRef.current)
+    ) {
+      failedSelectionRef.current = null;
+      missingSelectionRef.current = false;
+      setSelectionError(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -176,13 +182,9 @@ export function useControlSessions({
       } catch (error) {
         if (revision === selectionRevisionRef.current) {
           failedSelectionRef.current = id;
-          setSelectionError(
-            error instanceof ClientFetchError && error.status === 404
-              ? "That session no longer exists"
-              : error instanceof ClientFetchError
-                ? error.message
-                : "Could not load this chat. Try again."
-          );
+          const { missing, message } = controlSelectionFailure(error);
+          missingSelectionRef.current = missing;
+          setSelectionError(message);
         }
         return false;
       }
@@ -197,6 +199,7 @@ export function useControlSessions({
       }
       selectedIdRef.current = record.id;
       restoredSelectionRef.current = true;
+      missingSelectionRef.current = false;
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
       failedSelectionRef.current = null;
@@ -278,6 +281,11 @@ export function useControlSessions({
         },
         ...current,
       ]);
+      selectionRevisionRef.current++;
+      restoredSelectionRef.current = true;
+      failedSelectionRef.current = null;
+      missingSelectionRef.current = false;
+      setSelectionError(null);
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
       return record.id;
@@ -473,7 +481,7 @@ export function useControlSessions({
     selectionError,
     retryList: refreshList,
     retrySelection: () =>
-      sessionId && failedSelectionRef.current
+      sessionId && failedSelectionRef.current && !missingSelectionRef.current
         ? selectSession(failedSelectionRef.current)
         : refreshList(),
     selectSession,

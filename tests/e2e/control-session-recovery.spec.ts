@@ -4,6 +4,7 @@ import { fulfillJson } from "./helpers/automation-control-plane-fixtures";
 import {
   mockRecoveryChrome,
   recoverySession,
+  recoveryStream,
 } from "./helpers/control-recovery-fixtures";
 
 test("failed session history shows an error and recovers through Retry", async ({
@@ -74,15 +75,19 @@ test("a missing session selection reports the failure while keeping the current 
 }) => {
   await mockRecoveryChrome(page);
   const gone = { ...recoverySession, id: "gone", title: "Deleted elsewhere" };
+  let goneRequests = 0;
+  let listRequests = 0;
   await page.route("**/api/control/sessions**", (route) => {
     const id = new URL(route.request().url()).searchParams.get("id");
+    if (id === "gone") goneRequests++;
+    if (!id) listRequests++;
     return fulfillJson(
       route,
       id === "gone"
         ? { error: "Not found" }
         : id
           ? recoverySession
-          : [recoverySession, gone],
+          : [recoverySession, ...(goneRequests ? [] : [gone])],
       id === "gone" ? 404 : 200
     );
   });
@@ -92,6 +97,20 @@ test("a missing session selection reports the failure while keeping the current 
   await expect(
     page.getByRole("alert").filter({ hasText: "That session no longer exists" })
   ).toContainText("That session no longer exists");
+  await expect(page.getByText("Saved request", { exact: true })).toBeVisible();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "That session no longer exists" })
+    .getByRole("button", { name: "Retry" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: /^Deleted elsewhere / })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "That session no longer exists" })
+  ).toHaveCount(0);
+  expect(goneRequests).toBe(1);
+  expect(listRequests).toBeGreaterThan(1);
   await expect(page.getByText("Saved request", { exact: true })).toBeVisible();
 });
 
@@ -169,3 +188,72 @@ for (const hasOtherChats of [false, true]) {
     );
   });
 }
+
+test("a slow automatic restore cannot replace a newly created mission", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  let release!: () => void;
+  let started!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const received = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const created = {
+    ...recoverySession,
+    id: "new-during-restore",
+    title: "New work",
+    messages: [],
+  };
+  await page.route("**/api/control/sessions**", async (route) => {
+    const method = route.request().method();
+    if (method === "POST") return fulfillJson(route, created);
+    if (method === "PUT") return fulfillJson(route, { session: created });
+    const id = new URL(route.request().url()).searchParams.get("id");
+    if (id === recoverySession.id) {
+      started();
+      await pending;
+    }
+    return fulfillJson(
+      route,
+      id ? (id === created.id ? created : recoverySession) : [recoverySession]
+    );
+  });
+  await page.route("**/api/control/chat", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: recoveryStream(),
+    })
+  );
+  await page.goto(scopedPath("control"));
+  await received;
+  await page.getByRole("button", { name: "New session", exact: true }).click();
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Keep the new mission selected");
+  await page
+    .getByRole("button", { name: "Start mission", exact: true })
+    .click();
+  await expect(
+    page.getByText("Request recovered.", { exact: true })
+  ).toBeVisible();
+  const restored = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).searchParams.get("id") === recoverySession.id
+  );
+  release();
+  await restored;
+  await expect(page).toHaveURL(/mission=new-during-restore/);
+  await expect(page.getByText("Saved request", { exact: true })).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("mogplex.control.lastSessionId")
+    )
+  ).toBe(created.id);
+});

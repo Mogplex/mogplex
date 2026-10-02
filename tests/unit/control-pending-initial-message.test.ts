@@ -356,3 +356,58 @@ for (const scenario of [
     }
   });
 }
+
+test("delivered first messages stay successful when draft cleanup fails", async () => {
+  const cleanup = installDom();
+  const { renderHook, act, waitFor } = await import("@testing-library/react");
+  const storage = new Map<string, string>();
+  let attempts = 0;
+  let writes = 0;
+  Object.defineProperty(window, "sessionStorage", {
+    value: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        writes++;
+        storage.set(key, value);
+      },
+      removeItem: () => {
+        throw new Error("Storage access revoked");
+      },
+    },
+  });
+  const view = renderHook(() =>
+    usePendingInitialMessage({
+      selectedMissionId: "delivered",
+      status: "ready",
+      sendMessage: async () => {
+        attempts++;
+      },
+      getChatError: () => undefined,
+      clearChatError: () => {},
+      messages: [],
+      requestContext: {},
+    })
+  );
+  try {
+    await act(async () =>
+      view.result.current.queue({
+        missionId: "delivered",
+        text: "Already delivered",
+        options: {
+          model: "test/model",
+          mode: "run",
+          permissions: "Skip Permissions",
+          files: [],
+        },
+      })
+    );
+    await waitFor(() => assert.equal(attempts, 1));
+    assert.equal(view.result.current.error, null);
+    assert.equal(writes, 1, "cleanup failure must not save a failed draft");
+    view.rerender();
+    assert.equal(attempts, 1);
+  } finally {
+    view.unmount();
+    cleanup();
+  }
+});

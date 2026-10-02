@@ -130,10 +130,14 @@ export function usePendingInitialMessage({
           failed();
           return;
         }
-        await removePendingInitialMessage(
-          window.sessionStorage,
-          pending.missionId
-        );
+        try {
+          await removePendingInitialMessage(
+            window.sessionStorage,
+            pending.missionId
+          );
+        } catch {
+          console.warn("Could not clear a delivered first-message draft");
+        }
         if (pendingRef.current?.missionId === pending.missionId)
           pendingRef.current = null;
         setPending((current) =>
