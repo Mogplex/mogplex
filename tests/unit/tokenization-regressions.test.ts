@@ -13,7 +13,7 @@ const asciiHeroUrl = new URL(
   import.meta.url
 );
 const dashboardLayoutUrl = new URL(
-  "../../app/(dashboard)/layout.tsx",
+  "../../components/dashboard-shell.tsx",
   import.meta.url
 );
 const topBarUrl = new URL("../../components/top-bar.tsx", import.meta.url);

@@ -21,7 +21,7 @@ test("new mission validates and creates an org-scoped project before starting", 
     name: string;
     default_branch: string;
   } | null = null;
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, createdRepo ? [createdRepo] : [])
   );
   await page.route("**/api/github/owners", (route) =>
@@ -189,7 +189,7 @@ test("new project explains GitHub connection and org-scope requirements", async 
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) => fulfillJson(route, []));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
   await page.route("**/api/control/sessions**", (route) =>
     fulfillJson(route, [])
   );
@@ -244,7 +244,7 @@ test("new project remains actionable when availability auth expires", async ({
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) => fulfillJson(route, []));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
   await page.route("**/api/control/sessions**", (route) =>
     fulfillJson(route, [])
   );
@@ -287,7 +287,7 @@ test("new project preserves the selected owner while switching projects", async 
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

@@ -5,7 +5,6 @@ import type {
   MemoryGroups,
   MemoryPayload,
   MemoryResourceScope,
-  Repo,
 } from "./context-section-types";
 import { LANES } from "./context-section-types";
 
@@ -115,18 +114,6 @@ export async function fetchMemoryGroups([url, resourceScope, activeTeamId]: [
   });
   if (!res.ok) throw new Error("Failed to load memories");
   return normalizeMemoryPayload(await res.json());
-}
-
-export async function fetchRepos([url, resourceScope, activeTeamId]: [
-  string,
-  Exclude<MemoryResourceScope, "all">,
-  string | null,
-]) {
-  const res = await fetch(url, {
-    headers: requestHeaders({ resourceScope, activeTeamId }),
-  });
-  if (!res.ok) throw new Error("Failed to load projects");
-  return (await res.json()) as Repo[];
 }
 
 export function isCurrentProject(

@@ -9,7 +9,7 @@ import { CommandPaletteProvider } from "@/components/command-palette-provider"
 import { NewModelsDialog } from "@/components/new-models-dialog"
 import { scopedHref } from "@/lib/scoped-href"
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { scope } = useParams<{ scope: string }>()
   return (
     <CommandPaletteProvider>

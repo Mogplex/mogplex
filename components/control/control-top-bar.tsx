@@ -43,8 +43,8 @@ export type ControlTopBarProps = {
   projectName: string | null;
   /** Selected session/mission title; null when nothing is selected. */
   sessionTitle: string | null;
-  /** Branch the commit actions target (active sandbox or mission base). */
-  branch: string;
+  /** Working branch reported by the active sandbox; null when unknown. */
+  branch: string | null;
   /** A chat session is active, so agent instructions can be sent. */
   hasSession: boolean;
   /** A run is streaming; agent instructions are blocked until it ends. */
@@ -325,16 +325,16 @@ export function ControlTopBar({
           <DropdownMenuContent align="end" className={MENU_CLASS}>
             <Item
               icon={GitCommit}
-              disabled={!agentReady}
-              title={agentBlockReason}
-              onSelect={() =>
+              disabled={!agentReady || !branch}
+              title={branch ? agentBlockReason : "Start a sandbox to enable commit and push"}
+              onSelect={() => {
+                if (!agentReady || !branch) return;
                 onSendInstruction(
                   `Commit the current changes with a conventional commit message and push the \`${branch}\` branch.`
-                )
-              }
+                );
+              }}
             >
-              Commit &amp; push to{" "}
-              <span className="font-mono text-[12px]">{branch}</span>
+              Commit &amp; push{branch && <> to <span className="font-mono text-[12px]">{branch}</span></>}
             </Item>
             <Item
               icon={GitCommit}

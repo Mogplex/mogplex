@@ -97,7 +97,7 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await page.route("**/api/control/worktrees**", (route) =>
     fulfillJson(route, { worktrees: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

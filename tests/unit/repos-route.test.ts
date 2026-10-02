@@ -431,3 +431,39 @@ test("DELETE /api/repos succeeds for team admins", async () => {
     productTeamId: TEAM_UUID,
   });
 });
+
+for (const configured of [false, true]) {
+  test(`the full repository cache carries coverage policy with app config ${configured}`, async () => {
+    const { createReposGetHandler } = await loadReposRoute();
+    const rows = [
+      { id: "covered", github_installation_id: 42 },
+      { id: "legacy", github_installation_id: null },
+      { id: "removed", github_installation_id: null, is_hidden: true },
+    ];
+    const handler = createReposGetHandler({
+      requireUserId: async () => "user-123",
+      hasGithubAppConfig: () => configured,
+      countGithubInstallations: async () => 1,
+      loadRepos: async (_scope, options) => {
+        assert.equal(options?.showHidden, true);
+        return { data: rows, error: null };
+      },
+    });
+    const response = await handler(
+      new Request("http://localhost/api/repos?show_hidden=true")
+    );
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.deepEqual(
+      data.map((row: { id: string }) => row.id),
+      rows.map((row) => row.id)
+    );
+    assert.equal(
+      data.every(
+        (row: { github_prefer_installation_coverage: boolean }) =>
+          row.github_prefer_installation_coverage === configured
+      ),
+      true
+    );
+  });
+}

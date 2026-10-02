@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Repo, Agent, Assignment, Workspace } from "@/lib/types";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { useUser } from "@/hooks/use-user";
+import { useRepos } from "@/hooks/use-repos";
 import {
   getActiveTeamRequestHeaders,
   useActiveTeamId,
@@ -17,7 +18,7 @@ import {
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
-import { sortRepos, sortWorkspaces } from "./helpers";
+import { mergeSyncedRepositories, sortRepos, sortWorkspaces } from "./helpers";
 import type { RepoDashboardProps } from "./types";
 import {
   createToggleFavorite,
@@ -38,7 +39,6 @@ export function useRepoDashboard({
   onReposLoaded,
 }: RepoDashboardProps) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [repos, setRepos] = useState<Repo[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [search, setSearch] = useState("");
@@ -56,9 +56,29 @@ export function useRepoDashboard({
   const [browsingMonorepo, setBrowsingMonorepo] = useState<Repo | null>(null);
   const [syncingRepos, setSyncingRepos] = useState(false);
   const [repoSyncError, setRepoSyncError] = useState<string | null>(null);
-  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [otherLoadError, setOtherLoadError] = useState<string | null>(null);
   const [hasAttemptedRepoSync, setHasAttemptedRepoSync] = useState(false);
-  const [hasLoadedInitialRepos, setHasLoadedInitialRepos] = useState(false);
+  const {
+    repos: rawRepos,
+    error: reposError,
+    isLoading: reposLoading,
+    mutate: mutateRepos,
+  } = useRepos({ showHidden: true });
+  const repos = useMemo(() => sortRepos(rawRepos), [rawRepos]);
+  const dataLoadError = otherLoadError ?? reposError?.message ?? null;
+  const hasLoadedInitialRepos = !reposLoading && !reposError;
+  const setRepos = useCallback(
+    (next: React.SetStateAction<Repo[]>) => {
+      void mutateRepos(
+        (current) => (typeof next === "function" ? next(current ?? []) : next),
+        { revalidate: false }
+      );
+    },
+    [mutateRepos]
+  );
+  useEffect(() => {
+    if (hasLoadedInitialRepos) onReposLoaded?.(repos, agents);
+  }, [hasLoadedInitialRepos, onReposLoaded, repos, agents]);
 
   const sandboxes = useSandboxStore((state) => state.sandboxes);
   const sandboxesById = useSandboxStore((state) => state.sandboxesById);
@@ -106,7 +126,7 @@ export function useRepoDashboard({
 
   const syncGithubRepos = useCallback(
     async (source = "repo_dashboard") => {
-      setDataLoadError(null);
+      setOtherLoadError(null);
       setRepoSyncError(null);
       setSyncingRepos(true);
       trackActivation("repo_sync_started", { source });
@@ -119,9 +139,8 @@ export function useRepoDashboard({
         if (res.ok) {
           const syncedRepos = sortRepos(data);
           const nextWorkspaces = await fetchWorkspaces();
-          setRepos(syncedRepos);
+          setRepos((current) => mergeSyncedRepositories(current, syncedRepos));
           setWorkspaces(nextWorkspaces);
-          onReposLoaded?.(syncedRepos, agents);
           trackActivation("repo_sync_completed", {
             source,
             repo_count: syncedRepos.length,
@@ -153,60 +172,42 @@ export function useRepoDashboard({
         setSyncingRepos(false);
       }
     },
-    [activeTeamId, connectGithubLabel, agents, fetchWorkspaces, onReposLoaded]
+    [activeTeamId, connectGithubLabel, fetchWorkspaces, setRepos]
   );
 
-  const fetchData = useCallback(async () => {
-    setDataLoadError(null);
-    const repoUrl = showHidden ? "/api/repos?show_hidden=true" : "/api/repos";
+  const fetchData = useCallback(
+    async (revalidateRepos = true) => {
+      setOtherLoadError(null);
 
-    try {
-      const [
-        workspaceResponse,
-        repoResponse,
-        agentResponse,
-        assignmentResponse,
-      ] = await Promise.all([
-        fetchWorkspaces(),
-        fetch(repoUrl, {
-          headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
-        }).then(async (res) => {
-          if (!res.ok) {
-            throw new Error(
-              await parseRouteError(res, "Failed to load repositories")
-            );
-          }
-          return res.json();
-        }),
-        fetch("/api/agents").then((res) => (res.ok ? res.json() : [])),
-        fetch("/api/assignments").then((res) => (res.ok ? res.json() : [])),
-      ]);
-      const sorted = sortRepos(repoResponse);
-      setWorkspaces(workspaceResponse);
-      setRepos(sorted);
-      setAgents(agentResponse);
-      setAssignments(assignmentResponse);
-      setHasLoadedInitialRepos(true);
-      onReposLoaded?.(sorted, agentResponse);
-    } catch (error) {
-      setWorkspaces([]);
-      setRepos([]);
-      setAgents([]);
-      setAssignments([]);
-      setDataLoadError(
-        (error as Error).message || "Failed to load projects and spaces"
-      );
-    }
-  }, [
-    activeTeamId,
-    fetchWorkspaces,
-    onReposLoaded,
-    parseRouteError,
-    showHidden,
-  ]);
+      try {
+        const [workspaceResponse, agentResponse, assignmentResponse] =
+          await Promise.all([
+            fetchWorkspaces(),
+            fetch("/api/agents", {
+              headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+            }).then((res) => (res.ok ? res.json() : [])),
+            fetch("/api/assignments", {
+              headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+            }).then((res) => (res.ok ? res.json() : [])),
+          ]);
+        if (revalidateRepos) await mutateRepos();
+        setWorkspaces(workspaceResponse);
+        setAgents(agentResponse);
+        setAssignments(assignmentResponse);
+      } catch (error) {
+        setWorkspaces([]);
+        setAgents([]);
+        setAssignments([]);
+        setOtherLoadError(
+          (error as Error).message || "Failed to load projects and spaces"
+        );
+      }
+    },
+    [activeTeamId, fetchWorkspaces, mutateRepos]
+  );
 
   useEffect(() => {
-    void fetchData();
+    void fetchData(false);
     void refreshSandboxes();
   }, [fetchData, refreshSandboxes]);
 
@@ -299,6 +300,7 @@ export function useRepoDashboard({
     ownerFilter,
     repos,
     sandboxesById,
+    showHidden,
     search,
     workspaces,
   });
@@ -306,25 +308,22 @@ export function useRepoDashboard({
   const actionsContext = useMemo(
     () => ({
       activeTeamId,
-      agents,
       fetchData,
       getSandboxForRepo,
       launchRepoSandbox,
       launchSandbox,
-      onReposLoaded,
       repos,
       setRepos,
       stopSandbox,
     }),
     [
       activeTeamId,
-      agents,
       fetchData,
       getSandboxForRepo,
       launchRepoSandbox,
       launchSandbox,
-      onReposLoaded,
       repos,
+      setRepos,
       stopSandbox,
     ]
   );

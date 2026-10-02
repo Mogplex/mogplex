@@ -43,7 +43,7 @@ test("triggers installation combobox shows scope and supports repo-name search",
   await page.route("**/api/auth/user", (route) =>
     fulfillJson(route, { user: connectedUser })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       { id: "repo-1", full_name: "acme/web-app", github_installation_id: 101 },
       { id: "repo-2", full_name: "acme/api", github_installation_id: 101 },
@@ -180,7 +180,7 @@ test("triggers empty state explains missing GitHub App installations", async ({
       },
     })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

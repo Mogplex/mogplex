@@ -12,6 +12,7 @@ import type {
 
 export interface RepoDashboardProps {
   onOpenChat: (repo: Repo) => void;
+  /** Reports the current scoped collection after cache or agent data changes. */
   onReposLoaded?: (repos: Repo[], agents: Agent[]) => void;
 }
 

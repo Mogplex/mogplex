@@ -55,7 +55,7 @@ export async function mockBaseChrome(page: Page) {
 }
 
 export async function mockControlSessionBootstrap(page: Page) {
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-control-default",

@@ -11,6 +11,7 @@ import {
   approveMissionEvent,
   generateMissionId,
 } from "@/lib/control/utils";
+import { resolveCommitPushBranch } from "@/lib/control/commit-push-branch";
 import { buildTranscriptMarkdown } from "@/lib/control/export-transcript";
 import { scopedHref } from "@/lib/scoped-href";
 import { useSandboxStore, useSandboxSync } from "@/hooks/use-sandbox";
@@ -228,7 +229,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     ) => {
       if (createdRepo)
         await mutateRepos(
-          [createdRepo, ...repos.filter((repo) => repo.id !== createdRepo.id)],
+          (current) => [createdRepo, ...(current ?? []).filter((repo) => repo.id !== createdRepo.id)],
           { revalidate: false }
         );
       const id = generateMissionId();
@@ -370,7 +371,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
             (mission ? (getWorkspace(mission.ws)?.name ?? null) : null)
           }
           sessionTitle={activeSession?.title ?? mission?.title ?? null}
-          branch={activeSandbox?.working_branch ?? mission?.base ?? "main"}
+          branch={resolveCommitPushBranch(activeSandbox)}
           hasSession={hasSession}
           chatPending={chatPending}
           previewUrl={previewUrl}
@@ -490,7 +491,6 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     </div>
   );
 }
-
 export function ControlShell(props: ControlShellProps) {
   return (
     <SandboxLaunchProvider>

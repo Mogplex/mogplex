@@ -114,7 +114,7 @@ test("assignments show last run health inline and triggers surface loads", async
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
 
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [{ id: "repo-1", full_name: "acme/demo-app" }])
   );
   await page.route("**/api/agents", (route) =>

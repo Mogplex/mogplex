@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useParams, usePathname } from "next/navigation"
-import useSWR from "swr"
+import { useRepos } from "@/hooks/use-repos"
 import { Server } from "iconoir-react"
 import { scopedHref } from "@/lib/scoped-href"
 import { useSandboxStore } from "@/hooks/use-sandbox"
@@ -14,8 +14,6 @@ import { useUser } from "@/hooks/use-user"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useSessionsStore } from "@/hooks/use-sessions"
 import { countPanes } from "@/hooks/use-split-panes"
-import type { Repo } from "@/lib/types"
-import { fetchJsonArray } from "@/lib/client-fetch"
 import {
   Sheet,
   SheetContent,
@@ -23,7 +21,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 
-const fetcher = (url: string) => fetchJsonArray<Repo>(url, "Failed to load repos")
 
 function Separator() {
   return <div className="h-3 w-px shrink-0 bg-border" />
@@ -41,7 +38,7 @@ export function StatusBar() {
     ? pathname.startsWith(scopedHref(scope, "/control"))
     : false
 
-  const { data: repos } = useSWR<Repo[]>("/api/repos", fetcher)
+  const { repos } = useRepos()
   const sandboxesById = useSandboxStore((state) => state.sandboxesById)
   const selectedSandboxId = useSandboxStore((state) => state.activeSandboxId)
   const selectedSandbox = selectedSandboxId
