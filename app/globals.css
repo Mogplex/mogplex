@@ -224,8 +224,18 @@
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
+  html {
+    @apply bg-background;
+  }
   body {
     @apply bg-background text-foreground;
+  }
+  @media (pointer: fine) {
+    html,
+    body,
+    .app-shell-content {
+      overscroll-behavior-y: none;
+    }
   }
   *::-webkit-scrollbar {
     width: 4px;
