@@ -95,101 +95,117 @@ test("control composer keeps text and attachments when a follow-up send fails", 
   await expect(page.getByText("retry-context.txt")).toBeVisible();
 });
 
-test("a failed first message survives reload and Retry sends it with its attachments once", async ({
-  page,
-}) => {
-  await mockRecoveryChrome(page);
-  let created = false;
-  const stored = {
-    ...recoverySession,
-    id: "first-message-session",
-    messages: [] as unknown[],
-  };
-  await page.route("**/api/control/sessions**", (route) => {
-    const method = route.request().method();
-    if (method === "POST") {
-      created = true;
-      return fulfillJson(route, stored);
-    }
-    if (method === "PUT") {
-      stored.messages = route.request().postDataJSON().messages;
-      return fulfillJson(route, { ok: true, session: stored });
-    }
-    return fulfillJson(
-      route,
-      new URL(route.request().url()).searchParams.has("id")
-        ? stored
-        : created
-          ? [stored]
-          : []
-    );
-  });
-  let blocked = true;
-  const requests: Array<Record<string, unknown>> = [];
-  await page.route("**/api/control/chat", (route) => {
-    requests.push(route.request().postDataJSON());
-    if (blocked) return route.abort("failed");
-    return route.fulfill({
-      status: 200,
-      headers: {
-        "content-type": "text/event-stream",
-        "x-vercel-ai-ui-message-stream": "v1",
-      },
-      body: recoveryStream(),
+for (const reload of [false, true])
+  test(`a failed first message ${reload ? "survives reload" : "retains its optimistic turn"} and Retry sends it with its attachments once`, async ({
+    page,
+  }) => {
+    await mockRecoveryChrome(page);
+    let created = false;
+    const stored = {
+      ...recoverySession,
+      id: "first-message-session",
+      messages: [] as unknown[],
+    };
+    await page.route("**/api/control/sessions**", (route) => {
+      const method = route.request().method();
+      if (method === "POST") {
+        created = true;
+        return fulfillJson(route, stored);
+      }
+      if (method === "PUT") {
+        stored.messages = route.request().postDataJSON().messages;
+        return fulfillJson(route, { ok: true, session: stored });
+      }
+      return fulfillJson(
+        route,
+        new URL(route.request().url()).searchParams.has("id")
+          ? stored
+          : created
+            ? [stored]
+            : []
+      );
     });
-  });
-  await page.goto(scopedPath("control"));
-  await page
-    .getByPlaceholder("Ask anything or run a command...")
-    .fill("Keep my first request");
-  await page
-    .locator('input[type="file"]')
-    .last()
-    .setInputFiles({
-      name: "first-context.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.alloc(4 * 1024 * 1024, 65),
+    let blocked = true;
+    const requests: Array<Record<string, unknown>> = [];
+    await page.route("**/api/control/chat", (route) => {
+      requests.push(route.request().postDataJSON());
+      if (blocked) return route.abort("failed");
+      return route.fulfill({
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+        body: recoveryStream(),
+      });
     });
-  await page.getByRole("button", { name: "Start mission" }).click();
-  await expect(
-    page
-      .getByRole("alert")
-      .filter({ hasText: "Your first message was not sent" })
-  ).toContainText("Your first message was not sent");
-  const savedDraft = await page.evaluate(() =>
-    sessionStorage.getItem(
-      "mogplex.control.pendingInitial.first-message-session"
-    )
-  );
-  expect(savedDraft).not.toBeNull();
-  expect(savedDraft!.length).toBeLessThan(2_000);
-  await page.reload();
-  await expect(
-    page
-      .getByRole("alert")
-      .filter({ hasText: "Your first message was not sent" })
-  ).toContainText("Your first message was not sent");
-  expect(requests.length).toBe(1);
-  blocked = false;
-  const before = requests.length;
-  await page
-    .getByRole("alert")
-    .filter({ hasText: "Your first message was not sent" })
-    .getByRole("button", { name: "Retry" })
-    .click();
-  await expect(
-    page.getByText("Request recovered.", { exact: true })
-  ).toBeVisible();
-  await expect(
-    page.getByText("Keep my first request", { exact: true })
-  ).toHaveCount(1);
-  expect(requests.length).toBe(before + 1);
-  expect(JSON.stringify(requests.at(-1))).toContain("first-context.txt");
-  expect(
-    await page.evaluate(() =>
+    await page.goto(scopedPath("control"));
+    await page
+      .getByPlaceholder("Ask anything or run a command...")
+      .fill("Keep my first request");
+    await page
+      .locator('input[type="file"]')
+      .last()
+      .setInputFiles({
+        name: "first-context.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.alloc(4 * 1024 * 1024, 65),
+      });
+    await page.getByRole("button", { name: "Start mission" }).click();
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({ hasText: "Your first message was not sent" })
+    ).toContainText("Your first message was not sent");
+    const savedDraft = await page.evaluate(() =>
       sessionStorage.getItem(
         "mogplex.control.pendingInitial.first-message-session"
       )
-    )
-  ).toBeNull();
-});
+    );
+    expect(savedDraft).not.toBeNull();
+    expect(savedDraft!.length).toBeLessThan(2_000);
+    await (reload
+      ? page.reload()
+      : expect(
+          page.getByText("Keep my first request", { exact: true })
+        ).toHaveCount(1));
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({ hasText: "Your first message was not sent" })
+    ).toContainText("Your first message was not sent");
+    expect(requests.length).toBe(1);
+    blocked = false;
+    const before = requests.length;
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Your first message was not sent" })
+      .getByRole("button", { name: "Retry" })
+      .click();
+    await expect(
+      page.getByText("Request recovered.", { exact: true })
+    ).toBeVisible();
+    await expect(
+      page.getByText("Keep my first request", { exact: true })
+    ).toHaveCount(1);
+    expect(requests.length).toBe(before + 1);
+    const sentMessages = requests.at(-1)?.messages as Array<{
+      role: string;
+      parts: Array<{ filename?: string }>;
+    }>;
+    expect(
+      sentMessages.filter((message) => message.role === "user")
+    ).toHaveLength(1);
+    expect(
+      sentMessages
+        .flatMap((message) => message.parts)
+        .some((part) => part.filename === "first-context.txt")
+    ).toBe(true);
+    expect(
+      await page.evaluate(() =>
+        sessionStorage.getItem(
+          "mogplex.control.pendingInitial.first-message-session"
+        )
+      )
+    ).toBeNull();
+  });

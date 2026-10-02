@@ -196,6 +196,7 @@ export function useControlSessions({
         updatedAtBySessionRef.current.set(record.id, record.updated_at);
       }
       selectedIdRef.current = record.id;
+      restoredSelectionRef.current = true;
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
       failedSelectionRef.current = null;

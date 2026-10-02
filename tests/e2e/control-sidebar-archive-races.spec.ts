@@ -112,56 +112,73 @@ test("an archive reserves its chat until the delayed server response arrives", a
   }
 });
 
-for (const mutation of ["archive", "restore"] as const) {
-  test(`${mutation} completion preserves an unrelated pending selection`, async ({
-    page,
-  }) => {
-    const selecting = deferred();
-    const response = deferred();
-    let holdSelection = false;
-    const { sidebar } = await setupControlSidebar(page, {
-      selected: async (session) => {
-        if (holdSelection && session.id === "other") {
-          selecting.resolve();
-          await response.promise;
+for (const explicitNew of [false, true])
+  for (const mutation of ["archive", "restore"] as const) {
+    test(`${mutation} completion preserves an unrelated pending selection${explicitNew ? " and a later explicit new chat" : ""}`, async ({
+      page,
+    }) => {
+      const selecting = deferred();
+      const response = deferred();
+      let holdSelection = false;
+      const { sidebar } = await setupControlSidebar(page, {
+        selected: async (session) => {
+          if (holdSelection && session.id === "other") {
+            selecting.resolve();
+            await response.promise;
+          }
+        },
+      });
+      try {
+        if (mutation === "restore") {
+          await archiveSelected(page);
+          await expect(
+            page.getByText("1 chat archived", { exact: true })
+          ).toBeVisible();
         }
-      },
-    });
-    try {
-      if (mutation === "restore") {
-        await archiveSelected(page);
-        await expect(
-          page.getByText("1 chat archived", { exact: true })
-        ).toBeVisible();
-      }
-      holdSelection = true;
-      await sidebar.getByRole("button", { name: /^Another project / }).click();
-      await selecting.promise;
-      if (mutation === "archive") {
-        await archiveSelected(page);
-        await expect(
-          page.getByText("1 chat archived", { exact: true })
-        ).toBeVisible();
-      } else {
+        holdSelection = true;
         await sidebar
-          .getByRole("button", { name: "Archived chats", exact: true })
+          .getByRole("button", { name: /^Another project / })
           .click();
-        const restore = sidebar.getByRole("button", {
-          name: "Restore Zebra investigation",
-        });
-        await restore.click();
-        await expect(restore).toHaveCount(0);
+        await selecting.promise;
+        if (mutation === "archive") {
+          await archiveSelected(page);
+          await expect(
+            page.getByText("1 chat archived", { exact: true })
+          ).toBeVisible();
+        } else {
+          await sidebar
+            .getByRole("button", { name: "Archived chats", exact: true })
+            .click();
+          const restore = sidebar.getByRole("button", {
+            name: "Restore Zebra investigation",
+          });
+          await restore.click();
+          await expect(restore).toHaveCount(0);
+        }
+        if (explicitNew && mutation === "restore")
+          await sidebar
+            .getByRole("button", { name: "Back to chats", exact: true })
+            .click();
+        if (explicitNew)
+          await sidebar
+            .getByRole("button", { name: "New session", exact: true })
+            .click();
+        response.resolve();
+        await expect(page).toHaveURL(/mission=other/);
+        await (explicitNew
+          ? expect(
+              page.getByRole("button", { name: "Start mission" })
+            ).toBeVisible()
+          : expect(
+              page.getByPlaceholder(
+                "Ask for follow-up changes or attach images"
+              )
+            ).toBeEnabled());
+      } finally {
+        response.resolve();
       }
-      response.resolve();
-      await expect(page).toHaveURL(/mission=other/);
-      await expect(
-        page.getByPlaceholder("Ask for follow-up changes or attach images")
-      ).toBeEnabled();
-    } finally {
-      response.resolve();
-    }
-  });
-}
+    });
+  }
 
 test("Undo waits for another archive instead of discarding the restore", async ({
   page,
