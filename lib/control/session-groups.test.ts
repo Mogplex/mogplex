@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { GENERAL_GROUP_NAME, projectColorClass } from "./session-groups";
+import {
+  GENERAL_GROUP_NAME,
+  groupSessionsByProject,
+  projectColorClass,
+} from "./session-groups";
+
+it("groups named but unlinked sessions separately from a linked repository", () => {
+  const updated_at = "2026-10-02T12:00:00Z";
+  const groups = groupSessionsByProject([
+    { id: "linked", repo_id: "repo", project: "acme/widgets", updated_at },
+    { id: "legacy", repo_id: null, project: "acme/widgets", updated_at },
+    { id: "ambiguous", project: "widgets", updated_at },
+  ]);
+  expect(
+    groups.map((group) => [
+      group.name,
+      group.project,
+      group.sessions.map((s) => s.id),
+    ])
+  ).toEqual([
+    ["acme/widgets", "acme/widgets", ["linked"]],
+    ["Unlinked", null, ["legacy", "ambiguous"]],
+  ]);
+});
 
 describe("project identity colors", () => {
   it("uses a neutral marker for the unassigned General group", () => {

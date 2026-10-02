@@ -358,7 +358,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       {activeSession?.external_run_id ? <ExternalRunConversation session={{ ...activeSession, external_run_id: activeSession.external_run_id }} /> : <div className="flex min-w-0 flex-1 flex-col">
         <ControlTopBar
           projectName={
-            activeSession?.project ??
+            (activeSession ? (activeSession.repo_id ? activeSession.project : "Unlinked") : null) ??
             (mission ? (getWorkspace(mission.ws)?.name ?? null) : null)
           }
           sessionTitle={activeSession?.title ?? mission?.title ?? null}

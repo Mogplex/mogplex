@@ -5,18 +5,21 @@
 export type SessionGroupInput = {
   id: string;
   project?: string | null;
+  repo_id?: string | null;
   updated_at: string;
 };
 
 export type SessionGroup<T extends SessionGroupInput> = {
-  /** Display name; "General" collects sessions without a project. */
+  /** Display name; "Unlinked" collects sessions without a saved repo binding. */
   name: string;
-  /** Project slug as stored, or null for the General group. */
+  /** Project display name, or null for the Unlinked group. */
   project: string | null;
   sessions: T[];
 };
 
-export const GENERAL_GROUP_NAME = "General";
+export const GENERAL_GROUP_NAME = "Unlinked";
+export const UNLINKED_SESSION_DESCRIPTION =
+  "This session has no linked repository. Start a new mission to link one.";
 
 const PROJECT_COLORS = [
   "bg-project-blue",
@@ -73,14 +76,14 @@ export function assignProjectColors(names: string[]): Map<string, string> {
 /**
  * Group sessions by project. Sessions inside a group sort by latest
  * activity first; groups sort by their most recently active session, with
- * General last so named projects always lead.
+ * Unlinked last so linked projects always lead.
  */
 export function groupSessionsByProject<T extends SessionGroupInput>(
   sessions: T[]
 ): SessionGroup<T>[] {
   const byProject = new Map<string | null, T[]>();
   for (const session of sessions) {
-    const key = session.project?.trim() || null;
+    const key = session.repo_id ? session.project?.trim() || null : null;
     const list = byProject.get(key) ?? [];
     list.push(session);
     byProject.set(key, list);

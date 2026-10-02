@@ -19,20 +19,23 @@ export function repoProjectName(repo: { full_name: string }): string {
 }
 
 /**
- * Resolve a durable session's repository. Older sessions only stored a short
- * project name, so retain a safe fallback when that name maps to one repo.
+ * Resolve the saved repository binding, matching the server's context.
+ * Legacy names are backfilled by migration; names never authorize a session.
  */
 export function resolveControlSessionRepo<T extends ProjectRepo>(
   session: { repo_id?: string | null; project?: string | null } | null,
   repos: T[]
 ): T | null {
-  if (!session) return null;
+  if (!session?.repo_id) return null;
+  return repos.find((repo) => repo.id === session.repo_id) ?? null;
+}
 
-  if (session.repo_id) {
-    return repos.find((repo) => repo.id === session.repo_id) ?? null;
-  }
-
-  const project = session.project?.trim().toLowerCase();
+/** Name lookup is only a picker hint when creating a new session. */
+function resolveProjectRepo<T extends ProjectRepo>(
+  name: string | null,
+  repos: T[]
+): T | null {
+  const project = name?.trim().toLowerCase();
   if (!project) return null;
 
   const exact = repos.find((repo) => repo.full_name.toLowerCase() === project);
@@ -45,11 +48,12 @@ export function resolveControlSessionRepo<T extends ProjectRepo>(
   return legacyMatches.length === 1 ? legacyMatches[0] : null;
 }
 
-/** Display legacy repo-backed sessions under the repo's canonical full name. */
+/** Display a saved binding under its canonical name; unlinked stays unnamed. */
 export function controlSessionProjectName<T extends ProjectRepo>(
   session: { repo_id?: string | null; project?: string | null },
   repos: T[]
 ): string | null {
+  if (!session.repo_id) return null;
   return (
     (resolveControlSessionRepo(session, repos)?.full_name ??
       session.project?.trim()) ||
@@ -130,7 +134,5 @@ export function resolveNewSessionRepoId<T extends ProjectRepo>(
   if (target.repoId && repos.some((repo) => repo.id === target.repoId)) {
     return target.repoId;
   }
-  return (
-    resolveControlSessionRepo({ project: target.project }, repos)?.id ?? null
-  );
+  return resolveProjectRepo(target.project, repos)?.id ?? null;
 }

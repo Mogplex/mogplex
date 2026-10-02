@@ -10,6 +10,7 @@ import {
 const SESSION = (id: string, project: string | null, updatedAt: string) => ({
   id,
   project,
+  repo_id: project?.trim() ? `repo-${project}` : null,
   updated_at: updatedAt,
 });
 
