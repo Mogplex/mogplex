@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import { useParams } from "next/navigation";
 import type { UIMessage } from "ai";
 import { ExternalRunPane } from "@/components/pane-content/agent-pane/external-run-pane";
@@ -10,12 +11,19 @@ import { Timeline } from "./timeline";
 const reportStreaming = () => {};
 
 function renderControlTranscript(messages: UIMessage[], running: boolean) {
+  return <ControlTranscript messages={messages} running={running} />;
+}
+
+function ControlTranscript({ messages, running }: { messages: UIMessage[]; running: boolean }) {
+  const events = useMemo(() => buildCombinedTimeline([], messages), [messages]);
+  // projectRunTranscript cannot emit approval or worktree/delegate events, so these callbacks are unreachable.
   return <Timeline
-    events={buildCombinedTimeline([], messages)}
+    events={events}
     worktrees={[]}
     getWorktree={() => undefined}
     onApprove={() => {}}
     pending={running}
+    collapseHistory={false}
   />;
 }
 
