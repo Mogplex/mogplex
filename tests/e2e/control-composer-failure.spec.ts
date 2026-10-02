@@ -281,3 +281,80 @@ test("a first response interrupted after assistant output is not offered as an u
   ).toBeNull();
   expect(requests).toBe(1);
 });
+
+test("first-message Retry sends from this tab when attachment recovery storage is unavailable", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  await page.addInitScript(() =>
+    Object.defineProperty(window, "indexedDB", {
+      get: () => {
+        throw new DOMException("Storage blocked", "SecurityError");
+      },
+    })
+  );
+  const stored = {
+    ...recoverySession,
+    id: "blocked-recovery",
+    messages: [] as unknown[],
+  };
+  await page.route("**/api/control/sessions**", (route) => {
+    if (route.request().method() === "POST") return fulfillJson(route, stored);
+    if (route.request().method() === "PUT") {
+      stored.messages = route.request().postDataJSON().messages ?? [];
+      return fulfillJson(route, { session: stored });
+    }
+    const id = new URL(route.request().url()).searchParams.get("id");
+    return fulfillJson(route, id ? stored : []);
+  });
+  const requests: Array<{
+    messages: Array<{ role: string; parts: Array<{ filename?: string }> }>;
+  }> = [];
+  await page.route("**/api/control/chat", (route) => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill(
+      requests.length === 1
+        ? { status: 503, body: "Unavailable" }
+        : {
+            status: 200,
+            headers: {
+              "content-type": "text/event-stream",
+              "x-vercel-ai-ui-message-stream": "v1",
+            },
+            body: recoveryStream(),
+          }
+    );
+  });
+  await page.goto(scopedPath("control"));
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Keep my text and file");
+  await page
+    .locator('input[type="file"]')
+    .last()
+    .setInputFiles({
+      name: "blocked-context.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("Keep this context"),
+    });
+  await page
+    .getByRole("button", { name: "Start mission", exact: true })
+    .click();
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "We could not save this draft" });
+  await expect(banner).toBeVisible();
+  expect(requests).toHaveLength(1);
+  await banner.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    page.getByText("Request recovered.", { exact: true })
+  ).toBeVisible();
+  expect(requests).toHaveLength(2);
+  const users = requests[1].messages.filter(
+    (message) => message.role === "user"
+  );
+  expect(users).toHaveLength(1);
+  expect(
+    users[0].parts.some((part) => part.filename === "blocked-context.txt")
+  ).toBe(true);
+});

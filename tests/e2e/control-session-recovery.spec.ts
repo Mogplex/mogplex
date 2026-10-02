@@ -286,3 +286,163 @@ test("Retry leaves a current chat confirmed deleted by refreshed history", async
   await expect(page.getByText("Saved request", { exact: true })).toHaveCount(0);
   await expect(banner).toHaveCount(0);
 });
+
+test("a chat arriving after empty history preserves the unsent new-chat composer", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  await page.addInitScript(() => {
+    const sources: EventSource[] = [];
+    Object.defineProperty(window, "recoveryEventSources", { value: sources });
+    const NativeEventSource = window.EventSource;
+    window.EventSource = class extends NativeEventSource {
+      constructor(url: string | URL, options?: EventSourceInit) {
+        super(url, options);
+        sources.push(this);
+      }
+    };
+  });
+  let arrived = false;
+  await page.route("**/api/control/sessions**", (route) => {
+    const id = new URL(route.request().url()).searchParams.get("id");
+    return fulfillJson(
+      route,
+      id ? recoverySession : arrived ? [recoverySession] : []
+    );
+  });
+  await page.goto(scopedPath("control"));
+  const composer = page.getByPlaceholder("Ask anything or run a command...");
+  await composer.fill("Keep this unsent new draft");
+  arrived = true;
+  await page.evaluate(() => {
+    const sources = (
+      window as unknown as { recoveryEventSources: EventSource[] }
+    ).recoveryEventSources;
+    for (const source of sources)
+      if (source.url.includes("tables=control_sessions"))
+        source.dispatchEvent(
+          new MessageEvent("message", {
+            data: JSON.stringify({ table: "control_sessions", op: "INSERT" }),
+          })
+        );
+  });
+  await expect(
+    page.getByRole("button", { name: /^Saved investigation / })
+  ).toBeVisible();
+  await expect(composer).toHaveValue("Keep this unsent new draft");
+  await expect(
+    page.getByRole("status", { name: "Loading conversation" })
+  ).toHaveCount(0);
+});
+
+test("Retry recovers a failed manual selection with no active chat", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  let archived = false;
+  let otherReads = 0;
+  const other = {
+    ...recoverySession,
+    id: "manual-other",
+    title: "Another saved chat",
+    messages: [
+      {
+        id: "other-user",
+        role: "user",
+        parts: [{ type: "text", text: "Recovered selection" }],
+      },
+    ],
+  };
+  await page.route("**/api/control/sessions**", (route) => {
+    if (route.request().method() === "PUT") {
+      archived = true;
+      return fulfillJson(route, {
+        session: { ...recoverySession, archived: true },
+      });
+    }
+    const id = new URL(route.request().url()).searchParams.get("id");
+    if (id === other.id) {
+      otherReads++;
+      return fulfillJson(
+        route,
+        otherReads === 1
+          ? { error: "Could not load this chat. Try again." }
+          : other,
+        otherReads === 1 ? 503 : 200
+      );
+    }
+    return fulfillJson(
+      route,
+      id ? recoverySession : [...(archived ? [] : [recoverySession]), other]
+    );
+  });
+  await page.goto(`${scopedPath("control")}?mission=${recoverySession.id}`);
+  await expect(page.getByText("Saved request", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "More options" }).click();
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Start mission", exact: true })
+  ).toBeVisible();
+  await page.getByRole("button", { name: /^Another saved chat / }).click();
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Could not load this chat" });
+  await expect(banner).toBeVisible();
+  await banner.getByRole("button", { name: "Retry" }).click();
+  await expect(
+    page.getByText("Recovered selection", { exact: true })
+  ).toBeVisible();
+  await expect(banner).toHaveCount(0);
+});
+
+test("a new mission remains usable after the history request fails", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  const created = {
+    ...recoverySession,
+    id: "created-after-history-error",
+    messages: [] as unknown[],
+  };
+  await page.route("**/api/control/sessions**", (route) => {
+    const method = route.request().method();
+    if (method === "POST") return fulfillJson(route, created);
+    if (method === "PUT") {
+      created.messages = route.request().postDataJSON().messages ?? [];
+      return fulfillJson(route, { session: created });
+    }
+    const id = new URL(route.request().url()).searchParams.get("id");
+    return fulfillJson(
+      route,
+      id ? created : { error: "Could not load chats. Try again." },
+      id ? 200 : 503
+    );
+  });
+  await page.route("**/api/control/chat", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: recoveryStream(),
+    })
+  );
+  await page.goto(scopedPath("control"));
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Could not load chats" })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "New session", exact: true }).click();
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Create despite unavailable history");
+  await page
+    .getByRole("button", { name: "Start mission", exact: true })
+    .click();
+  await expect(
+    page.getByText("Request recovered.", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByPlaceholder("Ask for follow-up changes or attach images")
+  ).toBeEnabled();
+});

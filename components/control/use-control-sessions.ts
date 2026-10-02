@@ -25,12 +25,8 @@ const SESSION_EVENTS = [
 ];
 
 /**
- * DB-backed control chat sessions: list, create, restore, and persist.
- * Messages sync whole-array with optimistic concurrency on updated_at
- * (same pattern as the pane workspace's conversations store).
- *
- * updated_at revisions are tracked per session so background chat completions
- * persist to their own rows even after the user selects another session.
+ * Restores DB-backed chats and persists whole-array messages with optimistic
+ * concurrency. Each session tracks its revision for background completions.
  */
 export function useControlSessions({
   sessionId,
@@ -65,6 +61,7 @@ export function useControlSessions({
     selectedIdRef.current = sessionId;
   }, [sessionId]);
   const restoredSelectionRef = useRef(false);
+  const [restoreSettled, setRestoreSettled] = useState(false);
   const refreshRevisionRef = useRef(0);
 
   const refreshCurrent = useCallback(async () => {
@@ -201,6 +198,7 @@ export function useControlSessions({
       }
       selectedIdRef.current = record.id;
       restoredSelectionRef.current = true;
+      setRestoreSettled(true);
       missingSelectionRef.current = false;
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
@@ -233,8 +231,10 @@ export function useControlSessions({
       null;
     if (!target || target === sessionId) {
       restoredSelectionRef.current = true;
+      setRestoreSettled(true);
       return;
     }
+    setRestoreSettled(false);
     restoreInFlightRef.current = true;
     void selectSession(target)
       .then((selected) => {
@@ -242,6 +242,7 @@ export function useControlSessions({
       })
       .finally(() => {
         restoreInFlightRef.current = false;
+        setRestoreSettled(true);
       });
   }, [sessions, sessionsLoaded, deepLinkTarget, selectSession, sessionId]);
 
@@ -285,6 +286,7 @@ export function useControlSessions({
       ]);
       selectionRevisionRef.current++;
       restoredSelectionRef.current = true;
+      setRestoreSettled(true);
       failedSelectionRef.current = null;
       missingSelectionRef.current = false;
       setSelectionError(null);
@@ -481,9 +483,10 @@ export function useControlSessions({
     sessionsLoaded,
     sessionsError,
     selectionError,
+    restoringSelection: !restoreSettled && !selectionError && !sessionId,
     retryList: refreshList,
     retrySelection: () =>
-      sessionId && failedSelectionRef.current && !missingSelectionRef.current
+      failedSelectionRef.current && !missingSelectionRef.current
         ? selectSession(failedSelectionRef.current)
         : refreshList(),
     selectSession,

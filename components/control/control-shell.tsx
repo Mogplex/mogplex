@@ -137,7 +137,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
   const {
     sessions,
     sessionsLoaded,
-    sessionsError, selectionError, retryList, retrySelection,
+    sessionsError, selectionError, retryList, retrySelection, restoringSelection,
     selectSession,
     createSession,
     updateSession,
@@ -320,7 +320,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     return () => window.removeEventListener(CONTROL_VIEW_EVENT, listener);
   }, []);
 
-  const shellView = resolveShellView({ newMission, hasMission: Boolean(mission && sessionId), sessionId, sessionsLoaded, restoring: sessions.length > 0 && !sessionId && !selectionError });
+  const shellView = resolveShellView({ newMission, hasMission: Boolean(mission && sessionId), sessionId, sessionsLoaded, restoring: restoringSelection });
   const loadState = { loaded: sessionsLoaded, error: sessionsError, onRetry: () => void retryList() };
   if (shellView !== "mission") {
     return (

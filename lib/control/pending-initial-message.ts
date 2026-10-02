@@ -15,6 +15,7 @@ export type PendingInitialMessage = {
   failed?: boolean;
   attachmentsMissing?: boolean;
   recovered?: boolean;
+  recoveryUnavailable?: boolean;
   queuedAt?: number;
 };
 export type PendingMessageStorage = Pick<

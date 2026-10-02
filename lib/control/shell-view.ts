@@ -12,6 +12,7 @@ export function resolveShellView({
   restoring?: boolean;
 }): "loading" | "new" | "mission" {
   if (newMission) return "new";
+  if (hasMission || sessionId) return "mission";
   if (!sessionsLoaded || restoring) return "loading";
-  return hasMission || sessionId ? "mission" : "new";
+  return "new";
 }

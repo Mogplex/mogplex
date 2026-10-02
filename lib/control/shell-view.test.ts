@@ -36,3 +36,15 @@ it("waits for history and selection while allowing an explicit New", () => {
     resolveShellView({ ...state, sessionsLoaded: true, hasMission: true })
   ).toBe("mission");
 });
+
+it("shows a created session even when history has failed to load", () => {
+  expect(
+    resolveShellView({
+      newMission: false,
+      hasMission: true,
+      sessionId: "created",
+      sessionsLoaded: false,
+      restoring: true,
+    })
+  ).toBe("mission");
+});

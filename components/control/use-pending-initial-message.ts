@@ -23,6 +23,17 @@ type SendMessage = (
   options: { body: ReturnType<typeof buildControlChatBody> }
 ) => Promise<void>;
 
+async function loadStoredDraft(missionId: string) {
+  try {
+    return await loadPendingInitialMessage(window.sessionStorage, missionId);
+  } catch {
+    return null;
+  }
+}
+async function saveStoredDraft(pending: PendingInitialMessage) {
+  await savePendingInitialMessage(window.sessionStorage, pending);
+}
+
 /** Queue before the chat is re-keyed, and retain the draft until a successful send. */
 export function usePendingInitialMessage({
   selectedMissionId,
@@ -51,14 +62,15 @@ export function usePendingInitialMessage({
       ...next,
       failed: false,
       recovered: false,
+      recoveryUnavailable: false,
       queuedAt: Date.now(),
     };
     pendingRef.current = queued;
     try {
-      await savePendingInitialMessage(window.sessionStorage, queued);
-    } catch (error) {
-      setPending({ ...queued, failed: true });
-      throw error;
+      await saveStoredDraft(queued);
+    } catch {
+      queued.recoveryUnavailable = true;
+      console.warn("Could not save a first-message draft for recovery");
     }
     setPending(queued);
   }, []);
@@ -70,7 +82,7 @@ export function usePendingInitialMessage({
     )
       return;
     let current = true;
-    void loadPendingInitialMessage(window.sessionStorage, selectedMissionId)
+    void loadStoredDraft(selectedMissionId)
       .then((stored) => {
         if (!current || !stored) return undefined;
         // A reload cannot establish whether the server accepted the previous
@@ -111,9 +123,7 @@ export function usePendingInitialMessage({
         return;
       }
       const next = { ...pending, failed: true };
-      void savePendingInitialMessage(window.sessionStorage, next).catch(
-        () => undefined
-      );
+      void saveStoredDraft(next).catch(() => undefined);
       setPending((current) =>
         current?.missionId === pending.missionId ? next : current
       );
@@ -170,30 +180,27 @@ export function usePendingInitialMessage({
 
   const retry = useCallback(async () => {
     const stored =
-      (await loadPendingInitialMessage(
-        window.sessionStorage,
-        selectedMissionId
-      )) ?? pendingRef.current;
+      (await loadStoredDraft(selectedMissionId)) ?? pendingRef.current;
     if (
       stored?.missionId !== selectedMissionId ||
       sendingRef.current.has(selectedMissionId)
     )
       return;
     clearChatError();
-    await queue({ ...stored, attachmentsMissing: false }).catch(
-      () => undefined
-    );
+    await queue({ ...stored, attachmentsMissing: false });
   }, [selectedMissionId, clearChatError, queue]);
   return {
     queue,
     retry,
     error:
       pending?.missionId === selectedMissionId && pending.failed
-        ? pending.attachmentsMissing
-          ? `${pending.recovered ? "We saved your first message" : FIRST_MESSAGE_FAILURE}. We could not load some files. Retry sends your saved text and available files.`
-          : pending.recovered
-            ? "We saved your first message. Retry sends it again."
-            : FIRST_MESSAGE_FAILURE
+        ? pending.recoveryUnavailable
+          ? `${FIRST_MESSAGE_FAILURE}. We could not save this draft. Keep this tab open. Retry sends your text and files.`
+          : pending.attachmentsMissing
+            ? `${pending.recovered ? "We saved your first message" : FIRST_MESSAGE_FAILURE}. We could not load some files. Retry sends your saved text and available files.`
+            : pending.recovered
+              ? "We saved your first message. Retry sends it again."
+              : FIRST_MESSAGE_FAILURE
         : null,
   };
 }
