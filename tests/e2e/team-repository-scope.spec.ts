@@ -71,6 +71,8 @@ async function installTeamRepositories(page: Page, canManage = true) {
         full_name: teamId ? "acme/team-project" : "alex/personal-project",
         owner: teamId ? "acme" : "alex",
         name: teamId ? "team-project" : "personal-project",
+        github_installation_id: 42,
+        github_prefer_installation_coverage: true,
       },
       {
         id: "hidden-team-repo",
@@ -78,6 +80,13 @@ async function installTeamRepositories(page: Page, canManage = true) {
         owner: "acme",
         name: "removed-project",
         is_hidden: true,
+      },
+      {
+        id: "legacy-repo",
+        full_name: "acme/legacy-project",
+        name: "legacy-project",
+        owner: "acme",
+        github_prefer_installation_coverage: true,
       },
     ];
     return fulfillJson(

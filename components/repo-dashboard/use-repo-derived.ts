@@ -8,6 +8,7 @@ import type {
   SandboxRecord,
   Workspace,
 } from "@/lib/types";
+import { visibleScopedRepos } from "@/lib/repos-visibility";
 import { filterRepos } from "@/lib/repo-search";
 import {
   isSandboxUiReachablePreview,
@@ -23,6 +24,7 @@ export function useRepoDashboardDerived({
   ownerFilter,
   repos,
   sandboxesById,
+  showHidden,
   search,
   workspaces,
 }: {
@@ -33,15 +35,16 @@ export function useRepoDashboardDerived({
   repos: Repo[];
   sandboxesById: Record<string, SandboxRecord | null | undefined>;
   search: string;
+  showHidden: boolean;
   workspaces: Workspace[];
 }) {
   const owners = useMemo(() => {
     const values = new Set<string>();
-    for (const repo of repos) {
+    for (const repo of visibleScopedRepos(repos, showHidden)) {
       values.add(getRepoOwner(repo));
     }
     return [...values].sort();
-  }, [repos]);
+  }, [repos, showHidden]);
 
   const hiddenCount = useMemo(
     () => repos.filter((repo) => repo.is_hidden).length,
@@ -83,8 +86,10 @@ export function useRepoDashboardDerived({
   );
 
   const visibleRepoCount = useMemo(
-    () => repos.filter((repo) => !repo.is_hidden).length,
-    [repos]
+    () =>
+      visibleScopedRepos(repos, showHidden).filter((repo) => !repo.is_hidden)
+        .length,
+    [repos, showHidden]
   );
 
   const workspaceSections = useMemo(() => {
@@ -154,10 +159,7 @@ export function useFilteredRepos({
   showHidden: boolean;
 }) {
   return useMemo(() => {
-    let result = repos;
-    if (!showHidden) {
-      result = result.filter((repo) => !repo.is_hidden);
-    }
+    let result = visibleScopedRepos(repos, showHidden);
     if (ownerFilter !== "all") {
       result = result.filter((repo) => getRepoOwner(repo) === ownerFilter);
     }

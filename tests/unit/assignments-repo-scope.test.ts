@@ -29,8 +29,14 @@ test("assignments share scoped repository data without leaking personal cache en
               {
                 id: team ?? "personal",
                 full_name: `${team ?? "personal"}/widgets`,
+                github_installation_id: 42,
+                github_prefer_installation_coverage: true,
               },
               { id: `hidden-${team ?? "personal"}`, is_hidden: true },
+              {
+                id: `legacy-${team ?? "personal"}`,
+                github_prefer_installation_coverage: true,
+              },
             ]
           : url === "/api/auth/user"
             ? { user: null }
@@ -80,14 +86,14 @@ test("assignments share scoped repository data without leaking personal cache en
         calls.filter((call) => call.url === url),
         [{ url, team: "team-a" }]
       );
-    assert.equal(view.result.current.repos.repos.length, 2);
+    assert.equal(view.result.current.repos.repos.length, 3);
     assert.equal(view.result.current.assignments.repos.length, 1);
     showHidden = false;
     view.rerender();
     assert.equal(view.result.current.repos.repos.length, 1);
     showHidden = true;
     view.rerender();
-    assert.equal(view.result.current.repos.repos.length, 2);
+    assert.equal(view.result.current.repos.repos.length, 3);
     assert.equal(
       calls.filter((call) => call.url.startsWith("/api/repos")).length,
       1
@@ -95,13 +101,17 @@ test("assignments share scoped repository data without leaking personal cache en
     await act(async () => {
       await view.result.current.repos.mutate(
         (current) => [
-          { id: "created" } as import("../../lib/types").Repo,
+          {
+            id: "created",
+            github_installation_id: 42,
+            github_prefer_installation_coverage: true,
+          } as import("../../lib/types").Repo,
           ...(current ?? []),
         ],
         { revalidate: false }
       );
     });
-    assert.equal(view.result.current.repos.repos.length, 3);
+    assert.equal(view.result.current.repos.repos.length, 4);
     assert.equal(view.result.current.assignments.repos.length, 2);
     assert.equal(
       view.result.current.repos.repos.some((repo) => repo.is_hidden),

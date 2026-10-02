@@ -57,6 +57,7 @@ export type Repo = {
   github_id?: number;
   github_installation_id?: number | null;
   github_has_app_installation?: boolean;
+  github_prefer_installation_coverage?: boolean;
   github_app_covered?: boolean;
   github_triggerable?: boolean;
   github_access_state?: RepoGithubAccessState;

@@ -6,6 +6,7 @@ import {
   useActiveTeamId,
 } from "@/components/active-scope-provider";
 import { fetchJsonArray } from "@/lib/client-fetch";
+import { visibleScopedRepos } from "@/lib/repos-visibility";
 import type { Repo } from "@/lib/types";
 
 const fetcher = (url: string, activeTeamId: string | null) =>
@@ -29,7 +30,7 @@ export function useRepos(
     ([url, teamId]: [string, string | null]) => fetcher(url, teamId)
   );
   const repos = useMemo(
-    () => (data ?? []).filter((repo) => options.showHidden || !repo.is_hidden),
+    () => visibleScopedRepos(data ?? [], options.showHidden),
     [data, options.showHidden]
   );
   return { repos, isLoading, error, mutate };

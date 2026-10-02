@@ -300,6 +300,7 @@ export function useRepoDashboard({
     ownerFilter,
     repos,
     sandboxesById,
+    showHidden,
     search,
     workspaces,
   });

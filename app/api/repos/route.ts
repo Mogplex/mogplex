@@ -155,9 +155,10 @@ function buildDeps(overrides: Partial<ReposRouteDeps>): ReposRouteDeps {
 
 function withGithubCoverage<
   T extends { github_installation_id?: number | null },
->(repo: T, hasInstallations: boolean) {
+>(repo: T, hasInstallations: boolean, preferInstallationCoverage = false) {
   return {
     ...repo,
+    github_prefer_installation_coverage: preferInstallationCoverage,
     ...deriveRepoGithubCoverage({
       hasInstallations,
       githubInstallationId: repo.github_installation_id,
@@ -211,7 +212,13 @@ export function createReposGetHandler(overrides: Partial<ReposRouteDeps> = {}) {
         : repos;
 
     return NextResponse.json(
-      visibleRepos.map((repo) => withGithubCoverage(repo, hasInstallations))
+      visibleRepos.map((repo) =>
+        withGithubCoverage(
+          repo,
+          hasInstallations,
+          hasInstallations && deps.hasGithubAppConfig()
+        )
+      )
     );
   };
 }
@@ -279,7 +286,13 @@ export function createReposPostHandler(
       );
 
     const installationCount = await deps.countGithubInstallations(userId);
-    return NextResponse.json(withGithubCoverage(data, installationCount > 0));
+    return NextResponse.json(
+      withGithubCoverage(
+        data,
+        installationCount > 0,
+        installationCount > 0 && deps.hasGithubAppConfig()
+      )
+    );
   };
 }
 
@@ -335,7 +348,13 @@ export function createReposPatchHandler(
       return NextResponse.json({ error: "Repo not found" }, { status: 404 });
 
     const installationCount = await deps.countGithubInstallations(userId);
-    return NextResponse.json(withGithubCoverage(data, installationCount > 0));
+    return NextResponse.json(
+      withGithubCoverage(
+        data,
+        installationCount > 0,
+        installationCount > 0 && deps.hasGithubAppConfig()
+      )
+    );
   };
 }
 
