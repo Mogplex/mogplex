@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { scopedHref } from "@/lib/scoped-href";
 import { switchScopePath } from "@/lib/scope-switch";
@@ -20,6 +20,8 @@ import {
   resolveSandboxUiState,
 } from "@/lib/sandbox/ui-state";
 import type { Agent, Repo, SandboxRecord } from "@/lib/types";
+import { useSessionSearch } from "@/components/control/use-session-search";
+import { SessionCommands } from "@/components/control/session-commands";
 
 interface Props {
   open: boolean;
@@ -62,6 +64,7 @@ const QUICK_ACTIONS: PaletteActionItem[] = [
 ];
 
 const NAVIGATION_ITEMS: NavigationItem[] = [
+  { path: "/control", value: "go to control", label: "Control" },
   { path: "/projects/workspace", value: "go to projects workspace", label: "Workspace" },
   { path: "/projects/repositories", value: "go to projects repositories", label: "Repositories" },
   {
@@ -108,21 +111,23 @@ export function CommandPalette({
   const { scope } = useParams<{ scope: string }>();
   const { memberships } = useMemberships();
   const [search, setSearch] = useState("");
-  const deferredSearch = useDeferredValue(search.trim().toLowerCase());
+  const [selectedCommand, setSelectedCommand] = useState({ query: "", value: "" });
+  const searchQuery = search.trim().toLowerCase();
+  const sessionSearch = useSessionSearch(open, searchQuery);
 
   const matchesQuery = useCallback(
     (value: string) =>
-      deferredSearch.length === 0 ||
-      value.toLowerCase().includes(deferredSearch),
-    [deferredSearch]
+      searchQuery.length === 0 ||
+      value.toLowerCase().includes(searchQuery),
+    [searchQuery]
   );
 
   const workspaceRepos = useMemo(() => {
     const filtered = repos.filter((repo) =>
       matchesQuery(`open workspace ${repo.full_name}`)
     );
-    return filtered.slice(0, deferredSearch ? 50 : 24);
-  }, [deferredSearch, matchesQuery, repos]);
+    return filtered.slice(0, searchQuery ? 50 : 24);
+  }, [searchQuery, matchesQuery, repos]);
 
   const runningPreviewRepos = useMemo(() => {
     return repos
@@ -165,8 +170,8 @@ export function CommandPalette({
     if (agents.length === 0) return [];
     return repos
       .filter((repo) => matchesQuery(`assign agent ${repo.full_name}`))
-      .slice(0, deferredSearch ? 16 : 8);
-  }, [agents.length, deferredSearch, matchesQuery, repos]);
+      .slice(0, searchQuery ? 16 : 8);
+  }, [agents.length, searchQuery, matchesQuery, repos]);
 
   const quickActions = useMemo(
     () => QUICK_ACTIONS.filter((item) => matchesQuery(item.value)),
@@ -210,6 +215,20 @@ export function CommandPalette({
     () => NAVIGATION_ITEMS.filter((item) => matchesQuery(item.value)),
     [matchesQuery]
   );
+
+  const commandValues = [
+    ...(sessionSearch.error ? ["retry-control-sessions"] : []),
+    ...sessionSearch.sessions.map((session) => `session-${session.id}`),
+    ...workspaceRepos.map((repo) => `open workspace ${repo.full_name}`),
+    ...runningSandboxes.map(({ repo, sandbox }) => `switch workspace ${repo.full_name} ${sandbox.working_branch}`),
+    ...runningPreviewRepos.map((repo) => `stop preview ${repo.full_name}`),
+    ...assignableRepos.map((repo) => `assign agent ${repo.full_name}`),
+    ...quickActions.map((item) => item.value),
+    ...navigationItems.map((item) => item.value),
+    ...scopeOptions.map((option) => `switch scope ${option.label} ${option.slug}`),
+  ];
+  const selectedValue = selectedCommand.query === searchQuery && commandValues.includes(selectedCommand.value)
+    ? selectedCommand.value : commandValues[0] ?? "";
 
   const handleSelect = useCallback(
     (action: string, payload?: string) => {
@@ -274,6 +293,7 @@ export function CommandPalette({
   );
 
   const showAnyItems =
+    sessionSearch.sessions.length > 0 || sessionSearch.isLoading || Boolean(sessionSearch.error) ||
     workspaceRepos.length > 0 ||
     runningSandboxes.length > 0 ||
     runningPreviewRepos.length > 0 ||
@@ -289,6 +309,8 @@ export function CommandPalette({
       onOpenChange={handleOpenChange}
       showCloseButton={false}
       commandProps={{
+        value: selectedValue,
+        onValueChange: (value) => setSelectedCommand({ query: searchQuery, value }),
         shouldFilter: false,
         className: "mogplex-command-palette-command",
       }}
@@ -300,6 +322,11 @@ export function CommandPalette({
       />
       <CommandList>
         {!showAnyItems && <CommandEmpty>No results found.</CommandEmpty>}
+
+        <SessionCommands
+          {...sessionSearch}
+          onSelect={(id) => handleSelect("navigate", `/control?mission=${encodeURIComponent(id)}`)}
+        />
 
         {workspaceRepos.length > 0 && (
           <CommandGroup heading="Open Workspace">

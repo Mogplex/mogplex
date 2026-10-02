@@ -18,6 +18,7 @@ import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 import { loadControlSessionList } from "./session-list-data";
 import { controlSelectionFailure } from "@/lib/control/session-list-state";
 import { ClientFetchError, fetchJsonObject } from "@/lib/client-fetch";
+import { useControlDeepLink } from "./use-control-deep-link";
 
 const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
 const SESSION_EVENTS = [
@@ -217,7 +218,7 @@ export function useControlSessions({
     [clearSelectionFailure, setSessionId, setSessionMessages]
   );
 
-  // Restore the URL target, last opened chat, or latest chat on bare /control.
+  useControlDeepLink(deepLinkTarget, selectSession);
   useEffect(() => {
     if (
       restoredSelectionRef.current ||
@@ -240,7 +241,6 @@ export function useControlSessions({
       setRestoreSettled(true);
       return;
     }
-    // Attempt restoration once; a failure waits for explicit Retry.
     restoredSelectionRef.current = true;
     setRestoreSettled(false);
     restoreInFlightRef.current = true;
