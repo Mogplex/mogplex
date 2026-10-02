@@ -3,6 +3,11 @@ import { summarizeEntityDispatchEvents } from "@/lib/automation-dispatch";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { summarizeEntityJobRuns } from "@/lib/job-runs";
+import { resolveActiveTeamCapabilities } from "@/lib/team-capabilities";
+import {
+  applyResourceOwnerScope,
+  resolveProductResourceScope,
+} from "@/lib/team-resource-scope";
 
 // Assignments no longer execute. They dispatched a run built straight from the
 // agent row, so the run took `agents.model` with nothing able to override it —
@@ -22,20 +27,44 @@ export async function POST() {
   );
 }
 
-export async function GET() {
-  const userId = await requireUserId();
-  if (userId instanceof Response) return userId;
+type AssignmentsReadDeps = {
+  requireUserId: typeof requireUserId;
+  resolveActiveTeamCapabilities: typeof resolveActiveTeamCapabilities;
+  db: typeof supabaseAdmin;
+};
+export function createAssignmentsGetHandler(
+  overrides: Partial<AssignmentsReadDeps> = {}
+) {
+  const deps = {
+    requireUserId,
+    resolveActiveTeamCapabilities,
+    db: supabaseAdmin,
+    ...overrides,
+  };
+  return (req: Request) => getAssignments(req, deps);
+}
 
-  // Get assignments for repos owned by this user
-  const { data: repos } = await supabaseAdmin
-    .from("repos")
-    .select("id")
-    .eq("user_id", userId);
+async function getAssignments(req: Request, deps: AssignmentsReadDeps) {
+  const userId = await deps.requireUserId();
+  if (userId instanceof Response) return userId;
+  const scope = await resolveProductResourceScope({
+    request: req,
+    userId,
+    resolveActiveTeamCapabilities: deps.resolveActiveTeamCapabilities,
+  });
+  if (!scope.ok)
+    return NextResponse.json({ error: scope.error }, { status: scope.status });
+  let query = deps.db.from("repos").select("id");
+  query = applyResourceOwnerScope(query, scope.scope);
+  const { data: repos, error: reposError } = await query;
+
+  if (reposError)
+    return NextResponse.json({ error: reposError.message }, { status: 500 });
 
   if (!repos?.length) return NextResponse.json([]);
 
   const repoIds = repos.map((r) => r.id);
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await deps.db
     .from("assignments")
     .select("*")
     .in("repo_id", repoIds)
@@ -48,7 +77,7 @@ export async function GET() {
   const assignmentIds = data.map((assignment) => assignment.id);
   // Newest-first + capped: the summaries only consume recent runs/events, and
   // with PostgREST max_rows raised these queries must not fetch full history.
-  const { data: jobRuns, error: jobRunsError } = await supabaseAdmin
+  const { data: jobRuns, error: jobRunsError } = await deps.db
     .from("job_runs")
     .select(
       "id, assignment_id, status, error, started_at, created_at, last_start_attempt_at"
@@ -60,7 +89,7 @@ export async function GET() {
   if (jobRunsError)
     return NextResponse.json({ error: jobRunsError.message }, { status: 500 });
 
-  const { data: dispatchEvents, error: dispatchError } = await supabaseAdmin
+  const { data: dispatchEvents, error: dispatchError } = await deps.db
     .from("automation_dispatch_events")
     .select("assignment_id, outcome, reason, created_at")
     .in("assignment_id", assignmentIds)
@@ -98,6 +127,8 @@ export async function GET() {
     }))
   );
 }
+
+export const GET = createAssignmentsGetHandler();
 
 export async function PUT(req: Request) {
   const userId = await requireUserId();

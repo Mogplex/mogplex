@@ -73,6 +73,11 @@ test("assignments share scoped repository data without leaking personal cache en
       calls.filter((call) => call.url === "/api/repos"),
       [{ url: "/api/repos", team: "team-a" }]
     );
+    for (const url of ["/api/agents", "/api/assignments"])
+      assert.deepEqual(
+        calls.filter((call) => call.url === url),
+        [{ url, team: "team-a" }]
+      );
     teamId = null;
     view.rerender();
     assert.equal(view.result.current.assignments.repos.length, 0);
@@ -80,6 +85,16 @@ test("assignments share scoped repository data without leaking personal cache en
       assert.equal(view.result.current.assignments.repos[0]?.id, "personal")
     );
     assert.equal(view.result.current.repos.repos[0]?.id, "personal");
+    await waitFor(() => {
+      for (const url of ["/api/agents", "/api/assignments"])
+        assert.deepEqual(
+          calls.filter((call) => call.url === url),
+          [
+            { url, team: "team-a" },
+            { url, team: null },
+          ]
+        );
+    });
     assert.deepEqual(
       calls.filter((call) => call.url === "/api/repos"),
       [

@@ -56,7 +56,7 @@ export function useRepoDashboard({
   const [browsingMonorepo, setBrowsingMonorepo] = useState<Repo | null>(null);
   const [syncingRepos, setSyncingRepos] = useState(false);
   const [repoSyncError, setRepoSyncError] = useState<string | null>(null);
-  const [otherLoadError, setDataLoadError] = useState<string | null>(null);
+  const [otherLoadError, setOtherLoadError] = useState<string | null>(null);
   const [hasAttemptedRepoSync, setHasAttemptedRepoSync] = useState(false);
   const {
     repos: rawRepos,
@@ -126,7 +126,7 @@ export function useRepoDashboard({
 
   const syncGithubRepos = useCallback(
     async (source = "repo_dashboard") => {
-      setDataLoadError(null);
+      setOtherLoadError(null);
       setRepoSyncError(null);
       setSyncingRepos(true);
       trackActivation("repo_sync_started", { source });
@@ -185,14 +185,18 @@ export function useRepoDashboard({
 
   const fetchData = useCallback(
     async (revalidateRepos = true) => {
-      setDataLoadError(null);
+      setOtherLoadError(null);
 
       try {
         const [workspaceResponse, agentResponse, assignmentResponse] =
           await Promise.all([
             fetchWorkspaces(),
-            fetch("/api/agents").then((res) => (res.ok ? res.json() : [])),
-            fetch("/api/assignments").then((res) => (res.ok ? res.json() : [])),
+            fetch("/api/agents", {
+              headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+            }).then((res) => (res.ok ? res.json() : [])),
+            fetch("/api/assignments", {
+              headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+            }).then((res) => (res.ok ? res.json() : [])),
           ]);
         if (revalidateRepos) await mutateRepos();
         setWorkspaces(workspaceResponse);
@@ -202,7 +206,7 @@ export function useRepoDashboard({
         setWorkspaces([]);
         setAgents([]);
         setAssignments([]);
-        setDataLoadError(
+        setOtherLoadError(
           (error as Error).message || "Failed to load projects and spaces"
         );
       }

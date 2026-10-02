@@ -37,13 +37,24 @@ async function installTeamRepositories(page: Page) {
     fulfillJson(route, { sandboxes: [] })
   );
   await page.route("**/api/agents", (route) =>
-    fulfillJson(route, [{ id: "agent-1", name: "Reviewer" }])
+    fulfillJson(route, [
+      {
+        id: "agent-1",
+        name:
+          route.request().headers()["x-mogplex-team-id"] === team.id
+            ? "Reviewer"
+            : "Personal agent",
+      },
+    ])
   );
   await page.route("**/api/assignments", (route) =>
     fulfillJson(route, [
       {
         id: "assignment-1",
-        repo_id: "team-repo",
+        repo_id:
+          route.request().headers()["x-mogplex-team-id"] === team.id
+            ? "team-repo"
+            : "personal-repo",
         agent_id: "agent-1",
         enabled: true,
       },
