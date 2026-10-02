@@ -18,6 +18,8 @@ test("project identity colors stay distinct and stable across sorting and themes
     "mogplex",
     null,
   ];
+  // These are saved repository bindings; name-only sessions are Unlinked.
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
   await page.route("**/api/control/sessions**", (route) =>
     fulfillJson(
       route,
@@ -25,7 +27,7 @@ test("project identity colors stay distinct and stable across sorting and themes
         id: `session-${i}`,
         title: `Conversation ${i}`,
         project,
-        repo_id: null,
+        repo_id: project ? `repo-${i}` : null,
         pinned: false,
         updated_at: new Date(2026, 8, 5, 12 - i).toISOString(),
       }))
@@ -33,7 +35,7 @@ test("project identity colors stay distinct and stable across sorting and themes
   );
   await page.goto(scopedPath("control"));
   const sidebar = page.getByRole("complementary", { name: "Sessions" });
-  const names = projects.map((project) => project ?? "General");
+  const names = projects.map((project) => project ?? "Unlinked");
   const colors = async () =>
     Promise.all(
       names.map(async (name) => {
