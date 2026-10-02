@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -13,6 +12,7 @@ import {
 import { McpStatusButton } from "@/components/chat/mcp-status-button";
 import { ProviderIcon } from "@/components/provider-icon";
 import { useModels } from "@/hooks/use-models";
+import { ControlErrorBanner } from "./control-load-state";
 import type { ControlContextUsage } from "@/lib/control/context-usage";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { MissionPermissions } from "@/lib/control/types";
@@ -23,14 +23,12 @@ import {
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
 import { useSkillSuggestionMenu } from "./skill-suggestions";
-
 export type ComposerSendOptions = {
   model: string | null;
   permissions: MissionPermissions;
   mode: "plan" | "run";
   files: ControlComposerFile[];
 };
-
 type Props = {
   value: string;
   onChange: (value: string) => void;
@@ -115,11 +113,13 @@ export function ModelChip({
   modelIds,
   onSelect,
   disabled,
+  loading = false,
 }: {
   modelId: string | null;
   modelIds: string[];
   onSelect: (modelId: string) => void;
   disabled: boolean;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -150,7 +150,7 @@ export function ModelChip({
     <div className="relative">
       <button
         ref={btnRef}
-        disabled={disabled}
+        disabled={disabled || loading}
         onClick={() => {
           setOpen((o) => {
             if (!o && btnRef.current) {
@@ -172,10 +172,10 @@ export function ModelChip({
             className="size-4 border-0"
           />
         ) : null}
-        {modelId ? shortModelName(modelId) : "Model"}
+        {loading ? "Loading models…" : modelId ? shortModelName(modelId) : "Model"}
         <NavArrowDown className="size-3 text-ink-400" strokeWidth={2} />
       </button>
-      {open &&
+      {open && !loading &&
         menuPos &&
         createPortal(
           <div
@@ -238,7 +238,7 @@ export function Composer({
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const { modelIds, defaultModelId, contextLimits } = useModels("control");
+  const { modelIds, defaultModelId, contextLimits, isLoading: modelsLoading, error: modelsError, mutate: mutateModels } = useModels("control");
   const [selectedModel, setSelectedModel] = useState<string | null>(
     initialModelId
   );
@@ -292,7 +292,7 @@ export function Composer({
   );
 
   const handleSend = useCallback(async () => {
-    if ((value.trim() || files.length > 0) && !pending && !archiving && !modelSaving) {
+    if ((value.trim() || files.length > 0) && !pending && !archiving && !modelSaving && !modelsLoading && modelId) {
       const draft = { text: value, files: [...files] };
       onChange("");
       setFiles([]);
@@ -322,6 +322,7 @@ export function Composer({
     pending,
     archiving,
     modelSaving,
+    modelsLoading,
     modelId,
     permissionsIdx,
     onSend,
@@ -345,6 +346,7 @@ export function Composer({
 
   return (
     <fieldset disabled={archiving} className="mx-auto min-w-0 w-full max-w-[67rem] shrink-0 px-4 pb-5 sm:px-6">
+      <ControlErrorBanner message={modelsError ? "We could not load models. Try again." : null} onRetry={() => { void mutateModels().catch(() => undefined); }} />
       {archiving ? <p role="status" className="pb-2 text-xs text-ink-400">Archive in progress</p> : null}
       <div
         data-testid="control-composer-dropzone"
@@ -431,6 +433,7 @@ export function Composer({
             }}
           />
           <ModelChip
+            loading={modelsLoading}
             modelId={modelId}
             modelIds={modelIds}
             onSelect={(nextModelId) => void selectModel(nextModelId)}
@@ -478,10 +481,10 @@ export function Composer({
                 aria-label="Send"
                 onClick={() => void handleSend()}
                 disabled={
-                  modelSaving || (!value.trim() && files.length === 0)
+                  modelSaving || modelsLoading || !modelId || (!value.trim() && files.length === 0)
                 }
                 className={`flex size-9 items-center justify-center rounded-full transition-colors ${
-                  !modelSaving && (value.trim() || files.length > 0)
+                  !modelSaving && !modelsLoading && modelId && (value.trim() || files.length > 0)
                     ? "bg-primary text-primary-foreground hover:bg-brand-accent-hover"
                     : "cursor-not-allowed bg-ink-800 text-ink-600"
                 }`}

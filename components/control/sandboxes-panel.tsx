@@ -15,6 +15,7 @@ export function SandboxesPanel({
   sandboxes,
   loading,
   hasRepository,
+  repositoryLoading = false,
   selectedSandboxId,
   focusSandboxId,
   onClearFocus,
@@ -24,6 +25,7 @@ export function SandboxesPanel({
   sandboxes: SandboxRecord[];
   loading: boolean;
   hasRepository: boolean;
+  repositoryLoading?: boolean;
   selectedSandboxId: string | null;
   focusSandboxId: string | null;
   onClearFocus: () => void;
@@ -77,6 +79,7 @@ export function SandboxesPanel({
           </span>
           <button
             type="button"
+            disabled={repositoryLoading}
             onClick={onStartSandbox}
             className="border-ink-700 bg-ink-850 text-ink-200 hover:bg-ink-800 ml-auto flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors"
           >
@@ -89,7 +92,7 @@ export function SandboxesPanel({
           more worktree checkouts.
         </p>
       </div>
-      {!hasRepository ? (
+      {!hasRepository && !repositoryLoading ? (
         <div
           role="note"
           className="border-ink-700 bg-ink-900/60 text-ink-300 mt-4 rounded-lg border px-4 py-3 text-[12.5px]"
@@ -98,7 +101,7 @@ export function SandboxesPanel({
           select a connected repository before starting compute.
         </div>
       ) : null}
-      {loading ? (
+      {loading || repositoryLoading ? (
         <div
           role="status"
           aria-label="Loading sandbox compute"
@@ -134,6 +137,7 @@ export function SandboxesPanel({
           ))}
           <button
             type="button"
+            disabled={repositoryLoading}
             onClick={onStartSandbox}
             className="border-ink-700 bg-ink-900/40 text-ink-400 hover:border-ink-600 hover:bg-ink-900 hover:text-ink-200 flex min-h-48 min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 text-center transition-colors"
           >

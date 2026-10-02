@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { ComposerSendOptions } from "./composer";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createPendingInitialMessageDeadline,
+  FIRST_MESSAGE_FAILURE,
+  loadPendingInitialMessage,
+  removePendingInitialMessage,
+  savePendingInitialMessage,
+  pendingInitialMessageRetryId,
+  pendingInitialMessageWasAnswered,
+  type PendingUserTurn,
+  type PendingInitialMessage,
+} from "@/lib/control/pending-initial-message";
 import {
   buildControlChatBody,
   buildControlChatMessage,
@@ -9,55 +19,188 @@ import {
 } from "./control-chat-request";
 
 type SendMessage = (
-  message: ReturnType<typeof buildControlChatMessage>,
+  message: ReturnType<typeof buildControlChatMessage> & { messageId?: string },
   options: { body: ReturnType<typeof buildControlChatBody> }
 ) => Promise<void>;
 
-/**
- * A mission's first message can't go through sendMessage directly from the
- * create handler: useChat is keyed by mission/session id, so the send would
- * hit the instance of the mission we're navigating away from. Park it here
- * and send once the re-keyed chat is live.
- */
+async function loadStoredDraft(missionId: string) {
+  try {
+    return await loadPendingInitialMessage(window.sessionStorage, missionId);
+  } catch {
+    return null;
+  }
+}
+async function saveStoredDraft(pending: PendingInitialMessage) {
+  await savePendingInitialMessage(window.sessionStorage, pending);
+}
+
+/** Queue before the chat is re-keyed, and retain the draft until a successful send. */
 export function usePendingInitialMessage({
   selectedMissionId,
   status,
   sendMessage,
-  onError,
+  getChatError,
+  getChatMessages,
+  clearChatError,
+  messages,
   requestContext,
 }: {
   selectedMissionId: string;
   status: string;
   sendMessage: SendMessage;
-  onError: (message: string) => void;
+  getChatError: () => Error | undefined;
+  getChatMessages: () => PendingUserTurn[];
+  clearChatError: () => void;
+  messages: PendingUserTurn[];
   requestContext: ControlChatRequestContext;
 }) {
-  const pendingRef = useRef<{
-    missionId: string;
-    text: string;
-    options: ComposerSendOptions;
-  } | null>(null);
+  const [pending, setPending] = useState<PendingInitialMessage | null>(null);
+  const pendingRef = useRef<PendingInitialMessage | null>(null);
+  const sendingRef = useRef(new Set<string>());
+  const queue = useCallback(async (next: PendingInitialMessage) => {
+    const queued = {
+      ...next,
+      failed: false,
+      recovered: false,
+      recoveryUnavailable: false,
+      queuedAt: Date.now(),
+    };
+    pendingRef.current = queued;
+    try {
+      await saveStoredDraft(queued);
+    } catch {
+      queued.recoveryUnavailable = true;
+      console.warn("Could not save a first-message draft for recovery");
+    }
+    setPending(queued);
+  }, []);
 
   useEffect(() => {
-    const pending = pendingRef.current;
-    if (!pending) return;
-    if (pending.missionId !== selectedMissionId) return;
-    if (status !== "ready") return;
-    const { text, options } = pending;
-    pendingRef.current = null;
-    sendMessage(buildControlChatMessage(text, options), {
-      body: buildControlChatBody({
-        model: options.model,
-        scope: options.mode === "plan" ? "PLAN ONLY" : "IMPLEMENT",
-        target: "mission",
-        permissions: options.permissions,
-        mode: options.mode,
-        ...requestContext,
-      }),
-    }).catch((err: unknown) => {
-      onError(err instanceof Error ? err.message : "Chat error");
-    });
-  }, [selectedMissionId, status, sendMessage, onError, requestContext]);
+    if (
+      !selectedMissionId ||
+      pendingRef.current?.missionId === selectedMissionId
+    )
+      return;
+    let current = true;
+    void loadStoredDraft(selectedMissionId)
+      .then((stored) => {
+        if (!current || !stored) return undefined;
+        // A reload cannot establish whether the server accepted the previous
+        // request. Keep it recoverable and let Retry explicitly resend it.
+        pendingRef.current = stored;
+        setPending({
+          ...stored,
+          failed: true,
+          recovered: Boolean(stored.recovered || !stored.failed),
+        });
+        return undefined;
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [selectedMissionId, queue]);
+  useEffect(() => {
+    if (pending?.missionId !== selectedMissionId || pending.failed) return;
+    const completed = async () => {
+      try {
+        await removePendingInitialMessage(
+          window.sessionStorage,
+          pending.missionId
+        );
+      } catch {
+        console.warn("Could not clear a delivered first-message draft");
+      }
+      if (pendingRef.current?.missionId === pending.missionId)
+        pendingRef.current = null;
+      setPending((current) =>
+        current?.missionId === pending.missionId ? null : current
+      );
+    };
+    const failed = () => {
+      if (pendingInitialMessageWasAnswered(getChatMessages(), pending)) {
+        void completed();
+        return;
+      }
+      const next = { ...pending, failed: true };
+      void saveStoredDraft(next).catch(() => undefined);
+      setPending((current) =>
+        current?.missionId === pending.missionId ? next : current
+      );
+    };
+    if (status !== "ready") {
+      if (sendingRef.current.has(pending.missionId)) return;
+      const deadline = createPendingInitialMessageDeadline(
+        failed,
+        pending.queuedAt
+      );
+      return deadline.cancel;
+    }
+    if (sendingRef.current.has(pending.missionId)) return;
+    sendingRef.current.add(pending.missionId);
+    clearChatError();
+    // Retain completed or different follow-ups when the saved draft is retried.
+    const previousId = pendingInitialMessageRetryId(messages, pending);
+    void sendMessage(
+      {
+        ...buildControlChatMessage(pending.text, pending.options),
+        ...(previousId ? { messageId: previousId } : {}),
+      },
+      {
+        body: buildControlChatBody({
+          model: pending.options.model,
+          scope: pending.options.mode === "plan" ? "PLAN ONLY" : "IMPLEMENT",
+          target: "mission",
+          permissions: pending.options.permissions,
+          mode: pending.options.mode,
+          ...requestContext,
+        }),
+      }
+    )
+      .then(async () => {
+        if (getChatError()) {
+          failed();
+          return;
+        }
+        await completed();
+      })
+      .catch(failed)
+      .finally(() => sendingRef.current.delete(pending.missionId));
+  }, [
+    pending,
+    selectedMissionId,
+    status,
+    sendMessage,
+    getChatError,
+    getChatMessages,
+    clearChatError,
+    messages,
+    requestContext,
+  ]);
 
-  return pendingRef;
+  const retry = useCallback(async () => {
+    const stored =
+      (await loadStoredDraft(selectedMissionId)) ?? pendingRef.current;
+    if (
+      stored?.missionId !== selectedMissionId ||
+      sendingRef.current.has(selectedMissionId)
+    )
+      return;
+    clearChatError();
+    await queue({ ...stored, attachmentsMissing: false });
+  }, [selectedMissionId, clearChatError, queue]);
+  return {
+    queue,
+    retry,
+    error:
+      pending?.missionId === selectedMissionId && pending.failed
+        ? pending.recoveryUnavailable
+          ? `${FIRST_MESSAGE_FAILURE}. We could not save this draft. Keep this tab open. Retry sends your text and files.`
+          : pending.attachmentsMissing
+            ? `${pending.recovered ? "We saved your first message" : FIRST_MESSAGE_FAILURE}. We could not load some files. Retry sends your saved text and available files.`
+            : pending.recovered
+              ? "We saved your first message. Retry sends it again."
+              : FIRST_MESSAGE_FAILURE
+        : null,
+  };
 }

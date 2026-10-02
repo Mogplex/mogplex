@@ -16,20 +16,15 @@ import {
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 import { loadControlSessionList } from "./session-list-data";
+import { controlSelectionFailure } from "@/lib/control/session-list-state";
+import { ClientFetchError, fetchJsonObject } from "@/lib/client-fetch";
 
 const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
 const SESSION_EVENTS = [
   { table: "control_sessions", filter: "user_id=eq.$USER_ID" },
 ];
 
-/**
- * DB-backed control chat sessions: list, create, restore, and persist.
- * Messages sync whole-array with optimistic concurrency on updated_at
- * (same pattern as the pane workspace's conversations store).
- *
- * updated_at revisions are tracked per session so background chat completions
- * persist to their own rows even after the user selects another session.
- */
+/** Restores and persists chats with optimistic concurrency and stale-response guards. */
 export function useControlSessions({
   sessionId,
   setSessionId,
@@ -48,6 +43,12 @@ export function useControlSessions({
 }) {
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const failedSelectionRef = useRef<string | null>(null);
+  const missingSelectionRef = useRef(false);
+  const restoreInFlightRef = useRef(false);
+  const listRequestRef = useRef(0);
   const updatedAtBySessionRef = useRef(new Map<string, string>());
   const mutationRevisionRef = useRef(0);
   const removedSessionIdsRef = useRef(new Set<string>());
@@ -57,17 +58,38 @@ export function useControlSessions({
     selectedIdRef.current = sessionId;
   }, [sessionId]);
   const restoredSelectionRef = useRef(false);
+  const [restoreSettled, setRestoreSettled] = useState(false);
   const refreshRevisionRef = useRef(0);
+  const clearSelectionFailure = useCallback((id?: string) => {
+    if (id && failedSelectionRef.current !== id) return;
+    failedSelectionRef.current = null;
+    missingSelectionRef.current = false;
+    setSelectionError(null);
+  }, []);
 
   const refreshCurrent = useCallback(async () => {
     if (!sessionId || chatPending) return;
     const requestRevision = ++refreshRevisionRef.current;
     const mutationRevision = mutationRevisionRef.current;
-    const res = await fetch(
-      `/api/control/sessions?id=${encodeURIComponent(sessionId)}`
-    );
-    if (!res.ok) return;
-    const record = (await res.json()) as ControlSessionRecord;
+    let record: ControlSessionRecord;
+    try {
+      record = await fetchJsonObject<ControlSessionRecord>(
+        `/api/control/sessions?id=${encodeURIComponent(sessionId)}`,
+        "Could not load this chat. Try again."
+      );
+    } catch (error) {
+      if (
+        requestRevision === refreshRevisionRef.current &&
+        mutationRevision === mutationRevisionRef.current &&
+        !removedSessionIdsRef.current.has(sessionId)
+      ) {
+        failedSelectionRef.current = sessionId;
+        const { missing, message } = controlSelectionFailure(error);
+        missingSelectionRef.current = missing;
+        setSelectionError(message);
+      }
+      return;
+    }
     if (
       requestRevision !== refreshRevisionRef.current ||
       mutationRevision !== mutationRevisionRef.current ||
@@ -101,8 +123,21 @@ export function useControlSessions({
 
   const refreshList = useCallback(async () => {
     const revision = mutationRevisionRef.current;
-    const fetched = await loadControlSessionList().catch(() => null);
-    if (!fetched) return;
+    const request = ++listRequestRef.current;
+    setSessionsError(null);
+    let fetched: ControlSessionSummary[];
+    try {
+      fetched = await loadControlSessionList();
+    } catch (error) {
+      if (request === listRequestRef.current)
+        setSessionsError(
+          error instanceof ClientFetchError
+            ? error.message
+            : "Could not load chats. Try again."
+        );
+      return;
+    }
+    if (request !== listRequestRef.current) return;
     setSessionsLoaded(true);
     for (const session of fetched) {
       if (!updatedAtBySessionRef.current.has(session.id)) {
@@ -118,7 +153,17 @@ export function useControlSessions({
       return;
     }
     setSessions(fetched);
-  }, []);
+    if (
+      missingSelectionRef.current &&
+      !fetched.some((entry) => entry.id === failedSelectionRef.current)
+    ) {
+      if (selectedIdRef.current === failedSelectionRef.current)
+        setSessionId(null);
+      failedSelectionRef.current = null;
+      missingSelectionRef.current = false;
+      setSelectionError(null);
+    }
+  }, [setSessionId]);
 
   useEffect(() => {
     void refreshList();
@@ -132,30 +177,54 @@ export function useControlSessions({
   const selectSession = useCallback(
     async (id: string) => {
       const revision = ++selectionRevisionRef.current;
-      const res = await fetch(`/api/control/sessions?id=${id}`);
-      if (!res.ok) return;
-      const record = (await res.json()) as ControlSessionRecord;
+      let record: ControlSessionRecord;
+      try {
+        record = await fetchJsonObject<ControlSessionRecord>(
+          `/api/control/sessions?id=${encodeURIComponent(id)}`,
+          "Could not load this chat. Try again."
+        );
+        if (record.id !== id || !Array.isArray(record.messages))
+          throw new Error("Invalid session");
+      } catch (error) {
+        if (
+          revision === selectionRevisionRef.current &&
+          !removedSessionIdsRef.current.has(id)
+        ) {
+          failedSelectionRef.current = id;
+          const { missing, message } = controlSelectionFailure(error);
+          missingSelectionRef.current = missing;
+          setSelectionError(message);
+        }
+        return false;
+      }
       if (
         revision !== selectionRevisionRef.current ||
         removedSessionIdsRef.current.has(id)
       )
-        return;
+        return false;
       const hydrated = setSessionMessages(record.id, record.messages ?? []);
       if (hydrated) {
         updatedAtBySessionRef.current.set(record.id, record.updated_at);
       }
       selectedIdRef.current = record.id;
+      restoredSelectionRef.current = true;
+      setRestoreSettled(true);
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
+      clearSelectionFailure();
+      return true;
     },
-    [setSessionId, setSessionMessages]
+    [clearSelectionFailure, setSessionId, setSessionMessages]
   );
 
-  // Restore the URL target, then the last opened chat, then the most recent
-  // chat. Global navigation returns to bare /control, so relying on the query
-  // string alone would strand persisted follow-up turns behind an empty view.
+  // Restore the URL target, last opened chat, or latest chat on bare /control.
   useEffect(() => {
-    if (restoredSelectionRef.current || !sessionsLoaded) return;
+    if (
+      restoredSelectionRef.current ||
+      restoreInFlightRef.current ||
+      !sessionsLoaded
+    )
+      return;
     const remembered = window.localStorage.getItem(LAST_CONTROL_SESSION_KEY);
     const target =
       (deepLinkTarget && sessions.some((entry) => entry.id === deepLinkTarget)
@@ -166,10 +235,19 @@ export function useControlSessions({
         : null) ??
       sessions[0]?.id ??
       null;
+    if (!target || target === sessionId) {
+      restoredSelectionRef.current = true;
+      setRestoreSettled(true);
+      return;
+    }
+    // Attempt restoration once; a failure waits for explicit Retry.
     restoredSelectionRef.current = true;
-    if (!target || target === sessionId) return;
-
-    void selectSession(target);
+    setRestoreSettled(false);
+    restoreInFlightRef.current = true;
+    void selectSession(target).finally(() => {
+      restoreInFlightRef.current = false;
+      setRestoreSettled(true);
+    });
   }, [sessions, sessionsLoaded, deepLinkTarget, selectSession, sessionId]);
 
   const createSession = useCallback(
@@ -210,11 +288,15 @@ export function useControlSessions({
         },
         ...current,
       ]);
+      selectionRevisionRef.current++;
+      restoredSelectionRef.current = true;
+      setRestoreSettled(true);
+      clearSelectionFailure();
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
       return record.id;
     },
-    [setSessionId, setSessionMessages]
+    [clearSelectionFailure, setSessionId, setSessionMessages]
   );
 
   const persistSession = useCallback(
@@ -239,11 +321,7 @@ export function useControlSessions({
     []
   );
 
-  /**
-   * Rename/pin/archive the selected session with the same optimistic
-   * concurrency as persist (one rebase retry on 409). Archiving removes the
-   * session from the list and clears the selection.
-   */
+  /** Rename/pin/archive with optimistic concurrency and one rebase retry on 409. */
   const updateSession = useCallback(
     async (fields: {
       title?: string;
@@ -282,6 +360,7 @@ export function useControlSessions({
       mutationRevisionRef.current += 1;
       updatedAtBySessionRef.current.set(sessionId, session.updated_at);
       if (fields.archived) {
+        clearSelectionFailure(sessionId);
         removedSessionIdsRef.current.add(sessionId);
         updatedAtBySessionRef.current.delete(sessionId);
         setSessions((current) =>
@@ -314,7 +393,7 @@ export function useControlSessions({
       );
       return true;
     },
-    [removeSessionMessages, sessionId, setSessionId]
+    [clearSelectionFailure, removeSessionMessages, sessionId, setSessionId]
   );
 
   const deleteSession = useCallback(
@@ -332,6 +411,7 @@ export function useControlSessions({
 
       mutationRevisionRef.current += 1;
       selectionRevisionRef.current += 1;
+      clearSelectionFailure(targetSessionId);
       removedSessionIdsRef.current.add(targetSessionId);
       updatedAtBySessionRef.current.delete(targetSessionId);
       setSessions((current) =>
@@ -347,7 +427,7 @@ export function useControlSessions({
       }
       return true;
     },
-    [removeSessionMessages, sessionId, setSessionId]
+    [clearSelectionFailure, removeSessionMessages, sessionId, setSessionId]
   );
 
   const setSessionArchived = useCallback(
@@ -374,6 +454,7 @@ export function useControlSessions({
       mutationRevisionRef.current++;
       updatedAtBySessionRef.current.set(target.id, session.updated_at);
       if (archived) {
+        clearSelectionFailure(target.id);
         removedSessionIdsRef.current.add(target.id);
         setSessions((current) =>
           current.filter((entry) => entry.id !== target.id)
@@ -394,13 +475,21 @@ export function useControlSessions({
       }
       return session;
     },
-    [refreshList, removeSessionMessages, setSessionId]
+    [clearSelectionFailure, refreshList, removeSessionMessages, setSessionId]
   );
 
   return {
     setSessionArchived,
     sessions,
     sessionsLoaded,
+    sessionsError,
+    selectionError,
+    restoringSelection: !restoreSettled && !selectionError && !sessionId,
+    retryList: refreshList,
+    retrySelection: () =>
+      failedSelectionRef.current && !missingSelectionRef.current
+        ? selectSession(failedSelectionRef.current)
+        : refreshList(),
     selectSession,
     createSession,
     updateSession,

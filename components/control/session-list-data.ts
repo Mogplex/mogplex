@@ -1,4 +1,5 @@
 import type { ControlSessionSummary } from "@/lib/control/session-types";
+import { fetchJsonArray } from "@/lib/client-fetch";
 
 /** Read every page so a group action also includes chats beyond the first page. */
 export async function loadControlSessionList(
@@ -12,9 +13,10 @@ export async function loadControlSessionList(
     const query = new URLSearchParams({ order: "id" });
     if (archived) query.set("archived", "true");
     if (after) query.set("after", after);
-    const response = await fetch(`/api/control/sessions?${query}`);
-    if (!response.ok) throw new Error("Could not load chats. Try again.");
-    const page = (await response.json()) as ControlSessionSummary[];
+    const page = await fetchJsonArray<ControlSessionSummary>(
+      `/api/control/sessions?${query}`,
+      "Could not load chats. Try again."
+    );
     sessions.push(...page);
     if (page.length < 200)
       return sessions.sort(

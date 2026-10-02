@@ -74,7 +74,16 @@ test("control composers expose permissions, model, and MCP controls without a sp
       };
       return fulfillJson(route, { ok: true, session: sessionRecord });
     }
-    if (request.method() !== "POST") return route.continue();
+    if (request.method() === "GET")
+      return fulfillJson(
+        route,
+        new URL(request.url()).searchParams.has("id")
+          ? sessionRecord
+          : sessionRecord
+            ? [sessionRecord]
+            : []
+      );
+    if (request.method() !== "POST") return route.fallback();
     const body = request.postDataJSON() as {
       title?: string;
       project?: string | null;
@@ -154,10 +163,8 @@ test("control composers expose permissions, model, and MCP controls without a sp
       body: streamBody,
     });
   });
-
   await page.goto(scopedPath("control"));
   await page.waitForLoadState("networkidle");
-
   // New-mission composer: permissions defaults to Skip Permissions (amber
   // warning), cycles to Approve Edits (blue), and no dollar spend-cap chip
   // exists anywhere.
@@ -201,14 +208,12 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await expect(
     page.getByRole("button", { name: "Skip Permissions" })
   ).toBeVisible();
-
   const initialModelChip = page.getByRole("button", {
     name: shortModel,
     exact: true,
   });
   await initialModelChip.click();
   await page.getByRole("button", { name: "anthropic/claude-sonnet-5" }).click();
-
   // No manual plan-mode gate: the composer sends straight to the agent.
   await expect(page.getByRole("button", { name: "Plan mode" })).toHaveCount(0);
   await page
@@ -224,7 +229,6 @@ test("control composers expose permissions, model, and MCP controls without a sp
     .getByPlaceholder("Ask anything or run a command...")
     .fill("Ship the new onboarding flow");
   await page.getByRole("button", { name: "Start mission" }).click();
-
   // Streamed replies and tool status render in the conversation.
   const conversation = page.getByRole("log", { name: "Conversation" });
   await expect(
@@ -279,7 +283,6 @@ test("control composers expose permissions, model, and MCP controls without a sp
     ?.at(-1)
     ?.parts?.find((part) => part.type === "file");
   expect(initialFilePart?.url).toContain("data:text/plain");
-
   // Conversation controls retain the persisted model.
   const composerPermissions = page.getByRole("button", {
     name: "Skip Permissions",
@@ -295,7 +298,6 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await mcpButton.click();
   await expect(page.getByRole("dialog", { name: "MCP servers" })).toBeVisible();
   await page.keyboard.press("Escape");
-
   // Switching models routes the chosen id through to the chat request body.
   await modelChip.click();
   await page.getByRole("button", { name: modelId }).click();
@@ -307,7 +309,6 @@ test("control composers expose permissions, model, and MCP controls without a sp
     .getByPlaceholder("Ask for follow-up changes or attach images")
     .fill("Summarize progress");
   await page.getByRole("button", { name: "Send" }).click();
-
   await expect
     .poll(() => chatRequests.at(-1)?.model, { timeout: 10_000 })
     .toBe(modelId);
@@ -320,7 +321,6 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await expect(
     page.getByRole("button", { name: "Attach file" }).last()
   ).toBeEnabled();
-
   await page.getByTestId("control-composer-dropzone").evaluate((element) => {
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(
@@ -356,6 +356,7 @@ test("control chat surfaces request failures instead of swallowing them", async 
 }) => {
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
+  await mockControlSessionBootstrap(page);
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
