@@ -209,3 +209,75 @@ for (const reload of [false, true])
       )
     ).toBeNull();
   });
+
+test("a first response interrupted after assistant output is not offered as an unsent draft", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  const stored = {
+    ...recoverySession,
+    id: "partial-response",
+    messages: [] as unknown[],
+  };
+  await page.route("**/api/control/sessions**", (route) => {
+    if (route.request().method() === "POST") return fulfillJson(route, stored);
+    if (route.request().method() === "PUT") {
+      stored.messages = route.request().postDataJSON().messages ?? [];
+      return fulfillJson(route, { session: stored });
+    }
+    const id = new URL(route.request().url()).searchParams.get("id");
+    return fulfillJson(route, id ? stored : []);
+  });
+  let requests = 0;
+  await page.route("**/api/control/chat", (route) => {
+    requests++;
+    return route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body:
+        [
+          { type: "start" },
+          { type: "text-start", id: "partial" },
+          {
+            type: "text-delta",
+            id: "partial",
+            delta: "Partial answer received.",
+          },
+          { type: "error", errorText: "Response interrupted" },
+        ]
+          .map((part) => `data: ${JSON.stringify(part)}\n\n`)
+          .join("") + "data: [DONE]\n\n",
+    });
+  });
+  await page.goto(scopedPath("control"));
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Deliver this request once");
+  await page
+    .getByRole("button", { name: "Start mission", exact: true })
+    .click();
+  await expect(
+    page.getByText("Partial answer received.", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Response interrupted" })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Your first message was not sent", { exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Deliver this request once", { exact: true })
+  ).toHaveCount(1);
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("mogplex.control.pendingInitial.partial-response")
+    )
+  ).toBeNull();
+  expect(requests).toBe(1);
+});

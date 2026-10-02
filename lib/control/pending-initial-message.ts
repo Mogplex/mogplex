@@ -155,3 +155,17 @@ export function pendingInitialMessageRetryId(
     ? last.id
     : undefined;
 }
+
+/** Assistant output after the newest matching turn proves the draft was delivered. */
+export function pendingInitialMessageWasAnswered(
+  messages: PendingUserTurn[],
+  pending: PendingInitialMessage
+): boolean {
+  const index = messages.findLastIndex(
+    (message) => pendingInitialMessageRetryId([message], pending) !== undefined
+  );
+  return (
+    index !== -1 &&
+    messages.slice(index + 1).some((message) => message.role === "assistant")
+  );
+}

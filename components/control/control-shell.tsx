@@ -119,6 +119,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     [removeChatError, removeComposerDraft, removeSession]
   );
   const getActiveChatError = useCallback(() => activeChat.error, [activeChat]);
+  const getActiveChatMessages = useCallback(() => activeChat.messages, [activeChat]);
   const chatPending = status === "streaming" || status === "submitted";
   const controlWorktrees = useControlWorktrees({ sessionId, chatPending });
   const controlWorkers = useControlWorkers(sessionId, chatPending, messages.findLast((message) => message.role === "user")?.id ?? null);
@@ -206,7 +207,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     selectedMissionId: sessionId ?? "",
     status,
     sendMessage,
-    getChatError: getActiveChatError, clearChatError: clearActiveChatError, messages,
+    getChatError: getActiveChatError, getChatMessages: getActiveChatMessages, clearChatError: clearActiveChatError, messages,
     requestContext,
   });
 

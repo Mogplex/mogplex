@@ -8,6 +8,7 @@ import {
   removePendingInitialMessage,
   savePendingInitialMessage,
   pendingInitialMessageRetryId,
+  pendingInitialMessageWasAnswered,
   type PendingUserTurn,
   type PendingInitialMessage,
 } from "@/lib/control/pending-initial-message";
@@ -28,6 +29,7 @@ export function usePendingInitialMessage({
   status,
   sendMessage,
   getChatError,
+  getChatMessages,
   clearChatError,
   messages,
   requestContext,
@@ -36,6 +38,7 @@ export function usePendingInitialMessage({
   status: string;
   sendMessage: SendMessage;
   getChatError: () => Error | undefined;
+  getChatMessages: () => PendingUserTurn[];
   clearChatError: () => void;
   messages: PendingUserTurn[];
   requestContext: ControlChatRequestContext;
@@ -87,7 +90,26 @@ export function usePendingInitialMessage({
   }, [selectedMissionId, queue]);
   useEffect(() => {
     if (pending?.missionId !== selectedMissionId || pending.failed) return;
+    const completed = async () => {
+      try {
+        await removePendingInitialMessage(
+          window.sessionStorage,
+          pending.missionId
+        );
+      } catch {
+        console.warn("Could not clear a delivered first-message draft");
+      }
+      if (pendingRef.current?.missionId === pending.missionId)
+        pendingRef.current = null;
+      setPending((current) =>
+        current?.missionId === pending.missionId ? null : current
+      );
+    };
     const failed = () => {
+      if (pendingInitialMessageWasAnswered(getChatMessages(), pending)) {
+        void completed();
+        return;
+      }
       const next = { ...pending, failed: true };
       void savePendingInitialMessage(window.sessionStorage, next).catch(
         () => undefined
@@ -130,19 +152,7 @@ export function usePendingInitialMessage({
           failed();
           return;
         }
-        try {
-          await removePendingInitialMessage(
-            window.sessionStorage,
-            pending.missionId
-          );
-        } catch {
-          console.warn("Could not clear a delivered first-message draft");
-        }
-        if (pendingRef.current?.missionId === pending.missionId)
-          pendingRef.current = null;
-        setPending((current) =>
-          current?.missionId === pending.missionId ? null : current
-        );
+        await completed();
       })
       .catch(failed)
       .finally(() => sendingRef.current.delete(pending.missionId));
@@ -152,6 +162,7 @@ export function usePendingInitialMessage({
     status,
     sendMessage,
     getChatError,
+    getChatMessages,
     clearChatError,
     messages,
     requestContext,

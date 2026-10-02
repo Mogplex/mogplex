@@ -153,11 +153,13 @@ export function useControlSessions({
       missingSelectionRef.current &&
       !fetched.some((entry) => entry.id === failedSelectionRef.current)
     ) {
+      if (selectedIdRef.current === failedSelectionRef.current)
+        setSessionId(null);
       failedSelectionRef.current = null;
       missingSelectionRef.current = false;
       setSelectionError(null);
     }
-  }, []);
+  }, [setSessionId]);
 
   useEffect(() => {
     void refreshList();

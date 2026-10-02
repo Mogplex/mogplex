@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   createPendingInitialMessageDeadline,
   loadPendingInitialMessage,
+  pendingInitialMessageWasAnswered,
   removePendingInitialMessage,
   savePendingInitialMessage,
   type PendingInitialMessage,
@@ -125,3 +126,32 @@ it("preserves the saved text when an attachment cannot be restored", async () =>
   expect(restored?.failed).toBe(true);
   expect(restored?.attachmentsMissing).toBe(true);
 });
+
+it.each([
+  { roles: ["user", "assistant"], matching: true, delivered: true },
+  { roles: ["user"], matching: true, delivered: false },
+  { roles: ["user", "assistant", "user"], matching: true, delivered: false },
+  { roles: ["user", "assistant"], matching: false, delivered: false },
+])(
+  "recognizes delivery without discarding a newer unanswered or different draft: %j",
+  ({ roles, matching, delivered }) => {
+    const draft: PendingInitialMessage = {
+      missionId: "match",
+      text: "Original request",
+      options: {
+        model: "test/model",
+        mode: "run",
+        permissions: "Skip Permissions",
+        files: [],
+      },
+    };
+    const messages = roles.map((role, index) => ({
+      id: String(index),
+      role,
+      parts: [
+        { type: "text", text: matching ? draft.text : "Different request" },
+      ],
+    }));
+    expect(pendingInitialMessageWasAnswered(messages, draft)).toBe(delivered);
+  }
+);

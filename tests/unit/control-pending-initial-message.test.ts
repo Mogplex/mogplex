@@ -44,6 +44,7 @@ test("the readiness deadline never reports a live first response as unsent", asy
       attempts++;
       return response;
     },
+    getChatMessages: () => [],
     getChatError: () => undefined,
     clearChatError: () => {},
     messages: [],
@@ -122,6 +123,7 @@ test("an unavailable attachment store retains the text and waits for explicit Re
       sendMessage: async (message) => {
         sent.push(message);
       },
+      getChatMessages: () => [],
       getChatError: () => undefined,
       clearChatError: () => {},
       messages: [],
@@ -170,6 +172,7 @@ test("a reloaded in-flight draft waits for Retry without claiming it was never d
       sendMessage: async () => {
         attempts++;
       },
+      getChatMessages: () => [],
       getChatError: () => undefined,
       clearChatError: () => {},
       messages: [{ id: "previous-user-turn", role: "user" }],
@@ -223,6 +226,7 @@ test("first-message recovery retains a failed draft across remounts and retries 
     clearChatError: () => {
       error = undefined;
     },
+    getChatMessages: () => [],
     getChatError: () => error,
     messages: [],
     requestContext: {},
@@ -332,6 +336,7 @@ for (const scenario of [
         sendMessage: async (message) => {
           sent.push(message);
         },
+        getChatMessages: () => [],
         getChatError: () => undefined,
         clearChatError: () => {},
         requestContext: {},
@@ -382,6 +387,7 @@ test("delivered first messages stay successful when draft cleanup fails", async 
       sendMessage: async () => {
         attempts++;
       },
+      getChatMessages: () => [],
       getChatError: () => undefined,
       clearChatError: () => {},
       messages: [],
@@ -406,6 +412,65 @@ test("delivered first messages stay successful when draft cleanup fails", async 
     assert.equal(writes, 1, "cleanup failure must not save a failed draft");
     view.rerender();
     assert.equal(attempts, 1);
+  } finally {
+    view.unmount();
+    cleanup();
+  }
+});
+
+test("a stream error after assistant output retires the delivered draft using the live chat store", async () => {
+  const cleanup = installDom();
+  const { renderHook, act, waitFor } = await import("@testing-library/react");
+  let liveMessages: Array<{
+    id: string;
+    role: string;
+    parts: Array<{ type: string; text: string }>;
+  }> = [];
+  const view = renderHook(() =>
+    usePendingInitialMessage({
+      selectedMissionId: "partial",
+      status: "ready",
+      messages: [],
+      getChatMessages: () => liveMessages,
+      sendMessage: async () => {
+        liveMessages = [
+          {
+            id: "user",
+            role: "user",
+            parts: [{ type: "text", text: "Delivered once" }],
+          },
+          {
+            id: "assistant",
+            role: "assistant",
+            parts: [{ type: "text", text: "Partial answer" }],
+          },
+        ];
+        throw new Error("Response interrupted");
+      },
+      getChatError: () => undefined,
+      clearChatError: () => {},
+      requestContext: {},
+    })
+  );
+  try {
+    await act(async () =>
+      view.result.current.queue({
+        missionId: "partial",
+        text: "Delivered once",
+        options: {
+          model: "test/model",
+          mode: "run",
+          permissions: "Skip Permissions",
+          files: [],
+        },
+      })
+    );
+    await waitFor(() => assert.equal(liveMessages.length, 2));
+    assert.equal(view.result.current.error, null);
+    assert.equal(
+      window.sessionStorage.getItem("mogplex.control.pendingInitial.partial"),
+      null
+    );
   } finally {
     view.unmount();
     cleanup();

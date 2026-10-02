@@ -257,3 +257,32 @@ test("a slow automatic restore cannot replace a newly created mission", async ({
     )
   ).toBe(created.id);
 });
+
+test("Retry leaves a current chat confirmed deleted by refreshed history", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  let reads = 0;
+  await page.route("**/api/control/sessions**", (route) => {
+    const id = new URL(route.request().url()).searchParams.get("id");
+    if (!id) return fulfillJson(route, reads > 1 ? [] : [recoverySession]);
+    reads++;
+    return fulfillJson(
+      route,
+      reads > 1 ? { error: "Not found" } : recoverySession,
+      reads > 1 ? 404 : 200
+    );
+  });
+  await page.goto(scopedPath("control"));
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "That session no longer exists" });
+  await expect(banner).toBeVisible();
+  await expect(page.getByText("Saved request", { exact: true })).toBeVisible();
+  await banner.getByRole("button", { name: "Retry" }).click();
+  await expect(
+    page.getByRole("button", { name: "Start mission", exact: true })
+  ).toBeVisible();
+  await expect(page.getByText("Saved request", { exact: true })).toHaveCount(0);
+  await expect(banner).toHaveCount(0);
+});
