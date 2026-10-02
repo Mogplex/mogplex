@@ -36,6 +36,7 @@ import { useControlSend } from "./use-control-send";
 import { latestControlContext } from "@/lib/control/context-usage";
 import { useControlSessionContext } from "./use-control-session-context";
 import { useControlSessionUrl } from "./use-control-session-url";
+import { UNLINKED_GROUP_NAME } from "@/lib/control/session-groups";
 import {
   canonicalizeControlSessionProjects,
   resolveNewSessionRepoId,
@@ -153,9 +154,13 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     chatPending,
   });
   const archiveState = useSessionArchive({ setSessionArchived, reserveArchiveSession });
+  const archiveSessions = useMemo(
+    () => canonicalizeControlSessionProjects(archiveState.sessions, repos),
+    [archiveState.sessions, repos]
+  );
   const archive = {
     ...archiveState,
-    sessions: canonicalizeControlSessionProjects(archiveState.sessions, repos),
+    sessions: archiveSessions,
   };
   const displaySessions = useMemo(
     () => canonicalizeControlSessionProjects(sessions, repos),
@@ -362,7 +367,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
       {activeSession?.external_run_id ? <ExternalRunConversation session={{ ...activeSession, external_run_id: activeSession.external_run_id }} /> : <div className="flex min-w-0 flex-1 flex-col">
         <ControlTopBar
           projectName={
-            (activeSession ? (activeSession.repo_id ? activeSession.project : "Unlinked") : null) ??
+            (activeSession ? (activeSession.repo_id ? activeSession.project : UNLINKED_GROUP_NAME) : null) ??
             (mission ? (getWorkspace(mission.ws)?.name ?? null) : null)
           }
           sessionTitle={activeSession?.title ?? mission?.title ?? null}

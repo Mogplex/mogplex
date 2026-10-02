@@ -24,18 +24,21 @@ it("groups named but unlinked sessions separately from a linked repository", () 
   ]);
 });
 
-it("keeps a saved binding with no project label out of Unlinked", () => {
-  const [group] = groupSessionsByProject([
-    {
-      id: "bound",
-      repo_id: "unavailable",
-      project: " ",
-      updated_at: "2026-10-02T12:00:00Z",
-    },
-  ]);
-  expect(group.name).toBe("Linked repository");
-  expect(group.project).not.toBeNull();
-});
+it.each([undefined, null, "", " "])(
+  "keeps a saved binding with label %j out of Unlinked",
+  (project) => {
+    const [group] = groupSessionsByProject([
+      {
+        id: "bound",
+        repo_id: "unavailable",
+        project,
+        updated_at: "2026-10-02T12:00:00Z",
+      },
+    ]);
+    expect(group.name).toBe("Linked repository");
+    expect(group.project).not.toBeNull();
+  }
+);
 
 describe("project identity colors", () => {
   it("uses a neutral marker for the Unlinked group", () => {
