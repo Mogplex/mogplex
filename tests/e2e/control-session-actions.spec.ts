@@ -327,3 +327,31 @@ test("a follow-up chat is restored after leaving Control and returning", async (
   ).toBeVisible();
   await expect(page.getByText("Regression test added.")).toBeVisible();
 });
+
+test("a restored chat cannot commit and push to a guessed branch", async ({
+  page,
+}) => {
+  await installControlChrome(page);
+  const restored = session("session-restored", "Restored chat");
+  await page.route("**/api/control/sessions**", (route) => {
+    const id = new URL(route.request().url()).searchParams.get("id");
+    return fulfillJson(route, id ? restored : [restored]);
+  });
+  await page.goto(`${scopedPath("control")}?mission=session-restored`);
+  await expect(
+    page.getByPlaceholder("Ask for follow-up changes or attach images")
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Commit & push", exact: true })
+    .click();
+  const item = page.getByRole("menuitem", {
+    name: "Commit & push",
+    exact: true,
+  });
+  await expect(item).toHaveAttribute("data-disabled");
+  await expect(item).toHaveAttribute(
+    "title",
+    "Start a sandbox to enable commit and push"
+  );
+  await expect(item).not.toContainText("main");
+});

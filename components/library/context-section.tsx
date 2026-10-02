@@ -4,19 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Filter } from "iconoir-react";
 import { useActiveTeamId } from "@/components/active-scope-provider";
+import { useRepos } from "@/hooks/use-repos";
 import type {
   ContextSectionProps,
   MemoryLane,
   MemoryPayload,
   MemoryResourceScope,
-  Repo,
 } from "./context-section-types";
 import { LANE_INFO } from "./context-section-types";
 import {
   buildMemoryUrl,
   emptyMemoryPayload,
   fetchMemoryGroups,
-  fetchRepos,
   isCurrentProject,
   scopeForWrites,
 } from "./context-section-utils";
@@ -83,15 +82,7 @@ export function ContextSection({
 
   const projectListScope: Exclude<MemoryResourceScope, "all"> =
     resourceScope === "team" ? "team" : "personal";
-  const reposKey =
-    projectListScope === "team" && !activeTeamId
-      ? null
-      : (["/api/repos", projectListScope, activeTeamId] as [
-          string,
-          Exclude<MemoryResourceScope, "all">,
-          string | null,
-        ]);
-  const { data: repos = [] } = useSWR<Repo[], Error>(reposKey, fetchRepos);
+  const { repos } = useRepos({ teamId: projectListScope === "team" ? activeTeamId : null, enabled: projectListScope !== "team" || Boolean(activeTeamId) });
 
   const repoLabels = useMemo(() => {
     const labels = new Map<string, string>();

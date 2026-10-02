@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { ActiveScopeProvider } from "@/components/active-scope-provider";
+import { DashboardShell } from "@/components/dashboard-shell";
 import { TerminalHost } from "@/components/terminal-host";
 import { parseScopeContextForLayout } from "@/lib/scope-context";
 import { PRIVATE_NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -26,7 +27,7 @@ export default async function ScopeLayout({
   return (
     <ActiveScopeProvider teamId={scope.kind === "team" ? scope.teamId : null}>
       <TerminalHost />
-      {children}
+      <DashboardShell>{children}</DashboardShell>
     </ActiveScopeProvider>
   );
 }

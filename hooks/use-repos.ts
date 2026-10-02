@@ -12,10 +12,18 @@ const fetcher = (url: string, activeTeamId: string | null) =>
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
   });
 
-export function useRepos() {
+export function useRepos(
+  options: {
+    teamId?: string | null;
+    showHidden?: boolean;
+    enabled?: boolean;
+  } = {}
+) {
   const activeTeamId = useActiveTeamId();
+  const teamId = options.teamId === undefined ? activeTeamId : options.teamId;
+  const url = options.showHidden ? "/api/repos?show_hidden=true" : "/api/repos";
   const { data, error, isLoading, mutate } = useSWR<Repo[], Error>(
-    ["/api/repos", activeTeamId],
+    options.enabled === false ? null : [url, teamId],
     ([url, teamId]: [string, string | null]) => fetcher(url, teamId)
   );
   return { repos: data ?? [], isLoading, error, mutate };

@@ -2,12 +2,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useRepos } from "@/hooks/use-repos";
 import { toast } from "@/hooks/use-toast";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 import type {
   AuthUserResponse,
   Installation,
-  RepoSummary,
   TriggerWithAgent,
 } from "./triggers-pane-types";
 import {
@@ -30,10 +30,7 @@ export function TriggersPane() {
     Installation[]
   >("/api/github/installations", fetcher);
   const { data: authData } = useSWR<AuthUserResponse>("/api/auth/user", fetcher);
-  const { data: repos, mutate: mutateRepos } = useSWR<RepoSummary[]>(
-    "/api/repos",
-    fetcher
-  );
+  const { repos, mutate: mutateRepos } = useRepos();
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);

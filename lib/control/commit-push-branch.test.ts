@@ -1,0 +1,15 @@
+import { describe, expect, it } from "vitest";
+import { resolveCommitPushBranch } from "./commit-push-branch";
+
+describe("commit and push branch", () => {
+  it("does not guess from the mission base when no sandbox is present", () => {
+    expect(resolveCommitPushBranch(null, { base: "main" })).toBeNull();
+    expect(resolveCommitPushBranch(undefined, null)).toBeNull();
+    expect(resolveCommitPushBranch({ working_branch: " " })).toBeNull();
+  });
+  it("uses the sandbox working branch instead of the mission base", () => {
+    expect(
+      resolveCommitPushBranch({ working_branch: "feat/fix" }, { base: "main" })
+    ).toBe("feat/fix");
+  });
+});

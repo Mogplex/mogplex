@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import { useRepos } from "@/hooks/use-repos";
 import type { Agent, TriggerEvent } from "@/lib/types";
 import { toast } from "@/hooks/use-toast";
 import { InstallationCombobox } from "./installation-combobox";
 import type {
   AuthUserResponse,
   Installation,
-  RepoSummary,
 } from "./triggers-pane-types";
 import { EVENT_OPTIONS, fetcher } from "./triggers-pane-types";
 
@@ -27,7 +27,7 @@ export function InlineTriggerForm({
   );
   const { data: agents } = useSWR<Agent[]>("/api/agents", fetcher);
   const { data: authData } = useSWR<AuthUserResponse>("/api/auth/user", fetcher);
-  const { data: repos } = useSWR<RepoSummary[]>("/api/repos", fetcher);
+  const { repos } = useRepos();
   const [installationId, setInstallationId] = useState("");
   const [agentId, setAgentId] = useState("");
   const [event, setEvent] = useState<TriggerEvent>("mention");

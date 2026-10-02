@@ -2,12 +2,11 @@
 import useSWR from "swr";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
 import { fetchJsonArray } from "@/lib/client-fetch";
-import type { Assignment, Repo, Agent } from "@/lib/types";
+import type { Assignment, Agent } from "@/lib/types";
+import { useRepos } from "@/hooks/use-repos";
 
 const fetchAssignments = (url: string) =>
   fetchJsonArray<Assignment>(url, "Failed to load assignments");
-const fetchRepos = (url: string) =>
-  fetchJsonArray<Repo>(url, "Failed to load repos");
 const fetchAgents = (url: string) =>
   fetchJsonArray<Agent>(url, "Failed to load agents");
 
@@ -16,7 +15,7 @@ export function useAssignments() {
     "/api/assignments",
     fetchAssignments
   );
-  const { data: repos } = useSWR<Repo[]>("/api/repos", fetchRepos);
+  const { repos } = useRepos();
   const { data: agents } = useSWR<Agent[]>("/api/agents", fetchAgents);
 
   useRealtimeRouteRefresh({
@@ -33,7 +32,7 @@ export function useAssignments() {
 
   return {
     assignments: data ?? [],
-    repos: repos ?? [],
+    repos,
     agents: agents ?? [],
     isLoading,
     error,
