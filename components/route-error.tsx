@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 
 export type RouteErrorProps = {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 };
 
-export function RouteError({ error, reset }: RouteErrorProps) {
+export function RouteError({ error, retry }: RouteErrorProps) {
   useEffect(() => {
     Sentry.captureException(error);
   }, [error]);
@@ -20,7 +20,7 @@ export function RouteError({ error, reset }: RouteErrorProps) {
         {error.digest && (
           <p className="break-all font-mono text-xs text-muted-foreground">Reference: {error.digest}</p>
         )}
-        <Button onClick={reset} variant="outline" size="sm">Try again</Button>
+        <Button onClick={retry} variant="outline" size="sm">Try again</Button>
       </div>
     </div>
   );

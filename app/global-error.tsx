@@ -4,13 +4,13 @@ import { RouteError, type RouteErrorProps } from "@/components/route-error";
 
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: RouteErrorProps) {
   return (
     <html className="dark" lang="en">
       <body className="bg-background font-mono text-foreground">
         <div className="min-h-screen">
-          <RouteError error={error} reset={reset} />
+          <RouteError error={error} retry={retry} />
         </div>
       </body>
     </html>

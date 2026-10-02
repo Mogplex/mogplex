@@ -5,6 +5,41 @@ import {
   mockBaseChrome,
 } from "./helpers/automation-control-plane-fixtures";
 
+test("Try again refetches a recovered server page and retains navigation", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
+  await page.route("**/api/agents**", (route) => fulfillJson(route, []));
+  await page.goto(`${scopedPath("agents")}?routeError=server`);
+  await expect(
+    page.getByText("Something went wrong", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByTestId("dashboard-shell")).toBeVisible();
+  await expect(page.getByText(/^Reference: /)).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(
+    "Private server database fixture failure"
+  );
+  await page.context().addCookies([
+    {
+      name: "mogplex-e2e-route-recovered",
+      value: "1",
+      url: new URL(page.url()).origin,
+    },
+  ]);
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "New Agent", exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Something went wrong", { exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Command Center", exact: true })
+  ).toBeVisible();
+});
+
 test("page failure preserves the shell, reports to Sentry, hides details, and retries", async ({
   page,
 }) => {
