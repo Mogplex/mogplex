@@ -49,15 +49,13 @@ for (const decision of ["Approve", "Deny"] as const) {
         messages: UIMessage[];
       };
       const firstTurn = turns++ === 0;
-      let emittedTool = false;
       const result = streamText({
         stopWhen: [],
         model: new MockLanguageModelV3({
           doStream: async () => ({
             stream: new ReadableStream({
               start(controller) {
-                const callsTool = firstTurn && !emittedTool;
-                emittedTool = true;
+                const callsTool = firstTurn;
                 if (callsTool) {
                   controller.enqueue({
                     type: "tool-call",

@@ -44,7 +44,7 @@ test("consequential tool definitions declare their approval requirement", () => 
   const actions = ORCHESTRATOR_TOOLS.filter(
     (def) =>
       def.access !== "read" &&
-      /merge|deploy|promote|rollback|delete|secrets|grant|revoke|open_pr/.test(
+      /merge|deploy|promote|rollback|delete|secrets|grant|revoke|open_pr|feature_flag_set/.test(
         def.name
       )
   );
@@ -57,6 +57,28 @@ test("consequential tool definitions declare their approval requirement", () => 
       def.name
     );
   }
+});
+
+test("approval metadata preserves every previously gated action", () => {
+  assert.deepEqual(
+    getApprovalRequiredTools(ctx)
+      .map((def) => def.name)
+      .sort(),
+    [
+      "delete_file",
+      "deploy",
+      "feature_flag_set",
+      "mcp_grant",
+      "mcp_revoke",
+      "merge_changeset",
+      "open_pr",
+      "promote",
+      "prune_worktree",
+      "rebase_worktree",
+      "rollback",
+      "secrets_read",
+    ]
+  );
 });
 
 test("approval is determined by access, without a parallel name policy", () => {
