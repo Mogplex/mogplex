@@ -18,7 +18,9 @@ import {
   deriveProjectName,
   repoProjectName,
 } from "@/lib/control/session-project";
-import { ModelChip, type ComposerSendOptions } from "./composer";
+import type { ComposerSendOptions } from "./composer";
+import { ModelChip } from "./model-chip";
+import { ControlPermissionsNote } from "./permissions-note";
 import {
   appendControlComposerFiles,
   consumeControlFileInput,
@@ -323,6 +325,7 @@ export function NewMissionComposer({
             />
             <button
               onClick={cyclePermissions}
+              aria-describedby={MISSION_PERMISSION_OPTIONS[permissionsIdx] === "Approve Edits" ? "control-permissions-note" : undefined}
               className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium ${
                 MISSION_PERMISSION_OPTIONS[permissionsIdx] ===
                 "Skip Permissions"
@@ -369,6 +372,7 @@ export function NewMissionComposer({
               </button>
             </div>
           </div>
+          <ControlPermissionsNote permissions={MISSION_PERMISSION_OPTIONS[permissionsIdx]} />
           {files.length > 0 && (
             <div className="border-border mt-2 flex flex-wrap gap-1.5 border-t pt-2">
               {files.map((file) => (

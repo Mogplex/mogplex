@@ -1,3 +1,7 @@
+import {
+  MISSION_PERMISSION_OPTIONS,
+  type MissionPermissions,
+} from "@/lib/control/types";
 import { buildLimitResponse, enforceChatLimits } from "@/lib/request-limits";
 import {
   ALLOWLIST_UNAVAILABLE_RETRY_AFTER_SECONDS,
@@ -34,8 +38,12 @@ export async function runAuthorizedControlChat(
     background?: import("@/lib/control/background-context").ControlBackgroundExecution;
   }
 ) {
-  const rawBody = (await req.json()) as ControlChatRequestBody & {
+  const rawBody = (await req.json()) as Omit<
+    ControlChatRequestBody,
+    "mode" | "permissions"
+  > & {
     mode?: unknown;
+    permissions?: unknown;
   };
   if (
     rawBody.mode !== undefined &&
@@ -48,9 +56,22 @@ export async function runAuthorizedControlChat(
       { status: 400 }
     );
   }
+  const permissions = rawBody.permissions;
+  if (
+    permissions !== undefined &&
+    permissions !== null &&
+    (typeof permissions !== "string" ||
+      !MISSION_PERMISSION_OPTIONS.includes(permissions as MissionPermissions))
+  ) {
+    return Response.json(
+      { error: "Invalid control permissions." },
+      { status: 400 }
+    );
+  }
   const hintedBody: ControlChatRequestBody = {
     ...rawBody,
     mode: rawBody.mode ?? null,
+    permissions: (permissions ?? null) as MissionPermissions | null,
   };
   let body: ControlChatRequestBody;
   try {
