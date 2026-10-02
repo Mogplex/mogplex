@@ -27,6 +27,10 @@ export const AI_CALL_EVENT_TYPES = [
 ] as const;
 export type AiCallEventType = (typeof AI_CALL_EVENT_TYPES)[number];
 
+// /api/control/chat lasts 800 seconds; hosted continuations last 30 minutes.
+// Both get one minute for final persistence after their execution deadline.
+export const ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS = 800_000 + 60_000;
+export const ACTIVE_CONTROL_BACKGROUND_STALE_THRESHOLD_MS = 1_800_000 + 60_000;
 export const ACTIVE_CHAT_STALE_THRESHOLD_MS = 30 * 60 * 1000;
 export const ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 export const PREPARED_HARNESS_STALE_THRESHOLD_MS = 2 * 60 * 1000;
@@ -359,21 +363,20 @@ export function isStaleLiveInteractiveCall(
     return false;
   }
 
-  // Chat streams are bounded by /api/chat's 30-minute platform deadline,
-  // so the chat threshold applies uniformly regardless of
-  // anchor presence. This keeps stale chat rows out of live-run UI.
-  //
-  // Non-chat interactive runs (agent jobs via Trigger.dev) can legitimately
-  // run for hours. They keep the longer threshold whether or not they have
-  // a runtime anchor yet — an agent run that has not yet received its
-  // runtime_command_id callback is still legitimately live and must not be
-  // hidden from the UI within minutes.
+  // Control is identified by server-owned metadata, not call type: newer
+  // coordinator calls are agents, while older calls were recorded as chats.
+  // Hosted follow-ups have a longer deadline than the browser route. Unknown
+  // legacy runtimes stay visible until the reaper resolves their saved ticket.
   const threshold =
     call.metadata?.prepared === true
       ? PREPARED_HARNESS_STALE_THRESHOLD_MS
-      : call.type === "chat"
-        ? ACTIVE_CHAT_STALE_THRESHOLD_MS
-        : ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS;
+      : call.metadata?.surface === "control"
+        ? call.metadata.control_runtime === "request"
+          ? ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS
+          : ACTIVE_CONTROL_BACKGROUND_STALE_THRESHOLD_MS
+        : call.type === "chat"
+          ? ACTIVE_CHAT_STALE_THRESHOLD_MS
+          : ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS;
 
   return now - startedAt >= threshold;
 }

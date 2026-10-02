@@ -7,6 +7,8 @@ import {
 } from "@/lib/zombies/zombie-reaper";
 import type { ZombieReaperRunnerDeps } from "@/lib/zombies/zombie-reaper";
 
+export const maxDuration = 300;
+
 type ZombieReaperGetHandlerOverrides = Partial<ZombieReaperRunnerDeps> & {
   requireMachineApiAuth?: typeof requireMachineApiAuth;
 };

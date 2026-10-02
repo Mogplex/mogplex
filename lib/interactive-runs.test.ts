@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
+  isStaleLiveInteractiveCall,
   appendAiCallEvent,
   safeAppendAiCallEvent,
   sanitizeAiCallEventInput,
@@ -147,5 +148,98 @@ describe("appendAiCallEvent", () => {
         }),
       })
     );
+  });
+});
+
+describe("Control turn staleness", () => {
+  const now = Date.parse("2026-10-02T12:00:00Z");
+  function call(
+    ageMs: number,
+    metadata: Record<string, unknown> = {},
+    type: "agent" | "chat" = "agent"
+  ) {
+    return {
+      type,
+      status: "streaming" as const,
+      started_at: new Date(now - ageMs).toISOString(),
+      metadata,
+    };
+  }
+
+  it.each(["agent", "chat"] as const)(
+    "reaps a dead browser Control %s after its route deadline",
+    (type) => {
+      expect(
+        isStaleLiveInteractiveCall(
+          call(
+            15 * 60_000,
+            { surface: "control", control_runtime: "request" },
+            type
+          ),
+          now
+        )
+      ).toBe(true);
+      expect(
+        isStaleLiveInteractiveCall(
+          call(
+            859_999,
+            { surface: "control", control_runtime: "request" },
+            type
+          ),
+          now
+        )
+      ).toBe(false);
+      expect(
+        isStaleLiveInteractiveCall(
+          call(
+            860_000,
+            { surface: "control", control_runtime: "request" },
+            type
+          ),
+          now
+        )
+      ).toBe(true);
+    }
+  );
+
+  it("preserves ordinary chats, worker runs, and live hosted continuations", () => {
+    expect(isStaleLiveInteractiveCall(call(15 * 60_000, {}, "chat"), now)).toBe(
+      false
+    );
+    expect(isStaleLiveInteractiveCall(call(15 * 60_000), now)).toBe(false);
+    expect(
+      isStaleLiveInteractiveCall(
+        call(15 * 60_000, {
+          surface: "control",
+          control_runtime: "background",
+        }),
+        now
+      )
+    ).toBe(false);
+    expect(
+      isStaleLiveInteractiveCall(
+        call(1_860_000, { surface: "control", control_runtime: "background" }),
+        now
+      )
+    ).toBe(true);
+  });
+
+  it("keeps a legacy hosted turn visible while the reaper resolves its runtime", () => {
+    expect(
+      isStaleLiveInteractiveCall(call(15 * 60_000, { surface: "control" }), now)
+    ).toBe(false);
+    expect(
+      isStaleLiveInteractiveCall(call(1_860_000, { surface: "control" }), now)
+    ).toBe(true);
+  });
+
+  it("preserves terminal calls and invalid timestamps", () => {
+    const stale = call(15 * 60_000, { surface: "control" });
+    for (const status of ["success", "failed", "cancelled"] as const) {
+      expect(isStaleLiveInteractiveCall({ ...stale, status }, now)).toBe(false);
+    }
+    expect(
+      isStaleLiveInteractiveCall({ ...stale, started_at: "invalid" }, now)
+    ).toBe(false);
   });
 });

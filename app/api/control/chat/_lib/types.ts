@@ -62,6 +62,7 @@ export type ControlChatRunScope = {
  */
 export type ControlChatRunMetadata = {
   surface: "control";
+  control_runtime: "request" | "background";
   sandbox_id: string | null;
   sandbox_hint_id: string | null;
   sandbox_runtime_id: string | null;

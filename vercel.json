@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/reconcile-job-runs",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/zombie-row-reaper",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
