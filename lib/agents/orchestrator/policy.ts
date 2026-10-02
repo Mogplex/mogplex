@@ -33,21 +33,6 @@ export type PolicyCheckResult =
     };
 
 /**
- * Tools that always require approval regardless of context.
- */
-const ALWAYS_APPROVAL_REQUIRED = new Set([
-  "merge_changeset",
-  "deploy",
-  "promote",
-  "rollback",
-  "feature_flag_set",
-  "delete_file",
-  "mcp_grant",
-  "mcp_revoke",
-  "secrets_read",
-]);
-
-/**
  * Mutations that require approval when targeting protected branches.
  */
 const PROTECTED_BRANCH_SENSITIVE = new Set([
@@ -116,7 +101,6 @@ function extractTargetBranch(
  * - "read" access tools: always allowed
  * - "mutation" tools: allowed unless targeting protected branch
  * - "approval" tools: always return approval_required
- * - Tools in ALWAYS_APPROVAL_REQUIRED: always return approval_required
  * - Protected branch mutations: return protected_branch denial
  */
 export function checkToolPolicy(
@@ -139,8 +123,8 @@ export function checkToolPolicy(
     };
   }
 
-  // Tools marked as always requiring approval
-  if (ALWAYS_APPROVAL_REQUIRED.has(def.name) || def.access === "approval") {
+  // The tool definition is the source of truth for unconditional approvals.
+  if (def.access === "approval") {
     return {
       allowed: false,
       reason: "approval_required",
@@ -312,10 +296,7 @@ export function wrapWithPolicy(
 
   const riskAssessed = RISK_ASSESSED_TOOLS.has(def.name);
   const mayRequireApproval =
-    ALWAYS_APPROVAL_REQUIRED.has(def.name) ||
-    def.access === "approval" ||
-    def.name === "git_push" ||
-    riskAssessed;
+    def.access === "approval" || def.name === "git_push" || riskAssessed;
 
   const approvalSummary = async (input: unknown): Promise<string | null> => {
     const policyResult = checkToolPolicy(def, ctx, input);
@@ -476,20 +457,5 @@ export function wrapToolsWithPolicy(
 export function getApprovalRequiredTools(
   _ctx: OrchestratorToolContext
 ): OrchestratorToolDef[] {
-  return ORCHESTRATOR_TOOLS.filter((def) => {
-    if (def.access === "approval") return true;
-    if (ALWAYS_APPROVAL_REQUIRED.has(def.name)) return true;
-    return false;
-  });
-}
-
-/**
- * Check if any pending action requires approval.
- */
-export function hasPendingApproval(
-  _ctx: OrchestratorToolContext,
-  _pendingActions: ReadonlyArray<{ toolName: string; input: unknown }>
-): boolean {
-  // TODO: Implement approval queue check
-  return false;
+  return ORCHESTRATOR_TOOLS.filter((def) => def.access === "approval");
 }

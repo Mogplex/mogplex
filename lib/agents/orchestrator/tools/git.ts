@@ -89,8 +89,9 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
   {
     name: "open_pr",
     category: "git",
-    description: "Open a pull request for the current branch",
-    access: "mutation",
+    description:
+      "Open a pull request for the current branch (requires approval)",
+    access: "approval",
     implemented: true,
   },
   {
