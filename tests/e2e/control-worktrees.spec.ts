@@ -45,7 +45,7 @@ test("Control counts worktrees separately from sandbox compute", async ({
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",
@@ -194,7 +194,7 @@ test("Control ignores a stale worktree response after switching sessions", async
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",
@@ -307,7 +307,7 @@ test("Control worktrees keeps teaching copy visible when loading fails", async (
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

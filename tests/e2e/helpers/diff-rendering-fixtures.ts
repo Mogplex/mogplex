@@ -72,7 +72,7 @@ export async function mockBaseApp(page: Page) {
       catalog: [{ id: modelId, context_length: 128000, is_enabled: true }],
     })
   );
-  await page.route("**/api/repos", (route) => fulfillJson(route, [repo]));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, [repo]));
   await page.route("**/api/agents", (route) =>
     fulfillJson(route, { agents: [] })
   );

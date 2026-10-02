@@ -12,7 +12,7 @@ const team = {
   iconUrl: null,
 };
 
-async function installTeamRepositories(page: Page) {
+async function installTeamRepositories(page: Page, canManage = true) {
   await page.context().setExtraHTTPHeaders({
     ...buildE2EAuthHeaders(E2E_SCOPE_USER.id),
     "x-mogplex-scope-kind": "team",
@@ -57,21 +57,35 @@ async function installTeamRepositories(page: Page) {
             : "personal-repo",
         agent_id: "agent-1",
         enabled: true,
+        can_manage: canManage,
       },
     ])
   );
   const teams: Array<string | undefined> = [];
-  await page.route("**/api/repos", (route) => {
+  await page.route("**/api/repos**", (route) => {
     const teamId = route.request().headers()["x-mogplex-team-id"];
     teams.push(teamId);
-    return fulfillJson(route, [
+    const rows = [
       {
         id: teamId ? "team-repo" : "personal-repo",
         full_name: teamId ? "acme/team-project" : "alex/personal-project",
         owner: teamId ? "acme" : "alex",
         name: teamId ? "team-project" : "personal-project",
       },
-    ]);
+      {
+        id: "hidden-team-repo",
+        full_name: "acme/removed-project",
+        owner: "acme",
+        name: "removed-project",
+        is_hidden: true,
+      },
+    ];
+    return fulfillJson(
+      route,
+      new URL(route.request().url()).searchParams.get("show_hidden") === "true"
+        ? rows
+        : rows.filter((row) => !row.is_hidden)
+    );
   });
   await page.route("**/api/workspaces", (route) => fulfillJson(route, []));
   await page.route("**/api/github/repos", (route) =>
@@ -97,6 +111,25 @@ test("team assignments and dashboard chrome share one team repository request", 
   expect(teams).toEqual([team.id]);
 });
 
+test("removed team repositories remain available without a second cache request", async ({
+  page,
+}) => {
+  const teams = await installTeamRepositories(page);
+  await page.goto("/acme/projects/repositories");
+  await expect(
+    page.getByRole("button", { name: "Show removed" })
+  ).toBeVisible();
+  await expect(page.getByText("removed-project", { exact: true })).toHaveCount(
+    0
+  );
+  await page.getByRole("button", { name: "Show removed" }).click();
+  await expect(
+    page.getByText("removed-project", { exact: true }).first()
+  ).toBeVisible();
+  await expect(page.locator(".app-statusbar")).toContainText("repos: 1");
+  expect(teams).toEqual([team.id]);
+});
+
 test("team Projects and status bar share the scoped repository cache", async ({
   page,
 }) => {
@@ -107,4 +140,37 @@ test("team Projects and status bar share the scoped repository cache", async ({
   ).toBeVisible();
   await expect(page.locator(".app-statusbar")).toContainText("repos: 1");
   expect(teams).toEqual([team.id]);
+});
+
+test("team viewers see assignments with management disabled", async ({
+  page,
+}) => {
+  await installTeamRepositories(page, false);
+  await page.goto("/acme/assignments");
+  await expect(page.getByText("team-project → Reviewer")).toBeVisible();
+  await page.getByRole("button", { name: "Assignment actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
+});
+
+test("team managers delete an assignment with the active team header", async ({
+  page,
+}) => {
+  await installTeamRepositories(page);
+  const deletes: Array<string | undefined> = [];
+  await page.route("**/api/assignments?id=*", async (route) => {
+    expect(route.request().method()).toBe("DELETE");
+    deletes.push(route.request().headers()["x-mogplex-team-id"]);
+    await fulfillJson(route, { ok: true });
+  });
+  await page.goto("/acme/assignments");
+  await expect(page.getByText("team-project → Reviewer")).toBeVisible();
+  await page.getByRole("button", { name: "Assignment actions" }).click();
+  const deleted = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/assignments?id=") &&
+      response.request().method() === "DELETE"
+  );
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await deleted;
+  expect(deletes).toEqual([team.id]);
 });

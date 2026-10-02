@@ -134,6 +134,7 @@ export type AgentCategoryRow = {
 };
 
 export type Assignment = {
+  can_manage?: boolean;
   id: string;
   repo_id: string;
   agent_id: string;

@@ -21,6 +21,7 @@ import { TriggersEmptyState } from "./triggers-empty-state";
 import { TriggerRow } from "./trigger-row";
 
 export function TriggersPane() {
+  // Installation triggers belong to the user, independently of project scope.
   const {
     data: triggers,
     mutate: mutateTriggers,

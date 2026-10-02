@@ -56,7 +56,7 @@ test("Control completes a skill handle and sends the message exactly as typed", 
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

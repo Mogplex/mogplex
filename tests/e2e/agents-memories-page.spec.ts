@@ -70,7 +70,7 @@ test("memories page shows exact lane totals, origin chips, and prunes noise", as
     fulfillJson(route, { default_model: "openai/gpt-5", theme: "dark" })
   );
   await page.route("**/api/memberships", (route) => fulfillJson(route, []));
-  await page.route("**/api/repos", (route) => fulfillJson(route, [repo]));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, [repo]));
   await page.route("**/api/memories?**", (route) =>
     fulfillJson(route, memoriesPayload)
   );

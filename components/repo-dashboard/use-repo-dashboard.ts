@@ -18,7 +18,7 @@ import {
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
-import { sortRepos, sortWorkspaces } from "./helpers";
+import { mergeSyncedRepositories, sortRepos, sortWorkspaces } from "./helpers";
 import type { RepoDashboardProps } from "./types";
 import {
   createToggleFavorite,
@@ -63,7 +63,7 @@ export function useRepoDashboard({
     error: reposError,
     isLoading: reposLoading,
     mutate: mutateRepos,
-  } = useRepos({ showHidden });
+  } = useRepos({ showHidden: true });
   const repos = useMemo(() => sortRepos(rawRepos), [rawRepos]);
   const dataLoadError = otherLoadError ?? reposError?.message ?? null;
   const hasLoadedInitialRepos = !reposLoading && !reposError;
@@ -139,9 +139,8 @@ export function useRepoDashboard({
         if (res.ok) {
           const syncedRepos = sortRepos(data);
           const nextWorkspaces = await fetchWorkspaces();
-          setRepos(syncedRepos);
+          setRepos((current) => mergeSyncedRepositories(current, syncedRepos));
           setWorkspaces(nextWorkspaces);
-          onReposLoaded?.(syncedRepos, agents);
           trackActivation("repo_sync_completed", {
             source,
             repo_count: syncedRepos.length,
@@ -173,14 +172,7 @@ export function useRepoDashboard({
         setSyncingRepos(false);
       }
     },
-    [
-      activeTeamId,
-      connectGithubLabel,
-      agents,
-      fetchWorkspaces,
-      onReposLoaded,
-      setRepos,
-    ]
+    [activeTeamId, connectGithubLabel, fetchWorkspaces, setRepos]
   );
 
   const fetchData = useCallback(
@@ -315,24 +307,20 @@ export function useRepoDashboard({
   const actionsContext = useMemo(
     () => ({
       activeTeamId,
-      agents,
       fetchData,
       getSandboxForRepo,
       launchRepoSandbox,
       launchSandbox,
-      onReposLoaded,
       repos,
       setRepos,
       stopSandbox,
     }),
     [
       activeTeamId,
-      agents,
       fetchData,
       getSandboxForRepo,
       launchRepoSandbox,
       launchSandbox,
-      onReposLoaded,
       repos,
       setRepos,
       stopSandbox,

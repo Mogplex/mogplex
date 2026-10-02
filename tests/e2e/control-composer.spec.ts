@@ -36,7 +36,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
     fulfillJson(route, { connections: [] })
   );
   // One connected repo: the composer must default the session's project to it.
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",
@@ -359,7 +359,7 @@ test("control chat surfaces request failures instead of swallowing them", async 
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

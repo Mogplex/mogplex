@@ -1,6 +1,6 @@
 "use client";
 
-import type { Repo, Agent, SandboxRecord, Workspace } from "@/lib/types";
+import type { Repo, SandboxRecord, Workspace } from "@/lib/types";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { toast } from "@/hooks/use-toast";
@@ -14,14 +14,12 @@ import { sortRepos, getRepoOwner } from "./helpers";
 
 export interface RepoActionsContext {
   activeTeamId: string | null;
-  agents: Agent[];
   fetchData: () => Promise<void>;
   getSandboxForRepo: (repoId: string) => SandboxRecord | null | undefined;
   launchRepoSandbox: ReturnType<
     typeof useSandboxLaunchActions
   >["launchRepoSandbox"];
   launchSandbox: ReturnType<typeof useSandboxStore.getState>["launch"];
-  onReposLoaded?: (repos: Repo[], agents: Agent[]) => void;
   repos: Repo[];
   setRepos: React.Dispatch<React.SetStateAction<Repo[]>>;
   stopSandbox: ReturnType<typeof useSandboxStore.getState>["stop"];
@@ -39,13 +37,9 @@ export function createToggleFavorite(ctx: RepoActionsContext) {
     });
     const data = await res.json();
     if (res.ok) {
-      ctx.setRepos((current) => {
-        const updated = sortRepos(
-          current.map((item) => (item.id === data.id ? data : item))
-        );
-        ctx.onReposLoaded?.(updated, ctx.agents);
-        return updated;
-      });
+      ctx.setRepos((current) =>
+        sortRepos(current.map((item) => (item.id === data.id ? data : item)))
+      );
     }
   };
 }

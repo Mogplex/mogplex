@@ -229,7 +229,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     ) => {
       if (createdRepo)
         await mutateRepos(
-          [createdRepo, ...repos.filter((repo) => repo.id !== createdRepo.id)],
+          (current) => [createdRepo, ...(current ?? []).filter((repo) => repo.id !== createdRepo.id)],
           { revalidate: false }
         );
       const id = generateMissionId();
@@ -371,7 +371,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
             (mission ? (getWorkspace(mission.ws)?.name ?? null) : null)
           }
           sessionTitle={activeSession?.title ?? mission?.title ?? null}
-          branch={resolveCommitPushBranch(activeSandbox, mission)}
+          branch={resolveCommitPushBranch(activeSandbox)}
           hasSession={hasSession}
           chatPending={chatPending}
           previewUrl={previewUrl}

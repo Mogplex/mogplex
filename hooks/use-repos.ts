@@ -1,5 +1,6 @@
 "use client";
 import useSWR from "swr";
+import { useMemo } from "react";
 import {
   getActiveTeamRequestHeaders,
   useActiveTeamId,
@@ -21,10 +22,15 @@ export function useRepos(
 ) {
   const activeTeamId = useActiveTeamId();
   const teamId = options.teamId === undefined ? activeTeamId : options.teamId;
-  const url = options.showHidden ? "/api/repos?show_hidden=true" : "/api/repos";
+  // One full collection per scope; consumers choose their visible subset.
+  const url = "/api/repos?show_hidden=true";
   const { data, error, isLoading, mutate } = useSWR<Repo[], Error>(
     options.enabled === false ? null : [url, teamId],
     ([url, teamId]: [string, string | null]) => fetcher(url, teamId)
   );
-  return { repos: data ?? [], isLoading, error, mutate };
+  const repos = useMemo(
+    () => (data ?? []).filter((repo) => options.showHidden || !repo.is_hidden),
+    [data, options.showHidden]
+  );
+  return { repos, isLoading, error, mutate };
 }

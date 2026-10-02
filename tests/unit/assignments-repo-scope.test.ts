@@ -24,12 +24,13 @@ test("assignments share scoped repository data without leaking personal cache en
       const team = new Headers(init?.headers).get("x-mogplex-team-id");
       calls.push({ url, team });
       return Response.json(
-        url === "/api/repos"
+        url === "/api/repos?show_hidden=true"
           ? [
               {
                 id: team ?? "personal",
                 full_name: `${team ?? "personal"}/widgets`,
               },
+              { id: `hidden-${team ?? "personal"}`, is_hidden: true },
             ]
           : url === "/api/auth/user"
             ? { user: null }
@@ -44,9 +45,10 @@ test("assignments share scoped repository data without leaking personal cache en
       writable: true,
       value,
     });
-  const { renderHook, waitFor } = await import("@testing-library/react");
+  const { renderHook, waitFor, act } = await import("@testing-library/react");
   const { useAssignments } = await import("../../hooks/use-assignments");
   const { useRepos } = await import("../../hooks/use-repos");
+  let showHidden = true;
   let teamId: string | null = "team-a";
   const cache = new Map();
   const wrapper = ({ children }: { children: ReactNode }) =>
@@ -62,7 +64,7 @@ test("assignments share scoped repository data without leaking personal cache en
       createElement(ActiveScopeProvider, { teamId, children })
     );
   const view = renderHook(
-    () => ({ assignments: useAssignments(), repos: useRepos() }),
+    () => ({ assignments: useAssignments(), repos: useRepos({ showHidden }) }),
     { wrapper }
   );
   try {
@@ -70,14 +72,41 @@ test("assignments share scoped repository data without leaking personal cache en
       assert.equal(view.result.current.assignments.repos[0]?.id, "team-a")
     );
     assert.deepEqual(
-      calls.filter((call) => call.url === "/api/repos"),
-      [{ url: "/api/repos", team: "team-a" }]
+      calls.filter((call) => call.url === "/api/repos?show_hidden=true"),
+      [{ url: "/api/repos?show_hidden=true", team: "team-a" }]
     );
     for (const url of ["/api/agents", "/api/assignments"])
       assert.deepEqual(
         calls.filter((call) => call.url === url),
         [{ url, team: "team-a" }]
       );
+    assert.equal(view.result.current.repos.repos.length, 2);
+    assert.equal(view.result.current.assignments.repos.length, 1);
+    showHidden = false;
+    view.rerender();
+    assert.equal(view.result.current.repos.repos.length, 1);
+    showHidden = true;
+    view.rerender();
+    assert.equal(view.result.current.repos.repos.length, 2);
+    assert.equal(
+      calls.filter((call) => call.url.startsWith("/api/repos")).length,
+      1
+    );
+    await act(async () => {
+      await view.result.current.repos.mutate(
+        (current) => [
+          { id: "created" } as import("../../lib/types").Repo,
+          ...(current ?? []),
+        ],
+        { revalidate: false }
+      );
+    });
+    assert.equal(view.result.current.repos.repos.length, 3);
+    assert.equal(view.result.current.assignments.repos.length, 2);
+    assert.equal(
+      view.result.current.repos.repos.some((repo) => repo.is_hidden),
+      true
+    );
     teamId = null;
     view.rerender();
     assert.equal(view.result.current.assignments.repos.length, 0);
@@ -96,10 +125,10 @@ test("assignments share scoped repository data without leaking personal cache en
         );
     });
     assert.deepEqual(
-      calls.filter((call) => call.url === "/api/repos"),
+      calls.filter((call) => call.url === "/api/repos?show_hidden=true"),
       [
-        { url: "/api/repos", team: "team-a" },
-        { url: "/api/repos", team: null },
+        { url: "/api/repos?show_hidden=true", team: "team-a" },
+        { url: "/api/repos?show_hidden=true", team: null },
       ]
     );
   } finally {

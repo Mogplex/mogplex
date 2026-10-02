@@ -118,7 +118,7 @@ test("control chats keep independent streams, status, and cancellation across sw
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) => fulfillJson(route, []));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
   await page.route("**/api/control/worktrees**", (route) =>
     fulfillJson(route, { worktrees: [] })
   );

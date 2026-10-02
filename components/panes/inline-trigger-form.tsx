@@ -25,6 +25,8 @@ export function InlineTriggerForm({
     "/api/github/installations",
     fetcher
   );
+  // Installation triggers are personal resources: their API accepts only
+  // user-owned installations and agents. Scoped repos provide coverage counts.
   const { data: agents } = useSWR<Agent[]>("/api/agents", fetcher);
   const { data: authData } = useSWR<AuthUserResponse>("/api/auth/user", fetcher);
   const { repos } = useRepos();

@@ -78,7 +78,7 @@ test("new work in an existing thread receives its own task while earlier work re
         : [session]
     );
   });
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       { id: REPO_ID, full_name: "acme/widgets", default_branch: "main" },
     ])

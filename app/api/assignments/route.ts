@@ -3,11 +3,13 @@ import { summarizeEntityDispatchEvents } from "@/lib/automation-dispatch";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { summarizeEntityJobRuns } from "@/lib/job-runs";
-import { resolveActiveTeamCapabilities } from "@/lib/team-capabilities";
 import {
-  applyResourceOwnerScope,
-  resolveProductResourceScope,
-} from "@/lib/team-resource-scope";
+  hasCapability,
+  resolveActiveTeamCapabilities,
+  TEAM_RESOURCE_WRITE_CAPABILITY,
+} from "@/lib/team-capabilities";
+import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { applyAssignmentOwnerScope } from "@/lib/assignment-owner-scope";
 
 // Assignments no longer execute. They dispatched a run built straight from the
 // agent row, so the run took `agents.model` with nothing able to override it —
@@ -54,21 +56,9 @@ async function getAssignments(req: Request, deps: AssignmentsReadDeps) {
   });
   if (!scope.ok)
     return NextResponse.json({ error: scope.error }, { status: scope.status });
-  let query = deps.db.from("repos").select("id");
-  query = applyResourceOwnerScope(query, scope.scope);
-  const { data: repos, error: reposError } = await query;
-
-  if (reposError)
-    return NextResponse.json({ error: reposError.message }, { status: 500 });
-
-  if (!repos?.length) return NextResponse.json([]);
-
-  const repoIds = repos.map((r) => r.id);
-  const { data, error } = await deps.db
-    .from("assignments")
-    .select("*")
-    .in("repo_id", repoIds)
-    .limit(500);
+  let query = deps.db.from("assignments").select("*, repos!inner(id)");
+  query = applyAssignmentOwnerScope(query, scope.scope);
+  const { data, error } = await query.limit(500);
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -119,8 +109,14 @@ async function getAssignments(req: Request, deps: AssignmentsReadDeps) {
   }
 
   return NextResponse.json(
-    data.map((assignment) => ({
+    data.map(({ repos: _repo, ...assignment }) => ({
       ...assignment,
+      can_manage:
+        scope.scope.kind === "personal" ||
+        hasCapability(
+          scope.capabilities ?? new Set(),
+          TEAM_RESOURCE_WRITE_CAPABILITY
+        ),
       ...(summaries.get(assignment.id) || summarizeEntityJobRuns([])),
       ...(pressureSummaries.get(assignment.id) ||
         summarizeEntityDispatchEvents([])),
@@ -130,9 +126,28 @@ async function getAssignments(req: Request, deps: AssignmentsReadDeps) {
 
 export const GET = createAssignmentsGetHandler();
 
-export async function PUT(req: Request) {
-  const userId = await requireUserId();
+export function createAssignmentsPutHandler(
+  overrides: Partial<AssignmentsReadDeps> = {}
+) {
+  const deps = {
+    requireUserId,
+    resolveActiveTeamCapabilities,
+    db: supabaseAdmin,
+    ...overrides,
+  };
+  return (req: Request) => putAssignment(req, deps);
+}
+async function putAssignment(req: Request, deps: AssignmentsReadDeps) {
+  const userId = await deps.requireUserId();
   if (userId instanceof Response) return userId;
+  const scope = await resolveProductResourceScope({
+    request: req,
+    userId,
+    requiredCapability: TEAM_RESOURCE_WRITE_CAPABILITY,
+    resolveActiveTeamCapabilities: deps.resolveActiveTeamCapabilities,
+  });
+  if (!scope.ok)
+    return NextResponse.json({ error: scope.error }, { status: scope.status });
 
   const body = await req.json();
   const { id } = body;
@@ -165,20 +180,24 @@ export async function PUT(req: Request) {
     );
 
   // Verify ownership via repo with a single joined query
-  const { data: assignment } = await supabaseAdmin
+  let query = deps.db
     .from("assignments")
-    .select("id, repo_id, repos!inner(user_id)")
-    .eq("id", id)
-    .eq("repos.user_id", userId)
-    .single();
+    .select("id, repo_id, repos!inner(id)")
+    .eq("id", id);
+  query = applyAssignmentOwnerScope(query, scope.scope);
+  const { data: assignment, error: lookupError } = await query.maybeSingle();
+
+  if (lookupError)
+    return NextResponse.json({ error: lookupError.message }, { status: 500 });
 
   if (!assignment)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await deps.db
     .from("assignments")
     .update(updates)
     .eq("id", id)
+    .eq("repo_id", assignment.repo_id)
     .select()
     .single();
 
@@ -186,32 +205,57 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
+export const PUT = createAssignmentsPutHandler();
 
-export async function DELETE(req: Request) {
-  const userId = await requireUserId();
+export function createAssignmentsDeleteHandler(
+  overrides: Partial<AssignmentsReadDeps> = {}
+) {
+  const deps = {
+    requireUserId,
+    resolveActiveTeamCapabilities,
+    db: supabaseAdmin,
+    ...overrides,
+  };
+  return (req: Request) => deleteAssignment(req, deps);
+}
+async function deleteAssignment(req: Request, deps: AssignmentsReadDeps) {
+  const userId = await deps.requireUserId();
   if (userId instanceof Response) return userId;
+  const scope = await resolveProductResourceScope({
+    request: req,
+    userId,
+    requiredCapability: TEAM_RESOURCE_WRITE_CAPABILITY,
+    resolveActiveTeamCapabilities: deps.resolveActiveTeamCapabilities,
+  });
+  if (!scope.ok)
+    return NextResponse.json({ error: scope.error }, { status: scope.status });
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
   // Verify ownership via repo with a single joined query
-  const { data: assignment } = await supabaseAdmin
+  let query = deps.db
     .from("assignments")
-    .select("id, repo_id, repos!inner(user_id)")
-    .eq("id", id)
-    .eq("repos.user_id", userId)
-    .single();
+    .select("id, repo_id, repos!inner(id)")
+    .eq("id", id);
+  query = applyAssignmentOwnerScope(query, scope.scope);
+  const { data: assignment, error: lookupError } = await query.maybeSingle();
+
+  if (lookupError)
+    return NextResponse.json({ error: lookupError.message }, { status: 500 });
 
   if (!assignment)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { error } = await supabaseAdmin
+  const { error } = await deps.db
     .from("assignments")
     .delete()
-    .eq("id", assignment.id);
+    .eq("id", assignment.id)
+    .eq("repo_id", assignment.repo_id);
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+export const DELETE = createAssignmentsDeleteHandler();

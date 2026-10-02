@@ -101,7 +101,7 @@ test("roster shows sharing and usage, attaches skills in the editor, and starts 
       { id: "rule-1", name: "no-any.md", content: "# No any" },
     ])
   );
-  await page.route("**/api/repos", (route) => fulfillJson(route, [repo]));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, [repo]));
   await page.route("**/api/agents/run", async (route) => {
     runRequests.push(route.request().postDataJSON() as Record<string, unknown>);
     await fulfillJson(

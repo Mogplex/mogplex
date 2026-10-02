@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useAssignments } from "@/hooks/use-assignments"
+import { getActiveTeamRequestHeaders, useActiveTeamId } from "@/components/active-scope-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,11 +12,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export default function AssignmentsPage() {
+  const teamId = useActiveTeamId()
   const { assignments, repos, agents, isLoading, error, mutate } = useAssignments()
   const [jobActionId, setJobActionId] = useState<string | null>(null)
 
   const deleteAssignment = async (id: string) => {
-    const res = await fetch(`/api/assignments?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+    const res = await fetch(`/api/assignments?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: getActiveTeamRequestHeaders(undefined, teamId) })
     if (res.ok) {
       await mutate()
     }
@@ -140,7 +142,7 @@ export default function AssignmentsPage() {
                   <button aria-label="Assignment actions" className="px-1 py-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-secondary text-sm">···</button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-36">
-                  <DropdownMenuItem variant="destructive" onSelect={() => void deleteAssignment(a.id)}>
+                  <DropdownMenuItem disabled={a.can_manage === false} variant="destructive" onSelect={() => void deleteAssignment(a.id)}>
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>

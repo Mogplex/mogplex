@@ -41,7 +41,7 @@ export async function setupControlSidebar(
   });
   let failArchive = false;
   const rejectedIds = new Set<string>();
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

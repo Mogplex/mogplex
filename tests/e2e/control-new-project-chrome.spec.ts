@@ -17,7 +17,7 @@ async function openComposer(
   await page.route("**/api/connections", (route) =>
     fulfillJson(route, { connections: [] })
   );
-  await page.route("**/api/repos", (route) => fulfillJson(route, []));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
   await page.route("**/api/github/owners", (route) =>
     route.fulfill({
       status: 200,
