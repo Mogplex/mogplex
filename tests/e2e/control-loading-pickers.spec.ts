@@ -104,6 +104,10 @@ test("a restored sandbox view waits for repository data instead of claiming none
   await expect(
     page.getByText("No repository is linked", { exact: false })
   ).toHaveCount(0);
+  const startButtons = page.getByRole("button", { name: /^Start sandbox/ });
+  await expect(startButtons).toHaveCount(2);
+  for (const button of await startButtons.all())
+    await expect(button).toBeDisabled();
   releaseRepos();
   await expect(
     page.getByText("No current sandbox", { exact: true })

@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { scopedPath } from "./helpers/auth";
 import { fulfillJson } from "./helpers/automation-control-plane-fixtures";
 import {
+  captureRecoveryEvents,
+  invalidateRecoverySessions,
   mockRecoveryChrome,
   recoverySession,
 } from "./helpers/control-recovery-fixtures";
@@ -11,17 +13,7 @@ for (const newChat of [false, true]) {
     page,
   }) => {
     await mockRecoveryChrome(page);
-    await page.addInitScript(() => {
-      const sources: EventSource[] = [];
-      Object.defineProperty(window, "recoveryEventSources", { value: sources });
-      const NativeEventSource = window.EventSource;
-      window.EventSource = class extends NativeEventSource {
-        constructor(url: string | URL, options?: EventSourceInit) {
-          super(url, options);
-          sources.push(this);
-        }
-      };
-    });
+    await captureRecoveryEvents(page);
     let failed = false;
     await page.route("**/api/control/sessions**", (route) => {
       const id = new URL(route.request().url()).searchParams.get("id");
@@ -50,17 +42,7 @@ for (const newChat of [false, true]) {
         .fill("Keep my new draft");
     }
     failed = true;
-    await page.evaluate(() => {
-      for (const source of (
-        window as unknown as { recoveryEventSources: EventSource[] }
-      ).recoveryEventSources)
-        if (source.url.includes("tables=control_sessions"))
-          source.dispatchEvent(
-            new MessageEvent("message", {
-              data: JSON.stringify({ table: "control_sessions", op: "UPDATE" }),
-            })
-          );
-    });
+    await invalidateRecoverySessions(page);
     await expect(sidebar.getByRole("alert")).toContainText(
       "Could not refresh chats"
     );
@@ -78,5 +60,118 @@ for (const newChat of [false, true]) {
     await expect(
       page.getByText("Saved request", { exact: true })
     ).toBeVisible();
+  });
+}
+
+test("failed initial restore waits for explicit Retry after a history refresh", async ({
+  page,
+}) => {
+  await mockRecoveryChrome(page);
+  await captureRecoveryEvents(page);
+  let failSelection = true;
+  let refreshed = false;
+  let selections = 0;
+  await page.route("**/api/control/sessions**", (route) => {
+    const id = new URL(route.request().url()).searchParams.get("id");
+    if (id) selections++;
+    return fulfillJson(
+      route,
+      id
+        ? failSelection
+          ? { error: "Could not load this chat. Try again." }
+          : recoverySession
+        : [
+            {
+              ...recoverySession,
+              title: refreshed ? "Updated history" : recoverySession.title,
+            },
+          ],
+      id && failSelection ? 503 : 200
+    );
+  });
+  await page.goto(`${scopedPath("control")}?mission=${recoverySession.id}`);
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Could not load this chat" });
+  await expect(banner).toBeVisible();
+  const composer = page.getByPlaceholder("Ask anything or run a command...");
+  await composer.fill("Do not discard this new draft");
+  failSelection = false;
+  refreshed = true;
+  await invalidateRecoverySessions(page);
+  await expect(
+    page.getByRole("button", { name: /^Updated history / })
+  ).toBeVisible();
+  await expect(composer).toHaveValue("Do not discard this new draft");
+  await banner.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText("Saved request", { exact: true })).toBeVisible();
+  expect(selections).toBe(3); // Initial restore, explicit Retry, current-chat hydration.
+});
+
+for (const mutation of ["archive", "delete"] as const) {
+  test(`${mutation} retires the selected chat failure without a stale Retry`, async ({
+    page,
+  }) => {
+    await mockRecoveryChrome(page);
+    await captureRecoveryEvents(page);
+    let failSelection = false;
+    let removed = false;
+    await page.route("**/api/control/sessions**", (route) => {
+      const request = route.request();
+      if (request.method() === "PUT") {
+        removed = true;
+        return fulfillJson(route, {
+          session: { ...recoverySession, archived: true },
+        });
+      }
+      if (request.method() === "DELETE") {
+        removed = true;
+        return fulfillJson(route, { ok: true });
+      }
+      const id = new URL(request.url()).searchParams.get("id");
+      return fulfillJson(
+        route,
+        id
+          ? failSelection
+            ? { error: "Could not load this chat. Try again." }
+            : recoverySession
+          : removed
+            ? []
+            : [recoverySession],
+        id && failSelection ? 503 : 200
+      );
+    });
+    await page.goto(`${scopedPath("control")}?mission=${recoverySession.id}`);
+    await expect(
+      page.getByText("Saved request", { exact: true })
+    ).toBeVisible();
+    failSelection = true;
+    await invalidateRecoverySessions(page);
+    const banner = page
+      .getByRole("alert")
+      .filter({ hasText: "Could not load this chat" });
+    await expect(banner).toBeVisible();
+    if (mutation === "archive") {
+      await page.getByRole("button", { name: "More options" }).click();
+      await page
+        .getByRole("menuitem", { name: "Archive", exact: true })
+        .click();
+    } else {
+      await page
+        .getByRole("button", { name: "Actions for Saved investigation" })
+        .click();
+      await page
+        .getByRole("menuitem", { name: "Delete chat", exact: true })
+        .click();
+      await page
+        .getByRole("alertdialog", { name: "Delete Saved investigation?" })
+        .getByRole("button", { name: "Delete chat", exact: true })
+        .click();
+    }
+    await expect(
+      page.getByPlaceholder("Ask anything or run a command...")
+    ).toBeVisible();
+    await expect(banner).toHaveCount(0);
+    expect(removed).toBe(true);
   });
 }

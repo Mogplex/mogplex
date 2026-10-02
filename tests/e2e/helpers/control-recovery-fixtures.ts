@@ -58,3 +58,30 @@ export function recoveryStream() {
       .join("") + "data: [DONE]\n\n"
   );
 }
+
+export async function captureRecoveryEvents(page: Page) {
+  await page.addInitScript(() => {
+    const sources: EventSource[] = [];
+    Object.defineProperty(window, "recoveryEventSources", { value: sources });
+    const NativeEventSource = window.EventSource;
+    window.EventSource = class extends NativeEventSource {
+      constructor(url: string | URL, options?: EventSourceInit) {
+        super(url, options);
+        sources.push(this);
+      }
+    };
+  });
+}
+export async function invalidateRecoverySessions(page: Page) {
+  await page.evaluate(() => {
+    for (const source of (
+      window as unknown as { recoveryEventSources: EventSource[] }
+    ).recoveryEventSources)
+      if (source.url.includes("tables=control_sessions"))
+        source.dispatchEvent(
+          new MessageEvent("message", {
+            data: JSON.stringify({ table: "control_sessions", op: "UPDATE" }),
+          })
+        );
+  });
+}

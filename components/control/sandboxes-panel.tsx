@@ -137,6 +137,7 @@ export function SandboxesPanel({
           ))}
           <button
             type="button"
+            disabled={repositoryLoading}
             onClick={onStartSandbox}
             className="border-ink-700 bg-ink-900/40 text-ink-400 hover:border-ink-600 hover:bg-ink-900 hover:text-ink-200 flex min-h-48 min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 text-center transition-colors"
           >

@@ -24,10 +24,7 @@ const SESSION_EVENTS = [
   { table: "control_sessions", filter: "user_id=eq.$USER_ID" },
 ];
 
-/**
- * Restores DB-backed chats and persists whole-array messages with optimistic
- * concurrency. Each session tracks its revision for background completions.
- */
+/** Restores and persists chats with optimistic concurrency and stale-response guards. */
 export function useControlSessions({
   sessionId,
   setSessionId,
@@ -63,6 +60,12 @@ export function useControlSessions({
   const restoredSelectionRef = useRef(false);
   const [restoreSettled, setRestoreSettled] = useState(false);
   const refreshRevisionRef = useRef(0);
+  const clearSelectionFailure = useCallback((id?: string) => {
+    if (id && failedSelectionRef.current !== id) return;
+    failedSelectionRef.current = null;
+    missingSelectionRef.current = false;
+    setSelectionError(null);
+  }, []);
 
   const refreshCurrent = useCallback(async () => {
     if (!sessionId || chatPending) return;
@@ -75,7 +78,11 @@ export function useControlSessions({
         "Could not load this chat. Try again."
       );
     } catch (error) {
-      if (requestRevision === refreshRevisionRef.current) {
+      if (
+        requestRevision === refreshRevisionRef.current &&
+        mutationRevision === mutationRevisionRef.current &&
+        !removedSessionIdsRef.current.has(sessionId)
+      ) {
         failedSelectionRef.current = sessionId;
         const { missing, message } = controlSelectionFailure(error);
         missingSelectionRef.current = missing;
@@ -179,7 +186,10 @@ export function useControlSessions({
         if (record.id !== id || !Array.isArray(record.messages))
           throw new Error("Invalid session");
       } catch (error) {
-        if (revision === selectionRevisionRef.current) {
+        if (
+          revision === selectionRevisionRef.current &&
+          !removedSessionIdsRef.current.has(id)
+        ) {
           failedSelectionRef.current = id;
           const { missing, message } = controlSelectionFailure(error);
           missingSelectionRef.current = missing;
@@ -199,19 +209,15 @@ export function useControlSessions({
       selectedIdRef.current = record.id;
       restoredSelectionRef.current = true;
       setRestoreSettled(true);
-      missingSelectionRef.current = false;
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
-      failedSelectionRef.current = null;
-      setSelectionError(null);
+      clearSelectionFailure();
       return true;
     },
-    [setSessionId, setSessionMessages]
+    [clearSelectionFailure, setSessionId, setSessionMessages]
   );
 
-  // Restore the URL target, then the last opened chat, then the most recent
-  // chat. Global navigation returns to bare /control, so relying on the query
-  // string alone would strand persisted follow-up turns behind an empty view.
+  // Restore the URL target, last opened chat, or latest chat on bare /control.
   useEffect(() => {
     if (
       restoredSelectionRef.current ||
@@ -234,16 +240,14 @@ export function useControlSessions({
       setRestoreSettled(true);
       return;
     }
+    // Attempt restoration once; a failure waits for explicit Retry.
+    restoredSelectionRef.current = true;
     setRestoreSettled(false);
     restoreInFlightRef.current = true;
-    void selectSession(target)
-      .then((selected) => {
-        if (selected) restoredSelectionRef.current = true;
-      })
-      .finally(() => {
-        restoreInFlightRef.current = false;
-        setRestoreSettled(true);
-      });
+    void selectSession(target).finally(() => {
+      restoreInFlightRef.current = false;
+      setRestoreSettled(true);
+    });
   }, [sessions, sessionsLoaded, deepLinkTarget, selectSession, sessionId]);
 
   const createSession = useCallback(
@@ -287,14 +291,12 @@ export function useControlSessions({
       selectionRevisionRef.current++;
       restoredSelectionRef.current = true;
       setRestoreSettled(true);
-      failedSelectionRef.current = null;
-      missingSelectionRef.current = false;
-      setSelectionError(null);
+      clearSelectionFailure();
       setSessionId(record.id);
       window.localStorage.setItem(LAST_CONTROL_SESSION_KEY, record.id);
       return record.id;
     },
-    [setSessionId, setSessionMessages]
+    [clearSelectionFailure, setSessionId, setSessionMessages]
   );
 
   const persistSession = useCallback(
@@ -319,11 +321,7 @@ export function useControlSessions({
     []
   );
 
-  /**
-   * Rename/pin/archive the selected session with the same optimistic
-   * concurrency as persist (one rebase retry on 409). Archiving removes the
-   * session from the list and clears the selection.
-   */
+  /** Rename/pin/archive with optimistic concurrency and one rebase retry on 409. */
   const updateSession = useCallback(
     async (fields: {
       title?: string;
@@ -362,6 +360,7 @@ export function useControlSessions({
       mutationRevisionRef.current += 1;
       updatedAtBySessionRef.current.set(sessionId, session.updated_at);
       if (fields.archived) {
+        clearSelectionFailure(sessionId);
         removedSessionIdsRef.current.add(sessionId);
         updatedAtBySessionRef.current.delete(sessionId);
         setSessions((current) =>
@@ -394,7 +393,7 @@ export function useControlSessions({
       );
       return true;
     },
-    [removeSessionMessages, sessionId, setSessionId]
+    [clearSelectionFailure, removeSessionMessages, sessionId, setSessionId]
   );
 
   const deleteSession = useCallback(
@@ -412,6 +411,7 @@ export function useControlSessions({
 
       mutationRevisionRef.current += 1;
       selectionRevisionRef.current += 1;
+      clearSelectionFailure(targetSessionId);
       removedSessionIdsRef.current.add(targetSessionId);
       updatedAtBySessionRef.current.delete(targetSessionId);
       setSessions((current) =>
@@ -427,7 +427,7 @@ export function useControlSessions({
       }
       return true;
     },
-    [removeSessionMessages, sessionId, setSessionId]
+    [clearSelectionFailure, removeSessionMessages, sessionId, setSessionId]
   );
 
   const setSessionArchived = useCallback(
@@ -454,6 +454,7 @@ export function useControlSessions({
       mutationRevisionRef.current++;
       updatedAtBySessionRef.current.set(target.id, session.updated_at);
       if (archived) {
+        clearSelectionFailure(target.id);
         removedSessionIdsRef.current.add(target.id);
         setSessions((current) =>
           current.filter((entry) => entry.id !== target.id)
@@ -474,7 +475,7 @@ export function useControlSessions({
       }
       return session;
     },
-    [refreshList, removeSessionMessages, setSessionId]
+    [clearSelectionFailure, refreshList, removeSessionMessages, setSessionId]
   );
 
   return {
