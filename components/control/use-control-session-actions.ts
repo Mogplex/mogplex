@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import type { NewSessionTarget } from "@/lib/control/session-project";
 
@@ -25,6 +25,14 @@ export function useControlSessionActions({
     setNewSessionRequest((current) => current + 1);
     setNewMission(true);
   }, []);
+
+  // Archive and external deletion can clear selection outside deleteChat.
+  const previousSessionId = useRef(sessionId);
+  useEffect(() => {
+    const previous = previousSessionId.current;
+    previousSessionId.current = sessionId;
+    if (previous && !sessionId && !newMission) startNewSession();
+  }, [sessionId, newMission, startNewSession]);
 
   const closeNewSession = useCallback(() => {
     setNewMission(false);

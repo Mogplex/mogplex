@@ -12,6 +12,7 @@ import {
 import { McpStatusButton } from "@/components/chat/mcp-status-button";
 import { ProviderIcon } from "@/components/provider-icon";
 import { useModels } from "@/hooks/use-models";
+import { ControlErrorBanner } from "./control-load-state";
 import type { ControlContextUsage } from "@/lib/control/context-usage";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { MissionPermissions } from "@/lib/control/types";
@@ -22,14 +23,12 @@ import {
 } from "./control-attachments";
 import { useControlFileDrop } from "./use-control-file-drop";
 import { useSkillSuggestionMenu } from "./skill-suggestions";
-
 export type ComposerSendOptions = {
   model: string | null;
   permissions: MissionPermissions;
   mode: "plan" | "run";
   files: ControlComposerFile[];
 };
-
 type Props = {
   value: string;
   onChange: (value: string) => void;
@@ -239,7 +238,7 @@ export function Composer({
   const [permissionsIdx, setPermissionsIdx] = useState(0); // Default: Skip Permissions
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const { modelIds, defaultModelId, contextLimits, isLoading: modelsLoading } = useModels("control");
+  const { modelIds, defaultModelId, contextLimits, isLoading: modelsLoading, error: modelsError, mutate: mutateModels } = useModels("control");
   const [selectedModel, setSelectedModel] = useState<string | null>(
     initialModelId
   );
@@ -347,6 +346,7 @@ export function Composer({
 
   return (
     <fieldset disabled={archiving} className="mx-auto min-w-0 w-full max-w-[67rem] shrink-0 px-4 pb-5 sm:px-6">
+      <ControlErrorBanner message={modelsError ? "We could not load models. Try again." : null} onRetry={() => { void mutateModels().catch(() => undefined); }} />
       {archiving ? <p role="status" className="pb-2 text-xs text-ink-400">Archive in progress</p> : null}
       <div
         data-testid="control-composer-dropzone"

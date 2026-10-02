@@ -12,17 +12,15 @@ it("reports a first message waiting in error after ten seconds", () => {
   vi.useFakeTimers();
   const failed = vi.fn();
   const deadline = createPendingInitialMessageDeadline(failed);
-  deadline.updateStatus("error");
   vi.advanceTimersByTime(9_999);
   expect(failed).not.toHaveBeenCalled();
   vi.advanceTimersByTime(1);
   expect(failed).toHaveBeenCalledOnce();
   deadline.cancel();
 });
-it("clears the readiness deadline when ready or unmounted", () => {
+it("clears the readiness deadline on lifecycle cleanup", () => {
   vi.useFakeTimers();
   const failed = vi.fn();
-  createPendingInitialMessageDeadline(failed).updateStatus("ready");
   createPendingInitialMessageDeadline(failed).cancel();
   vi.advanceTimersByTime(10_000);
   expect(failed).not.toHaveBeenCalled();

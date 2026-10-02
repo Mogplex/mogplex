@@ -33,7 +33,7 @@ export async function mockRecoveryChrome(page: Page) {
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, { sandboxes: [] })
   );
-  await page.route("**/api/repos", (route) =>
+  await page.route("**/api/repos**", (route) =>
     fulfillJson(route, [
       {
         id: "repo-1",

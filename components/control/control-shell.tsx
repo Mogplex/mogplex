@@ -319,7 +319,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     return () => window.removeEventListener(CONTROL_VIEW_EVENT, listener);
   }, []);
 
-  const shellView = resolveShellView({ newMission, hasMission: Boolean(mission), sessionId, sessionsLoaded, restoring: sessions.length > 0 && !sessionId && !selectionError });
+  const shellView = resolveShellView({ newMission, hasMission: Boolean(mission && sessionId), sessionId, sessionsLoaded, restoring: sessions.length > 0 && !sessionId && !selectionError });
   const loadState = { loaded: sessionsLoaded, error: sessionsError, onRetry: () => void retryList() };
   if (shellView !== "mission") {
     return (
@@ -329,7 +329,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
         sessions={displaySessions}
         sessionId={sessionId}
         workingIds={runningSessionIds}
-        canCancel={Boolean(mission || sessionId)}
+        canCancel={Boolean(sessionId)}
         onCancel={closeNewSession}
         onCreate={handleCreateMission}
         onSelectSession={handleSelectSession}

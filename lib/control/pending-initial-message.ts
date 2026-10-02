@@ -115,9 +115,43 @@ export function createPendingInitialMessageDeadline(
     Math.max(0, queuedAt + INITIAL_MESSAGE_DEADLINE_MS - Date.now())
   );
   return {
-    updateStatus: (status: string) => {
-      if (status === "ready") clearTimeout(timer);
-    },
     cancel: () => clearTimeout(timer),
   };
+}
+
+export type PendingUserTurn = {
+  id: string;
+  role: string;
+  parts?: Array<{
+    type: string;
+    text?: string;
+    url?: string;
+    filename?: string;
+    mediaType?: string;
+  }>;
+};
+/** Replace only the matching unanswered optimistic draft, never a later turn. */
+export function pendingInitialMessageRetryId(
+  messages: PendingUserTurn[],
+  pending: PendingInitialMessage
+): string | undefined {
+  const last = messages.at(-1);
+  if (last?.role !== "user" || !last.parts) return undefined;
+  const text = last.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("");
+  const files = last.parts.filter((part) => part.type === "file");
+  if (text !== pending.text || files.length !== pending.options.files.length)
+    return undefined;
+  return files.every((file, index) => {
+    const draft = pending.options.files[index];
+    return (
+      file.url === draft.url &&
+      file.mediaType === draft.mediaType &&
+      file.filename === draft.filename
+    );
+  })
+    ? last.id
+    : undefined;
 }

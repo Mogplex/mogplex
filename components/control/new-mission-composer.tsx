@@ -9,6 +9,7 @@ import {
 } from "iconoir-react";
 import { MogplexFace } from "@/components/brand/mogplex-face";
 import { useModels } from "@/hooks/use-models";
+import { ControlErrorBanner } from "./control-load-state";
 import { fetchWithActiveTeam } from "@/components/active-scope-provider";
 import { MISSION_PERMISSION_OPTIONS } from "@/lib/control/types";
 import type { Repo } from "@/lib/types";
@@ -72,7 +73,7 @@ export function NewMissionComposer({
   const [files, setFiles] = useState<ControlComposerFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { modelIds, defaultModelId, isLoading: modelsLoading } = useModels("control");
+  const { modelIds, defaultModelId, isLoading: modelsLoading, error: modelsError, mutate: mutateModels } = useModels("control");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const { isDraggingFiles, addFiles, dropZoneProps } = useControlFileDrop({
     existingCount: files.length,
@@ -209,6 +210,7 @@ export function NewMissionComposer({
 
   return (
     <div className="flex flex-1 flex-col justify-end px-4 py-5 sm:px-8">
+      <ControlErrorBanner message={modelsError ? "We could not load models. Try again." : null} onRetry={() => { void mutateModels().catch(() => undefined); }} />
       <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center">
         {/* Header */}
         <div className="mb-8">

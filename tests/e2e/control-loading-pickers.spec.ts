@@ -21,7 +21,7 @@ test("new chat waits for projects and models without opening project creation", 
   const modelsReady = new Promise<void>((resolve) => {
     releaseModels = resolve;
   });
-  await page.route("**/api/repos", async (route) => {
+  await page.route("**/api/repos**", async (route) => {
     await reposReady;
     return fulfillJson(route, [{ id: "repo-1", full_name: "acme/widgets" }]);
   });
@@ -80,7 +80,7 @@ test("a restored sandbox view waits for repository data instead of claiming none
   const reposReady = new Promise<void>((resolve) => {
     releaseRepos = resolve;
   });
-  await page.route("**/api/repos", async (route) => {
+  await page.route("**/api/repos**", async (route) => {
     await reposReady;
     return fulfillJson(route, [{ id: "repo-1", full_name: "acme/widgets" }]);
   });
@@ -112,3 +112,55 @@ test("a restored sandbox view waits for repository data instead of claiming none
     page.getByText("No repository is linked", { exact: false })
   ).toHaveCount(0);
 });
+
+for (const newChat of [false, true]) {
+  test(`a failed model load offers Retry in ${newChat ? "a new" : "a restored"} chat`, async ({
+    page,
+  }) => {
+    await mockRecoveryChrome(page);
+    let failed = true;
+    await page.route("**/api/models", (route) =>
+      fulfillJson(
+        route,
+        failed
+          ? { error: "Unavailable" }
+          : {
+              models: [{ id: modelId, context_length: 128000 }],
+              catalog: [{ id: modelId, is_enabled: true }],
+            },
+        failed ? 503 : 200
+      )
+    );
+    await page.route("**/api/control/sessions**", (route) =>
+      fulfillJson(
+        route,
+        newChat
+          ? []
+          : new URL(route.request().url()).searchParams.has("id")
+            ? recoverySession
+            : [recoverySession]
+      )
+    );
+    await page.goto(scopedPath("control"));
+    const error = page
+      .getByRole("alert")
+      .filter({ hasText: "Could not load models" });
+    await expect(error).toBeVisible();
+    failed = false;
+    await error.getByRole("button", { name: "Retry" }).click();
+    await expect(error).toHaveCount(0);
+    await page
+      .getByPlaceholder(
+        newChat
+          ? "Ask anything or run a command..."
+          : "Ask for follow-up changes or attach images"
+      )
+      .fill("Continue investigation");
+    await expect(
+      page.getByRole("button", {
+        name: newChat ? "Start mission" : "Send",
+        exact: true,
+      })
+    ).toBeEnabled();
+  });
+}

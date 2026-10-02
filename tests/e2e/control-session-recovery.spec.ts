@@ -121,3 +121,51 @@ test("a failed restore is retried on the next history refresh without reloading"
   await expect(page.getByText("Saved request", { exact: true })).toBeVisible();
   expect(attempts).toBeGreaterThan(1);
 });
+
+for (const hasOtherChats of [false, true]) {
+  test(`archiving the selected chat opens a fresh composer ${hasOtherChats ? "with another chat remaining" : "when history becomes empty"}`, async ({
+    page,
+  }) => {
+    await mockRecoveryChrome(page);
+    let archived = false;
+    const other = {
+      ...recoverySession,
+      id: "other-chat",
+      title: "Another chat",
+      messages: [],
+    };
+    await page.route("**/api/control/sessions**", (route) => {
+      if (route.request().method() === "PUT") {
+        archived = true;
+        return fulfillJson(route, {
+          session: { ...recoverySession, archived: true },
+        });
+      }
+      const id = new URL(route.request().url()).searchParams.get("id");
+      return fulfillJson(
+        route,
+        id
+          ? recoverySession
+          : [
+              ...(archived ? [] : [recoverySession]),
+              ...(hasOtherChats ? [other] : []),
+            ]
+      );
+    });
+    await page.goto(`${scopedPath("control")}?mission=${recoverySession.id}`);
+    await expect(
+      page.getByText("Saved request", { exact: true })
+    ).toBeVisible();
+    await page.getByRole("button", { name: "More options" }).click();
+    await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Start mission" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("status", { name: "Loading conversation" })
+    ).toHaveCount(0);
+    await expect(page.getByText("Saved request", { exact: true })).toHaveCount(
+      0
+    );
+  });
+}

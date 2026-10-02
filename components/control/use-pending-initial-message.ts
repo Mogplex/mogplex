@@ -7,6 +7,8 @@ import {
   loadPendingInitialMessage,
   removePendingInitialMessage,
   savePendingInitialMessage,
+  pendingInitialMessageRetryId,
+  type PendingUserTurn,
   type PendingInitialMessage,
 } from "@/lib/control/pending-initial-message";
 import {
@@ -35,7 +37,7 @@ export function usePendingInitialMessage({
   sendMessage: SendMessage;
   getChatError: () => Error | undefined;
   clearChatError: () => void;
-  messages: Array<{ id: string; role: string }>;
+  messages: PendingUserTurn[];
   requestContext: ControlChatRequestContext;
 }) {
   const [pending, setPending] = useState<PendingInitialMessage | null>(null);
@@ -105,12 +107,12 @@ export function usePendingInitialMessage({
     if (sendingRef.current.has(pending.missionId)) return;
     sendingRef.current.add(pending.missionId);
     clearChatError();
-    // Replace a failed first user turn on Retry rather than append it twice.
-    const previous = messages.find((message) => message.role === "user");
+    // Retain completed or different follow-ups when the saved draft is retried.
+    const previousId = pendingInitialMessageRetryId(messages, pending);
     void sendMessage(
       {
         ...buildControlChatMessage(pending.text, pending.options),
-        ...(previous ? { messageId: previous.id } : {}),
+        ...(previousId ? { messageId: previousId } : {}),
       },
       {
         body: buildControlChatBody({

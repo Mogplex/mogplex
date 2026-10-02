@@ -276,3 +276,83 @@ test("first-message recovery retains a failed draft across remounts and retries 
     }
   }
 });
+
+for (const scenario of [
+  "answered follow-up",
+  "different trailing draft",
+  "failed original draft",
+] as const) {
+  test(`Retry preserves an ${scenario} user turn`, async () => {
+    const cleanup = installDom();
+    const { renderHook, act, waitFor } = await import("@testing-library/react");
+    window.sessionStorage.setItem(
+      "mogplex.control.pendingInitial.retry-turn",
+      JSON.stringify({
+        missionId: "retry-turn",
+        text: "Original request",
+        failed: true,
+        options: {
+          model: "test/model",
+          mode: "run",
+          permissions: "Skip Permissions",
+          files: [],
+        },
+      })
+    );
+    const user = {
+      id: "existing-user",
+      role: "user",
+      parts: [
+        {
+          type: "text",
+          text:
+            scenario === "failed original draft"
+              ? "Original request"
+              : "Different request",
+        },
+      ],
+    };
+    const messages =
+      scenario === "answered follow-up"
+        ? [
+            user,
+            {
+              id: "reply",
+              role: "assistant",
+              parts: [{ type: "text", text: "Complete" }],
+            },
+          ]
+        : [user];
+    const sent: Array<{ messageId?: string }> = [];
+    const view = renderHook(() =>
+      usePendingInitialMessage({
+        selectedMissionId: "retry-turn",
+        status: "ready",
+        messages,
+        sendMessage: async (message) => {
+          sent.push(message);
+        },
+        getChatError: () => undefined,
+        clearChatError: () => {},
+        requestContext: {},
+      })
+    );
+    try {
+      await waitFor(() =>
+        assert.equal(
+          view.result.current.error,
+          "Your first message was not sent"
+        )
+      );
+      await act(async () => view.result.current.retry());
+      await waitFor(() => assert.equal(sent.length, 1));
+      assert.equal(
+        sent[0].messageId,
+        scenario === "failed original draft" ? "existing-user" : undefined
+      );
+    } finally {
+      view.unmount();
+      cleanup();
+    }
+  });
+}
