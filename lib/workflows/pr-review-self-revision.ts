@@ -41,15 +41,21 @@ export type ReviewFormatJudge = (
   harnessResult: PrReviewHarnessResult
 ) => Promise<readonly ReviewFormatProblem[] | null>;
 
-/** What identifies a finding across a formatting fix, which may reword its title and body. */
-function findingKey(finding: ReviewFinding) {
-  return JSON.stringify([finding.severity, finding.path, finding.line]);
-}
-
 function keepsEveryFinding(draft: ReviewFinding[], revised: ReviewFinding[]) {
-  const remaining = revised.map(findingKey);
-  return draft.every((finding) => {
-    const index = remaining.indexOf(findingKey(finding));
+  const remaining = [...revised];
+  // Match fixed lines first so an unspecified line cannot consume the only
+  // revision that preserves another finding's exact location.
+  const ordered = [
+    ...draft.filter((finding) => finding.line != null),
+    ...draft.filter((finding) => finding.line == null),
+  ];
+  return ordered.every((finding) => {
+    const index = remaining.findIndex(
+      (candidate) =>
+        candidate.severity === finding.severity &&
+        candidate.path === finding.path &&
+        (finding.line == null || candidate.line === finding.line)
+    );
     if (index === -1) return false;
     remaining.splice(index, 1);
     return true;

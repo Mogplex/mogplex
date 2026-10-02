@@ -92,6 +92,84 @@ function published(result: AutomationAgentResult) {
 }
 
 describe("reviseFlaggedReview", () => {
+  it("accepts a revised finding that adds a previously missing line", async () => {
+    const draft = reported({
+      hasIssues: true,
+      summary: "reportReview filed.",
+      findings: [warning],
+    });
+    const revision = reported({
+      hasIssues: true,
+      summary: "Guard the nullable lookup.",
+      findings: [{ ...warning, line: 42 }],
+    });
+    const { judge } = judgeFlagging(/reportReview/, ["processTalk"]);
+    const { generate } = reviewer([revision]);
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: draft,
+      generate,
+      judge,
+    });
+    expect(published(result).findings).toEqual([{ ...warning, line: 42 }]);
+    expect(result.reviewFormatPassed).toBe(true);
+  });
+
+  it("matches fixed lines before missing lines regardless of finding order", async () => {
+    const draft = reported({
+      hasIssues: true,
+      summary: "reportReview filed.",
+      findings: [warning, { ...warning, line: 42 }],
+    });
+    const revision = reported({
+      hasIssues: true,
+      summary: "Guard both lookups.",
+      findings: [
+        { ...warning, line: 42 },
+        { ...warning, line: 50 },
+      ],
+    });
+    const { judge } = judgeFlagging(/reportReview/, ["processTalk"]);
+    const { generate } = reviewer([revision]);
+    const result = await reviseFlaggedReview({
+      ...followUp,
+      result: draft,
+      generate,
+      judge,
+    });
+    expect(published(result).findings.map((finding) => finding.line)).toEqual([
+      42, 50,
+    ]);
+    expect(result.reviewFormatPassed).toBe(true);
+  });
+
+  it.each([
+    [[{ ...warning, line: 42 }], [{ ...warning, line: 50 }]],
+    [[{ ...warning, line: 42 }], [warning]],
+    [[warning, warning], [{ ...warning, line: 42 }]],
+    [[warning], [{ ...warning, severity: "suggestion", line: 42 }]],
+  ])(
+    "retains known lines, multiplicity, and severity (%#)",
+    async (findings, changed) => {
+      const draft = reported({
+        hasIssues: true,
+        summary: "reportReview filed.",
+        findings,
+      });
+      const { judge } = judgeFlagging(/reportReview/, ["processTalk"]);
+      const { generate } = reviewer([
+        reported({ hasIssues: true, summary: "Revised.", findings: changed }),
+      ]);
+      const result = await reviseFlaggedReview({
+        ...followUp,
+        result: draft,
+        generate,
+        judge,
+      });
+      expect(result).toBe(draft);
+    }
+  );
+
   it("should mark a draft the format check passes without asking the reviewer anything", async () => {
     const { judge } = judgeFlagging(/never/);
     const { generate, requests } = reviewer([]);
