@@ -89,6 +89,9 @@ test("mobile drawer starts a new session in the current project and closes", asy
     .click();
   const drawer = page.getByRole("dialog", { name: "Sessions", exact: true });
   await expect(
+    drawer.getByRole("separator", { name: "Resize sheet", includeHidden: true })
+  ).toBeHidden();
+  await expect(
     drawer.getByRole("button", { name: /^Second investigation/ })
   ).toBeVisible();
   await drawer

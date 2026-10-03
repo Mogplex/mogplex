@@ -9,6 +9,7 @@ import { SessionList, type SessionListProps } from "./session-list";
 export function MobileSessionList(props: SessionListProps) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
+    // Match the md:hidden navigation breakpoint.
     const desktop = window.matchMedia("(min-width: 768px)");
     const closeOnDesktop = () => { if (desktop.matches) setOpen(false); };
     desktop.addEventListener("change", closeOnDesktop);
@@ -21,7 +22,7 @@ export function MobileSessionList(props: SessionListProps) {
           <SidebarExpand className="size-5" aria-hidden="true" />
         </button>
       </SheetTrigger>
-      <SheetContent side="left" className="gap-0 border-ink-800 bg-ink-900 text-ink-100 md:hidden">
+      <SheetContent side="left" style={{ width: 360 }} className="gap-0 border-ink-800 bg-ink-900 text-ink-100 md:hidden [&_.sheet-resizer]:hidden">
         <SheetHeader className="shrink-0">
           <SheetTitle className="text-ink-100">Sessions</SheetTitle>
           <SheetDescription className="sr-only">Select a chat or start a new session.</SheetDescription>

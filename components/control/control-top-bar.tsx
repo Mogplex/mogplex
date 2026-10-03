@@ -158,8 +158,8 @@ export function ControlTopBar({
 
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-ink-800 px-4 py-3 sm:px-6">
-      {sessionNavigation}
       <div className="flex min-w-0 items-center gap-2 text-[15px]">
+        {sessionNavigation}
         <Book
           className="size-3.5 shrink-0 text-ink-400"
           strokeWidth={1.8}
