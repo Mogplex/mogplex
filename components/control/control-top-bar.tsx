@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Archive,
   Book,
@@ -39,6 +39,7 @@ import {
 } from "./control-top-bar-dialogs";
 
 export type ControlTopBarProps = {
+  sessionNavigation?: ReactNode;
   /** Project/repo label for the breadcrumb; null when nothing is selected. */
   projectName: string | null;
   /** Selected session/mission title; null when nothing is selected. */
@@ -104,6 +105,7 @@ function Item({
 }
 
 export function ControlTopBar({
+  sessionNavigation,
   projectName,
   sessionTitle,
   branch,
@@ -157,6 +159,7 @@ export function ControlTopBar({
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-ink-800 px-4 py-3 sm:px-6">
       <div className="flex min-w-0 items-center gap-2 text-[15px]">
+        {sessionNavigation}
         <Book
           className="size-3.5 shrink-0 text-ink-400"
           strokeWidth={1.8}

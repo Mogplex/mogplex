@@ -5,6 +5,7 @@ import type { Repo } from "@/lib/types";
 import type { ComposerSendOptions } from "./composer";
 import { NewMissionComposer } from "./new-mission-composer";
 import { SessionList } from "./session-list";
+import { MobileSessionList } from "./mobile-session-list";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import type { NewSessionTarget } from "./session-list-actions";
 import type { SessionArchiveControls } from "./use-session-archive";
@@ -62,25 +63,21 @@ export function NewMissionView({
   selectionError: string | null;
   retrySelection: () => void;
 }) {
+  const sessionListProps = {
+    loadState, sessions, selectedId: sessionId, workingIds,
+    onSelect: onSelectSession, onNew: onNewSession, onDelete: onDeleteSession, archive,
+  };
   return (
     <div className="app-control-shell flex h-full overflow-hidden">
-      <SessionList
-        loadState={loadState}
-        sessions={sessions}
-        selectedId={sessionId}
-        workingIds={workingIds}
-        onSelect={onSelectSession}
-        onNew={onNewSession}
-        onDelete={onDeleteSession}
-        archive={archive}
-      />
+      <SessionList {...sessionListProps} />
       <main
         className="app-chat-column flex min-w-0 flex-1 flex-col"
         aria-label="Command Center"
       >
-        <div className="border-border flex h-14 shrink-0 items-center gap-3 border-b px-6">
-          <h1 className="text-xl font-semibold">Command Center</h1>
-          <span className="bg-secondary text-secondary-foreground inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs">
+        <div className="border-border flex h-14 shrink-0 items-center gap-2 border-b px-4 sm:gap-3 sm:px-6">
+          <MobileSessionList {...sessionListProps} />
+          <h1 className="min-w-0 truncate text-lg font-semibold sm:text-xl">Command Center</h1>
+          <span className="bg-secondary text-secondary-foreground hidden sm:inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs">
             <Network
               className="text-accent-blue size-3.5"
               strokeWidth={1.5}

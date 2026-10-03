@@ -200,6 +200,21 @@ test("a follow-up focuses the latest request and shows live command progress and
   ).toHaveText("Stop");
   await page.screenshot({ path: testInfo.outputPath("follow-up-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
+  const navigation = await page
+    .getByRole("button", { name: "Open sessions", exact: true })
+    .boundingBox();
+  const title = await page
+    .getByRole("banner")
+    .getByText("Review this repository", { exact: true })
+    .boundingBox();
+  expect(navigation).not.toBeNull();
+  expect(title).not.toBeNull();
+  // Navigation shares the breadcrumb row rather than consuming another phone row.
+  expect(
+    Math.abs(
+      navigation!.y + navigation!.height / 2 - title!.y - title!.height / 2
+    )
+  ).toBeLessThan(2);
   await expect(progress).toBeInViewport();
   await expect(
     page
