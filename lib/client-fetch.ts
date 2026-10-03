@@ -31,6 +31,30 @@ function resolveErrorMessage(data: unknown, fallback: string) {
   return fallback;
 }
 
+/** Resolve only after a write succeeds, before callers change local state. */
+export async function mutateJson(
+  url: string,
+  init: RequestInit
+): Promise<unknown> {
+  const response = await fetch(url, init);
+  if (response.status === 204 && response.ok) return null;
+  if (!response.ok) {
+    throw new ClientFetchError(
+      resolveErrorMessage(await readJson(response), "Action failed"),
+      response.status
+    );
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new ClientFetchError(
+      "Cannot read server response",
+      response.status,
+      "invalid_response"
+    );
+  }
+}
+
 export async function fetchJsonArray<T>(
   url: string,
   fallbackMessage = "Failed to load data",

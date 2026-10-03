@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Agent, AIModel } from "@/lib/types";
 import { getDefaultNewAgentModel } from "@/lib/agents/model-options";
 import { validateAgentInput } from "@/lib/agents/validation";
+import { mutateJson } from "@/lib/client-fetch";
 
 export function useAgentEditor({
   agents,
@@ -191,10 +192,17 @@ export function useAgentEditor({
 
   const deleteAgent = useCallback(
     async (id: string) => {
-      const res = await fetch(`/api/agents?id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-      if (res.ok) await mutate();
+      setSaveError(null);
+      try {
+        await mutateJson(`/api/agents?id=${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+        await mutate();
+      } catch (error) {
+        setSaveError(
+          error instanceof Error ? error.message : "Cannot delete agent"
+        );
+      }
     },
     [mutate]
   );
