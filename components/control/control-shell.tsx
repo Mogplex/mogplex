@@ -30,6 +30,7 @@ import { Timeline } from "./timeline";
 import { Composer } from "./composer";
 import { ArtifactSidePanel } from "./artifact-side-panel";
 import { SessionList } from "./session-list";
+import { MobileSessionList } from "./mobile-session-list";
 import { ExternalRunConversation } from "./external-run-conversation";
 import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
@@ -352,20 +353,17 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     );
   }
 
+  const sessionListProps = {
+    loadState, sessions: displaySessions, selectedId: sessionId,
+    workingIds: runningSessionIds, onSelect: handleSelectSession,
+    onNew: startNewSession, onDelete: deleteChat, archive,
+  };
   return (
     <div className="app-control-shell bg-ink-950 text-ink-100 flex h-full overflow-hidden">
-      <SessionList
-        loadState={loadState}
-        sessions={displaySessions}
-        selectedId={sessionId}
-        workingIds={runningSessionIds}
-        onSelect={handleSelectSession}
-        onNew={startNewSession}
-        onDelete={deleteChat}
-        archive={archive}
-      />
-      {activeSession?.external_run_id ? <ExternalRunConversation session={{ ...activeSession, external_run_id: activeSession.external_run_id }} /> : <div className="flex min-w-0 flex-1 flex-col">
+      <SessionList {...sessionListProps} />
+      {activeSession?.external_run_id ? <div className="flex min-w-0 flex-1 flex-col"><div className="border-b border-ink-800 px-4 py-1 md:hidden"><MobileSessionList {...sessionListProps} /></div><ExternalRunConversation session={{ ...activeSession, external_run_id: activeSession.external_run_id }} /></div> : <div className="flex min-w-0 flex-1 flex-col">
         <ControlTopBar
+          sessionNavigation={<MobileSessionList {...sessionListProps} />}
           projectName={
             (activeSession ? (activeSession.repo_id ? activeSession.project : UNLINKED_GROUP_NAME) : null) ??
             (mission ? (getWorkspace(mission.ws)?.name ?? null) : null)
