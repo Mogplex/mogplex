@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
@@ -140,7 +141,9 @@ export function createSettingsPatchHandler(
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body: unknown = await request.json().catch(() => null);
+    const jsonBody = await parseJsonBody<unknown>(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
     if (!body || typeof body !== "object" || Array.isArray(body))
       return NextResponse.json({ error: "Invalid settings" }, { status: 400 });
     const fields = body as Record<string, unknown>;

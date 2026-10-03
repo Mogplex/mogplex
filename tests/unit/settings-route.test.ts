@@ -107,6 +107,41 @@ function request(body: unknown) {
   });
 }
 
+test("PATCH rejects malformed JSON before changing settings", async () => {
+  const { createSettingsPatchHandler } = await loadSettingsRoute();
+  const handler = createSettingsPatchHandler({
+    requireUserId: async () => "user-123",
+    updateProfile: async () => {
+      throw new Error("must not write");
+    },
+    applyModelDefaults: async () => {
+      throw new Error("must not write");
+    },
+  });
+  for (const body of ['{"theme":', ""]) {
+    const response = await handler(
+      new Request("http://localhost/api/settings", {
+        method: "PATCH",
+        body,
+      })
+    );
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "Invalid JSON body." });
+  }
+  const unauthorized = createSettingsPatchHandler({
+    requireUserId: async () =>
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+  });
+  const response = await unauthorized(
+    new Request("http://localhost/api/settings", {
+      method: "PATCH",
+      body: "{",
+    })
+  );
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "Unauthorized" });
+});
+
 test("PATCH rejects invalid destinations before writing, and requires authentication", async () => {
   const { createSettingsPatchHandler } = await loadSettingsRoute();
   const handler = createSettingsPatchHandler({

@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -227,7 +228,9 @@ export function createWorkspacesPostHandler(
     }
     const { scope } = scopeResolution;
 
-    const body = await req.json();
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
     const settings = normalizeWorkspaceSettings(body);
     const {
       name,

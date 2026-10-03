@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -79,7 +80,9 @@ export async function PUT(req: Request, ctx: RouteContext) {
   if (!token)
     return NextResponse.json({ error: "NO_GITHUB_TOKEN" }, { status: 400 });
 
-  const { name, value } = (await req.json()) as {
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const { name, value } = jsonBody.body as {
     name?: string;
     value?: string;
   };
@@ -150,7 +153,9 @@ export async function DELETE(req: Request, ctx: RouteContext) {
   if (!token)
     return NextResponse.json({ error: "NO_GITHUB_TOKEN" }, { status: 400 });
 
-  const { name } = (await req.json()) as { name?: string };
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const { name } = jsonBody.body as { name?: string };
   if (!name)
     return NextResponse.json({ error: "name is required" }, { status: 400 });
 

@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireMachineApiAuth } from "@/lib/internal-api-auth";
 import {
@@ -25,7 +26,9 @@ export function createJobsProcessPostHandler(
     const authResponse = requireMachineApiAuth(request, "/api/jobs/process");
     if (authResponse) return authResponse;
 
-    const { jobId } = await request.json();
+    const jsonBody = await parseJsonBody(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const { jobId } = jsonBody.body;
     if (!jobId) {
       return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
     }

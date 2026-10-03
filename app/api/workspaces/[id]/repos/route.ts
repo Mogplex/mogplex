@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import {
@@ -176,7 +177,9 @@ export function createWorkspaceRepoPostHandler(
       );
     }
 
-    const body = await req.json();
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
     const name = normalizeRepoName(body.name);
     const description = normalizeWorkspaceDescription(body.description);
     const ownerLogin = normalizeOwnerLogin(body.owner_login);

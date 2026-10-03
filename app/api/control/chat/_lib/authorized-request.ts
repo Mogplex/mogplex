@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import {
   MISSION_PERMISSION_OPTIONS,
   type MissionPermissions,
@@ -42,7 +43,9 @@ export async function runAuthorizedControlChat(
     background?: import("@/lib/control/background-context").ControlBackgroundExecution;
   }
 ) {
-  const rawBody = (await req.json()) as Omit<
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const rawBody = jsonBody.body as Omit<
     ControlChatRequestBody,
     "mode" | "permissions"
   > & {

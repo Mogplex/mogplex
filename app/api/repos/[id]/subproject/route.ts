@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
@@ -11,7 +12,9 @@ export async function POST(
   if (userId instanceof Response) return userId;
   const { id } = await params;
 
-  const body = await req.json();
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const body = jsonBody.body;
   const rootDir = normalizeRootDirectory(body.root_directory);
   if (!rootDir) {
     return NextResponse.json(

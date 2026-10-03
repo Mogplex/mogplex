@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import {
@@ -251,7 +252,9 @@ export function createRepoEnvVarsPostHandler(
       );
     }
 
-    const body = (await req.json()) as {
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body as {
       key?: string;
       value?: string;
       target?: string[];
@@ -300,7 +303,9 @@ export function createRepoEnvVarsPatchHandler(
       );
     }
 
-    const body = (await req.json()) as {
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body as {
       envId?: string;
       value?: string;
       target?: string[];
@@ -344,7 +349,9 @@ export function createRepoEnvVarsDeleteHandler(
       );
     }
 
-    const body = (await req.json()) as { envId?: string };
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body as { envId?: string };
     if (!body.envId) {
       return NextResponse.json({ error: "envId is required" }, { status: 400 });
     }
