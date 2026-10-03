@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import {
   createMemoriesClient,
@@ -194,7 +195,9 @@ export async function POST(req: NextRequest) {
   const userId = await requireUserId();
   if (userId instanceof Response) return userId;
 
-  const body = (await req.json()) as Record<string, unknown>;
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const body = jsonBody.body as Record<string, unknown>;
   const { lane, content, metadata } = body;
   if (!isValidLane(lane))
     return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
@@ -261,7 +264,9 @@ export async function PATCH(req: NextRequest) {
   // Intentionally accepts only { id, content } — metadata edits are not
   // supported on this route. If support is added later, run the new metadata
   // through `validateMetadata()` (see POST) before passing to `editMemory`.
-  const { id, content } = await req.json();
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const { id, content } = jsonBody.body;
   if (!id || typeof id !== "string" || !UUID_RE.test(id))
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   if (!content || typeof content !== "string")

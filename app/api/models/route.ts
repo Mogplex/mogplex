@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import {
   MODEL_SURFACES,
   surfaceDefaultModel,
@@ -408,7 +409,9 @@ export function createModelsPatchHandler(
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body = (await request.json()) as Record<string, unknown>;
+    const jsonBody = await parseJsonBody(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body as Record<string, unknown>;
     const modelId = typeof body.model_id === "string" ? body.model_id : "";
     const isEnabled = body.is_enabled;
 

@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import {
   ensureDirectoryTreePath,
@@ -298,7 +299,9 @@ export function createSandboxTreePostHandler(
       );
       if (loaded.response) return loaded.response;
 
-      const body = await request.json();
+      const jsonBody = await parseJsonBody(request);
+      if (!jsonBody.ok) return jsonBody.response;
+      const body = jsonBody.body;
       const kind =
         body?.kind === "directory"
           ? "directory"
@@ -364,7 +367,9 @@ export function createSandboxTreePatchHandler(
       );
       if (loaded.response) return loaded.response;
 
-      const body = await request.json();
+      const jsonBody = await parseJsonBody(request);
+      if (!jsonBody.ok) return jsonBody.response;
+      const body = jsonBody.body;
       const rawMoves = Array.isArray(body?.moves) ? body.moves : [];
       if (rawMoves.length === 0) {
         throw new TreeRouteError("moves required", 400);
@@ -454,7 +459,9 @@ export function createSandboxTreeDeleteHandler(
       );
       if (loaded.response) return loaded.response;
 
-      const body = await request.json();
+      const jsonBody = await parseJsonBody(request);
+      if (!jsonBody.ok) return jsonBody.response;
+      const body = jsonBody.body;
       const repoPath = normalizeTreePathInput(body?.path, "either");
 
       return await deps.withSandboxMutationLock(id, async () => {

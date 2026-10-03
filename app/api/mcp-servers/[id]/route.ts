@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import {
@@ -83,11 +84,9 @@ export function createMcpServerPatchHandler(
     }
 
     try {
-      const server = await deps.updateUserMcpServer(
-        userId,
-        id,
-        await request.json()
-      );
+      const jsonBody = await parseJsonBody(request);
+      if (!jsonBody.ok) return jsonBody.response;
+      const server = await deps.updateUserMcpServer(userId, id, jsonBody.body);
 
       if (!server) {
         return NextResponse.json(

@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import {
@@ -71,7 +72,9 @@ export function createFlowPutHandler(overrides: Partial<FlowRouteDeps> = {}) {
       return NextResponse.json({ error: "Flow not found" }, { status: 404 });
     }
 
-    const body = await request.json();
+    const jsonBody = await parseJsonBody(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
 
     if ("status" in body) {
       const status =

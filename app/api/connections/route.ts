@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -55,7 +56,9 @@ export async function POST(req: Request) {
   if (userId instanceof Response) return userId;
 
   try {
-    const body = normalizeConnectionCreateInput(await req.json());
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = normalizeConnectionCreateInput(jsonBody.body);
 
     if (body.scope === "project" && body.repo_id) {
       const ownsRepo = await verifyRepoOwnership(body.repo_id, userId);
@@ -159,7 +162,9 @@ export async function PATCH(req: Request) {
   if (userId instanceof Response) return userId;
 
   try {
-    const body = await req.json();
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
     const id = body?.id;
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -191,7 +196,9 @@ export async function DELETE(req: Request) {
   if (userId instanceof Response) return userId;
 
   try {
-    const { id } = await req.json();
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const { id } = jsonBody.body;
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
     if (!(await verifyConnectionOwnership(id, userId))) {

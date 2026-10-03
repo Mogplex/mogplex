@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -246,7 +247,9 @@ export function createReposPostHandler(
     }
     const { scope } = scopeResolution;
 
-    const body = await req.json();
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
     const settings = normalizeRepoSettings(body);
     const requestedWorkspaceId =
       typeof body.workspace_id === "string" && body.workspace_id.trim()
@@ -319,7 +322,9 @@ export function createReposPatchHandler(
     }
     const { scope } = scopeResolution;
 
-    const body = await req.json();
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
     if (!body.id)
       return NextResponse.json({ error: "Missing id" }, { status: 400 });
 

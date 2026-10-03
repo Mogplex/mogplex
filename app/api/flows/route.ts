@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import {
@@ -72,7 +73,9 @@ export function createFlowsPostHandler(
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body = await request.json();
+    const jsonBody = await parseJsonBody(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body;
     const installationId = Number(body.installation_id);
     const name = optionalString(body.name);
     const templateId = readTemplateId(body.template_id);

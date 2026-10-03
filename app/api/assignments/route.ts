@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { summarizeEntityDispatchEvents } from "@/lib/automation-dispatch";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -149,7 +150,9 @@ async function putAssignment(req: Request, deps: AssignmentsReadDeps) {
   if (!scope.ok)
     return NextResponse.json({ error: scope.error }, { status: scope.status });
 
-  const body = await req.json();
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const body = jsonBody.body;
   const { id } = body;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 

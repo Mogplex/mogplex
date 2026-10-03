@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -78,7 +79,9 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   if (!repo)
     return NextResponse.json({ error: "Repo not found" }, { status: 404 });
 
-  const body = await req.json();
+  const jsonBody = await parseJsonBody(req);
+  if (!jsonBody.ok) return jsonBody.response;
+  const body = jsonBody.body;
 
   if (body.skill_id && typeof body.excluded === "boolean") {
     const { error } = await supabaseAdmin

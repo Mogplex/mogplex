@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { streamText } from "ai";
 import { requireUserId } from "@/lib/auth";
 import { resolveUserLanguageModel } from "@/lib/ai-model-resolver";
@@ -151,7 +152,9 @@ export function createAgentGeneratePostHandler(
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    const body = (await req.json()) as Record<string, unknown>;
+    const jsonBody = await parseJsonBody(req);
+    if (!jsonBody.ok) return jsonBody.response;
+    const body = jsonBody.body as Record<string, unknown>;
     const description =
       typeof body.description === "string" ? body.description : "";
     const generatorModel =

@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireMachineApiAuth } from "@/lib/internal-api-auth";
 import {
@@ -25,7 +26,9 @@ export function createAgentReviewPostHandler(
     const authResponse = requireMachineApiAuth(request, "/api/agent/review");
     if (authResponse) return authResponse;
 
-    const { jobRunId } = await request.json();
+    const jsonBody = await parseJsonBody(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const { jobRunId } = jsonBody.body;
     if (!jobRunId) {
       return NextResponse.json({ error: "Missing jobRunId" }, { status: 400 });
     }

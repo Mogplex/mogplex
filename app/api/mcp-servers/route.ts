@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { getUserId, requireUserId } from "@/lib/auth";
 import {
@@ -100,7 +101,9 @@ export function createMcpServersPostHandler(
     if (userId instanceof Response) return userId;
 
     try {
-      const body = normalizeMcpServerCreateInput(await request.json());
+      const jsonBody = await parseJsonBody(request);
+      if (!jsonBody.ok) return jsonBody.response;
+      const body = normalizeMcpServerCreateInput(jsonBody.body);
       const server = await deps.createUserMcpServer(userId, body);
       return NextResponse.json({ server }, { status: 201 });
     } catch (error) {

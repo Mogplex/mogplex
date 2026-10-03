@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -143,7 +144,9 @@ export function createSandboxExecPostHandler(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { command, args, cwd } = await request.json();
+    const jsonBody = await parseJsonBody(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const { command, args, cwd } = jsonBody.body;
     if (!command)
       return NextResponse.json({ error: "command required" }, { status: 400 });
 

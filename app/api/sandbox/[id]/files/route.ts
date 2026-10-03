@@ -1,3 +1,4 @@
+import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { resolveSandboxPath } from "@/lib/repo-settings";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
@@ -64,7 +65,9 @@ export function createSandboxFilePutHandler(deps = defaultPutDeps) {
     { params }: { params: Promise<{ id: string }> }
   ) {
     const { id } = await params;
-    const { path, content } = await request.json();
+    const jsonBody = await parseJsonBody(request);
+    if (!jsonBody.ok) return jsonBody.response;
+    const { path, content } = jsonBody.body;
     if (!path || content === undefined) {
       return NextResponse.json(
         { error: "path and content required" },
@@ -113,7 +116,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { path = "." } = await request.json();
+  const jsonBody = await parseJsonBody(request);
+  if (!jsonBody.ok) return jsonBody.response;
+  const { path = "." } = jsonBody.body;
 
   try {
     // Directory listing runs `ls` inside the sandbox via runCommand, which
