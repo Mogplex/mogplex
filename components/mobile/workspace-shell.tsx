@@ -93,6 +93,7 @@ export function MobileWorkspaceShell({
     return findPaneByType(root, type) ?? (tab === "files" ? findPaneByType(root, "editor") : null)
   }, [root])
   const handleTabChange = (tab: MobileTab) => {
+    if (tab === activeTab) return
     const pane = paneForTab(tab)
     if (pane) onSelect(pane.id)
   }

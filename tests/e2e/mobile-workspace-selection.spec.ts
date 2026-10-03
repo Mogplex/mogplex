@@ -26,7 +26,11 @@ const tree: TreeNode = {
   ],
 };
 
-async function installWorkspace(page: Page) {
+async function installWorkspace(
+  page: Page,
+  paneTree = tree,
+  selectedId = "files-two"
+) {
   await enableScopedE2EAuth(page);
   await mockActivationFlow(page);
   const sessions: Session[] = [
@@ -35,20 +39,29 @@ async function installWorkspace(page: Page) {
       index: 0,
       name: "First workspace",
       color: "green",
-      paneTree: tree,
-      activeId: "files-two",
+      paneTree,
+      activeId: selectedId,
     },
     {
       id: "workspace-two",
       index: 1,
       name: "Second workspace",
       color: "blue",
-      paneTree: tree,
+      paneTree,
       activeId: "chat-one",
     },
   ];
   await page.addInitScript(
     (state) => {
+      const originalSetItem = Storage.prototype.setItem;
+      function instrumentedSetItem(this: Storage, key: string, value: string) {
+        originalSetItem.call(this, key, value);
+        if (this === localStorage && key === "mogplex-sessions")
+          window.dispatchEvent(new Event("fixture-workspace-saved"));
+      }
+      Object.defineProperty(Storage.prototype, "setItem", {
+        value: instrumentedSetItem,
+      });
       if (!localStorage.getItem("mogplex-sessions"))
         localStorage.setItem(
           "mogplex-sessions",
@@ -56,6 +69,28 @@ async function installWorkspace(page: Page) {
         );
     },
     { sessions, activeSessionId: "workspace-one" }
+  );
+}
+
+async function waitForSavedSelection(page: Page, activeId: string) {
+  await page.evaluate(
+    (expectedId) =>
+      new Promise<void>((resolve) => {
+        const onSaved = () => {
+          const saved = JSON.parse(
+            localStorage.getItem("mogplex-sessions") ?? "null"
+          );
+          const workspace = saved?.state?.sessions?.find(
+            (session: { id: string }) => session.id === "workspace-one"
+          );
+          if (workspace?.activeId !== expectedId) return;
+          window.removeEventListener("fixture-workspace-saved", onSaved);
+          resolve();
+        };
+        window.addEventListener("fixture-workspace-saved", onSaved);
+        onSaved();
+      }),
+    activeId
   );
 }
 
@@ -75,6 +110,8 @@ test("mobile restores the exact selected pane and follows workspace selection", 
   await expect(
     page.getByRole("button", { name: "Files", exact: true })
   ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Files", exact: true }).click();
+  await expect(page.getByTestId("pane-files-two")).toBeVisible();
   await page.getByTestId("session-tab-1").click();
   await expect(page.getByTestId("pane-chat-one")).toBeVisible();
   await expect(
@@ -82,7 +119,7 @@ test("mobile restores the exact selected pane and follows workspace selection", 
   ).toHaveAttribute("aria-pressed", "true");
   await page.getByTestId("session-tab-0").click();
   await expect(page.getByTestId("pane-files-two")).toBeVisible();
-  await page.waitForLoadState("networkidle");
+  await waitForSavedSelection(page, "files-two");
   await page.reload();
   await expect(page.getByTestId("pane-files-two")).toBeVisible();
 });
@@ -95,7 +132,7 @@ test("mobile tab selection updates the shared selected pane", async ({
   await expect(page.getByTestId("pane-files-two")).toBeVisible();
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await expect(page.getByTestId("pane-chat-one")).toBeVisible();
-  await page.waitForLoadState("networkidle");
+  await waitForSavedSelection(page, "chat-one");
   await page.reload();
   await expect(page.getByTestId("pane-chat-one")).toBeVisible();
   await page.getByRole("button", { name: "Files", exact: true }).click();
@@ -106,4 +143,28 @@ test("mobile tab selection updates the shared selected pane", async ({
   await expect(
     page.getByRole("button", { name: "Terminal", exact: true })
   ).toBeDisabled();
+});
+
+test("Files represents the selected editor when there is no files pane", async ({
+  page,
+}) => {
+  const editorTree: TreeNode = {
+    id: "editor-root",
+    dir: "horizontal",
+    sizes: [50, 50],
+    children: [pane("chat-one", "agent"), pane("editor-one", "editor")],
+  };
+  await installWorkspace(page, editorTree, "editor-one");
+  await page.goto(scopedPath("projects/workspace"));
+  await expect(page.getByTestId("pane-editor-one")).toBeVisible();
+  const files = page.getByRole("button", { name: "Files", exact: true });
+  await expect(files).toBeEnabled();
+  await expect(files).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Chat", exact: true }).click();
+  await expect(page.getByTestId("pane-chat-one")).toBeVisible();
+  await files.click();
+  await expect(page.getByTestId("pane-editor-one")).toBeVisible();
+  await waitForSavedSelection(page, "editor-one");
+  await page.reload();
+  await expect(page.getByTestId("pane-editor-one")).toBeVisible();
 });
