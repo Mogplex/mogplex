@@ -46,6 +46,119 @@ const run: ObservabilityJobDetail = {
   review_findings: [],
 };
 
+test("scrolling past the inspector end does not move the page", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page);
+  const longRun: ObservabilityJobDetail = {
+    ...run,
+    review_findings: Array.from({ length: 10 }, (_, ordinal) => ({
+      id: `finding-${ordinal}`,
+      user_id: "user-1",
+      job_run_id: run.id,
+      repo_id: "repo-1",
+      repo_full_name: "acme/widgets",
+      pr_number: 1477,
+      head_sha: null,
+      ordinal,
+      fingerprint: `finding-${ordinal}`,
+      status: "open",
+      issue_number: null,
+      issue_url: null,
+      dismissed_at: null,
+      created_at: run.created_at,
+      updated_at: run.created_at,
+      severity: "suggestion",
+      title: `Review finding ${ordinal + 1}`,
+      body: "Keep the current behavior when updating the shared component. ".repeat(
+        8
+      ),
+      path: "components/example.tsx",
+      line: null,
+    })),
+  };
+  await page.route("**/api/observability/stats*", (route) =>
+    fulfillJson(route, buildObservabilitySummary([]))
+  );
+  await page.route("**/api/observability/jobs?*", (route) =>
+    fulfillJson(route, { jobs: [run], total: 1, page: 1, limit: 25 })
+  );
+  await page.route(`**/api/observability/jobs/${run.id}?*`, (route) =>
+    fulfillJson(route, { run: longRun })
+  );
+  await page.goto(scopedPath(`observability?view=runs&run_id=${run.id}`));
+  const inspector = page.getByRole("region", { name: "Run details" });
+  await expect(
+    inspector.getByRole("heading", { name: "Review PR #1477" })
+  ).toBeVisible();
+  const shell = page.locator(".app-shell-content");
+  const pageScroll = await shell.evaluate((element) => element.scrollTop);
+  const end = await inspector.evaluate(
+    (element) => element.scrollHeight - element.clientHeight
+  );
+  expect(end).toBeGreaterThan(0);
+  const bounds = await inspector.boundingBox();
+  if (!bounds) throw new Error("Inspector is not visible");
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 30);
+  const scrolled = inspector.evaluate(
+    (element) =>
+      new Promise<void>((resolve) =>
+        // eslint-disable-next-line github/prefer-observers -- One-shot native scroll synchronization in this browser test.
+        element.addEventListener("scroll", () => resolve(), { once: true })
+      )
+  );
+  await page.mouse.wheel(0, 10000);
+  await scrolled;
+  expect(
+    await inspector.evaluate(
+      (element) =>
+        element.scrollHeight - element.clientHeight - element.scrollTop
+    )
+  ).toBeLessThan(2);
+  await page.mouse.wheel(0, 500);
+  // Observe after the browser has painted the second native wheel gesture.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+  );
+  expect(await shell.evaluate((element) => element.scrollTop)).toBe(pageScroll);
+  await expect(inspector).toHaveCSS("overscroll-behavior-y", "contain");
+  await expect(shell).toHaveCSS("overscroll-behavior-y", "none");
+  await expect(page.locator("html")).toHaveCSS("overscroll-behavior-y", "none");
+  await expect(shell).toHaveCSS("overscroll-behavior-x", "auto");
+  await expect(page.locator("html")).toHaveCSS("overscroll-behavior-x", "auto");
+});
+
+test.describe("touch scrolling", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+  test("keeps native pull-to-refresh available", async ({ page }) => {
+    await enableScopedE2EAuth(page);
+    await mockActivationFlow(page);
+    await page.goto(scopedPath("agents/roster"));
+    await expect(page.getByTestId("dashboard-shell")).toBeVisible();
+    await expect(page.locator("html")).toHaveCSS(
+      "overscroll-behavior-y",
+      "auto"
+    );
+    await expect(page.locator("body")).toHaveCSS(
+      "overscroll-behavior-y",
+      "auto"
+    );
+    await expect(page.locator(".app-shell-content")).toHaveCSS(
+      "overscroll-behavior-y",
+      "auto"
+    );
+  });
+});
+
 for (const viewport of [
   { width: 1440, height: 1000 },
   { width: 834, height: 1112 },

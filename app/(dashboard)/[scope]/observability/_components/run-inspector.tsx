@@ -26,7 +26,7 @@ export function RunInspector({ id, source, busy, error: actionError, onAction, o
   const disconnectedMessage = run && ["success", "failed", "cancelled"].includes(run.status)
     ? "Updates disconnected. Showing the last saved result."
     : "Updates disconnected. Execution may still be running."
-  return <section aria-label="Run details" className="min-w-0 rounded-md border border-border bg-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
+  return <section aria-label="Run details" className="min-w-0 rounded-md border border-border bg-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto xl:overscroll-y-contain">
     <div className="flex items-center justify-between gap-3 border-b border-border p-4">
       <h2 ref={heading} tabIndex={-1} className="text-base font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Run details</h2>
       <Button variant="outline" size="sm" onClick={onClose}>Back to runs</Button>
@@ -52,7 +52,7 @@ export function RunInspector({ id, source, busy, error: actionError, onAction, o
       <Tabs defaultValue="summary" className="gap-0">
         <TabsList className="mx-5 flex h-auto flex-wrap justify-start"><TabsTrigger value="summary">Summary</TabsTrigger><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="usage">AI usage</TabsTrigger><TabsTrigger value="diagnostics">Diagnostics</TabsTrigger></TabsList>
         <TabsContent value="summary" className="space-y-4 p-5">
-          {report && <section className="space-y-2"><h4 className="text-sm font-medium">Agent report</h4><p className="text-xs text-muted-foreground">The agent’s account of its work, not independent verification.</p><p className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm leading-6">{report}</p></section>}
+          {report && <section className="space-y-2"><h4 className="text-sm font-medium">Agent report</h4><p className="text-xs text-muted-foreground">The agent’s account of its work, not independent verification.</p><p className="max-h-80 overflow-auto overscroll-y-contain whitespace-pre-wrap break-words text-sm leading-6">{report}</p></section>}
           {work.branch && <p className="text-sm">Branch <code className="break-all text-xs">{work.branch}</code></p>}
           <RunTimeline run={run} latestOnly />
           {run.review_findings.length > 0 && <section className="space-y-3"><h4 className="font-medium">Review findings ({run.review_findings.length})</h4>{run.review_findings.map((finding) => <div key={finding.id} className="space-y-1 border-t border-border pt-3"><p className="text-sm font-medium">{finding.title}</p><p className="text-sm leading-6">{finding.body}</p>{finding.path && <code className="break-all text-xs text-muted-foreground">{finding.path}{finding.line ? `:${finding.line}` : ""}</code>}</div>)}</section>}
