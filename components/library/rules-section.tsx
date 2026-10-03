@@ -1,6 +1,8 @@
 "use client"
 import { useState } from "react"
 import useSWR from "swr"
+import { mutateJson } from "@/lib/client-fetch"
+import { toast } from "@/hooks/use-toast"
 
 type FileItem = { id: string; name: string; content: string; type: string }
 
@@ -27,32 +29,44 @@ export function RulesSection({ compact }: Props) {
 
   const saveFile = async () => {
     if (!selected) return
-    await fetch("/api/rules", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: selected.id, table: "agent_rules", content }),
-    })
-    setSelected({ ...selected, content })
-    setEditing(false)
-    await mutate()
+    try {
+      await mutateJson("/api/rules", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selected.id, table: "agent_rules", content }),
+      })
+      setSelected({ ...selected, content })
+      setEditing(false)
+      await mutate()
+    } catch (error) {
+      toast({ title: "Cannot save rule", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
+    }
   }
 
   const createFile = async () => {
     if (!newName.trim()) return
-    await fetch("/api/rules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ table: "agent_rules", name: newName.trim(), content: `# ${newName.trim()}\n\n`, type: "rules" }),
-    })
-    setNewName("")
-    setShowNew(false)
-    await mutate()
+    try {
+      await mutateJson("/api/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table: "agent_rules", name: newName.trim(), content: `# ${newName.trim()}\n\n`, type: "rules" }),
+      })
+      setNewName("")
+      setShowNew(false)
+      await mutate()
+    } catch (error) {
+      toast({ title: "Cannot create rule", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
+    }
   }
 
   const deleteFile = async (id: string) => {
-    await fetch(`/api/rules?id=${id}&table=agent_rules`, { method: "DELETE" })
-    if (selected?.id === id) { setSelected(null); setContent("") }
-    await mutate()
+    try {
+      await mutateJson(`/api/rules?id=${id}&table=agent_rules`, { method: "DELETE" })
+      if (selected?.id === id) { setSelected(null); setContent("") }
+      await mutate()
+    } catch (error) {
+      toast({ title: "Cannot delete rule", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
+    }
   }
 
   if (compact) {

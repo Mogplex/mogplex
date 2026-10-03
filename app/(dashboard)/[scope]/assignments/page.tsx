@@ -1,5 +1,7 @@
 "use client"
 import { useState } from "react"
+import { mutateJson } from "@/lib/client-fetch"
+import { toast } from "@/hooks/use-toast"
 import { useAssignments } from "@/hooks/use-assignments"
 import { getActiveTeamRequestHeaders, useActiveTeamId } from "@/components/active-scope-provider"
 import { Badge } from "@/components/ui/badge"
@@ -17,19 +19,21 @@ export default function AssignmentsPage() {
   const [jobActionId, setJobActionId] = useState<string | null>(null)
 
   const deleteAssignment = async (id: string) => {
-    const res = await fetch(`/api/assignments?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: getActiveTeamRequestHeaders(undefined, teamId) })
-    if (res.ok) {
+    try {
+      await mutateJson(`/api/assignments?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: getActiveTeamRequestHeaders(undefined, teamId) })
       await mutate()
+    } catch (error) {
+      toast({ title: "Cannot delete assignment", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
     }
   }
 
   const runJobAction = async (jobRunId: string, action: "repair" | "requeue" | "cancel") => {
     setJobActionId(jobRunId)
     try {
-      const res = await fetch(`/api/observability/jobs/${jobRunId}/${action}`, { method: "POST" })
-      if (res.ok) {
-        await mutate()
-      }
+      await mutateJson(`/api/observability/jobs/${jobRunId}/${action}`, { method: "POST" })
+      await mutate()
+    } catch (error) {
+      toast({ title: "Cannot change run", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
     } finally {
       setJobActionId(null)
     }

@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { useRepos } from "@/hooks/use-repos";
 import { toast } from "@/hooks/use-toast";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
+import { mutateJson } from "@/lib/client-fetch";
 import type {
   AuthUserResponse,
   Installation,
@@ -64,14 +65,14 @@ export function TriggersPane() {
   const toggleEnabled = async (trigger: TriggerWithAgent) => {
     setTogglingId(trigger.id);
     try {
-      await fetch("/api/triggers", {
+      await mutateJson("/api/triggers", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: trigger.id, enabled: !trigger.enabled }),
       });
       await mutateTriggers();
-    } catch {
-      // SWR will refetch
+    } catch (error) {
+      toast({ title: "Cannot change trigger", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" });
     } finally {
       setTogglingId(null);
     }
@@ -80,14 +81,13 @@ export function TriggersPane() {
   const deleteTrigger = async (id: string) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/triggers?id=${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete");
+      await mutateJson(`/api/triggers?id=${id}`, { method: "DELETE" });
       await mutateTriggers();
       toast({ title: "Trigger deleted" });
-    } catch {
+    } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to delete trigger",
+        title: "Cannot delete trigger",
+        description: error instanceof Error ? error.message : "Action failed",
         variant: "destructive",
       });
     } finally {

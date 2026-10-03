@@ -4,6 +4,7 @@ import useSWR from "swr"
 import type { Assignment } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh"
+import { mutateJson } from "@/lib/client-fetch"
 
 const fetcher = async (url: string) => {
   const r = await fetch(url)
@@ -67,12 +68,11 @@ export function CronPane() {
   const deleteAssignment = async (id: string) => {
     setDeletingId(id)
     try {
-      const res = await fetch(`/api/assignments?id=${id}`, { method: "DELETE" })
-      if (!res.ok) throw new Error("Failed to delete")
+      await mutateJson(`/api/assignments?id=${id}`, { method: "DELETE" })
       await mutate()
       toast({ title: "Cron deleted" })
-    } catch {
-      toast({ title: "Error", description: "Failed to delete cron", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Cannot delete cron", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
     } finally {
       setDeletingId(null)
     }
@@ -81,14 +81,14 @@ export function CronPane() {
   const toggleEnabled = async (assignment: Assignment) => {
     setTogglingId(assignment.id)
     try {
-      await fetch("/api/assignments", {
+      await mutateJson("/api/assignments", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: assignment.id, enabled: !assignment.enabled }),
       })
       await mutate()
-    } catch {
-      // SWR will refetch
+    } catch (error) {
+      toast({ title: "Cannot change cron", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
     } finally {
       setTogglingId(null)
     }

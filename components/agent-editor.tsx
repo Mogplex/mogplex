@@ -6,6 +6,8 @@ import { useModels } from "@/hooks/use-models"
 import { scopedHref } from "@/lib/scoped-href"
 import { buildAgentModelOptions, buildSelectableAgentModelCatalog } from "@/lib/agents/model-options"
 import { PRECONFIGURED_AGENTS } from "@/lib/agents/templates"
+import { mutateJson } from "@/lib/client-fetch"
+import { toast } from "@/hooks/use-toast"
 
 type Props = { agent: Agent | null; template?: string; onClose: () => void; onSave: () => void }
 
@@ -33,30 +35,38 @@ export function AgentEditor({ agent, template, onClose, onSave }: Props) {
   const save = async () => {
     setSaving(true)
     const payload = { name, model, system_prompt: prompt }
-
-    if (agent) {
-      await fetch("/api/agents", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: agent.id, ...payload }),
-      })
-    } else {
-      await fetch("/api/agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
+    try {
+      if (agent) {
+        await mutateJson("/api/agents", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: agent.id, ...payload }),
+        })
+      } else {
+        await mutateJson("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      }
+      onSave()
+      onClose()
+    } catch (error) {
+      toast({ title: "Cannot save agent", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    onSave()
-    onClose()
   }
 
   const deleteAgent = async () => {
     if (!agent) return
-    await fetch(`/api/agents?id=${agent.id}`, { method: "DELETE" })
-    onSave()
-    onClose()
+    try {
+      await mutateJson(`/api/agents?id=${agent.id}`, { method: "DELETE" })
+      onSave()
+      onClose()
+    } catch (error) {
+      toast({ title: "Cannot delete agent", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
+    }
   }
 
   return (

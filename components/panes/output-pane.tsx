@@ -10,6 +10,8 @@ import {
 import type { AgentRosterItem } from "@/app/api/agents/roster/route"
 import type { ObservabilityJob, AutomationDispatchEvent } from "@/lib/types"
 import useSWR from "swr"
+import { mutateJson } from "@/lib/client-fetch"
+import { toast } from "@/hooks/use-toast"
 import {
   formatTokens,
   formatDispatchReason,
@@ -155,7 +157,9 @@ function ActivityTab({ agentId }: { agentId: string }) {
   const runAction = useCallback(async (jobId: string, action: "repair" | "requeue" | "cancel") => {
     setActionId(jobId)
     try {
-      await fetch(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
+      await mutateJson(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
+    } catch (error) {
+      toast({ title: "Cannot change run", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
     } finally {
       setActionId(null)
     }
