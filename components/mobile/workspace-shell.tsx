@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useCallback, useMemo } from "react"
+import { collectPanes, isPane } from "@/hooks/split-panes-types"
+import { findTreeNode } from "@/hooks/split-panes-tree-ops"
 import type {
   PaneNode,
   PaneType,
@@ -24,20 +26,11 @@ const TABS: { id: MobileTab; label: string; icon: string; paneType: PaneType }[]
 ]
 
 function findPaneByType(node: TreeNode, type: PaneType): PaneNode | null {
-  if ("type" in node) {
+  if (isPane(node)) {
     return node.type === type ? node : null
   }
   for (const child of node.children) {
     const found = findPaneByType(child, type)
-    if (found) return found
-  }
-  return null
-}
-
-function findFirstPane(node: TreeNode): PaneNode | null {
-  if ("type" in node) return node
-  for (const child of node.children) {
-    const found = findFirstPane(child)
     if (found) return found
   }
   return null
@@ -74,7 +67,7 @@ interface Props {
 
 export function MobileWorkspaceShell({
   root,
-  activeId: _activeId,
+  activeId,
   onSelect,
   onSplit,
   onClose,
@@ -90,20 +83,19 @@ export function MobileWorkspaceShell({
   onClearFilePath,
   onPopOutIDE,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<MobileTab>("agent")
-
-  const currentPaneType = TABS.find((t) => t.id === activeTab)?.paneType ?? "agent"
-
-  // Find the pane matching the active tab, or fall back to first pane
   const currentPane = useMemo(() => {
-    return findPaneByType(root, currentPaneType) ?? findFirstPane(root)
-  }, [root, currentPaneType])
-
-  const handleTabChange = useCallback((tab: MobileTab) => {
-    setActiveTab(tab)
-    const pane = findPaneByType(root, TABS.find((t) => t.id === tab)?.paneType ?? "agent")
+    const selected = findTreeNode(root, activeId)
+    return selected && isPane(selected) ? selected : collectPanes(root)[0] ?? null
+  }, [root, activeId])
+  const activeTab = currentPane?.type === "editor" ? "files" : TABS.find(tab => tab.paneType === currentPane?.type)?.id
+  const paneForTab = useCallback((tab: MobileTab) => {
+    const type = TABS.find(item => item.id === tab)?.paneType ?? "agent"
+    return findPaneByType(root, type) ?? (tab === "files" ? findPaneByType(root, "editor") : null)
+  }, [root])
+  const handleTabChange = (tab: MobileTab) => {
+    const pane = paneForTab(tab)
     if (pane) onSelect(pane.id)
-  }, [root, onSelect])
+  }
 
   if (!currentPane) return null
 
@@ -141,15 +133,18 @@ export function MobileWorkspaceShell({
         {TABS.map((tab) => (
           <button
             key={tab.id}
+            type="button"
+            aria-pressed={activeTab === tab.id}
+            disabled={!paneForTab(tab.id)}
             onClick={() => handleTabChange(tab.id)}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] transition-colors",
+              "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] transition-colors disabled:opacity-40",
               activeTab === tab.id
                 ? "text-foreground"
                 : "text-muted-foreground",
             )}
           >
-            <span className="text-base">{tab.icon}</span>
+            <span className="text-base" aria-hidden="true">{tab.icon}</span>
             <span>{tab.label}</span>
           </button>
         ))}
