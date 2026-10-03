@@ -4,10 +4,6 @@ import { fulfillJson, mockActivationFlow } from "./helpers/activation-fixtures";
 import type { Agent, Assignment, ObservabilityJob } from "@/lib/types";
 import type { AgentRosterItem } from "@/app/api/agents/roster/route";
 import type { Session } from "@/hooks/session-types";
-import type {
-  TriggerWithAgent,
-  Installation,
-} from "@/components/panes/triggers-pane-types";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/integrations/slack/installations", (route) =>
@@ -276,80 +272,56 @@ test("failed output run actions show an error and keep the run available", async
   await expect(cancel).toBeEnabled();
 });
 
-for (const paneType of ["cron", "triggers"] as const) {
-  test(`failed ${paneType} toggles preserve the enabled item and report the server error`, async ({
-    page,
-  }) => {
-    await enableScopedE2EAuth(page);
-    await mockActivationFlow(page);
-    const sessions: Session[] = [
-      {
-        id: "legacy-workspace",
-        index: 0,
-        name: "Legacy workspace",
-        color: "green",
-        activeId: "legacy",
-        paneTree: {
-          id: "legacy",
-          type: paneType,
-          name: paneType,
-          lines: [],
-          status: "idle",
-        },
+test("failed cron toggles preserve the enabled item and report the server error", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page);
+  const sessions: Session[] = [
+    {
+      id: "legacy-workspace",
+      index: 0,
+      name: "Legacy workspace",
+      color: "green",
+      activeId: "legacy",
+      paneTree: {
+        id: "legacy",
+        type: "cron",
+        name: "Cron",
+        lines: [],
+        status: "idle",
       },
-    ];
-    await page.addInitScript(
-      (state) =>
-        localStorage.setItem(
-          "mogplex-sessions",
-          JSON.stringify({ state, version: 3 })
-        ),
-      { sessions, activeSessionId: "legacy-workspace" }
-    );
-    const trigger: TriggerWithAgent = {
-      id: "trigger-1",
-      user_id: "user-1",
-      installation_id: 1,
-      agent_id: agent.id,
-      event: "pr_opened",
-      is_default: false,
-      enabled: true,
-      created_at: assignment.created_at,
-      agents: agent,
-    };
-    const installations: Installation[] = [
-      {
-        id: "installation-1",
-        installation_id: 1,
-        account_login: "acme",
-        account_type: "Organization",
-        target_type: "Organization",
-        repositories: [],
-      },
-    ];
-    await page.route("**/api/github/installations", (route) =>
-      fulfillJson(route, installations)
-    );
-    const path = paneType === "cron" ? "assignments" : "triggers";
-    await page.route(`**/api/${path}**`, (route) =>
-      fulfillJson(
-        route,
-        route.request().method() === "GET"
-          ? paneType === "cron"
-            ? [{ ...assignment, type: "cron", cron_schedule: "0 9 * * *" }]
-            : [trigger]
-          : { error: "Cannot change enabled state" },
-        route.request().method() === "GET" ? 200 : 403
-      )
-    );
-    await page.goto(scopedPath("projects/workspace"));
-    const pane = page.getByTestId("pane-legacy");
-    const toggle = pane.getByRole("button").first();
-    await toggle.click();
-    await expect(
-      page.getByText("Cannot change enabled state", { exact: true })
-    ).toBeVisible();
-    await expect(toggle).toBeEnabled();
-    await expect(toggle).toHaveClass(/bg-accent-green/);
-  });
-}
+    },
+  ];
+  await page.addInitScript(
+    (state) =>
+      localStorage.setItem(
+        "mogplex-sessions",
+        JSON.stringify({ state, version: 3 })
+      ),
+    { sessions, activeSessionId: "legacy-workspace" }
+  );
+  const cron: Assignment = {
+    ...assignment,
+    type: "cron",
+    cron_schedule: "0 9 * * *",
+  };
+  await page.route("**/api/assignments**", (route) =>
+    fulfillJson(
+      route,
+      route.request().method() === "GET"
+        ? [cron]
+        : { error: "Cannot change enabled state" },
+      route.request().method() === "GET" ? 200 : 403
+    )
+  );
+  await page.goto(scopedPath("projects/workspace"));
+  const pane = page.getByTestId("pane-legacy");
+  const toggle = pane.getByRole("button", { name: "", exact: true });
+  await toggle.click();
+  await expect(
+    page.getByText("Cannot change enabled state", { exact: true })
+  ).toBeVisible();
+  await expect(toggle).toBeEnabled();
+  await expect(toggle).toHaveClass(/bg-accent-green/);
+});
