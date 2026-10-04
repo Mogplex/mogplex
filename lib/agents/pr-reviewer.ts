@@ -105,18 +105,28 @@ export function buildPRReviewTools(config: {
     return input;
   }, reportObjectSchema);
 
-  // Once a report has claimed issues, only an accepted report that lists
-  // findings can authorize a merge: none accepted means every claim was
-  // rejected, and one that clears the review has dropped them.
-  const droppedFindingsRefusal = () =>
-    claimedIssues &&
-    (acceptedReport === null || clearsReviewWithoutFindings(acceptedReport))
-      ? {
-          success: false as const,
-          error:
-            "Not merged: this review said it found issues but its report lists none. Report each issue as a finding.",
-        }
-      : null;
+  // The accepted hasIssues verdict is authoritative, as in the post-run gate.
+  // Preserve the refusal for reports that claimed issues and omitted findings.
+  const mergeRefusal = () => {
+    if (
+      claimedIssues &&
+      (acceptedReport === null || clearsReviewWithoutFindings(acceptedReport))
+    ) {
+      return {
+        success: false as const,
+        error:
+          "Not merged: this review said it found issues but its report lists none. Report each issue as a finding.",
+      };
+    }
+    if (acceptedReport?.hasIssues !== false) {
+      return {
+        success: false as const,
+        error:
+          "Not merged: submit an accepted review report with no unresolved issues before merging.",
+      };
+    }
+    return null;
+  };
 
   const tools = {
     getPullRequest: tool({
@@ -245,7 +255,7 @@ export function buildPRReviewTools(config: {
     }),
     reportReview: tool({
       description:
-        "Record the structured review result for workflow orchestration. Call exactly once after analysis.",
+        "Record the structured review result after analysis and before merging. If a report is rejected or needs correction, submit the corrected report before merging.",
       inputSchema: reportReviewInputSchema,
       execute: async (input) => {
         acceptedReport = input;
@@ -264,7 +274,7 @@ export function buildPRReviewTools(config: {
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
-              droppedFindingsRefusal() ??
+              mergeRefusal() ??
               mergePullRequestIfSafe({
                 githubToken: config.githubToken,
                 owner: config.owner,
@@ -276,12 +286,12 @@ export function buildPRReviewTools(config: {
           }),
           queuePullRequestForMerge: tool({
             description:
-              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Prefer this over mergePullRequest when checks are still running.",
+              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Only call this after an accepted report with hasIssues=false. Prefer this over mergePullRequest when checks are still running.",
             inputSchema: z.object({
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
-              droppedFindingsRefusal() ??
+              mergeRefusal() ??
               queuePullRequestAutoMerge({
                 githubToken: config.githubToken,
                 owner: config.owner,

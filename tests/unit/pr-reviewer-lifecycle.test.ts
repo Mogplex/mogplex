@@ -68,6 +68,20 @@ function buildLifecycleTools(buildPRReviewTools: BuildPRReviewTools) {
   });
 }
 
+async function reportCleanReview(tools: unknown) {
+  const report = (
+    tools as {
+      reportReview: {
+        execute: (input: {
+          hasIssues: boolean;
+          summary: string;
+        }) => Promise<unknown>;
+      };
+    }
+  ).reportReview;
+  await report.execute({ hasIssues: false, summary: "No material issues." });
+}
+
 test("buildPRReviewTools omits PR lifecycle tools by default", async () => {
   const { buildPRReviewTools } = await loadPrReviewer();
   const tools = buildPRReviewTools({
@@ -111,6 +125,7 @@ test("mergePullRequest squash-merges a clean PR", async () => {
 
   try {
     const tools = buildLifecycleTools(buildPRReviewTools);
+    await reportCleanReview(tools);
     const outcome = await getLifecycleExecutor(
       tools,
       "mergePullRequest"
@@ -153,6 +168,7 @@ test("mergePullRequest arms auto-merge when checks are still pending", async () 
 
   try {
     const tools = buildLifecycleTools(buildPRReviewTools);
+    await reportCleanReview(tools);
     const outcome = await getLifecycleExecutor(
       tools,
       "mergePullRequest"
@@ -198,6 +214,7 @@ test("queuePullRequestForMerge enables auto-merge without merging directly", asy
 
   try {
     const tools = buildLifecycleTools(buildPRReviewTools);
+    await reportCleanReview(tools);
     const outcome = await getLifecycleExecutor(
       tools,
       "queuePullRequestForMerge"
@@ -223,6 +240,7 @@ test("queuePullRequestForMerge refuses when the PR is not open", async () => {
 
   try {
     const tools = buildLifecycleTools(buildPRReviewTools);
+    await reportCleanReview(tools);
     const outcome = await getLifecycleExecutor(
       tools,
       "queuePullRequestForMerge"
