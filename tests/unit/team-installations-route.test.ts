@@ -190,6 +190,10 @@ for (const body of [
   { installation_id: 0 },
   { installation_id: -1 },
   { installation_id: 1.5 },
+  { installation_id: Number.MAX_SAFE_INTEGER + 1 },
+  { installation_id: 1e21 },
+  { installation_id: "9007199254740993" },
+  { installation_id: "1000000000000000000000" },
 ]) {
   test(`installation POST rejects invalid body ${JSON.stringify(body)} with flattened errors`, async () => {
     const f = fixture();

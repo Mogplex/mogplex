@@ -7,5 +7,5 @@ export const teamInstallationParamsSchema = z.object({
 export const attachInstallationSchema = z.object({
   installation_id: z
     .union([z.number(), z.string().regex(/^\d+$/).transform(Number)])
-    .pipe(z.number().int().positive()),
+    .pipe(z.number().int().positive().safe()),
 });
