@@ -6,150 +6,185 @@ import {
   deleteTeamProviderKey,
   listTeamProviderKeys,
   storeTeamProviderKey,
-  type Provider,
 } from "@/lib/vault";
 
-const VALID_PROVIDERS = new Set<Provider>([
-  "ai_gateway",
-  "anthropic",
-  "openai",
-  "openrouter",
-]);
+import {
+  teamKeyParamsSchema,
+  storeTeamKeySchema,
+  deleteTeamKeySchema,
+} from "./schema";
 
-function isValidProvider(provider: string): provider is Provider {
-  return VALID_PROVIDERS.has(provider as Provider);
-}
+const defaultDeps = {
+  requireProfileId,
+  loadTeamMembershipAuth,
+  recordTeamAuditEvent,
+};
 
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ teamId: string }> }
+export function createTeamProviderKeyHandlers(
+  overrides: Partial<typeof defaultDeps> = {}
 ) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
+  const deps = { ...defaultDeps, ...overrides };
+  async function GET(
+    _request: Request,
+    context: { params: Promise<{ teamId: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
 
-  const { teamId } = await context.params;
-  const auth = await loadTeamMembershipAuth(teamId, profileId);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const parsedParams = teamKeyParamsSchema.safeParse(await context.params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: "Invalid team ID.", details: parsedParams.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const { teamId } = parsedParams.data;
+    const auth = await deps.loadTeamMembershipAuth(teamId, profileId);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    try {
+      const keys = await listTeamProviderKeys(teamId);
+      return NextResponse.json({
+        keys,
+        viewer: { role: auth.role, canManage: auth.canManage },
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error ? error.message : "Failed to load team keys",
+        },
+        { status: 500 }
+      );
+    }
   }
 
-  try {
-    const keys = await listTeamProviderKeys(teamId);
-    return NextResponse.json({
-      keys,
-      viewer: { role: auth.role, canManage: auth.canManage },
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to load team keys",
-      },
-      { status: 500 }
-    );
+  async function PUT(
+    request: Request,
+    context: { params: Promise<{ teamId: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
+
+    const parsedParams = teamKeyParamsSchema.safeParse(await context.params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: "Invalid team ID.", details: parsedParams.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const { teamId } = parsedParams.data;
+    const auth = await deps.loadTeamMembershipAuth(teamId, profileId);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    if (!auth.canManage) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const parsed = storeTeamKeySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid provider key.", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const { provider, key } = parsed.data;
+
+    try {
+      await storeTeamProviderKey(teamId, provider, key);
+      await deps.recordTeamAuditEvent({
+        productTeamId: teamId,
+        actorUserId: profileId,
+        action: "team_provider_key.updated",
+        targetType: "provider_key",
+        targetId: provider,
+        payload: { provider },
+      });
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error ? error.message : "Failed to store team key",
+        },
+        { status: 500 }
+      );
+    }
   }
+
+  async function DELETE(
+    request: Request,
+    context: { params: Promise<{ teamId: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
+
+    const parsedParams = teamKeyParamsSchema.safeParse(await context.params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: "Invalid team ID.", details: parsedParams.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const { teamId } = parsedParams.data;
+    const auth = await deps.loadTeamMembershipAuth(teamId, profileId);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    if (!auth.canManage) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const parsed = deleteTeamKeySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid provider key.", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const { provider } = parsed.data;
+
+    try {
+      await deleteTeamProviderKey(teamId, provider);
+      await deps.recordTeamAuditEvent({
+        productTeamId: teamId,
+        actorUserId: profileId,
+        action: "team_provider_key.deleted",
+        targetType: "provider_key",
+        targetId: provider,
+        payload: { provider },
+      });
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete team key",
+        },
+        { status: 500 }
+      );
+    }
+  }
+  return { GET, PUT, DELETE };
 }
 
-export async function PUT(
-  request: Request,
-  context: { params: Promise<{ teamId: string }> }
-) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
-
-  const { teamId } = await context.params;
-  const auth = await loadTeamMembershipAuth(teamId, profileId);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
-  if (!auth.canManage) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  let body: { provider?: unknown; key?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const provider = typeof body.provider === "string" ? body.provider : "";
-  const key = typeof body.key === "string" ? body.key.trim() : "";
-  if (!isValidProvider(provider)) {
-    return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
-  }
-  if (!key) {
-    return NextResponse.json({ error: "Key is required" }, { status: 400 });
-  }
-
-  try {
-    await storeTeamProviderKey(teamId, provider, key);
-    await recordTeamAuditEvent({
-      productTeamId: teamId,
-      actorUserId: profileId,
-      action: "team_provider_key.updated",
-      targetType: "provider_key",
-      targetId: provider,
-      payload: { provider },
-    });
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to store team key",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  context: { params: Promise<{ teamId: string }> }
-) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
-
-  const { teamId } = await context.params;
-  const auth = await loadTeamMembershipAuth(teamId, profileId);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
-  if (!auth.canManage) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  let body: { provider?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const provider = typeof body.provider === "string" ? body.provider : "";
-  if (!isValidProvider(provider)) {
-    return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
-  }
-
-  try {
-    await deleteTeamProviderKey(teamId, provider);
-    await recordTeamAuditEvent({
-      productTeamId: teamId,
-      actorUserId: profileId,
-      action: "team_provider_key.deleted",
-      targetType: "provider_key",
-      targetId: provider,
-      payload: { provider },
-    });
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to delete team key",
-      },
-      { status: 500 }
-    );
-  }
-}
+export const { GET, PUT, DELETE } = createTeamProviderKeyHandlers();
