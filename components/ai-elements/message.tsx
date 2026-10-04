@@ -335,15 +335,15 @@ export const MessageResponse = memo(
     const code = useCodeHighlighting(props.children);
     const plugins = useMemo(() => ({ ...streamdownPlugins, code }), [code]);
     return (
-    <Streamdown
-      className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className
-      )}
-      plugins={plugins}
-      linkSafety={markdownLinkSafety}
-      {...props}
-    />
+      <Streamdown
+        className={cn(
+          "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+          className
+        )}
+        plugins={plugins}
+        linkSafety={markdownLinkSafety}
+        {...props}
+      />
     );
   },
   (prevProps, nextProps) =>

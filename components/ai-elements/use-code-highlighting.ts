@@ -6,11 +6,13 @@ import type { CodeHighlighterPlugin } from "streamdown";
 /** Keep the grammar bundle out of ordinary text messages and initial JS. */
 export function useCodeHighlighting(content: string | undefined) {
   const [code, setCode] = useState<CodeHighlighterPlugin>();
-  // Include fences nested inside lists and blockquotes, not just column zero.
-  const hasCodeFence = /`{3,}|~{3,}/.test(content ?? "");
+  // Include nested fences and Markdown's space/tab-indented code blocks.
+  const hasCodeBlock = /`{3,}|~{3,}|^(?: *> ?)*(?: {4,}|\t)\S/m.test(
+    content ?? ""
+  );
 
   useEffect(() => {
-    if (!hasCodeFence) return;
+    if (!hasCodeBlock) return;
     let active = true;
     void import("@streamdown/code")
       .then((module) => {
@@ -22,7 +24,7 @@ export function useCodeHighlighting(content: string | undefined) {
     return () => {
       active = false;
     };
-  }, [hasCodeFence]);
+  }, [hasCodeBlock]);
 
   return code;
 }

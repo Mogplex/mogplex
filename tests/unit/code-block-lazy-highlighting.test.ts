@@ -87,3 +87,23 @@ test("Markdown highlighting activates for code fences and supports real language
     restore();
   }
 });
+
+test("Markdown highlighting also activates for indented code blocks", async () => {
+  const restore = installControlHookDom();
+  const [{ renderHook, act }, { useCodeHighlighting }] = await Promise.all([
+    import("@testing-library/react"),
+    import("../../components/ai-elements/use-code-highlighting"),
+  ]);
+  const view = renderHook(() =>
+    useCodeHighlighting("Example:\n\n    const indented = true;")
+  );
+  try {
+    await act(async () => {
+      await import("@streamdown/code");
+    });
+    assert.equal(view.result.current?.supportsLanguage("javascript"), true);
+  } finally {
+    view.unmount();
+    restore();
+  }
+});

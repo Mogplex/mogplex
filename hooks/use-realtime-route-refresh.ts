@@ -99,7 +99,7 @@ export function useRealtimeRouteRefresh({
 
   // Supabase path: existing postgres_changes subscription
   useEffect(() => {
-    // Skip when Neon backend is enabled or when disabled
+    // Keep the build-time backend guard next to the legacy dynamic import.
     if (
       process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon" ||
       !enabled ||
