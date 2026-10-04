@@ -6,158 +6,196 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { canInviteRole, loadTeamMembershipAuth } from "@/lib/team-management";
 import { recordTeamAuditEvent } from "@/lib/team-audit";
 import type { InviteRole } from "@/app/api/teams/[teamId]/invites/route";
+import { inviteActionParamsSchema } from "./schema";
 
-async function loadInvite(teamId: string, inviteId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("team_invites")
-    .select("id, team_id, email, role, accepted_at")
-    .eq("team_id", teamId)
-    .eq("id", inviteId)
-    .maybeSingle();
+const defaultDeps = {
+  requireProfileId,
+  db: supabaseAdmin,
+  loadTeamMembershipAuth,
+  generateInviteToken,
+  sendTeamInvite,
+  recordTeamAuditEvent,
+};
 
-  if (error || !data) return null;
-  return data as {
-    id: string;
-    team_id: string;
-    email: string;
-    role: InviteRole;
-    accepted_at: string | null;
-  };
-}
-
-export async function DELETE(
-  _request: Request,
-  context: { params: Promise<{ teamId: string; inviteId: string }> }
+export function createTeamInviteActionHandlers(
+  overrides: Partial<typeof defaultDeps> = {}
 ) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
+  const deps = { ...defaultDeps, ...overrides };
+  async function loadInvite(teamId: string, inviteId: string) {
+    const { data, error } = await deps.db
+      .from("team_invites")
+      .select("id, team_id, email, role, accepted_at")
+      .eq("team_id", teamId)
+      .eq("id", inviteId)
+      .maybeSingle();
 
-  const { teamId, inviteId } = await context.params;
-  const auth = await loadTeamMembershipAuth(teamId, profileId);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
-  const invite = await loadInvite(teamId, inviteId);
-  if (!invite || invite.accepted_at) {
-    return NextResponse.json({ error: "Invite not found" }, { status: 404 });
-  }
-  if (!canInviteRole(auth.role, invite.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const { error } = await supabaseAdmin
-    .from("team_invites")
-    .delete()
-    .eq("team_id", teamId)
-    .eq("id", inviteId);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error || !data) return null;
+    return data as {
+      id: string;
+      team_id: string;
+      email: string;
+      role: InviteRole;
+      accepted_at: string | null;
+    };
   }
 
-  await recordTeamAuditEvent({
-    productTeamId: teamId,
-    actorUserId: profileId,
-    action: "invite.revoked",
-    targetType: "invite",
-    targetId: inviteId,
-    payload: { email: invite.email, role: invite.role },
-  });
+  async function DELETE(
+    _request: Request,
+    context: { params: Promise<{ teamId: string; inviteId: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
 
-  return NextResponse.json({ ok: true });
-}
+    const parsed = inviteActionParamsSchema.safeParse(await context.params);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Invalid team or invite ID.",
+          details: parsed.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+    const { teamId, inviteId } = parsed.data;
+    const auth = await deps.loadTeamMembershipAuth(teamId, profileId);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    const invite = await loadInvite(teamId, inviteId);
+    if (!invite || invite.accepted_at) {
+      return NextResponse.json({ error: "Invite not found" }, { status: 404 });
+    }
+    if (!canInviteRole(auth.role, invite.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-export async function POST(
-  _request: Request,
-  context: { params: Promise<{ teamId: string; inviteId: string }> }
-) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
+    const { error } = await deps.db
+      .from("team_invites")
+      .delete()
+      .eq("team_id", teamId)
+      .eq("id", inviteId);
 
-  const { teamId, inviteId } = await context.params;
-  const auth = await loadTeamMembershipAuth(teamId, profileId);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    await deps.recordTeamAuditEvent({
+      productTeamId: teamId,
+      actorUserId: profileId,
+      action: "invite.revoked",
+      targetType: "invite",
+      targetId: inviteId,
+      payload: { email: invite.email, role: invite.role },
+    });
+
+    return NextResponse.json({ ok: true });
   }
 
-  const invite = await loadInvite(teamId, inviteId);
-  if (!invite || invite.accepted_at) {
-    return NextResponse.json({ error: "Invite not found" }, { status: 404 });
-  }
-  if (!canInviteRole(auth.role, invite.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  async function POST(
+    _request: Request,
+    context: { params: Promise<{ teamId: string; inviteId: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
 
-  const [teamResult, inviterResult] = await Promise.all([
-    supabaseAdmin.from("teams").select("name").eq("id", teamId).single(),
-    supabaseAdmin
-      .from("profiles")
-      .select("name, username")
-      .eq("id", profileId)
-      .single(),
-  ]);
+    const parsed = inviteActionParamsSchema.safeParse(await context.params);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Invalid team or invite ID.",
+          details: parsed.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+    const { teamId, inviteId } = parsed.data;
+    const auth = await deps.loadTeamMembershipAuth(teamId, profileId);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
 
-  if (teamResult.error || !teamResult.data) {
-    return NextResponse.json({ error: "Team not found" }, { status: 404 });
-  }
+    const invite = await loadInvite(teamId, inviteId);
+    if (!invite || invite.accepted_at) {
+      return NextResponse.json({ error: "Invite not found" }, { status: 404 });
+    }
+    if (!canInviteRole(auth.role, invite.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-  const token = generateInviteToken();
-  const expiresAt = new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000
-  ).toISOString();
-  const { data: updated, error } = await supabaseAdmin
-    .from("team_invites")
-    .update({
-      token,
-      expires_at: expiresAt,
-      invited_by_user_id: profileId,
-    })
-    .eq("team_id", teamId)
-    .eq("id", inviteId)
-    .select("id, email, role, expires_at")
-    .single();
+    const [teamResult, inviterResult] = await Promise.all([
+      deps.db.from("teams").select("name").eq("id", teamId).single(),
+      deps.db
+        .from("profiles")
+        .select("name, username")
+        .eq("id", profileId)
+        .single(),
+    ]);
 
-  if (error || !updated) {
-    return NextResponse.json(
-      { error: error?.message || "Failed to resend invite" },
-      { status: 500 }
-    );
-  }
+    if (teamResult.error || !teamResult.data) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
 
-  const inviterName =
-    (inviterResult.data?.name as string | null) ||
-    (inviterResult.data?.username as string | null) ||
-    null;
+    const token = deps.generateInviteToken();
+    const expiresAt = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const { data: updated, error } = await deps.db
+      .from("team_invites")
+      .update({
+        token,
+        expires_at: expiresAt,
+        invited_by_user_id: profileId,
+      })
+      .eq("team_id", teamId)
+      .eq("id", inviteId)
+      .select("id, email, role, expires_at")
+      .single();
 
-  const sendResult = await sendTeamInvite({
-    email: invite.email,
-    teamName: teamResult.data.name as string,
-    inviterName,
-    role: invite.role,
-    token,
-  });
+    if (error || !updated) {
+      return NextResponse.json(
+        { error: error?.message || "Failed to resend invite" },
+        { status: 500 }
+      );
+    }
 
-  await recordTeamAuditEvent({
-    productTeamId: teamId,
-    actorUserId: profileId,
-    action: "invite.resent",
-    targetType: "invite",
-    targetId: inviteId,
-    payload: {
+    const inviterName =
+      (inviterResult.data?.name as string | null) ||
+      (inviterResult.data?.username as string | null) ||
+      null;
+
+    const sendResult = await deps.sendTeamInvite({
       email: invite.email,
+      teamName: teamResult.data.name as string,
+      inviterName,
       role: invite.role,
-      delivery: sendResult.ok ? sendResult.channel : "resend_error",
-      expires_at: updated.expires_at as string,
-    },
-  });
+      token,
+    });
 
-  return NextResponse.json({
-    invite: {
-      id: updated.id as string,
-      email: updated.email as string,
-      role: updated.role as InviteRole,
-      expiresAt: updated.expires_at as string,
-    },
-    delivery: sendResult.ok ? sendResult.channel : "resend_error",
-  });
+    await deps.recordTeamAuditEvent({
+      productTeamId: teamId,
+      actorUserId: profileId,
+      action: "invite.resent",
+      targetType: "invite",
+      targetId: inviteId,
+      payload: {
+        email: invite.email,
+        role: invite.role,
+        delivery: sendResult.ok ? sendResult.channel : "resend_error",
+        expires_at: updated.expires_at as string,
+      },
+    });
+
+    return NextResponse.json({
+      invite: {
+        id: updated.id as string,
+        email: updated.email as string,
+        role: updated.role as InviteRole,
+        expiresAt: updated.expires_at as string,
+      },
+      delivery: sendResult.ok ? sendResult.channel : "resend_error",
+    });
+  }
+  return { POST, DELETE };
 }
+
+export const { POST, DELETE } = createTeamInviteActionHandlers();
