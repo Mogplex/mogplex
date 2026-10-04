@@ -7,13 +7,12 @@ import { canInviteRole, loadTeamMembershipAuth } from "@/lib/team-management";
 import { recordTeamAuditEvent } from "@/lib/team-audit";
 import {
   BULK_INVITE_SEND_CONCURRENCY,
-  MAX_BULK_INVITE_EMAILS,
   chunkEmails,
   prepareBulkInviteEmails,
   summarizeBulkInviteResults,
   type BulkInviteResult,
-  type BulkInviteRole,
 } from "@/lib/team-bulk-invite";
+import { bulkInviteSchema } from "./schema";
 
 export type {
   BulkInviteResponse,
@@ -21,204 +20,193 @@ export type {
   BulkInviteRole,
 } from "@/lib/team-bulk-invite";
 
-const INVITE_ROLES = new Set<BulkInviteRole>(["admin", "developer", "viewer"]);
+const defaultDeps = {
+  requireProfileId,
+  db: supabaseAdmin,
+  loadTeamMembershipAuth,
+  generateInviteToken,
+  sendTeamInvite,
+  recordTeamAuditEvent,
+};
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ teamId: string }> }
+export function createBulkInvitePostHandler(
+  overrides: Partial<typeof defaultDeps> = {}
 ) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
+  const deps = { ...defaultDeps, ...overrides };
+  return async function POST(
+    request: Request,
+    context: { params: Promise<{ teamId: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
 
-  const { teamId } = await context.params;
+    const { teamId } = await context.params;
 
-  // Authorize before parsing/validating the payload so unauthenticated callers
-  // can't use validation responses to probe team existence.
-  const auth = await loadTeamMembershipAuth(teamId, profileId);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
-  if (!auth.canManage) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    // Authorize before parsing/validating the payload so unauthenticated callers
+    // can't use validation responses to probe team existence.
+    const auth = await deps.loadTeamMembershipAuth(teamId, profileId);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    if (!auth.canManage) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-  let body: { emails?: unknown; role?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
-  const role = typeof body.role === "string" ? body.role : "";
-  if (!INVITE_ROLES.has(role as BulkInviteRole)) {
-    return NextResponse.json(
-      { error: "role must be admin, developer, or viewer" },
-      { status: 422 }
-    );
-  }
-  if (!canInviteRole(auth.role, role as BulkInviteRole)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  if (!Array.isArray(body.emails)) {
-    return NextResponse.json(
-      { error: "emails must be an array of strings" },
-      { status: 422 }
-    );
-  }
-  if (body.emails.length === 0) {
-    return NextResponse.json(
-      { error: "emails must not be empty" },
-      { status: 422 }
-    );
-  }
-  if (body.emails.length > MAX_BULK_INVITE_EMAILS) {
-    return NextResponse.json(
-      {
-        error: `Too many emails: cap is ${MAX_BULK_INVITE_EMAILS} per request`,
-      },
-      { status: 422 }
-    );
-  }
-
-  const { validEmails, preResults } = prepareBulkInviteEmails(body.emails);
-  const results: BulkInviteResult[] = [...preResults];
-
-  const existingMemberEmails = new Set<string>();
-  if (validEmails.length > 0) {
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from("profiles")
-      .select("id, email")
-      .in("email", validEmails);
-
-    if (profilesError) {
+    const parsed = bulkInviteSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: profilesError.message },
-        { status: 500 }
+        { error: "Invalid bulk invite.", details: parsed.error.flatten() },
+        { status: 400 }
       );
     }
-
-    const profileIdByEmail = new Map<string, string>();
-    for (const row of profiles ?? []) {
-      const email = (row.email as string | null)?.toLowerCase() ?? null;
-      const id = row.id as string | null;
-      if (email && id) profileIdByEmail.set(email, id);
+    const { role, emails } = parsed.data;
+    if (!canInviteRole(auth.role, role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const { validEmails, preResults } = prepareBulkInviteEmails(emails);
+    const results: BulkInviteResult[] = [...preResults];
 
-    const profileIds = Array.from(profileIdByEmail.values());
-    if (profileIds.length > 0) {
-      const { data: members, error: membersError } = await supabaseAdmin
-        .from("team_members")
-        .select("user_id")
-        .eq("team_id", teamId)
-        .in("user_id", profileIds);
+    const existingMemberEmails = new Set<string>();
+    if (validEmails.length > 0) {
+      const { data: profiles, error: profilesError } = await deps.db
+        .from("profiles")
+        .select("id, email")
+        .in("email", validEmails);
 
-      if (membersError) {
+      if (profilesError) {
         return NextResponse.json(
-          { error: membersError.message },
+          { error: profilesError.message },
           { status: 500 }
         );
       }
 
-      const memberIds = new Set(
-        (members ?? []).map((m) => m.user_id as string)
-      );
-      for (const [email, id] of profileIdByEmail.entries()) {
-        if (memberIds.has(id)) existingMemberEmails.add(email);
+      const profileIdByEmail = new Map<string, string>();
+      for (const row of profiles ?? []) {
+        const email = (row.email as string | null)?.toLowerCase() ?? null;
+        const id = row.id as string | null;
+        if (email && id) profileIdByEmail.set(email, id);
+      }
+
+      const profileIds = Array.from(profileIdByEmail.values());
+      if (profileIds.length > 0) {
+        const { data: members, error: membersError } = await deps.db
+          .from("team_members")
+          .select("user_id")
+          .eq("team_id", teamId)
+          .in("user_id", profileIds);
+
+        if (membersError) {
+          return NextResponse.json(
+            { error: membersError.message },
+            { status: 500 }
+          );
+        }
+
+        const memberIds = new Set(
+          (members ?? []).map((m) => m.user_id as string)
+        );
+        for (const [email, id] of profileIdByEmail.entries()) {
+          if (memberIds.has(id)) existingMemberEmails.add(email);
+        }
       }
     }
-  }
 
-  const [teamResult, inviterResult] = await Promise.all([
-    supabaseAdmin
-      .from("teams")
-      .select("id, name, slug")
-      .eq("id", teamId)
-      .single(),
-    supabaseAdmin
-      .from("profiles")
-      .select("name, username")
-      .eq("id", profileId)
-      .single(),
-  ]);
+    const [teamResult, inviterResult] = await Promise.all([
+      deps.db.from("teams").select("id, name, slug").eq("id", teamId).single(),
+      deps.db
+        .from("profiles")
+        .select("name, username")
+        .eq("id", profileId)
+        .single(),
+    ]);
 
-  if (teamResult.error || !teamResult.data) {
-    return NextResponse.json({ error: "Team not found" }, { status: 404 });
-  }
-
-  const teamName = teamResult.data.name as string;
-  const inviterName =
-    (inviterResult.data?.name as string | null) ||
-    (inviterResult.data?.username as string | null) ||
-    null;
-
-  for (const email of validEmails) {
-    if (existingMemberEmails.has(email)) {
-      results.push({ email, status: "skipped_member" });
+    if (teamResult.error || !teamResult.data) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
     }
-  }
-  const toInvite = validEmails.filter(
-    (email) => !existingMemberEmails.has(email)
-  );
 
-  for (const batch of chunkEmails(toInvite, BULK_INVITE_SEND_CONCURRENCY)) {
-    const batchResults = await Promise.all(
-      batch.map(async (email): Promise<BulkInviteResult> => {
-        const token = generateInviteToken();
-        const { data: inviteRow, error: insertError } = await supabaseAdmin
-          .from("team_invites")
-          .insert({
-            team_id: teamId,
+    const teamName = teamResult.data.name as string;
+    const inviterName =
+      (inviterResult.data?.name as string | null) ||
+      (inviterResult.data?.username as string | null) ||
+      null;
+
+    for (const email of validEmails) {
+      if (existingMemberEmails.has(email)) {
+        results.push({ email, status: "skipped_member" });
+      }
+    }
+    const toInvite = validEmails.filter(
+      (email) => !existingMemberEmails.has(email)
+    );
+
+    for (const batch of chunkEmails(toInvite, BULK_INVITE_SEND_CONCURRENCY)) {
+      const batchResults = await Promise.all(
+        batch.map(async (email): Promise<BulkInviteResult> => {
+          const token = deps.generateInviteToken();
+          const { data: inviteRow, error: insertError } = await deps.db
+            .from("team_invites")
+            .insert({
+              team_id: teamId,
+              email,
+              role,
+              token,
+              invited_by_user_id: profileId,
+            })
+            .select("id")
+            .single();
+
+          if (insertError || !inviteRow) {
+            return { email, status: "insert_failed" };
+          }
+
+          const sendResult = await deps.sendTeamInvite({
             email,
-            role: role as BulkInviteRole,
+            teamName,
+            inviterName,
+            role,
             token,
-            invited_by_user_id: profileId,
-          })
-          .select("id")
-          .single();
+          });
 
-        if (insertError || !inviteRow) {
-          return { email, status: "insert_failed" };
-        }
-
-        const sendResult = await sendTeamInvite({
-          email,
-          teamName,
-          inviterName,
-          role: role as BulkInviteRole,
-          token,
-        });
-
-        if (!sendResult.ok) {
+          if (!sendResult.ok) {
+            return {
+              email,
+              status: "delivery_failed",
+              invite_id: inviteRow.id as string,
+            };
+          }
           return {
             email,
-            status: "delivery_failed",
+            status: "invited",
             invite_id: inviteRow.id as string,
           };
-        }
-        return {
-          email,
-          status: "invited",
-          invite_id: inviteRow.id as string,
-        };
-      })
-    );
-    results.push(...batchResults);
-  }
+        })
+      );
+      results.push(...batchResults);
+    }
 
-  const summary = summarizeBulkInviteResults(results, body.emails.length);
+    const summary = summarizeBulkInviteResults(results, emails.length);
 
-  await recordTeamAuditEvent({
-    productTeamId: teamId,
-    actorUserId: profileId,
-    action: "invite.bulk_created",
-    targetType: "invite",
-    targetId: teamId,
-    payload: {
-      role,
-      ...summary,
-    },
-  });
+    await deps.recordTeamAuditEvent({
+      productTeamId: teamId,
+      actorUserId: profileId,
+      action: "invite.bulk_created",
+      targetType: "invite",
+      targetId: teamId,
+      payload: {
+        role,
+        ...summary,
+      },
+    });
 
-  return NextResponse.json({ results, summary });
+    return NextResponse.json({ results, summary });
+  };
 }
+
+export const POST = createBulkInvitePostHandler();
