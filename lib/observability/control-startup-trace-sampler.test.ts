@@ -51,6 +51,14 @@ describe("Control startup trace sampling", () => {
     expect(second(request)).toBe(1);
   });
 
+  it("retains the first trace at a configured rate of one despite a dropped parent", () => {
+    const sample = createControlStartupTraceSampler(1);
+    const request = context("GET /api/control/sessions", 0);
+
+    expect(sample(request)).toBe(1);
+    expect(sample(request)).toBe(0);
+  });
+
   it.each([0, -1, 2, Number.NaN])(
     "leaves a disabled or invalid rate %s to the SDK",
     (rate) => {
