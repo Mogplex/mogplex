@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadTeamMembershipAuth } from "@/lib/team-management";
 import { teamIconUrlFromPath } from "@/lib/team-icons";
 import type { TeamRole } from "@/lib/team-capabilities";
+import { teamMembersParamsSchema } from "./schema";
 
 type ProfileJoin =
   | {
@@ -50,109 +51,129 @@ function profileFromJoin(profile: ProfileJoin) {
   return Array.isArray(profile) ? profile[0] : profile;
 }
 
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ teamId: string }> }
+const defaultDeps = {
+  requireProfileId,
+  db: supabaseAdmin,
+  loadTeamMembershipAuth,
+};
+
+export function createTeamMembersGetHandler(
+  overrides: Partial<typeof defaultDeps> = {}
 ) {
-  const profileId = await requireProfileId();
-  if (profileId instanceof Response) return profileId;
+  const deps = { ...defaultDeps, ...overrides };
+  return async function GET(
+    _request: Request,
+    context: { params: Promise<{ teamId: string }> }
+  ) {
+    const profileId = await deps.requireProfileId();
+    if (profileId instanceof Response) return profileId;
 
-  const { teamId } = await context.params;
-  const auth = await loadTeamMembershipAuth(teamId, profileId);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
+    const parsed = teamMembersParamsSchema.safeParse(await context.params);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid team ID.", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const { teamId } = parsed.data;
+    const auth = await deps.loadTeamMembershipAuth(teamId, profileId);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
 
-  const [teamResult, membersResult, invitesResult] = await Promise.all([
-    supabaseAdmin
-      .from("teams")
-      .select("id, name, slug, icon_path")
-      .eq("id", teamId)
-      .single(),
-    supabaseAdmin
-      .from("team_members")
-      .select(
-        "user_id, role, joined_at, profile:profiles(id, name, username, github_username, email, avatar_url)"
-      )
-      .eq("team_id", teamId)
-      .order("joined_at"),
-    supabaseAdmin
-      .from("team_invites")
-      .select("id, email, role, expires_at, created_at")
-      .eq("team_id", teamId)
-      .is("accepted_at", null)
-      .order("created_at", { ascending: false }),
-  ]);
+    const [teamResult, membersResult, invitesResult] = await Promise.all([
+      deps.db
+        .from("teams")
+        .select("id, name, slug, icon_path")
+        .eq("id", teamId)
+        .single(),
+      deps.db
+        .from("team_members")
+        .select(
+          "user_id, role, joined_at, profile:profiles(id, name, username, github_username, email, avatar_url)"
+        )
+        .eq("team_id", teamId)
+        .order("joined_at"),
+      deps.db
+        .from("team_invites")
+        .select("id, email, role, expires_at, created_at")
+        .eq("team_id", teamId)
+        .is("accepted_at", null)
+        .order("created_at", { ascending: false }),
+    ]);
 
-  if (teamResult.error || !teamResult.data) {
-    return NextResponse.json({ error: "Team not found" }, { status: 404 });
-  }
-  if (membersResult.error) {
-    return NextResponse.json(
-      { error: membersResult.error.message },
-      { status: 500 }
-    );
-  }
-  if (invitesResult.error) {
-    return NextResponse.json(
-      { error: invitesResult.error.message },
-      { status: 500 }
-    );
-  }
+    if (teamResult.error || !teamResult.data) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
+    if (membersResult.error) {
+      return NextResponse.json(
+        { error: membersResult.error.message },
+        { status: 500 }
+      );
+    }
+    if (invitesResult.error) {
+      return NextResponse.json(
+        { error: invitesResult.error.message },
+        { status: 500 }
+      );
+    }
 
-  const members = (
-    (membersResult.data ?? []) as Array<{
-      user_id: string;
-      role: TeamRole;
-      joined_at: string;
-      profile: ProfileJoin;
-    }>
-  ).map((row) => {
-    const profile = profileFromJoin(row.profile);
-    return {
-      userId: row.user_id,
-      name: profile?.name ?? null,
-      username: profile?.username ?? profile?.github_username ?? null,
-      email: profile?.email ?? null,
-      avatarUrl: profile?.avatar_url ?? null,
+    const members = (
+      (membersResult.data ?? []) as Array<{
+        user_id: string;
+        role: TeamRole;
+        joined_at: string;
+        profile: ProfileJoin;
+      }>
+    ).map((row) => {
+      const profile = profileFromJoin(row.profile);
+      return {
+        userId: row.user_id,
+        name: profile?.name ?? null,
+        username: profile?.username ?? profile?.github_username ?? null,
+        email: profile?.email ?? null,
+        avatarUrl: profile?.avatar_url ?? null,
+        role: row.role,
+        joinedAt: row.joined_at,
+        isCurrentUser: row.user_id === profileId,
+      };
+    });
+
+    const invites = (
+      (invitesResult.data ?? []) as Array<{
+        id: string;
+        email: string;
+        role: "admin" | "developer" | "viewer";
+        expires_at: string;
+        created_at: string;
+      }>
+    ).map((row) => ({
+      id: row.id,
+      email: row.email,
       role: row.role,
-      joinedAt: row.joined_at,
-      isCurrentUser: row.user_id === profileId,
-    };
-  });
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+    }));
 
-  const invites = (
-    (invitesResult.data ?? []) as Array<{
+    const teamRow = teamResult.data as {
       id: string;
-      email: string;
-      role: "admin" | "developer" | "viewer";
-      expires_at: string;
-      created_at: string;
-    }>
-  ).map((row) => ({
-    id: row.id,
-    email: row.email,
-    role: row.role,
-    expiresAt: row.expires_at,
-    createdAt: row.created_at,
-  }));
+      name: string;
+      slug: string;
+      icon_path: string | null;
+    };
 
-  const teamRow = teamResult.data as {
-    id: string;
-    name: string;
-    slug: string;
-    icon_path: string | null;
+    return NextResponse.json({
+      team: {
+        id: teamRow.id,
+        name: teamRow.name,
+        slug: teamRow.slug,
+        iconUrl: teamIconUrlFromPath(teamRow.icon_path),
+      },
+      viewer: { role: auth.role, canManage: auth.canManage },
+      members,
+      invites,
+    });
   };
-
-  return NextResponse.json({
-    team: {
-      id: teamRow.id,
-      name: teamRow.name,
-      slug: teamRow.slug,
-      iconUrl: teamIconUrlFromPath(teamRow.icon_path),
-    },
-    viewer: { role: auth.role, canManage: auth.canManage },
-    members,
-    invites,
-  });
 }
+
+export const GET = createTeamMembersGetHandler();
