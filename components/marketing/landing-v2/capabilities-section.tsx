@@ -8,6 +8,8 @@ import {
   Eyebrow,
 } from "@/components/marketing/mpx-chrome";
 
+import { VercelFill } from "@/components/settings/icons";
+
 import { traceRows } from "./data";
 
 export function BuildMaintainSection() {
@@ -166,17 +168,22 @@ export function GatesSection() {
           <p className="mpx-cap-description">
             Hosted model access uses your Mogplex balance, at published
             rates. Or route each call through your own Anthropic, OpenAI,
-            OpenRouter, or AI Gateway key. Your vault stores it.
+            or AI Gateway key. Your vault stores it.
           </p>
           <div className="mpx-vault">
             <small>
               <i aria-hidden />
               VAULT://PLATFORM/PRODUCTION
             </small>
-            {(["Anthropic", "OpenAI", "OpenRouter"] as const).map(
+            {(["Anthropic", "OpenAI", "AI Gateway"] as const).map(
               (provider, index) => (
                 <p key={provider}>
-                  <span>{provider}</span>
+                  <span className="mpx-vault-provider">
+                    {provider === "AI Gateway" && (
+                      <VercelFill size={14} aria-hidden="true" />
+                    )}
+                    {provider}
+                  </span>
                   <b className={index === 2 ? "is-available" : ""}>
                     {index === 2 ? "AVAILABLE" : "CONNECTED"}
                   </b>

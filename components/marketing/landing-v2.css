@@ -2035,6 +2035,12 @@ path.mpx-dag-line,
   margin-top: 16px;
 }
 
+.mpx-vault-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .mpx-vault p b {
   color: var(--green-deep);
   font: 400 9px/1 var(--font-mono);
