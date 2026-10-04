@@ -9,13 +9,7 @@ import {
 import { recordTeamAuditEvent } from "@/lib/team-audit";
 import type { TeamRole } from "@/lib/team-capabilities";
 import type { RecordTeamAuditEventInput } from "@/lib/team-audit";
-
-const MEMBER_ROLES = new Set<TeamRole>([
-  "owner",
-  "admin",
-  "developer",
-  "viewer",
-]);
+import { memberRoleSchema } from "./schema";
 
 async function loadTargetRole(teamId: string, memberUserId: string) {
   const { data, error } = await supabaseAdmin
@@ -93,17 +87,21 @@ export function createTeamMemberPatchHandler(
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
-    let body: { role?: unknown };
+    let body: unknown;
     try {
       body = await request.json();
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const nextRole = typeof body.role === "string" ? body.role : "";
-    if (!MEMBER_ROLES.has(nextRole as TeamRole)) {
-      return NextResponse.json({ error: "Invalid role" }, { status: 422 });
+    const parsed = memberRoleSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid member role.", details: parsed.error.flatten() },
+        { status: 400 }
+      );
     }
+    const nextRole = parsed.data.role;
 
     if (memberUserId === profileId) {
       return NextResponse.json(
@@ -117,14 +115,14 @@ export function createTeamMemberPatchHandler(
       return NextResponse.json({ error: "Member not found" }, { status: 404 });
     }
 
-    if (!canChangeMemberRole(auth.role, targetRole, nextRole as TeamRole)) {
+    if (!canChangeMemberRole(auth.role, targetRole, nextRole)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { error } = await deps.updateMemberRole(
       teamId,
       memberUserId,
-      nextRole as TeamRole
+      nextRole
     );
 
     if (error) {
