@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
 import { useTableEvents } from "@/hooks/use-table-events";
 
@@ -100,62 +99,85 @@ export function useRealtimeRouteRefresh({
 
   // Supabase path: existing postgres_changes subscription
   useEffect(() => {
-    // Skip when Neon backend is enabled or when disabled
-    if (useNeonBackend || !enabled || resolvedSpecs.length === 0) return;
+    // Keep the build-time backend guard next to the legacy dynamic import.
+    if (
+      process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon" ||
+      !enabled ||
+      resolvedSpecs.length === 0
+    )
+      return;
 
-    const supabase = createClient();
-    const channel = supabase.channel(`${channelName}:${channelId}`);
-    connectionRef.current?.("connecting");
-    const scheduleInvalidate = () => {
-      if (scheduledRef.current) return;
-      scheduledRef.current = true;
-      queueMicrotask(() => {
-        scheduledRef.current = false;
-        void Promise.resolve(invalidateRef.current()).catch((error) => {
-          console.error(
-            `[realtime-route-refresh] ${channelName} invalidate failed`,
-            error
-          );
+    let active = true;
+    let disconnect = () => {};
+    const subscribe = async () => {
+      const { createClient } = await import("@/lib/supabase/client");
+      if (!active) return;
+      const supabase = createClient();
+      const channel = supabase.channel(`${channelName}:${channelId}`);
+      connectionRef.current?.("connecting");
+      const scheduleInvalidate = () => {
+        if (scheduledRef.current) return;
+        scheduledRef.current = true;
+        queueMicrotask(() => {
+          scheduledRef.current = false;
+          void Promise.resolve(invalidateRef.current()).catch((error) => {
+            console.error(
+              `[realtime-route-refresh] ${channelName} invalidate failed`,
+              error
+            );
+          });
         });
-      });
-    };
+      };
 
-    for (const spec of resolvedSpecs) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: spec.event ?? "*",
-          schema: spec.schema ?? "public",
-          table: spec.table,
-          filter: spec.filter,
-        },
-        scheduleInvalidate
-      );
-    }
-
-    channel.subscribe((status: string, error) => {
-      if (status === "SUBSCRIBED") {
-        connectionRef.current?.("connected");
-        scheduleInvalidate();
+      for (const spec of resolvedSpecs) {
+        channel.on(
+          "postgres_changes",
+          {
+            event: spec.event ?? "*",
+            schema: spec.schema ?? "public",
+            table: spec.table,
+            filter: spec.filter,
+          },
+          scheduleInvalidate
+        );
       }
-      if (
-        status === "CHANNEL_ERROR" ||
-        status === "TIMED_OUT" ||
-        status === "CLOSED"
-      )
-        connectionRef.current?.("disconnected");
-      if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
-      console.error(
-        `[realtime-route-refresh] ${channelName} subscription ${status.toLowerCase()}`,
-        {
-          error,
-          specs: resolvedSpecs,
+
+      channel.subscribe((status: string, error) => {
+        if (status === "SUBSCRIBED") {
+          connectionRef.current?.("connected");
+          scheduleInvalidate();
         }
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        )
+          connectionRef.current?.("disconnected");
+        if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
+        console.error(
+          `[realtime-route-refresh] ${channelName} subscription ${status.toLowerCase()}`,
+          {
+            error,
+            specs: resolvedSpecs,
+          }
+        );
+      });
+
+      disconnect = () => {
+        void supabase.removeChannel(channel);
+      };
+    };
+    void subscribe().catch((error) => {
+      if (!active) return;
+      connectionRef.current?.("disconnected");
+      console.error(
+        `[realtime-route-refresh] ${channelName} load failed`,
+        error
       );
     });
-
     return () => {
-      void supabase.removeChannel(channel);
+      active = false;
+      disconnect();
     };
   }, [channelId, channelName, enabled, resolvedSpecs]);
 }

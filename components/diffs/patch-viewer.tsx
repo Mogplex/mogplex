@@ -1,10 +1,11 @@
 "use client"
 
-import { FileDiff } from "@pierre/diffs/react"
 import type { CSSProperties } from "react"
-import { useMemo } from "react"
+import { lazy, Suspense, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { detectPatch, type DetectedPatch } from "@/lib/diffs/detect"
+
+const FileDiff = lazy(() => import("@pierre/diffs/react").then(module => ({ default: module.FileDiff })))
 
 const DEFAULT_OPTIONS = {
   theme: "pierre-dark" as const,
@@ -46,6 +47,7 @@ export function PatchViewer({ patch, detectedPatch, className }: PatchViewerProp
 
   return (
     <div className={cn("my-2 overflow-hidden rounded-sm border border-white/8 bg-white/[0.03]", className)}>
+      <Suspense fallback={<pre className="overflow-x-auto p-3 font-mono text-[11px]">{resolvedPatch.patch}</pre>}>
       {resolvedPatch.files.map((fileDiff, index) => (
         <FileDiff
           key={`${fileDiff.prevName ?? ""}:${fileDiff.name}:${index}`}
@@ -55,6 +57,7 @@ export function PatchViewer({ patch, detectedPatch, className }: PatchViewerProp
           style={DIFF_STYLE}
         />
       ))}
+      </Suspense>
     </div>
   )
 }

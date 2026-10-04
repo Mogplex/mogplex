@@ -5,7 +5,6 @@ import { create } from "zustand";
 
 import { mergeSandboxRecord } from "@/lib/sandbox/client-record";
 import { createSandboxLaunchAttemptId } from "@/lib/sandbox/error-state";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { toast } from "@/hooks/use-toast";
 import { useTableEvents } from "@/hooks/use-table-events";
@@ -419,29 +418,43 @@ export function useSandboxSync() {
   });
 
   useEffect(() => {
-    if (useNeonBackend || !user?.id) return;
-    const supabase = createSupabaseClient();
-    const channel = supabase
-      .channel(`sandboxes:${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "sandboxes",
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === "DELETE" || !payload.new) {
-            void refresh();
-            return;
+    if (process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon" || !user?.id)
+      return;
+    let active = true;
+    let disconnect = () => {};
+    const subscribe = async () => {
+      const { createClient } = await import("@/lib/supabase/client");
+      if (!active) return;
+      const supabase = createClient();
+      const channel = supabase
+        .channel(`sandboxes:${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "sandboxes",
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            if (payload.eventType === "DELETE" || !payload.new) {
+              void refresh();
+              return;
+            }
+            applySandboxPatch(payload.new as SandboxRecordPatch);
           }
-          applySandboxPatch(payload.new as SandboxRecordPatch);
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+      disconnect = () => {
+        void supabase.removeChannel(channel);
+      };
+    };
+    void subscribe().catch((error) => {
+      if (active) console.error("[sandbox-sync] realtime load failed", error);
+    });
     return () => {
-      void supabase.removeChannel(channel);
+      active = false;
+      disconnect();
     };
   }, [user?.id, refresh, applySandboxPatch]);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect } from "react";
-import { ACTIVE_TEAM_HEADER } from "@/lib/team-capabilities";
+import { ACTIVE_TEAM_HEADER } from "@/lib/team-scope-header";
 import type { ReactNode } from "react";
 
 type ActiveScopeContextValue = {
