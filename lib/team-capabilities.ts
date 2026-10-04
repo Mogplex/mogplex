@@ -1,4 +1,5 @@
 import { isUuid } from "@/lib/uuid";
+import { ACTIVE_TEAM_HEADER } from "@/lib/team-scope-header";
 import { logAllowlistFailureOnce } from "@/lib/team-allowlist-throttle";
 
 /**
@@ -470,7 +471,7 @@ export function teamAllowlistMatcher(
  * short-circuits before slug resolution), so the client is the source of
  * truth for the active team on API calls.
  */
-export const ACTIVE_TEAM_HEADER = "x-mogplex-team-id";
+export { ACTIVE_TEAM_HEADER } from "@/lib/team-scope-header";
 
 export function readActiveTeamIdHeader(request: Request): string | null {
   const raw = request.headers.get(ACTIVE_TEAM_HEADER);

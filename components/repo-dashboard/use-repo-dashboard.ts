@@ -15,7 +15,6 @@ import {
   presentRepoSyncFailure,
   presentVercelSetup,
 } from "@/lib/activation/setup-state";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import { mergeSyncedRepositories, sortRepos, sortWorkspaces } from "./helpers";
@@ -262,27 +261,41 @@ export function useRepoDashboard({
   });
 
   useEffect(() => {
-    if (useNeonBackend || !user?.id) return;
+    if (process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon" || !user?.id)
+      return;
 
-    const supabase = createSupabaseClient();
-    const channel = supabase
-      .channel(`repos:${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "repos",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          void fetchData();
-        }
-      )
-      .subscribe();
+    let active = true;
+    let disconnect = () => {};
+    const subscribe = async () => {
+      const { createClient } = await import("@/lib/supabase/client");
+      if (!active) return;
+      const supabase = createClient();
+      const channel = supabase
+        .channel(`repos:${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "repos",
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            void fetchData();
+          }
+        )
+        .subscribe();
 
+      disconnect = () => {
+        void supabase.removeChannel(channel);
+      };
+    };
+    void subscribe().catch((error) => {
+      if (active) console.error("[repo-dashboard] realtime load failed", error);
+    });
     return () => {
-      void supabase.removeChannel(channel);
+      active = false;
+      disconnect();
     };
   }, [user?.id, fetchData]);
 

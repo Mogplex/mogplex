@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
@@ -27,6 +26,7 @@ import { Streamdown } from "streamdown";
 
 import { Shimmer } from "./shimmer";
 import { markdownLinkSafety } from "./link-safety";
+import { useCodeHighlighting } from "./use-code-highlighting";
 
 interface ReasoningContextValue {
   isStreaming: boolean;
@@ -205,10 +205,13 @@ export type ReasoningContentProps = ComponentProps<
   children: string;
 };
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+const streamdownPlugins = { cjk, math, mermaid };
 
 export const ReasoningContent = memo(
-  ({ className, children, ...props }: ReasoningContentProps) => (
+  ({ className, children, ...props }: ReasoningContentProps) => {
+    const code = useCodeHighlighting(children);
+    const plugins = useMemo(() => ({ ...streamdownPlugins, code }), [code]);
+    return (
     <CollapsibleContent
       className={cn(
         "mt-4 text-sm",
@@ -217,9 +220,10 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown plugins={streamdownPlugins} linkSafety={markdownLinkSafety}>{children}</Streamdown>
+      <Streamdown plugins={plugins} linkSafety={markdownLinkSafety}>{children}</Streamdown>
     </CollapsibleContent>
-  )
+    );
+  }
 );
 
 Reasoning.displayName = "Reasoning";

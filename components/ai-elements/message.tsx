@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
@@ -31,6 +30,7 @@ import {
 import { Streamdown } from "streamdown";
 import { streamdownDiffRenderer } from "@/components/diffs/streamdown-diff-renderer";
 import { markdownLinkSafety } from "./link-safety";
+import { useCodeHighlighting } from "./use-code-highlighting";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -325,24 +325,27 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = {
   cjk,
-  code,
   math,
   mermaid,
   renderers: [streamdownDiffRenderer],
 };
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, ...props }: MessageResponseProps) => {
+    const code = useCodeHighlighting(props.children);
+    const plugins = useMemo(() => ({ ...streamdownPlugins, code }), [code]);
+    return (
     <Streamdown
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
-      plugins={streamdownPlugins}
+      plugins={plugins}
       linkSafety={markdownLinkSafety}
       {...props}
     />
-  ),
+    );
+  },
   (prevProps, nextProps) =>
     prevProps.children === nextProps.children &&
     nextProps.isAnimating === prevProps.isAnimating

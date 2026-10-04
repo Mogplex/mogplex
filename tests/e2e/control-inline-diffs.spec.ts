@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
@@ -25,6 +27,34 @@ test("control chat renders agent diffs inline when tools produce a patch", async
   page,
 }) => {
   const pageErrors = capturePageErrors(page);
+  const chunksDir = join(process.cwd(), ".next/static/chunks");
+  const shikiChunks = new Set(
+    readdirSync(chunksDir).filter(
+      (file) =>
+        file.endsWith(".js") &&
+        readFileSync(join(chunksDir, file), "utf8").includes(
+          "getLoadedLanguages(){"
+        )
+    )
+  );
+  let releaseHighlighting!: () => void;
+  const highlightingReady = new Promise<void>((resolve) => {
+    releaseHighlighting = resolve;
+  });
+  let reportHighlightingRequest!: () => void;
+  const highlightingRequested = new Promise<void>((resolve) => {
+    reportHighlightingRequest = resolve;
+  });
+  let requestedHighlighting = false;
+  await page.route("**/_next/static/chunks/*.js*", async (route) => {
+    const filename = new URL(route.request().url()).pathname.split("/").at(-1);
+    if (filename && shikiChunks.has(filename)) {
+      requestedHighlighting = true;
+      reportHighlightingRequest();
+      await highlightingReady;
+    }
+    await route.continue();
+  });
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
   await mockControlSessionBootstrap(page);
@@ -35,7 +65,12 @@ test("control chat renders agent diffs inline when tools produce a patch", async
   const streamChunks = [
     { type: "start" },
     { type: "text-start", id: "t1" },
-    { type: "text-delta", id: "t1", delta: "Patching the auth module." },
+    {
+      type: "text-delta",
+      id: "t1",
+      delta:
+        "Patching the auth module.\n\n```typescript\nconst phase = 'ready';\n```",
+    },
     { type: "text-end", id: "t1" },
     {
       type: "tool-input-available",
@@ -66,6 +101,7 @@ test("control chat renders agent diffs inline when tools produce a patch", async
 
   await page.goto(scopedPath("control"));
   await page.waitForLoadState("networkidle");
+  expect(requestedHighlighting).toBe(false);
 
   await page
     .getByPlaceholder("Ask anything or run a command...")
@@ -80,6 +116,17 @@ test("control chat renders agent diffs inline when tools produce a patch", async
   // The diff renders inline in the conversation: per-file stats plus the
   // highlighted patch content (added line from the hunk).
   const conversation = page.getByRole("log", { name: "Conversation" });
+  try {
+    await expect(
+      conversation.locator("pre").filter({ hasText: "const phase" })
+    ).toContainText("const phase = 'ready';");
+    await expect(
+      conversation.locator("pre").filter({ hasText: "diff --git" })
+    ).toContainText("audit('login')");
+    await highlightingRequested;
+  } finally {
+    releaseHighlighting();
+  }
   await expect(
     conversation.getByText("lib/auth.ts", { exact: true }).first()
   ).toBeVisible();

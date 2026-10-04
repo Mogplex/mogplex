@@ -85,7 +85,7 @@ const nextConfig = {
     unoptimized: true,
   },
   experimental: {
-    optimizePackageImports: ["iconoir-react"],
+    optimizePackageImports: ["iconoir-react", "lucide-react"],
   },
   turbopack: {
     root: __dirname,
