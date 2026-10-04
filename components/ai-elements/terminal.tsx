@@ -147,6 +147,7 @@ export const TerminalCopyButton = ({
         className
       )}
       onClick={copyToClipboard}
+      aria-label="Copy terminal output"
       size="icon"
       variant="ghost"
       {...props}
@@ -176,6 +177,7 @@ export const TerminalClearButton = ({
         className
       )}
       onClick={onClear}
+      aria-label="Clear terminal"
       size="icon"
       variant="ghost"
       {...props}

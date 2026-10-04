@@ -348,7 +348,10 @@ export function CommandPalette({
                   {isSandboxUiRuntimeRunning(
                     resolveSandboxUiState({ session: null, record: sandbox })
                   ) && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                    <span role="status" aria-live="polite">
+                      <span aria-hidden="true" className="block h-1.5 w-1.5 rounded-full bg-green-500" />
+                      <span className="sr-only">Running</span>
+                    </span>
                   )}
                 </CommandItem>
               );
@@ -366,7 +369,10 @@ export function CommandPalette({
                   value={`switch workspace ${repo.full_name} ${sandbox.working_branch}`}
                   onSelect={() => handleSelect("switch", sandbox.id)}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                  <span role="status" aria-live="polite">
+                    <span aria-hidden="true" className="block h-1.5 w-1.5 rounded-full bg-green-500" />
+                    <span className="sr-only">Running</span>
+                  </span>
                   <span className="flex-1 truncate">
                     {repo.full_name}
                     <span className="text-muted-foreground">

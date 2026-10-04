@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { connectedUser, fulfillJson } from "./helpers/flows-pane-runs-fixtures";
 
@@ -232,6 +233,12 @@ test("completed runs hide follow-up actions and show the terminal empty state", 
   await page.getByTestId("flow-run-card-job-success").click();
 
   const dialog = page.locator("[data-slot='dialog-content']");
+  await expect(dialog).toHaveAccessibleName(/^Run details/);
+  const names = await new AxeBuilder({ page })
+    .include('[data-slot="dialog-content"]')
+    .withRules(["button-name", "aria-dialog-name"])
+    .analyze();
+  expect(names.violations).toEqual([]);
   await expect(
     dialog.getByText("Completed runs do not have follow-up actions.")
   ).toBeVisible();

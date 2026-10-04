@@ -118,7 +118,7 @@ export const QueueItemActions = ({
 export type QueueItemActionProps = Omit<
   ComponentProps<typeof Button>,
   "variant" | "size"
->;
+> & { "aria-label": string };
 
 export const QueueItemAction = ({
   className,

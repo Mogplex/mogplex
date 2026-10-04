@@ -100,9 +100,11 @@ export function SandboxChip({
   }`;
   return (
     <span
+      role="status"
+      aria-live="polite"
       className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] ${tone.shell}`}
     >
-      <span className={dotClassName} />
+      <span aria-hidden="true" className={dotClassName} />
       {presentation.label}
     </span>
   );
