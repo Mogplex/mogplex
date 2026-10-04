@@ -224,7 +224,6 @@ export const highlightCode = (
         tokens: result.tokens,
       };
 
-      // Cache the result
       tokensCache.set(tokensCacheKey, tokenized);
 
       // Notify all subscribers
@@ -499,6 +498,7 @@ export const CodeBlockCopyButton = ({
 
   return (
     <Button
+      aria-label="Copy code"
       className={cn("shrink-0", className)}
       onClick={copyToClipboard}
       size="icon"

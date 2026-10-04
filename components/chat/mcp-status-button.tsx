@@ -33,6 +33,14 @@ const STATUS_TEXT: Record<ConnectionHealthStatus, string> = {
   unknown: "text-muted-foreground",
 }
 
+const SUMMARY_STATUS = {
+  empty: "No connections",
+  "none-enabled": "All connections disabled",
+  "all-healthy": "All connections healthy",
+  partial: "Some connections need a test or setup",
+  failing: "Some connections failed",
+} as const
+
 export function McpStatusButton({ repoId }: { repoId?: string }) {
   const { scope } = useParams<{ scope: string }>()
   const {
@@ -181,8 +189,9 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
         className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
         title="MCP tools status"
       >
-        <span className={`inline-block h-1.5 w-1.5 rounded-full ${summary.dot}`} />
+        <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${summary.dot}`} />
         <span>{summary.label}</span>
+        <span role="status" aria-live="polite" className="sr-only">{SUMMARY_STATUS[summary.state]}</span>
       </button>
       {open && menuPos && createPortal(
         <div
@@ -245,6 +254,7 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
               return (
                 <div key={server.id} className="px-3 py-2 border-b border-border/50 flex items-start gap-2">
                   <span
+                    aria-hidden="true"
                     className={`mt-1 inline-block h-2 w-2 rounded-full ${dot} ${!effectiveEnabled ? "opacity-40" : ""}`}
                     title={getConnectionStatusLabel(server.health_status)}
                   />
@@ -276,7 +286,7 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
                       {server.mcp_url || "—"}
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className={`text-[10px] ${text}`}>
+                      <span role="status" aria-live="polite" className={`text-[10px] ${text}`}>
                         {isTesting ? "Testing..." : getConnectionStatusLabel(server.health_status)}
                         {server.last_test_tool_count != null && server.health_status === "healthy" && (
                           <span className="text-muted-foreground"> · {server.last_test_tool_count} tools</span>

@@ -258,6 +258,7 @@ export const CommitCopyButton = ({
     <Button
       className={cn("size-7 shrink-0", className)}
       onClick={copyToClipboard}
+      aria-label="Copy commit hash"
       size="icon"
       variant="ghost"
       {...props}

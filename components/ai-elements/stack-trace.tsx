@@ -87,7 +87,6 @@ const parseStackFrame = (line: string): StackFrame => {
     };
   }
 
-  // Pattern: at filePath:line:column (no function name)
   const withoutFnMatch = trimmed.match(STACK_FRAME_WITHOUT_FN_REGEX);
   if (withoutFnMatch) {
     const [, filePath, lineNum, colNum] = withoutFnMatch;
@@ -353,6 +352,7 @@ export const StackTraceCopyButton = memo(
       <Button
         className={cn("size-7", className)}
         onClick={copyToClipboard}
+        aria-label="Copy stack trace"
         size="icon"
         variant="ghost"
         {...props}
