@@ -105,8 +105,8 @@ export function buildPRReviewTools(config: {
     return input;
   }, reportObjectSchema);
 
-  // Merging requires an accepted clean report. Preserve the refusal for
-  // reports that claimed issues and then omitted their findings.
+  // The accepted hasIssues verdict is authoritative, as in the post-run gate.
+  // Preserve the refusal for reports that claimed issues and omitted findings.
   const mergeRefusal = () => {
     if (
       claimedIssues &&
@@ -255,7 +255,7 @@ export function buildPRReviewTools(config: {
     }),
     reportReview: tool({
       description:
-        "Record the structured review result for workflow orchestration. Call exactly once after analysis.",
+        "Record the structured review result after analysis and before merging. If a report is rejected or needs correction, submit the corrected report before merging.",
       inputSchema: reportReviewInputSchema,
       execute: async (input) => {
         acceptedReport = input;
@@ -286,7 +286,7 @@ export function buildPRReviewTools(config: {
           }),
           queuePullRequestForMerge: tool({
             description:
-              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Prefer this over mergePullRequest when checks are still running.",
+              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Only call this after an accepted report with hasIssues=false. Prefer this over mergePullRequest when checks are still running.",
             inputSchema: z.object({
               commitTitle: z.string().optional(),
             }),
