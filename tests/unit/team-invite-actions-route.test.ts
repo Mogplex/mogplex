@@ -213,7 +213,7 @@ for (const method of ["POST", "DELETE"] as const) {
       const response = await handlers[method](request(method), context(params));
       assert.equal(response.status, 400);
       const result = await response.json();
-      assert.equal(result.error, "Invalid invite ID.");
+      assert.equal(result.error, "Invalid team or invite ID.");
       assert.deepEqual(result.details.formErrors, []);
       assert.ok(
         Object.values(result.details.fieldErrors).some(

@@ -49,7 +49,10 @@ export function createTeamInviteActionHandlers(
     const parsed = inviteActionParamsSchema.safeParse(await context.params);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid invite ID.", details: parsed.error.flatten() },
+        {
+          error: "Invalid team or invite ID.",
+          details: parsed.error.flatten(),
+        },
         { status: 400 }
       );
     }
@@ -98,7 +101,10 @@ export function createTeamInviteActionHandlers(
     const parsed = inviteActionParamsSchema.safeParse(await context.params);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid invite ID.", details: parsed.error.flatten() },
+        {
+          error: "Invalid team or invite ID.",
+          details: parsed.error.flatten(),
+        },
         { status: 400 }
       );
     }
