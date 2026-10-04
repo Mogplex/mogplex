@@ -103,13 +103,85 @@ for (const name of ["mergePullRequest", "queuePullRequestForMerge"]) {
     assert.deepEqual(github.urls, []);
   });
 
-  test(`${name} proceeds before any report when nothing claimed issues`, async () => {
+  test(`${name} refuses before any report, without contacting GitHub`, async () => {
     const github = recordGithubRequests();
     const tools = await buildTools(github.fetch);
+
+    const outcome = await toolOf(tools, name).execute({});
+
+    assert.equal(outcome.success, false);
+    assert.match(String(outcome.error), /accepted review report/);
+    assert.deepEqual(github.urls, []);
+  });
+
+  test(`${name} refuses a rejected clean report, without contacting GitHub`, async () => {
+    const github = recordGithubRequests();
+    const tools = await buildTools(github.fetch);
+    assert.equal(await fileReport(tools, { hasIssues: false }), false);
+
+    const outcome = await toolOf(tools, name).execute({});
+
+    assert.equal(outcome.success, false);
+    assert.deepEqual(github.urls, []);
+  });
+
+  test(`${name} refuses an accepted report that still has issues`, async () => {
+    const github = recordGithubRequests();
+    const tools = await buildTools(github.fetch);
+    assert.equal(
+      await fileReport(tools, {
+        hasIssues: true,
+        summary: "The lookup can fail.",
+        findings: [
+          {
+            severity: "warning",
+            title: "Guard lookup",
+            body: "Handle missing rows.",
+          },
+        ],
+      }),
+      true
+    );
+
+    const outcome = await toolOf(tools, name).execute({});
+
+    assert.equal(outcome.success, false);
+    assert.deepEqual(github.urls, []);
+  });
+
+  test(`${name} proceeds only after accepting a clean report`, async () => {
+    const github = recordGithubRequests();
+    const tools = await buildTools(github.fetch);
+    assert.equal(
+      await fileReport(tools, { hasIssues: false, summary: "No issues." }),
+      true
+    );
 
     await toolOf(tools, name).execute({});
 
     assert.ok(github.urls.some((url) => url.endsWith("/pulls/42")));
+  });
+
+  test(`${name} refuses when a later accepted report changes the verdict to issues`, async () => {
+    const github = recordGithubRequests();
+    const tools = await buildTools(github.fetch);
+    await fileReport(tools, { hasIssues: false, summary: "No issues." });
+    await fileReport(tools, {
+      hasIssues: true,
+      summary: "A missing row breaks the lookup.",
+      findings: [
+        {
+          severity: "warning",
+          title: "Guard lookup",
+          body: "Handle missing rows.",
+        },
+      ],
+    });
+
+    const outcome = await toolOf(tools, name).execute({});
+
+    assert.equal(outcome.success, false);
+    assert.deepEqual(github.urls, []);
   });
 
   test(`${name} proceeds when the clean report lists its suggestions`, async () => {

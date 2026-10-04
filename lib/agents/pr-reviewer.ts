@@ -105,18 +105,28 @@ export function buildPRReviewTools(config: {
     return input;
   }, reportObjectSchema);
 
-  // Once a report has claimed issues, only an accepted report that lists
-  // findings can authorize a merge: none accepted means every claim was
-  // rejected, and one that clears the review has dropped them.
-  const droppedFindingsRefusal = () =>
-    claimedIssues &&
-    (acceptedReport === null || clearsReviewWithoutFindings(acceptedReport))
-      ? {
-          success: false as const,
-          error:
-            "Not merged: this review said it found issues but its report lists none. Report each issue as a finding.",
-        }
-      : null;
+  // Merging requires an accepted clean report. Preserve the refusal for
+  // reports that claimed issues and then omitted their findings.
+  const mergeRefusal = () => {
+    if (
+      claimedIssues &&
+      (acceptedReport === null || clearsReviewWithoutFindings(acceptedReport))
+    ) {
+      return {
+        success: false as const,
+        error:
+          "Not merged: this review said it found issues but its report lists none. Report each issue as a finding.",
+      };
+    }
+    if (acceptedReport?.hasIssues !== false) {
+      return {
+        success: false as const,
+        error:
+          "Not merged: submit an accepted review report with no unresolved issues before merging.",
+      };
+    }
+    return null;
+  };
 
   const tools = {
     getPullRequest: tool({
@@ -264,7 +274,7 @@ export function buildPRReviewTools(config: {
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
-              droppedFindingsRefusal() ??
+              mergeRefusal() ??
               mergePullRequestIfSafe({
                 githubToken: config.githubToken,
                 owner: config.owner,
@@ -281,7 +291,7 @@ export function buildPRReviewTools(config: {
               commitTitle: z.string().optional(),
             }),
             execute: async ({ commitTitle }) =>
-              droppedFindingsRefusal() ??
+              mergeRefusal() ??
               queuePullRequestAutoMerge({
                 githubToken: config.githubToken,
                 owner: config.owner,
