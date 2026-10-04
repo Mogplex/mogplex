@@ -1,8 +1,14 @@
 import * as Sentry from "@sentry/nextjs";
+import { startServerStartupTiming } from "@/lib/observability/server-startup-timing";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    await import("./sentry.server.config");
+    const finishSentryImport = startServerStartupTiming("sentry_config_import");
+    try {
+      await import("./sentry.server.config");
+    } finally {
+      finishSentryImport();
+    }
 
     if (
       process.env.SANDBOX_DISABLE_USER_BILLING &&
