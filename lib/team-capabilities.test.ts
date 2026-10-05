@@ -51,6 +51,17 @@ describe("hasCapability", () => {
 });
 
 describe("ROLE_PRESETS", () => {
+  it("developer keeps the explicit merge grant while viewer cannot merge", () => {
+    expect(
+      hasCapability(presetForRole("developer"), "tools.github_merge")
+    ).toBe(true);
+    expect(hasCapability(presetForRole("viewer"), "tools.github_merge")).toBe(
+      false
+    );
+    expect(
+      hasCapability(new Set(["tools.github_api"]), "tools.github_merge")
+    ).toBe(false);
+  });
   it("owner and admin get full grant", () => {
     expect(ROLE_PRESETS.owner).toEqual(["*"]);
     expect(ROLE_PRESETS.admin).toEqual(["*"]);

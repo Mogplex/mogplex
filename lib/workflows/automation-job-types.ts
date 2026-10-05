@@ -142,6 +142,11 @@ export type AutomationAgentResult = {
   aiCallId?: string | null;
   /** The review's report was judged and passed the format check inside the run, so publishing does not check it again. */
   reviewFormatPassed?: boolean;
+  autoMergeRequest?: {
+    prNumber: number;
+    expectedHeadSha?: string | null;
+    commitTitle?: string | null;
+  };
 };
 
 // Carries the model id that actually executed. It can differ from the pinned

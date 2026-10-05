@@ -124,6 +124,63 @@ test("filterToolsByCapability with empty caps drops every tool (fail closed)", a
   assert.deepEqual(filtered, {});
 });
 
+test("GitHub inventory and edits do not grant pull request merge rights", async () => {
+  const { buildStaticTools } = await loadToolsModule();
+  const denied: Array<[string, string | null]> = [];
+  const tools = buildStaticTools(
+    undefined,
+    "user-1",
+    "token",
+    undefined,
+    undefined,
+    undefined,
+    new Set(["tools.github_api"]),
+    (name, required) => denied.push([name, required])
+  );
+  assert.ok(tools.github_create_issue);
+  assert.ok(tools.github_update_issue);
+  assert.ok(tools.github_pull_request_status);
+  assert.equal(tools.github_merge_pull_request, undefined);
+  assert.ok(
+    denied.some(
+      ([name, cap]) =>
+        name === "github_merge_pull_request" && cap === "tools.github_merge"
+    )
+  );
+});
+
+test("a merge grant enables the merge tool without granting other GitHub tools", async () => {
+  const { buildStaticTools } = await loadToolsModule();
+  const tools = buildStaticTools(
+    undefined,
+    "user-1",
+    "token",
+    undefined,
+    undefined,
+    undefined,
+    new Set(["tools.github_merge"])
+  );
+  assert.ok(tools.github_merge_pull_request);
+  assert.equal(tools.github_create_issue, undefined);
+  assert.equal(tools.github_api, undefined);
+});
+
+test("the developer preset retains the existing merge tool by default", async () => {
+  const { buildStaticTools } = await loadToolsModule();
+  const { presetForRole } = await import("../../lib/team-capabilities");
+  assert.ok(
+    buildStaticTools(
+      undefined,
+      "user-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      presetForRole("developer")
+    ).github_merge_pull_request
+  );
+});
+
 test("filterToolsByCapability drops unknown keys (fail closed for unregistered tools)", async () => {
   const { filterToolsByCapability } = await loadToolsModule();
   const filtered = filterToolsByCapability(

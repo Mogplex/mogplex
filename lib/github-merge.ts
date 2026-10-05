@@ -1,8 +1,14 @@
+import {
+  withAgentMergePolicy,
+  type AgentMergePolicyScope,
+} from "./github-merge-agent-policy";
+
 export type AutoMergeOutcome = {
   merged: boolean;
   queued?: boolean;
   reason: string;
   sha?: string | null;
+  approvalId?: string;
 };
 
 type PullRequestGate = {
@@ -24,6 +30,8 @@ type MergeInput = {
   expectedHeadSha?: string;
   commitTitle?: string;
   fetchImpl?: typeof fetch;
+  mergePolicyScope?: AgentMergePolicyScope;
+  requireImmediateMerge?: boolean;
 };
 
 export function githubHeaders(token: string) {
@@ -139,6 +147,13 @@ async function enablePullRequestAutoMerge(
   input: MergeInput,
   pr: PullRequestGate
 ): Promise<AutoMergeOutcome> {
+  if (input.requireImmediateMerge) {
+    return {
+      merged: false,
+      reason:
+        "Approval covers one exact head for a direct merge. Wait for checks and reviews to pass, then request approval for another attempt. Auto-merge was not enabled.",
+    };
+  }
   if (!pr.node_id?.trim() || !pr.head?.sha?.trim()) {
     return {
       merged: false,
@@ -248,7 +263,7 @@ async function mergeCleanPullRequest(
 // Arm GitHub's native auto-merge without attempting a direct merge. The merge
 // then completes on a later webhook-driven state transition (required checks
 // green, branch protection satisfied) without polling.
-export async function queuePullRequestForMerge(
+async function queuePullRequestForMergeUnchecked(
   input: MergeInput
 ): Promise<AutoMergeOutcome> {
   const pr = await loadPullRequestGate(input);
@@ -264,7 +279,7 @@ export async function queuePullRequestForMerge(
 // The direct merge pins the reviewed head. Native auto-merge validates that
 // head when enabled. GitHub can keep it enabled after later pushes, but still
 // enforces required checks and branch protection on the current head.
-export async function mergePullRequestIfSafe(
+async function mergePullRequestIfSafeUnchecked(
   input: MergeInput
 ): Promise<AutoMergeOutcome> {
   const pr = await loadPullRequestGate(input);
@@ -280,4 +295,20 @@ export async function mergePullRequestIfSafe(
     };
   }
   return mergeCleanPullRequest(input, pr);
+}
+
+export function queuePullRequestForMerge(
+  input: MergeInput
+): Promise<AutoMergeOutcome> {
+  return withAgentMergePolicy(input, "queue", (requireImmediateMerge) =>
+    queuePullRequestForMergeUnchecked({ ...input, requireImmediateMerge })
+  );
+}
+
+export function mergePullRequestIfSafe(
+  input: MergeInput
+): Promise<AutoMergeOutcome> {
+  return withAgentMergePolicy(input, "merge", (requireImmediateMerge) =>
+    mergePullRequestIfSafeUnchecked({ ...input, requireImmediateMerge })
+  );
 }

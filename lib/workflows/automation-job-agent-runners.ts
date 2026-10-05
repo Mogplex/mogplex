@@ -6,6 +6,10 @@ import { createDependabotSandboxLoader } from "./automation-dependabot-sandbox";
 import { generateText, type ToolSet } from "ai";
 import { buildPRFixTools, buildSandboxPRFixTools } from "@/lib/agents/pr-fixer";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
+import {
+  buildFlowPRReviewTools,
+  finishFlowPrReview,
+} from "./automation-pr-review-tools";
 import { buildIssueTools } from "@/lib/agents/issue-tools";
 import { buildCITools } from "@/lib/agents/ci-tools";
 import { buildTagPushTools } from "@/lib/agents/tag-tools";
@@ -21,6 +25,7 @@ import {
   type AutomationLanguageModel,
   type JobContext,
   type PullRequestDetails,
+  type FlowAutoMergeRequest,
 } from "@/lib/workflows/automation-job-types";
 import {
   normalizeAutomationAssignmentType,
@@ -28,7 +33,6 @@ import {
 } from "@/lib/workflows/automation-job-utils";
 import { normalizeAutomationAgentResult } from "@/lib/workflows/automation-job-metadata";
 import type { ReportRepairRequest } from "@/lib/workflows/pr-review-report-repair";
-import { finishPrReview } from "@/lib/workflows/pr-review-self-revision";
 import {
   appendToRunSpec,
   buildJobRunSpec,
@@ -94,6 +98,7 @@ export function createAutomationAgentRunner(
     };
     const baseBranch = context.repo.default_branch || "main";
 
+    let deferredMergeRequest: FlowAutoMergeRequest | null = null;
     const tools =
       context.metadata.flow_node_role === "task"
         ? buildScheduledTaskTools({
@@ -122,20 +127,14 @@ export function createAutomationAgentRunner(
                     throw new Error(INVALID_PR_REVIEW_CONTEXT);
                   }
 
-                  return buildPRReviewTools({
+                  return buildFlowPRReviewTools(
+                    context,
                     githubToken,
-                    owner,
-                    repo: repoName,
-                    headOwner: headRepoParts.owner,
-                    headRepo: headRepoParts.repo,
-                    prNumber: prReviewNumber,
-                    defaultRef:
-                      typeof context.metadata.head_ref === "string"
-                        ? context.metadata.head_ref
-                        : undefined,
-                    allowPostComment: false,
-                    allowPrLifecycle: context.metadata.flow_auto_merge === true,
-                  });
+                    prReviewNumber,
+                    (target) => {
+                      deferredMergeRequest = target;
+                    }
+                  );
                 })()
               : assignmentType === "push_review"
                 ? buildPRReviewTools({
@@ -312,14 +311,17 @@ export function createAutomationAgentRunner(
     });
     if (assignmentType !== "pr_review") return review.normalized;
 
-    return finishPrReview({
-      result: review.normalized,
-      responseMessages: review.responseMessages,
-      prompt: runSpec.prompt,
-      tools,
-      generate: async (request) => (await generate(request)).normalized,
-      judge: (draft) => deps.judgeReviewFormat(draft, context),
-    });
+    return finishFlowPrReview(
+      {
+        result: review.normalized,
+        responseMessages: review.responseMessages,
+        prompt: runSpec.prompt,
+        tools,
+        generate: async (request) => (await generate(request)).normalized,
+        judge: (draft) => deps.judgeReviewFormat(draft, context),
+      },
+      () => deferredMergeRequest
+    );
   };
 }
 

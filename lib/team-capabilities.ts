@@ -29,6 +29,7 @@ export const ROLE_PRESETS: Record<TeamRole, readonly Capability[]> = {
     "tools.web_fetch",
     "tools.virtual_exec",
     "tools.github_api",
+    "tools.github_merge",
     "tools.memories",
     "tools.skills",
     "connections.create",

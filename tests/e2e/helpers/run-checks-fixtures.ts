@@ -63,6 +63,13 @@ export async function mockTeamSettings(page: Page, role: TeamRole = "owner") {
   await page.route(`**/api/teams/${TEAM.id}/audit-events`, (route) =>
     fulfillJson(route, { events: [] })
   );
+  await page.route(`**/api/teams/${TEAM.id}/agent-merges`, (route) =>
+    fulfillJson(route, {
+      policy: { requireApproval: false, contextRepoOnly: false },
+      approvals: [],
+      viewer: { canManage },
+    })
+  );
 }
 
 export { expect } from "@playwright/test";

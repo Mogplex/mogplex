@@ -25,6 +25,25 @@ export async function checkSchemaCompatibility(
   const client = createPostgrestShim(db);
   const adminClient = client as unknown as SupabaseClient;
   if (phase === "verify") {
+    const team = await client
+      .from("teams")
+      .select("name,slug,owner_user_id")
+      .eq("id", BEFORE_USER)
+      .single();
+    assert.equal(team.error, null, JSON.stringify(team.error));
+    assert.deepEqual(team.data, {
+      name: "Existing team",
+      slug: "compatibility-team-seed",
+      owner_user_id: BEFORE_USER,
+    });
+    const membership = await client
+      .from("team_members")
+      .select("role")
+      .eq("team_id", BEFORE_USER)
+      .eq("user_id", BEFORE_USER)
+      .single();
+    assert.equal(membership.error, null, JSON.stringify(membership.error));
+    assert.deepEqual(membership.data, { role: "owner" });
     const profile = await client
       .from("profiles")
       .select("email,default_model,surface_models")
@@ -136,6 +155,18 @@ export async function checkSchemaCompatibility(
         : "compatibility-after@example.test",
   });
   assert.equal(profile.error, null, JSON.stringify(profile.error));
+  const team = await client
+    .from("teams")
+    .insert({
+      id: userId,
+      name: phase === "seed" ? "Existing team" : "Retained release team",
+      slug: `compatibility-team-${phase}`,
+      owner_user_id: userId,
+    })
+    .select("id,name,slug,owner_user_id")
+    .single();
+  assert.equal(team.error, null, JSON.stringify(team.error));
+  assert.equal((team.data as { owner_user_id: string }).owner_user_id, userId);
   const owner = buildResourceOwnershipInsert({
     kind: "personal",
     userId,

@@ -28,7 +28,7 @@ export const TOOL_CAPABILITY: Record<string, Capability> = {
   github_create_issue: "tools.github_api",
   github_update_issue: "tools.github_api",
   github_comment_issue: "tools.github_api",
-  github_merge_pull_request: "tools.github_api",
+  github_merge_pull_request: "tools.github_merge",
   github_create_pull_request: "tools.github_api",
   github_update_pull_request: "tools.github_api",
   write_file: "tools.write_file",
