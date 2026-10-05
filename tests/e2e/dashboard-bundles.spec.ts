@@ -33,11 +33,7 @@ test("Neon client bundles omit legacy realtime and Control defers Shiki", () => 
   expect
     .soft(
       chunks
-        // The public Supabase agent template contains a documentation example
-        // with postgres_changes. Match the runtime enum, not that example.
-        .filter(({ source }) =>
-          source.includes('POSTGRES_CHANGES="postgres_changes"')
-        )
+        .filter(({ source }) => source.includes("postgres_changes"))
         .map(({ file }) => file)
     )
     .toEqual([]);
