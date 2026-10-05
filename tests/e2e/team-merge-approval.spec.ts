@@ -23,11 +23,11 @@ test("owner opts into merge approval and context scope, and choices survive relo
   const changes: unknown[] = [];
   await page.route(endpoint, (route) => {
     if (route.request().method() === "PATCH") {
-      const policy = route
-        .request()
-        .postDataJSON() as TeamMergePolicyResponse["policy"];
+      const policy = route.request().postDataJSON() as Partial<
+        TeamMergePolicyResponse["policy"]
+      >;
       changes.push(policy);
-      data = { ...data, policy };
+      data = { ...data, policy: { ...data.policy, ...policy } };
     }
     return fulfillJson(route, data);
   });
@@ -46,8 +46,8 @@ test("owner opts into merge approval and context scope, and choices survive relo
   await expect(approval).toBeChecked();
   await expect(scope).toBeChecked();
   expect(changes).toEqual([
-    { requireApproval: true, contextRepoOnly: false },
-    { requireApproval: true, contextRepoOnly: true },
+    { requireApproval: true },
+    { contextRepoOnly: true },
   ]);
 });
 
@@ -148,4 +148,38 @@ test("failed setting or approval writes keep the saved state and request visible
     page.getByRole("alert").filter({ hasText: "Unable to save merge approval" })
   ).toHaveText("Unable to save merge approval");
   await expect(deny).toBeEnabled();
+});
+
+test("a stale tab can change repository scope without disabling another admin's approval setting", async ({
+  page,
+}) => {
+  await mockTeamSettings(page);
+  let saved = initial;
+  await page.route(endpoint, (route) => {
+    if (route.request().method() === "PATCH") {
+      // Another admin saves after this tab's GET, immediately before its PATCH.
+      saved = {
+        ...saved,
+        policy: { requireApproval: true, contextRepoOnly: false },
+      };
+      saved = {
+        ...saved,
+        policy: { ...saved.policy, ...route.request().postDataJSON() },
+      };
+    }
+    return fulfillJson(route, saved);
+  });
+  await page.goto(`${TEAM_SETTINGS_PATH}/members`);
+  const approval = page.getByRole("switch", { name: "Require merge approval" });
+  const scope = page.getByRole("switch", {
+    name: "Merge only in the run's repository",
+  });
+  await expect(approval).not.toBeChecked();
+  await scope.click();
+  await expect(scope).toBeChecked();
+  await expect(approval).toBeChecked();
+  expect(saved.policy).toEqual({
+    requireApproval: true,
+    contextRepoOnly: true,
+  });
 });

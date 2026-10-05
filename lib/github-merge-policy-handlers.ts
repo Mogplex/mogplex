@@ -51,7 +51,9 @@ const policyBody = z
     requireApproval: z.boolean(),
     contextRepoOnly: z.boolean(),
   })
-  .strict();
+  .partial()
+  .strict()
+  .refine((value) => Object.keys(value).length > 0);
 const resolutionBody = z.object({ approved: z.boolean() }).strict();
 
 export function createMergeSettingsHandlers(
@@ -127,9 +129,22 @@ export function createMergeSettingsHandlers(
         const previous = await deps.read(teamId);
         if (!previous || !(await deps.write(teamId, parsed.data)))
           return Response.json({ error: "Team not found" }, { status: 404 });
+        const policy = await deps.read(teamId);
+        if (!policy)
+          return Response.json({ error: "Team not found" }, { status: 404 });
+        const from = {
+          ...(parsed.data.requireApproval === undefined
+            ? {}
+            : { requireApproval: previous.requireApproval }),
+          ...(parsed.data.contextRepoOnly === undefined
+            ? {}
+            : { contextRepoOnly: previous.contextRepoOnly }),
+        };
         if (
-          previous.requireApproval !== parsed.data.requireApproval ||
-          previous.contextRepoOnly !== parsed.data.contextRepoOnly
+          (parsed.data.requireApproval !== undefined &&
+            previous.requireApproval !== parsed.data.requireApproval) ||
+          (parsed.data.contextRepoOnly !== undefined &&
+            previous.contextRepoOnly !== parsed.data.contextRepoOnly)
         ) {
           await audit({
             productTeamId: teamId,
@@ -137,11 +152,11 @@ export function createMergeSettingsHandlers(
             action: "github.merge_policy.changed",
             targetType: "team",
             targetId: teamId,
-            payload: { from: previous, to: parsed.data },
+            payload: { from, to: parsed.data },
           });
         }
         return Response.json({
-          policy: parsed.data,
+          policy,
           approvals: await deps.list(auth.userId, teamId),
           viewer: { canManage: true },
         } satisfies TeamMergePolicyResponse);

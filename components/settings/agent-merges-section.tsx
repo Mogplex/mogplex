@@ -17,7 +17,7 @@ export function AgentMergesSection({ teamId }: { teamId: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  async function save(policy: TeamMergePolicy) {
+  async function save(policy: Partial<TeamMergePolicy>) {
     setBusy(true);
     setMessage(null);
     setSaveError(null);
@@ -61,7 +61,7 @@ export function AgentMergesSection({ teamId }: { teamId: string }) {
         </div>
         <Switch aria-label="Require merge approval" checked={data?.policy.requireApproval ?? false}
           disabled={!data || !data.viewer.canManage || busy}
-          onCheckedChange={requireApproval => data && void save({ ...data.policy, requireApproval })} />
+          onCheckedChange={requireApproval => data && void save({ requireApproval })} />
       </div>
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -70,7 +70,7 @@ export function AgentMergesSection({ teamId }: { teamId: string }) {
         </div>
         <Switch aria-label="Merge only in the run's repository" checked={data?.policy.contextRepoOnly ?? false}
           disabled={!data || !data.viewer.canManage || busy}
-          onCheckedChange={contextRepoOnly => data && void save({ ...data.policy, contextRepoOnly })} />
+          onCheckedChange={contextRepoOnly => data && void save({ contextRepoOnly })} />
       </div>
       <p className="text-sm text-muted-foreground">These controls apply to Mogplex merge tools and flow merge actions. Approval is most useful when a repository has no required checks or reviews. GitHub still enforces protection rules for branches. Select Refresh requests to see requests from chat, Slack, CLI runs, or flows.</p>
       <div className="flex items-center justify-between gap-4">

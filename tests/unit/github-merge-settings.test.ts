@@ -37,7 +37,7 @@ function fixture(
           },
     read: async () => policy,
     write: async (_id, next) => {
-      policy = next;
+      policy = { ...policy, ...next };
       writes += 1;
       return true;
     },
@@ -286,4 +286,34 @@ test("malformed approval IDs are rejected before storage and auditing", async ()
   }
   assert.deepEqual(state.resolutions, []);
   assert.deepEqual(state.audits, []);
+});
+
+test("saving one control preserves the other and returns the complete saved policy", async () => {
+  const state = fixture();
+  const handlers = createMergeSettingsHandlers(state.deps);
+  for (const patch of [{ requireApproval: true }, { contextRepoOnly: true }]) {
+    const response = await handlers.patch(request(patch), "team-1");
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).policy, state.policy);
+  }
+  assert.deepEqual(state.policy, {
+    requireApproval: true,
+    contextRepoOnly: true,
+  });
+  assert.deepEqual(
+    state.audits.map((event) => event.payload),
+    [
+      { from: { requireApproval: false }, to: { requireApproval: true } },
+      { from: { contextRepoOnly: false }, to: { contextRepoOnly: true } },
+    ]
+  );
+  assert.equal(
+    (await handlers.patch(request({ requireApproval: false }), "team-1"))
+      .status,
+    200
+  );
+  assert.deepEqual(state.policy, {
+    requireApproval: false,
+    contextRepoOnly: true,
+  });
 });

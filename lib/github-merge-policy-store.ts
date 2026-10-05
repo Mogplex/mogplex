@@ -37,13 +37,17 @@ export async function readTeamMergePolicy(
 
 export async function writeTeamMergePolicy(
   teamId: string,
-  policy: TeamMergePolicy
+  policy: Partial<TeamMergePolicy>
 ) {
   const { data, error } = await supabaseAdmin
     .from("teams")
     .update({
-      github_merge_require_approval: policy.requireApproval,
-      github_merge_context_repo_only: policy.contextRepoOnly,
+      ...(policy.requireApproval === undefined
+        ? {}
+        : { github_merge_require_approval: policy.requireApproval }),
+      ...(policy.contextRepoOnly === undefined
+        ? {}
+        : { github_merge_context_repo_only: policy.contextRepoOnly }),
     })
     .eq("id", teamId)
     .select("id");

@@ -36,6 +36,7 @@ const developer = "00000000-0000-4000-8000-000000000061";
 const other = "00000000-0000-4000-8000-000000000062";
 const team = "00000000-0000-4000-8000-000000000071";
 const otherTeam = "00000000-0000-4000-8000-000000000072";
+const missingTeam = "00000000-0000-4000-8000-000000000073";
 const target: MergeApprovalTarget = {
   userId: developer,
   teamId: team,
@@ -190,10 +191,26 @@ describe("team merge approvals against the real schema and routes", () => {
     expect(
       (await handlers().patch(request(policy, "PATCH"), team)).status
     ).toBe(403);
-    expect(
-      (await handlers(owner).patch(request(policy, "PATCH"), team)).status
-    ).toBe(200);
+    const saves = await Promise.all([
+      handlers(owner).patch(request({ requireApproval: true }, "PATCH"), team),
+      handlers(owner).patch(request({ contextRepoOnly: true }, "PATCH"), team),
+    ]);
+    expect(saves.map((response) => response.status)).toEqual([200, 200]);
     expect(await readTeamMergePolicy(team)).toEqual(policy);
+    expect(await writeTeamMergePolicy(team, { requireApproval: false })).toBe(
+      true
+    );
+    expect(await readTeamMergePolicy(team)).toEqual({
+      ...policy,
+      requireApproval: false,
+    });
+    expect(await readTeamMergePolicy(otherTeam)).toEqual({
+      requireApproval: false,
+      contextRepoOnly: false,
+    });
+    expect(
+      await writeTeamMergePolicy(missingTeam, { requireApproval: true })
+    ).toBe(false);
     expect((await handlers(other).get(otherTeam)).status).toBe(403);
   });
   it("deduplicates pending targets, lists only this user's team requests, and requires explicit human resolution", async () => {
