@@ -4,7 +4,7 @@ export type SlashCommand = {
   name: string;
   description: string;
   args?: string;
-  execute: (args: string) => CommandResult;
+  execute: (args: string) => CommandResult | Promise<CommandResult>;
 };
 
 export type CommandResult = {

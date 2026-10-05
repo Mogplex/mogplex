@@ -9,7 +9,7 @@ import {
   buildSelectableAgentModelCatalog,
   getDefaultNewAgentModel,
 } from "@/lib/agents/model-options"
-import { AGENT_CATEGORIES, type AgentCategory } from "@/lib/agents/templates"
+import { AGENT_CATEGORIES, type AgentCategory } from "@/lib/agents/templates/types"
 import {
   MAX_AGENT_SYSTEM_PROMPT_LENGTH,
   validateAgentInput,

@@ -250,7 +250,7 @@ async function handleAuthorizedModelCommand(input: {
   const modelCommand = buildBuiltinCommands({ models }).find(
     (command) => command.name === "model"
   );
-  const result = modelCommand?.execute(modelArgument);
+  const result = await modelCommand?.execute(modelArgument);
   const selectedModel = readSelectedModel(result);
   if (!selectedModel) {
     await respond(

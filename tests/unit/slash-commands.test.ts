@@ -89,3 +89,72 @@ test("non-harness mode still rejects unknown slash commands locally", () => {
     output: "Unknown command: /deploy",
   });
 });
+
+test("/agent retrieves display summaries on demand instead of client-bundled prompts", async () => {
+  const previousFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (url) => {
+    requests.push(String(url));
+    return Response.json([
+      {
+        name: "SERVER-TEMPLATE",
+        description: "Server summary",
+        category: "data",
+        model: "test-model",
+      },
+      {
+        name: "SECOND-TEMPLATE",
+        description: "Second summary",
+        category: "coding",
+        model: "test-model",
+      },
+    ]);
+  };
+  try {
+    const commands = buildBuiltinCommands({ models: ["test-model"] });
+    assert.deepEqual(requests, []);
+    assert.deepEqual(await parseSlashCommand("/agent", commands), {
+      output:
+        "Agent templates:\n  SERVER-TEMPLATE — Server summary\n  SECOND-TEMPLATE — Second summary",
+      action: "help",
+    });
+    assert.deepEqual(await parseSlashCommand("/agent  SeRvEr  ", commands), {
+      output:
+        "SERVER-TEMPLATE\n  Server summary\n  Category: data\n  Model: test-model",
+      action: "help",
+    });
+    assert.deepEqual(await parseSlashCommand("/agent  missing  ", commands), {
+      output: 'No template matching "missing"',
+      action: "help",
+    });
+    assert.deepEqual(await parseSlashCommand("/agent   ", commands), {
+      output:
+        "Agent templates:\n  SERVER-TEMPLATE — Server summary\n  SECOND-TEMPLATE — Second summary",
+      action: "help",
+    });
+    assert.deepEqual(
+      requests,
+      Array.from({ length: 4 }).fill("/api/agents/templates")
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("/agent reports unavailable summaries without leaking server errors or starting work", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    Response.json({ error: "private server diagnostic" }, { status: 500 });
+  try {
+    const result = await parseSlashCommand(
+      "/agent",
+      buildBuiltinCommands({ models: [] })
+    );
+    assert.deepEqual(result, {
+      output: "Unable to load agent templates. Try again.",
+      action: "help",
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
