@@ -1,4 +1,5 @@
 import { tool, type ToolSet } from "ai";
+import type { AgentMergePolicyScope } from "@/lib/github-merge-agent-policy";
 import { z } from "zod";
 import { withAutomationMarker } from "@/lib/github-automation-marker";
 import {
@@ -56,6 +57,8 @@ export function buildPRReviewTools(config: {
   // Only flow review nodes that opted into autoMerge get these, so a plain
   // review run can never mutate the PR.
   allowPrLifecycle?: boolean;
+  mergePolicyScope?: AgentMergePolicyScope;
+  expectedHeadSha?: string;
 }) {
   const request = config.fetch ?? fetch;
   const contentOwner = config.headOwner ?? config.owner;
@@ -280,13 +283,15 @@ export function buildPRReviewTools(config: {
                 owner: config.owner,
                 repo: config.repo,
                 prNumber: config.prNumber,
+                mergePolicyScope: config.mergePolicyScope,
+                expectedHeadSha: config.expectedHeadSha,
                 ...(commitTitle ? { commitTitle } : {}),
                 fetchImpl: request,
               }),
           }),
           queuePullRequestForMerge: tool({
             description:
-              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Only call this after an accepted report with hasIssues=false. Prefer this over mergePullRequest when checks are still running.",
+              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Only call this after an accepted report with hasIssues=false. Team merge controls apply. Teams that require exact-head approval must use mergePullRequest when checks pass; do not queue or poll for approval.",
             inputSchema: z.object({
               commitTitle: z.string().optional(),
             }),
@@ -297,6 +302,8 @@ export function buildPRReviewTools(config: {
                 owner: config.owner,
                 repo: config.repo,
                 prNumber: config.prNumber,
+                mergePolicyScope: config.mergePolicyScope,
+                expectedHeadSha: config.expectedHeadSha,
                 ...(commitTitle ? { commitTitle } : {}),
                 fetchImpl: request,
               }),

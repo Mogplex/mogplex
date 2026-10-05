@@ -1,6 +1,7 @@
 "use client";
 
 import { DecisionChecksSection } from "@/components/settings/decision-checks-section";
+import { AgentMergesSection } from "@/components/settings/agent-merges-section";
 import { useTeamSettingsActions } from "./use-team-settings-actions";
 import { MembersTabContent } from "./members-tab-content";
 import { KeysTabContent } from "./keys-tab-content";
@@ -167,6 +168,8 @@ export function TeamSettingsClient({
           iconInputRef={iconInputRef}
         />
       )}
+
+      {section === "members" && <AgentMergesSection teamId={teamId} />}
 
       {section === "keys" && (
         <KeysTabContent

@@ -159,6 +159,16 @@ export async function auditedTeamMerge(
           repo: input.contextRepo ?? "widgets",
         },
         requestId: "slack:T1:Ev1",
+        mergePolicyDeps: {
+          read: async () => ({
+            requireApproval: false,
+            contextRepoOnly: false,
+          }),
+          claimApproval: async () => null,
+          requestApproval: async () => {
+            throw new Error("Approval is off in this fixture");
+          },
+        },
         loadUserGithubLogin: async () => input.userGithubLogin ?? null,
         recordAuditEvent: async (event) => {
           events.push(event);

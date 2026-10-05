@@ -29,6 +29,7 @@ import { buildAutomationExecutionMetadataFields } from "@/lib/workflows/automati
 import { resolvePullRequestNumber } from "@/lib/workflows/automation-job-sandbox-actions";
 import {
   attemptFlowAutoMerge,
+  flowMergePolicyScope,
   getAutoMergeHeadBlockReason,
   getPrReviewAutoMergeBlockReason,
 } from "@/lib/workflows/automation-job-auto-merge";
@@ -190,6 +191,7 @@ export async function finalizeFlowSuccess(
         ? { merged: false, reason: autoMergeBlockReason }
         : await attemptFlowAutoMerge({
             jobRunId,
+            mergePolicyScope: flowMergePolicyScope(context, jobRunId),
             repoFullName: context.repo.full_name,
             prNumber: autoMergeRequest.prNumber,
             githubToken,
@@ -222,6 +224,7 @@ export async function finalizeFlowSuccess(
         ? { merged: false, reason: autoMergeBlockReason }
         : await attemptFlowAutoMerge({
             jobRunId,
+            mergePolicyScope: flowMergePolicyScope(context, jobRunId),
             repoFullName: context.repo.full_name,
             prNumber: autoMergeRequest.prNumber,
             githubToken,

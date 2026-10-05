@@ -3,6 +3,8 @@ import {
   type AutoMergeOutcome,
 } from "@/lib/github-merge";
 import type { FlowGraph } from "@/lib/types";
+import type { AgentMergePolicyScope } from "@/lib/github-merge-agent-policy";
+import { metadataTeamId } from "./automation-job-classify";
 import type {
   JobContext,
   PullRequestDetails,
@@ -10,6 +12,24 @@ import type {
 import { loadPullRequestDetails } from "@/lib/workflows/automation-job-github";
 import { resolvePullRequestNumber } from "@/lib/workflows/automation-job-sandbox-actions";
 import type { ReviewOutcome } from "@/lib/workflows/pr-review-harness";
+
+export function flowMergePolicyScope(
+  context: JobContext,
+  requestId?: string
+): AgentMergePolicyScope {
+  const [owner, repo] = context.repo.full_name.split("/");
+  return {
+    userId: context.repo.user_id,
+    teamId:
+      metadataTeamId(context.metadata) ?? context.repo.product_team_id ?? null,
+    contextRepo: { id: context.repo.id, owner, repo },
+    requestId:
+      requestId ??
+      (typeof context.metadata.flow_job_run_id === "string"
+        ? context.metadata.flow_job_run_id
+        : null),
+  };
+}
 
 export function getPrReviewAutoMergeBlockReason(input: {
   reviewOutcome: Pick<ReviewOutcome, "hasIssues"> | null;
@@ -125,6 +145,7 @@ export async function attemptFlowAutoMerge(input: {
   githubToken: string;
   expectedHeadSha?: string | null;
   commitTitle?: string | null;
+  mergePolicyScope: AgentMergePolicyScope;
 }): Promise<AutoMergeOutcome> {
   const [mergeOwner, mergeRepo] = input.repoFullName.split("/");
   let autoMerge: AutoMergeOutcome;
@@ -134,6 +155,7 @@ export async function attemptFlowAutoMerge(input: {
       owner: mergeOwner,
       repo: mergeRepo,
       prNumber: input.prNumber,
+      mergePolicyScope: input.mergePolicyScope,
       ...(input.expectedHeadSha
         ? { expectedHeadSha: input.expectedHeadSha }
         : {}),
