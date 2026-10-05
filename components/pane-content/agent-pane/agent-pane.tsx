@@ -276,7 +276,7 @@ export function AgentPane({
 
       const result = attachments?.length
         ? null
-        : parseSlashCommand(input, builtinCommands, asSlashCommands(), {
+        : await parseSlashCommand(input, builtinCommands, asSlashCommands(), {
             allowUnknown: model.startsWith("harness:"),
           });
       if (result && result.action !== "skill") {
@@ -300,7 +300,7 @@ export function AgentPane({
           setMessages([]);
           clearMessages(pane.id);
         } else if (result.action === "help") {
-          const help = builtinCommands
+          const help = result.output || builtinCommands
             .map((c) => `/${c.name} - ${c.description}`)
             .join("\n");
           addLocalMsg(pane.id, { id: crypto.randomUUID(), text: help });

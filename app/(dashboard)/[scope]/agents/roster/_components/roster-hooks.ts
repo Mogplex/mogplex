@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { Agent, AgentCategoryRow } from "@/lib/types";
-import { AGENT_CATEGORIES } from "@/lib/agents/templates";
+import { AGENT_CATEGORIES } from "@/lib/agents/templates/types";
 
 export type CategoryEntry = [
   string,

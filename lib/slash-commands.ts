@@ -1,4 +1,5 @@
-import { PRECONFIGURED_AGENTS } from "@/lib/agents/templates";
+import { fetchJsonArray } from "@/lib/client-fetch";
+import type { AgentTemplateSummary } from "@/lib/agents/template-summaries-handler";
 import {
   buildHarnessSlashCommands,
   getHarnessIdFromModelId,
@@ -81,27 +82,39 @@ function buildChatBuiltinCommands(models: string[]): SlashCommand[] {
       name: "agent",
       description: "Browse agent templates",
       args: "[template-name]",
-      execute: (args) => {
+      execute: async (args) => {
+        let templates: AgentTemplateSummary[];
+        try {
+          templates = await fetchJsonArray<AgentTemplateSummary>(
+            "/api/agents/templates"
+          );
+        } catch {
+          return {
+            output: "Unable to load agent templates. Try again.",
+            action: "help" as const,
+          };
+        }
         if (!args.trim()) {
-          const list = PRECONFIGURED_AGENTS.map(
-            (t) => `  ${t.name} — ${t.description}`
-          ).join("\n");
+          const list = templates
+            .map((t) => `  ${t.name} — ${t.description}`)
+            .join("\n");
           return {
             output: `Agent templates:\n${list}`,
             action: "help" as const,
           };
         }
         const q = args.trim().toLowerCase();
-        const match = PRECONFIGURED_AGENTS.find((t) =>
-          t.name.toLowerCase().includes(q)
-        );
+        const match = templates.find((t) => t.name.toLowerCase().includes(q));
         if (match) {
           return {
             output: `${match.name}\n  ${match.description}\n  Category: ${match.category}\n  Model: ${match.model}`,
             action: "help" as const,
           };
         }
-        return { output: `No template matching "${args.trim()}"` };
+        return {
+          output: `No template matching "${args.trim()}"`,
+          action: "help" as const,
+        };
       },
     },
   ];
@@ -124,7 +137,7 @@ export function parseSlashCommand(
   builtins: SlashCommand[],
   custom: SlashCommand[] = [],
   options?: { allowUnknown?: boolean }
-): CommandResult | null {
+): CommandResult | Promise<CommandResult> | null {
   if (!input.startsWith("/")) return null;
   const [cmd, ...rest] = input.slice(1).split(" ");
   const args = rest.join(" ");
