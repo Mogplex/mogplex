@@ -99,6 +99,17 @@ test("native approved merge consumes once and records the approved exact-head at
   assert.equal(f.events[0]?.payload?.approval_id, "approved");
 });
 
+test("personal native flows retain merging without a team policy or team audit row", async () => {
+  const f = fixture();
+  const result = await mergePullRequestIfSafe({
+    ...f.merge,
+    mergePolicyScope: { ...f.scope, teamId: null },
+  });
+  assert.equal(result.merged, true);
+  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
+  assert.deepEqual(f.events, []);
+});
+
 test("approval cannot arm auto-merge that would survive a later head push", async () => {
   const f = fixture({ approved: true, waiting: true });
   const result = await mergePullRequestIfSafe(f.merge);
@@ -147,6 +158,22 @@ test("native merge fails closed on cross-repo context and unavailable storage", 
     assert.deepEqual(f.writes, []);
     assert.equal(f.counts().claims, 0);
   }
+});
+
+test("a refused context cannot produce a deferred native merge request", async () => {
+  const f = fixture();
+  f.scope.contextRepo.repo = "different";
+  const deferred: unknown[] = [];
+  const result = await mergePullRequestIfSafe({
+    ...f.merge,
+    mergePolicyScope: {
+      ...f.scope,
+      deferUntilReviewComplete: (target) => deferred.push(target),
+    },
+  });
+  assert.equal(result.merged, false);
+  assert.deepEqual(deferred, []);
+  assert.deepEqual(f.writes, []);
 });
 
 test("native reviewer lifecycle tool retains clean-report gate and applies team approval", async () => {

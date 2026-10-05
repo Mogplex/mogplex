@@ -85,7 +85,7 @@ jobs:
             [ -f "$file" ] || continue
             changed+=("$file")
           done < <(git diff -z --name-only --diff-filter=d \
-            "origin/${BASE_REF}...HEAD" -- 'lib/**/*.ts')
+            "origin/${BASE_REF}...HEAD" -- ':(glob)lib/**/*.ts')
 
           if [ "${#changed[@]}" -eq 0 ]; then
             echo "No mutable lib files changed; nothing to mutate."

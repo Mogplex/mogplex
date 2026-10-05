@@ -247,6 +247,17 @@ describe("team merge approvals against the real schema and routes", () => {
       })
     ).toBe(id);
   });
+  it("omitted merge titles stay empty in the approval list and bind a single claim", async () => {
+    const untitled = { ...target, commitTitle: undefined };
+    const id = await defaultMergePolicyDeps.requestApproval(untitled);
+    expect(await listMergeApprovals(developer, team)).toEqual([
+      expect.objectContaining({ id, commit_title: "" }),
+    ]);
+    await approve(id);
+    expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
+    expect(await defaultMergePolicyDeps.claimApproval(untitled)).toBe(id);
+    expect(await defaultMergePolicyDeps.claimApproval(untitled)).toBeNull();
+  });
   it("denied requests cannot authorize a merge", async () => {
     const id = await defaultMergePolicyDeps.requestApproval(target);
     expect(
@@ -351,6 +362,18 @@ describe("team merge approvals against the real schema and routes", () => {
       },
     };
     const originalFetch = globalThis.fetch;
+    const disabledTools = buildFlowPRReviewTools(
+      { ...context, metadata: { ...context.metadata, flow_auto_merge: false } },
+      "test-token",
+      target.number,
+      () => {
+        throw new Error("Disabled flow must not defer merges");
+      }
+    );
+    expect(Object.keys(disabledTools)).not.toContain("mergePullRequest");
+    expect(Object.keys(disabledTools)).not.toContain(
+      "queuePullRequestForMerge"
+    );
     const writes: string[] = [];
     const pinned: string[] = [];
     globalThis.fetch = async (url, init) => {
