@@ -55,11 +55,19 @@ describe("team merge policy", () => {
     };
     expect(
       await enforceMergePolicy(target, undefined, storage, "queue")
-    ).toMatchObject({ allowed: false, decision: "immediate_merge_required" });
+    ).toMatchObject({
+      allowed: false,
+      decision: "immediate_merge_required",
+      error: expect.stringMatching(/direct merge tool/i),
+    });
     expect(approvalCalls).toBe(0);
     expect(
       await enforceMergePolicy(target, undefined, storage, "review")
-    ).toMatchObject({ allowed: false, decision: "merge_deferred" });
+    ).toMatchObject({
+      allowed: false,
+      decision: "merge_deferred",
+      error: expect.stringMatching(/review check to complete/i),
+    });
     expect(approvalCalls).toBe(0);
   });
   it("requires a full reviewed SHA before using or creating an approval", async () => {
@@ -71,14 +79,24 @@ describe("team merge policy", () => {
         return "approved";
       },
     };
-    for (const expectedHeadSha of ["", "abc", "g".repeat(40)]) {
+    for (const expectedHeadSha of [
+      "",
+      "abc",
+      "g".repeat(40),
+      `prefix${"a".repeat(40)}`,
+      `${"a".repeat(40)}suffix`,
+    ]) {
       expect(
         await enforceMergePolicy(
           { ...target, expectedHeadSha },
           undefined,
           storage
         )
-      ).toMatchObject({ allowed: false, decision: "merge_policy_unavailable" });
+      ).toMatchObject({
+        allowed: false,
+        decision: "merge_policy_unavailable",
+        error: expect.stringMatching(/review the current head/i),
+      });
     }
     expect(approvalCalls).toBe(0);
   });
@@ -93,6 +111,7 @@ describe("team merge policy", () => {
       allowed: false,
       decision: "approval_required",
       approvalId: "pending",
+      error: expect.stringMatching(/Team settings > Members > Agent merges/),
     });
   });
   it("refuses contextless and cross-repository merges before touching approval storage", async () => {
@@ -106,12 +125,16 @@ describe("team merge policy", () => {
     };
     for (const context of [
       undefined,
+      {},
+      { owner: "acme" },
+      { repo: "widgets" },
       { owner: "other", repo: "widgets" },
       { owner: "acme", repo: "other" },
     ]) {
       expect(await enforceMergePolicy(target, context, storage)).toMatchObject({
         allowed: false,
         decision: "outside_context_repo",
+        error: expect.stringMatching(/run's repository/i),
       });
     }
     expect(approvalCalls).toBe(0);
@@ -147,6 +170,7 @@ describe("team merge policy", () => {
       expect(result).toMatchObject({
         allowed: false,
         decision: "merge_policy_unavailable",
+        error: expect.stringMatching(/No merge was started/),
       });
       expect(JSON.stringify(result)).not.toContain("private diagnostic");
     }
