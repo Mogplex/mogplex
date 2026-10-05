@@ -88,7 +88,7 @@ export async function enforceMergePolicy(
       decision: "approval_required",
       approvalId: await deps.requestApproval(input),
       error:
-        "This team requires your approval before an agent merges a pull request. Review this request in Team settings > Members > Agent merges, then ask the agent to continue. Do not retry or poll while approval is pending.",
+        "This team requires your approval before an agent merges a pull request. Review this request in Team settings > Members > Agent merges, then ask the agent to continue. After approval, use the same repository, pull request, head SHA, and exact commit title; omit the title again if it was omitted. Do not retry or poll while approval is pending.",
     };
   } catch {
     return {

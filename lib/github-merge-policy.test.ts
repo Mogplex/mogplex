@@ -114,6 +114,23 @@ describe("team merge policy", () => {
       error: expect.stringMatching(/Team settings > Members > Agent merges/),
     });
   });
+  it("tells the agent to preserve the exact approved target and title", async () => {
+    const result = await enforceMergePolicy(
+      target,
+      undefined,
+      deps({ requireApproval: true, contextRepoOnly: false })
+    );
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.error).toMatch(
+        /same repository, pull request, head SHA, and exact commit title/i
+      );
+      expect(result.error).toMatch(/omit the title again if it was omitted/i);
+      expect(result.error).toMatch(
+        /do not retry or poll while approval is pending/i
+      );
+    }
+  });
   it("refuses contextless and cross-repository merges before touching approval storage", async () => {
     let approvalCalls = 0;
     const storage = {

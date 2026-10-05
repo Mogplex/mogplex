@@ -116,7 +116,7 @@ test("unauthenticated and outside-team requests cannot read, update, or resolve"
       await handlers.resolve(
         request({ approved: true }),
         "team-1",
-        "approval-1"
+        "00000000-0000-4000-8000-000000000081"
       ),
     ])
       assert.equal(response.status, denied.signedOut ? 401 : 403);
@@ -143,7 +143,13 @@ test("rejects malformed bodies and model-supplied approval identities before wri
     { approved: true, userId: "attacker" },
   ])
     assert.equal(
-      (await handlers.resolve(request(body), "team-1", "approval-1")).status,
+      (
+        await handlers.resolve(
+          request(body),
+          "team-1",
+          "00000000-0000-4000-8000-000000000081"
+        )
+      ).status,
       422
     );
   assert.equal(state.writes, 0);
@@ -158,7 +164,7 @@ test("resolution always uses the signed-in member and URL team, and records the 
       await handlers.resolve(
         request({ approved: false }),
         "team-1",
-        "approval-1"
+        "00000000-0000-4000-8000-000000000081"
       )
     ).status,
     200
@@ -167,7 +173,7 @@ test("resolution always uses the signed-in member and URL team, and records the 
     {
       userId: "user-1",
       teamId: "team-1",
-      approvalId: "approval-1",
+      approvalId: "00000000-0000-4000-8000-000000000081",
       approved: false,
     },
   ]);
@@ -177,7 +183,7 @@ test("resolution always uses the signed-in member and URL team, and records the 
       actorUserId: "user-1",
       action: "github.merge_approval.resolved",
       targetType: "merge_approval",
-      targetId: "approval-1",
+      targetId: "00000000-0000-4000-8000-000000000081",
       payload: { approved: false },
     },
   ]);
@@ -187,7 +193,7 @@ test("resolution always uses the signed-in member and URL team, and records the 
       await createMergeSettingsHandlers(state.deps).resolve(
         request({ approved: true }),
         "team-1",
-        "approval-1"
+        "00000000-0000-4000-8000-000000000081"
       )
     ).status,
     409
@@ -216,7 +222,7 @@ test("storage failures return a safe error and never report a saved approval", a
       await handlers.resolve(
         request({ approved: true }),
         "team-1",
-        "approval-1"
+        "00000000-0000-4000-8000-000000000081"
       ),
     ]) {
       assert.equal(response.status, 500);
@@ -253,11 +259,31 @@ test("lost setting and approval audits are surfaced without undoing successful w
       await handlers.resolve(
         request({ approved: true }),
         "team-1",
-        "approval-1"
+        "00000000-0000-4000-8000-000000000081"
       )
     ).status,
     200
   );
   assert.equal(reports.length, 2);
   assert.ok(!JSON.stringify(reports).includes("private diagnostic"));
+});
+
+test("malformed approval IDs are rejected before storage and auditing", async () => {
+  const state = fixture();
+  const handlers = createMergeSettingsHandlers(state.deps);
+  for (const id of [
+    "not-a-uuid",
+    "",
+    "00000000-0000-4000-8000-000000000081extra",
+  ]) {
+    const response = await handlers.resolve(
+      request({ approved: true }),
+      "team-1",
+      id
+    );
+    assert.equal(response.status, 422);
+    assert.deepEqual(await response.json(), { error: "Invalid approval ID" });
+  }
+  assert.deepEqual(state.resolutions, []);
+  assert.deepEqual(state.audits, []);
 });

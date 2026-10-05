@@ -124,6 +124,20 @@ async function approve(id: string) {
 }
 
 describe("team merge approvals against the real schema and routes", () => {
+  it("rejects a malformed approval ID without changing a pending request", async () => {
+    const id = await defaultMergePolicyDeps.requestApproval(target);
+    const pending = await listMergeApprovals(developer, team);
+    expect(pending.map((row) => row.id)).toEqual([id]);
+    const response = await handlers().resolve(
+      request({ approved: true }),
+      team,
+      "not-a-uuid"
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "Invalid approval ID" });
+    expect(await listMergeApprovals(developer, team)).toEqual(pending);
+    expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
+  });
   it("server service_role can use approvals while public callers cannot execute the RPC", async () => {
     const result = await db.transaction(async (tx) => {
       await tx.exec("set local row_security=on; set local role service_role");

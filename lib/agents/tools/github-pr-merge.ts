@@ -370,6 +370,8 @@ export function createGithubPullRequestMergeTool(
         return { error: target.error };
       }
       const attempt = { ...target, number, expectedHeadSha };
+      // Approval covers one invocation, including a refused or failed preflight.
+      // Claim first so a cached tool call cannot reuse consent after failure.
       const policy = options.teamId
         ? await enforceMergePolicy(
             {

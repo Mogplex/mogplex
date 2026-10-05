@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { requireProfileId } from "@/lib/auth";
 import { loadTeamMembershipAuth } from "@/lib/team-management";
 import { recordTeamAuditEvent } from "@/lib/team-audit";
+import { isUuid } from "@/lib/uuid";
 import {
   listMergeApprovals,
   readTeamMergePolicy,
@@ -151,6 +152,8 @@ export function createMergeSettingsHandlers(
     async resolve(request: Request, teamId: string, approvalId: string) {
       const auth = await access(teamId);
       if (auth instanceof Response) return auth;
+      if (!isUuid(approvalId))
+        return Response.json({ error: "Invalid approval ID" }, { status: 422 });
       const parsed = resolutionBody.safeParse(
         await request.json().catch(() => null)
       );
