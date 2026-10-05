@@ -128,6 +128,20 @@ test("queue-only call refuses under approval policy without consuming approval",
   assert.deepEqual(f.writes, []);
 });
 
+test("default-off team controls retain native GitHub auto-merge without an approval claim", async () => {
+  const f = fixture();
+  f.scope.deps.read = async () => ({
+    requireApproval: false,
+    contextRepoOnly: false,
+  });
+  const result = await queuePullRequestForMerge(f.merge);
+  assert.equal(result.merged, false);
+  assert.equal(result.queued, true);
+  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
+  assert.deepEqual(f.writes, ["https://api.github.com/graphql"]);
+  assert.equal(f.events[0]?.decisionCode, "auto_merge_queued");
+});
+
 test("flow review defers an approved attempt until its required review check completes", async () => {
   const f = fixture({ approved: true });
   const deferred: unknown[] = [];
