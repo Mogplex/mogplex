@@ -100,7 +100,7 @@ export default function HowItWorksPage() {
         </header>
 
         <nav className="run-overview" aria-label="Run overview">
-          <ol>
+          <ol role="list">
             {STAGES.map((stage) => (
               <li key={stage.id}>
                 <a href={`#run-${stage.id}`}>

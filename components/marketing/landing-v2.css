@@ -2479,7 +2479,7 @@ path.mpx-dag-line,
 
 .dark .mpx-harnesses :is(
   .mpx-eyebrow,
-  .mpx-harness-tabs button[aria-selected="false"],
+  .mpx-harness-tabs button[aria-selected="false"]:not(:hover),
   .mpx-code-panel header > span,
   .mpx-code-panel .t-root,
   .mpx-harness-id p

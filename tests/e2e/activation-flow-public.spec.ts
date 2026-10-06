@@ -87,7 +87,7 @@ test("public marketing pages use the capacity pricing copy", async ({
 }) => {
   const pages = [
     ["/workflows", "Pipelines worth stealing."],
-    ["/how-it-works", "One run, drawn to scale."],
+    ["/how-it-works", "From the first event to code you can trust."],
     ["/pricing", "Run more work. Know what it costs."],
     ["/faq", "Fair questions."],
     ["/company", "The company behind the system."],

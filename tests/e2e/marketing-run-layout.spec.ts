@@ -116,4 +116,17 @@ test("solid homepage dark sections remain distinct from the page", async ({
       (await copy.textContent()) ?? undefined
     ).toBeGreaterThanOrEqual(4.5);
   }
+  const tab = page.getByRole("tab", { name: "Claude Code", exact: true });
+  const restingColor = await tab.evaluate(
+    (element) => getComputedStyle(element).color
+  );
+  await tab.hover();
+  await tab.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map((animation) => animation.finished)
+    );
+  });
+  expect(
+    await tab.evaluate((element) => getComputedStyle(element).color)
+  ).not.toBe(restingColor);
 });
