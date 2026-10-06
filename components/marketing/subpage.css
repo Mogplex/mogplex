@@ -84,9 +84,8 @@
   margin-top: 20px;
 }
 
-/* ---------- ledger rows (shared by /workflows + /how-it-works) ---------- */
-.mpx-sub .patterns,
-.mpx-sub .runsheet {
+/* ---------- workflow ledger rows ---------- */
+.mpx-sub .patterns {
   width: 100%;
   max-width: 1560px;
   padding: 0 40px;
@@ -94,8 +93,7 @@
   border-top: 1px solid var(--border);
 }
 
-.mpx-sub .pattern,
-.mpx-sub .stage {
+.mpx-sub .pattern {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -103,8 +101,7 @@
   padding: clamp(44px, 7vh, 72px) 0 clamp(44px, 7vh, 72px) 26px;
 }
 
-.mpx-sub .pattern + .pattern,
-.mpx-sub .stage + .stage {
+.mpx-sub .pattern + .pattern {
   border-top: 1px solid var(--border-soft);
 }
 
@@ -183,8 +180,7 @@
   font-style: normal;
 }
 
-.mpx-sub .pattern-desc,
-.mpx-sub .stage-desc {
+.mpx-sub .pattern-desc {
   max-width: 58ch;
   color: var(--ink-body);
   font-size: clamp(0.92rem, 1.1vw, 1rem);
@@ -220,41 +216,154 @@
   color: var(--neutral-5);
 }
 
-/* ---------- /how-it-works — run ledger ---------- */
-.mpx-sub .stage-t {
-  margin-bottom: 10px;
-  color: var(--faint);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+/* ---------- /how-it-works — a readable path through one run ---------- */
+.mpx-sub .run-guide {
+  --ink-body: var(--ink-soft);
+  background: var(--card);
 }
 
-.mpx-sub .stage-t b {
-  color: var(--ink);
-  font-weight: 500;
+.mpx-sub .run-guide .sub-hero {
+  max-width: 1280px;
+  padding-top: clamp(64px, 8vw, 112px);
+  padding-bottom: 48px;
+}
+
+.mpx-sub .run-kicker {
+  color: var(--ink-body);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+
+.mpx-sub .run-guide .sub-title {
+  max-width: 24ch;
+  font-size: clamp(2.6rem, 5vw, 4.75rem);
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.mpx-sub .run-period {
+  color: var(--accent);
+}
+
+.mpx-sub .run-guide .sub-lede {
+  max-width: 54ch;
+  font-size: 18px;
+}
+
+.mpx-sub .run-overview,
+.mpx-sub .runsheet {
+  max-width: 1280px;
+  padding: 0 40px;
+  margin: 0 auto;
+}
+
+.mpx-sub .run-overview ol {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  padding: 0;
+  margin: 0;
+  border-block: 1px solid var(--border);
+  list-style: none;
+}
+
+.mpx-sub .run-overview li + li {
+  border-left: 1px solid var(--border);
+}
+
+.mpx-sub .run-overview a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 20px;
+  text-decoration: none;
+}
+
+.mpx-sub .run-overview a:hover {
+  background: var(--surface-2);
+}
+
+.mpx-sub .run-overview a:active {
+  background: var(--border-soft);
+}
+
+.mpx-sub .run-overview a:focus-visible {
+  outline-offset: -3px;
+}
+
+.mpx-sub .run-overview .mono {
+  grid-column: 1 / -1;
+  color: var(--ink-body);
+  font-size: 14px;
+}
+
+.mpx-sub .run-overview strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.mpx-sub .run-arrow {
+  align-self: center;
+  color: var(--ink-body);
+}
+
+.mpx-sub .stage {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(220px, 0.55fr);
+  gap: 32px;
+  align-items: start;
+  padding: 48px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mpx-sub .stage:last-child {
+  border-bottom: 0;
+}
+
+.mpx-sub .stage-num {
+  padding-top: 4px;
+  color: var(--ink-body);
+  font-size: 18px;
 }
 
 .mpx-sub .stage-name {
-  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  margin: 0;
+  font-size: clamp(1.5rem, 2.2vw, 1.875rem);
   font-weight: 700;
   letter-spacing: -0.035em;
-  line-height: 1.15;
-  max-width: 18ch;
+  line-height: 1.2;
+}
+
+.mpx-sub .stage-desc {
+  max-width: 60ch;
+  margin-top: 16px;
+  color: var(--ink-body);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.mpx-sub .stage-control {
+  padding: 20px 24px;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+
+.mpx-sub .stage-control h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .mpx-sub .stage-fact {
-  max-width: 80ch;
-  padding-left: 12px;
-  border-left: 2px solid var(--accent);
-  margin-top: 18px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.7;
+  margin-top: 8px;
+  color: var(--ink-body);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-.mpx-sub .stage-fact b {
-  color: var(--ink);
-  font-weight: 500;
+.dark .mpx-sub .stage-control,
+.dark .mpx-sub .run-overview a:hover {
+  background: var(--surface);
 }
 
 /* what stays yours */
@@ -264,6 +373,19 @@
   padding: clamp(44px, 7vh, 72px) 40px;
   margin: 0 auto;
   border-top: 1px solid var(--border);
+}
+
+.mpx-sub .run-guide .terms {
+  max-width: 1280px;
+  padding-top: 48px;
+  padding-bottom: 64px;
+}
+
+.mpx-sub .terms-title {
+  margin: 0 0 32px;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
 }
 
 .mpx-sub .terms-row {
@@ -285,36 +407,19 @@
   line-height: 1.6;
 }
 
+.mpx-sub .run-guide .term-k {
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+
+.mpx-sub .run-guide .term-v {
+  font-size: 15px;
+}
+
 .mpx-sub .term-v a {
   color: var(--ink);
   text-underline-offset: 3px;
-}
-
-.mpx-sub .shipped {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: clamp(36px, 6vh, 56px);
-}
-
-.mpx-sub .node-end {
-  position: static;
-}
-
-.mpx-sub .shipped-label {
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.mpx-sub .shipped-label b {
-  color: var(--green-deep);
-  font-weight: 600;
-}
-
-.dark .mpx-sub .shipped-label b {
-  color: var(--green-soft);
 }
 
 /* ---------- /faq — objection ledger ---------- */
@@ -802,6 +907,7 @@
   .mpx-sub .sub-hero,
   .mpx-sub .patterns,
   .mpx-sub .runsheet,
+  .mpx-sub .run-overview,
   .mpx-sub .terms,
   .mpx-sub .faq-list,
   .mpx-sub .price-cards,
@@ -850,8 +956,7 @@
     display: none;
   }
 
-  .mpx-sub .pattern,
-  .mpx-sub .stage {
+  .mpx-sub .pattern {
     grid-template-columns: minmax(0, 1fr);
     gap: 18px;
     padding-left: 22px;
@@ -874,5 +979,68 @@
 @media (max-width: 560px) {
   .mpx-sub .terms-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .mpx-sub .stage {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .mpx-sub .stage-control {
+    grid-column: 2;
+  }
+
+  .mpx-sub .run-overview a {
+    padding: 16px 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mpx-sub .run-guide .sub-hero {
+    padding: 56px 20px 32px;
+  }
+
+  .mpx-sub .run-guide .sub-title {
+    font-size: clamp(2.25rem, 8.7vw, 3.5rem);
+  }
+
+  .mpx-sub .run-guide .sub-lede {
+    font-size: 17px;
+  }
+
+  .mpx-sub .run-overview ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mpx-sub .run-overview li:nth-child(4) {
+    border-left: 0;
+  }
+
+  .mpx-sub .run-overview li:nth-child(n + 4) {
+    border-top: 1px solid var(--border);
+  }
+
+  .mpx-sub .run-overview strong {
+    font-size: 16px;
+  }
+
+  .mpx-sub .run-overview a {
+    gap: 8px;
+  }
+
+  .mpx-sub .stage {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 16px;
+    padding: 32px 0;
+  }
+
+  .mpx-sub .stage-num {
+    font-size: 14px;
+  }
+
+  .mpx-sub .stage-control {
+    padding: 16px;
   }
 }
