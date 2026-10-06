@@ -15,7 +15,6 @@ export const DEFAULT_SANDBOX_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 export const MIN_SANDBOX_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 export const DEFAULT_SANDBOX_BILLING_TARGET = "personal";
 export const DEFAULT_ENV_SYNC_MODE = "sandbox-only";
-export const VERCEL_PROJECT_ENV_SYNC_AVAILABLE = false;
 
 export type RepoEnvVars = Record<string, string>;
 export type SandboxBillingTarget = "personal" | "team";
@@ -167,9 +166,8 @@ export function normalizeEnvSyncMode(value: unknown): EnvSyncMode {
 
 export function resolveEffectiveEnvSyncMode(value: unknown): EnvSyncMode {
   const mode = normalizeEnvSyncMode(value);
-  return mode === "vercel-project" && !VERCEL_PROJECT_ENV_SYNC_AVAILABLE
-    ? DEFAULT_ENV_SYNC_MODE
-    : mode;
+  // Normalize stored preferences from the retired personal Vercel integration.
+  return mode === "vercel-project" ? DEFAULT_ENV_SYNC_MODE : mode;
 }
 
 function normalizeEnvVarValue(value: unknown) {
@@ -242,10 +240,7 @@ export function hasConfiguredSandboxEnv(repo: {
   env_sync_mode?: unknown;
   vercel_project_id?: string | null;
 }): boolean {
-  const manual = normalizeEnvVars(repo.sandbox_env_vars);
-  if (Object.keys(manual).length > 0) return true;
-  const mode = resolveEffectiveEnvSyncMode(repo.env_sync_mode);
-  return mode === "vercel-project" && Boolean(repo.vercel_project_id);
+  return Object.keys(normalizeEnvVars(repo.sandbox_env_vars)).length > 0;
 }
 
 export function formatEnvVars(value: RepoEnvVars | null | undefined) {

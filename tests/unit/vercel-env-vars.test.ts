@@ -1,55 +1,45 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { buildRuntimeSandboxEnv } from "../../lib/repo-settings";
+import {
+  getRepoLinkedVercelProject,
+  resolveRepoSandboxEnv,
+} from "../../lib/vercel/env-vars";
 
-async function loadVercelEnvHelpers() {
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../lib/vercel/env-vars");
-}
-
-test("flattenVercelProjectEnvVars prefers preview values over development for duplicate keys", async () => {
-  const { flattenVercelProjectEnvVars } = await loadVercelEnvHelpers();
-  const envs = [
-    { key: "DATABASE_URL", value: "postgres://dev", target: ["development"] },
-    { key: "DATABASE_URL", value: "postgres://preview", target: ["preview"] },
-    {
-      key: "API_BASE_URL",
-      value: "https://dev.example.com",
-      target: ["development"],
-    },
-    {
-      key: "SHARED_SECRET",
-      value: "shared",
-      target: ["preview", "development"],
-    },
-  ];
-
-  assert.deepEqual(flattenVercelProjectEnvVars(envs), {
-    DATABASE_URL: "postgres://preview",
-    API_BASE_URL: "https://dev.example.com",
-    SHARED_SECRET: "shared",
+test("legacy Vercel preferences preserve manual sandbox env without provider access", async () => {
+  const providerFetch = mock.method(globalThis, "fetch", async () => {
+    throw new Error("must not fetch provider env");
   });
+  try {
+    const repo = {
+      env_sync_mode: "vercel-project",
+      vercel_project_id: "prj_legacy",
+      vercel_team_id: "team_legacy",
+      sandbox_env_vars: { API_URL: '"https://example.com"', FEATURE: "on" },
+    };
+    assert.deepEqual(await resolveRepoSandboxEnv({ repo, userId: "user-1" }), {
+      envVars: { API_URL: "https://example.com", FEATURE: "on" },
+      sync: { mode: "sandbox-only", source: "manual", warning: null },
+    });
+    assert.equal(getRepoLinkedVercelProject(repo), null);
+    assert.equal(providerFetch.mock.callCount(), 0);
+  } finally {
+    providerFetch.mock.restore();
+  }
 });
 
-test("mergeRepoSandboxEnvVars lets manual vars override synced Vercel vars", async () => {
-  const { mergeRepoSandboxEnvVars } = await loadVercelEnvHelpers();
-
+test("manual preview env injection remains available", async () => {
   assert.deepEqual(
-    mergeRepoSandboxEnvVars(
-      {
-        DATABASE_URL: "postgres://preview",
-        API_BASE_URL: "https://preview.example.com",
+    await resolveRepoSandboxEnv({
+      userId: "user-1",
+      repo: {
+        env_sync_mode: "sandbox-and-preview",
+        sandbox_env_vars: { FEATURE: "on" },
       },
-      {
-        DATABASE_URL: "postgres://manual",
-        FEATURE_FLAG: "on",
-      }
-    ),
+    }),
     {
-      DATABASE_URL: "postgres://manual",
-      API_BASE_URL: "https://preview.example.com",
-      FEATURE_FLAG: "on",
+      envVars: { FEATURE: "on" },
+      sync: { mode: "sandbox-and-preview", source: "manual", warning: null },
     }
   );
 });

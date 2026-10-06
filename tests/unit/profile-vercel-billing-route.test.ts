@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { NextResponse } from "next/server";
 
 async function loadProfileVercelBillingRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -39,6 +40,57 @@ test("PATCH /api/profile/vercel-billing still clears stale defaults", async () =
       default_vercel_team_id: null,
     },
   ]);
+  assert.deepEqual(await response.json(), {
+    projectId: null,
+    teamId: null,
+    projectName: null,
+  });
+});
+
+test("clearing stale Vercel defaults requires authentication", async () => {
+  const { createProfileVercelBillingPatchHandler } =
+    await loadProfileVercelBillingRoute();
+  const handler = createProfileVercelBillingPatchHandler({
+    requireUserId: async () =>
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    updateProfile: async () => {
+      throw new Error("unauthenticated requests must not update profiles");
+    },
+  });
+  assert.equal(
+    (await handler(createPatchRequest({ projectId: null }))).status,
+    401
+  );
+});
+
+test("invalid clear requests cannot erase saved defaults", async () => {
+  const { createProfileVercelBillingPatchHandler } =
+    await loadProfileVercelBillingRoute();
+  const handler = createProfileVercelBillingPatchHandler({
+    requireUserId: async () => "user-1",
+    updateProfile: async () => {
+      throw new Error("invalid requests must not update profiles");
+    },
+  });
+  for (const body of [null, [], {}, { projectId: " " }, { projectId: 123 }]) {
+    assert.equal((await handler(createPatchRequest(body))).status, 400);
+  }
+});
+
+test("failed default clearing does not report success", async () => {
+  const { createProfileVercelBillingPatchHandler } =
+    await loadProfileVercelBillingRoute();
+  const handler = createProfileVercelBillingPatchHandler({
+    requireUserId: async () => "user-1",
+    updateProfile: async (userId) => {
+      assert.equal(userId, "user-1");
+      return { error: { message: "Update failed" } };
+    },
+  });
+  assert.equal(
+    (await handler(createPatchRequest({ projectId: null }))).status,
+    500
+  );
 });
 
 test("PATCH /api/profile/vercel-billing rejects new personal project configuration", async () => {
@@ -46,8 +98,8 @@ test("PATCH /api/profile/vercel-billing rejects new personal project configurati
     await loadProfileVercelBillingRoute();
   const handler = createProfileVercelBillingPatchHandler({
     requireUserId: async () => "user-1",
-    loadUserVercelCredentials: async () => {
-      throw new Error("disabled configuration must not load credentials");
+    updateProfile: async () => {
+      throw new Error("unsupported configuration must not update the profile");
     },
   });
 
