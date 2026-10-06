@@ -6,7 +6,6 @@ import {
   resolveEffectiveSandboxBillingMode,
   normalizeRepoSandboxBillingModeOverride,
   normalizeSandboxBillingMode,
-  resolveSandboxBilling,
 } from "@/lib/sandbox/billing";
 import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import type { VercelAuthMode } from "@/lib/vercel/service";
@@ -63,36 +62,11 @@ export function resolveBillingLinkedProjectSelection(input?: {
   accountLinkedProjectId?: unknown;
   accountLinkedTeamId?: unknown;
 }): BillingLinkedProjectSelection {
-  const billingMode = resolveEffectiveSandboxBillingMode({
-    workspaceBillingModeInput: input?.workspaceBillingModeInput,
-    repoBillingModeOverrideInput: input?.repoBillingModeOverrideInput,
-  });
-
-  const resolution = resolveSandboxBilling({
-    workspaceBillingModeInput: input?.workspaceBillingModeInput,
-    repoBillingModeOverrideInput: input?.repoBillingModeOverrideInput,
-    repoLinkedProjectId: input?.repoLinkedProjectId,
-    repoLinkedTeamId: input?.repoLinkedTeamId,
-    workspaceLinkedProjectId: input?.workspaceLinkedProjectId,
-    workspaceLinkedTeamId: input?.workspaceLinkedTeamId,
-    accountLinkedProjectId: input?.accountLinkedProjectId,
-    accountLinkedTeamId: input?.accountLinkedTeamId,
-  });
-
-  if (!resolution.ok || resolution.billingSource !== "user_vercel_project") {
-    return {
-      billingMode,
-      source: null,
-      projectId: null,
-      teamId: null,
-    };
-  }
-
   return {
-    billingMode,
-    source: resolution.sourceScope,
-    projectId: resolution.projectId,
-    teamId: resolution.teamId,
+    billingMode: resolveEffectiveSandboxBillingMode(input),
+    source: null,
+    projectId: null,
+    teamId: null,
   };
 }
 
@@ -159,21 +133,11 @@ export function resolveEnvSyncLinkedProjectSelection(input?: {
   repoLinkedProjectId?: unknown;
   repoLinkedTeamId?: unknown;
 }): EnvSyncLinkedProjectSelection {
-  const envSyncMode = resolveEffectiveEnvSyncMode(input?.envSyncModeInput);
-  if (envSyncMode !== "vercel-project") {
-    return {
-      envSyncMode,
-      source: null,
-      projectId: null,
-      teamId: null,
-    };
-  }
-
   return {
-    envSyncMode,
-    source: "repo",
-    projectId: normalizeOptionalText(input?.repoLinkedProjectId),
-    teamId: normalizeOptionalText(input?.repoLinkedTeamId),
+    envSyncMode: resolveEffectiveEnvSyncMode(input?.envSyncModeInput),
+    source: null,
+    projectId: null,
+    teamId: null,
   };
 }
 
@@ -199,101 +163,6 @@ export function resolveRepoEnvVarAccess(input: {
       error: "VERCEL_INTEGRATION_REQUIRED",
       message:
         "Vercel project environment import requires an API-capable Vercel integration and is not available with Sign in with Vercel.",
-    };
-  }
-
-  const envSyncSelection = resolveEnvSyncLinkedProjectSelection({
-    envSyncModeInput: input.envSyncModeInput,
-    repoLinkedProjectId: input.repoLinkedProjectId,
-    repoLinkedTeamId: input.repoLinkedTeamId,
-  });
-
-  if (envSyncSelection.envSyncMode === "vercel-project") {
-    if (!envSyncSelection.projectId) {
-      return {
-        ok: false,
-        status: 400,
-        error: "NO_LINKED_PROJECT",
-        message:
-          "Link a repo-linked Vercel project to sync env vars from Vercel.",
-      };
-    }
-
-    if (!input.personalVercelToken) {
-      return {
-        ok: false,
-        status: 400,
-        error: "PERSONAL_VERCEL_REQUIRED",
-        message:
-          "Link Personal Vercel to sync env vars from the repo-linked Vercel project.",
-      };
-    }
-
-    return {
-      ok: true,
-      authMode: "personal",
-      projectId: envSyncSelection.projectId,
-      teamId: envSyncSelection.teamId,
-      selectionSource: "repo",
-      reason: "env_sync",
-      vercelToken: input.personalVercelToken,
-    };
-  }
-
-  const billingSelection = resolveBillingLinkedProjectSelection({
-    workspaceBillingModeInput: input.workspaceBillingModeInput,
-    repoBillingModeOverrideInput: input.repoBillingModeOverrideInput,
-    repoLinkedProjectId: input.repoLinkedProjectId,
-    repoLinkedTeamId: input.repoLinkedTeamId,
-    workspaceLinkedProjectId: input.workspaceLinkedProjectId,
-    workspaceLinkedTeamId: input.workspaceLinkedTeamId,
-    accountLinkedProjectId: input.accountLinkedProjectId,
-    accountLinkedTeamId: input.accountLinkedTeamId,
-  });
-
-  if (billingSelection.billingMode === "user_vercel_project") {
-    if (!billingSelection.projectId) {
-      return {
-        ok: false,
-        status: 400,
-        error: "NO_LINKED_PROJECT",
-        message:
-          billingSelection.source === "workspace"
-            ? "Select or create a workspace-linked Vercel project to access user-billed env vars."
-            : billingSelection.source === "account"
-              ? "Set a default Vercel billing project to access user-billed env vars."
-              : "Select or create a repo-linked Vercel project to access user-billed env vars.",
-      };
-    }
-
-    if (!input.personalVercelToken) {
-      return {
-        ok: false,
-        status: 400,
-        error: "PERSONAL_VERCEL_REQUIRED",
-        message: "Link Personal Vercel to access the selected billing project.",
-      };
-    }
-
-    if (billingSelection.source === null) {
-      // Invariant: resolveBillingLinkedProjectSelection only returns source=null
-      // when projectId is also null, and we already gated on !projectId above.
-      // If we're here, something upstream is returning an unexpected shape.
-      // Surface it instead of silently attributing the access to "repo".
-      console.warn(
-        "[vercel/target-resolution] billing selection source is null with non-null projectId",
-        { projectId: billingSelection.projectId }
-      );
-    }
-
-    return {
-      ok: true,
-      authMode: "personal",
-      projectId: billingSelection.projectId,
-      teamId: billingSelection.teamId,
-      selectionSource: billingSelection.source ?? "repo",
-      reason: "billing",
-      vercelToken: input.personalVercelToken,
     };
   }
 

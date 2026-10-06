@@ -1,23 +1,14 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
-import { loadUserVercelCredentials } from "@/lib/sandbox/get-user-credentials";
-import {
-  getVercelProjectDetails,
-  type VercelServiceError,
-} from "@/lib/vercel/service";
 
 type PatchBody = {
   projectId?: unknown;
   teamId?: unknown;
 };
 
-export const PERSONAL_VERCEL_BILLING_CONFIGURATION_AVAILABLE = false;
-
 type ProfileVercelBillingDeps = {
   requireUserId: typeof requireUserId;
-  loadUserVercelCredentials: typeof loadUserVercelCredentials;
-  getVercelProjectDetails: typeof getVercelProjectDetails;
   updateProfile: (
     userId: string,
     updates: {
@@ -25,13 +16,10 @@ type ProfileVercelBillingDeps = {
       default_vercel_team_id: string | null;
     }
   ) => Promise<{ error: { message: string } | null }>;
-  fetch: typeof fetch;
 };
 
 const defaultDeps: ProfileVercelBillingDeps = {
   requireUserId,
-  loadUserVercelCredentials,
-  getVercelProjectDetails,
   async updateProfile(userId, updates) {
     const { error } = await supabaseAdmin
       .from("profiles")
@@ -40,14 +28,7 @@ const defaultDeps: ProfileVercelBillingDeps = {
 
     return { error: error ? { message: error.message } : null };
   },
-  fetch,
 };
-
-function normalizeOptionalText(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 type ProjectIdInput =
   | { ok: true; value: string | null }
@@ -63,37 +44,6 @@ function parseProjectIdInput(value: unknown): ProjectIdInput {
     return { ok: false, error: "projectId must be a non-empty string or null" };
   }
   return { ok: true, value: trimmed };
-}
-
-function mapVercelError(error: VercelServiceError) {
-  switch (error.code) {
-    case "AUTH_INVALID":
-      return NextResponse.json(
-        { error: "VERCEL_AUTH_INVALID" },
-        { status: 401 }
-      );
-    case "PROJECT_NOT_FOUND":
-      return NextResponse.json(
-        { error: "VERCEL_PROJECT_NOT_FOUND" },
-        { status: 404 }
-      );
-    case "PROJECT_FORBIDDEN":
-    case "TEAM_FORBIDDEN":
-      return NextResponse.json(
-        { error: "VERCEL_PROJECT_FORBIDDEN" },
-        { status: 403 }
-      );
-    case "RATE_LIMITED":
-      return NextResponse.json(
-        { error: "VERCEL_RATE_LIMITED" },
-        { status: 429 }
-      );
-    default:
-      return NextResponse.json(
-        { error: "VERCEL_PROJECT_LOOKUP_FAILED" },
-        { status: 500 }
-      );
-  }
 }
 
 export function createProfileVercelBillingPatchHandler(
@@ -134,7 +84,6 @@ export function createProfileVercelBillingPatchHandler(
       );
     }
     const projectId = parsedProjectId.value;
-    const teamId = normalizeOptionalText(body.teamId);
 
     if (projectId === null) {
       // Intentional: clearing the user's own default does not require a live
@@ -154,53 +103,15 @@ export function createProfileVercelBillingPatchHandler(
       });
     }
 
-    if (!PERSONAL_VERCEL_BILLING_CONFIGURATION_AVAILABLE) {
-      return NextResponse.json(
-        {
-          error: "VERCEL_INTEGRATION_REQUIRED",
-          message:
-            "User-owned Vercel billing requires an API-capable Vercel integration and is not available.",
-        },
-        { status: 501 }
-      );
-    }
-
-    const creds = await deps.loadUserVercelCredentials(userId);
-    if (!creds?.userVercelToken) {
-      return NextResponse.json(
-        { error: "VERCEL_NOT_CONNECTED" },
-        { status: 400 }
-      );
-    }
-
-    const projectResult = await deps.getVercelProjectDetails(
+    // Retained only so existing clients can clear obsolete account defaults.
+    return NextResponse.json(
       {
-        authMode: "personal",
-        vercelToken: creds.userVercelToken,
-        teamId,
-        projectId,
+        error: "VERCEL_INTEGRATION_REQUIRED",
+        message:
+          "User-owned Vercel billing requires an API-capable Vercel integration and is not available.",
       },
-      deps.fetch
+      { status: 501 }
     );
-
-    if (!projectResult.ok) {
-      return mapVercelError(projectResult.error);
-    }
-
-    const { error } = await deps.updateProfile(userId, {
-      default_vercel_project_id: projectId,
-      default_vercel_team_id: teamId,
-    });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      projectId,
-      teamId,
-      projectName: projectResult.data.name,
-    });
   };
 }
 

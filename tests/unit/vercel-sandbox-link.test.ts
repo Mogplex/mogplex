@@ -47,6 +47,30 @@ function createMockSandbox(initialFiles: Record<string, string> = {}) {
   };
 }
 
+test("historical generated links are still cleaned before snapshots", async () => {
+  const { cleanupPreparedSandboxVercelLink } = await loadVercelSandboxHelpers();
+  const generatedFiles = [
+    "apps/web/.vercel/project.json",
+    "apps/web/.vercel/.env.preview.local",
+  ];
+  const manifestPath = "apps/web/.mogplex/vercel-link-manifest.json";
+  const mock = createMockSandbox({
+    [generatedFiles[0]]: '{"projectId":"prj_old"}',
+    [generatedFiles[1]]: "OLD_VALUE=fixture",
+    [manifestPath]: JSON.stringify({ version: 1, files: generatedFiles }),
+    "apps/web/.env.local": "USER_DEFINED=keep",
+    "apps/web/README.md": "keep me",
+  });
+  const result = await cleanupPreparedSandboxVercelLink(mock.sandbox as never, {
+    rootDirectory: "apps/web",
+  });
+  assert.deepEqual(result.removedFiles, generatedFiles);
+  assert.deepEqual(Object.fromEntries(mock.files), {
+    "apps/web/.env.local": "USER_DEFINED=keep",
+    "apps/web/README.md": "keep me",
+  });
+});
+
 test("prepareSandboxVercelLink does not materialize disabled Vercel env sync", async () => {
   const { cleanupPreparedSandboxVercelLink, prepareSandboxVercelLink } =
     await loadVercelSandboxHelpers();

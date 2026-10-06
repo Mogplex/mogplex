@@ -1,10 +1,6 @@
 export type SandboxBillingMode = "platform" | "user_vercel_project";
 
 export const DEFAULT_SANDBOX_BILLING_MODE: SandboxBillingMode = "platform";
-// Sign in with Vercel grants identity scopes only. It is not an API-capable
-// integration grant, so user-owned compute cannot safely be activated by an
-// environment flag or a stale database setting.
-export const USER_VERCEL_PROJECT_BILLING_AVAILABLE = false;
 export const INHERITED_WORKSPACE_TEAM_OPTION = "__workspace__";
 
 export type RepoSandboxBillingModeOverride = SandboxBillingMode | null;
@@ -64,24 +60,18 @@ export function resolveEffectiveSandboxBillingMode(input?: {
     repoOverride ??
     normalizeSandboxBillingMode(input?.workspaceBillingModeInput);
 
-  if (
-    resolved === "user_vercel_project" &&
-    !USER_VERCEL_PROJECT_BILLING_AVAILABLE
-  ) {
-    // Warn only on the server so we can grep prod logs for stragglers
-    // without spamming the browser console on every render.
-    if (typeof window === "undefined") {
-      console.warn(
-        "[sandbox-billing] user_vercel_project is not implemented; forcing platform"
-      );
-    }
-    return "platform";
+  // Warn only on the server so legacy preferences can be found in logs.
+  if (resolved === "user_vercel_project" && typeof window === "undefined") {
+    console.warn(
+      "[sandbox-billing] user_vercel_project is not implemented; forcing platform"
+    );
   }
 
-  return resolved;
+  // Stored legacy preferences never select credentials for new launches.
+  return DEFAULT_SANDBOX_BILLING_MODE;
 }
 
-export function resolveSandboxBilling(input?: {
+export function resolveSandboxBilling(_input?: {
   workspaceBillingModeInput?: unknown;
   repoBillingModeOverrideInput?: unknown;
   repoLinkedProjectId?: unknown;
@@ -91,60 +81,14 @@ export function resolveSandboxBilling(input?: {
   accountLinkedProjectId?: unknown;
   accountLinkedTeamId?: unknown;
 }): SandboxBillingResolution {
-  const billingMode = resolveEffectiveSandboxBillingMode(input);
-  if (billingMode === "platform") {
-    return {
-      ok: true,
-      billingSource: "platform",
-      projectId: null,
-      teamId: null,
-      sourceScope: "platform",
-    };
-  }
-
-  const repoProjectId = normalizeOptionalText(input?.repoLinkedProjectId);
-  const repoTeamId = normalizeOptionalText(input?.repoLinkedTeamId);
-  const workspaceProjectId = normalizeOptionalText(
-    input?.workspaceLinkedProjectId
-  );
-  const workspaceTeamId = normalizeOptionalText(input?.workspaceLinkedTeamId);
-  const accountProjectId = normalizeOptionalText(input?.accountLinkedProjectId);
-  const accountTeamId = normalizeOptionalText(input?.accountLinkedTeamId);
-
-  if (repoProjectId) {
-    return {
-      ok: true,
-      billingSource: "user_vercel_project",
-      projectId: repoProjectId,
-      teamId: repoTeamId,
-      sourceScope: "repo",
-    };
-  }
-
-  if (workspaceProjectId) {
-    return {
-      ok: true,
-      billingSource: "user_vercel_project",
-      projectId: workspaceProjectId,
-      teamId: workspaceTeamId,
-      sourceScope: "workspace",
-    };
-  }
-
-  if (accountProjectId) {
-    return {
-      ok: true,
-      billingSource: "user_vercel_project",
-      projectId: accountProjectId,
-      teamId: accountTeamId,
-      sourceScope: "account",
-    };
-  }
-
+  // Keep accepting the persisted preference shape for older callers. Existing
+  // sandbox records retain their original credential ownership elsewhere.
   return {
-    ok: false,
-    billingSource: "user_vercel_project",
-    error: "Select or create a Vercel project for user-owned sandbox billing.",
+    ok: true,
+    billingSource: "platform",
+    projectId: null,
+    teamId: null,
+    sourceScope: "platform",
   };
 }
 
