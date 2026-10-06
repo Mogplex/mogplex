@@ -36,8 +36,36 @@ for (const theme of ["light", "dark"] as const) {
       const overview = page.getByRole("navigation", { name: "Run overview" });
       const links = overview.getByRole("link");
       await expect(links).toHaveCount(6);
+      await links.first().hover();
+      await links.first().evaluate(async (link) => {
+        await Promise.all(
+          link.getAnimations().map((animation) => animation.finished)
+        );
+      });
+      const surfaces = await links.first().evaluate((link) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const context = canvas.getContext("2d")!;
+        return [link.closest(".run-guide")!, link].map((element) => {
+          context.clearRect(0, 0, 1, 1);
+          const ancestors: Element[] = [];
+          for (
+            let node: Element | null = element;
+            node;
+            node = node.parentElement
+          )
+            ancestors.unshift(node);
+          for (const node of ancestors) {
+            context.fillStyle = getComputedStyle(node).backgroundColor;
+            context.fillRect(0, 0, 1, 1);
+          }
+          return Array.from(context.getImageData(0, 0, 1, 1).data);
+        });
+      });
+      expect(surfaces[1]).not.toEqual(surfaces[0]);
       // Keyboard users can jump from the overview to every stage. The target
-      // heading must remain visible below the fixed marketing header.
+      // scroll margin should leave clear space above its visible heading.
       for (const link of await links.all()) {
         const href = await link.getAttribute("href");
         expect(href).toMatch(/^#run-/);

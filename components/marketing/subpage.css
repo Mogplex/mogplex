@@ -361,7 +361,8 @@
   line-height: 1.6;
 }
 
-.dark .mpx-sub .stage-control {
+.dark .mpx-sub .stage-control,
+.dark .mpx-sub .run-overview a:hover {
   background: var(--surface);
 }
 
