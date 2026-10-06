@@ -2472,6 +2472,21 @@ path.mpx-dag-line,
   pointer-events: none;
 }
 
+.dark .mpx-harnesses {
+  --dark: var(--neutral-9);
+  border-color: var(--border-soft);
+}
+
+.dark .mpx-harnesses :is(
+  .mpx-eyebrow,
+  .mpx-harness-tabs button[aria-selected="false"],
+  .mpx-code-panel header > span,
+  .mpx-code-panel .t-root,
+  .mpx-harness-id p
+) {
+  color: var(--neutral-4);
+}
+
 .mpx-harness-inner {
   position: relative;
   max-width: 1560px;

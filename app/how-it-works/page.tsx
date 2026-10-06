@@ -10,55 +10,69 @@ export const metadata: Metadata = buildMarketingMetadata({
 });
 
 type Stage = {
-  t: string;
   num: string;
+  id: string;
+  label: string;
   name: string;
   desc: string;
+  control: string;
   fact: string;
 };
 
 const STAGES: Stage[] = [
   {
-    t: "T+00:00.0",
-    num: "00",
-    name: "An event arrives",
-    desc: "An issue opens. CI fails. A schedule fires. Someone asks in Slack. A standing assignment comes due. Mogplex catches the event, dedupes it, and assembles the context that matters: the repo, the thread, the logs, the diff.",
-    fact: "held — one event, one run. Nothing polls your repo. Nothing runs on your machines.",
-  },
-  {
-    t: "T+00:00.8",
     num: "01",
-    name: "A run is queued",
-    desc: "The pipeline you wired decides everything up front: which repo, which harness (Mogplex native, Claude Code, or Codex), what context it gets, and which gates its output must pass. The system records that decision before any work starts.",
-    fact: "held — every run traces back to the exact event that caused it.",
+    id: "event",
+    label: "Trigger",
+    name: "An event arrives",
+    desc: "An issue opens, CI fails, or a schedule fires. Mogplex collects the repo, thread, logs, and diff that the agent needs to act.",
+    control: "You choose the trigger",
+    fact: "Connect an event, a Slack message, or a schedule to the pipeline you want to run.",
   },
   {
-    t: "T+00:04.2",
     num: "02",
-    name: "A sandbox boots",
-    desc: "A fresh microVM boots with a clone of your repo. Nothing is shared between runs. Hosted sandbox time uses your usage balance at the published per-minute rate.",
-    fact: "held — per-run isolation. Your code never executes on shared infrastructure you can't see.",
+    id: "pipeline",
+    label: "Plan",
+    name: "Your pipeline sets the plan",
+    desc: "Your pipeline defines the repo, agent, context, and approval gates before work starts. Each run records the event that caused it.",
+    control: "Your agent, your context",
+    fact: "Choose Mogplex Native, Claude Code, or Codex for each pipeline. Add the tools and context it needs.",
   },
   {
-    t: "T+00:06.5",
     num: "03",
-    name: "The agent loop",
-    desc: "The agent writes code, runs your tests, and calls your MCP tools. It iterates until the tests pass or its budget stops it. Mogplex gives you model access at the provider price. Each $1 of inference credit pays for $1 of model usage.",
-    fact: "held — open any live run call-by-call. Approve the next tool call, redirect the plan, or kill it.",
+    id: "sandbox",
+    label: "Isolate",
+    name: "A sandbox boots",
+    desc: "The run gets an isolated microVM with a clone of your repo. The agent can change files and run commands there. Your machine stays free.",
+    control: "A separate place to work",
+    fact: "Each run has its own sandbox. Hosted sandbox time draws from your usage balance.",
   },
   {
-    t: "T+04:12.9",
     num: "04",
-    name: "The gates",
-    desc: "Output leaves the sandbox only one way: as a PR, a check run, or a merge that passed the gates you configured. Branch protections always rule. Mogplex cannot bypass required reviews, required checks, or protected branches.",
-    fact: "held — nothing ships that your rules wouldn't let a human ship.",
+    id: "agent",
+    label: "Build",
+    name: "The agent loop",
+    desc: "The agent writes code, runs tests, and uses your connected tools. Follow the work as it happens, with each model call and tool result in view.",
+    control: "Stay in control",
+    fact: "Inspect a live run, approve a tool call, redirect the plan, or stop the work.",
   },
   {
-    t: "T+04:40.1",
     num: "05",
+    id: "gates",
+    label: "Review",
+    name: "The gates",
+    desc: "The work reaches a pull request and the checks you set. A merge must pass your configured gates. Branch protections and required reviews still apply.",
+    control: "Your rules decide what ships",
+    fact: "Set the level of autonomy per pipeline. Required checks and reviews still apply.",
+  },
+  {
+    num: "06",
+    id: "trace",
+    label: "Trace",
     name: "Reconcile, then loop",
-    desc: "When the change deploys, the deploy points back to the run. The run points back to the event. The audit trail shows what asked for the work, what did it, what it cost, and who approved it. Then the pipeline loops back to the trigger. The same system that built the change now maintains it.",
-    fact: "held — “who did this and why” always has an answer.",
+    desc: "Trace a deployed change back to its run and the event that started it. The pipeline stays ready for the next feature, failed check, or maintenance task.",
+    control: "Keep the full history",
+    fact: "See what requested the work, which agent did it, what it cost, and who approved it.",
   },
 ];
 
@@ -66,91 +80,91 @@ export default function HowItWorksPage() {
   return (
     <MarketingSubpageShell
       close={{
-        kicker: "SHEET 03 — END",
-        lines: ["Watch one run.", "You'll wire five."],
-        note: "Individual plans show all three limits. company plans use custom terms.",
+        kicker: "YOUR FIRST PIPELINE",
+        lines: ["Set the rules.", "Let the work run."],
+        note: "Choose a repo, an agent, and the gates every change must pass.",
       }}
     >
-      <header className="sub-hero">
-        <div className="hero-annot mono" aria-hidden>
-          <span>MOGPLEX</span>
-          <span className="annot-rule" />
-          <span>SHEET 03 — ANATOMY OF A RUN</span>
-        </div>
-        <h1 className="sub-title">
-          One run, <em className="grad">drawn to scale</em>.
-        </h1>
-        <p className="sub-lede">
-          You wouldn&apos;t trust a deploy pipeline you couldn&apos;t inspect. Same
-          rule here. This is the full path of a single run, from the event that
-          wakes it to the deploy that closes the loop. It also shows what holds
-          at every station. Wire it once. The loop runs for new features and
-          last night&apos;s dependency rot.
-        </p>
-        <p className="mono micro">
-          timestamps from a representative nightly-deps run · your repo · your gates
-        </p>
-      </header>
-
-      <section className="runsheet" aria-label="Stages of a run">
-        {STAGES.map((s) => (
-          <article className="stage" key={s.num}>
-            <span className="node" aria-hidden />
-            <div>
-              <p className="stage-t mono">
-                <b>{s.t}</b> · STATION {s.num}
-              </p>
-              <h2 className="stage-name">{s.name}</h2>
-            </div>
-            <div>
-              <p className="stage-desc">{s.desc}</p>
-              <p className="stage-fact mono">▪ {s.fact}</p>
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <section className="terms" aria-label="What stays yours">
-        <div className="terms-row">
-          <div className="term">
-            <p className="term-k mono">HARNESSES</p>
-            <p className="term-v">
-              The native Mogplex agent, Claude Code, and Codex. Pick the
-              harness and model per pipeline. Every call is visible
-              call-by-call.
-            </p>
-          </div>
-          <div className="term">
-            <p className="term-k mono">SANDBOX</p>
-            <p className="term-v">
-              Every run gets a fresh, isolated microVM. Nothing is shared
-              between runs.
-            </p>
-          </div>
-          <div className="term">
-            <p className="term-k mono">GATES</p>
-            <p className="term-v">
-              Branch protections, required checks, and required reviews always
-              win. Autonomy is a dial you set per pipeline.
-            </p>
-          </div>
-          <div className="term">
-            <p className="term-k mono">SOURCE</p>
-            <p className="term-v">
-              The <a href="https://github.com/mogplex/mogplex">platform</a> is
-              Apache-2.0. Read what authenticates against your repos before you
-              run it.
-            </p>
-          </div>
-        </div>
-
-        <div className="shipped">
-          <span className="node node-end" aria-hidden />
-          <p className="mono shipped-label">
-            <b>RECONCILED.</b> &nbsp;the deploy points back at the run &nbsp;↺
+      <div className="run-guide">
+        <header className="sub-hero">
+          <p className="run-kicker mono">HOW IT WORKS</p>
+          <h1 className="sub-title">
+            From the first event<br />
+            to code you can trust<span className="run-period">.</span>
+          </h1>
+          <p className="sub-lede">
+            You choose the agent and set the rules. Mogplex takes each run from
+            trigger to review in an isolated sandbox, with the work visible at
+            every step.
           </p>
-        </div>
-      </section>
+        </header>
+
+        <nav className="run-overview" aria-label="Run overview">
+          <ol>
+            {STAGES.map((stage) => (
+              <li key={stage.id}>
+                <a href={`#run-${stage.id}`}>
+                  <span className="mono">{stage.num}</span>
+                  <strong>{stage.label}</strong>
+                  <span className="run-arrow" aria-hidden>↗</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+
+        <section className="runsheet" aria-label="Stages of a run">
+          {STAGES.map((s) => (
+            <article className="stage" id={`run-${s.id}`} key={s.id}>
+              <span className="stage-num mono" aria-hidden>{s.num}</span>
+              <div className="stage-body">
+                <h2 className="stage-name">{s.name}</h2>
+                <p className="stage-desc">{s.desc}</p>
+              </div>
+              <div className="stage-control">
+                <h3>{s.control}</h3>
+                <p className="stage-fact">{s.fact}</p>
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section className="terms" aria-label="What stays yours">
+          <h2 className="terms-title">Your code. Your rules.</h2>
+          <div className="terms-row">
+            <div className="term">
+              <p className="term-k mono">HARNESSES</p>
+              <p className="term-v">
+                The native Mogplex agent, Claude Code, and Codex. Pick the
+                harness and model per pipeline. Every call is visible
+                call-by-call.
+              </p>
+            </div>
+            <div className="term">
+              <p className="term-k mono">SANDBOX</p>
+              <p className="term-v">
+                Every run gets a fresh, isolated microVM with a separate
+                workspace.
+              </p>
+            </div>
+            <div className="term">
+              <p className="term-k mono">GATES</p>
+              <p className="term-v">
+                Branch protections, required checks, and required reviews always
+                win. Autonomy is a dial you set per pipeline.
+              </p>
+            </div>
+            <div className="term">
+              <p className="term-k mono">SOURCE</p>
+              <p className="term-v">
+                The <a href="https://github.com/mogplex/mogplex">platform</a> is
+                Apache-2.0. Read what authenticates against your repos before you
+                run it.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
     </MarketingSubpageShell>
   );
 }
