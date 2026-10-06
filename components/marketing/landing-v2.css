@@ -1773,11 +1773,12 @@ path.mpx-dag-line,
 }
 
 .mpx-section-intro {
-  display: grid;
-  align-items: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   margin-bottom: 64px;
-  gap: 32px 80px;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 32px;
+  text-align: left;
 }
 
 .mpx-section-intro h2,
@@ -2479,10 +2480,11 @@ path.mpx-dag-line,
 }
 
 .mpx-harness-heading {
-  display: grid;
-  align-items: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 32px;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  text-align: left;
 }
 
 .mpx-harnesses h2 {
@@ -3201,11 +3203,6 @@ path.mpx-dag-line,
   .mpx-hero-run {
     max-width: 920px;
     margin-inline: auto;
-  }
-
-  .mpx-section-intro,
-  .mpx-harness-heading {
-    grid-template-columns: 1fr;
   }
 
   .mpx-cap.is-observe {
