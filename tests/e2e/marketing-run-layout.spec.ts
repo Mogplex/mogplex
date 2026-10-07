@@ -30,6 +30,21 @@ for (const theme of ["light", "dark"] as const) {
           `${side} frame stays painted beside the reading surface`
         ).toBe(true);
       }
+      if (width > 900) {
+        const grid = await page.locator(".mpx-quarter").first().boundingBox();
+        const strip = (x: number) =>
+          page.screenshot({
+            clip: { x, y: guide!.y + 32, width: 2, height: 16 },
+          });
+        expect(
+          (await strip(Math.floor(grid!.x))).equals(
+            await strip(Math.floor(grid!.x) + 4)
+          ),
+          "interior grid stays hidden behind the reading surface"
+        ).toBe(true);
+      } else {
+        await expect(page.locator(".mpx-quarter").first()).toBeHidden();
+      }
 
       const stages = page.locator(".stage");
       await expect(stages).toHaveCount(6);
@@ -99,6 +114,41 @@ for (const theme of ["light", "dark"] as const) {
       await page.screenshot({ path: testInfo.outputPath("run-overview.png") });
     });
   }
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`frame markers remain fully painted in ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    await page.addInitScript(
+      (value) => localStorage.setItem("theme", value),
+      theme
+    );
+    await page.goto("/how-it-works");
+    await expect(page.locator("html")).toHaveClass(new RegExp(theme));
+    // Match the backdrop on either side of the frame so these comparisons
+    // isolate occlusion of the marker, rather than the surface color change.
+    await page.addStyleTag({
+      content: ".mpx-landing { background: var(--card); }",
+    });
+    for (const marker of [
+      page.locator(".mpx-blueprint > span"),
+      page.locator(".mpx-xh").first(),
+    ]) {
+      await expect(marker).toBeVisible();
+      const covered = await marker.screenshot({ animations: "disabled" });
+      const uncover = await page.addStyleTag({
+        content: ".run-guide { background: transparent !important; }",
+      });
+      const reference = await marker.screenshot({ animations: "disabled" });
+      await uncover.evaluate((element) => {
+        (element as HTMLStyleElement).remove();
+      });
+      expect(covered.equals(reference), "frame marker is not sliced").toBe(
+        true
+      );
+    }
+  });
 }
 
 test("solid homepage dark sections remain distinct from the page", async ({

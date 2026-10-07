@@ -217,12 +217,19 @@
 }
 
 /* ---------- /how-it-works — a readable path through one run ---------- */
+/* Let the frame and its markers sit above the solid reading surface while
+   the interior grid stays behind it. Keep this layering local to this page. */
+.mpx-sub:has(.run-guide) .mpx-blueprint {
+  z-index: auto;
+}
+
+.mpx-sub:has(.run-guide) .mpx-blueprint > :not(.mpx-quarter) {
+  z-index: 11;
+}
+
 .mpx-sub .run-guide {
   --ink-body: var(--ink-soft);
   background: var(--card);
-  /* Keep the opaque reading surface inside the blueprint frame without
-     shifting the content. The desktop frame occupies the 14px–15px edge. */
-  clip-path: inset(0 15px);
 }
 
 .mpx-sub .run-guide .sub-hero {
@@ -1001,10 +1008,6 @@
 }
 
 @media (max-width: 640px) {
-  .mpx-sub .run-guide {
-    clip-path: inset(0 9px);
-  }
-
   .mpx-sub .run-guide .sub-hero {
     padding: 56px 20px 32px;
   }
