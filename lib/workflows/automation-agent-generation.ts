@@ -33,7 +33,7 @@ export function createAutomationTextGenerator(input: {
       },
     });
     return {
-      responseMessages: result.response?.messages,
+      responseMessages: result.responseMessages ?? result.response?.messages,
       normalized: normalizeAutomationAgentResult({
         text: result.text,
         steps: result.steps,

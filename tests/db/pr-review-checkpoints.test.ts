@@ -174,6 +174,8 @@ it("resumes durable completed steps after provider failure without repeating rea
     expect(reads).toBe(1);
     expect(JSON.stringify(resumedMessages)).toContain("Evidence already read");
     expect(review.normalized.steps).toHaveLength(3);
+    expect(review.responseMessages).toHaveLength(5);
+    expect(JSON.stringify(review.responseMessages)).toContain("Lost update");
     expect(review.normalized.usage).toMatchObject({
       inputTokens: 2,
       outputTokens: 2,
