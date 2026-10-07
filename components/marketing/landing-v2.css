@@ -2456,14 +2456,15 @@ path.mpx-dag-line,
 .mpx-harnesses {
   position: relative;
   z-index: 10;
-  overflow: hidden;
-  background-color: var(--dark);
-  border-block: 1px solid var(--neutral-11);
+  max-width: 1560px;
+  padding-inline: 40px;
+  margin: 0 auto;
   color: var(--neutral-0);
 }
 
-.mpx-harnesses::before {
+.mpx-harness-inner::before {
   position: absolute;
+  z-index: -1;
   background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.1px);
   background-size: 18px 18px;
   content: "";
@@ -2474,6 +2475,9 @@ path.mpx-dag-line,
 
 .dark .mpx-harnesses {
   --dark: var(--neutral-9);
+}
+
+.dark .mpx-harness-inner {
   border-color: var(--border-soft);
 }
 
@@ -2489,9 +2493,12 @@ path.mpx-dag-line,
 
 .mpx-harness-inner {
   position: relative;
-  max-width: 1560px;
+  isolation: isolate;
+  overflow: hidden;
   padding: 128px 40px;
-  margin: 0 auto;
+  border: 1px solid var(--neutral-11);
+  border-radius: 16px;
+  background-color: var(--dark);
 }
 
 .mpx-harness-heading {
@@ -2577,6 +2584,7 @@ path.mpx-dag-line,
 }
 
 .mpx-code-panel {
+  min-width: 0;
   padding: 32px;
   border-right: 1px solid rgb(255 255 255 / 10%);
 }
@@ -3386,6 +3394,10 @@ path.mpx-dag-line,
   .mpx-harness-inner,
   .mpx-enterprise {
     padding: 96px 20px;
+  }
+
+  .mpx-harnesses {
+    padding-inline: 20px;
   }
 
   .mpx-footer-main {

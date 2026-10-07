@@ -158,18 +158,20 @@ test("solid homepage dark sections remain distinct from the page", async ({
   await page.addInitScript(() => localStorage.setItem("theme", "dark"));
   await page.goto("/");
   await expect(page.locator("html")).toHaveClass(/dark/);
-  const colors = await page.locator(".mpx-harnesses").evaluate((section) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 1;
-    canvas.height = 1;
-    const context = canvas.getContext("2d")!;
-    return [section.closest(".mpx-landing")!, section].map((element) => {
-      context.clearRect(0, 0, 1, 1);
-      context.fillStyle = getComputedStyle(element).backgroundColor;
-      context.fillRect(0, 0, 1, 1);
-      return Array.from(context.getImageData(0, 0, 1, 1).data);
+  const colors = await page
+    .locator(".mpx-harness-inner")
+    .evaluate((section) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const context = canvas.getContext("2d")!;
+      return [section.closest(".mpx-landing")!, section].map((element) => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = getComputedStyle(element).backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        return Array.from(context.getImageData(0, 0, 1, 1).data);
+      });
     });
-  });
   expect(colors[1][3]).toBe(255);
   expect(colors[1][0] - colors[0][0]).toBeGreaterThanOrEqual(8);
   for (const copy of await page
