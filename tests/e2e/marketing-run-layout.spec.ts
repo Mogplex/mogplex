@@ -15,6 +15,22 @@ for (const theme of ["light", "dark"] as const) {
       await page.goto("/how-it-works");
       await expect(page.locator("html")).toHaveClass(new RegExp(theme));
 
+      // Compare painted frame pixels with the uncovered header segment. DOM
+      // visibility alone misses an opaque content surface covering the frame.
+      const guide = await page.locator(".run-guide").boundingBox();
+      for (const side of ["left", "right"]) {
+        const frame = await page.locator(`.mpx-frame.is-${side}`).boundingBox();
+        const pixel = (x: number, y: number) =>
+          page.screenshot({ clip: { x, y, width: 1, height: 1 } });
+        const reference = await pixel(frame!.x, 32);
+        const besideFrame = await pixel(frame!.x - 2, 32);
+        expect(reference.equals(besideFrame)).toBe(false);
+        expect(
+          (await pixel(frame!.x, guide!.y + 32)).equals(reference),
+          `${side} frame stays painted beside the reading surface`
+        ).toBe(true);
+      }
+
       const stages = page.locator(".stage");
       await expect(stages).toHaveCount(6);
       for (const stage of await stages.all()) {
