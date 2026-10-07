@@ -1,14 +1,17 @@
 import { buildDependabotTools } from "@/lib/agents/dependabot";
 import { buildScheduledTaskTools } from "@/lib/agents/scheduled-task";
 import { buildFlowReportTools } from "./flow-report-tools";
+import { runCheckpointedPrReview } from "./pr-review-checkpoint";
+import { createAutomationTextGenerator } from "./automation-agent-generation";
 import { createTaskSandboxLoader } from "./automation-task-sandbox";
 import { createDependabotSandboxLoader } from "./automation-dependabot-sandbox";
-import { generateText, type ToolSet } from "ai";
+import { generateText } from "ai";
 import { buildPRFixTools, buildSandboxPRFixTools } from "@/lib/agents/pr-fixer";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
 import {
   buildFlowPRReviewTools,
   finishFlowPrReview,
+  validatePrReviewResume,
 } from "./automation-pr-review-tools";
 import { buildIssueTools } from "@/lib/agents/issue-tools";
 import { buildCITools } from "@/lib/agents/ci-tools";
@@ -32,7 +35,6 @@ import {
   splitRepoFullName,
 } from "@/lib/workflows/automation-job-utils";
 import { normalizeAutomationAgentResult } from "@/lib/workflows/automation-job-metadata";
-import type { ReportRepairRequest } from "@/lib/workflows/pr-review-report-repair";
 import {
   appendToRunSpec,
   buildJobRunSpec,
@@ -99,6 +101,7 @@ export function createAutomationAgentRunner(
     const baseBranch = context.repo.default_branch || "main";
 
     let deferredMergeRequest: FlowAutoMergeRequest | null = null;
+    let previousReviewSteps: AutomationAgentResult["steps"] = [];
     const tools =
       context.metadata.flow_node_role === "task"
         ? buildScheduledTaskTools({
@@ -133,7 +136,8 @@ export function createAutomationAgentRunner(
                     prReviewNumber,
                     (target) => {
                       deferredMergeRequest = target;
-                    }
+                    },
+                    () => previousReviewSteps
                   );
                 })()
               : assignmentType === "push_review"
@@ -272,43 +276,35 @@ export function createAutomationAgentRunner(
       runSpec.instructions,
       gatewayContext
     );
-    type Ask = { tools: ToolSet; prompt: string } | ReportRepairRequest;
-    const generate = async (request: Ask) => {
-      const { result, metadata } = await executeAutomationTextGeneration({
-        phase: assignmentType,
-        requestedModelId: resolvedModel.effectiveModelId,
-        // What the graph pinned. Recorded only when it differs, so an upgraded
-        // run is distinguishable from one always pinned to the successor.
-        pinnedModelId: context.agent.model,
-        generateText: deps.generateText,
-        timeoutMs: context.agent.timeout_ms,
-        request: {
-          model: resolvedModel.model,
-          providerOptions: resolvedModel.providerOptions,
-          instructions,
-          ...request,
-          stopWhen: () => false,
-        },
-      });
-      return {
-        responseMessages: result.response?.messages,
-        normalized: normalizeAutomationAgentResult({
-          text: result.text,
-          steps: result.steps,
-          totalUsage: result.totalUsage,
-          execution: metadata,
-        }),
-      };
-    };
-
-    const review = await generate({
-      tools: applyToolApprovalGate(
-        { ...tools, ...skills.tools, ...buildFlowReportTools(context) },
-        context,
-        deps
-      ),
-      prompt: runSpec.prompt,
+    const generate = createAutomationTextGenerator({
+      context,
+      resolvedModel,
+      phase: assignmentType,
+      generateText: deps.generateText,
+      instructions,
     });
+
+    const reviewTools = applyToolApprovalGate(
+      { ...tools, ...skills.tools, ...buildFlowReportTools(context) },
+      context,
+      deps
+    );
+    const review =
+      assignmentType === "pr_review"
+        ? await runCheckpointedPrReview({
+            context,
+            instructions,
+            prompt: runSpec.prompt,
+            tools: reviewTools,
+            generate,
+            store: deps.reviewCheckpointStore,
+            restoreReportState: (steps) => {
+              previousReviewSteps = steps;
+            },
+            validateResume: () =>
+              validatePrReviewResume(context, githubToken, prReviewNumber!),
+          })
+        : await generate({ tools: reviewTools, prompt: runSpec.prompt });
     if (assignmentType !== "pr_review") return review.normalized;
 
     return finishFlowPrReview(

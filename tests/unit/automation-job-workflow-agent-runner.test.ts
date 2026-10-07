@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WEB_RESEARCH_INSTRUCTIONS } from "../../lib/agents/web-research-instructions";
-import {
-  AUTOMATION_MODEL_TIMEOUT_FLOOR_MS,
-  getAutomationGenerateTimeoutMs,
-} from "../../lib/workflows/automation-model-execution";
+import { AUTOMATION_MODEL_TIMEOUT_FLOOR_MS } from "../../lib/workflows/automation-model-execution";
 import {
   type CapturedConstructorOptions,
   type CapturedGenerateTextOptions,
@@ -114,10 +111,7 @@ test("createAutomationAgentRunner uses generateText without mutating global fetc
       typeof (options as CapturedGenerateTextOptions).stopWhen,
       "function"
     );
-    assert.equal(
-      (options as CapturedGenerateTextOptions).timeout,
-      getAutomationGenerateTimeoutMs(18000)
-    );
+    assert.equal((options as CapturedGenerateTextOptions).timeout, undefined);
     assert.equal((options as CapturedGenerateTextOptions).maxRetries, 0);
     assert.equal(capturedOptions.prompt, "Review PR #42.");
     assert.equal(result.text, "final answer");

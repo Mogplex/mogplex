@@ -66,11 +66,12 @@ test("runTriggerAutomationJob returns successful workflow results as-is", async 
   ]);
 });
 
-test("executeAutomationJobTask keeps the Trigger.dev timeout at 30 minutes", async () => {
+test("executeAutomationJobTask permits long-running review conversations", async () => {
   const { AUTOMATION_JOB_TRIGGER_MAX_DURATION_SECONDS } =
     await loadTriggerTaskModule();
 
-  assert.equal(AUTOMATION_JOB_TRIGGER_MAX_DURATION_SECONDS, 60 * 30);
+  const { timeout } = await import("@trigger.dev/sdk/v3");
+  assert.equal(AUTOMATION_JOB_TRIGGER_MAX_DURATION_SECONDS, timeout.None);
 });
 
 test("runTriggerAutomationJob aborts failed workflow results so Trigger marks the run failed", async () => {

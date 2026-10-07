@@ -331,7 +331,9 @@ export async function executeAutomationTextGeneration(input: {
         }),
 
       maxRetries: 0,
-      timeout: generateTimeoutMs,
+      // A review may keep making useful progress for longer than one request
+      // budget. The provider fetch still bounds each individual request.
+      timeout: input.phase === "pr_review" ? undefined : generateTimeoutMs,
     }) as GenerateTextRequest;
 
   try {

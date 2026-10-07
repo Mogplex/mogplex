@@ -15,6 +15,7 @@ import {
 } from "@/lib/agents/github-file-content";
 import { isRecord } from "@/lib/workflows/pr-review-harness-utils";
 import { clearsReviewWithoutFindings } from "@/lib/workflows/pr-review-report-state";
+import type { AutomationAgentResult } from "@/lib/workflows/automation-job-types";
 
 const PR_REVIEW_FILE_CONTENT_CHAR_LIMIT = GITHUB_FILE_CONTENT_CHAR_LIMIT;
 const PR_REVIEW_PATCH_CHAR_LIMIT = 4_000;
@@ -59,6 +60,7 @@ export function buildPRReviewTools(config: {
   allowPrLifecycle?: boolean;
   mergePolicyScope?: AgentMergePolicyScope;
   expectedHeadSha?: string;
+  previousSteps?: () => AutomationAgentResult["steps"];
 }) {
   const request = config.fetch ?? fetch;
   const contentOwner = config.headOwner ?? config.owner;
@@ -111,9 +113,19 @@ export function buildPRReviewTools(config: {
   // The accepted hasIssues verdict is authoritative, as in the post-run gate.
   // Preserve the refusal for reports that claimed issues and omitted findings.
   const mergeRefusal = () => {
+    const priorCalls = (config.previousSteps?.() ?? []).flatMap((step) =>
+      (step.toolCalls ?? []).filter(
+        (call) => call.toolName === "reportReview" && isRecord(call.input)
+      )
+    );
+    const priorClaimedIssues = priorCalls.some(
+      (call) => isRecord(call.input) && call.input.hasIssues === true
+    );
+    const report =
+      acceptedReport ?? priorCalls.findLast((call) => !call.invalid)?.input;
     if (
-      claimedIssues &&
-      (acceptedReport === null || clearsReviewWithoutFindings(acceptedReport))
+      (claimedIssues || priorClaimedIssues) &&
+      (!isRecord(report) || clearsReviewWithoutFindings(report))
     ) {
       return {
         success: false as const,
@@ -121,7 +133,7 @@ export function buildPRReviewTools(config: {
           "Not merged: this review said it found issues but its report lists none. Report each issue as a finding.",
       };
     }
-    if (acceptedReport?.hasIssues !== false) {
+    if (!isRecord(report) || report.hasIssues !== false) {
       return {
         success: false as const,
         error:

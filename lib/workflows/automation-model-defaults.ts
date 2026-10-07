@@ -80,7 +80,8 @@ export function getAutomationModelFallbackIdsWithOverride(
   );
 }
 
-// Default timeout is per attempt; keep all retry attempts under the task cap.
+// Per-request timeout. The total budget still applies to non-review generation;
+// PR reviews keep their completed steps and may span many bounded requests.
 export const AUTOMATION_MODEL_DEFAULT_TIMEOUT_MS = Math.floor(
   AUTOMATION_MODEL_DEFAULT_TOTAL_BUDGET_MS /
     (AUTOMATION_MODEL_MAX_GENERATE_RETRIES + 1)

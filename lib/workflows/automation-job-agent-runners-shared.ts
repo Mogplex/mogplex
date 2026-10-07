@@ -33,9 +33,14 @@ import {
 import type { PrReviewHarnessResult } from "@/lib/workflows/pr-review-harness-types";
 import { normalizeAutomationAssignmentType } from "@/lib/workflows/automation-job-utils";
 import { getAutomationGenerateTimeoutMs } from "@/lib/workflows/automation-model-defaults";
+import {
+  prReviewCheckpointStore,
+  type PrReviewCheckpointStore,
+} from "./pr-review-checkpoint-store";
 
 export type AutomationAgentDeps = {
   generateText: typeof generateText;
+  reviewCheckpointStore: PrReviewCheckpointStore;
   // Wait infrastructure for mid-run tool-call approval. The runner derives
   // the approval context from flow metadata, so only flow agent nodes with
   // requireApproval ever touch these.
@@ -53,6 +58,7 @@ export type AutomationAgentDeps = {
 
 export const defaultAutomationAgentDeps: AutomationAgentDeps = {
   generateText,
+  reviewCheckpointStore: prReviewCheckpointStore,
   waitProvider: triggerWaitProvider,
   waitStore: supabaseWaitStore,
   loadApprovalSpentWaitMs: loadToolApprovalSpentWaitMs,
@@ -98,9 +104,10 @@ export function applyToolApprovalGate(
     loadSpentWaitMs: deps.loadApprovalSpentWaitMs,
     // Waits must never outlast this loop's own generation window — an
     // in-wait deadline abort would fail the run instead of denying the call.
-    generationTimeoutMs: getAutomationGenerateTimeoutMs(
-      context.agent.timeout_ms
-    ),
+    generationTimeoutMs:
+      normalizeAutomationAssignmentType(context.assignmentType) === "pr_review"
+        ? undefined
+        : getAutomationGenerateTimeoutMs(context.agent.timeout_ms),
   });
 }
 
