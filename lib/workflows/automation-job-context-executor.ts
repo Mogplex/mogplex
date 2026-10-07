@@ -64,7 +64,7 @@ export async function executeAutomationContext(input: {
   }
 
   let result = await input.deps.runAutomationAgent(
-    input.context,
+    { ...input.context, jobRunId: input.jobRunId },
     input.githubToken,
     resolvedModel
   );

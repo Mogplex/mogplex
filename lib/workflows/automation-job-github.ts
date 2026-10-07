@@ -285,6 +285,7 @@ export async function assertPullRequestGithubAccess(input: {
   repoFullName: string;
   prNumber: number;
   githubToken: string;
+  expectedReviewRefs?: { head: string; base?: string };
 }) {
   const repoParts = splitRepoFullName(input.repoFullName);
   if (!repoParts) return;
@@ -301,6 +302,21 @@ export async function assertPullRequestGithubAccess(input: {
   );
 
   if (response.ok) {
+    if (input.expectedReviewRefs) {
+      const pullRequest = (await response.json()) as {
+        head?: { sha?: string };
+        base?: { sha?: string };
+      };
+      if (
+        pullRequest.head?.sha !== input.expectedReviewRefs.head ||
+        (input.expectedReviewRefs.base &&
+          pullRequest.base?.sha !== input.expectedReviewRefs.base)
+      ) {
+        throw new Error(
+          "The pull request changed after Mogplex saved this review. Start a new review for the current commit."
+        );
+      }
+    }
     return;
   }
 

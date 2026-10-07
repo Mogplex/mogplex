@@ -46,6 +46,7 @@ export type AutomationJobRunResult =
     };
 
 export type JobContext = {
+  jobRunId?: string;
   metadata: Record<string, unknown>;
   assignmentType: string;
   skillId: string | null;

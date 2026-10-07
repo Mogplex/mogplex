@@ -11,7 +11,8 @@ import {
 } from "./helpers/automation-job-fixtures";
 
 test("createAutomationJobTask classifies transport timeouts from resolved gateway fetches as infrastructure failures", async () => {
-  const { createAutomationJobTask } = await loadAutomationJobWorkflowModule();
+  const { createAutomationJobTask, createAutomationAgentRunner } =
+    await loadAutomationJobWorkflowModule();
   const { createResolveUserLanguageModel } = await loadAiModelResolverModule();
   const {
     buildAutomationProviderFetch,
@@ -74,6 +75,12 @@ test("createAutomationJobTask classifies transport timeouts from resolved gatewa
     }) as typeof fetch;
 
     const workflow = createAutomationJobTask({
+      runAutomationAgent: createAutomationAgentRunner({
+        reviewCheckpointStore: {
+          load: async () => null,
+          save: async () => {},
+        },
+      }),
       resolveJobContext: async () => ({
         context: {
           metadata: {

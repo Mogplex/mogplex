@@ -1,4 +1,9 @@
-import { AbortTaskRunError, metadata, task } from "@trigger.dev/sdk/v3";
+import {
+  AbortTaskRunError,
+  metadata,
+  task,
+  timeout,
+} from "@trigger.dev/sdk/v3";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
   AUTOMATION_JOB_TRIGGER_MAX_ATTEMPTS,
@@ -18,7 +23,9 @@ const defaultDeps: TriggerAutomationJobDeps = {
   metadata,
 };
 
-export const AUTOMATION_JOB_TRIGGER_MAX_DURATION_SECONDS = 60 * 30;
+// Provider requests remain bounded. Do not kill a progressing agent's entire
+// conversation when the cumulative task duration crosses an arbitrary limit.
+export const AUTOMATION_JOB_TRIGGER_MAX_DURATION_SECONDS = timeout.None;
 
 export async function runTriggerAutomationJob(
   payload: AutomationJobInput,

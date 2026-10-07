@@ -57,11 +57,31 @@ export async function checkSchemaCompatibility(
     });
     const job = await client
       .from("job_runs")
-      .select("status,metadata")
+      .select("id,status,metadata,retry_of_job_run_id")
       .eq("status", "success")
       .single();
     assert.equal(job.error, null, JSON.stringify(job.error));
-    assert.deepEqual(job.data, completedJob);
+    const savedJob = job.data as {
+      id: string;
+      status: string;
+      metadata: unknown;
+      retry_of_job_run_id: string | null;
+    };
+    assert.deepEqual(
+      { status: savedJob.status, metadata: savedJob.metadata },
+      completedJob
+    );
+    assert.equal(savedJob.retry_of_job_run_id, null);
+    const savedRetry = await client
+      .from("job_runs")
+      .select("retry_of_job_run_id,metadata")
+      .eq("status", "failed")
+      .single();
+    assert.equal(savedRetry.error, null, JSON.stringify(savedRetry.error));
+    assert.deepEqual(savedRetry.data, {
+      retry_of_job_run_id: savedJob.id,
+      metadata: { compatibility: true, retry: true },
+    });
     const conversation = await client
       .from("control_sessions")
       .select("title,messages,pinned,archived")
@@ -270,6 +290,12 @@ export async function checkSchemaCompatibility(
     .single();
   assert.equal(updated.error, null, JSON.stringify(updated.error));
   assert.deepEqual(updated.data, completedJob);
+  const retry = await client.from("job_runs").insert({
+    status: "failed",
+    retry_of_job_run_id: jobId,
+    metadata: { compatibility: true, retry: true },
+  });
+  assert.equal(retry.error, null, JSON.stringify(retry.error));
   const smoke = await runProductionSmokeChecks({}, adminClient);
   assert.equal(smoke.ok, true, JSON.stringify(smoke));
   console.log(
