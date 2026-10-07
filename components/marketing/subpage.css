@@ -217,6 +217,16 @@
 }
 
 /* ---------- /how-it-works — a readable path through one run ---------- */
+/* Let the frame and its markers sit above the solid reading surface while
+   the interior grid stays behind it. Keep this layering local to this page. */
+.mpx-sub:has(.run-guide) .mpx-blueprint {
+  z-index: auto;
+}
+
+.mpx-sub:has(.run-guide) .mpx-blueprint > :not(.mpx-quarter) {
+  z-index: 11;
+}
+
 .mpx-sub .run-guide {
   --ink-body: var(--ink-soft);
   background: var(--card);
