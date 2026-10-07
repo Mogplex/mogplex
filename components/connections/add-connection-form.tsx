@@ -58,7 +58,7 @@ export function AddConnectionForm({
           {connectionError}
         </div>
       )}
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 lg:flex-row">
         <select
           value={newConn.type}
           onChange={e => setNewConn((p) => {
@@ -79,13 +79,13 @@ export function AddConnectionForm({
           <option value="rest_api">REST API</option>
           <option value="mcp_server">MCP Server</option>
         </select>
-        <input value={newConn.name} onChange={e => setNewConn(p => ({ ...p, name: e.target.value }))} placeholder="name" className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
-        <input value={newConn.description} onChange={e => setNewConn(p => ({ ...p, description: e.target.value }))} placeholder="description (optional)" className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+        <input value={newConn.name} onChange={e => setNewConn(p => ({ ...p, name: e.target.value }))} placeholder="name" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+        <input value={newConn.description} onChange={e => setNewConn(p => ({ ...p, description: e.target.value }))} placeholder="description (optional)" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
       </div>
       {newConn.type === "rest_api" ? (
         <>
-          <div className="flex gap-2">
-            <input value={newConn.base_url} onChange={e => setNewConn(p => ({ ...p, base_url: e.target.value }))} placeholder="https://api.example.com" className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+          <div className="flex flex-col gap-2 lg:flex-row">
+            <input value={newConn.base_url} onChange={e => setNewConn(p => ({ ...p, base_url: e.target.value }))} placeholder="https://api.example.com" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
             <select
               value={newConn.auth_type}
               onChange={e => setNewConn(p => ({
@@ -100,7 +100,7 @@ export function AddConnectionForm({
               ))}
             </select>
             {newConn.auth_type !== "none" && (
-              <input value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder="credential" type="password" className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+              <input value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder="credential" type="password" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
             )}
           </div>
           {(newConn.auth_type === "bearer" || newConn.auth_type === "api_key") && (
@@ -114,8 +114,8 @@ export function AddConnectionForm({
         </>
       ) : (
         <>
-          <div className="flex gap-2">
-            <input value={newConn.mcp_url} onChange={e => setNewConn(p => ({ ...p, mcp_url: e.target.value }))} placeholder="https://mcp.example.com" className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+          <div className="flex flex-col gap-2 lg:flex-row">
+            <input value={newConn.mcp_url} onChange={e => setNewConn(p => ({ ...p, mcp_url: e.target.value }))} placeholder="https://mcp.example.com" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
             <select value={newConn.mcp_transport} onChange={e => setNewConn(p => ({ ...p, mcp_transport: e.target.value as "sse" | "http" }))} className="border border-border bg-input px-3 py-2 text-sm text-foreground">
               <option value="http">HTTP</option>
               <option value="sse">SSE</option>
@@ -134,7 +134,7 @@ export function AddConnectionForm({
               ))}
             </select>
             {newConn.auth_type !== "none" && (
-              <input value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder={newConn.auth_type === "api_key" ? "API key" : newConn.auth_type === "basic" ? "base64 user:pass" : "token"} type="password" className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+              <input value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder={newConn.auth_type === "api_key" ? "API key" : newConn.auth_type === "basic" ? "base64 user:pass" : "token"} type="password" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
             )}
           </div>
           {(newConn.auth_type === "bearer" || newConn.auth_type === "api_key") && (

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { mockSettingsPageData, model } from "./helpers/theme-settings-fixtures";
+import { expectFullRouteWidth } from "./helpers/route-width";
 
 test("chain edits survive switching tabs, save atomically, and fit desktop and mobile", async ({
   page,
@@ -72,9 +73,7 @@ test("chain edits survive switching tabs, save atomically, and fit desktop and m
     section.getByRole("button", { name: "Save chain" })
   ).toBeDisabled();
   expect((await section.boundingBox())!.width).toBeLessThanOrEqual(760);
-  expect(
-    (await page.getByTestId("models-configuration").boundingBox())!.width
-  ).toBeLessThanOrEqual(1440);
+  await expectFullRouteWidth(page, page.getByTestId("models-configuration"));
   await expect(page.getByTestId("models-routing-preview")).toContainText(
     "Fallback 2"
   );
@@ -193,6 +192,7 @@ test("chain edits survive switching tabs, save atomically, and fit desktop and m
     0
   );
   await page.setViewportSize({ width: 390, height: 844 });
+  await expectFullRouteWidth(page, page.getByTestId("models-configuration"));
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth
@@ -202,6 +202,7 @@ test("chain edits survive switching tabs, save atomically, and fit desktop and m
     path: testInfo.outputPath("model-chain-mobile.png"),
   });
   await page.getByTestId("models-tab-catalog").click();
+  await expectFullRouteWidth(page, page.getByTestId("models-content"));
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth

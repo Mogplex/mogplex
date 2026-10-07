@@ -66,7 +66,7 @@ function TabNav() {
 export function ModelsShell({ children }: { children: ReactNode }) {
   return (
     <ModelChainProvider>
-      <div className="min-h-full w-full max-w-[1488px] space-y-5 p-3 md:space-y-6 md:p-6">
+      <div className="min-h-full w-full space-y-5 p-3 md:space-y-6 md:p-6">
         <header className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>

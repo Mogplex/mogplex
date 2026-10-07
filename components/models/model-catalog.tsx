@@ -82,7 +82,7 @@ export function ModelCatalog() {
     setFilters((current) => ({ ...current, [key]: value }));
 
   return (
-    <div data-testid="models-content" className="w-full min-w-0 max-w-[1440px] space-y-5">
+    <div data-testid="models-content" className="w-full min-w-0 space-y-5">
       <section aria-label="Catalog summary" className="grid grid-cols-2 gap-4 rounded-lg border border-border/70 bg-card px-5 py-4 md:grid-cols-4">
         <Stat label="Enabled" value={enabledCount} hint={`of ${visible.length} ${visible.length === 1 ? "model" : "models"}`} />
         <Stat label="Providers" value={providers.length} />

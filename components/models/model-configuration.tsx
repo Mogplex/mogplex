@@ -95,7 +95,7 @@ export function ModelConfiguration() {
   const visibleCount = catalog.filter((model) => model.is_hidden !== true).length;
 
   return (
-    <div data-testid="models-configuration" className="grid w-full min-w-0 max-w-[1440px] gap-6 lg:grid-cols-[minmax(0,760px)_minmax(280px,1fr)]">
+    <div data-testid="models-configuration" className="grid w-full min-w-0 gap-6 lg:grid-cols-[minmax(0,760px)_minmax(280px,1fr)]">
       <div className="self-start rounded-lg border border-border/70 bg-card p-5">
         <ModelChainEditor {...chain} catalog={catalog} />
       </div>
