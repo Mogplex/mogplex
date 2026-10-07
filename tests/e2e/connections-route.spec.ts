@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectFullRouteWidth } from "./helpers/route-width";
 import {
   buildE2EAuthHeaders,
   enableScopedE2EAuth,
@@ -17,6 +18,55 @@ test.beforeEach(async ({ page }) => {
     fulfillJson(route, { enabled: true, viewer: { canManage: true } })
   );
 });
+
+for (const width of [1920, 768, 390]) {
+  test(`Connections tabs fill the route at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.route("**/api/mcp-servers", (route) =>
+      fulfillJson(route, { servers: [] })
+    );
+    await page.goto(scopedPath("connections"));
+    const integrations = page.getByRole("tabpanel", {
+      name: "Integrations",
+      exact: true,
+    });
+    await expect(page.getByTestId("settings-preset-neon")).toBeVisible();
+    await expectFullRouteWidth(page, integrations);
+    await page.screenshot({
+      path: testInfo.outputPath("connections-width.png"),
+    });
+
+    await page
+      .getByRole("combobox")
+      .filter({
+        has: page.getByRole("option", { name: "No Auth", exact: true }),
+      })
+      .selectOption("bearer");
+    await expect(
+      page.getByPlaceholder("credential", { exact: true })
+    ).toBeVisible();
+    await expectFullRouteWidth(page, integrations);
+    await page
+      .getByRole("combobox")
+      .filter({
+        has: page.getByRole("option", { name: "MCP Server", exact: true }),
+      })
+      .selectOption("mcp_server");
+    await expect(page.getByPlaceholder("token", { exact: true })).toBeVisible();
+    await expectFullRouteWidth(page, integrations);
+
+    await page.getByRole("tab", { name: "MCP Servers", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Add server" })
+    ).toBeVisible();
+    await expectFullRouteWidth(
+      page,
+      page.getByRole("tabpanel", { name: "MCP Servers", exact: true })
+    );
+  });
+}
 
 test("Connections has its own navigation destination outside Settings", async ({
   page,

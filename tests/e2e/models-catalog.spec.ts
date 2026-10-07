@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { linkedVercelCapability } from "./helpers/activation-fixtures";
 import type { Route } from "@playwright/test";
+import { expectFullRouteWidth } from "./helpers/route-width";
 
 const recommendedAt = new Date().toISOString();
 
@@ -224,7 +225,8 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   expect(defaultModel).toBe("openai/gpt-oss-120b");
   await expect(page.getByTestId("models-draft-indicator")).toHaveCount(0);
 
-  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.setViewportSize({ width: 1920, height: 1000 });
+  await expectFullRouteWidth(page, page.getByTestId("models-content"));
   await page.screenshot({ path: testInfo.outputPath("models-catalog.png") });
   await expect(page.getByText("In $2.50")).toBeVisible();
   await expect(page.getByText("Out $75")).toBeVisible();
