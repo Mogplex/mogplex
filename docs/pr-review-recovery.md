@@ -22,9 +22,22 @@ The checkpoint includes the transcript, completed tool calls and results, and
 any structured findings. It does not include the GitHub access token or transport
 headers. Usage records count only new model calls on each retry.
 
-An external action gets a durable marker before execution. If the worker stops
-before Mogplex saves its result, Retry stops for manual reconciliation. Confirm
-the action's outcome before a new review. Completed review evidence remains stored.
+An external action gets a durable marker before execution. The marker includes
+its tool name, call ID, and input. Concurrent actions retain all their markers.
+If the worker stops before Mogplex saves their results, Retry stops for manual
+reconciliation. Completed review evidence remains stored.
+
+An operator must locate the checkpoint by `job_run_id`, `node_id`, and `user_id`.
+Inspect each `inFlightTools` entry and confirm its outcome in GitHub. Do not clear
+markers or delete the checkpoint: that would allow replay without a saved result.
+After resolving the actions, start a separate review with
+[`mogplex_trigger_automation`](./mogplex-api-mcp/local-agent-automation.md), using
+the current PR head/base and the same automation and repository. This starts a
+fresh run instead of retrying the blocked step; the old evidence stays stored.
+
+A clean saved verdict still requests flow auto-merge when the node enables it.
+`executeAutomationContext` rebuilds that request after the reviewer returns.
+The flow checks the current merge policy and exact head after publishing its review.
 
 Checkpoints are server-only rows in `pr_review_checkpoints`. They have no timed
 expiry. Deletion of the parent job or account deletes its checkpoint.

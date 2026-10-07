@@ -21,7 +21,13 @@ const checkpointSchema = z.object({
   ),
   text: z.string(),
   complete: z.boolean(),
-  inFlightTool: z.string().nullable(),
+  inFlightTools: z.array(
+    z.object({
+      toolName: z.string(),
+      toolCallId: z.string(),
+      input: z.unknown(),
+    })
+  ),
 });
 
 export type PrReviewCheckpoint = z.infer<typeof checkpointSchema>;
@@ -56,7 +62,8 @@ export function createPrReviewCheckpointStore(
     const checkpoint = checkpointSchema.parse(data.checkpoint);
     // Changing the model or instructions must not hide an unknown action
     // outcome on the run being retried.
-    return checkpoint.inFlightTool || data.fingerprint === scope.fingerprint
+    return checkpoint.inFlightTools.length > 0 ||
+      data.fingerprint === scope.fingerprint
       ? checkpoint
       : null;
   }

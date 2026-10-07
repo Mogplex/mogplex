@@ -215,7 +215,7 @@ it("scopes recovery to the owner, node and exact review inputs, while leaving pr
       steps: [],
       text: "saved",
       complete: false,
-      inFlightTool: null,
+      inFlightTools: [],
     };
     await store.save(scope, checkpoint);
     expect(await store.load({ ...scope, jobRunId: retryJob })).toEqual(
@@ -284,10 +284,11 @@ it("keeps a retry checkpoint when the retry fails before its first new step", as
   }
 });
 
-it("does not replay an action whose result is unknown", async () => {
+it("retains every concurrent action and blocks replay when their results are unknown", async () => {
   const { db, store } = await fixture();
   try {
     let writes = 0;
+    const bothStarted = Promise.withResolvers<void>();
     const tools = buildPRReviewTools({
       githubToken: "fixture",
       owner: "acme",
@@ -296,13 +297,20 @@ it("does not replay an action whose result is unknown", async () => {
       allowPrLifecycle: true,
       fetch: async () => {
         writes++;
+        if (writes === 2) bothStarted.resolve();
+        await bothStarted.promise;
         throw new Error("connection lost after write");
       },
     });
     const model = createTestAutomationModel({
       onGenerate: (call) => {
         if (call > 1) throw new Error("unexpected second call");
-        return toolCall("closePullRequest", {});
+        const close = toolCall("closePullRequest", {});
+        const issue = toolCall("createIssue", {
+          title: "Follow-up",
+          body: "Details",
+        });
+        return { ...close, content: [...close.content, ...issue.content] };
       },
     });
     const common = {
@@ -317,7 +325,7 @@ it("does not replay an action whose result is unknown", async () => {
     await expect(
       runCheckpointedPrReview({ ...common, generate: generator(model.model) })
     ).rejects.toThrow("action did not return a result");
-    expect(writes).toBe(1);
+    expect(writes).toBe(2);
     expect(model.getDoGenerateCallCount()).toBe(1);
     await expect(
       runCheckpointedPrReview({
@@ -337,13 +345,24 @@ it("does not replay an action whose result is unknown", async () => {
         generate: generator(model.model),
       })
     ).rejects.toThrow("unfinished action");
-    expect(writes).toBe(1);
+    expect(writes).toBe(2);
     const saved = (
-      await db.query<{ checkpoint: { inFlightTool: string } }>(
+      await db.query<{ checkpoint: { inFlightTools: unknown[] } }>(
         "select checkpoint from pr_review_checkpoints"
       )
     ).rows[0].checkpoint;
-    expect(saved.inFlightTool).toBe("closePullRequest");
+    expect(saved.inFlightTools).toEqual([
+      {
+        toolName: "closePullRequest",
+        toolCallId: "call-closePullRequest",
+        input: {},
+      },
+      {
+        toolName: "createIssue",
+        toolCallId: "call-createIssue",
+        input: { title: "Follow-up", body: "Details" },
+      },
+    ]);
   } finally {
     await db.close();
   }

@@ -79,12 +79,12 @@ export async function runCheckpointedPrReview(input: {
     steps: [],
     text: "",
     complete: false,
-    inFlightTool: null,
+    inFlightTools: [],
   };
   // Preserve the source even if validation fails before generation. A retry
   // of this retry must retain both evidence and any unresolved action marker.
   await input.store.save(scope, checkpoint);
-  if (checkpoint.inFlightTool) {
+  if (checkpoint.inFlightTools.length > 0) {
     throw new Error(
       "The saved review has an unfinished action. Check that action's result before a new review."
     );
@@ -100,6 +100,9 @@ export async function runCheckpointedPrReview(input: {
     };
   }
   const controller = new AbortController();
+  // Tool calls can run concurrently. Serialize their marker writes so an
+  // earlier snapshot cannot overwrite the complete set of pending actions.
+  let actionWrites = Promise.resolve();
   const tools = Object.fromEntries(
     Object.entries(input.tools).map(([name, tool]) => {
       const execute = tool.execute;
@@ -109,9 +112,24 @@ export async function runCheckpointedPrReview(input: {
         {
           ...tool,
           execute: async (...args: Parameters<typeof execute>) => {
-            checkpoint = { ...checkpoint, inFlightTool: name };
+            checkpoint = {
+              ...checkpoint,
+              inFlightTools: [
+                ...checkpoint.inFlightTools,
+                {
+                  toolName: name,
+                  toolCallId: args[1].toolCallId,
+                  input: args[0],
+                },
+              ],
+            };
+            const marked = checkpoint;
             try {
-              await input.store.save(scope, checkpoint);
+              actionWrites = actionWrites.then(() =>
+                input.store.save(scope, marked)
+              );
+              await actionWrites;
+              controller.signal.throwIfAborted();
             } catch (error) {
               controller.abort(error);
               throw error;
@@ -156,7 +174,7 @@ export async function runCheckpointedPrReview(input: {
         steps: [...checkpoint.steps, ...normalized.steps],
         text: step.text,
         complete: step.finishReason === "stop" && step.toolCalls.length === 0,
-        inFlightTool: null,
+        inFlightTools: [],
       };
       // Await durability before the SDK starts the next generation. Failure
       // leaves the last good checkpoint intact instead of continuing unsaved.
