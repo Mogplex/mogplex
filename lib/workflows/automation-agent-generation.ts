@@ -22,6 +22,7 @@ export function createAutomationTextGenerator(input: {
       phase: input.phase,
       requestedModelId: input.resolvedModel.effectiveModelId,
       pinnedModelId: input.context.agent.model,
+      fallbackModels: input.resolvedModel.fallbackModels,
       generateText: input.generateText,
       timeoutMs: input.context.agent.timeout_ms,
       request: {

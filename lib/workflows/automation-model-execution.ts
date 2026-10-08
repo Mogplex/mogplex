@@ -1,9 +1,7 @@
 import {
   generateText,
-  type LanguageModelMiddleware,
   type LanguageModelUsage,
   type ProviderMetadata,
-  wrapLanguageModel,
 } from "ai";
 import { Agent, type Dispatcher } from "undici";
 import { demoteStaleToolOutputs } from "@/lib/agents/compaction/reduce";
@@ -16,7 +14,6 @@ import {
   type CapturedUsage,
 } from "@/lib/observability/usage";
 import {
-  AUTOMATION_MODEL_MAX_GENERATE_RETRIES,
   getAutomationGenerateTimeoutMs,
   getEffectiveAutomationTimeoutMs,
 } from "@/lib/workflows/automation-model-defaults";
@@ -28,7 +25,6 @@ import type {
   AutomationModelFailureInfo,
   GenerateTextRequest,
 } from "./automation-model-execution-types";
-import { isAutomationWrappableLanguageModel } from "./automation-model-execution-types";
 import {
   AutomationModelExecutionError,
   classifyAutomationModelError,
@@ -41,10 +37,13 @@ import {
 import {
   logAutomationGatewayFallback,
   logAutomationGenerationFailure,
-  logAutomationProviderAttemptFailure,
   type AutomationModelLogContext,
   type AutomationModelLogger,
 } from "./automation-model-logging";
+import {
+  wrapAutomationModelForRecovery,
+  type AutomationFallbackModel,
+} from "./automation-model-failover";
 
 // Re-export types from split modules
 export type {
@@ -53,6 +52,8 @@ export type {
   AutomationGatewayModelAttempt,
   AutomationModelExecutionMetadata,
 } from "./automation-model-execution-types";
+
+export type { AutomationFallbackModel } from "./automation-model-failover";
 
 // Re-export functions and class from split modules
 export {
@@ -135,56 +136,6 @@ export function resetAutomationDispatcherCacheForTests() {
   }
 }
 
-function wrapAutomationModelForGenerateRetries(
-  model: GenerateTextRequest["model"],
-  retryState: AutomationGenerateRetryState,
-  logger: AutomationModelLogger,
-  logContext: AutomationModelLogContext
-): GenerateTextRequest["model"] {
-  let wrappedModel = model;
-
-  if (
-    AUTOMATION_MODEL_MAX_GENERATE_RETRIES > 0 &&
-    isAutomationWrappableLanguageModel(model)
-  ) {
-    const middleware: LanguageModelMiddleware = {
-      specificationVersion: "v4",
-      async wrapGenerate({ doGenerate }) {
-        try {
-          return await doGenerate();
-        } catch (error) {
-          const failure = classifyAutomationModelError(error);
-          const willRetry = !(
-            retryState.retryCount >= AUTOMATION_MODEL_MAX_GENERATE_RETRIES ||
-            !failure.retryable
-          );
-          logAutomationProviderAttemptFailure({
-            logger,
-            context: logContext,
-            error,
-            failure,
-            attempt: retryState.retryCount + 1,
-            willRetry,
-          });
-          if (!willRetry) {
-            throw error;
-          }
-
-          retryState.retryCount += 1;
-          retryState.recoveredFromFailureClass ??= failure.classification;
-          retryState.recoveredFromMessage ??= failure.rawMessage;
-
-          return await doGenerate();
-        }
-      },
-    };
-
-    wrappedModel = wrapLanguageModel({ model, middleware });
-  }
-
-  return wrappedModel;
-}
-
 function buildAutomationExecutionMetadata(input: {
   phase: string;
   effectiveTimeoutMs: number;
@@ -204,6 +155,15 @@ function buildAutomationExecutionMetadata(input: {
     finalFailureMessage: input.finalFailure?.rawMessage ?? null,
     finalFailureStatusCode: input.finalFailure?.statusCode ?? null,
     ...buildAutomationGatewayRoutingMetadata(input.gatewayRoutingState),
+    ...buildFailoverMetadata(input.retryState),
+  };
+}
+
+function buildFailoverMetadata(retryState: AutomationGenerateRetryState) {
+  if (retryState.failoverModelIds.length === 0) return {};
+  return {
+    failoverModelIds: [...retryState.failoverModelIds],
+    fallbackUsed: true,
   };
 }
 
@@ -265,6 +225,8 @@ export async function executeAutomationTextGeneration(input: {
   requestedModelId?: string | null;
   /** The pinned id, when a deprecated-model upgrade substituted a successor. */
   pinnedModelId?: string | null;
+  /** Approved fallbacks to switch to when the primary fails mid-run. */
+  fallbackModels?: readonly AutomationFallbackModel[];
   generateText: typeof generateText;
   logger?: AutomationModelLogger;
   request: Omit<GenerateTextRequest, "maxRetries" | "timeout">;
@@ -284,6 +246,7 @@ export async function executeAutomationTextGeneration(input: {
     retryCount: 0,
     recoveredFromFailureClass: null,
     recoveredFromMessage: null,
+    failoverModelIds: [],
   };
   const gatewayRoutingState: AutomationGatewayRoutingState = {
     requestedModelId: input.requestedModelId?.trim() || null,
@@ -298,12 +261,13 @@ export async function executeAutomationTextGeneration(input: {
       (usage, stepUsage) => mergeUsage(usage, stepUsage),
       EMPTY_CAPTURED_USAGE
     );
-  const model = wrapAutomationModelForGenerateRetries(
-    input.request.model,
+  const model = wrapAutomationModelForRecovery({
+    model: input.request.model,
+    fallbackModels: input.fallbackModels,
     retryState,
     logger,
-    logContext
-  );
+    logContext,
+  });
   const onStepEnd: NonNullable<GenerateTextRequest["onStepEnd"]> = async (
     event
   ) => {
@@ -416,8 +380,10 @@ export async function executeAutomationTextGeneration(input: {
       observedUsage,
       recoveredFromFailureClass: retryState.recoveredFromFailureClass,
       recoveredFromMessage: retryState.recoveredFromMessage,
-      gatewayRoutingMetadata:
-        buildAutomationGatewayRoutingMetadata(gatewayRoutingState),
+      gatewayRoutingMetadata: {
+        ...buildAutomationGatewayRoutingMetadata(gatewayRoutingState),
+        ...buildFailoverMetadata(retryState),
+      },
     });
   }
 }

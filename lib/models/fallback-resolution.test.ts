@@ -106,3 +106,33 @@ describe("gateway account fallback resolution", () => {
     }
   );
 });
+
+describe("gateway fallback models", () => {
+  it("resolves only the approved fallbacks as callable models on the same key", async () => {
+    database(["openai/second", "openai/denied", "openai/retired"]);
+    const resolved: string[] = [];
+    const result = await createResolveUserLanguageModel({
+      getProviderKey: async () => "test-key",
+      loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
+      resolveGatewayModel: (apiKey, modelId) => {
+        resolved.push(`${apiKey}:${modelId}`);
+        return `model:${modelId}` as never;
+      },
+    })("owner", "openai/primary", {
+      teamId: "team",
+      capabilities: new Set(["models.*"]),
+      allowlistState: {
+        status: "restricted",
+        models: ["openai/primary", "openai/second", "openai/retired"],
+      },
+    });
+
+    expect(result.fallbackModels).toEqual([
+      { modelId: "openai/second", model: "model:openai/second" },
+    ]);
+    expect(resolved).toEqual([
+      "test-key:openai/primary",
+      "test-key:openai/second",
+    ]);
+  });
+});

@@ -117,7 +117,20 @@ test("logs the terminal provider failure after the bounded retry", async () => {
     (error: unknown) => error instanceof AutomationModelExecutionError
   );
 
-  assert.equal(captured.warnings.length, 1);
+  // Every attempt logs its own failure, so the final one says it gave up.
+  assert.deepEqual(
+    captured.warnings.map(([, payload]) => {
+      const { attempt, willRetry } = payload as {
+        attempt: number;
+        willRetry: boolean;
+      };
+      return { attempt, willRetry };
+    }),
+    [
+      { attempt: 1, willRetry: true },
+      { attempt: 2, willRetry: false },
+    ]
+  );
   assert.deepEqual(captured.errors, [
     [
       "[automation-model] generation failed",

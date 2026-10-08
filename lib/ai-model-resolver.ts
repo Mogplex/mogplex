@@ -74,6 +74,12 @@ export type ResolveUserLanguageModelOptions = {
 export type ResolvedUserLanguageModel = {
   model: ResolvedLanguageModel;
   providerOptions?: GatewayProviderOptions;
+  /**
+   * The approved gateway fallbacks as callable models on the same key and
+   * transport, so a caller can switch to one after the primary fails
+   * mid-request, which the gateway's own `models` routing cannot do.
+   */
+  fallbackModels?: { modelId: string; model: ResolvedLanguageModel }[];
 };
 
 function filterGatewayFallbackModelIds(input: {
@@ -353,6 +359,13 @@ export function createResolveUserLanguageModel(
       teamId,
       allowlistState,
     });
+    const resolveGatewayFallbackModels = (apiKey: string) =>
+      approvedGatewayFallbackModelIds.map((modelId) => ({
+        modelId,
+        model: deps.resolveGatewayModel(apiKey, modelId, {
+          fetch: options?.providerFetch,
+        }),
+      }));
     if (userGatewayKey && !isOpenRouterModel) {
       return {
         model: deps.resolveGatewayModel(userGatewayKey, normalizedModel, {
@@ -363,6 +376,7 @@ export function createResolveUserLanguageModel(
           options?.gatewayContext ?? { userId },
           approvedGatewayFallbackModelIds
         ),
+        fallbackModels: resolveGatewayFallbackModels(userGatewayKey),
       };
     }
 
@@ -386,6 +400,9 @@ export function createResolveUserLanguageModel(
             }
           ),
           providerOptions,
+          fallbackModels: resolveGatewayFallbackModels(
+            process.env.AI_GATEWAY_API_KEY
+          ),
         };
       }
       return { model: normalizedModel, providerOptions };
