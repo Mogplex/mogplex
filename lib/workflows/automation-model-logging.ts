@@ -101,6 +101,26 @@ export function logAutomationProviderAttemptFailure(input: {
   );
 }
 
+export function logAutomationModelFailover(input: {
+  logger: AutomationModelLogger;
+  context: AutomationModelLogContext;
+  failure: AutomationModelFailureInfo;
+  toModelId: string;
+}) {
+  input.logger.warn(
+    "[automation-model] failed over to fallback model",
+    sanitizeLogPayload({
+      event: "automation_model_failover",
+      ...buildBaseLogContext(input.context),
+      toModelId: input.toModelId,
+      classification: input.failure.classification,
+      statusCode: input.failure.statusCode,
+      errorCode: input.failure.errorCode,
+      message: input.failure.rawMessage,
+    })
+  );
+}
+
 export function logAutomationGenerationFailure(input: {
   logger: AutomationModelLogger;
   context: AutomationModelLogContext;

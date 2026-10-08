@@ -78,12 +78,19 @@ export type AutomationModelExecutionMetadata = {
   gatewayModelAttemptCount?: number;
   effectiveModelIds?: string[];
   fallbackUsed?: boolean;
+  /**
+   * Fallback models this run switched to after the active model failed, in
+   * order. Present only when a fail-over happened.
+   */
+  failoverModelIds?: string[];
 };
 
 export type AutomationGenerateRetryState = {
+  /** Every re-attempt: same-model retries plus fail-overs. */
   retryCount: number;
   recoveredFromFailureClass: AutomationModelFailureClass | null;
   recoveredFromMessage: string | null;
+  failoverModelIds: string[];
 };
 
 export type AutomationGatewayRoutingState = {
@@ -102,6 +109,7 @@ export type AutomationGatewayRoutingMetadata = Pick<
   | "gatewayModelAttemptCount"
   | "effectiveModelIds"
   | "fallbackUsed"
+  | "failoverModelIds"
 >;
 
 export type AutomationErrorSignals = {

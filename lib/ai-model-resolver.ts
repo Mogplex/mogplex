@@ -74,6 +74,12 @@ export type ResolveUserLanguageModelOptions = {
 export type ResolvedUserLanguageModel = {
   model: ResolvedLanguageModel;
   providerOptions?: GatewayProviderOptions;
+  /**
+   * The approved gateway fallbacks as callable models on the same key and
+   * transport, so a caller can switch to one after the primary fails
+   * mid-request, which the gateway's own `models` routing cannot do.
+   */
+  fallbackModels?: { modelId: string; model: ResolvedLanguageModel }[];
 };
 
 function filterGatewayFallbackModelIds(input: {
@@ -353,15 +359,35 @@ export function createResolveUserLanguageModel(
       teamId,
       allowlistState,
     });
+    // Built from the exact list the gateway receives, which already drops the
+    // primary and duplicates, so a fail-over never lands back on the primary.
+    // If the gateway itself substituted fallbacks[0] up front and that model
+    // then drops mid-request, the first fail-over can try it once more: the
+    // failure carries no record of which model served it.
+    const resolveGatewayFallbackModels = (
+      apiKey: string,
+      providerOptions: GatewayProviderOptions
+    ) =>
+      (providerOptions.gateway.models ?? []).map((modelId) => ({
+        modelId,
+        model: deps.resolveGatewayModel(apiKey, modelId, {
+          fetch: options?.providerFetch,
+        }),
+      }));
     if (userGatewayKey && !isOpenRouterModel) {
+      const providerOptions = gatewayProviderOptions(
+        normalizedModel,
+        options?.gatewayContext ?? { userId },
+        approvedGatewayFallbackModelIds
+      );
       return {
         model: deps.resolveGatewayModel(userGatewayKey, normalizedModel, {
           fetch: options?.providerFetch,
         }),
-        providerOptions: gatewayProviderOptions(
-          normalizedModel,
-          options?.gatewayContext ?? { userId },
-          approvedGatewayFallbackModelIds
+        providerOptions,
+        fallbackModels: resolveGatewayFallbackModels(
+          userGatewayKey,
+          providerOptions
         ),
       };
     }
@@ -386,6 +412,10 @@ export function createResolveUserLanguageModel(
             }
           ),
           providerOptions,
+          fallbackModels: resolveGatewayFallbackModels(
+            process.env.AI_GATEWAY_API_KEY,
+            providerOptions
+          ),
         };
       }
       return { model: normalizedModel, providerOptions };

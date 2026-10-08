@@ -343,6 +343,7 @@ async function runPRFixAgentWithTools(input: {
     phase: "pr_fix",
     requestedModelId: input.resolvedModel.effectiveModelId,
     pinnedModelId: input.context.agent.model,
+    fallbackModels: input.resolvedModel.fallbackModels,
     generateText: input.deps.generateText,
     timeoutMs: input.context.agent.timeout_ms,
     request: {

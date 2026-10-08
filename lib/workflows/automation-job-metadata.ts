@@ -63,6 +63,9 @@ export function mergeAutomationExecutionMetadata(
   const effectiveModelIds = distinctModelIds(
     executions.flatMap((execution) => execution.effectiveModelIds ?? [])
   );
+  const failoverModelIds = distinctModelIds(
+    executions.flatMap((execution) => execution.failoverModelIds ?? [])
+  );
   const gatewayModelAttempts = executions
     .flatMap((execution) => execution.gatewayModelAttempts ?? [])
     .slice(0, 50);
@@ -103,6 +106,7 @@ export function mergeAutomationExecutionMetadata(
     ...(gatewayModelAttempts.length > 0 ? { gatewayModelAttempts } : {}),
     ...(gatewayModelAttemptCount > 0 ? { gatewayModelAttemptCount } : {}),
     ...(effectiveModelIds.length > 0 ? { effectiveModelIds } : {}),
+    ...(failoverModelIds.length > 0 ? { failoverModelIds } : {}),
     ...(hasFallbackRouting
       ? {
           fallbackUsed: executions.some(
@@ -146,6 +150,9 @@ export function buildAutomationExecutionMetadataFields(
       : {}),
     ...(typeof execution.fallbackUsed === "boolean"
       ? { model_fallback_used: execution.fallbackUsed }
+      : {}),
+    ...(execution.failoverModelIds?.length
+      ? { model_failover_ids: execution.failoverModelIds }
       : {}),
     ...(typeof execution.gatewayModelAttemptCount === "number"
       ? { gateway_model_attempt_count: execution.gatewayModelAttemptCount }
