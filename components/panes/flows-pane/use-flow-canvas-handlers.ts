@@ -15,6 +15,10 @@ import {
   type FlowDraftSnapshot,
 } from "@/lib/flows/editor";
 import { pruneClassifyEdges } from "@/lib/flows/classify-branches";
+import {
+  buildTriggerFilter,
+  pruneReposToInstallations,
+} from "@/lib/flows/trigger-accounts";
 import type { Flow, FlowClassifyNodeData, FlowStartFilter } from "@/lib/types";
 import type { Installation } from "./types";
 import {
@@ -22,7 +26,6 @@ import {
   HISTORY_LIMIT,
   HISTORY_MERGE_WINDOW_MS,
 } from "./constants";
-import { buildFilter } from "./start-filter-fields";
 import type { FlowDraftHistory } from "./use-flow-save-publish-state";
 
 export type FlowCanvasHandlersDeps = {
@@ -37,8 +40,7 @@ export type FlowCanvasHandlersDeps = {
   hydratedFlowIdRef: RefObject<string | null>;
   // External data
   installations: Installation[] | undefined;
-  effectiveInstallationId: number | null;
-  // Selected nodes (for updateTriggerInstallation)
+  // Selected nodes (for updateTriggerInstallations)
   selectedStartNode:
     | (FlowCanvasNode & {
         data: { filter?: FlowStartFilter };
@@ -61,7 +63,8 @@ export type FlowCanvasHandlers = {
     updater: (data: Record<string, unknown>) => Record<string, unknown>,
     options?: { mergeKey?: string | null }
   ) => void;
-  updateTriggerInstallation: (installationId: number) => void;
+  // Empty list = every connected account.
+  updateTriggerInstallations: (installationIds: number[]) => void;
 };
 
 /**
@@ -78,7 +81,6 @@ export function useFlowCanvasHandlers(
     fittedFlowIdRef,
     hydratedFlowIdRef,
     installations,
-    effectiveInstallationId,
     selectedStartNode,
   } = deps;
 
@@ -277,34 +279,43 @@ export function useFlowCanvasHandlers(
     [updateDraft]
   );
 
-  const updateTriggerInstallation = useCallback(
-    (installationId: number) => {
+  const updateTriggerInstallations = useCallback(
+    (installationIds: number[]) => {
+      const known = new Set(
+        (installations || []).map(
+          (installation) => installation.installation_id
+        )
+      );
       if (
         !selectedStartNode ||
-        !(installations || []).some(
-          (installation) => installation.installation_id === installationId
-        )
+        installationIds.some((installationId) => !known.has(installationId))
       ) {
         return;
       }
-      const accountChanged = effectiveInstallationId !== installationId;
       updateNodeData(
         selectedStartNode.id,
         (data) => {
           const filter = data.filter as FlowStartFilter | undefined;
-          return {
-            ...data,
-            filter: buildFilter(
-              installationId,
-              accountChanged ? [] : (filter?.repos ?? []),
-              filter?.authorFilter ?? "any"
+          const next = buildTriggerFilter(
+            installationIds,
+            pruneReposToInstallations(
+              filter?.repos ?? [],
+              installationIds,
+              installations || []
             ),
-          };
+            filter?.authorFilter ?? "any",
+            // An explicit account choice defines the account scope outright,
+            // replacing any API-set org/personal narrowing.
+            "all"
+          );
+          if (next) return { ...data, filter: next };
+          const { filter: _omit, ...rest } = data;
+          return rest;
         },
         { mergeKey: `start-account-${selectedStartNode.id}` }
       );
     },
-    [effectiveInstallationId, installations, selectedStartNode, updateNodeData]
+    [installations, selectedStartNode, updateNodeData]
   );
 
   return {
@@ -315,6 +326,6 @@ export function useFlowCanvasHandlers(
     onConnect,
     onSelectionChange,
     updateNodeData,
-    updateTriggerInstallation,
+    updateTriggerInstallations,
   };
 }

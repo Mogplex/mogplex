@@ -10,7 +10,7 @@ export const MCP_TOOLS_INFRA: McpToolDefinition[] = [
     name: "mogplex_list_repos",
     title: "List Mogplex Repos",
     description:
-      "List repositories available to the authenticated Mogplex API token.",
+      "List repositories available to the authenticated Mogplex API token, including repos removed from the dashboard (hidden: true), which still receive automation runs.",
     inputSchema: objectSchema({
       properties: {
         query: {

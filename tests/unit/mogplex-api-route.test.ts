@@ -42,7 +42,7 @@ test("GET /api/v1/mogplex/repos returns repos in the external envelope", async (
   const authCalls: Array<string | null> = [];
   const calls: Array<{
     userId: string;
-    options: { query?: string | null; limit?: number };
+    options: { query?: string | null; limit?: number; includeHidden?: boolean };
   }> = [];
   const handler = createMogplexApiReposGetHandler({
     resolveApiKey: async (authorization) => {
@@ -61,6 +61,7 @@ test("GET /api/v1/mogplex/repos returns repos in the external envelope", async (
           installation_id: 123,
           default_branch: "main",
           root_directory: null,
+          hidden: false,
         },
       ];
     },
@@ -84,12 +85,16 @@ test("GET /api/v1/mogplex/repos returns repos in the external envelope", async (
           installation_id: 123,
           default_branch: "main",
           root_directory: null,
+          hidden: false,
         },
       ],
     },
   });
   assert.deepEqual(calls, [
-    { userId: "user-123", options: { query: "mog", id: null, limit: 200 } },
+    {
+      userId: "user-123",
+      options: { query: "mog", id: null, limit: 200, includeHidden: true },
+    },
   ]);
   assert.deepEqual(authCalls, ["Bearer mog_valid"]);
 });
@@ -98,7 +103,12 @@ test("GET /api/v1/mogplex/repos forwards an id lookup to the repo list", async (
   const { createMogplexApiReposGetHandler } = await loadReposRoute();
   const calls: Array<{
     userId: string;
-    options: { query?: string | null; id?: string | null; limit?: number };
+    options: {
+      query?: string | null;
+      id?: string | null;
+      limit?: number;
+      includeHidden?: boolean;
+    };
   }> = [];
   const repoId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
   const handler = createMogplexApiReposGetHandler({
@@ -115,6 +125,7 @@ test("GET /api/v1/mogplex/repos forwards an id lookup to the repo list", async (
           installation_id: 456,
           default_branch: "main",
           root_directory: null,
+          hidden: true,
         },
       ];
     },
@@ -131,7 +142,10 @@ test("GET /api/v1/mogplex/repos forwards an id lookup to the repo list", async (
   assert.equal(payload.ok, true);
   assert.equal(payload.data.repos[0]?.id, repoId);
   assert.deepEqual(calls, [
-    { userId: "user-123", options: { query: null, id: repoId, limit: 100 } },
+    {
+      userId: "user-123",
+      options: { query: null, id: repoId, limit: 100, includeHidden: true },
+    },
   ]);
 });
 

@@ -133,8 +133,11 @@ test("workflow viewing filters stay outside the canvas and trigger scope binds a
     .filter({ hasText: "PR opened" });
   await startNode.click();
 
+  // A GitHub trigger without installationIds runs for every connected
+  // account, so the editor must say so instead of naming flows.installation_id.
   const account = page.getByTestId("flow-trigger-account");
-  await expect(account).toHaveAttribute("data-value", "101");
+  await expect(account).toHaveAttribute("data-value", "all");
+  await expect(account).toContainText("All accounts");
   const repositoryScope = page.getByTestId("flow-trigger-repository-scope");
   await expect(repositoryScope).toContainText("All repositories");
   await repositoryScope.click();
@@ -142,9 +145,12 @@ test("workflow viewing filters stay outside the canvas and trigger scope binds a
     .getByTestId("flow-trigger-repository-option-webrenew/blackbox")
     .click();
   await repositoryScope.click();
-  await expect(startNode).toContainText("webrenew · webrenew/blackbox");
+  await expect(startNode).toContainText("All accounts · webrenew/blackbox");
 
-  await selectAppOption(account, "202");
+  await account.click();
+  await page.getByTestId("flow-trigger-account-option-202").click();
+  await account.click();
+  await expect(account).toHaveAttribute("data-value", "202");
   await expect(repositoryScope).toContainText("All repositories");
   await repositoryScope.click();
   await page

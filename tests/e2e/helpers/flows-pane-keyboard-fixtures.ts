@@ -1,7 +1,7 @@
 import type { Page, Route } from "@playwright/test";
 import { buildE2EAuthHeaders } from "./auth";
 import { linkedVercelCapability } from "./activation-fixtures";
-import type { FlowNode } from "../../../lib/types";
+import type { FlowNode, FlowStartFilter } from "../../../lib/types";
 
 export const primaryModifier =
   process.platform === "darwin" ? "Meta" : "Control";
@@ -40,6 +40,7 @@ export interface StubFlowsPageOptions {
     repositories: Array<{ id: string; full_name: string }>;
   }>;
   flowStatus?: "active" | "inactive";
+  startFilter?: FlowStartFilter;
   personalTemplates?: Array<{
     id: string;
     name: string;
@@ -207,7 +208,11 @@ export async function stubFlowsPage(
           id: "start",
           type: "start",
           position: { x: 120, y: 160 },
-          data: { label: "PR opened", event: "pr_opened" },
+          data: {
+            label: "PR opened",
+            event: "pr_opened",
+            ...(options?.startFilter ? { filter: options.startFilter } : {}),
+          },
         },
         {
           id: "agent-a",
@@ -337,6 +342,8 @@ export async function stubFlowsPage(
       start?.type === "start" ? (start.data.filter?.installationIds ?? []) : [];
     currentFlow = {
       ...currentFlow,
+      // Mirrors publishFlowDraft's installation_id sync in
+      // lib/flows/server-publish.ts; keep the two in step.
       installation_id:
         installationIds.length === 1
           ? installationIds[0]

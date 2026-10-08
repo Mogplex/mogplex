@@ -5,6 +5,11 @@ import {
   type FlowDraftSnapshot,
 } from "@/lib/flows/editor";
 import { getStartConfig } from "@/lib/flows/graph";
+import {
+  describeTriggerAccounts,
+  resolveTriggerInstallationIds,
+  resolveTriggerScope,
+} from "@/lib/flows/trigger-accounts";
 import type { Flow, FlowAgentHarness, FlowNode, Agent } from "@/lib/types";
 import { scopedHref } from "@/lib/scoped-href";
 import type { Installation, SlackInstallation } from "./types";
@@ -27,9 +32,9 @@ export interface FlowDerivedSelectionResult {
     | (FlowCanvasNode & { data: Extract<FlowNode, { type: "start" }>["data"] })
     | null;
   selectedStartConfig: ReturnType<typeof getStartConfig> | null;
-  scopedInstallationIds: number[] | undefined;
-  effectiveInstallationId: number | null;
-  selectedFlowInstallation: Installation | null;
+  // Accounts that can start the trigger; `null` = every connected account.
+  triggerInstallationIds: number[] | null;
+  triggerAccountLabel: string | undefined;
   selectedAgentNode:
     | (FlowCanvasNode & { data: Extract<FlowNode, { type: "agent" }>["data"] })
     | null;
@@ -124,17 +129,19 @@ export function useFlowDerivedSelection(
     [draft]
   );
 
-  const scopedInstallationIds = selectedStartConfig?.filter?.installationIds;
+  const triggerInstallationIds = resolveTriggerInstallationIds(
+    selectedStartConfig,
+    selectedFlow?.installation_id
+  );
 
-  const effectiveInstallationId =
-    scopedInstallationIds?.length === 1
-      ? scopedInstallationIds[0]
-      : (selectedFlow?.installation_id ?? null);
-
-  const selectedFlowInstallation =
-    (installations || []).find(
-      (installation) => installation.installation_id === effectiveInstallationId
-    ) ?? null;
+  const triggerAccountLabel =
+    triggerInstallationIds?.length === 0
+      ? undefined
+      : describeTriggerAccounts(
+          triggerInstallationIds,
+          installations || [],
+          resolveTriggerScope(selectedStartConfig)
+        );
 
   const selectedAgentNode =
     selectedNode?.type === "agent"
@@ -239,9 +246,8 @@ export function useFlowDerivedSelection(
     selectedAgentDefinition,
     selectedStartNode,
     selectedStartConfig,
-    scopedInstallationIds,
-    effectiveInstallationId,
-    selectedFlowInstallation,
+    triggerInstallationIds,
+    triggerAccountLabel,
     selectedAgentNode,
     selectedActionNode,
     selectedSlackTeamId,

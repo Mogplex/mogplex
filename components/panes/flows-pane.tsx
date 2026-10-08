@@ -201,7 +201,7 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   })
   const derivedRuns = useFlowDerivedRuns({ flowRunsResponse, selectedRunId })
   const derivedCanvas = useFlowDerivedCanvas({
-    draft, selectedFlowInstallation: derivedSelection.selectedFlowInstallation,
+    draft, triggerAccountLabel: derivedSelection.triggerAccountLabel,
     selectedStartConfig: derivedSelection.selectedStartConfig, repos, contextMenu,
     openEdgeContextMenu: (edgeId, x, y) => setContextMenu({ kind: "edge", x, y, flowPosition: null, nodeId: null, nodeType: null, edgeId }),
   })
@@ -209,7 +209,7 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   const { selectedNode, selectedStartConfig, selectedAgentNode, selectedStartNode, selectedActionNode,
     selectedConditionNode, selectedClassifyNode, selectedParallelNode, selectedJoinNode, selectedDelayNode,
     selectedAwaitEventNode, selectedSetVariableNode, selectedTransformNode, selectedEndNode,
-    selectedAgentDefinition, effectiveInstallationId, slackInstallations,
+    selectedAgentDefinition, triggerInstallationIds, slackInstallations,
     slackConnectionsHref, apiKeysSettingsHref, selectedSlackTeamId } = derivedSelection
   const { primaryModifierLabel, saveStatusLabel, saveStatusTitle, quietSaveStatus, saveStatusTone,
     saveStatusAnnouncement, shouldPublishLatestDraft, primaryActionLabel, primaryActionClassName } = derivedStatus
@@ -252,9 +252,9 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   const canvasClipboardRef = useRef<FlowDraftClipboard | null>(null)
   const canvasPasteCountRef = useRef(0)
   const { updateDraft, handleFlowNameChange, onNodesChange, onEdgesChange, onConnect, onSelectionChange,
-    updateNodeData, updateTriggerInstallation } = useFlowCanvasHandlers({
+    updateNodeData, updateTriggerInstallations } = useFlowCanvasHandlers({
     setHistory, historyMergeRef, selectedFlow, reactFlowRef, fittedFlowIdRef, hydratedFlowIdRef,
-    installations, effectiveInstallationId, selectedStartNode,
+    installations, selectedStartNode,
   })
   const { getDefaultInsertionPosition, addNode, selectCanvasNode, applyTriggerPreset, deleteSelectedNode,
     deleteSelectedCanvasItems, duplicateSelectedCanvasItems, duplicateContextMenuNode, deleteContextMenuNode,
@@ -473,7 +473,7 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
                 <section key={selectedNode.id} className="space-y-3">
                   {selectedNode ? <div className="space-y-4 rounded-lg border border-border/80 bg-background/60 p-4 shadow-sm">
                     {selectedAgentNode && <AgentInspector node={selectedAgentNode} draft={draft} agents={agents ?? []} updateNodeData={updateNodeData} onDelete={deleteSelectedNode} selectedAgentDefinition={selectedAgentDefinition} availableModelOptions={availableModelOptions} enabledModelIds={enabledModelIds} quickReplaceFlowModelId={quickReplaceFlowModelId} quickReplaceFlowModelName={quickReplaceFlowModelName} canQuickReplaceFlowModel={canQuickReplaceFlowModel} harnessesResponse={harnessesResponse} harnessesLoading={harnessesLoading} harnessesError={harnessesError} apiKeysSettingsHref={apiKeysSettingsHref} sandboxTestRepoId={sandboxTestRepoId} onSandboxTestRepoIdChange={setSandboxTestRepoId} sandboxTestRepos={sandboxTestRepos} sandboxTestResult={sandboxTestResult} sandboxTestError={sandboxTestError} sandboxTestRunning={sandboxTestRunning} onRunSandboxTest={runAutomationSandboxTest} onClearSandboxTest={() => { setSandboxTestResult(null); setSandboxTestError(null) }} selectedStartConfig={selectedStartConfig} />}
-                    {selectedStartNode && selectedFlow && <StartInspector node={selectedStartNode} selectedFlow={selectedFlow} updateNodeData={updateNodeData} installations={installations || []} effectiveInstallationId={effectiveInstallationId} updateTriggerInstallation={updateTriggerInstallation} slackInstallations={slackInstallations} slackChannels={slackChannels} slackChannelsLoading={slackChannelsLoading} slackChannelsLoadingMore={slackChannelsLoadingMore} slackChannelsHaveMore={slackChannelsHaveMore} slackChannelPageCount={slackChannelPageCount} setSlackChannelPageCount={setSlackChannelPageCount} slackConnectionsHref={slackConnectionsHref} selectedSlackTeamId={selectedSlackTeamId} generatedWebhookSecret={generatedWebhookSecret} webhookSecretGenerating={webhookSecretGenerating} generateWebhookSecret={generateWebhookSecret} copyWebhookValue={copyWebhookValue} dirty={dirty} triggerTestRunning={triggerTestRunning} runTriggerTest={runTriggerTest} />}
+                    {selectedStartNode && selectedFlow && <StartInspector node={selectedStartNode} selectedFlow={selectedFlow} updateNodeData={updateNodeData} installations={installations || []} triggerInstallationIds={triggerInstallationIds} updateTriggerInstallations={updateTriggerInstallations} slackInstallations={slackInstallations} slackChannels={slackChannels} slackChannelsLoading={slackChannelsLoading} slackChannelsLoadingMore={slackChannelsLoadingMore} slackChannelsHaveMore={slackChannelsHaveMore} slackChannelPageCount={slackChannelPageCount} setSlackChannelPageCount={setSlackChannelPageCount} slackConnectionsHref={slackConnectionsHref} selectedSlackTeamId={selectedSlackTeamId} generatedWebhookSecret={generatedWebhookSecret} webhookSecretGenerating={webhookSecretGenerating} generateWebhookSecret={generateWebhookSecret} copyWebhookValue={copyWebhookValue} dirty={dirty} triggerTestRunning={triggerTestRunning} runTriggerTest={runTriggerTest} />}
                     {selectedActionNode && <ActionInspector node={selectedActionNode} updateNodeData={updateNodeData} onDelete={deleteSelectedNode} slackInstallations={slackInstallations} slackChannels={slackChannels} slackChannelsLoading={slackChannelsLoading} slackChannelsLoadingMore={slackChannelsLoadingMore} slackChannelsHaveMore={slackChannelsHaveMore} onLoadMoreSlackChannels={() => void setSlackChannelPageCount(slackChannelPageCount + 1)} slackConnectionsHref={slackConnectionsHref} selectedSlackTeamId={selectedSlackTeamId} />}
                     {selectedConditionNode && <ConditionInspector node={selectedConditionNode} updateNodeData={updateNodeData} onDelete={deleteSelectedNode} />}{selectedClassifyNode && <ClassifyInspector node={selectedClassifyNode} updateNodeData={updateNodeData} onDelete={deleteSelectedNode} />}
                     {selectedParallelNode && <ParallelInspector node={selectedParallelNode} updateNodeData={updateNodeData} onDelete={deleteSelectedNode} />}

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Bell, Clock, Copy, InfoCircle, WarningTriangle } from "iconoir-react"
 import type { Flow, FlowNode, TriggerEvent } from "@/lib/types"
 import type { FlowCanvasNode } from "@/lib/flows/editor"
+import { SINGLE_INSTALLATION_TRIGGER_EVENTS } from "@/lib/flows/trigger-accounts"
 import { startDataForEvent } from "./canvas-utils"
 import { EVENT_OPTIONS } from "./constants"
 import type { Installation, SlackChannel, SlackInstallation } from "./types"
@@ -29,8 +30,8 @@ export interface StartInspectorProps {
     options?: { mergeKey?: string | null },
   ) => void
   installations: Installation[]
-  effectiveInstallationId: number | null
-  updateTriggerInstallation: (installationId: number) => void
+  triggerInstallationIds: number[] | null
+  updateTriggerInstallations: (installationIds: number[]) => void
   slackInstallations: SlackInstallation[]
   slackChannels: SlackChannel[]
   slackChannelsLoading: boolean
@@ -54,8 +55,8 @@ export function StartInspector({
   selectedFlow,
   updateNodeData,
   installations,
-  effectiveInstallationId,
-  updateTriggerInstallation,
+  triggerInstallationIds,
+  updateTriggerInstallations,
   slackInstallations,
   slackChannels,
   slackChannelsLoading,
@@ -378,16 +379,12 @@ export function StartInspector({
       <StartFilterFields
         node={node}
         installations={installations || []}
-        installationId={effectiveInstallationId}
-        onInstallationChange={updateTriggerInstallation}
-        singleRepo={["schedule", "webhook", "slack_mention"].includes(
-          node.data.event,
-        )}
+        installationIds={triggerInstallationIds}
+        onInstallationsChange={updateTriggerInstallations}
+        singleRepo={SINGLE_INSTALLATION_TRIGGER_EVENTS.has(node.data.event)}
         updateNodeData={updateNodeData}
       />
-      {["schedule", "webhook", "slack_mention"].includes(
-        node.data.event,
-      ) ? (
+      {SINGLE_INSTALLATION_TRIGGER_EVENTS.has(node.data.event) ? (
         <ExternalTriggerTestPanel
           key={`${selectedFlow.id}:${node.id}:${node.data.event}`}
           node={node}

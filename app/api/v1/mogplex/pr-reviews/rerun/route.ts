@@ -47,7 +47,11 @@ type PrReviewRerunRouteDeps = {
 const defaults: PrReviewRerunRouteDeps = {
   resolveApiKey,
   loadRepo: async (userId, repoId) => {
-    const repos = await listMogplexApiRepos(userId, { id: repoId, limit: 1 });
+    const repos = await listMogplexApiRepos(userId, {
+      id: repoId,
+      limit: 1,
+      includeHidden: true,
+    });
     return repos[0] ?? null;
   },
   loadGithubAccessToken: (repo, userId) =>

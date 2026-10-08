@@ -61,6 +61,8 @@ export const automationGraphSchema = {
                   installationIds: {
                     type: "array",
                     items: { type: "integer", minimum: 1 },
+                    description:
+                      "GitHub event triggers: omit to run for every connected account, including ones connected later; list ids only to restrict. Schedule, webhook, and slack_mention require exactly one.",
                   },
                   repos: {
                     ...strings,

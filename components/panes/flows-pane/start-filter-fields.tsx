@@ -11,37 +11,26 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  buildTriggerFilter,
+  describeTriggerAccounts,
+  resolveTriggerScope,
+  triggerCoversInstallation,
+  installationLoginLabel,
+} from "@/lib/flows/trigger-accounts"
 import type { FlowNode, FlowStartAuthorFilter, FlowStartFilter } from "@/lib/types"
 import { AUTHOR_FILTER_OPTIONS } from "./constants"
 import type { Installation } from "./types"
 import { WorkflowSelect, InspectorCallout, InspectorField } from "./inspector-shared"
+import {
+  AccountScopePicker,
+  installationAccountTypeLabel,
+} from "./account-scope-picker"
 
-export function installationAccountTypeLabel(accountType: string | null | undefined) {
-  return accountType?.toLowerCase() === "organization"
-    ? "Organization"
-    : accountType?.toLowerCase() === "user"
-      ? "Personal"
-      : "GitHub account"
-}
+export { installationAccountTypeLabel }
 
 export function installationAccountLabel(installation: Installation) {
-  return installation.account_login || `Installation ${installation.installation_id}`
-}
-
-export function buildFilter(
-  installationId: number | null,
-  repos: string[],
-  authorFilter: FlowStartAuthorFilter,
-): FlowStartFilter | undefined {
-  if (installationId === null && repos.length === 0 && authorFilter === "any") {
-    return undefined
-  }
-  return {
-    scope: "all",
-    ...(installationId !== null ? { installationIds: [installationId] } : {}),
-    ...(repos.length > 0 ? { repos } : {}),
-    ...(authorFilter !== "any" ? { authorFilter } : {}),
-  }
+  return installationLoginLabel(installation)
 }
 
 export function RepositoryScopePicker({
@@ -183,15 +172,16 @@ export function RepositoryScopePicker({
 export function StartFilterFields({
   node,
   installations,
-  installationId,
-  onInstallationChange,
+  installationIds,
+  onInstallationsChange,
   singleRepo = false,
   updateNodeData,
 }: {
   node: { id: string; data: { event?: string; filter?: FlowStartFilter } }
   installations: Installation[]
-  installationId: number | null
-  onInstallationChange: (installationId: number) => void
+  // Accounts that can start this trigger; `null` = every connected account.
+  installationIds: number[] | null
+  onInstallationsChange: (installationIds: number[]) => void
   singleRepo?: boolean
   updateNodeData: (
     nodeId: string,
@@ -203,17 +193,30 @@ export function StartFilterFields({
   const authorFilter: FlowStartAuthorFilter = filter?.authorFilter ?? "any"
   const showAuthorFilter = node.data.event === "pr_opened"
   const repos = useMemo(() => filter?.repos ?? [], [filter?.repos])
-  const selectedInstallation = installations.find(
-    (installation) => installation.installation_id === installationId,
-  ) ?? null
+  // Repo and author edits keep the stored account scope. Single-repository
+  // triggers pin their one bound account; GitHub event triggers keep exactly
+  // what the filter says, so "all accounts" and multi-account scopes survive.
+  const pinnedInstallationIds = useMemo(
+    () => (singleRepo ? (installationIds ?? []) : (filter?.installationIds ?? [])),
+    [filter?.installationIds, installationIds, singleRepo],
+  )
+  // API-authored filters may narrow by account type; edits keep it.
+  const scope = resolveTriggerScope({ event: node.data.event, filter })
+  const accountLabel = describeTriggerAccounts(installationIds, installations, scope)
   const repositoryOptions = useMemo(() => {
-    const configured = selectedInstallation?.repositories.map(
-      (repository) => repository.full_name,
-    ) ?? []
+    const covered = installations.filter((installation) =>
+      triggerCoversInstallation(installationIds, installation.installation_id, {
+        scope,
+        accountType: installation.account_type,
+      }),
+    )
+    const configured = covered.flatMap((installation) =>
+      installation.repositories.map((repository) => repository.full_name),
+    )
     return Array.from(new Set([...repos, ...configured])).sort((left, right) =>
       left.localeCompare(right),
     )
-  }, [repos, selectedInstallation])
+  }, [installationIds, installations, repos, scope])
 
   const commitFilter = useCallback(
     (next: FlowStartFilter | undefined) => {
@@ -232,33 +235,58 @@ export function StartFilterFields({
     [node.id, updateNodeData],
   )
 
+  const boundInstallation = singleRepo
+    ? (installations.find(
+        (installation) => installation.installation_id === installationIds?.[0],
+      ) ?? null)
+    : null
+
   const onReposChange = (nextRepos: string[]) => {
-    commitFilter(buildFilter(installationId, nextRepos, authorFilter))
+    commitFilter(
+      buildTriggerFilter(pinnedInstallationIds, nextRepos, authorFilter, scope),
+    )
   }
 
   const onAuthorFilterChange = (next: FlowStartAuthorFilter) => {
-    commitFilter(buildFilter(installationId, repos, next))
+    commitFilter(buildTriggerFilter(pinnedInstallationIds, repos, next, scope))
   }
 
   return (
     <>
-      <InspectorField label="GitHub account">
-        <WorkflowSelect
-          testId="flow-trigger-account"
-          ariaLabel="GitHub account"
-          value={String(installationId ?? "")}
-          onValueChange={(value) => onInstallationChange(Number(value))}
-          disabled={installations.length === 0}
-          options={
-            installations.length === 0
-              ? [{ value: "", label: "No GitHub accounts connected" }]
-              : installations.map((installation) => ({
-                  value: String(installation.installation_id),
-                  label: `${installationAccountLabel(installation)} · ${installationAccountTypeLabel(installation.account_type)}`,
-                }))
-          }
-        />
-      </InspectorField>
+      {singleRepo ? (
+        <InspectorField label="GitHub account">
+          <WorkflowSelect
+            testId="flow-trigger-account"
+            ariaLabel="GitHub account"
+            value={boundInstallation ? String(boundInstallation.installation_id) : ""}
+            onValueChange={(value) => onInstallationsChange([Number(value)])}
+            disabled={installations.length === 0}
+            options={
+              installations.length === 0
+                ? [{ value: "", label: "No GitHub accounts connected" }]
+                : [
+                    // Unbound or disconnected: show a prompt, not a blank select.
+                    ...(boundInstallation
+                      ? []
+                      : [{ value: "", label: "Select an account…" }]),
+                    ...installations.map((installation) => ({
+                      value: String(installation.installation_id),
+                      label: `${installationAccountLabel(installation)} · ${installationAccountTypeLabel(installation.account_type)}`,
+                    })),
+                  ]
+            }
+          />
+        </InspectorField>
+      ) : (
+        <InspectorField label="GitHub accounts">
+          <AccountScopePicker
+            installations={installations}
+            selected={installationIds}
+            scope={scope}
+            onChange={onInstallationsChange}
+          />
+        </InspectorField>
+      )}
       {singleRepo ? (
         <InspectorField label="Repository">
           <WorkflowSelect
@@ -278,9 +306,9 @@ export function StartFilterFields({
         <InspectorField label="Repository scope">
           <RepositoryScopePicker
             accountLabel={
-              selectedInstallation
-                ? installationAccountLabel(selectedInstallation)
-                : "this account"
+              installationIds === null && scope === "all"
+                ? "all connected accounts"
+                : accountLabel
             }
             options={repositoryOptions}
             selected={repos}

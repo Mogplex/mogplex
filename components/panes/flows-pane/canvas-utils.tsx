@@ -4,6 +4,10 @@ import { useMemo } from "react"
 import { MiniMap, useStore as useReactFlowStore } from "@xyflow/react"
 import { getMinimapSize } from "@/lib/flows/minimap-size"
 import type { FlowDraftSnapshot } from "@/lib/flows/editor"
+import {
+  buildTriggerFilter,
+  SINGLE_INSTALLATION_TRIGGER_EVENTS,
+} from "@/lib/flows/trigger-accounts"
 import type { FlowStartFilter, TriggerEvent } from "@/lib/types"
 import { EVENT_OPTIONS } from "./constants"
 
@@ -54,7 +58,10 @@ export function startDataForEvent(
   data: Record<string, unknown>,
   nextEvent: TriggerEvent,
 ): Record<string, unknown> {
-  const filtered = stripAuthorFilterForEvent(data, nextEvent)
+  const filtered = dropMultiAccountScopeForEvent(
+    stripAuthorFilterForEvent(data, nextEvent),
+    nextEvent,
+  )
   const {
     labelName: _labelName,
     labelPrOnly: _labelPrOnly,
@@ -102,4 +109,27 @@ export function stripAuthorFilterForEvent(
     return restData
   }
   return { ...data, filter: restFilter }
+}
+
+// Schedule, webhook, and Slack triggers bind one installation, and publishing
+// rejects a filter listing others. Switching a multi-account GitHub trigger to
+// one of them drops the list, so it binds the flow's own installation, which
+// is also what the editor shows.
+function dropMultiAccountScopeForEvent(
+  data: Record<string, unknown>,
+  nextEvent: TriggerEvent,
+): Record<string, unknown> {
+  if (!SINGLE_INSTALLATION_TRIGGER_EVENTS.has(nextEvent)) return data
+  const filter = data.filter as FlowStartFilter | undefined
+  if (!filter?.installationIds || filter.installationIds.length <= 1) return data
+  const next = buildTriggerFilter(
+    [],
+    filter.repos ?? [],
+    filter.authorFilter ?? "any",
+    // Scope only filters GitHub deliveries; it means nothing here.
+    "all",
+  )
+  if (next) return { ...data, filter: next }
+  const { filter: _omitFilter, ...restData } = data
+  return restData
 }
