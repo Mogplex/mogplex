@@ -342,6 +342,8 @@ export async function stubFlowsPage(
       start?.type === "start" ? (start.data.filter?.installationIds ?? []) : [];
     currentFlow = {
       ...currentFlow,
+      // Mirrors publishFlowDraft's installation_id sync in
+      // lib/flows/server-publish.ts; keep the two in step.
       installation_id:
         installationIds.length === 1
           ? installationIds[0]
