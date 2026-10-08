@@ -209,6 +209,15 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
                         status: "COMPLETED",
                         conclusion: "FAILURE",
                         detailsUrl: "https://ci.example/check/1",
+                        isRequired: true,
+                      },
+                      {
+                        __typename: "CheckRun",
+                        name: "diff-coverage",
+                        status: "COMPLETED",
+                        conclusion: "FAILURE",
+                        detailsUrl: "https://ci.example/check/2",
+                        isRequired: false,
                       },
                     ],
                   },
@@ -272,7 +281,15 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
             name: "test",
             status: "completed",
             conclusion: "failure",
+            required: true,
             url: "https://ci.example/check/1",
+          },
+          {
+            name: "diff-coverage",
+            status: "completed",
+            conclusion: "failure",
+            required: false,
+            url: "https://ci.example/check/2",
           },
         ]);
         assert.equal(result.unresolvedReviewThreadCount, 1);

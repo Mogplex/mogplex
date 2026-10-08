@@ -24,6 +24,7 @@ import { buildAppUrl } from "@/lib/app-url";
 import { resolveSlackTurnModel } from "@/lib/slack/turn-model-resolve";
 import { dispatchSlackMentionWorkflows } from "@/lib/flows/trigger-dispatch";
 import { defaultResolveSlackRepoContext } from "./slack-event-lib/repo-context";
+import { loadSlackPullRequestBranch } from "./slack-event-lib/pull-request-branch";
 import {
   findSlackGuidanceRuns,
   submitSlackRunGuidance,
@@ -99,6 +100,7 @@ const defaultDeps: SlackEventTaskDeps = {
   getChannelLink: getSlackChannelLink,
   getThreadMessages: getSlackThreadMessages,
   resolveRepoContext: defaultResolveSlackRepoContext,
+  loadPullRequestBranch: loadSlackPullRequestBranch,
   reserveSlackRepoAgentMonthlyRun: defaultReserveSlackRepoAgentMonthlyRun,
   releaseSlackRepoAgentMonthlyRun: defaultReleaseSlackRepoAgentMonthlyRun,
   now: () => new Date(),

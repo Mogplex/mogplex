@@ -124,6 +124,11 @@ export type StartRepoAgentRunInput = {
   mogplexUserId: string;
   repoId: string;
   prompt: string;
+  /**
+   * Continue an existing branch (an open pull request's head) instead of
+   * creating one from the default branch, so pushes update that pull request.
+   */
+  branch?: { working: string; base: string };
   idempotencyKey: string;
   slackContext: SlackRepoAgentRunContext;
   slackAttachments?: SlackRunImageAttachment[];
@@ -196,6 +201,8 @@ export type SlackEventTaskDeps = {
     mogplexUserId: string;
     texts: string[];
   }) => Promise<SlackRepoContext | null>;
+  /** Head and base branch of an open pull request a run should continue. */
+  loadPullRequestBranch?: typeof import("./pull-request-branch").loadSlackPullRequestBranch;
   persistConversation: (input: {
     conversationId: string;
     userId: string;
