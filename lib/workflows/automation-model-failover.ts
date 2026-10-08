@@ -125,11 +125,17 @@ function planNextAttempt(input: {
   retryState: AutomationGenerateRetryState;
   hasNextFallback: boolean;
   generationAborted: boolean;
+  stepBudgetSpent: boolean;
 }): AutomationModelRecovery {
   // The generation's own signal (its budget or a cancellation) fired. Every
   // further attempt shares that signal and would abort before sending, so
   // trying another model would only record attempts that never happened.
   if (input.generationAborted) return "fail";
+  // Fail-overs and retries share the step's clock. Each attempt gets a fresh
+  // per-request timeout, so without this a long fallback chain would multiply
+  // a step's worst case; with it the chain ends where a step's budget did
+  // before fail-over existed, while fast failures still walk the chain.
+  if (input.stepBudgetSpent) return "fail";
   const recovery = decideAutomationModelRecovery(input.failure);
   if (recovery === "fail") return "fail";
   if (recovery === "fail_over" && input.hasNextFallback) return "fail_over";
@@ -146,13 +152,17 @@ function createRecoveryMiddleware(input: {
   retryState: AutomationGenerateRetryState;
   logger: AutomationModelLogger;
   logContext: AutomationModelLogContext;
+  stepBudgetMs: number | undefined;
+  now: () => number;
 }): LanguageModelMiddleware {
-  const { fallbacks, retryState, logger, logContext } = input;
+  const { fallbacks, retryState, logger, logContext, stepBudgetMs, now } =
+    input;
   let activeFallbackIndex = -1;
 
   return {
     specificationVersion: "v4",
     async wrapGenerate({ doGenerate, params }) {
+      const stepStartedAt = now();
       for (;;) {
         try {
           if (activeFallbackIndex < 0) return await doGenerate();
@@ -169,6 +179,9 @@ function createRecoveryMiddleware(input: {
             retryState,
             hasNextFallback: activeFallbackIndex + 1 < fallbacks.length,
             generationAborted: params.abortSignal?.aborted === true,
+            stepBudgetSpent:
+              stepBudgetMs !== undefined &&
+              now() - stepStartedAt >= stepBudgetMs,
           });
           logAutomationProviderAttemptFailure({
             logger,
@@ -211,6 +224,9 @@ function createRecoveryMiddleware(input: {
  * sticky for the rest of this generation: once the primary has failed, later
  * tool-loop steps start on the fallback rather than waiting on the primary
  * again. Same-model retries share the existing per-generation budget.
+ *
+ * `stepBudgetMs` is how long one step may keep starting new attempts; a
+ * failure after that surfaces instead of moving down the chain.
  */
 export function wrapAutomationModelForRecovery(input: {
   model: GenerateTextRequest["model"];
@@ -218,6 +234,8 @@ export function wrapAutomationModelForRecovery(input: {
   retryState: AutomationGenerateRetryState;
   logger: AutomationModelLogger;
   logContext: AutomationModelLogContext;
+  stepBudgetMs?: number;
+  now?: () => number;
 }): GenerateTextRequest["model"] {
   let wrappedModel = input.model;
   const fallbacks = usableFallbacks(input.fallbackModels ?? []);
@@ -228,7 +246,12 @@ export function wrapAutomationModelForRecovery(input: {
   ) {
     wrappedModel = wrapLanguageModel({
       model: input.model,
-      middleware: createRecoveryMiddleware({ ...input, fallbacks }),
+      middleware: createRecoveryMiddleware({
+        ...input,
+        fallbacks,
+        stepBudgetMs: input.stepBudgetMs,
+        now: input.now ?? Date.now,
+      }),
     });
   }
 

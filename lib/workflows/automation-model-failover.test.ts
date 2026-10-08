@@ -1,4 +1,5 @@
-import { generateText } from "ai";
+import { generateText, tool } from "ai";
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import { classifyAutomationModelError } from "./automation-model-execution-errors";
 import {
@@ -14,7 +15,7 @@ import {
   wrapAutomationModelForRecovery,
 } from "./automation-model-failover";
 
-type Outcome = "ok" | Error;
+type Outcome = "ok" | "tool" | Error;
 type V4Model = Extract<
   GenerateTextRequest["model"],
   { specificationVersion: "v4" }
@@ -37,10 +38,24 @@ const socketDrop = () =>
     name: "GatewayResponseError",
   });
 
-function generateResult(text: string) {
+function generateResult(text: string, modelId: string, callTool = false) {
   return {
-    content: [{ type: "text", text }],
-    finishReason: { unified: "stop", raw: "stop" },
+    content: callTool
+      ? [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "lookup",
+            input: "{}",
+          },
+        ]
+      : [{ type: "text", text }],
+    finishReason: callTool
+      ? { unified: "tool-calls", raw: "tool_calls" }
+      : { unified: "stop", raw: "stop" },
+    providerMetadata: {
+      gateway: { modelAttempts: [{ canonicalSlug: modelId, success: true }] },
+    },
     usage: {
       inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
       outputTokens: { total: 1, text: 1, reasoning: 0 },
@@ -50,7 +65,11 @@ function generateResult(text: string) {
 }
 
 /** A v4 model that plays back one outcome per call and records its options. */
-function scriptedModel(modelId: string, outcomes: Outcome[]) {
+function scriptedModel(
+  modelId: string,
+  outcomes: Outcome[],
+  onCall?: () => void
+) {
   const calls: CallOptions[] = [];
   const model = {
     specificationVersion: "v4" as const,
@@ -59,9 +78,10 @@ function scriptedModel(modelId: string, outcomes: Outcome[]) {
     supportedUrls: {},
     async doGenerate(options: CallOptions) {
       calls.push(options);
+      onCall?.();
       const outcome = outcomes[calls.length - 1] ?? outcomes.at(-1) ?? "ok";
       if (outcome instanceof Error) throw outcome;
-      return generateResult(`${modelId} answered`);
+      return generateResult(`${modelId} answered`, modelId, outcome === "tool");
     },
     async doStream() {
       throw new Error("doStream should not be called");
@@ -145,7 +165,8 @@ describe("wrapAutomationModelForRecovery", () => {
   function wrap(
     primary: V4Model,
     fallbacks: { modelId: string; model: V4Model }[],
-    retryState = freshRetryState()
+    retryState = freshRetryState(),
+    clock?: { stepBudgetMs: number; now: () => number }
   ) {
     const wrapped = wrapAutomationModelForRecovery({
       model: primary,
@@ -153,9 +174,36 @@ describe("wrapAutomationModelForRecovery", () => {
       retryState,
       logger: silentLogger,
       logContext: { phase: "pr_review", requestedModelId: "zai/glm-5.3" },
+      ...clock,
     }) as V4Model;
     return { wrapped, retryState };
   }
+
+  it("should stop moving down the chain once the step has used its budget", async () => {
+    let now = 0;
+    const tick = () => {
+      now += 600_000;
+    };
+    const primary = scriptedModel("zai/glm-5.3", [socketDrop()], tick);
+    const first = scriptedModel("zai/glm-5.3-fast", [socketDrop()], tick);
+    const second = scriptedModel("b", ["ok"], tick);
+    const { wrapped, retryState } = wrap(
+      primary.model,
+      [
+        { modelId: "zai/glm-5.3-fast", model: first.model },
+        { modelId: "b", model: second.model },
+      ],
+      freshRetryState(),
+      { stepBudgetMs: 1_000_000, now: () => now }
+    );
+
+    await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(
+      "Gateway request failed"
+    );
+    expect(first.calls).toHaveLength(1);
+    expect(second.calls).toHaveLength(0);
+    expect(retryState.failoverModelIds).toEqual(["zai/glm-5.3-fast"]);
+  });
 
   it("should hand the request to the fallback when the primary drops the connection", async () => {
     const primary = scriptedModel("zai/glm-5.3", [socketDrop()]);
@@ -320,6 +368,48 @@ describe("executeAutomationTextGeneration fail-over", () => {
       failoverModelIds: ["zai/glm-5.3-fast"],
       fallbackUsed: true,
       finalFailureClass: "provider_unavailable",
+    });
+  });
+
+  it("should keep a tool loop on the fallback after a later step fails", async () => {
+    const primary = scriptedModel("zai/glm-5.3", ["tool", socketDrop()]);
+    const fallback = scriptedModel("zai/glm-5.3-fast", ["ok"]);
+    const last = scriptedModel("b", ["ok"]);
+
+    const { result, metadata } = await executeAutomationTextGeneration({
+      phase: "pr_review",
+      requestedModelId: "zai/glm-5.3",
+      fallbackModels: [
+        { modelId: "zai/glm-5.3-fast", model: fallback.model },
+        { modelId: "b", model: last.model },
+      ],
+      generateText,
+      logger: silentLogger,
+      request: {
+        model: primary.model,
+        prompt: "Review this PR",
+        providerOptions: {
+          gateway: { models: ["zai/glm-5.3-fast", "b"] },
+        },
+        tools: {
+          lookup: tool({
+            inputSchema: z.object({}),
+            execute: async () => "found",
+          }),
+        },
+        stopWhen: () => false,
+      },
+    });
+
+    expect(result.text).toBe("zai/glm-5.3-fast answered");
+    expect(primary.calls).toHaveLength(2);
+    expect(fallback.calls).toHaveLength(1);
+    expect(fallback.calls[0].providerOptions?.gateway).toMatchObject({
+      models: ["b"],
+    });
+    expect(metadata).toMatchObject({
+      failoverModelIds: ["zai/glm-5.3-fast"],
+      effectiveModelIds: ["zai/glm-5.3", "zai/glm-5.3-fast"],
     });
   });
 });

@@ -267,6 +267,8 @@ export async function executeAutomationTextGeneration(input: {
     retryState,
     logger,
     logContext,
+    // A review step has no SDK timeout, so this is its only shared clock.
+    stepBudgetMs: generateTimeoutMs,
   });
   const onStepEnd: NonNullable<GenerateTextRequest["onStepEnd"]> = async (
     event
