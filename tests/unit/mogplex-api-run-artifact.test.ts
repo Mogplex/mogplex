@@ -17,24 +17,89 @@ function matchesMalformedProvider(url: string, malformed?: "commit" | "tree") {
   );
 }
 
-async function setup(
-  options: {
-    owned?: boolean;
-    status?: "success" | "streaming";
-    mode?: string;
-    content?: string;
-    providerFailure?: boolean;
-    malformed?: "commit" | "tree";
-    rootDirectory?: string;
-    repositoryFailure?: boolean;
-  } = {}
-) {
+type SetupOptions = {
+  owned?: boolean;
+  status?: "success" | "streaming";
+  mode?: string;
+  content?: string;
+  providerFailure?: boolean;
+  malformed?: "commit" | "tree";
+  rootDirectory?: string;
+  repositoryFailure?: boolean;
+  createBranch?: boolean;
+  workingBranch?: string;
+  githubToken?: string | null;
+  commitSha?: string;
+  truncated?: boolean;
+  leafSize?: number;
+  blob?: Record<string, unknown>;
+  // Exercise the production githubJson against a mocked global fetch.
+  realGithub?: boolean;
+};
+
+/** Provider responses for the happy path, keyed by the URL suffix they answer. */
+function providerFixtures(options: SetupOptions): [string, unknown][] {
+  const leaf = {
+    path: "preview-test.json",
+    mode: options.mode ?? "100644",
+    type: "blob",
+    sha: "blob",
+    size: options.leafSize ?? 10,
+  };
+  const blob = options.blob ?? {
+    encoding: "base64",
+    size: 10,
+    content: Buffer.from(options.content ?? '{"ready":true}').toString(
+      "base64"
+    ),
+  };
+  return [
+    [
+      `/commits/${encodeURIComponent(options.workingBranch ?? "mogplex/external/run")}`,
+      {
+        sha: options.commitSha ?? commitSha,
+        commit: { tree: { sha: "root" } },
+      },
+    ],
+    [
+      "/trees/root",
+      {
+        truncated: options.truncated,
+        tree: [{ path: ".mogplex", mode: "040000", type: "tree", sha: "dir" }],
+      },
+    ],
+    [
+      "/trees/dir",
+      {
+        tree: [
+          { path: "artifacts", mode: "040000", type: "tree", sha: "artifacts" },
+        ],
+      },
+    ],
+    ["/trees/artifacts", { tree: [leaf] }],
+    ["/blobs/blob", blob],
+  ];
+}
+
+async function setup(options: SetupOptions = {}) {
   await loadRunDetailRoute();
   const { loadRunArtifact, RunArtifactError } =
     await import("../../lib/mogplex-api/run-artifacts");
   const { createRunArtifactGetHandler } =
     await import("../../app/api/v1/mogplex/runs/[runId]/artifact/route");
   const urls: string[] = [];
+  const githubJson = async (_token: string, url: string) => {
+    urls.push(url);
+    if (matchesMalformedProvider(url, options.malformed))
+      return { private: "PRIVATE PROVIDER CONTENT" };
+    if (options.providerFailure)
+      throw new RunArtifactError(502, "Could not read the committed artifact");
+    const fixture = providerFixtures(options).find(([suffix]) =>
+      url.endsWith(suffix)
+    );
+    if (fixture) return fixture[1];
+    throw new Error("Unexpected GitHub URL");
+  };
   const handler = createRunArtifactGetHandler({
     resolveApiKey: async () => ({ ok: true, auth: buildUser() }),
     loadArtifact: (input) =>
@@ -45,7 +110,9 @@ async function setup(
             : presentMogplexApiRun(
                 buildRunRow({
                   status: options.status ?? "success",
-                  create_branch: true,
+                  create_branch: options.createBranch ?? true,
+                  working_branch:
+                    options.workingBranch ?? "mogplex/external/run",
                   root_directory: options.rootDirectory ?? null,
                 })
               ),
@@ -54,59 +121,13 @@ async function setup(
             throw new TypeError("PRIVATE DATABASE DETAIL");
           return {
             repo: { user_id: "user-123", full_name: "webrenew/previews" },
-            githubToken: "test-token",
+            githubToken:
+              options.githubToken === undefined
+                ? "test-token"
+                : options.githubToken,
           };
         },
-        githubJson: async (_token, url) => {
-          urls.push(url);
-          if (matchesMalformedProvider(url, options.malformed))
-            return { private: "PRIVATE PROVIDER CONTENT" };
-          if (options.providerFailure)
-            throw new RunArtifactError(
-              502,
-              "Could not read the committed artifact"
-            );
-          if (url.includes("/commits/"))
-            return { sha: commitSha, commit: { tree: { sha: "root" } } };
-          if (url.endsWith("/trees/root"))
-            return {
-              tree: [
-                { path: ".mogplex", mode: "040000", type: "tree", sha: "dir" },
-              ],
-            };
-          if (url.endsWith("/trees/dir"))
-            return {
-              tree: [
-                {
-                  path: "artifacts",
-                  mode: "040000",
-                  type: "tree",
-                  sha: "artifacts",
-                },
-              ],
-            };
-          if (url.endsWith("/trees/artifacts"))
-            return {
-              tree: [
-                {
-                  path: "preview-test.json",
-                  mode: options.mode ?? "100644",
-                  type: "blob",
-                  sha: "blob",
-                  size: 10,
-                },
-              ],
-            };
-          if (url.endsWith("/blobs/blob"))
-            return {
-              encoding: "base64",
-              size: 10,
-              content: Buffer.from(
-                options.content ?? '{"ready":true}'
-              ).toString("base64"),
-            };
-          throw new Error("Unexpected GitHub URL");
-        },
+        ...(options.realGithub ? {} : { githubJson }),
       }),
   });
   const request = (artifactPath = path, auth = true) =>
@@ -200,4 +221,85 @@ test("unexpected failures log an error class without private content", async (co
     runId: "run-1",
     errorType: "TypeError",
   });
+});
+
+test("network-level GitHub failures and timeouts return 502, not 500", async (context) => {
+  for (const failure of [
+    new TypeError("fetch failed"),
+    new DOMException("The operation timed out.", "TimeoutError"),
+    new DOMException("This operation was aborted", "AbortError"),
+  ]) {
+    const fetchMock = context.mock.method(globalThis, "fetch", async () => {
+      throw failure;
+    });
+    const { request } = await setup({ realGithub: true });
+    const response = await request();
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(fetchMock.mock.callCount(), 1);
+    fetchMock.mock.restore();
+  }
+});
+
+test("SHA-256 object-format commits are accepted; other lengths are not", async () => {
+  const sha256 = await setup({ commitSha: "b".repeat(64) });
+  const response = await sha256.request();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.artifact.commitSha, "b".repeat(64));
+  for (const invalid of ["c".repeat(41), "d".repeat(63), "e".repeat(65)]) {
+    const { request } = await setup({ commitSha: invalid });
+    assert.equal((await request()).status, 502);
+  }
+});
+
+// Each blob below is otherwise valid JSON, so only the targeted guard can refuse it.
+const readyBase64 = Buffer.from('{"ready":true}').toString("base64");
+
+test("oversized artifacts are refused before or after the blob read", async () => {
+  const leaf = await setup({ leafSize: 1024 * 1024 + 1 });
+  assert.equal((await leaf.request()).status, 400);
+  assert.ok(!leaf.urls.some((url) => url.includes("/blobs/")));
+  const declared = await setup({
+    blob: { encoding: "base64", size: 1024 * 1024 + 1, content: readyBase64 },
+  });
+  assert.equal((await declared.request()).status, 400);
+  const decoded = await setup({
+    blob: {
+      encoding: "base64",
+      size: 10,
+      content: Buffer.from(`${" ".repeat(1024 * 1024)}{}`).toString("base64"),
+    },
+  });
+  assert.equal((await decoded.request()).status, 400);
+});
+
+test("unsupported blob encodings are refused", async () => {
+  const { request } = await setup({
+    blob: { encoding: "none", size: 14, content: readyBase64 },
+  });
+  const response = await request();
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, "BAD_REQUEST");
+});
+
+test("truncated provider trees are treated as not found", async () => {
+  const { request, urls } = await setup({ truncated: true });
+  assert.equal((await request()).status, 404);
+  assert.ok(!urls.some((url) => url.includes("/blobs/")));
+});
+
+test("a missing GitHub connection returns 409 without provider access", async () => {
+  const { request, urls } = await setup({ githubToken: null });
+  const response = await request();
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, "CONFLICT");
+  assert.equal(urls.length, 0);
+});
+
+test("runs without their own branch cannot provide artifacts", async () => {
+  for (const options of [{ createBranch: false }, { workingBranch: "main" }]) {
+    const { request, urls } = await setup(options);
+    assert.equal((await request()).status, 409);
+    assert.equal(urls.length, 0);
+  }
 });

@@ -41,6 +41,7 @@ export class RunArtifactError extends Error {
 }
 
 async function githubJson(token: string, url: string): Promise<unknown> {
+  // Network, TLS, redirect, and timeout rejections are provider outages, not server bugs.
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -50,6 +51,8 @@ async function githubJson(token: string, url: string): Promise<unknown> {
     cache: "no-store",
     redirect: "error",
     signal: AbortSignal.timeout(15000),
+  }).catch(() => {
+    throw new RunArtifactError(502, "Could not read the committed artifact");
   });
   if (response.status === 404)
     throw new RunArtifactError(404, "Committed artifact not found");
@@ -173,7 +176,8 @@ export async function loadRunArtifact(
   const read = (url: string) => deps.githubJson(githubToken, url);
   const commit = parseProvider(
     z.object({
-      sha: z.string().regex(/^[a-f0-9]{40}$/),
+      // SHA-1 (40 hex) or SHA-256 object-format (64 hex) repositories.
+      sha: z.string().regex(/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/),
       commit: z.object({ tree: z.object({ sha: z.string().min(1) }) }),
     }),
     await read(`${base}/commits/${encodeURIComponent(run.branch.working)}`)
