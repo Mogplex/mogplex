@@ -33,16 +33,39 @@ function scopeDataValue(
 }
 
 // Toggle and count only connected accounts; a saved id whose installation was
-// disconnected stays in the summary but would make every edit invalid.
-function connectedSelection(
+// disconnected would make every edit invalid. Disconnected ids stay in the
+// summary and get their own row, showing what the next account change drops.
+function partitionSelection(
   selected: number[] | null,
   installations: Installation[],
 ) {
-  if (!selected) return []
   const connectedIds = new Set(
     installations.map((installation) => installation.installation_id),
   )
-  return selected.filter((id) => connectedIds.has(id))
+  const connected: number[] = []
+  const disconnected: number[] = []
+  for (const id of selected ?? []) {
+    if (connectedIds.has(id)) connected.push(id)
+    else disconnected.push(id)
+  }
+  return { connected, disconnected }
+}
+
+function DisconnectedAccountRow({ installationId }: { installationId: number }) {
+  return (
+    <label
+      data-testid={`flow-trigger-account-option-${installationId}`}
+      className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-xs text-muted-foreground"
+    >
+      <Checkbox checked disabled className="mt-0.5" />
+      <span className="min-w-0">
+        <span className="block truncate">Installation {installationId} · Disconnected</span>
+        <span className="mt-0.5 block text-[10px]">
+          Removed from this trigger when you change accounts
+        </span>
+      </span>
+    </label>
+  )
 }
 
 // An org- or personal-scoped trigger (API-authored) covers every account of
@@ -81,7 +104,8 @@ export function AccountScopePicker({
   onChange: (installationIds: number[]) => void
 }) {
   const [open, setOpen] = useState(false)
-  const selectedIds = connectedSelection(selected, installations)
+  const { connected: selectedIds, disconnected: disconnectedIds } =
+    partitionSelection(selected, installations)
   const allAccounts = selected === null && scope === "all"
   const allOfType = selected === null && scope !== "all"
   const summary = describeTriggerAccounts(selected, installations, scope)
@@ -173,6 +197,9 @@ export function AccountScopePicker({
             </span>
           </label>
           <div className="my-1 border-t border-border" />
+          {disconnectedIds.map((installationId) => (
+            <DisconnectedAccountRow key={installationId} installationId={installationId} />
+          ))}
           {installations.map((installation) => (
             <label
               key={installation.installation_id}

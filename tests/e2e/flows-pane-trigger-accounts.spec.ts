@@ -171,6 +171,12 @@ test("a single-repository trigger bound to a disconnected account prompts for on
   const account = page.getByTestId("flow-trigger-account");
   await expect(account).toHaveAttribute("data-value", "");
   await expect(account).toContainText("Select an account");
+  // The prompt is not a choice; picking it used to be a silent no-op.
+  await account.click();
+  await expect(page.locator('[role="option"][data-value=""]')).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
 });
 
 test("a multi-account trigger with a disconnected account stays editable", async ({
@@ -195,11 +201,17 @@ test("a multi-account trigger with a disconnected account stays editable", async
   await expect(account).toContainText("1 of 3 connected accounts");
 
   await account.click();
+  // The disconnected account is listed, so the drop below is not a surprise.
+  const disconnected = page.getByTestId("flow-trigger-account-option-999");
+  await expect(disconnected).toContainText("Installation 999 · Disconnected");
+  await expect(disconnected.getByRole("checkbox")).toBeChecked();
+  await expect(disconnected.getByRole("checkbox")).toBeDisabled();
   await expect(
     page.getByTestId("flow-trigger-account-option-202").getByRole("checkbox")
   ).toBeDisabled();
   await page.getByTestId("flow-trigger-account-option-101").click();
   await expect(account).toHaveAttribute("data-value", "202,101");
+  await expect(disconnected).toHaveCount(0);
 });
 
 test("switching a multi-account trigger to a schedule binds one account", async ({
