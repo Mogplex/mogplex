@@ -54,6 +54,8 @@ export function decideAutomationModelRecovery(
   failure: AutomationModelFailureInfo
 ): AutomationModelRecovery {
   if (!failure.retryable) return "fail";
+  // Retryable, but raised by Mogplex's own allowlist read during model
+  // resolution, never by a model; no model switch or re-send can fix it.
   if (failure.classification === "dependency_unavailable") return "fail";
 
   const code = failure.errorCode?.toLowerCase() ?? "";
@@ -193,6 +195,11 @@ function createRecoveryMiddleware(input: {
 }
 
 /**
+ * Generate-only: the middleware implements `wrapGenerate` and nothing else,
+ * so a streaming call passes through with no retry or fail-over. Automation
+ * generation uses `generateText` today; add a `wrapStream` counterpart before
+ * any automation path streams.
+ *
  * Wraps the primary model so each generation step recovers from a provider
  * failure according to {@link decideAutomationModelRecovery}. A fail-over is
  * sticky for the rest of this generation: once the primary has failed, later

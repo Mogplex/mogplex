@@ -108,6 +108,22 @@ describe("gateway account fallback resolution", () => {
 });
 
 describe("gateway fallback models", () => {
+  it("never offers the primary as its own fallback", async () => {
+    database([]);
+    const result = await createResolveUserLanguageModel({
+      getProviderKey: async () => "test-key",
+      loadUserPlatformAccess: async () => ({ allowPlatformAi: false }),
+      resolveGatewayModel: (_apiKey, modelId) => `model:${modelId}` as never,
+    })("owner", "openai/primary", {
+      gatewayFallbackModelIds: ["OpenAI/Primary", "openai/second"],
+    });
+
+    expect(result.fallbackModels?.map((fallback) => fallback.modelId)).toEqual([
+      "openai/second",
+    ]);
+    expect(result.providerOptions?.gateway.models).toEqual(["openai/second"]);
+  });
+
   it("resolves only the approved fallbacks as callable models on the same key", async () => {
     database(["openai/second", "openai/denied", "openai/retired"]);
     const resolved: string[] = [];

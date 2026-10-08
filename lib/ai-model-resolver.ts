@@ -359,24 +359,34 @@ export function createResolveUserLanguageModel(
       teamId,
       allowlistState,
     });
-    const resolveGatewayFallbackModels = (apiKey: string) =>
-      approvedGatewayFallbackModelIds.map((modelId) => ({
+    // Built from the exact list the gateway receives, which already drops the
+    // primary and duplicates, so a fail-over never lands back on the model
+    // that just failed.
+    const resolveGatewayFallbackModels = (
+      apiKey: string,
+      providerOptions: GatewayProviderOptions
+    ) =>
+      (providerOptions.gateway.models ?? []).map((modelId) => ({
         modelId,
         model: deps.resolveGatewayModel(apiKey, modelId, {
           fetch: options?.providerFetch,
         }),
       }));
     if (userGatewayKey && !isOpenRouterModel) {
+      const providerOptions = gatewayProviderOptions(
+        normalizedModel,
+        options?.gatewayContext ?? { userId },
+        approvedGatewayFallbackModelIds
+      );
       return {
         model: deps.resolveGatewayModel(userGatewayKey, normalizedModel, {
           fetch: options?.providerFetch,
         }),
-        providerOptions: gatewayProviderOptions(
-          normalizedModel,
-          options?.gatewayContext ?? { userId },
-          approvedGatewayFallbackModelIds
+        providerOptions,
+        fallbackModels: resolveGatewayFallbackModels(
+          userGatewayKey,
+          providerOptions
         ),
-        fallbackModels: resolveGatewayFallbackModels(userGatewayKey),
       };
     }
 
@@ -401,7 +411,8 @@ export function createResolveUserLanguageModel(
           ),
           providerOptions,
           fallbackModels: resolveGatewayFallbackModels(
-            process.env.AI_GATEWAY_API_KEY
+            process.env.AI_GATEWAY_API_KEY,
+            providerOptions
           ),
         };
       }
