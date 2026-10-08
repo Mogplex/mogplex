@@ -3,11 +3,12 @@ import { executeExternalAgentRun } from "@/lib/mogplex-api/run-execution";
 import { superviseExternalAgentRun } from "@/lib/mogplex-api/run-supervisor";
 import { notifyControlWorkerCompletion } from "@/lib/control/continuation-dispatch";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
+import { AGENT_WORKER_MAX_DURATION_SECONDS } from "@/lib/trigger/agent-worker-duration";
 import type { ExternalAgentRunExecutionPayload } from "@/lib/mogplex-api/run-execution";
 
 export const executeExternalAgentRunWorkerTask = task({
   id: TRIGGER_TASK_IDS.externalAgentRunWorker,
-  maxDuration: 60 * 30,
+  maxDuration: AGENT_WORKER_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 1,
   },

@@ -1,11 +1,12 @@
 import { AbortTaskRunError, metadata, task } from "@trigger.dev/sdk/v3";
 import { resumeExternalAgentRun } from "@/lib/mogplex-api/run-resume";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
+import { AGENT_WORKER_MAX_DURATION_SECONDS } from "@/lib/trigger/agent-worker-duration";
 import type { ResumeExternalAgentRunPayload } from "@/lib/mogplex-api/run-resume";
 
 export const executeResumeAgentRunTask = task({
   id: TRIGGER_TASK_IDS.resumeAgentRun,
-  maxDuration: 60 * 30,
+  maxDuration: AGENT_WORKER_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 1,
   },
