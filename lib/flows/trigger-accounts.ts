@@ -1,4 +1,7 @@
 import type { FlowStartFilter, TriggerEvent } from "@/lib/types";
+import { normalizeAccountType } from "./trigger-filter";
+
+type TriggerScope = FlowStartFilter["scope"];
 
 // These triggers run against one repository, so they bind exactly one GitHub
 // installation (server validation enforces it). GitHub event triggers can
@@ -25,8 +28,10 @@ export function resolveTriggerInstallationIds(
   flowInstallationId: number | null | undefined
 ): number[] | null {
   const scoped = start?.filter?.installationIds ?? [];
+  // No start node means nothing can route; report the bound installation the
+  // same way as a single-repository trigger instead of "all accounts".
   if (
-    start?.event &&
+    !start?.event ||
     SINGLE_INSTALLATION_TRIGGER_EVENTS.has(start.event as TriggerEvent)
   ) {
     if (scoped.length === 1) return scoped;
@@ -35,11 +40,25 @@ export function resolveTriggerInstallationIds(
   return scoped.length > 0 ? scoped : null;
 }
 
+/**
+ * Whether a delivery from this installation passes the trigger's account
+ * scope. Mirrors `evaluateTriggerFilter`, including the `org` / `personal`
+ * account-type scope, which API-authored filters can set.
+ */
 export function triggerCoversInstallation(
   installationIds: number[] | null,
-  installationId: number
+  installationId: number,
+  options: { scope?: TriggerScope; accountType?: string | null } = {}
 ) {
-  return installationIds === null || installationIds.includes(installationId);
+  if (installationIds !== null && !installationIds.includes(installationId)) {
+    return false;
+  }
+  const scope = options.scope ?? "all";
+  if (scope === "all") return true;
+  const accountType = normalizeAccountType(options.accountType);
+  return scope === "org"
+    ? accountType === "Organization"
+    : accountType === "User";
 }
 
 /**
@@ -49,9 +68,11 @@ export function triggerCoversInstallation(
 export function buildTriggerFilter(
   installationIds: number[],
   repos: string[],
-  authorFilter: NonNullable<FlowStartFilter["authorFilter"]>
+  authorFilter: NonNullable<FlowStartFilter["authorFilter"]>,
+  scope: TriggerScope = "all"
 ): FlowStartFilter | undefined {
   if (
+    scope === "all" &&
     installationIds.length === 0 &&
     repos.length === 0 &&
     authorFilter === "any"
@@ -59,7 +80,7 @@ export function buildTriggerFilter(
     return undefined;
   }
   return {
-    scope: "all",
+    scope,
     ...(installationIds.length > 0 ? { installationIds } : {}),
     ...(repos.length > 0 ? { repos } : {}),
     ...(authorFilter === "any" ? {} : { authorFilter }),
@@ -103,12 +124,32 @@ export function installationLoginLabel(installation: LabeledInstallation) {
   );
 }
 
+const SCOPE_ALL_LABELS: Record<TriggerScope, string> = {
+  all: "All accounts",
+  org: "All organizations",
+  personal: "All personal accounts",
+};
+
+const SCOPE_QUALIFIERS: Record<TriggerScope, string> = {
+  all: "",
+  org: " (organizations only)",
+  personal: " (personal only)",
+};
+
 /** Short account summary for the trigger inspector and canvas node. */
 export function describeTriggerAccounts(
   installationIds: number[] | null,
+  installations: LabeledInstallation[],
+  scope: TriggerScope = "all"
+) {
+  if (installationIds === null) return SCOPE_ALL_LABELS[scope];
+  return `${describeInstallationList(installationIds, installations)}${SCOPE_QUALIFIERS[scope]}`;
+}
+
+function describeInstallationList(
+  installationIds: number[],
   installations: LabeledInstallation[]
 ) {
-  if (installationIds === null) return "All accounts";
   const labels = installationIds.map((id) => {
     const installation = installations.find(
       (candidate) => candidate.installation_id === id

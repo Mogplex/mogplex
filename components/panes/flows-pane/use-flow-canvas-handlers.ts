@@ -303,7 +303,10 @@ export function useFlowCanvasHandlers(
               installationIds,
               installations || []
             ),
-            filter?.authorFilter ?? "any"
+            filter?.authorFilter ?? "any",
+            // An explicit account choice defines the account scope outright,
+            // replacing any API-set org/personal narrowing.
+            "all"
           );
           if (next) return { ...data, filter: next };
           const { filter: _omit, ...rest } = data;

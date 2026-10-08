@@ -109,29 +109,38 @@ export function useFlowCreateBrowseState({
     const selectedRepositories = browseRepositoryOptions.filter((repository) =>
       selectedRepositoryKeys.has(repository.full_name.toLowerCase())
     );
+    const accountTypes = new Map(
+      (installations || []).map((installation) => [
+        installation.installation_id,
+        installation.account_type,
+      ])
+    );
 
     return (flows || []).filter((flow) => {
-      const start = getStartConfig(flow.draft_graph);
+      if (browseInstallationId === "all" && selectedRepositories.length === 0) {
+        return true;
+      }
+      // Optimistic list entries (e.g. a just-created flow) may not carry a
+      // graph yet; treat them as unscoped rather than crashing the pane.
+      const start = flow.draft_graph ? getStartConfig(flow.draft_graph) : null;
       const flowInstallationIds = resolveTriggerInstallationIds(
         start,
         flow.installation_id
       );
+      const coversInstallation = (installationId: number) =>
+        triggerCoversInstallation(flowInstallationIds, installationId, {
+          scope: start?.filter?.scope,
+          accountType: accountTypes.get(installationId),
+        });
       if (
         browseInstallationId !== "all" &&
-        !triggerCoversInstallation(
-          flowInstallationIds,
-          Number(browseInstallationId)
-        )
+        !coversInstallation(Number(browseInstallationId))
       ) {
         return false;
       }
       if (selectedRepositories.length === 0) return true;
       const selectedForInstallation = selectedRepositories.filter(
-        (repository) =>
-          triggerCoversInstallation(
-            flowInstallationIds,
-            repository.installationId
-          )
+        (repository) => coversInstallation(repository.installationId)
       );
       if (selectedForInstallation.length === 0) return false;
       const scopedRepos = start?.filter?.repos ?? [];
@@ -148,6 +157,7 @@ export function useFlowCreateBrowseState({
     browseRepositories,
     browseRepositoryOptions,
     flows,
+    installations,
   ]);
 
   // Filter out browse repositories that no longer exist in available options

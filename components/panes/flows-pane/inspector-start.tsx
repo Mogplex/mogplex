@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Bell, Clock, Copy, InfoCircle, WarningTriangle } from "iconoir-react"
 import type { Flow, FlowNode, TriggerEvent } from "@/lib/types"
 import type { FlowCanvasNode } from "@/lib/flows/editor"
+import { SINGLE_INSTALLATION_TRIGGER_EVENTS } from "@/lib/flows/trigger-accounts"
 import { startDataForEvent } from "./canvas-utils"
 import { EVENT_OPTIONS } from "./constants"
 import type { Installation, SlackChannel, SlackInstallation } from "./types"
@@ -380,14 +381,10 @@ export function StartInspector({
         installations={installations || []}
         installationIds={triggerInstallationIds}
         onInstallationsChange={updateTriggerInstallations}
-        singleRepo={["schedule", "webhook", "slack_mention"].includes(
-          node.data.event,
-        )}
+        singleRepo={SINGLE_INSTALLATION_TRIGGER_EVENTS.has(node.data.event)}
         updateNodeData={updateNodeData}
       />
-      {["schedule", "webhook", "slack_mention"].includes(
-        node.data.event,
-      ) ? (
+      {SINGLE_INSTALLATION_TRIGGER_EVENTS.has(node.data.event) ? (
         <ExternalTriggerTestPanel
           key={`${selectedFlow.id}:${node.id}:${node.data.event}`}
           node={node}

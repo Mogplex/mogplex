@@ -70,24 +70,42 @@ describe("resolveTriggerInstallationIds", () => {
     ).toEqual([]);
   });
 
-  it("should agree with webhook routing for every account", () => {
+  it("should bind a flow without a start node to its own installation", () => {
+    expect(resolveTriggerInstallationIds(null, WEBRENEW)).toEqual([WEBRENEW]);
+    expect(resolveTriggerInstallationIds(null, undefined)).toEqual([]);
+  });
+
+  it("should agree with webhook routing for every account and scope", () => {
+    const accountTypes = new Map([
+      [MOGPLEX, "Organization"],
+      [WEBRENEW, "Organization"],
+      [PERSONAL, "User"],
+    ] as const);
     const filters: Array<FlowStartFilter | undefined> = [
       undefined,
       { scope: "all" },
+      { scope: "org" },
+      { scope: "personal" },
       { scope: "all", installationIds: [MOGPLEX, WEBRENEW] },
       { scope: "all", installationIds: [PERSONAL] },
+      { scope: "org", installationIds: [WEBRENEW, PERSONAL] },
     ];
     for (const filter of filters) {
       const ids = resolveTriggerInstallationIds(
         { event: "pr_opened", filter },
         MOGPLEX
       );
-      for (const installationId of [MOGPLEX, WEBRENEW, PERSONAL]) {
-        expect(triggerCoversInstallation(ids, installationId)).toBe(
+      for (const [installationId, accountType] of accountTypes) {
+        expect(
+          triggerCoversInstallation(ids, installationId, {
+            scope: filter?.scope,
+            accountType,
+          })
+        ).toBe(
           evaluateTriggerFilter(filter, {
             installationId,
             repoFullName: null,
-            accountType: "Organization",
+            accountType,
           })
         );
       }
@@ -102,6 +120,13 @@ describe("buildTriggerFilter", () => {
       authorFilter: "exclude_dependabot",
     });
     expect(buildTriggerFilter([], [], "any")).toBeUndefined();
+  });
+
+  it("should keep an org or personal scope", () => {
+    expect(buildTriggerFilter([], [], "any", "org")).toEqual({ scope: "org" });
+    expect(
+      buildTriggerFilter([], ["webrenew/vmotif"], "any", "personal")
+    ).toEqual({ scope: "personal", repos: ["webrenew/vmotif"] });
   });
 
   it("should keep every selected account", () => {
@@ -148,6 +173,18 @@ describe("describeTriggerAccounts", () => {
     expect(
       describeTriggerAccounts([MOGPLEX, WEBRENEW, PERSONAL], INSTALLATIONS)
     ).toBe("3 accounts");
+  });
+
+  it("should name an org or personal scope", () => {
+    expect(describeTriggerAccounts(null, INSTALLATIONS, "org")).toBe(
+      "All organizations"
+    );
+    expect(describeTriggerAccounts(null, INSTALLATIONS, "personal")).toBe(
+      "All personal accounts"
+    );
+    expect(describeTriggerAccounts([MOGPLEX], INSTALLATIONS, "org")).toBe(
+      "Mogplex (organizations only)"
+    );
   });
 
   it("should fall back to the installation id for unknown or unnamed accounts", () => {

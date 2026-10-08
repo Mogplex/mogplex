@@ -14,6 +14,7 @@ import {
 import {
   buildTriggerFilter,
   describeTriggerAccounts,
+  triggerCoversInstallation,
   installationLoginLabel,
 } from "@/lib/flows/trigger-accounts"
 import type { FlowNode, FlowStartAuthorFilter, FlowStartFilter } from "@/lib/types"
@@ -198,20 +199,23 @@ export function StartFilterFields({
     () => (singleRepo ? (installationIds ?? []) : (filter?.installationIds ?? [])),
     [filter?.installationIds, installationIds, singleRepo],
   )
-  const accountLabel = describeTriggerAccounts(installationIds, installations)
+  // API-authored filters may narrow by account type; edits keep it.
+  const scope = filter?.scope ?? "all"
+  const accountLabel = describeTriggerAccounts(installationIds, installations, scope)
   const repositoryOptions = useMemo(() => {
-    const scoped = installationIds === null
-      ? installations
-      : installations.filter((installation) =>
-          installationIds.includes(installation.installation_id),
-        )
-    const configured = scoped.flatMap((installation) =>
+    const covered = installations.filter((installation) =>
+      triggerCoversInstallation(installationIds, installation.installation_id, {
+        scope,
+        accountType: installation.account_type,
+      }),
+    )
+    const configured = covered.flatMap((installation) =>
       installation.repositories.map((repository) => repository.full_name),
     )
     return Array.from(new Set([...repos, ...configured])).sort((left, right) =>
       left.localeCompare(right),
     )
-  }, [installationIds, installations, repos])
+  }, [installationIds, installations, repos, scope])
 
   const commitFilter = useCallback(
     (next: FlowStartFilter | undefined) => {
@@ -231,11 +235,13 @@ export function StartFilterFields({
   )
 
   const onReposChange = (nextRepos: string[]) => {
-    commitFilter(buildTriggerFilter(pinnedInstallationIds, nextRepos, authorFilter))
+    commitFilter(
+      buildTriggerFilter(pinnedInstallationIds, nextRepos, authorFilter, scope),
+    )
   }
 
   const onAuthorFilterChange = (next: FlowStartAuthorFilter) => {
-    commitFilter(buildTriggerFilter(pinnedInstallationIds, repos, next))
+    commitFilter(buildTriggerFilter(pinnedInstallationIds, repos, next, scope))
   }
 
   return (
@@ -263,6 +269,7 @@ export function StartFilterFields({
           <AccountScopePicker
             installations={installations}
             selected={installationIds}
+            scope={scope}
             onChange={onInstallationsChange}
           />
         </InspectorField>
@@ -286,7 +293,9 @@ export function StartFilterFields({
         <InspectorField label="Repository scope">
           <RepositoryScopePicker
             accountLabel={
-              installationIds === null ? "all connected accounts" : accountLabel
+              installationIds === null && scope === "all"
+                ? "all connected accounts"
+                : accountLabel
             }
             options={repositoryOptions}
             selected={repos}

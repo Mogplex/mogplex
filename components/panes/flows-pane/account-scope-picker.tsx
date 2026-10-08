@@ -13,6 +13,7 @@ import {
   describeTriggerAccounts,
   installationLoginLabel,
 } from "@/lib/flows/trigger-accounts"
+import type { FlowStartFilter } from "@/lib/types"
 import type { Installation } from "./types"
 
 export function installationAccountTypeLabel(accountType: string | null | undefined) {
@@ -23,6 +24,14 @@ export function installationAccountTypeLabel(accountType: string | null | undefi
       : "GitHub account"
 }
 
+function scopeDataValue(
+  selected: number[] | null,
+  scope: FlowStartFilter["scope"],
+) {
+  if (selected !== null) return selected.join(",")
+  return scope === "all" ? "all" : `all-${scope}`
+}
+
 /**
  * Multi-select for the GitHub accounts a GitHub event trigger runs on. No
  * selection means every connected account, including ones connected later.
@@ -30,16 +39,19 @@ export function installationAccountTypeLabel(accountType: string | null | undefi
 export function AccountScopePicker({
   installations,
   selected,
+  scope = "all",
   onChange,
 }: {
   installations: Installation[]
-  // `null` = all connected accounts.
+  // `null` = all connected accounts (narrowed by `scope`).
   selected: number[] | null
+  scope?: FlowStartFilter["scope"]
   onChange: (installationIds: number[]) => void
 }) {
   const [open, setOpen] = useState(false)
   const selectedIds = selected ?? []
-  const summary = describeTriggerAccounts(selected, installations)
+  const allAccounts = selected === null && scope === "all"
+  const summary = describeTriggerAccounts(selected, installations, scope)
   const detail = selected === null
     ? "Includes accounts you connect later"
     : `${selectedIds.length} of ${installations.length} connected accounts`
@@ -61,7 +73,7 @@ export function AccountScopePicker({
           aria-label="GitHub accounts"
           aria-expanded={open}
           data-testid="flow-trigger-account"
-          data-value={selected === null ? "all" : selectedIds.join(",")}
+          data-value={scopeDataValue(selected, scope)}
           disabled={installations.length === 0}
           className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-border bg-input/40 px-3 py-2 text-left text-foreground transition-colors hover:border-border/80 hover:bg-input/55 disabled:opacity-60"
         >
@@ -100,11 +112,11 @@ export function AccountScopePicker({
             data-testid="flow-trigger-account-option-all"
             className={cn(
               "flex w-full cursor-pointer items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-foreground/[0.05]",
-              selected === null && "bg-foreground/[0.04]",
+              allAccounts && "bg-foreground/[0.04]",
             )}
           >
             <Checkbox
-              checked={selected === null}
+              checked={allAccounts}
               onCheckedChange={() => onChange([])}
               className="mt-0.5"
             />

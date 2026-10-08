@@ -136,7 +136,11 @@ export function useFlowDerivedSelection(
   const triggerAccountLabel =
     triggerInstallationIds?.length === 0
       ? undefined
-      : describeTriggerAccounts(triggerInstallationIds, installations || []);
+      : describeTriggerAccounts(
+          triggerInstallationIds,
+          installations || [],
+          selectedStartConfig?.filter?.scope
+        );
 
   const selectedAgentNode =
     selectedNode?.type === "agent"
