@@ -131,3 +131,26 @@ test("an org-scoped PR trigger keeps its account-type scope across edits", async
     authorFilter: "humans_only",
   });
 });
+
+test("a single-repository trigger bound to a disconnected account prompts for one", async ({
+  page,
+}) => {
+  await stubFlowsPage(page, {
+    installations,
+    startFilter: { scope: "all", installationIds: [999] },
+  });
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "PR opened" })
+    .click();
+  await selectAppOption(page.getByTestId("flow-trigger-event"), "schedule");
+
+  const account = page.getByTestId("flow-trigger-account");
+  await expect(account).toHaveAttribute("data-value", "");
+  await expect(account).toContainText("Select an account");
+});

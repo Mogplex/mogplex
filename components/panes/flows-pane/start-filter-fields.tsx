@@ -234,6 +234,12 @@ export function StartFilterFields({
     [node.id, updateNodeData],
   )
 
+  const boundInstallation = singleRepo
+    ? (installations.find(
+        (installation) => installation.installation_id === installationIds?.[0],
+      ) ?? null)
+    : null
+
   const onReposChange = (nextRepos: string[]) => {
     commitFilter(
       buildTriggerFilter(pinnedInstallationIds, nextRepos, authorFilter, scope),
@@ -251,16 +257,22 @@ export function StartFilterFields({
           <WorkflowSelect
             testId="flow-trigger-account"
             ariaLabel="GitHub account"
-            value={String(installationIds?.[0] ?? "")}
+            value={boundInstallation ? String(boundInstallation.installation_id) : ""}
             onValueChange={(value) => onInstallationsChange([Number(value)])}
             disabled={installations.length === 0}
             options={
               installations.length === 0
                 ? [{ value: "", label: "No GitHub accounts connected" }]
-                : installations.map((installation) => ({
-                    value: String(installation.installation_id),
-                    label: `${installationAccountLabel(installation)} · ${installationAccountTypeLabel(installation.account_type)}`,
-                  }))
+                : [
+                    // Unbound or disconnected: show a prompt, not a blank select.
+                    ...(boundInstallation
+                      ? []
+                      : [{ value: "", label: "Select an account…" }]),
+                    ...installations.map((installation) => ({
+                      value: String(installation.installation_id),
+                      label: `${installationAccountLabel(installation)} · ${installationAccountTypeLabel(installation.account_type)}`,
+                    })),
+                  ]
             }
           />
         </InspectorField>
