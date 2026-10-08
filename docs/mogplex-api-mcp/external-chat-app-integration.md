@@ -171,3 +171,27 @@ MOGPLEX_API_TOKEN=mog_... MOGPLEX_API_URL=http://localhost:3000 pnpm mcp:smoke
 ```
 
 The smoke initializes MCP, lists tools, and calls `mogplex_list_repos`.
+
+### Committed JSON artifacts
+
+After a successful run on a branch created for that run, a server integration can
+read an explicit output file with
+`GET /api/v1/mogplex/runs/{runId}/artifact?path=.mogplex/artifacts/{name}.json`.
+Use the same bearer authentication as the run APIs. The response envelope contains
+`data.artifact` with `runId`, `repoId`, `branch`, `path`, `commitSha`, and parsed
+`content`. It uses the caller's existing repository access; no GitHub token is
+returned or copied to the consuming app.
+
+Only one regular JSON file under `.mogplex/artifacts/` is accepted (letters,
+digits, hyphens and underscores in its name, up to 1 MiB). Symlinks, traversal,
+submodules, unfinished runs and runs on their base branch are refused. The run
+and repository must both belong to the authenticated caller. Errors never include
+file content or provider credentials.
+
+The endpoint resolves the run's working branch **at read time**, then reads every
+tree/blob from that immutable commit. `commitSha` identifies the imported content;
+it does not attest that this was the branch tip when execution ended. Use a unique
+branch per requested build and retain the returned commit with the imported draft.
+Validate the artifact against the consuming app's schema and require its normal
+publication approval. A successful run or agent-written check report is not a
+substitute for that review. This endpoint does not merge or publish anything.
