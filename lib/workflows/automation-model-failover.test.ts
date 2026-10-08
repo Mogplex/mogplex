@@ -227,6 +227,25 @@ describe("wrapAutomationModelForRecovery", () => {
     expect(retryState.failoverModelIds).toEqual([]);
   });
 
+  it("should not switch models once the generation's own signal has aborted", async () => {
+    const primary = scriptedModel("zai/glm-5.3", [
+      providerError("The operation was aborted due to timeout", {
+        name: "TimeoutError",
+      }),
+    ]);
+    const fallback = scriptedModel("zai/glm-5.3-fast", ["ok"]);
+    const { wrapped, retryState } = wrap(primary.model, [
+      { modelId: "zai/glm-5.3-fast", model: fallback.model },
+    ]);
+
+    await expect(
+      wrapped.doGenerate({ ...callOptions, abortSignal: AbortSignal.abort() })
+    ).rejects.toThrow("aborted due to timeout");
+    expect(fallback.calls).toHaveLength(0);
+    expect(retryState.failoverModelIds).toEqual([]);
+    expect(retryState.retryCount).toBe(0);
+  });
+
   it("should not switch models on an authentication failure", async () => {
     const primary = scriptedModel("zai/glm-5.3", [
       providerError("Invalid API key", { statusCode: 401 }),

@@ -360,8 +360,10 @@ export function createResolveUserLanguageModel(
       allowlistState,
     });
     // Built from the exact list the gateway receives, which already drops the
-    // primary and duplicates, so a fail-over never lands back on the model
-    // that just failed.
+    // primary and duplicates, so a fail-over never lands back on the primary.
+    // If the gateway itself substituted fallbacks[0] up front and that model
+    // then drops mid-request, the first fail-over can try it once more: the
+    // failure carries no record of which model served it.
     const resolveGatewayFallbackModels = (
       apiKey: string,
       providerOptions: GatewayProviderOptions

@@ -124,7 +124,12 @@ function planNextAttempt(input: {
   failure: AutomationModelFailureInfo;
   retryState: AutomationGenerateRetryState;
   hasNextFallback: boolean;
+  generationAborted: boolean;
 }): AutomationModelRecovery {
+  // The generation's own signal (its budget or a cancellation) fired. Every
+  // further attempt shares that signal and would abort before sending, so
+  // trying another model would only record attempts that never happened.
+  if (input.generationAborted) return "fail";
   const recovery = decideAutomationModelRecovery(input.failure);
   if (recovery === "fail") return "fail";
   if (recovery === "fail_over" && input.hasNextFallback) return "fail_over";
@@ -163,6 +168,7 @@ function createRecoveryMiddleware(input: {
             failure,
             retryState,
             hasNextFallback: activeFallbackIndex + 1 < fallbacks.length,
+            generationAborted: params.abortSignal?.aborted === true,
           });
           logAutomationProviderAttemptFailure({
             logger,
