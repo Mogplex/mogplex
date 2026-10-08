@@ -24,6 +24,7 @@ const REPO: MogplexApiRepo = {
   installation_id: 123,
   default_branch: "main",
   root_directory: null,
+  hidden: false,
 };
 
 function buildRetryContext(

@@ -6,12 +6,18 @@ export type MogplexApiRepo = {
   installation_id: number;
   default_branch: string | null;
   root_directory: string | null;
+  // Removed from the repo dashboard. Hidden repos still receive webhooks and
+  // automation runs, so API callers see them, flagged.
+  hidden: boolean;
 };
 
 export type ListMogplexApiReposOptions = {
   query?: string | null;
   id?: string | null;
   limit?: number;
+  // Pickers that mirror the dashboard (Slack /mogplex repo) leave this off;
+  // the v1 API includes hidden repos because automations still run on them.
+  includeHidden?: boolean;
 };
 
 const UUID_PATTERN =
@@ -30,12 +36,15 @@ export async function listMogplexApiRepos(
   let query = supabaseAdmin
     .from("repos")
     .select(
-      "id, full_name, github_installation_id, default_branch, root_directory"
+      "id, full_name, github_installation_id, default_branch, root_directory, is_hidden"
     )
     .eq("user_id", userId)
-    .or("is_hidden.is.null,is_hidden.eq.false")
     .order("full_name", { ascending: true })
     .limit(options.limit ?? 100);
+
+  if (!options.includeHidden) {
+    query = query.or("is_hidden.is.null,is_hidden.eq.false");
+  }
 
   if (options.id != null) {
     query = query.eq("id", options.id);
@@ -54,5 +63,6 @@ export async function listMogplexApiRepos(
     installation_id: repo.github_installation_id,
     default_branch: repo.default_branch,
     root_directory: repo.root_directory,
+    hidden: repo.is_hidden === true,
   })) as MogplexApiRepo[];
 }

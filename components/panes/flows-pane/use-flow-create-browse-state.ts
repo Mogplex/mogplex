@@ -3,6 +3,10 @@ import type { Flow } from "@/lib/types";
 import type { Installation } from "./types";
 import { installationAccountLabel } from "./start-filter-fields";
 import { getStartConfig } from "@/lib/flows/graph";
+import {
+  resolveTriggerInstallationIds,
+  triggerCoversInstallation,
+} from "@/lib/flows/trigger-accounts";
 
 export type FlowCreateBrowseState = {
   // Create state
@@ -107,18 +111,30 @@ export function useFlowCreateBrowseState({
     );
 
     return (flows || []).filter((flow) => {
+      const start = getStartConfig(flow.draft_graph);
+      const flowInstallationIds = resolveTriggerInstallationIds(
+        start,
+        flow.installation_id
+      );
       if (
         browseInstallationId !== "all" &&
-        String(flow.installation_id) !== browseInstallationId
+        !triggerCoversInstallation(
+          flowInstallationIds,
+          Number(browseInstallationId)
+        )
       ) {
         return false;
       }
       if (selectedRepositories.length === 0) return true;
       const selectedForInstallation = selectedRepositories.filter(
-        (repository) => repository.installationId === flow.installation_id
+        (repository) =>
+          triggerCoversInstallation(
+            flowInstallationIds,
+            repository.installationId
+          )
       );
       if (selectedForInstallation.length === 0) return false;
-      const scopedRepos = getStartConfig(flow.draft_graph)?.filter?.repos ?? [];
+      const scopedRepos = start?.filter?.repos ?? [];
       if (scopedRepos.length === 0) return true;
       const scopedRepositoryKeys = new Set(
         scopedRepos.map((repository) => repository.toLowerCase())

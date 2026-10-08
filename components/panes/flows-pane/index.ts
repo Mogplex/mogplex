@@ -202,7 +202,6 @@ export {
 export {
   installationAccountTypeLabel,
   installationAccountLabel,
-  buildFilter,
   RepositoryScopePicker,
   StartFilterFields,
   ExternalTriggerTestPanel,

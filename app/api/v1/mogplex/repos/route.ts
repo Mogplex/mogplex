@@ -46,7 +46,12 @@ export function createMogplexApiReposGetHandler(
     );
 
     try {
-      const repos = await deps.listRepos(user.userId, { query, id, limit });
+      const repos = await deps.listRepos(user.userId, {
+        query,
+        id,
+        limit,
+        includeHidden: true,
+      });
       return mogplexApiSuccess({ repos });
     } catch (error) {
       console.error("[mogplex-api/repos] failed to list repos", error);

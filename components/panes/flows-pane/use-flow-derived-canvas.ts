@@ -13,13 +13,8 @@ import {
 } from "@/lib/flows/graph";
 import { classifyBranchRows } from "@/lib/flows/classify-branches";
 import type { FlowClassifyNodeData, FlowGraph, Repo } from "@/lib/types";
-import type {
-  Installation,
-  FlowContextMenuState,
-  FlowRenderableEdgeData,
-} from "./types";
+import type { FlowContextMenuState, FlowRenderableEdgeData } from "./types";
 import { FlowSemanticEdge } from "./edge-component";
-import { installationAccountLabel } from "./start-filter-fields";
 
 type EdgeDecoration = {
   label: string | null;
@@ -63,7 +58,7 @@ function describeEdge(
 
 export interface FlowDerivedCanvasParams {
   draft: FlowDraftSnapshot | null;
-  selectedFlowInstallation: Installation | null;
+  triggerAccountLabel: string | undefined;
   selectedStartConfig: ReturnType<typeof getStartConfig> | null;
   repos: Repo[];
   contextMenu: FlowContextMenuState | null;
@@ -88,7 +83,7 @@ export function useFlowDerivedCanvas(
 ): FlowDerivedCanvasResult {
   const {
     draft,
-    selectedFlowInstallation,
+    triggerAccountLabel,
     selectedStartConfig,
     repos,
     contextMenu,
@@ -97,21 +92,18 @@ export function useFlowDerivedCanvas(
 
   const renderedCanvasNodes = useMemo(() => {
     if (!draft) return [];
-    const accountLabel = selectedFlowInstallation
-      ? installationAccountLabel(selectedFlowInstallation)
-      : undefined;
     return draft.nodes.map((node: FlowCanvasNode) =>
       node.type === "start"
         ? {
             ...node,
             data: {
               ...node.data,
-              accountLabel,
+              accountLabel: triggerAccountLabel,
             },
           }
         : node
     );
-  }, [draft, selectedFlowInstallation]);
+  }, [draft, triggerAccountLabel]);
 
   const currentTriggerNode = useMemo(
     () =>

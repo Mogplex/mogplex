@@ -29,8 +29,8 @@ export interface StartInspectorProps {
     options?: { mergeKey?: string | null },
   ) => void
   installations: Installation[]
-  effectiveInstallationId: number | null
-  updateTriggerInstallation: (installationId: number) => void
+  triggerInstallationIds: number[] | null
+  updateTriggerInstallations: (installationIds: number[]) => void
   slackInstallations: SlackInstallation[]
   slackChannels: SlackChannel[]
   slackChannelsLoading: boolean
@@ -54,8 +54,8 @@ export function StartInspector({
   selectedFlow,
   updateNodeData,
   installations,
-  effectiveInstallationId,
-  updateTriggerInstallation,
+  triggerInstallationIds,
+  updateTriggerInstallations,
   slackInstallations,
   slackChannels,
   slackChannelsLoading,
@@ -378,8 +378,8 @@ export function StartInspector({
       <StartFilterFields
         node={node}
         installations={installations || []}
-        installationId={effectiveInstallationId}
-        onInstallationChange={updateTriggerInstallation}
+        installationIds={triggerInstallationIds}
+        onInstallationsChange={updateTriggerInstallations}
         singleRepo={["schedule", "webhook", "slack_mention"].includes(
           node.data.event,
         )}
