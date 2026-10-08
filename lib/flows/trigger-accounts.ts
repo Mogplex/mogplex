@@ -41,6 +41,21 @@ export function resolveTriggerInstallationIds(
 }
 
 /**
+ * The account-type scope routing applies. Only GitHub event deliveries are
+ * filtered by scope; single-repository triggers bind one installation and
+ * ignore it, so the editor must too.
+ */
+export function resolveTriggerScope(start: TriggerStart): TriggerScope {
+  if (
+    !start?.event ||
+    SINGLE_INSTALLATION_TRIGGER_EVENTS.has(start.event as TriggerEvent)
+  ) {
+    return "all";
+  }
+  return start.filter?.scope ?? "all";
+}
+
+/**
  * Whether a delivery from this installation passes the trigger's account
  * scope. Mirrors `evaluateTriggerFilter`, including the `org` / `personal`
  * account-type scope, which API-authored filters can set.

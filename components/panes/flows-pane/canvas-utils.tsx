@@ -126,7 +126,8 @@ function dropMultiAccountScopeForEvent(
     [],
     filter.repos ?? [],
     filter.authorFilter ?? "any",
-    filter.scope,
+    // Scope only filters GitHub deliveries; it means nothing here.
+    "all",
   )
   if (next) return { ...data, filter: next }
   const { filter: _omitFilter, ...restData } = data

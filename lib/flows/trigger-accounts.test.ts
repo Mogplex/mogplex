@@ -6,6 +6,7 @@ import {
   describeTriggerAccounts,
   pruneReposToInstallations,
   resolveTriggerInstallationIds,
+  resolveTriggerScope,
   triggerCoversInstallation,
 } from "./trigger-accounts";
 
@@ -110,6 +111,24 @@ describe("resolveTriggerInstallationIds", () => {
         );
       }
     }
+  });
+});
+
+describe("resolveTriggerScope", () => {
+  it("should apply an org or personal scope to GitHub event triggers", () => {
+    expect(
+      resolveTriggerScope({ event: "pr_opened", filter: { scope: "org" } })
+    ).toBe("org");
+    expect(resolveTriggerScope({ event: "pr_opened" })).toBe("all");
+  });
+
+  it("should ignore scope on single-repository triggers, as routing does", () => {
+    for (const event of ["schedule", "webhook", "slack_mention"]) {
+      expect(
+        resolveTriggerScope({ event, filter: { scope: "personal" } })
+      ).toBe("all");
+    }
+    expect(resolveTriggerScope(null)).toBe("all");
   });
 });
 

@@ -5,6 +5,7 @@ import { installationAccountLabel } from "./start-filter-fields";
 import { getStartConfig } from "@/lib/flows/graph";
 import {
   resolveTriggerInstallationIds,
+  resolveTriggerScope,
   triggerCoversInstallation,
 } from "@/lib/flows/trigger-accounts";
 
@@ -129,7 +130,7 @@ export function useFlowCreateBrowseState({
       );
       const coversInstallation = (installationId: number) =>
         triggerCoversInstallation(flowInstallationIds, installationId, {
-          scope: start?.filter?.scope,
+          scope: resolveTriggerScope(start),
           accountType: accountTypes.get(installationId),
         });
       if (

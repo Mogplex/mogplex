@@ -206,10 +206,11 @@ test("switching a multi-account trigger to a schedule binds one account", async 
   page,
 }) => {
   // Publishing rejects a schedule whose filter lists other installations, so
-  // the switch must not carry the GitHub trigger's account list over.
+  // the switch must not carry the GitHub trigger's account list over. The
+  // org scope is dropped too: it only filters GitHub deliveries.
   const { getFlow } = await stubFlowsPage(page, {
     installations,
-    startFilter: { scope: "all", installationIds: [101, 202] },
+    startFilter: { scope: "org", installationIds: [101, 303] },
   });
   const savedStart = () =>
     (getFlow().draft_graph.nodes as FlowNode[]).find(
@@ -233,4 +234,36 @@ test("switching a multi-account trigger to a schedule binds one account", async 
   await page.keyboard.press(`${primaryModifier}+S`);
   await expect.poll(() => savedStart()?.event).toBe("schedule");
   expect(savedStart()?.filter).toBeUndefined();
+});
+
+test("re-selecting All accounts does not add an undo step", async ({
+  page,
+}) => {
+  await stubFlowsPage(page, { installations });
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "PR opened" })
+    .click();
+  const account = page.getByTestId("flow-trigger-account");
+  await expect(account).toHaveAttribute("data-value", "all");
+  await account.click();
+  await page.getByTestId("flow-trigger-account-option-all").click();
+  await page.keyboard.press("Escape");
+
+  const pane = page.locator(".react-flow__pane");
+  const bounds = await pane.boundingBox();
+  if (!bounds) throw new Error("Canvas pane has no bounding box");
+  await pane.dispatchEvent("contextmenu", {
+    clientX: bounds.x + 40,
+    clientY: bounds.y + bounds.height - 40,
+    button: 2,
+    bubbles: true,
+    cancelable: true,
+  });
+  await expect(page.getByTestId("flow-context-undo")).toBeDisabled();
 });

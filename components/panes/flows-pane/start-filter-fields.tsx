@@ -14,6 +14,7 @@ import {
 import {
   buildTriggerFilter,
   describeTriggerAccounts,
+  resolveTriggerScope,
   triggerCoversInstallation,
   installationLoginLabel,
 } from "@/lib/flows/trigger-accounts"
@@ -200,7 +201,7 @@ export function StartFilterFields({
     [filter?.installationIds, installationIds, singleRepo],
   )
   // API-authored filters may narrow by account type; edits keep it.
-  const scope = filter?.scope ?? "all"
+  const scope = resolveTriggerScope({ event: node.data.event, filter })
   const accountLabel = describeTriggerAccounts(installationIds, installations, scope)
   const repositoryOptions = useMemo(() => {
     const covered = installations.filter((installation) =>

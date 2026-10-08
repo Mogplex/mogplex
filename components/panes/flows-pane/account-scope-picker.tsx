@@ -157,7 +157,10 @@ export function AccountScopePicker({
           >
             <Checkbox
               checked={allAccounts}
-              onCheckedChange={() => onChange([])}
+              // Re-selecting would only add an empty undo step.
+              onCheckedChange={() => {
+                if (!allAccounts) onChange([])
+              }}
               className="mt-0.5"
             />
             <span className="min-w-0">

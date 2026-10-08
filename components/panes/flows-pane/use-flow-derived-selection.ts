@@ -8,6 +8,7 @@ import { getStartConfig } from "@/lib/flows/graph";
 import {
   describeTriggerAccounts,
   resolveTriggerInstallationIds,
+  resolveTriggerScope,
 } from "@/lib/flows/trigger-accounts";
 import type { Flow, FlowAgentHarness, FlowNode, Agent } from "@/lib/types";
 import { scopedHref } from "@/lib/scoped-href";
@@ -139,7 +140,7 @@ export function useFlowDerivedSelection(
       : describeTriggerAccounts(
           triggerInstallationIds,
           installations || [],
-          selectedStartConfig?.filter?.scope
+          resolveTriggerScope(selectedStartConfig)
         );
 
   const selectedAgentNode =
