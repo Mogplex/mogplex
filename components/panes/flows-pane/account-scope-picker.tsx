@@ -56,7 +56,13 @@ export function AccountScopePicker({
     ? "Includes accounts you connect later"
     : `${selectedIds.length} of ${installations.length} connected accounts`
 
+  // An empty list means every account, so unchecking the last account would
+  // silently widen the trigger. "All accounts" is the explicit way to widen.
+  const isLastSelected = (installationId: number) =>
+    selectedIds.length === 1 && selectedIds[0] === installationId
+
   const toggle = (installationId: number) => {
+    if (isLastSelected(installationId)) return
     onChange(
       selectedIds.includes(installationId)
         ? selectedIds.filter((id) => id !== installationId)
@@ -138,6 +144,7 @@ export function AccountScopePicker({
             >
               <Checkbox
                 checked={selectedIds.includes(installation.installation_id)}
+                disabled={isLastSelected(installation.installation_id)}
                 onCheckedChange={() => toggle(installation.installation_id)}
               />
               <span className="truncate">

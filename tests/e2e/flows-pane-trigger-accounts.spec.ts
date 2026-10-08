@@ -77,7 +77,16 @@ test("a multi-account PR trigger shows every account and keeps them across edits
     authorFilter: "exclude_dependabot",
   });
 
+  // Unchecking the last account must not widen the trigger to every account.
   await account.click();
+  await page.getByTestId("flow-trigger-account-option-202").click();
+  await expect(account).toHaveAttribute("data-value", "101");
+  const lastAccount = page.getByTestId("flow-trigger-account-option-101");
+  await expect(lastAccount.getByRole("checkbox")).toBeDisabled();
+  await lastAccount.click({ force: true });
+  await expect(account).toHaveAttribute("data-value", "101");
+  await expect(startNode).toContainText("webrenew · All repositories");
+
   await page.getByTestId("flow-trigger-account-option-all").click();
   await account.click();
   await expect(account).toHaveAttribute("data-value", "all");
