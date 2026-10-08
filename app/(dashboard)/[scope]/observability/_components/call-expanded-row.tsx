@@ -66,10 +66,12 @@ function readSlackRunInfo(
 
 export function CallExpandedRow({
   call,
+  repository,
   canOpenSandboxHealth,
   onOpenSandboxHealth,
 }: {
   call: AiCall;
+  repository: string | null;
   canOpenSandboxHealth: boolean;
   onOpenSandboxHealth: (call: AiCall) => void;
 }) {
@@ -102,13 +104,21 @@ export function CallExpandedRow({
 
   return (
     <div className="space-y-3 p-4 text-sm">
+      {call.type === "agent" && (
+        <div
+          className="max-w-64 whitespace-normal"
+          aria-label="Run repository details"
+        >
+          <div className="ui-label mb-0.5">Repository</div>
+          <div className="break-all font-mono font-medium text-foreground">
+            {repository || "Not recorded"}
+          </div>
+        </div>
+      )}
+
       <GithubEventLinkPanel
         sourceType={call.type}
-        repoFullName={
-          typeof call.metadata?.repo_full_name === "string"
-            ? call.metadata.repo_full_name
-            : null
-        }
+        repoFullName={repository}
         metadata={call.metadata}
       />
 

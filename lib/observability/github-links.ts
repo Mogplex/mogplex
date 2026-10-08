@@ -1,3 +1,5 @@
+import { normalizeRepoFullName } from "./run-repository";
+
 export type GithubObservabilityLinkKind =
   | "pr"
   | "pr_comment"
@@ -59,13 +61,6 @@ function normalizeGithubUrl(value: unknown) {
   } catch {
     return null;
   }
-}
-
-function normalizeRepoFullName(value: unknown) {
-  const trimmed = toOptionalTrimmedString(value);
-  if (trimmed == null) return null;
-
-  return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(trimmed) ? trimmed : null;
 }
 
 function buildGithubMetadataLink(input: {
