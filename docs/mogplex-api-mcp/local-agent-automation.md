@@ -29,7 +29,7 @@ url = "https://mogplex.com/api/v1/mogplex/mcp"
 oauth_resource = "https://mogplex.com/api/v1/mogplex/mcp"
 ```
 
-For clients without OAuth support, create a key in Mogplex Settings > Mogplex Keys and send `Authorization: Bearer mog_...`. A read-only token can discover repos, agents, models, automations, runs, and logs. Creating sandboxes or changing/running automations requires `write`. Keep PATs in the client's secret or environment configuration; never paste them into a prompt.
+For clients without OAuth support, create a key in Mogplex Settings > Mogplex Keys and send `Authorization: Bearer mog_...`. A read-only token can discover repos, agents, models, automations, runs, and logs. Creating sandboxes or changing/running automations requires `write` and a key with Full access. A key set to Automations only (by you, or by a team owner on the team's repositories) can trigger automations that have an API trigger and read or cancel their runs, and nothing else that starts work. Keep PATs in the client's secret or environment configuration; never paste them into a prompt.
 
 ## Tool workflow
 

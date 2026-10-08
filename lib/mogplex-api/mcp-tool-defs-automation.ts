@@ -210,7 +210,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     name: "mogplex_trigger_automation",
     title: "Trigger Mogplex Automation",
     description:
-      "Trigger an active published automation for an owned repository. Optional input is merged into the run metadata for conditions and prompts.",
+      "Trigger an active published automation for an owned repository. For an automation with an API trigger, input must match its declared fields and is passed to the agent as data; it cannot change the automation's instructions, repository or permissions. A repeated idempotencyKey with the same input returns the original run. A Mogplex API key set to Automations only can start work only through this tool, and only for automations with an API trigger.",
     inputSchema: objectSchema({
       properties: {
         automationId: { type: "string", description: "Automation id." },
@@ -220,7 +220,8 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
         },
         input: {
           type: "object",
-          description: "Optional run input metadata.",
+          description:
+            "Run input. API-trigger automations accept only their declared fields.",
           additionalProperties: true,
         },
         idempotencyKey: {

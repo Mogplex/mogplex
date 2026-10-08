@@ -4,9 +4,11 @@ import {
   resolveApiKey,
 } from "@/lib/auth/api-key";
 import { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
+import { readStoredApiKeyAccess } from "@/lib/mogplex-api/key-access";
 import { buildMogplexMcpBearerChallenge } from "@/lib/mogplex-api/oauth-config";
 
 export type MogplexApiErrorCode =
+  | "AUTOMATION_REQUIRED"
   | "BAD_REQUEST"
   | "CONFLICT"
   | "FORBIDDEN"
@@ -103,5 +105,11 @@ export async function resolveMogplexApiUser(
     userId: result.auth.userId,
     keyId: result.auth.keyId,
     scopes: result.auth.scopes,
+    // A Mogplex API key is usually held by a server; what it may do is the
+    // access its owner chose (and the team's, checked per repository). An
+    // OAuth token is issued to a person who approved it in the browser (the
+    // Mogplex CLI, or an MCP client such as Claude Code or Cursor).
+    credentialKind: isPat ? ("integration" as const) : ("interactive" as const),
+    keyAccess: isPat ? readStoredApiKeyAccess(result.auth.access) : null,
   };
 }

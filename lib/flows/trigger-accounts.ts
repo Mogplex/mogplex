@@ -7,7 +7,7 @@ type TriggerScope = FlowStartFilter["scope"];
 // installation (server validation enforces it). GitHub event triggers can
 // span any number of installations.
 export const SINGLE_INSTALLATION_TRIGGER_EVENTS: ReadonlySet<TriggerEvent> =
-  new Set<TriggerEvent>(["schedule", "webhook", "slack_mention"]);
+  new Set<TriggerEvent>(["schedule", "webhook", "slack_mention", "api"]);
 
 type TriggerStart = {
   event?: TriggerEvent | string | null;

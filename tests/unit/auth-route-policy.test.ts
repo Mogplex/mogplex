@@ -5,6 +5,7 @@ import {
   allowsDelegatedInternalApiPath,
   allowsMachineApiPath,
   isPublicRoutePath,
+  requiresFullAccessBearerApiPath,
 } from "../../lib/auth-route-policy";
 
 test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavior", () => {
@@ -90,4 +91,38 @@ test("allowsCliPatApiPath keeps the PAT allowlist narrow and boundary-safe", () 
   assert.equal(allowsCliPatApiPath("/api/sandboxfoo"), false);
   assert.equal(allowsCliPatApiPath("/api/skills/registry"), false);
   assert.equal(allowsCliPatApiPath("/api/cron/repair-jobs"), false);
+});
+
+test("requiresFullAccessBearerApiPath covers direct execution and settings writes", () => {
+  assert.equal(requiresFullAccessBearerApiPath("/api/sandbox", "GET"), true);
+  assert.equal(
+    requiresFullAccessBearerApiPath("/api/sandbox/sandbox-1/delete", "POST"),
+    true
+  );
+  assert.equal(
+    requiresFullAccessBearerApiPath("/api/sandboxfoo", "POST"),
+    false
+  );
+  assert.equal(
+    requiresFullAccessBearerApiPath(
+      "/api/cli/inference/chat/completions",
+      "POST"
+    ),
+    true
+  );
+  assert.equal(
+    requiresFullAccessBearerApiPath("/api/cli/openai/chat/completions", "POST"),
+    true
+  );
+  assert.equal(requiresFullAccessBearerApiPath("/api/settings", "GET"), false);
+  assert.equal(requiresFullAccessBearerApiPath("/api/settings", "PATCH"), true);
+  assert.equal(
+    requiresFullAccessBearerApiPath("/api/mcp-servers", "head"),
+    false
+  );
+  assert.equal(
+    requiresFullAccessBearerApiPath("/api/mcp-servers", "POST"),
+    true
+  );
+  assert.equal(requiresFullAccessBearerApiPath("/api/models", "POST"), false);
 });

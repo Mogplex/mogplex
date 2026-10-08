@@ -213,6 +213,7 @@ export function getStartConfig(graph: FlowGraph) {
     slackTeamId: start.data.slackTeamId,
     slackChannelId: start.data.slackChannelId,
     slackChannelName: start.data.slackChannelName,
+    inputFields: start.data.inputFields,
   };
 }
 

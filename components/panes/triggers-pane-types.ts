@@ -112,6 +112,10 @@ export const EVENT_BADGES: Record<
     label: "Slack",
     color: "text-fuchsia-400 border-fuchsia-400/20 bg-fuchsia-400/[0.06]",
   },
+  api: {
+    label: "API",
+    color: "text-fuchsia-400 border-fuchsia-400/20 bg-fuchsia-400/[0.06]",
+  },
 };
 
 export function getInstallationAccountScope(installation: Installation) {

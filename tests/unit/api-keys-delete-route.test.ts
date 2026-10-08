@@ -95,3 +95,76 @@ test("revoked tokens cannot authenticate (security test)", async () => {
   assert.equal(revokedKeys.length, 1);
   assert.equal(revokedKeys[0].id, "key-2");
 });
+
+test("PATCH /api/settings/api-keys/[id] changes the owner's key access", async () => {
+  const { createApiKeyPatchHandler } = await loadApiKeyDeleteRoute();
+  const updates: Array<{ userId: string; keyId: string; access: string }> = [];
+
+  const handler = createApiKeyPatchHandler({
+    requireUserId: async () => "user-123",
+    setApiKeyAccess: async (userId, keyId, access) => {
+      updates.push({ userId, keyId, access });
+      return { updated: 1, error: null };
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings/api-keys/key-456", {
+      method: "PATCH",
+      body: JSON.stringify({ access: "automations" }),
+    }),
+    { params: Promise.resolve({ id: "key-456" }) }
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    id: "key-456",
+    access: "automations",
+  });
+  assert.deepEqual(updates, [
+    { userId: "user-123", keyId: "key-456", access: "automations" },
+  ]);
+});
+
+test("PATCH /api/settings/api-keys/[id] returns 404 for another account's key", async () => {
+  const { createApiKeyPatchHandler } = await loadApiKeyDeleteRoute();
+
+  const handler = createApiKeyPatchHandler({
+    requireUserId: async () => "user-123",
+    setApiKeyAccess: async () => ({ updated: 0, error: null }),
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings/api-keys/key-other", {
+      method: "PATCH",
+      body: JSON.stringify({ access: "full" }),
+    }),
+    { params: Promise.resolve({ id: "key-other" }) }
+  );
+
+  assert.equal(response.status, 404);
+});
+
+test("PATCH /api/settings/api-keys/[id] rejects an unknown access level", async () => {
+  const { createApiKeyPatchHandler } = await loadApiKeyDeleteRoute();
+  let updated = false;
+
+  const handler = createApiKeyPatchHandler({
+    requireUserId: async () => "user-123",
+    setApiKeyAccess: async () => {
+      updated = true;
+      return { updated: 1, error: null };
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings/api-keys/key-456", {
+      method: "PATCH",
+      body: JSON.stringify({ access: "everything" }),
+    }),
+    { params: Promise.resolve({ id: "key-456" }) }
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(updated, false);
+});

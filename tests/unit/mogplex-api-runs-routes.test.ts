@@ -11,6 +11,8 @@ test("POST /api/v1/mogplex/runs returns 403 for read-only PATs", async () => {
   const { createMogplexApiRunsPostHandler } = await loadRunsRoute();
   let startCalled = false;
   const handler = createMogplexApiRunsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true,
       auth: {
@@ -49,6 +51,8 @@ test("POST /api/v1/mogplex/runs returns 403 for read-only PATs", async () => {
 test("POST /api/v1/mogplex/runs requires an idempotency key", async () => {
   const { createMogplexApiRunsPostHandler } = await loadRunsRoute();
   const handler = createMogplexApiRunsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true,
       auth: {
@@ -86,6 +90,8 @@ test("POST /api/v1/mogplex/runs requires an idempotency key", async () => {
 test("POST /api/v1/mogplex/runs rejects overlong idempotency keys clearly", async () => {
   const { createMogplexApiRunsPostHandler } = await loadRunsRoute();
   const handler = createMogplexApiRunsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true,
       auth: {
@@ -124,6 +130,8 @@ test("POST /api/v1/mogplex/runs rejects overlong idempotency keys clearly", asyn
 test("POST /api/v1/mogplex/runs returns accepted run details", async () => {
   const { createMogplexApiRunsPostHandler } = await loadRunsRoute();
   const handler = createMogplexApiRunsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true,
       auth: {
@@ -164,6 +172,8 @@ test("POST /api/v1/mogplex/runs returns accepted run details", async () => {
 test("POST /api/v1/mogplex/runs rate-limits expensive external run starts by API key", async () => {
   const { createMogplexApiRunsPostHandler } = await loadRunsRoute();
   const handler = createMogplexApiRunsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true,
       auth: {
@@ -226,6 +236,8 @@ test("POST /api/v1/mogplex/runs fails closed when rate-limit admission fails", a
     errors.push(args);
   };
   const handler = createMogplexApiRunsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true,
       auth: {

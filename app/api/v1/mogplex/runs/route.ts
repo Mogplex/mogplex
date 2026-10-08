@@ -1,4 +1,5 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
+import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import {
   MOGPLEX_API_MAX_IDEMPOTENCY_KEY_LENGTH,
   readMogplexApiIdempotencyKeyResult,
@@ -12,14 +13,23 @@ import {
   mogplexApiSuccess,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
+import { requireFullAccessKey } from "@/lib/mogplex-api/credential-boundary";
+import {
+  requireKeyAllowedOn,
+  type LoadTeamKeyAccess,
+} from "@/lib/mogplex-api/team-key-access";
 import { requireScope } from "@/lib/mogplex-api/scopes";
 import { MogplexApiRunError, startMogplexApiRun } from "@/lib/mogplex-api/runs";
 import type { NextRequest } from "next/server";
 
 type MogplexApiRunsPostDeps = {
   resolveApiKey: typeof resolveApiKey;
+  /** Test seam for OAuth (interactive) bearer tokens. */
+  resolveOAuthToken?: typeof resolveMogplexOAuthToken;
   enforceRunStartLimits: typeof enforceExternalAgentRunLimits;
   startRun: typeof startMogplexApiRun;
+  /** Test seam for the repository's team key access. */
+  loadTeamKeyAccess?: LoadTeamKeyAccess;
 };
 
 const defaultMogplexApiRunsPostDeps: MogplexApiRunsPostDeps = {
@@ -67,6 +77,7 @@ export function createMogplexApiRunsPostHandler(
   return async function POST(request: NextRequest) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
 
@@ -75,6 +86,8 @@ export function createMogplexApiRunsPostHandler(
     // working; read-only tokens issued going forward will see 403 here.
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
+    const restricted = requireFullAccessKey(user);
+    if (restricted) return restricted;
 
     const idempotencyKey = readMogplexApiIdempotencyKeyResult(request.headers);
     if (!idempotencyKey.ok) {
@@ -96,6 +109,14 @@ export function createMogplexApiRunsPostHandler(
     }
 
     const repoId = typeof body.repoId === "string" ? body.repoId.trim() : null;
+    if (repoId) {
+      const teamRefusal = await requireKeyAllowedOn(
+        user,
+        { repoId },
+        deps.loadTeamKeyAccess
+      );
+      if (teamRefusal) return teamRefusal;
+    }
     let limitDecision: LimitDecision;
     try {
       limitDecision = await deps.enforceRunStartLimits({

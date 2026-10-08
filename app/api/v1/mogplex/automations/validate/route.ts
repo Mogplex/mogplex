@@ -1,4 +1,5 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
+import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import { validateFlowConfiguration } from "@/lib/flows/server-validation";
 import { mogplexAutomationErrorResponse } from "@/lib/mogplex-api/automation-response";
 import { coerceGraph } from "@/lib/flows/graph";
@@ -14,12 +15,14 @@ import type { NextRequest } from "next/server";
 export function createAutomationValidateHandler(
   overrides: {
     resolveApiKey?: typeof resolveApiKey;
+    resolveOAuthToken?: typeof resolveMogplexOAuthToken;
     validate?: typeof validateFlowConfiguration;
   } = {}
 ) {
   return async function POST(request: NextRequest) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: overrides.resolveApiKey ?? resolveApiKey,
+      resolveOAuthToken: overrides.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "read");

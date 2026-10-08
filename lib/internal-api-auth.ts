@@ -3,7 +3,12 @@ import {
   allowsCliBearerApiPath as allowsCliBearerApiAuth,
   allowsCliPatApiPath as allowsCliPatApiAuth,
   allowsMachineApiPath as allowsMachineApiAuth,
+  requiresFullAccessBearerApiPath,
 } from "@/lib/auth-route-policy";
+import {
+  AUTOMATION_REQUIRED_MESSAGE,
+  type ApiKeyAccess,
+} from "@/lib/mogplex-api/credential-boundary";
 import { ACTIVE_TEAM_HEADER } from "@/lib/team-capabilities";
 
 const INTERNAL_AUTHORIZATION_HEADER = "authorization";
@@ -124,6 +129,32 @@ export function requireMachineApiAuth(request: Request, pathname: string) {
   }
 
   return buildMachineApiAuthFailureResponse(result);
+}
+
+/**
+ * A Mogplex API key set to Automations only, on a path that starts execution
+ * directly. The proxy answers these with
+ * {@link buildIntegrationCredentialRejection} instead of falling through to
+ * the session check, so the caller learns why. Full-access keys pass through
+ * to the route, and an unknown or revoked key is left for the route to 401.
+ */
+export async function isAutomationOnlyKeyOnDirectPath(
+  request: Request,
+  pathname: string,
+  lookupAccess: (authorization: string) => Promise<ApiKeyAccess | null>
+) {
+  if (!requiresFullAccessBearerApiPath(pathname, request.method)) return false;
+  const authorization = request.headers.get(CLI_PAT_AUTHORIZATION_HEADER);
+  if (!authorization?.startsWith(PAT_BEARER_PREFIX)) return false;
+  const access = await lookupAccess(authorization);
+  return access !== null && access !== "full";
+}
+
+export function buildIntegrationCredentialRejection() {
+  return NextResponse.json(
+    { error: AUTOMATION_REQUIRED_MESSAGE, code: "AUTOMATION_REQUIRED" },
+    { status: 403 }
+  );
 }
 
 /**

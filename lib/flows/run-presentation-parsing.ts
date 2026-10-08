@@ -29,5 +29,6 @@ export function readNodeRunSummary(output: unknown) {
 export function formatRunSourceType(sourceType: string) {
   const normalized = sourceType.trim().toLowerCase();
   if (normalized === "pr_opened") return "PR OPENED";
+  if (normalized === "api") return "API";
   return sourceType.trim().replaceAll("_", " ");
 }

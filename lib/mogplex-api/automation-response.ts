@@ -10,6 +10,24 @@ import {
   MODEL_ALLOWLIST_UNAVAILABLE_ERROR,
 } from "@/lib/team-capabilities";
 
+function automationErrorCode(error: MogplexApiAutomationError) {
+  if (error.code === "AUTOMATION_NOT_INTEGRATION_ENABLED") {
+    return "AUTOMATION_REQUIRED" as const;
+  }
+  if (error.code === "IDEMPOTENCY_CONFLICT")
+    return "IDEMPOTENCY_CONFLICT" as const;
+  switch (error.status) {
+    case 403:
+      return "FORBIDDEN" as const;
+    case 404:
+      return "NOT_FOUND" as const;
+    case 409:
+      return "CONFLICT" as const;
+    default:
+      return "BAD_REQUEST" as const;
+  }
+}
+
 export function mogplexAutomationErrorResponse(
   error: unknown,
   fallbackMessage: string
@@ -27,13 +45,11 @@ export function mogplexAutomationErrorResponse(
     );
   }
   if (error instanceof MogplexApiAutomationError) {
-    const code =
-      error.status === 404
-        ? "NOT_FOUND"
-        : error.status === 409
-          ? "CONFLICT"
-          : "BAD_REQUEST";
-    return mogplexApiError(code, error.message, error.status);
+    return mogplexApiError(
+      automationErrorCode(error),
+      error.message,
+      error.status
+    );
   }
   if (isFlowServiceError(error)) {
     const status = getFlowServiceErrorStatus(error);

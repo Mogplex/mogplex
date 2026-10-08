@@ -88,6 +88,16 @@ export type TriggerMogplexApiAutomationInput = {
   repoId: string;
   idempotencyKey: string;
   input?: Record<string, unknown>;
+  /** The caller's credential, recorded on the run. Absent for internal calls. */
+  credential?: {
+    kind: "integration" | "interactive";
+    keyId: string;
+    /**
+     * True when the key may start work only through automations with an API
+     * trigger (its own access, or the repository's team policy).
+     */
+    automationOnly?: boolean;
+  };
 };
 
 export class MogplexApiAutomationError extends Error {
@@ -95,6 +105,10 @@ export class MogplexApiAutomationError extends Error {
     public readonly code:
       | "AUTOMATION_HAS_ACTIVE_RUNS"
       | "AUTOMATION_INACTIVE"
+      | "AUTOMATION_NOT_INTEGRATION_ENABLED"
+      | "IDEMPOTENCY_CONFLICT"
+      | "INVALID_INPUT"
+      | "REPO_NOT_ALLOWED"
       | "AUTOMATION_NOT_FOUND"
       | "AUTOMATION_NOT_PUBLISHED"
       | "AUTOMATION_NODE_NOT_FOUND"
@@ -105,7 +119,7 @@ export class MogplexApiAutomationError extends Error {
       | "REPO_NOT_FOUND"
       | "REPO_SCOPE_MISMATCH",
     message: string,
-    public readonly status: 400 | 404 | 409 = 400
+    public readonly status: 400 | 403 | 404 | 409 = 400
   ) {
     super(message);
     this.name = "MogplexApiAutomationError";

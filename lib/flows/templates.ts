@@ -101,6 +101,7 @@ const REPOSITORY_REQUIRED_TEMPLATE_EVENTS: ReadonlySet<TriggerEvent> = new Set([
   "schedule",
   "webhook",
   "slack_mention",
+  "api",
 ]);
 
 export function flowTemplateRequiresRepository(graph: FlowGraph) {

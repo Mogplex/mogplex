@@ -1,5 +1,6 @@
 "use client"
 
+import { useParams } from "next/navigation"
 import {
   DialogDescription,
   DialogHeader,
@@ -10,6 +11,7 @@ import {
   formatJson,
   formatRunSourceType,
   getRunCancellationState,
+  getRunInvocation,
   getRunLatestReason,
   resolveReviewedTargetLink,
   runStatusTone,
@@ -53,6 +55,50 @@ export function RunDetailsHeader({
   )
 }
 
+const LINK_CLASS =
+  "inline-flex rounded border border-border px-2.5 py-1 text-xs transition-colors hover:border-accent-blue/30 hover:bg-accent-blue/[0.08] hover:text-accent-blue"
+
+function RunInvocationFields({ runDetail }: { runDetail: FlowRunDetail }) {
+  const { scope } = useParams<{ scope?: string }>()
+  const invocation = getRunInvocation(runDetail, scope)
+
+  return (
+    <>
+      <OverviewField label="Automation version">
+        {invocation.versionNumber === null ? "n/a" : `v${invocation.versionNumber}`}
+      </OverviewField>
+      <OverviewField label="Triggered by">{invocation.triggeredBy ?? "n/a"}</OverviewField>
+      {invocation.workingBranch && (
+        <OverviewField label="Branch">
+          <div className="break-all font-mono text-xs">{invocation.workingBranch}</div>
+        </OverviewField>
+      )}
+      <OverviewField label="Workspace">
+        <div className="flex flex-wrap gap-2">
+          {invocation.workspaceHref ? (
+            <a href={invocation.workspaceHref} className={LINK_CLASS}>
+              Open transcript
+            </a>
+          ) : null}
+          {invocation.sandboxHref ? (
+            <a href={invocation.sandboxHref} className={LINK_CLASS}>
+              Open sandbox
+            </a>
+          ) : null}
+          {invocation.workspaceHref || invocation.sandboxHref ? null : "n/a"}
+        </div>
+      </OverviewField>
+      {invocation.input !== null && (
+        <OverviewField label="Input">
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5">
+            {invocation.input}
+          </pre>
+        </OverviewField>
+      )}
+    </>
+  )
+}
+
 export function RunDetailsOverview({ runDetail }: { runDetail: FlowRunDetail }) {
   const reviewedTarget = resolveReviewedTargetLink(runDetail)
   const latestReason = getRunLatestReason(runDetail)
@@ -84,6 +130,7 @@ export function RunDetailsOverview({ runDetail }: { runDetail: FlowRunDetail }) 
           <OverviewField label="Source">
             {formatRunSourceType(runDetail.source_type)}
           </OverviewField>
+          <RunInvocationFields runDetail={runDetail} />
           <OverviewField label="Started">
             {runDetail.started_at ? new Date(runDetail.started_at).toLocaleString() : "n/a"}
           </OverviewField>

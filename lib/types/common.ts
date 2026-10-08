@@ -15,4 +15,6 @@ export type TriggerEvent =
   | "dependabot_alert"
   | "schedule"
   | "webhook"
-  | "slack_mention";
+  | "slack_mention"
+  // Started by an integration through the v1 automation trigger endpoint.
+  | "api";

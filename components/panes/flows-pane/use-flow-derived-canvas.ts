@@ -126,6 +126,8 @@ export function useFlowDerivedCanvas(
         return "Signed webhook";
       case "slack_mention":
         return "Slack";
+      case "api":
+        return "API";
       default:
         return "GitHub";
     }

@@ -87,6 +87,27 @@ const CLI_BEARER_API_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/api/cli/openai/chat/completions", match: "exact" },
 ] as const;
 
+// Bearer paths that start or drive billable work directly, or change the
+// account settings automations run with. A Mogplex API key set to
+// Automations only may not use them (the proxy looks up the key's access);
+// full-access keys and interactive logins may. `writes` entries stay
+// readable with any key.
+const FULL_ACCESS_BEARER_API_PATHS: readonly (RoutePolicyEntry & {
+  methods: "all" | "writes";
+})[] = [
+  { path: "/api/sandbox", match: "subtree", methods: "all" },
+  {
+    path: "/api/cli/inference/chat/completions",
+    match: "exact",
+    methods: "all",
+  },
+  { path: "/api/cli/openai/chat/completions", match: "exact", methods: "all" },
+  { path: "/api/settings", match: "exact", methods: "writes" },
+  { path: "/api/mcp-servers", match: "exact", methods: "writes" },
+] as const;
+
+const READ_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
+
 function matchesDeclaredPath(pathname: string, entry: RoutePolicyEntry) {
   switch (entry.match) {
     case "exact":
@@ -130,4 +151,16 @@ export function allowsCliBearerApiPath(pathname: string) {
 
 export function allowsCliPatApiPath(pathname: string) {
   return allowsCliBearerApiPath(pathname);
+}
+
+export function requiresFullAccessBearerApiPath(
+  pathname: string,
+  method: string
+) {
+  const isRead = READ_METHODS.has(method.toUpperCase());
+  return FULL_ACCESS_BEARER_API_PATHS.some(
+    (entry) =>
+      (entry.methods === "all" || !isRead) &&
+      matchesDeclaredPath(pathname, entry)
+  );
 }

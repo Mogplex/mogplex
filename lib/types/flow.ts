@@ -108,6 +108,9 @@ export type FlowStartNodeData = {
   slackTeamId?: string;
   slackChannelId?: string;
   slackChannelName?: string | null;
+  // `api` event only: the inputs an integration may supply. Callers can set
+  // these fields and nothing else; see lib/flows/automation-inputs.ts.
+  inputFields?: import("@/lib/flows/automation-inputs").AutomationInputField[];
 };
 
 export type FlowAgentNodeData = {
@@ -353,7 +356,7 @@ export type Flow = {
   name: string;
   description: string | null;
   notes: string | null;
-  source_kind: "github" | "schedule" | "webhook" | "slack";
+  source_kind: "github" | "schedule" | "webhook" | "slack" | "api";
   status: "active" | "inactive";
   draft_graph: FlowGraph;
   published_version_id: string | null;

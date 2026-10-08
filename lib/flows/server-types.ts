@@ -12,7 +12,7 @@ export type FlowRow = {
   name: string;
   description: string | null;
   notes: string | null;
-  source_kind: "github" | "schedule" | "webhook" | "slack";
+  source_kind: "github" | "schedule" | "webhook" | "slack" | "api";
   status: "active" | "inactive";
   draft_graph: unknown;
   published_version_id: string | null;

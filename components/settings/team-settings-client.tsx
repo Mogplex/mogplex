@@ -1,6 +1,7 @@
 "use client";
 
 import { DecisionChecksSection } from "@/components/settings/decision-checks-section";
+import { TeamApiKeyAccessSection } from "@/components/settings/team-api-key-access-section";
 import { AgentMergesSection } from "@/components/settings/agent-merges-section";
 import { useTeamSettingsActions } from "./use-team-settings-actions";
 import { MembersTabContent } from "./members-tab-content";
@@ -172,16 +173,21 @@ export function TeamSettingsClient({
       {section === "members" && <AgentMergesSection teamId={teamId} />}
 
       {section === "keys" && (
-        <KeysTabContent
-          keysError={keysError}
-          canManageKeys={canManageKeys}
-          busyKey={busyKey}
-          configuredProviders={configuredProviders}
-          keyInputs={keyInputs}
-          setKeyInputs={setKeyInputs}
-          saveProviderKey={saveProviderKey}
-          deleteProviderKey={deleteProviderKey}
-        />
+        <div>
+          <KeysTabContent
+            keysError={keysError}
+            canManageKeys={canManageKeys}
+            busyKey={busyKey}
+            configuredProviders={configuredProviders}
+            keyInputs={keyInputs}
+            setKeyInputs={setKeyInputs}
+            saveProviderKey={saveProviderKey}
+            deleteProviderKey={deleteProviderKey}
+          />
+          <div className="mt-4 md:mt-6">
+            <TeamApiKeyAccessSection teamId={teamId} />
+          </div>
+        </div>
       )}
 
       {section === "models" && (

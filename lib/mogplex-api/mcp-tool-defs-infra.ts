@@ -213,7 +213,7 @@ export const MCP_TOOLS_INFRA: McpToolDefinition[] = [
     name: "mogplex_create_sandbox",
     title: "Create Mogplex Sandbox",
     description:
-      "Create or reuse a Mogplex sandbox for a repository and branch. The call consumes the launch event stream and returns when a sandbox record is ready or launch fails.",
+      "Create or reuse a Mogplex sandbox for a repository and branch. The call consumes the launch event stream and returns when a sandbox record is ready or launch fails. A Mogplex API key set to Automations only, or any key on a team whose owner holds keys to automations, is refused with AUTOMATION_REQUIRED.",
     inputSchema: objectSchema({
       properties: {
         repoId: {

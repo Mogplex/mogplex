@@ -7,6 +7,10 @@ import type {
   TriggerEvent,
 } from "@/lib/types";
 import { eventLabel } from "@/lib/flows/graph-helpers";
+import {
+  coerceAutomationInputFields,
+  validateAutomationInputFields,
+} from "@/lib/flows/automation-inputs";
 import type { FlowOperatorDefinition } from "./types";
 
 type StartNode = Extract<FlowNode, { type: "start" }>;
@@ -38,12 +42,14 @@ const VALID_TRIGGER_EVENTS: ReadonlySet<TriggerEvent> = new Set([
   "schedule",
   "webhook",
   "slack_mention",
+  "api",
 ]);
 
 const REPO_BOUND_EXTERNAL_EVENTS: ReadonlySet<TriggerEvent> = new Set([
   "schedule",
   "webhook",
   "slack_mention",
+  "api",
 ]);
 
 export function isValidFlowCron(value: string) {
@@ -142,6 +148,11 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
         errors.push("Schedule triggers must define a valid IANA timezone.");
       }
     }
+    if (node.data.event === "api") {
+      errors.push(
+        ...validateAutomationInputFields(node.data.inputFields ?? [])
+      );
+    }
     if (node.data.event === "slack_mention") {
       if (!node.data.slackTeamId?.trim()) {
         errors.push("Slack mention triggers must select a workspace.");
@@ -194,6 +205,8 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       event === "slack_mention" && typeof raw.slackChannelName === "string"
         ? raw.slackChannelName.trim()
         : "";
+    const inputFields =
+      event === "api" ? coerceAutomationInputFields(raw.inputFields) : [];
     return {
       label: String(raw.label ?? "Start"),
       event,
@@ -212,6 +225,7 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       ...(slackTeamId ? { slackTeamId } : {}),
       ...(slackChannelId ? { slackChannelId } : {}),
       ...(slackChannelName ? { slackChannelName } : {}),
+      ...(event === "api" ? { inputFields } : {}),
     };
   },
   defaultData: (input) => {

@@ -1,4 +1,8 @@
 import type { ApiKeyResolution } from "@/lib/auth/api-key";
+import {
+  readStoredApiKeyAccess,
+  type ApiKeyAccess,
+} from "@/lib/mogplex-api/key-access";
 import { MOGPLEX_CLI_OAUTH_CLIENT_ID } from "@/lib/better-auth/cli-token-ttl";
 
 type BearerResolver = (
@@ -8,6 +12,8 @@ type BearerResolver = (
 type CliBearerAuth = {
   profileId: string;
   source: "api-key" | "oauth";
+  /** What the key's owner allows it to do; set only for Mogplex API keys. */
+  apiKeyAccess?: ApiKeyAccess;
 };
 
 type CliBearerDependencies = {
@@ -23,7 +29,11 @@ async function resolvePat(
     resolver ?? (await import("@/lib/auth/api-key")).resolveApiKey;
   const result = await resolve(authorization);
   return result.ok
-    ? { profileId: result.auth.userId, source: "api-key" }
+    ? {
+        profileId: result.auth.userId,
+        source: "api-key",
+        apiKeyAccess: readStoredApiKeyAccess(result.auth.access),
+      }
     : undefined;
 }
 

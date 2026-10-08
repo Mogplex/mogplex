@@ -353,6 +353,13 @@ function buildExternalTriggerTestPayload(
         event: "workflow.test",
         test: true,
       };
+    case "api":
+      return Object.fromEntries(
+        (node.data.inputFields ?? []).map((field) => [
+          field.key,
+          field.type === "integer" ? 1 : field.type === "boolean" ? false : field.type === "json" ? {} : "",
+        ]),
+      );
     case "slack_mention":
       return {
         team_id: node.data.slackTeamId ?? "",
@@ -413,10 +420,11 @@ export function ExternalTriggerTestPanel({
     [webhookPayloadText],
   )
   const isWebhook = node.data.event === "webhook"
-  const testPayload = isWebhook
+  const isEditable = isWebhook || node.data.event === "api"
+  const testPayload = isEditable
     ? parsedWebhookPayload.payload
     : defaultPayload
-  const payloadError = isWebhook ? parsedWebhookPayload.error : null
+  const payloadError = isEditable ? parsedWebhookPayload.error : null
 
   return (
     <>
@@ -429,8 +437,8 @@ export function ExternalTriggerTestPanel({
           </>
         ) : null}
       </InspectorCallout>
-      <InspectorField label={isWebhook ? "Test payload (JSON)" : "Test payload"}>
-        {isWebhook ? (
+      <InspectorField label={isEditable ? "Test payload (JSON)" : "Test payload"}>
+        {isEditable ? (
           <Textarea
             data-testid="flow-trigger-test-payload"
             value={webhookPayloadText}

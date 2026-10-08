@@ -7,6 +7,10 @@ import {
   PLATFORM_SANDBOX_RECORD_ACCESS_ERROR,
 } from "@/lib/platform-access";
 import { getUserId } from "@/lib/auth";
+import {
+  getDirectExecutionUser,
+  mayExecuteInTeam,
+} from "@/lib/sandbox/direct-execution-user";
 import { resolveSandboxBilling } from "@/lib/sandbox/billing";
 import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
 import {
@@ -168,12 +172,15 @@ export async function getSandboxServiceCredentials(
     requireCapability?: Capability;
   }
 ): Promise<SandboxServiceCredentials | null> {
-  const userId =
+  const delegatedUserId =
     options?.allowInternal && request
-      ? (getDelegatedUserIdFromRequest(request) ?? (await getUserId()))
-      : await getUserId();
-
-  if (!userId) return null;
+      ? getDelegatedUserIdFromRequest(request)
+      : null;
+  const actor = delegatedUserId
+    ? { userId: delegatedUserId, viaApiKey: false }
+    : await getDirectExecutionUser();
+  if (!actor || !(await mayExecuteInTeam(actor, options?.teamId))) return null;
+  const { userId } = actor;
 
   if (options?.requireCapability) {
     const caps: ReadonlySet<Capability> = options.capabilities

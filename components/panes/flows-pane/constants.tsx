@@ -56,6 +56,7 @@ export const EVENT_OPTIONS: Array<{ value: TriggerEvent; label: string }> = [
   { value: "schedule", label: "Schedule" },
   { value: "webhook", label: "Signed webhook" },
   { value: "slack_mention", label: "Slack mention" },
+  { value: "api", label: "API (integrations)" },
 ]
 
 export const TRIGGER_PRESETS: TriggerPreset[] = [

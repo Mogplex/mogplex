@@ -69,6 +69,17 @@ Idempotency-Key: <caller-generated-key>
 
 `POST /api/v1/mogplex/runs` starts harness-backed sandbox runs. The API also exposes Flow automation design, publication, manual execution, run diagnostics, model discovery, and explicit sandbox launch/log access. See [Local Agent Automation](./local-agent-automation.md).
 
+Each Mogplex API key (`mog_…`) has an access level its owner chooses in
+Settings → Mogplex Keys: **Full access** (whatever its scopes allow, the
+default) or **Automations only** (read, and start work only by triggering an
+enabled automation with an API trigger). A team owner can hold every
+member's key to Automations only on the team's repositories. A key held to
+automations is refused on direct runs, sandboxes, hosted CLI inference,
+automation edits, and repository or account settings with
+`403 AUTOMATION_REQUIRED` before anything is created. Interactive logins (a
+browser session, the CLI's OAuth login, an MCP client's OAuth token) are not
+affected. See [Integration Triggers](./integration-triggers.md).
+
 ## Target MCP Tools
 
 The MCP server exposes workflow-sized tools that map one-to-one to the external API:
@@ -145,7 +156,8 @@ The first three slices are the minimum useful API. The MCP server can begin once
 
 - Mogplex owns execution. MCP only delegates and observes.
 - A run must be tied to a user, repo, sandbox record, branch, root directory, harness, and AI call.
-- External requests must use user-scoped PAT auth, not internal cron or delegated-machine secrets.
+- External requests must use user-scoped PAT or OAuth auth, not internal cron or delegated-machine secrets.
+- A PAT set to Automations only (by its owner, or by a team owner for the team's repositories) starts work only through an owned, enabled automation with an API trigger; the automation owns instructions, repositories and execution settings.
 - Every mutating start request must accept an idempotency key.
 - Run events must be append-only and safe to replay.
 - The initial version supports one harness run per API run. Multi-agent orchestration is a separate explicit mode.

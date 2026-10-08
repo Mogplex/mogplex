@@ -6,6 +6,11 @@ import {
   MOGPLEX_API_SCOPES,
   type MogplexApiScope,
 } from "@/lib/mogplex-api/scopes";
+import {
+  isApiKeyAccess,
+  readStoredApiKeyAccess,
+  type ApiKeyAccess,
+} from "@/lib/mogplex-api/key-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const DEFAULT_API_KEY_SCOPES: MogplexApiScope[] = ["read", "write"];
@@ -69,11 +74,30 @@ function parseScopesInput(
   return { ok: true, scopes: [...seen] };
 }
 
+/**
+ * The optional `access` field. Omitted keeps the behavior keys had before
+ * access existed, so scripts that create keys keep working.
+ */
+function parseAccessInput(
+  input: unknown
+): { ok: true; access: ApiKeyAccess } | { ok: false; response: NextResponse } {
+  if (input === undefined) return { ok: true, access: "full" };
+  if (isApiKeyAccess(input)) return { ok: true, access: input };
+  return {
+    ok: false,
+    response: NextResponse.json(
+      { error: "access must be 'full' or 'automations'" },
+      { status: 400 }
+    ),
+  };
+}
+
 type ApiKeyRow = {
   id: string;
   name: string;
   token_prefix: string;
   scopes: string[];
+  access: string | null;
   created_at: string;
   last_used_at: string | null;
   expires_at: string | null;
@@ -92,6 +116,7 @@ type ApiKeysDeps = {
     tokenHash: string;
     tokenPrefix: string;
     scopes: string[];
+    access: ApiKeyAccess;
     expiresAt: string | null;
   }) => Promise<{
     data: { id: string } | null;
@@ -107,7 +132,7 @@ const defaultApiKeysDeps: ApiKeysDeps = {
     const { data, error } = await supabaseAdmin
       .from("user_api_keys")
       .select(
-        "id, name, token_prefix, scopes, created_at, last_used_at, expires_at, revoked_at"
+        "id, name, token_prefix, scopes, access, created_at, last_used_at, expires_at, revoked_at"
       )
       .eq("user_id", userId)
       .is("revoked_at", null)
@@ -127,6 +152,7 @@ const defaultApiKeysDeps: ApiKeysDeps = {
         token_hash: input.tokenHash,
         token_prefix: input.tokenPrefix,
         scopes: input.scopes,
+        access: input.access,
         expires_at: input.expiresAt,
       })
       .select("id")
@@ -161,6 +187,7 @@ export function createApiKeysGetHandler(overrides: Partial<ApiKeysDeps> = {}) {
         name: key.name,
         prefix: key.token_prefix,
         scopes: key.scopes,
+        access: readStoredApiKeyAccess(key.access),
         createdAt: key.created_at,
         lastUsedAt: key.last_used_at,
         expiresAt: key.expires_at,
@@ -181,7 +208,12 @@ export function createApiKeysPostHandler(overrides: Partial<ApiKeysDeps> = {}) {
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
-    let body: { name?: string; expiresInDays?: number; scopes?: unknown };
+    let body: {
+      name?: string;
+      expiresInDays?: number;
+      scopes?: unknown;
+      access?: unknown;
+    };
     try {
       body = await request.json();
     } catch {
@@ -198,6 +230,11 @@ export function createApiKeysPostHandler(overrides: Partial<ApiKeysDeps> = {}) {
 
     const parsedScopes = parseScopesInput(body.scopes);
     if (!parsedScopes.ok) return parsedScopes.response;
+
+    // The key's owner chooses what it may do.
+    const parsedAccess = parseAccessInput(body.access);
+    if (!parsedAccess.ok) return parsedAccess.response;
+    const { access } = parsedAccess;
 
     const expiresInDays =
       typeof body.expiresInDays === "number" && body.expiresInDays > 0
@@ -219,6 +256,7 @@ export function createApiKeysPostHandler(overrides: Partial<ApiKeysDeps> = {}) {
       tokenHash: hash,
       tokenPrefix: prefix,
       scopes: parsedScopes.scopes,
+      access,
       expiresAt,
     });
 
@@ -232,6 +270,7 @@ export function createApiKeysPostHandler(overrides: Partial<ApiKeysDeps> = {}) {
       token,
       prefix,
       scopes: parsedScopes.scopes,
+      access,
       expiresAt,
     });
   };

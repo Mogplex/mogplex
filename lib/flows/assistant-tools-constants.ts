@@ -19,6 +19,7 @@ export const TRIGGER_EVENTS = [
   "schedule",
   "webhook",
   "slack_mention",
+  "api",
 ] as const satisfies ReadonlyArray<TriggerEvent>;
 
 export const AGENT_ROLES = [

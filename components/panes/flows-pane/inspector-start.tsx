@@ -18,6 +18,7 @@ import {
   InspectorCallout,
 } from "./inspector-shared"
 import { StartFilterFields, ExternalTriggerTestPanel } from "./start-filter-fields"
+import { ApiTriggerFields } from "./inspector-start-api"
 
 type StartNodeData = Extract<FlowNode, { type: "start" }>["data"]
 
@@ -290,6 +291,18 @@ export function StartInspector({
             Data is available under <span className="font-mono">metadata.webhook</span>.
           </InspectorCallout>
         </>
+      )}
+      {node.data.event === "api" && (
+        <ApiTriggerFields
+          key={node.id}
+          automationId={selectedFlow.id}
+          inputFields={node.data.inputFields}
+          onInputFieldsChange={(inputFields) => updateNodeData(node.id, (data) => ({
+            ...data,
+            inputFields,
+          }), { mergeKey: `start-api-inputs-${node.id}` })}
+          copyValue={copyWebhookValue}
+        />
       )}
       {node.data.event === "slack_mention" && (
         <>

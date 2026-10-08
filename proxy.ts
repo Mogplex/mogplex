@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { CookieOptions } from "@supabase/ssr";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { lookupApiKeyAccess } from "@/lib/auth/api-key";
 import {
   allowsDelegatedInternalApiPath,
   isPublicRoutePath,
@@ -12,7 +13,9 @@ import {
   getDelegatedUserIdFromRequest,
   getMachineApiAuthResult,
   hasPlaywrightAuthBypass,
+  buildIntegrationCredentialRejection,
   isCliPatApiRequest,
+  isAutomationOnlyKeyOnDirectPath,
   isMogplexBearerApiRequest,
 } from "@/lib/internal-api-auth";
 import { isDashboardScopedFirstSegment } from "@/lib/dashboard-rescue";
@@ -90,7 +93,21 @@ export function buildCanonicalHostRedirectUrl(request: NextRequest) {
   return redirect;
 }
 
+type ProxyDeps = {
+  /** Reads a Mogplex API key's access level; injected in tests. */
+  lookupApiKeyAccess: typeof lookupApiKeyAccess;
+};
+
 export async function proxy(request: NextRequest) {
+  return handleProxy(request, { lookupApiKeyAccess });
+}
+
+/** The proxy with injectable lookups, for tests. */
+export function createProxy(deps: ProxyDeps) {
+  return (request: NextRequest) => handleProxy(request, deps);
+}
+
+async function handleProxy(request: NextRequest, deps: ProxyDeps) {
   const canonicalHostRedirect = buildCanonicalHostRedirectUrl(request);
   if (canonicalHostRedirect) {
     return NextResponse.redirect(canonicalHostRedirect, 308);
@@ -149,6 +166,16 @@ export async function proxy(request: NextRequest) {
     machineAuthResult.type === "unauthorized"
   ) {
     return buildMachineApiAuthFailureResponse(machineAuthResult);
+  }
+
+  if (
+    await isAutomationOnlyKeyOnDirectPath(
+      request,
+      pathname,
+      deps.lookupApiKeyAccess
+    )
+  ) {
+    return buildIntegrationCredentialRejection();
   }
 
   // CLI PATs (Bearer mog_*) are only delegated on the narrow set of PAT-aware
