@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import { copyText } from "@/lib/clipboard";
 import { fetchJsonObject } from "@/lib/client-fetch";
 
 type CliApiKey = {
@@ -39,7 +40,9 @@ export function CliApiKeysSection() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [newToken, setNewToken] = useState<CreateKeyResponse | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
   const [revoking, setRevoking] = useState<string | null>(null);
 
   const handleCreate = async () => {
@@ -70,9 +73,9 @@ export function CliApiKeysSection() {
 
   const handleCopyToken = async () => {
     if (!newToken?.token) return;
-    await navigator.clipboard.writeText(newToken.token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const copiedToClipboard = await copyText(newToken.token);
+    setCopyState(copiedToClipboard ? "copied" : "failed");
+    if (copiedToClipboard) setTimeout(() => setCopyState("idle"), 2000);
   };
 
   const handleCloseModal = () => {
@@ -81,7 +84,7 @@ export function CliApiKeysSection() {
     setExpiresInDays(null);
     setNewToken(null);
     setCreateError(null);
-    setCopied(false);
+    setCopyState("idle");
   };
 
   const handleRevoke = async (keyId: string) => {
@@ -197,16 +200,25 @@ export function CliApiKeysSection() {
                   Copy this key now. You will not be able to see it again.
                 </p>
                 <div className="mt-4 rounded-md border border-border bg-background p-3">
-                  <code className="break-all font-mono text-sm text-foreground">
+                  <code className="select-all break-all font-mono text-sm text-foreground">
                     {newToken.token}
                   </code>
                 </div>
+                {copyState === "failed" ? (
+                  <p
+                    role="alert"
+                    className="mt-2 text-[11px] text-destructive"
+                  >
+                    Your browser blocked clipboard access. Select the key above
+                    and copy it manually.
+                  </p>
+                ) : null}
                 <div className="mt-4 flex gap-2">
                   <button
                     onClick={handleCopyToken}
                     className="flex-1 rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground hover:bg-secondary"
                   >
-                    {copied ? "Copied!" : "Copy to Clipboard"}
+                    {copyState === "copied" ? "Copied!" : "Copy to Clipboard"}
                   </button>
                   <button
                     onClick={handleCloseModal}

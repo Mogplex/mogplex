@@ -2,17 +2,19 @@
 
 import type { ReactNode } from "react"
 import { useCallback, useMemo, useState } from "react"
+import { copyText } from "@/lib/clipboard"
 import { detectPatch, getLanguageFromClassName } from "@/lib/diffs/detect"
 import { PatchViewer } from "@/components/diffs/patch-viewer"
 import { cn } from "@/lib/utils"
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
+const COPY_LABELS = { idle: "copy", copied: "copied", failed: "copy failed" } as const
 
-  const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+function CopyButton({ text }: { text: string }) {
+  const [copyState, setCopyState] = useState<keyof typeof COPY_LABELS>("idle")
+
+  const handleCopy = useCallback(async () => {
+    setCopyState((await copyText(text)) ? "copied" : "failed")
+    setTimeout(() => setCopyState("idle"), 1500)
   }, [text])
 
   return (
@@ -20,7 +22,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       className="absolute right-1.5 top-1.5 rounded border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-white/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white/70"
     >
-      {copied ? "copied" : "copy"}
+      {COPY_LABELS[copyState]}
     </button>
   )
 }
