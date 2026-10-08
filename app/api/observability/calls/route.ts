@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { AI_CALL_TYPE_SET } from "@/lib/ai-call-types";
 import { isStaleLiveInteractiveCall } from "@/lib/interactive-runs";
+import { loadLatestCallActivity } from "@/lib/zombies/ai-call-activity";
+import { filterLiveCalls } from "@/lib/observability/live-calls";
 import type { NextRequest } from "next/server";
 import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import type { AiCall, SandboxCallContext } from "@/lib/types";
@@ -40,6 +42,9 @@ type ObservabilityCallsGetDeps = {
     order: boolean
   ) => QueryLike;
   isStaleLiveInteractiveCall: typeof isStaleLiveInteractiveCall;
+  loadLatestActivity: (
+    callIds: string[]
+  ) => Promise<Map<string, string | null | undefined>>;
   loadSandboxRecords: (
     userId: string,
     sandboxRecordIds: string[]
@@ -74,6 +79,8 @@ const defaultObservabilityCallsGetDeps: ObservabilityCallsGetDeps = {
     return query as QueryLike;
   },
   isStaleLiveInteractiveCall,
+  loadLatestActivity: (callIds) =>
+    loadLatestCallActivity(supabaseAdmin, callIds),
   async loadSandboxRecords(userId, sandboxRecordIds) {
     if (sandboxRecordIds.length === 0) return [];
     const { data, error } = await supabaseAdmin
@@ -424,8 +431,9 @@ export function createObservabilityCallsGetHandler(
         );
       }
 
-      const filteredLiveCalls = ((data as AiCallRow[] | null) ?? []).filter(
-        (call) => !deps.isStaleLiveInteractiveCall(call as never)
+      const filteredLiveCalls = await filterLiveCalls(
+        (data as AiCallRow[] | null) ?? [],
+        deps
       );
       const pagedCalls = filteredLiveCalls.slice(
         (page - 1) * limit,

@@ -37,7 +37,13 @@ export type ZombieReaperResult = {
    * mistaking a malformed-legacy reap for a "0ms old" false positive.
    */
   ageMs: number | null;
-  action: "marked_failed" | "released_lock" | "cancelled";
+  action:
+    | "marked_failed"
+    | "released_lock"
+    | "cancelled"
+    // The reaper failed a call but could not stop the worker behind it; the
+    // next cycle retries the stop.
+    | "worker_stop_failed";
   detail?: string;
 };
 
@@ -75,8 +81,6 @@ export type ZombieReaperRunnerDeps = {
   captureWarning: (message: string, extra: Record<string, unknown>) => void;
 };
 
-export const ZOMBIE_REAPED_ERROR_MESSAGE =
-  "Run interrupted before finalize (reaped by zombie-row-reaper)";
 export const ZOMBIE_REAPED_CANCEL_REASON = "ZOMBIE_REAPED";
 
 export function safeAgeMs(anchor: string | null, now: number): number | null {

@@ -24,6 +24,7 @@ test("GET /api/observability/calls paginates after stale live rows are filtered"
       }) as never,
     isStaleLiveInteractiveCall: (call) =>
       (call as { id?: string }).id === "stale-1",
+    loadLatestActivity: async () => new Map([["stale-1", null]]),
   });
 
   const response = await handler(

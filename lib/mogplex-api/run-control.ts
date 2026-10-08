@@ -197,7 +197,7 @@ async function updateRunForUser(
   return (data as ExternalAgentRunRow | null) ?? null;
 }
 
-async function killRuntimeCommand(input: {
+export async function killRuntimeCommand(input: {
   user_id: string;
   sandbox_record_id: string | null;
   runtimeCommandId: string;

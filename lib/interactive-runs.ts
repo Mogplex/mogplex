@@ -27,8 +27,11 @@ export const AI_CALL_EVENT_TYPES = [
 ] as const;
 export type AiCallEventType = (typeof AI_CALL_EVENT_TYPES)[number];
 
-// /api/control/chat lasts 800 seconds; hosted continuations last 30 minutes.
-// Both get one minute for final persistence after their execution deadline.
+// How long a live call may go without recorded progress (its start or its
+// newest event) before it counts as dead. /api/control/chat lasts 800
+// seconds, plus a minute for final persistence. Hosted continuations and
+// agent workers have no duration cap, so these windows measure idleness,
+// not age: a worker that keeps reporting progress is never stale.
 export const ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS = 800_000 + 60_000;
 export const ACTIVE_CONTROL_BACKGROUND_STALE_THRESHOLD_MS = 1_800_000 + 60_000;
 export const ACTIVE_CHAT_STALE_THRESHOLD_MS = 30 * 60 * 1000;
@@ -362,10 +365,35 @@ export async function loadOwnedAiCall(userId: string, aiCallId: string) {
   return (data as AiCall | null) ?? null;
 }
 
+/** The idle window after which a live call of this kind counts as dead. */
+export function liveCallIdleThresholdMs(
+  call: Pick<AiCall, "type"> & Partial<Pick<AiCall, "metadata">>
+) {
+  // Control is identified by server-owned metadata, not call type: newer
+  // coordinator calls are agents, while older calls were recorded as chats.
+  // Hosted follow-ups get a longer window than the browser route. Unknown
+  // legacy runtimes stay visible until the reaper resolves their saved ticket.
+  return call.metadata?.prepared === true
+    ? PREPARED_HARNESS_STALE_THRESHOLD_MS
+    : call.metadata?.surface === "control"
+      ? call.metadata.control_runtime === "request"
+        ? ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS
+        : ACTIVE_CONTROL_BACKGROUND_STALE_THRESHOLD_MS
+      : call.type === "chat"
+        ? ACTIVE_CHAT_STALE_THRESHOLD_MS
+        : ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS;
+}
+
+/**
+ * Whether a pending or streaming call has gone quiet for its whole idle
+ * window. Progress is its start or `lastActivityAt`, the newest event it
+ * recorded; without that the call's age is all there is to go on.
+ */
 export function isStaleLiveInteractiveCall(
   call: Pick<AiCall, "type" | "status" | "started_at"> &
     Partial<Pick<AiCall, "metadata">>,
-  now = Date.now()
+  now = Date.now(),
+  lastActivityAt?: string | null
 ) {
   if (call.status !== "pending" && call.status !== "streaming") {
     return false;
@@ -375,23 +403,12 @@ export function isStaleLiveInteractiveCall(
   if (!Number.isFinite(startedAt)) {
     return false;
   }
+  const activityAt = lastActivityAt ? Date.parse(lastActivityAt) : Number.NaN;
+  const lastProgress = Number.isFinite(activityAt)
+    ? Math.max(startedAt, activityAt)
+    : startedAt;
 
-  // Control is identified by server-owned metadata, not call type: newer
-  // coordinator calls are agents, while older calls were recorded as chats.
-  // Hosted follow-ups have a longer deadline than the browser route. Unknown
-  // legacy runtimes stay visible until the reaper resolves their saved ticket.
-  const threshold =
-    call.metadata?.prepared === true
-      ? PREPARED_HARNESS_STALE_THRESHOLD_MS
-      : call.metadata?.surface === "control"
-        ? call.metadata.control_runtime === "request"
-          ? ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS
-          : ACTIVE_CONTROL_BACKGROUND_STALE_THRESHOLD_MS
-        : call.type === "chat"
-          ? ACTIVE_CHAT_STALE_THRESHOLD_MS
-          : ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS;
-
-  return now - startedAt >= threshold;
+  return now - lastProgress >= liveCallIdleThresholdMs(call);
 }
 
 export async function loadOwnedAiCallEvents(userId: string, aiCallId: string) {
