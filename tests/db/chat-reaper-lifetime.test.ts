@@ -11,7 +11,8 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
       create table ai_calls(id text primary key, type text, status text, started_at timestamptz,
         user_id text, conversation_id text, repo_id text, runtime_command_id text, metadata jsonb, error text,
         completed_at timestamptz);
-      create table control_continuations(resume_ai_call_id text, user_id text);
+      create table control_continuations(resume_ai_call_id text, user_id text, status text);
+      create table external_agent_runs(ai_call_id text, status text);
       create table ai_call_events(ai_call_id text, user_id text, conversation_id text, repo_id text,
         event_type text, message text, payload jsonb, created_at timestamptz default now());
     `);
@@ -55,7 +56,7 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
       );
     }
     await pg.exec(
-      "insert into control_continuations values ('legacy-continuation', 'owner')"
+      "insert into control_continuations values ('legacy-continuation', 'owner', 'running')"
     );
     // Old, but it reported progress five minutes ago.
     await pg.query(
@@ -72,6 +73,7 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
     const stopped: string[] = [];
     const stopWorker = async (input: { call: { id: string } }) => {
       stopped.push(input.call.id);
+      if (input.call.id === "expired-chat") throw new Error("Trigger down");
       return false;
     };
     const results = await Promise.all([
@@ -79,6 +81,20 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
       reapStaleAiCalls(client, stopWorker),
     ]);
     expect(results.map((result) => result.error)).toEqual([null, null]);
+    // A stop that fails is reported; the next cycle's sweep retries it.
+    expect(
+      results.flatMap((result) =>
+        result.results.filter((entry) => entry.action === "worker_stop_failed")
+      )
+    ).toEqual([
+      {
+        table: "ai_calls",
+        id: "expired-chat",
+        ageMs: null,
+        action: "worker_stop_failed",
+        detail: "Trigger down",
+      },
+    ]);
     expect(results.reduce((count, result) => count + result.reaped, 0)).toBe(5);
     const states = await pg.query<{ id: string; status: string }>(
       "select id,status from ai_calls order by id"

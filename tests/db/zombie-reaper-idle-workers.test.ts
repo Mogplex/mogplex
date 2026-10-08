@@ -15,7 +15,8 @@ beforeEach(async () => {
   await pg.exec(`
     create table external_agent_runs(id text primary key, ai_call_id text, user_id text,
       runtime_provider text, runtime_run_id text, sandbox_record_id text, status text);
-    create table control_continuations(resume_ai_call_id text, user_id text, runtime_run_id text);
+    create table control_continuations(id text, resume_ai_call_id text, user_id text, status text,
+      runtime_run_id text);
   `);
   const queryable: Queryable = {
     query: async (text, values) => {
@@ -36,6 +37,7 @@ function fakeTrigger(
   const cancelled: string[] = [];
   const killed: string[] = [];
   const finalized: Array<{ runId: string; error: string | null }> = [];
+  const reconciled: string[] = [];
   const deps: IdleWorkerDeps = {
     retrieveRun: async (id) => {
       const run = runs[id];
@@ -52,8 +54,11 @@ function fakeTrigger(
       finalized.push({ runId: run.id, error: completion.error });
       return null;
     },
+    reconcileContinuation: async (payload, supervisorRunId) => {
+      reconciled.push(`${payload.continuationId}@${supervisorRunId}`);
+    },
   };
-  return { deps, cancelled, killed, finalized };
+  return { deps, cancelled, killed, finalized, reconciled };
 }
 
 const error = "Stopped after 360 minutes with no progress.";
@@ -129,7 +134,7 @@ describe("stopIdleWorker", () => {
 
   it("should cancel the live worker of a Control continuation", async () => {
     await pg.exec(
-      "insert into control_continuations values ('call-3','owner','run_ctl')"
+      "insert into control_continuations values ('ticket-3','call-3','owner','running','run_ctl')"
     );
     const trigger = fakeTrigger({
       run_ctl: {
@@ -170,5 +175,85 @@ describe("stopIdleWorker", () => {
 
     expect(stopped).toBe(false);
     expect(trigger.cancelled).toEqual([]);
+  });
+
+  it("should finalize a run whose supervisor already ended", async () => {
+    await pg.exec(
+      "insert into external_agent_runs values ('run-5','call-5','owner','trigger','run_gone',null,'streaming')"
+    );
+    const trigger = fakeTrigger({
+      run_gone: {
+        id: "run_gone",
+        status: "CRASHED",
+        taskIdentifier: "execute-external-agent-run",
+      },
+    });
+
+    const stopped = await stopIdleWorker(
+      { client, call: { id: "call-5", user_id: "owner" }, error },
+      trigger.deps
+    );
+
+    expect(stopped).toBe(true);
+    expect(trigger.cancelled).toEqual([]);
+    expect(trigger.finalized).toEqual([{ runId: "run-5", error }]);
+  });
+
+  it("should reconcile a continuation whose supervisor already ended", async () => {
+    await pg.exec(
+      "insert into control_continuations values ('ticket-6','call-6','owner','running','run_ctl_gone')"
+    );
+    const trigger = fakeTrigger({
+      run_ctl_gone: {
+        id: "run_ctl_gone",
+        status: "COMPLETED",
+        taskIdentifier: "execute-control-continuation",
+      },
+    });
+
+    expect(
+      await stopIdleWorker(
+        { client, call: { id: "call-6", user_id: "owner" }, error },
+        trigger.deps
+      )
+    ).toBe(true);
+    expect(trigger.reconciled).toEqual(["ticket-6@run_ctl_gone"]);
+  });
+
+  it("should leave finished runs, finished continuations and unrelated tasks alone", async () => {
+    await pg.exec(`
+      insert into external_agent_runs values ('run-7','call-7','owner','trigger','run_sup','sbx','failed');
+      insert into external_agent_runs values ('run-8','call-8','owner','trigger','run_misc',null,'streaming');
+      insert into control_continuations values ('ticket-9','call-9','owner','finished','run_ctl');
+    `);
+    const trigger = fakeTrigger({
+      run_misc: {
+        id: "run_misc",
+        status: "EXECUTING",
+        taskIdentifier: "sync-models",
+      },
+    });
+
+    for (const id of ["call-7", "call-8", "call-9"]) {
+      expect(
+        await stopIdleWorker(
+          { client, call: { id, user_id: "owner" }, error },
+          trigger.deps
+        )
+      ).toBe(false);
+    }
+    expect(trigger.cancelled).toEqual([]);
+    expect(trigger.finalized).toEqual([]);
+    expect(trigger.reconciled).toEqual([]);
+  });
+
+  it("should throw when the run state can't be read", async () => {
+    await pg.exec("drop table external_agent_runs");
+    await expect(
+      stopIdleWorker(
+        { client, call: { id: "call-1", user_id: "owner" }, error },
+        fakeTrigger({}).deps
+      )
+    ).rejects.toThrow("Could not read the external run");
   });
 });

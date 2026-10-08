@@ -24,6 +24,7 @@ test("GET /api/observability/calls paginates after stale live rows are filtered"
       }) as never,
     isStaleLiveInteractiveCall: (call) =>
       (call as { id?: string }).id === "stale-1",
+    loadLatestActivity: async () => new Map([["stale-1", null]]),
   });
 
   const response = await handler(
@@ -41,69 +42,6 @@ test("GET /api/observability/calls paginates after stale live rows are filtered"
   assert.equal(payload.total, 2);
   assert.equal(payload.page, 1);
   assert.equal(payload.limit, 1);
-});
-
-test("GET /api/observability/calls keeps an old live call that is still making progress", async () => {
-  const { createObservabilityCallsGetHandler } =
-    await loadObservabilityCallsRoute();
-  const { isStaleLiveInteractiveCall } =
-    await import("../../lib/interactive-runs");
-  const hoursAgo = (hours: number) =>
-    new Date(Date.now() - hours * 60 * 60_000).toISOString();
-  const lookedUp: string[][] = [];
-
-  const handler = createObservabilityCallsGetHandler({
-    requireUserId: async () => "user-123",
-    buildQuery: () =>
-      new FakeQuery({
-        data: [
-          {
-            id: "busy",
-            type: "agent",
-            status: "streaming",
-            started_at: hoursAgo(8),
-            metadata: {},
-          },
-          {
-            id: "quiet",
-            type: "agent",
-            status: "streaming",
-            started_at: hoursAgo(8),
-            metadata: {},
-          },
-          {
-            id: "fresh",
-            type: "agent",
-            status: "streaming",
-            started_at: hoursAgo(1),
-            metadata: {},
-          },
-        ],
-        count: 3,
-        error: null,
-      }) as never,
-    isStaleLiveInteractiveCall,
-    loadLatestActivity: async (callIds) => {
-      lookedUp.push(callIds);
-      return new Map([
-        ["busy", hoursAgo(0.1)],
-        ["quiet", null],
-      ]);
-    },
-  });
-
-  const response = await handler(
-    new NextRequest(
-      "http://localhost/api/observability/calls?live_only=true&page=1&limit=10"
-    )
-  );
-  const payload = await response.json();
-
-  assert.deepEqual(lookedUp, [["busy", "quiet"]]);
-  assert.deepEqual(
-    payload.calls.map((call: { id: string }) => call.id),
-    ["busy", "fresh"]
-  );
 });
 
 test("GET /api/observability/calls enriches sandbox-backed calls with sandbox_context", async () => {

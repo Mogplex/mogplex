@@ -7,7 +7,14 @@ import {
   isStaleLiveInteractiveCall,
   liveCallIdleThresholdMs,
 } from "@/lib/interactive-runs";
+import type { AiCall } from "@/lib/types/ai";
 import { loadLatestCallActivity } from "./ai-call-activity";
+import { stopOrphanedWorkers } from "./zombie-reaper-orphans";
+import {
+  reportStopFailures,
+  stopWorkers,
+  type WorkerStop,
+} from "./zombie-reaper-stops";
 import {
   type ZombieReaperTableSummary,
   safeAgeMs,
@@ -149,6 +156,67 @@ async function selectAiCallZombies(
   };
 }
 
+/** Marks one idle call failed and records why; false if it was already finished. */
+async function markIdleCallFailed(
+  client: typeof supabaseAdmin,
+  input: {
+    row: AiCallZombieRow;
+    error: string;
+    ageMs: number | null;
+    now: number;
+    lastActivityAt: string | null;
+  }
+) {
+  const { row, error, ageMs, now, lastActivityAt } = input;
+  const completedAt = new Date(now).toISOString();
+
+  const { data: updated, error: updateError } = await client
+    .from("ai_calls")
+    .update({
+      status: "failed",
+      error,
+      completed_at: completedAt,
+    })
+    .eq("id", row.id)
+    .in("status", ["pending", "streaming"])
+    .select("id")
+    .maybeSingle();
+
+  if (updateError) {
+    console.error("[zombie-reaper] failed to mark ai_call as failed", {
+      id: row.id,
+      error: updateError.message,
+    });
+    return false;
+  }
+
+  if (!updated) return false; // Another reaper or finalizer already finished it.
+
+  // Best-effort terminal event so the observability pane shows the
+  // reap explicitly rather than a silent status flip.
+  const { error: eventError } = await client.from("ai_call_events").insert({
+    ai_call_id: row.id,
+    user_id: row.user_id,
+    conversation_id: row.conversation_id,
+    repo_id: row.repo_id,
+    event_type: "failed",
+    message: error,
+    payload: {
+      age_ms: ageMs,
+      last_activity_at: lastActivityAt,
+      source: "zombie-row-reaper",
+    },
+  });
+
+  if (eventError) {
+    console.error("[zombie-reaper] failed to append ai_call_events row", {
+      id: row.id,
+      error: eventError.message,
+    });
+  }
+  return true;
+}
+
 export async function reapStaleAiCalls(
   client = supabaseAdmin,
   stopWorker: typeof stopIdleWorker = stopIdleWorker
@@ -162,6 +230,12 @@ export async function reapStaleAiCalls(
   };
 
   const now = Date.now();
+  // Retry stops a previous cycle could not finish before reaping more.
+  reportStopFailures(
+    summary,
+    await stopOrphanedWorkers(client, now, stopWorker)
+  );
+
   const candidatesResult = await selectAiCallZombies(now, client);
   if (!candidatesResult.ok) {
     summary.error = candidatesResult.error;
@@ -177,11 +251,12 @@ export async function reapStaleAiCalls(
     candidates.map((row) => row.id)
   );
 
+  const stops: WorkerStop[] = [];
   for (const row of candidates) {
     const lastActivityAt = activity.get(row.id);
     const call = {
-      type: row.type as never,
-      status: row.status as never,
+      type: row.type as AiCall["type"],
+      status: row.status as AiCall["status"],
       started_at: row.started_at,
       metadata: row.metadata ?? {},
     };
@@ -192,62 +267,20 @@ export async function reapStaleAiCalls(
       continue;
     }
     const error = idleStopMessage(liveCallIdleThresholdMs(call));
-
     const ageMs = safeAgeMs(row.started_at, now);
-    const completedAt = new Date(now).toISOString();
-
-    const { data: updated, error: updateError } = await client
-      .from("ai_calls")
-      .update({
-        status: "failed",
+    if (
+      !(await markIdleCallFailed(client, {
+        row,
         error,
-        completed_at: completedAt,
-      })
-      .eq("id", row.id)
-      .in("status", ["pending", "streaming"])
-      .select("id")
-      .maybeSingle();
-
-    if (updateError) {
-      console.error("[zombie-reaper] failed to mark ai_call as failed", {
-        id: row.id,
-        error: updateError.message,
-      });
+        ageMs,
+        now,
+        lastActivityAt,
+      }))
+    ) {
       continue;
     }
 
-    if (!updated) continue; // Another reaper or finalizer already finished it.
-
-    // Best-effort terminal event so the observability pane shows the
-    // reap explicitly rather than a silent status flip.
-    const { error: eventError } = await client.from("ai_call_events").insert({
-      ai_call_id: row.id,
-      user_id: row.user_id,
-      conversation_id: row.conversation_id,
-      repo_id: row.repo_id,
-      event_type: "failed",
-      message: error,
-      payload: {
-        age_ms: ageMs,
-        last_activity_at: lastActivityAt,
-        source: "zombie-row-reaper",
-      },
-    });
-
-    if (eventError) {
-      console.error("[zombie-reaper] failed to append ai_call_events row", {
-        id: row.id,
-        error: eventError.message,
-      });
-    }
-
-    await stopWorker({ client, call: row, error }).catch((stopError: unknown) =>
-      console.error("[zombie-reaper] could not stop idle worker", {
-        id: row.id,
-        error: stopError,
-      })
-    );
-
+    stops.push({ call: row, error });
     summary.reaped += 1;
     summary.results.push({
       table: "ai_calls",
@@ -258,5 +291,6 @@ export async function reapStaleAiCalls(
     });
   }
 
+  reportStopFailures(summary, await stopWorkers(client, stops, stopWorker));
   return summary;
 }

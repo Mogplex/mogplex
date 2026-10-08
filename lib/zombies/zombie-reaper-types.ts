@@ -37,7 +37,13 @@ export type ZombieReaperResult = {
    * mistaking a malformed-legacy reap for a "0ms old" false positive.
    */
   ageMs: number | null;
-  action: "marked_failed" | "released_lock" | "cancelled";
+  action:
+    | "marked_failed"
+    | "released_lock"
+    | "cancelled"
+    // The reaper failed a call but could not stop the worker behind it; the
+    // next cycle retries the stop.
+    | "worker_stop_failed";
   detail?: string;
 };
 
