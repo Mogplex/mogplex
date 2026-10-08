@@ -143,6 +143,8 @@ export type StartRepoAgentRunInput = {
     channelId: string;
     messageTs: string;
     threadTs?: string;
+    /** Slack channel type for announcement mention logic. */
+    channelType?: "im" | "mpim" | "channel" | "group";
   };
 };
 

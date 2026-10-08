@@ -129,6 +129,7 @@ export async function launchSlackRepoAgentRun(input: {
         channelId: payload.channelId,
         messageTs: placeholder.ts,
         threadTs: postThreadTs,
+        channelType: payload.channelType,
       },
       slackAttachments: attachments.files,
       slackAttachmentDroppedCount: attachments.droppedCount,

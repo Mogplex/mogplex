@@ -368,7 +368,7 @@ it("does not announce a refreshed terminal message twice", async () => {
   expect(posts).toEqual([]);
 });
 
-it("keeps a report whose escaping multiplies its length within Slack's limits", () => {
+it("keeps a report whose escaping multiplies its length within Slack’s limits", () => {
   const message = buildRunResultMessage({
     run,
     status: "success",
@@ -383,3 +383,89 @@ it("keeps a report whose escaping multiplies its length within Slack's limits", 
   expect(report.text.text.length).toBeLessThanOrEqual(3000);
   expect(message.text.length).toBeLessThanOrEqual(4000);
 });
+
+it.each([
+  {
+    type: "mpim",
+    id: "G123",
+    expectMention: false,
+    desc: "group DM skips mention",
+  },
+  {
+    type: "channel",
+    id: "G123",
+    expectMention: true,
+    desc: "channel includes mention",
+  },
+  {
+    type: undefined,
+    id: "D123",
+    expectMention: false,
+    desc: "D prefix fallback",
+  },
+] as const)("channelType: $desc", async ({ type, id, expectMention }) => {
+  const { posts } = await deliver(
+    "success",
+    {
+      metadata: {
+        slack_user_id: "U123",
+        slackRunControls: {
+          teamId: "T1",
+          channelId: id,
+          messageTs: "1.2",
+          channelType: type,
+        },
+      },
+    },
+    emptyRunResultEvidence(),
+    { announce: true }
+  );
+  if (expectMention) expect(posts[0]?.text).toContain("<@U123>");
+  else expect(posts[0]?.text).not.toContain("<@U123>");
+});
+
+it.each([
+  {
+    case: "duplicate",
+    threadMsgs: [
+      { ts: "1.3", bot_id: "B123", text: "/runs/run-1?view=details" },
+    ],
+    expectPost: false,
+  },
+  { case: "no prior", threadMsgs: [], expectPost: true },
+  { case: "check fails", threadMsgs: "throw", expectPost: true },
+] as const)(
+  "idempotent announcement: $case",
+  async ({ threadMsgs, expectPost }) => {
+    const posts: PostSlackMessageInput[] = [];
+    const threadRun = {
+      ...run,
+      metadata: {
+        ...run.metadata,
+        slackRunControls: {
+          teamId: "T1",
+          channelId: "C1",
+          messageTs: "1.2",
+          threadTs: "1.1",
+        },
+      },
+    };
+    await stripSlackRunControlsForTerminalRun(
+      threadRun,
+      "success",
+      {
+        getSlackBotToken: async () => "fixture-token",
+        updateSlackMessage: async () => {},
+        postSlackMessage: async (_token, msg) => posts.push(msg),
+        getThreadMessages: async () => {
+          if (threadMsgs === "throw") throw new Error("Slack API unavailable");
+          return [...threadMsgs];
+        },
+        loadRunOutput: async () => "Done.",
+        loadEvidence: async () => emptyRunResultEvidence(),
+      },
+      { announce: true }
+    );
+    expect(posts).toHaveLength(expectPost ? 1 : 0);
+  }
+);
