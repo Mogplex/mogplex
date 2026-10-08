@@ -38,6 +38,12 @@ export const ACTIVE_CHAT_STALE_THRESHOLD_MS = 30 * 60 * 1000;
 export const ACTIVE_INTERACTIVE_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 export const PREPARED_HARNESS_STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
+// Heartbeat interval for long-running tool executions. This must be less than
+// the background idle threshold minus the exec route timeout, so a heartbeat
+// is recorded before the idle window expires for a valid tool execution.
+// Currently: 15 minutes (half of exec timeout, leaves 16+ minutes buffer).
+export const WORKER_HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000;
+
 type AiCallUpdate = Partial<
   Pick<
     AiCall,
@@ -306,6 +312,55 @@ export async function safeUpdateAiCall(aiCallId: string, update: AiCallUpdate) {
       error,
     });
   }
+}
+
+/**
+ * Records a heartbeat event for a long-running worker execution. This prevents
+ * the zombie reaper from killing workers that are validly executing a tool with
+ * a bounded timeout (like run_command's 30-minute exec timeout). The heartbeat
+ * uses the "log" event type, which the UI renders harmlessly.
+ *
+ * Heartbeats should only be recorded for tool executions that have their own
+ * bounded timeout, so truly hung workers (without timeouts) are still reaped.
+ */
+export async function recordWorkerHeartbeat(input: {
+  aiCallId: string;
+  userId: string;
+  conversationId?: string | null;
+  repoId?: string | null;
+  source: "control_continuation" | "agent_worker";
+}): Promise<void> {
+  await safeAppendAiCallEvent({
+    aiCallId: input.aiCallId,
+    userId: input.userId,
+    conversationId: input.conversationId,
+    repoId: input.repoId,
+    eventType: "log",
+    message: "Worker heartbeat",
+    payload: {
+      source: input.source,
+      heartbeat: true,
+      recorded_at: new Date().toISOString(),
+    },
+  });
+}
+
+/**
+ * Creates a heartbeat timer that fires once after WORKER_HEARTBEAT_INTERVAL_MS.
+ * Returns a cleanup function to cancel the timer. The heartbeat is only recorded
+ * if the timer fires before cleanup is called, ensuring active workers aren't
+ * marked as idle prematurely while still allowing truly hung workers to be reaped.
+ */
+export function createWorkerHeartbeatTimer(
+  onHeartbeat: () => void | Promise<void>
+): () => void {
+  const timerId = setTimeout(() => {
+    void Promise.resolve(onHeartbeat()).catch((error) => {
+      console.warn("[interactive-runs] heartbeat callback failed", error);
+    });
+  }, WORKER_HEARTBEAT_INTERVAL_MS);
+
+  return () => clearTimeout(timerId);
 }
 
 export function buildAiCallCompletionUpdate(input: {

@@ -20,7 +20,12 @@ import {
   loadRunForExecution,
   updateExternalAgentRun,
 } from "@/lib/mogplex-api/run-execution-data";
-import { loadOwnedAiCall, safeAppendAiCallEvent } from "@/lib/interactive-runs";
+import {
+  createWorkerHeartbeatTimer,
+  loadOwnedAiCall,
+  recordWorkerHeartbeat,
+  safeAppendAiCallEvent,
+} from "@/lib/interactive-runs";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
 import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
 import {
@@ -197,12 +202,16 @@ export async function executeExternalAgentRun(
     if (current && TERMINAL_RUN_STATUSES.has(current.status)) {
       return terminalResult(current);
     }
-    run = await deps.updateRun(run.user_id, run.id, {
+    const updatedRun = await deps.updateRun(run.user_id, run.id, {
       sandbox_record_id: sandbox.recordId,
       sandbox_id: sandbox.sandboxId,
       status: "streaming",
       error: null,
     });
+    if (!updatedRun) {
+      throw new Error("Failed to update run status");
+    }
+    run = updatedRun;
     await progress.report({
       kind: "phase",
       phase: "Investigating",
@@ -210,8 +219,28 @@ export async function executeExternalAgentRun(
       next: "Inspect the repository and your request.",
     });
 
-    const harnessResult = await deps.runHarness(run, sandbox);
-    return await finalizeHarnessPass(run, harnessResult, deps);
+    // Start heartbeat timer to prevent premature reaping during long tool
+    // executions. The timer fires once after 15 minutes and records a
+    // progress event, extending the idle window for valid work while still
+    // allowing truly hung workers (past the harness timeout + idle window) to be reaped.
+    const heartbeatContext = {
+      aiCallId: updatedRun.ai_call_id,
+      userId: updatedRun.user_id,
+      conversationId: updatedRun.conversation_id,
+      repoId: updatedRun.repo_id,
+    };
+    const stopHeartbeat = createWorkerHeartbeatTimer(() =>
+      recordWorkerHeartbeat({
+        ...heartbeatContext,
+        source: "agent_worker",
+      })
+    );
+    try {
+      const harnessResult = await deps.runHarness(run, sandbox);
+      return await finalizeHarnessPass(run, harnessResult, deps);
+    } finally {
+      stopHeartbeat();
+    }
   } catch (error) {
     return await finalizeFailedPass(run, error, deps);
   }

@@ -43,7 +43,10 @@ export type ZombieReaperResult = {
     | "cancelled"
     // The reaper failed a call but could not stop the worker behind it; the
     // next cycle retries the stop.
-    | "worker_stop_failed";
+    | "worker_stop_failed"
+    // The call had no active worker to stop (already finished or no worker
+    // backing it). Not an error, but distinct from a successful stop.
+    | "worker_not_found";
   detail?: string;
 };
 
