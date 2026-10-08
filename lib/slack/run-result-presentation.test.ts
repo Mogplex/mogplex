@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { stripSlackRunControlsForTerminalRun } from "./run-controls-notify";
-import type { UpdateSlackMessageInput } from "./client";
+import type { PostSlackMessageInput, UpdateSlackMessageInput } from "./client";
 import { emptyRunResultEvidence } from "./run-result-evidence";
 import { createRunProgressState, applyRunProgress } from "./run-progress-state";
 import { serializeRunProgress } from "./run-progress-store";
@@ -18,7 +18,7 @@ it("starts a long report at its beginning and labels a word-bounded excerpt", ()
     guidance: [],
   });
   expect(message.text).toContain(
-    "Agent’s closing report (excerpt)\nThe requested fix is complete."
+    "*Agent’s closing report (excerpt)*\nThe requested fix is complete."
   );
   const report = message.blocks.find(
     (block) =>
@@ -39,7 +39,7 @@ it("uses the latest durable update for an interrupted run instead of its early a
     guidance: [],
   });
   expect(message.text).toContain(
-    "Last agent update\nThe build failed; verification is unfinished."
+    "*Last agent update*\nThe build failed; verification is unfinished."
   );
   expect(message.text).not.toContain("I will inspect the repository.");
 });
@@ -62,24 +62,42 @@ const run = {
   working_branch: "fix/mobile",
   metadata: {
     slackRunControls: { teamId: "T1", channelId: "C1", messageTs: "1.2" },
-  },
+  } as Record<string, unknown>,
 };
+async function deliver(
+  status: "success" | "failed" | "cancelled",
+  changes: Partial<typeof run> & { slack_progress?: unknown } = {},
+  evidence = emptyRunResultEvidence(),
+  options: { announce?: boolean } = {}
+) {
+  const updates: UpdateSlackMessageInput[] = [];
+  const posts: PostSlackMessageInput[] = [];
+  await stripSlackRunControlsForTerminalRun(
+    { ...run, ...changes },
+    status,
+    {
+      getSlackBotToken: async () => "fixture-token",
+      updateSlackMessage: async (_token, message) => {
+        updates.push(message);
+      },
+      postSlackMessage: async (_token, message) => {
+        posts.push(message);
+      },
+      loadRunOutput: async () =>
+        "Changed the header. Tests passed. https://github.com/other/app/pull/99 <!channel>",
+      loadEvidence: async () => evidence,
+    },
+    options
+  );
+  return { update: updates[0], posts };
+}
+
 async function render(
   status: "success" | "failed" | "cancelled",
   changes: Partial<typeof run> & { slack_progress?: unknown } = {},
   evidence = emptyRunResultEvidence()
 ) {
-  const updates: UpdateSlackMessageInput[] = [];
-  await stripSlackRunControlsForTerminalRun({ ...run, ...changes }, status, {
-    getSlackBotToken: async () => "fixture-token",
-    updateSlackMessage: async (_token, message) => {
-      updates.push(message);
-    },
-    loadRunOutput: async () =>
-      "Changed the header. Tests passed. https://github.com/other/app/pull/99 <!channel>",
-    loadEvidence: async () => evidence,
-  });
-  return updates[0];
+  return (await deliver(status, changes, evidence)).update;
 }
 
 it("leads with the task and separates the agent report from verified artifacts", async () => {
@@ -191,13 +209,13 @@ it("renders verified artifact navigation and guidance in the Slack blocks", () =
   });
   expect(message.blocks).toContainEqual({
     type: "section",
-    text: { type: "plain_text", text: `Artifacts\nPR #42 · open\n${prUrl}` },
+    text: { type: "mrkdwn", text: `*Artifacts*\nPR #42 · open\n${prUrl}` },
   });
   expect(message.blocks).toContainEqual({
     type: "section",
     text: {
-      type: "plain_text",
-      text: "Your guidance\nSupplied to agent step 2: Keep desktop unchanged",
+      type: "mrkdwn",
+      text: "*Your guidance*\nSupplied to agent step 2: Keep desktop unchanged",
     },
   });
   expect(message.blocks.find((block) => block.type === "actions")).toEqual({
@@ -249,8 +267,8 @@ it("offers only verified branch navigation and keeps missing-work recovery expli
   expect(message.blocks).toContainEqual({
     type: "section",
     text: {
-      type: "plain_text",
-      text: "Last agent update\nInspected the header; edits are unfinished.",
+      type: "mrkdwn",
+      text: "*Last agent update*\nInspected the header; edits are unfinished.",
     },
   });
   expect(message.text).toContain(
@@ -274,4 +292,78 @@ it("offers only verified branch navigation and keeps missing-work recovery expli
   expect(JSON.stringify(message.blocks)).not.toContain(
     "mogplex-view-workspaces"
   );
+});
+
+it("renders the agent's Markdown report as Slack formatting with its line breaks", () => {
+  const message = buildRunResultMessage({
+    run,
+    status: "success",
+    output:
+      "## Summary\n- **Fixed** the `agent-loop` timeout\n- See [PR #7](https://github.com/acme/app/pull/7)",
+    evidence: emptyRunResultEvidence(),
+    guidance: [],
+  });
+  expect(message.blocks).toContainEqual({
+    type: "section",
+    text: {
+      type: "mrkdwn",
+      text: "*Agent’s closing report*\n*Summary*\n• *Fixed* the `agent-loop` timeout\n• See PR #7 (https://github.com/acme/app/pull/7)",
+    },
+  });
+  expect(JSON.stringify(message.blocks)).not.toContain("**");
+});
+
+it("announces a finished run in its thread, because an edit sends no notification", async () => {
+  const prUrl = "https://github.com/acme/app/pull/42";
+  const { posts } = await deliver(
+    "success",
+    {
+      metadata: {
+        slack_user_id: "U123",
+        slackRunControls: {
+          teamId: "T1",
+          channelId: "C1",
+          messageTs: "1.2",
+          threadTs: "1.1",
+        },
+      },
+    },
+    {
+      github: {
+        checked: true,
+        branch: null,
+        pullRequests: [{ number: 42, state: "open", url: prUrl }],
+      },
+      workspace: null,
+    },
+    { announce: true }
+  );
+  expect(posts).toEqual([
+    {
+      channel: "C1",
+      thread_ts: "1.1",
+      text: `<@U123> *✅ Run finished:* Fix the mobile controls\nPull request #42 (open): ${prUrl}\nFull report is on the run message above · <${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1?view=details|View run>`,
+    },
+  ]);
+});
+
+it("says why a failed run stopped and keeps agent text inert", async () => {
+  const state = createRunProgressState(1000);
+  state.summary = "Tests timed out <!channel>";
+  const { posts } = await deliver(
+    "failed",
+    { slack_progress: serializeRunProgress(state) },
+    emptyRunResultEvidence(),
+    { announce: true }
+  );
+  expect(posts[0]?.thread_ts).toBeUndefined();
+  expect(posts[0]?.text).toContain("*❌ Run failed:* Fix the mobile controls");
+  expect(posts[0]?.text).toContain("Last update: Tests timed out");
+  expect(posts[0]?.text).not.toContain("<!channel>");
+});
+
+it("does not announce a refreshed terminal message twice", async () => {
+  const { update, posts } = await deliver("success");
+  expect(update).toBeDefined();
+  expect(posts).toEqual([]);
 });

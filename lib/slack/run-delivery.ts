@@ -54,7 +54,10 @@ export async function deliverSlackRunUpdate(
     const key = terminalSlackDeliveryKey(run, run.status);
     if (!key) return { delivered: false };
     if (run.slack_terminal_notification_key === key) return { delivered: true };
-    if (!(await deps.sendTerminal(run, run.status)))
+    // Only the first terminal delivery announces; a later one refreshes the
+    // message for a guidance receipt that settled after the run ended.
+    const announce = !run.slack_terminal_notification_key;
+    if (!(await deps.sendTerminal(run, run.status, undefined, { announce })))
       throw new Error("Slack delivery unavailable");
     await deps.markDelivered(run, run.status, key);
     return { delivered: true };
