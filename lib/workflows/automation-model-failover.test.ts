@@ -342,7 +342,9 @@ describe("executeAutomationTextGeneration fail-over", () => {
     expect(result.text).toBe("zai/glm-5.3-fast answered");
     expect(metadata).toMatchObject({
       attempts: 2,
-      retried: true,
+      // retried is false because no same-model retry happened (only a failover)
+      retried: false,
+      failedOver: true,
       recoveredFromFailureClass: "provider_unavailable",
       failoverModelIds: ["zai/glm-5.3-fast"],
       fallbackUsed: true,

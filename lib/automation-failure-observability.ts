@@ -23,6 +23,7 @@ export type AutomationFailureDiagnostics = {
   timeoutBucket: AutomationFailureTimeoutBucket;
   timeoutBucketLabel: string;
   retryAttempted: boolean;
+  failedOver: boolean;
   retryCount: number;
   attempts: number;
   recoveredFromFailureClass: AutomationFailureClass | null;
@@ -222,6 +223,7 @@ export function presentAutomationFailureDiagnostics(
     timeoutBucket: timeoutBucket.key,
     timeoutBucketLabel: timeoutBucket.label,
     retryAttempted: toBoolean(normalizedMetadata?.model_retry_attempted),
+    failedOver: toBoolean(normalizedMetadata?.model_failed_over),
     retryCount: toCount(normalizedMetadata?.model_retry_count),
     attempts: toCount(normalizedMetadata?.model_attempts),
     recoveredFromFailureClass,

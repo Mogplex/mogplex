@@ -148,6 +148,7 @@ function planNextAttempt(input: {
 }
 
 function createRecoveryMiddleware(input: {
+  primaryModelId: string;
   fallbacks: { modelId: string; model: V4LanguageModel }[];
   retryState: AutomationGenerateRetryState;
   logger: AutomationModelLogger;
@@ -155,22 +156,76 @@ function createRecoveryMiddleware(input: {
   stepBudgetMs: number | undefined;
   now: () => number;
 }): LanguageModelMiddleware {
-  const { fallbacks, retryState, logger, logContext, stepBudgetMs, now } =
-    input;
+  const {
+    primaryModelId,
+    fallbacks,
+    retryState,
+    logger,
+    logContext,
+    stepBudgetMs,
+    now,
+  } = input;
   let activeFallbackIndex = -1;
+
+  function activeModelId() {
+    return activeFallbackIndex < 0
+      ? primaryModelId
+      : fallbacks[activeFallbackIndex].modelId;
+  }
 
   return {
     specificationVersion: "v4",
     async wrapGenerate({ doGenerate, params }) {
       const stepStartedAt = now();
       for (;;) {
+        // Compute remaining budget before each attempt so an attempt that would
+        // start past the budget never runs. For fallback models, we also abort
+        // in-flight attempts when the budget expires, making this a true ceiling
+        // for those paths. The primary model path (doGenerate) cannot be aborted
+        // mid-request since the middleware callback doesn't accept modified
+        // params; for that path, the stepBudgetSpent check after failure ensures
+        // we don't start new attempts once the budget is exhausted.
+        const remainingBudgetMs =
+          stepBudgetMs === undefined
+            ? undefined
+            : Math.max(0, stepBudgetMs - (now() - stepStartedAt));
+        const budgetSpent = remainingBudgetMs === 0;
+
+        if (budgetSpent) {
+          throw new Error(
+            "Step budget exhausted before starting the next attempt"
+          );
+        }
+
+        // Budget abort only works for fallback models where we control the call
+        let budgetTimeout: ReturnType<typeof setTimeout> | undefined;
+        const budgetController =
+          activeFallbackIndex >= 0 && remainingBudgetMs !== undefined
+            ? new AbortController()
+            : undefined;
+        if (budgetController && remainingBudgetMs !== undefined) {
+          budgetTimeout = setTimeout(
+            () => budgetController.abort(),
+            remainingBudgetMs
+          );
+        }
+
         try {
-          if (activeFallbackIndex < 0) return await doGenerate();
+          if (activeFallbackIndex < 0) {
+            return await doGenerate();
+          }
+          const mergedSignal =
+            budgetController && params.abortSignal
+              ? AbortSignal.any([params.abortSignal, budgetController.signal])
+              : (budgetController?.signal ?? params.abortSignal);
+          const callParams = mergedSignal
+            ? { ...params, abortSignal: mergedSignal }
+            : params;
           const remaining = fallbacks
             .slice(activeFallbackIndex + 1)
             .map((fallback) => fallback.modelId);
           return await fallbacks[activeFallbackIndex].model.doGenerate(
-            withRemainingGatewayModels(params, remaining)
+            withRemainingGatewayModels(callParams, remaining)
           );
         } catch (error) {
           const failure = classifyAutomationModelError(error);
@@ -178,7 +233,9 @@ function createRecoveryMiddleware(input: {
             failure,
             retryState,
             hasNextFallback: activeFallbackIndex + 1 < fallbacks.length,
-            generationAborted: params.abortSignal?.aborted === true,
+            generationAborted:
+              params.abortSignal?.aborted === true ||
+              budgetController?.signal.aborted === true,
             stepBudgetSpent:
               stepBudgetMs !== undefined &&
               now() - stepStartedAt >= stepBudgetMs,
@@ -197,6 +254,7 @@ function createRecoveryMiddleware(input: {
           retryState.recoveredFromFailureClass ??= failure.classification;
           retryState.recoveredFromMessage ??= failure.rawMessage;
           if (next === "fail_over") {
+            const fromModelId = activeModelId();
             activeFallbackIndex += 1;
             const toModelId = fallbacks[activeFallbackIndex].modelId;
             retryState.failoverModelIds.push(toModelId);
@@ -204,8 +262,13 @@ function createRecoveryMiddleware(input: {
               logger,
               context: logContext,
               failure,
+              fromModelId,
               toModelId,
             });
+          }
+        } finally {
+          if (budgetTimeout !== undefined) {
+            clearTimeout(budgetTimeout);
           }
         }
       }
@@ -248,6 +311,7 @@ export function wrapAutomationModelForRecovery(input: {
       model: input.model,
       middleware: createRecoveryMiddleware({
         ...input,
+        primaryModelId: input.model.modelId,
         fallbacks,
         stepBudgetMs: input.stepBudgetMs,
         now: input.now ?? Date.now,

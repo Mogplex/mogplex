@@ -101,6 +101,11 @@ function hasValidAutomationGatewayRouting(value: Record<string, unknown>) {
       "fallbackUsed",
       (field) => typeof field === "boolean"
     ) &&
+    hasOptionalField(
+      value,
+      "failedOver",
+      (field) => typeof field === "boolean"
+    ) &&
     hasOptionalField(value, "failoverModelIds", isStringArray)
   );
 }

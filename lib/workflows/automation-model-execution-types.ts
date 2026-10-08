@@ -55,8 +55,15 @@ export type AutomationGatewayModelAttempt = {
 export type AutomationModelExecutionMetadata = {
   phase: string;
   attempts: number;
+  /** Every re-attempt: same-model retries plus fail-overs. */
   retryCount: number;
+  /**
+   * True when a same-model retry happened (gateway was unreachable, so the
+   * same model was retried rather than failing over to a fallback).
+   */
   retried: boolean;
+  /** True when a fail-over to a different model happened. */
+  failedOver?: boolean;
   effectiveTimeoutMs: number;
   observedInputTokens?: number | null;
   observedOutputTokens?: number | null;
