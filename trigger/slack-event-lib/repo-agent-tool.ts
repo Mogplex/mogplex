@@ -29,6 +29,14 @@ const startRepoAgentRunParams = z.object({
     .describe(
       "owner/repo of the connected repository to run against. Only set this when the conversation names a repository other than the one already in context."
     ),
+  pullRequest: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Number of an open pull request in that repository to continue. Set it whenever the user wants an existing pull request fixed, finished or updated (for example after a failed check or review findings): the run checks out the pull request's branch and pushes there, so the pull request itself is updated. Omit it for new work, which gets its own branch and pull request."
+    ),
 });
 
 export type SlackStartRepoAgentRunToolResult =
@@ -40,6 +48,13 @@ type LaunchAttempt = {
   final: boolean;
   result: SlackStartRepoAgentRunToolResult;
 };
+
+function continuePullRequestPreamble(
+  pullRequest: number | undefined,
+  branch: string
+) {
+  return `You are continuing pull request #${pullRequest} on its branch ${branch}, which is already checked out. Commit and push your changes to this branch so the pull request updates. Do not open a new pull request.`;
+}
 
 export function buildSlackDelegatedRunPrompt(input: {
   task: string;
@@ -93,6 +108,30 @@ export function createSlackStartRepoAgentRunTool(input: {
     };
   }
 
+  async function resolvePullRequestBranch(
+    repo: SlackRepoContext,
+    pullRequest: number | undefined
+  ): Promise<
+    { value: { working: string; base: string } | null } | { error: string }
+  > {
+    if (pullRequest === undefined) return { value: null };
+    const load = input.deps.loadPullRequestBranch;
+    if (!load) {
+      return {
+        error: "Continuing an existing pull request isn't available here.",
+      };
+    }
+    const loaded = await load({
+      mogplexUserId: input.mogplexUserId,
+      owner: repo.repoOwner,
+      repo: repo.repoName,
+      number: pullRequest,
+    });
+    return loaded.ok
+      ? { value: { working: loaded.headRef, base: loaded.baseRef } }
+      : { error: loaded.error };
+  }
+
   async function attemptLaunch(
     args: z.infer<typeof startRepoAgentRunParams>
   ): Promise<LaunchAttempt> {
@@ -101,10 +140,17 @@ export function createSlackStartRepoAgentRunTool(input: {
       return { final: false, result: { ok: false, error: repo.error } };
     }
 
+    const branch = await resolvePullRequestBranch(repo, args.pullRequest);
+    if ("error" in branch) {
+      return { final: false, result: { ok: false, error: branch.error } };
+    }
+
     const attachments = prepareSlackRepoAgentAttachments(input.payload);
     const prompt = buildSlackRepoAgentPrompt({
       text: buildSlackDelegatedRunPrompt({
-        task: args.task,
+        task: branch.value
+          ? `${continuePullRequestPreamble(args.pullRequest, branch.value.working)}\n\n${args.task}`
+          : args.task,
         userText: input.userText,
       }),
       attachments,
@@ -118,6 +164,7 @@ export function createSlackStartRepoAgentRunTool(input: {
       installation: input.installation,
       repoId: repo.repoId,
       prompt,
+      ...(branch.value ? { branch: branch.value } : {}),
       attachments,
       postThreadTs: getSlackReplyThreadTs(input.payload),
     });

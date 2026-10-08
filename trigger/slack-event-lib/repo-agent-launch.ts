@@ -56,6 +56,8 @@ export async function launchSlackRepoAgentRun(input: {
   installation: SlackInstallationRow;
   repoId: string;
   prompt: string;
+  /** Existing branch to continue, e.g. an open pull request's head. */
+  branch?: { working: string; base: string };
   attachments: PreparedSlackRepoAgentAttachments;
   /** Slack `thread_ts` for every message this launch posts, including DMs. */
   postThreadTs: string;
@@ -109,6 +111,7 @@ export async function launchSlackRepoAgentRun(input: {
       mogplexUserId,
       repoId: input.repoId,
       prompt: input.prompt,
+      ...(input.branch ? { branch: input.branch } : {}),
       taskTitle: progressText(input.prompt.split("\n")[0], 140),
       // Slack `event_id` is unique per delivery - reuse so retries dedupe.
       idempotencyKey: `slack:${payload.eventId}`,

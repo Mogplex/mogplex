@@ -67,7 +67,13 @@ export async function defaultStartRepoAgentRun(
       prompt: input.prompt,
       harness,
       ...(agentId ? { agentId } : {}),
-      createBranch: true,
+      ...(input.branch
+        ? {
+            workingBranch: input.branch.working,
+            baseBranch: input.branch.base,
+            createBranch: false,
+          }
+        : { createBranch: true }),
     },
     origin: "slack",
     extraMetadata: {

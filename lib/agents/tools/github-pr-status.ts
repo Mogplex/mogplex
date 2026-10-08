@@ -32,6 +32,7 @@ type GithubCheckNode = {
   context?: string;
   state?: string;
   targetUrl?: string | null;
+  isRequired?: boolean | null;
 };
 
 type GithubReview = {
@@ -107,8 +108,8 @@ query MogplexPullRequestStatus($owner: String!, $repo: String!, $number: Int!) {
           totalCount
           nodes {
             __typename
-            ... on CheckRun { name status conclusion detailsUrl }
-            ... on StatusContext { context state targetUrl }
+            ... on CheckRun { name status conclusion detailsUrl isRequired(pullRequestNumber: $number) }
+            ... on StatusContext { context state targetUrl isRequired(pullRequestNumber: $number) }
           }
         }
       }
@@ -157,6 +158,7 @@ function normalizeChecks(nodes: Array<GithubCheckNode | null> = []) {
           name: node.name ?? "unnamed check",
           status: lower(node.status),
           conclusion: lower(node.conclusion),
+          required: node.isRequired ?? null,
           url: node.detailsUrl ?? null,
         },
       ];
@@ -167,6 +169,7 @@ function normalizeChecks(nodes: Array<GithubCheckNode | null> = []) {
           name: node.context ?? "unnamed status",
           status: lower(node.state),
           conclusion: lower(node.state),
+          required: node.isRequired ?? null,
           url: node.targetUrl ?? null,
         },
       ];
@@ -377,7 +380,7 @@ export function createGithubPullRequestStatusTool(
 ) {
   return defineTool({
     description:
-      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. Read this before reporting PR readiness or requesting a protected merge.",
+      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. Read this before reporting PR readiness or requesting a protected merge. Each check carries `required`: only required checks gate a merge, and GitHub enforces them. A failing check with `required: false` is advisory; name it as advisory, never as required.",
     inputSchema: githubPullRequestStatusParams,
     execute: async ({
       owner,
