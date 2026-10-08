@@ -100,16 +100,20 @@ async function readBlobSha(
     if (!entry || tree.truncated)
       throw new RunArtifactError(404, "Committed artifact not found");
     const leaf = index === segments.length - 1;
-    const allowed = leaf
-      ? entry.type === "blob" && ["100644", "100755"].includes(entry.mode)
-      : entry.type === "tree" && entry.mode === "040000";
-    if (!allowed)
-      throw new RunArtifactError(400, "Artifact must be a regular JSON file");
+    assertEntryType(entry, leaf);
     if (leaf && (entry.size ?? MAX_ARTIFACT_BYTES + 1) > MAX_ARTIFACT_BYTES)
       throw new RunArtifactError(400, "Artifact exceeds 1 MiB");
     current = entry.sha;
   }
   return current;
+}
+
+function assertEntryType(entry: Tree["tree"][number], leaf: boolean) {
+  const allowed = leaf
+    ? entry.type === "blob" && ["100644", "100755"].includes(entry.mode)
+    : entry.type === "tree" && entry.mode === "040000";
+  if (!allowed)
+    throw new RunArtifactError(400, "Artifact must be a regular JSON file");
 }
 
 function decodeArtifact(raw: unknown) {
