@@ -5,10 +5,15 @@ import {
   queuePullRequestForMerge,
 } from "../../lib/github-merge";
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {}
+) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers(headers),
     json: async () => body,
     text: async () => JSON.stringify(body),
   };
@@ -76,7 +81,7 @@ test("a clean PR on a merge-queue branch joins the queue instead of merging dire
   });
   assert.equal(
     calls[1].url,
-    "https://api.github.com/repos/Mogplex/mogplex/rules/branches/main"
+    "https://api.github.com/repos/Mogplex/mogplex/rules/branches/main?per_page=100"
   );
   const body = graphqlBody(calls[2]);
   assert.match(body.query, /enqueuePullRequest/);
@@ -111,7 +116,7 @@ test("a PR still waiting on required checks arms auto-merge, which joins the que
   assert.match(graphqlBody(calls[2]).query, /enablePullRequestAutoMerge/);
 });
 
-test("a failing check that is not required is named as the reason", async () => {
+test("a failing or running check that is not required is named as the reason", async () => {
   const { fetchImpl, calls } = makeFetch([
     jsonResponse({ ...pr, mergeable_state: "unstable" }),
     queueRules,
@@ -120,7 +125,10 @@ test("a failing check that is not required is named as the reason", async () => 
   const outcome = await mergePullRequestIfSafe({ ...input, fetchImpl });
 
   assert.equal(outcome.merged, false);
-  assert.match(outcome.reason, /a check that is not required is failing/);
+  assert.match(
+    outcome.reason,
+    /a check that is not required is failing or still running/
+  );
   assert.equal(calls.length, 2);
 });
 
@@ -180,4 +188,81 @@ test("queueing a clean PR on a merge-queue branch enqueues it", async () => {
 
   assert.equal(outcome.queued, true);
   assert.match(graphqlBody(calls[2]).query, /enqueuePullRequest/);
+});
+
+test("a PR already in the merge queue is reported as queued, not rejected", async () => {
+  const { fetchImpl } = makeFetch([
+    jsonResponse(pr),
+    queueRules,
+    jsonResponse({
+      errors: [{ message: "Pull request is already in the queue" }],
+    }),
+  ]);
+
+  const outcome = await mergePullRequestIfSafe({ ...input, fetchImpl });
+
+  assert.deepEqual(outcome, {
+    merged: false,
+    queued: true,
+    reason:
+      "Already in the merge queue; GitHub merges it once the queue's checks pass",
+  });
+});
+
+test("a merge-queue rule on a later rules page is still found", async () => {
+  const next =
+    "https://api.github.com/repositories/1/rules/branches/main?per_page=100&page=2";
+  const { fetchImpl, calls } = makeFetch([
+    jsonResponse(pr),
+    jsonResponse([{ type: "pull_request" }], 200, {
+      link: `<${next}>; rel="next", <${next}>; rel="last"`,
+    }),
+    jsonResponse([{ type: "merge_queue" }]),
+    jsonResponse({
+      data: { enqueuePullRequest: { mergeQueueEntry: { position: 1 } } },
+    }),
+  ]);
+
+  const outcome = await mergePullRequestIfSafe({ ...input, fetchImpl });
+
+  assert.equal(outcome.queued, true);
+  assert.equal(calls[2].url, next);
+  assert.match(graphqlBody(calls[3]).query, /enqueuePullRequest/);
+});
+
+const autoMergeDisallowed = jsonResponse({
+  errors: [{ message: "Auto merge is not allowed for this repository" }],
+});
+
+test("with auto-merge turned off, a waiting PR is offered to the merge queue", async () => {
+  const { fetchImpl, calls } = makeFetch([
+    jsonResponse({ ...pr, mergeable_state: "blocked" }),
+    queueRules,
+    autoMergeDisallowed,
+    jsonResponse({
+      data: { enqueuePullRequest: { mergeQueueEntry: { position: 3 } } },
+    }),
+  ]);
+
+  const outcome = await mergePullRequestIfSafe({ ...input, fetchImpl });
+
+  assert.equal(outcome.queued, true);
+  assert.match(graphqlBody(calls[3]).query, /enqueuePullRequest/);
+});
+
+test("with auto-merge turned off, a queue refusal explains why", async () => {
+  const { fetchImpl } = makeFetch([
+    jsonResponse({ ...pr, mergeable_state: "blocked" }),
+    queueRules,
+    autoMergeDisallowed,
+    jsonResponse({ errors: [{ message: "Pull request is not mergeable" }] }),
+  ]);
+
+  const outcome = await queuePullRequestForMerge({ ...input, fetchImpl });
+
+  assert.equal(outcome.queued, undefined);
+  assert.match(
+    outcome.reason,
+    /^Auto-merge is turned off for this repository, so the pull request can only join the merge queue once it is ready\. GitHub merge queue rejected the pull request \(200\): Pull request is not mergeable$/
+  );
 });

@@ -1,5 +1,5 @@
 import { findInstallationToken } from "@/lib/agents/tools/github-shared";
-import { githubHeaders } from "@/lib/github-merge";
+import { githubHeaders } from "@/lib/github-headers";
 
 export type SlackPullRequestBranch =
   | { ok: true; headRef: string; baseRef: string }

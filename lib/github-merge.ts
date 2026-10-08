@@ -2,6 +2,9 @@ import {
   withAgentMergePolicy,
   type AgentMergePolicyScope,
 } from "./github-merge-agent-policy";
+import { githubHeaders } from "./github-headers";
+
+export { githubHeaders } from "./github-headers";
 
 export type AutoMergeOutcome = {
   merged: boolean;
@@ -34,13 +37,6 @@ type MergeInput = {
   mergePolicyScope?: AgentMergePolicyScope;
   requireImmediateMerge?: boolean;
 };
-
-export function githubHeaders(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-  };
-}
 
 async function loadPullRequestGate(
   input: MergeInput
@@ -263,10 +259,22 @@ async function mergeCleanPullRequest(
   };
 }
 
+const RULES_PAGE_SIZE = 100;
+
+function nextPageUrl(linkHeader: string | null) {
+  const next = linkHeader
+    ?.split(",")
+    .find((part) => part.includes('rel="next"'));
+  const start = next?.indexOf("<") ?? -1;
+  const end = next?.indexOf(">") ?? -1;
+  return next && start >= 0 && end > start ? next.slice(start + 1, end) : null;
+}
+
 /**
  * Whether the PR's base branch merges through a merge queue. A ruleset can
  * require one; GitHub then refuses the REST merge endpoint, so the PR has to
- * join the queue instead. A rules lookup that fails keeps the direct path.
+ * join the queue instead. The rules list is paginated, so every page is read.
+ * A rules lookup that fails keeps the direct path.
  */
 async function baseBranchUsesMergeQueue(
   input: MergeInput,
@@ -275,17 +283,21 @@ async function baseBranchUsesMergeQueue(
   const baseRef = pr.base?.ref?.trim();
   if (!baseRef) return false;
   const doFetch = input.fetchImpl ?? fetch;
-  const res = await doFetch(
-    `https://api.github.com/repos/${input.owner}/${input.repo}/rules/branches/${encodeURIComponent(baseRef)}`,
-    { headers: githubHeaders(input.githubToken) }
-  ).catch(() => null);
-  if (!res?.ok) return false;
-  const rules = (await res.json().catch(() => null)) as Array<{
-    type?: string;
-  }> | null;
-  return (
-    Array.isArray(rules) && rules.some((rule) => rule?.type === "merge_queue")
-  );
+  let url: string | null =
+    `https://api.github.com/repos/${input.owner}/${input.repo}/rules/branches/${encodeURIComponent(baseRef)}?per_page=${RULES_PAGE_SIZE}`;
+  while (url) {
+    const res = await doFetch(url, {
+      headers: githubHeaders(input.githubToken),
+    }).catch(() => null);
+    if (!res?.ok) return false;
+    const rules = (await res.json().catch(() => null)) as Array<{
+      type?: string;
+    }> | null;
+    if (!Array.isArray(rules)) return false;
+    if (rules.some((rule) => rule?.type === "merge_queue")) return true;
+    url = nextPageUrl(res.headers.get("link"));
+  }
+  return false;
 }
 
 type EnqueueGraphqlPayload = {
@@ -330,11 +342,28 @@ async function enqueuePullRequest(
   const payload = (await res
     .json()
     .catch(() => null)) as EnqueueGraphqlPayload | null;
+  return enqueueOutcome({ ok: res.ok, status: res.status, payload });
+}
+
+function enqueueOutcome(response: {
+  ok: boolean;
+  status: number;
+  payload: EnqueueGraphqlPayload | null;
+}): AutoMergeOutcome {
+  const { payload } = response;
   const error = readGraphqlErrors(payload);
-  if (!res.ok || error) {
+  if (error?.toLowerCase().includes("already in the queue")) {
     return {
       merged: false,
-      reason: `GitHub merge queue rejected the pull request (${res.status})${error ? `: ${error.slice(0, 300)}` : ""}`,
+      queued: true,
+      reason:
+        "Already in the merge queue; GitHub merges it once the queue's checks pass",
+    };
+  }
+  if (!response.ok || error) {
+    return {
+      merged: false,
+      reason: `GitHub merge queue rejected the pull request (${response.status})${error ? `: ${error.slice(0, 300)}` : ""}`,
     };
   }
   const entry = payload?.data?.enqueuePullRequest?.mergeQueueEntry;
@@ -345,13 +374,15 @@ async function enqueuePullRequest(
         "GitHub did not confirm that the pull request joined the merge queue",
     };
   }
-  const position =
-    typeof entry.position === "number" ? ` at position ${entry.position}` : "";
   return {
     merged: false,
     queued: true,
-    reason: `Added to the merge queue${position}; GitHub merges it once the queue's checks pass`,
+    reason: `Added to the merge queue${queuePosition(entry.position)}; GitHub merges it once the queue's checks pass`,
   };
+}
+
+function queuePosition(position: number | null | undefined) {
+  return typeof position === "number" ? ` at position ${position}` : "";
 }
 
 function notCleanReason(pr: PullRequestGate): AutoMergeOutcome {
@@ -360,8 +391,31 @@ function notCleanReason(pr: PullRequestGate): AutoMergeOutcome {
     merged: false,
     reason:
       state === "unstable"
-        ? "PR is not clean to merge (state: unstable): a check that is not required is failing. Fix it first, or the user can merge on GitHub"
+        ? "PR is not clean to merge (state: unstable): a check that is not required is failing or still running. Fix it or wait for it first, or the user can merge on GitHub"
         : `PR is not clean to merge (state: ${state})`,
+  };
+}
+
+function autoMergeDisallowed(outcome: AutoMergeOutcome) {
+  return (
+    !outcome.queued && /auto[- ]?merge is not allowed/i.test(outcome.reason)
+  );
+}
+
+// Repositories can turn auto-merge off and still require a merge queue. The
+// queue then is the only way in, so offer the PR to it directly; GitHub
+// refuses it until its requirements pass, and that refusal is reported.
+async function armQueueMerge(
+  input: MergeInput,
+  pr: PullRequestGate
+): Promise<AutoMergeOutcome> {
+  const outcome = await enablePullRequestAutoMerge(input, pr);
+  if (!autoMergeDisallowed(outcome)) return outcome;
+  const enqueued = await enqueuePullRequest(input, pr);
+  if (enqueued.queued) return enqueued;
+  return {
+    merged: false,
+    reason: `Auto-merge is turned off for this repository, so the pull request can only join the merge queue once it is ready. ${enqueued.reason}`,
   };
 }
 
@@ -371,9 +425,7 @@ function mergeThroughQueue(
   pr: PullRequestGate
 ): Promise<AutoMergeOutcome> | AutoMergeOutcome {
   if (pr.mergeable_state === "clean") return enqueuePullRequest(input, pr);
-  if (shouldEnablePullRequestAutoMerge(pr)) {
-    return enablePullRequestAutoMerge(input, pr);
-  }
+  if (shouldEnablePullRequestAutoMerge(pr)) return armQueueMerge(input, pr);
   return notCleanReason(pr);
 }
 
@@ -386,13 +438,12 @@ async function queuePullRequestForMergeUnchecked(
   const pr = await loadPullRequestGate(input);
   const blocked = pullRequestBlockReason(input, pr);
   if (blocked) return blocked;
-  if (
-    pr.mergeable_state === "clean" &&
-    (await baseBranchUsesMergeQueue(input, pr))
-  ) {
-    return enqueuePullRequest(input, pr);
+  if (!(await baseBranchUsesMergeQueue(input, pr))) {
+    return enablePullRequestAutoMerge(input, pr);
   }
-  return enablePullRequestAutoMerge(input, pr);
+  return pr.mergeable_state === "clean"
+    ? enqueuePullRequest(input, pr)
+    : armQueueMerge(input, pr);
 }
 
 // Merge immediately only when GitHub itself reports the PR as safe: open, not
