@@ -268,7 +268,7 @@ export function StartFilterFields({
                     // Unbound or disconnected: show a prompt, not a blank select.
                     ...(boundInstallation
                       ? []
-                      : [{ value: "", label: "Select an account…" }]),
+                      : [{ value: "", label: "Select an account…", disabled: true }]),
                     ...installations.map((installation) => ({
                       value: String(installation.installation_id),
                       label: `${installationAccountLabel(installation)} · ${installationAccountTypeLabel(installation.account_type)}`,
