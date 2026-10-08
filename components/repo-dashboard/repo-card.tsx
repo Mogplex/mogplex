@@ -10,6 +10,7 @@ import {
   resolveSandboxUiState,
   type SandboxUiState,
 } from "@/lib/sandbox/ui-state";
+import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { MoreHoriz } from "iconoir-react";
 import {
@@ -59,9 +60,17 @@ function RepoCardMenuItems({
   ItemComponent,
   SeparatorComponent,
 }: RepoCardMenuItemsProps) {
-  const copyCloneUrl = () => {
-    void navigator.clipboard.writeText(`git@github.com:${repo.full_name}.git`);
-    toast({ title: "Copied clone URL" });
+  const copyCloneUrl = async () => {
+    const copied = await copyText(`git@github.com:${repo.full_name}.git`);
+    toast(
+      copied
+        ? { title: "Copied clone URL" }
+        : {
+            title: "Copy failed",
+            description: "Your browser blocked clipboard access.",
+            variant: "destructive",
+          },
+    );
   };
 
   return (

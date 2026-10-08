@@ -37,6 +37,8 @@ import {
   TopBarPromptDialog,
   type TopBarPromptKind,
 } from "./control-top-bar-dialogs";
+import { toast } from "@/hooks/use-toast";
+import { copyText } from "@/lib/clipboard";
 
 export type ControlTopBarProps = {
   sessionNavigation?: ReactNode;
@@ -299,11 +301,18 @@ export function ControlTopBar({
                 </Item>
                 <Item
                   icon={Copy}
-                  onSelect={() =>
-                    navigator.clipboard.writeText(
+                  onSelect={() => {
+                    void copyText(
                       `git clone https://github.com/${repoFullName}.git`
-                    )
-                  }
+                    ).then((copied) => {
+                      if (copied) return;
+                      toast({
+                        title: "Copy failed",
+                        description: "Your browser blocked clipboard access.",
+                        variant: "destructive",
+                      });
+                    });
+                  }}
                 >
                   Copy clone command
                 </Item>
