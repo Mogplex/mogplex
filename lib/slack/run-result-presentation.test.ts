@@ -367,3 +367,19 @@ it("does not announce a refreshed terminal message twice", async () => {
   expect(update).toBeDefined();
   expect(posts).toEqual([]);
 });
+
+it("keeps a report whose escaping multiplies its length within Slack's limits", () => {
+  const message = buildRunResultMessage({
+    run,
+    status: "success",
+    output: `Rendered markup:\n${"<a>&amp;</a> ".repeat(120)}`,
+    evidence: emptyRunResultEvidence(),
+    guidance: [],
+  });
+  const report = message.blocks.find((block) =>
+    JSON.stringify(block).includes("Agent’s closing report")
+  ) as { text: { text: string } };
+  expect(report.text.text).toContain("(excerpt)");
+  expect(report.text.text.length).toBeLessThanOrEqual(3000);
+  expect(message.text.length).toBeLessThanOrEqual(4000);
+});

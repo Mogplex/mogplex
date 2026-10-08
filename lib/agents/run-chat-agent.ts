@@ -22,6 +22,7 @@ import {
   resolveChatModelId,
   type RunChatAgentMessage,
   type ChatAgentContext,
+  type ChatModelStreamDeps,
 } from "@/lib/agents/run-chat";
 import {
   createRunChatProgressReporter,
@@ -69,6 +70,11 @@ export type RunChatAgentInput = ChatAgentContext & {
    * from the callback are caught so a progress surface cannot abort the run.
    */
   onProgress?: RunChatAgentProgressCallback;
+  /** Seams for tests: the model stream's dependencies and the ai_calls writer. */
+  deps?: {
+    stream?: Partial<ChatModelStreamDeps>;
+    recordAiCall?: (record: RunChatAiCallRecord) => void;
+  };
 };
 
 export type RunChatAgentResult = {
@@ -196,7 +202,7 @@ export function recordedToolCall(
   };
 }
 
-type RunChatAiCallRecord = {
+export type RunChatAiCallRecord = {
   context: RunChatAgentInput;
   model: string;
   startedAt: string;
@@ -300,6 +306,7 @@ export async function runChatAgent(
     );
   const progressReporter = createRunChatProgressReporter(input.onProgress);
   const toolCalls: AiToolCall[] = [];
+  const recordAiCall = input.deps?.recordAiCall ?? recordRunChatAiCall;
   const finalization = createSlackRunFinalization({
     userId: input.userId,
     userText: input.latestUserText,
@@ -323,6 +330,7 @@ export async function runChatAgent(
     systemSuffix: input.systemSuffix,
     abortSignal: input.abortSignal,
     additionalTools: input.additionalTools,
+    deps: input.deps?.stream,
     hooks: {
       onChunk(event) {
         if (event.chunk.type === "reasoning-delta") {
@@ -352,7 +360,7 @@ export async function runChatAgent(
   } catch (error) {
     await finalization.cleanupAfterInterruption();
     const message = error instanceof Error ? error.message : "Stream error";
-    recordRunChatAiCall({
+    recordAiCall({
       context: input,
       model: resolvedModel,
       startedAt,
@@ -397,7 +405,7 @@ export async function runChatAgent(
     },
     observedUsage
   );
-  recordRunChatAiCall({
+  recordAiCall({
     context: input,
     model: resolvedModel,
     startedAt,

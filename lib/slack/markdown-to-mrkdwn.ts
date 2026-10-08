@@ -12,6 +12,8 @@ export function markdownToMrkdwn(markdown: string): string {
   let inFence = false;
   for (const line of markdown.replace(/\r\n?/g, "\n").split("\n")) {
     if (FENCE.test(line)) {
+      // Text after an opening fence is its info string (the language), not
+      // code, and Slack has no use for it.
       inFence = !inFence;
       out.push("```");
       continue;
@@ -21,13 +23,13 @@ export function markdownToMrkdwn(markdown: string): string {
       continue;
     }
     const converted = convertLine(line);
-    if (converted !== null) out.push(converted);
+    if (converted === null) continue;
+    // Outside code, runs of blank lines become one; code keeps its spacing.
+    if (converted.trim() === "" && out.at(-1)?.trim() === "") continue;
+    out.push(converted);
   }
   if (inFence) out.push("```");
-  return out
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return out.join("\n").trim();
 }
 
 /** Escapes the three characters Slack reserves for mentions and links. */

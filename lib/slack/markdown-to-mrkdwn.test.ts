@@ -55,4 +55,10 @@ describe("markdownToMrkdwn", () => {
   it("should keep block quotes as Slack quotes", () => {
     expect(markdownToMrkdwn("> note **this**")).toBe("> note *this*");
   });
+
+  it("should collapse blank runs in prose but keep them inside code", () => {
+    expect(markdownToMrkdwn("one\n\n\n\ntwo\n```\na\n\n\nb\n```")).toBe(
+      "one\n\ntwo\n```\na\n\n\nb\n```"
+    );
+  });
 });

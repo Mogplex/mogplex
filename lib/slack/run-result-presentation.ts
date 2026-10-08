@@ -37,7 +37,7 @@ export function buildRunResultMessage(input: {
   const sections = [`*${result}*`];
   if (report)
     sections.push(
-      `*${status === "success" ? "Agent’s closing report" : "Last agent update"}${report.excerpt ? " (excerpt)" : ""}*\n${markdownToMrkdwn(report.text)}`
+      `*${status === "success" ? "Agent’s closing report" : "Last agent update"}${report.excerpt ? " (excerpt)" : ""}*\n${report.mrkdwn}`
     );
   const checks = [...(snapshot?.tasks.values() ?? [])]
     .filter((task) =>
@@ -135,16 +135,27 @@ export function buildRunResultMessage(input: {
       ],
     });
   return {
-    text: [
-      escapeMrkdwn(title),
-      ...sections,
-      `View run details: ${runUrl}`,
-    ].join("\n\n"),
+    text: capMessageText(
+      [escapeMrkdwn(title), ...sections, `View run details: ${runUrl}`].join(
+        "\n\n"
+      )
+    ),
     blocks,
   };
 }
 
 const REPORT_EXCERPT_CHARS = 1500;
+// Slack rejects a section over 3,000 characters and a message whose text is
+// over 4,000. Escaping can multiply the report's length, so the rendered
+// text is what gets budgeted.
+const REPORT_SECTION_CHARS = 2800;
+const MESSAGE_TEXT_CHARS = 3900;
+
+function cutAtWord(characters: string[], limit: number) {
+  const head = characters.slice(0, limit - 1).join("");
+  const wordEnd = head.search(/\s\S*$/);
+  return `${(wordEnd > 0 ? head.slice(0, wordEnd) : head).trimEnd()}…`;
+}
 
 /**
  * The agent's report keeps its line breaks so its Markdown can be rendered.
@@ -164,13 +175,26 @@ function closingReport(input: {
         : input.summary;
   if (!full) return null;
   const characters = Array.from(full);
-  if (characters.length <= REPORT_EXCERPT_CHARS) {
-    return { text: full, excerpt: false };
+  let budget = REPORT_EXCERPT_CHARS;
+  for (;;) {
+    const excerpt = characters.length > budget;
+    const mrkdwn = markdownToMrkdwn(
+      excerpt ? cutAtWord(characters, budget) : full
+    );
+    if (mrkdwn.length <= REPORT_SECTION_CHARS || budget <= 2) {
+      return { mrkdwn, excerpt };
+    }
+    // Shrink the source in proportion to how far the rendering overshot.
+    budget = Math.max(
+      2,
+      Math.floor((budget * REPORT_SECTION_CHARS) / mrkdwn.length) - 1
+    );
   }
-  const head = characters.slice(0, REPORT_EXCERPT_CHARS - 1).join("");
-  const wordEnd = head.search(/\s\S*$/);
-  return {
-    text: `${(wordEnd > 0 ? head.slice(0, wordEnd) : head).trimEnd()}…`,
-    excerpt: true,
-  };
+}
+
+function capMessageText(text: string) {
+  const characters = Array.from(text);
+  return characters.length > MESSAGE_TEXT_CHARS
+    ? cutAtWord(characters, MESSAGE_TEXT_CHARS)
+    : text;
 }

@@ -1,4 +1,5 @@
 import { buildAppUrl } from "@/lib/app-url";
+import { escapeMrkdwn } from "./markdown-to-mrkdwn";
 import { buildCancelRunActionsBlock } from "./run-controls";
 import type { SlackBlock } from "./client";
 import { progressText, type RunProgressState } from "./run-progress-state";
@@ -15,12 +16,6 @@ export type ProgressRun = {
   ai_call_id?: string;
   status?: string;
 };
-function escapeMrkdwn(text: string) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
 export function runProgressTitle(run: ProgressRun): string {
   const metadata =
     run.metadata && typeof run.metadata === "object"
