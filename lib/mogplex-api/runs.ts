@@ -168,6 +168,15 @@ async function queueExternalAgentRun(input: {
   };
 }
 
+function extractTerminalCommitSha(
+  metadata: Record<string, unknown>
+): string | null {
+  const sha = metadata?.terminal_commit_sha;
+  if (typeof sha !== "string" || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(sha))
+    return null;
+  return sha;
+}
+
 export function presentMogplexApiRun(row: ExternalAgentRunRow) {
   return {
     runId: row.id,
@@ -195,6 +204,7 @@ export function presentMogplexApiRun(row: ExternalAgentRunRow) {
       provider: row.runtime_provider,
       runId: row.runtime_run_id,
     },
+    terminalCommitSha: extractTerminalCommitSha(row.metadata),
   } satisfies MogplexApiRunDetail;
 }
 

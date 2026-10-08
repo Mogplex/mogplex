@@ -17,6 +17,10 @@ import type {
   MogplexApiRunStatus,
 } from "@/lib/mogplex-api/runs";
 import type { AiCall } from "@/lib/types";
+import {
+  recordTerminalCommitSha,
+  type RecordTerminalCommitDeps,
+} from "./run-terminal-commit";
 
 export type ExternalAgentRunExecutionPayload = {
   runId: string;
@@ -38,7 +42,12 @@ export type HarnessRunResult = {
 export type ExternalAgentRunUpdate = Partial<
   Pick<
     ExternalAgentRunRow,
-    "sandbox_record_id" | "sandbox_id" | "status" | "error" | "ai_call_id"
+    | "sandbox_record_id"
+    | "sandbox_id"
+    | "status"
+    | "error"
+    | "ai_call_id"
+    | "metadata"
   >
 >;
 
@@ -84,6 +93,11 @@ export type FinalizeDeps = HarnessPassNotifiers & {
   ) => Promise<ExternalAgentRunRow>;
   loadAiCall: typeof loadOwnedAiCall;
   appendEvent: typeof safeAppendAiCallEvent;
+  /** Optional terminal commit recording for artifact pinning. */
+  recordTerminalCommit?: (
+    run: ExternalAgentRunRow,
+    deps?: Partial<RecordTerminalCommitDeps>
+  ) => Promise<void>;
 };
 
 async function safeNotifyTerminal(
@@ -154,6 +168,19 @@ export async function finalizeHarnessPass(
     status,
     error: aiCall?.error ?? null,
   });
+
+  // Record terminal commit SHA for successful runs (best-effort, non-blocking).
+  // This pins artifact reads to the exact commit at run completion.
+  if (status === "success") {
+    const recordFn = deps.recordTerminalCommit ?? recordTerminalCommitSha;
+    recordFn(finished).catch((error) => {
+      console.warn("[run-execution] terminal commit recording failed", {
+        runId: finished.id,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    });
+  }
+
   await safeNotifyTerminal(deps, finished, status);
 
   return {

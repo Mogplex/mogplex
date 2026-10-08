@@ -40,24 +40,42 @@ export class RunArtifactError extends Error {
   }
 }
 
+function classifyGitHubFailure(status: number) {
+  if (status === 403 || status === 429) return "rate_limit";
+  if (status === 401) return "auth";
+  if (status >= 500) return "upstream";
+  return "other";
+}
+
 async function githubJson(token: string, url: string): Promise<unknown> {
   // Network, TLS, redirect, and timeout rejections are provider outages, not server bugs.
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    cache: "no-store",
-    redirect: "error",
-    signal: AbortSignal.timeout(15000),
-  }).catch(() => {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (error) {
+    const errorClass =
+      error instanceof Error ? error.constructor.name : "UnknownError";
+    console.error("[artifact] GitHub request failed", { errorClass });
     throw new RunArtifactError(502, "Could not read the committed artifact");
-  });
+  }
   if (response.status === 404)
     throw new RunArtifactError(404, "Committed artifact not found");
-  if (!response.ok)
+  if (!response.ok) {
+    console.error("[artifact] GitHub returned error", {
+      status: response.status,
+      errorClass: classifyGitHubFailure(response.status),
+    });
     throw new RunArtifactError(502, "Could not read the committed artifact");
+  }
   return response.json().catch(() => {
     throw new RunArtifactError(502, "GitHub returned an invalid response");
   });
@@ -155,7 +173,11 @@ function decodeArtifact(raw: unknown) {
   }
 }
 
-/** Read an explicit output at one immutable commit, using the run owner's existing repo access. */
+/**
+ * Read an explicit output at one immutable commit, using the run owner's existing repo access.
+ * When the run has a recorded terminal commit SHA, uses that exact commit.
+ * Falls back to the branch tip for older runs without a recorded SHA.
+ */
 export async function loadRunArtifact(
   input: { userId: string; runId: string; path: string },
   overrides: Partial<RunArtifactDeps> = {}
@@ -174,13 +196,21 @@ export async function loadRunArtifact(
     throw new RunArtifactError(409, "Reconnect GitHub to read the artifact");
   const base = `https://api.github.com/repos/${repo.full_name.split("/").map(encodeURIComponent).join("/")}`;
   const read = (url: string) => deps.githubJson(githubToken, url);
+
+  // Use the recorded terminal commit SHA if present (pinned), otherwise fall
+  // back to the branch tip (unpinned). Older runs without a recorded SHA will
+  // use the branch tip, which may have changed since the run completed.
+  const terminalCommitSha = run.terminalCommitSha;
+  const pinned = Boolean(terminalCommitSha);
+  const commitRef = terminalCommitSha ?? run.branch.working;
+
   const commit = parseProvider(
     z.object({
       // SHA-1 (40 hex) or SHA-256 object-format (64 hex) repositories.
       sha: z.string().regex(/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/),
       commit: z.object({ tree: z.object({ sha: z.string().min(1) }) }),
     }),
-    await read(`${base}/commits/${encodeURIComponent(run.branch.working)}`)
+    await read(`${base}/commits/${encodeURIComponent(commitRef)}`)
   );
   const blobSha = await readBlobSha(base, commit.commit.tree.sha, path, read);
   const content = decodeArtifact(
@@ -192,6 +222,7 @@ export async function loadRunArtifact(
     path,
     branch: run.branch.working,
     commitSha: commit.sha,
+    pinned,
     content,
   };
 }

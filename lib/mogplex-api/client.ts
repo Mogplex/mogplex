@@ -60,6 +60,18 @@ export type MogplexApiRunCancelResult = {
   status: string;
 };
 
+export type MogplexApiRunArtifactResult = {
+  artifact: {
+    runId: string;
+    repoId: string;
+    path: string;
+    branch: string;
+    commitSha: string;
+    pinned: boolean;
+    content: unknown;
+  };
+};
+
 export type RerunMogplexPrReviewResult = {
   queued: boolean;
   jobRunId: string | null;
@@ -428,6 +440,17 @@ export class MogplexApiClient {
       `/api/v1/mogplex/runs/${encodeURIComponent(input.runId)}/cancel`,
       {
         method: "POST",
+      }
+    );
+  }
+
+  getRunArtifact(input: { runId: string; path: string }) {
+    return this.request<MogplexApiRunArtifactResult>(
+      `/api/v1/mogplex/runs/${encodeURIComponent(input.runId)}/artifact`,
+      {
+        query: {
+          path: input.path,
+        },
       }
     );
   }

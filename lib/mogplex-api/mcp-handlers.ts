@@ -21,6 +21,7 @@ import {
   listSkillsArgsSchema,
   repoIdArgsSchema,
   rerunPrReviewArgsSchema,
+  runArtifactArgsSchema,
   runEventsArgsSchema,
   runIdArgsSchema,
   sandboxIdArgsSchema,
@@ -365,6 +366,17 @@ export async function callMogplexTool(
         const result = await context.client.cancelRun(input);
         return textResult(
           `Cancellation requested for Mogplex run ${result.run.runId}. Status: ${result.status}.`,
+          result
+        );
+      }
+      case "mogplex_get_run_artifact": {
+        const input = parseArgs(runArtifactArgsSchema, args);
+        const result = await context.client.getRunArtifact(input);
+        const pinnedLabel = result.artifact.pinned
+          ? " (pinned)"
+          : " (branch tip)";
+        return textResult(
+          `Loaded artifact ${result.artifact.path} from run ${result.artifact.runId} at commit ${result.artifact.commitSha.slice(0, 7)}${pinnedLabel}.`,
           result
         );
       }

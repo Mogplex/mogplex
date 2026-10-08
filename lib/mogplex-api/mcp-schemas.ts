@@ -187,6 +187,18 @@ export const runEventsArgsSchema = runIdArgsSchema.extend({
   limit: limitSchema,
 });
 
+export const runArtifactArgsSchema = runIdArgsSchema.extend({
+  path: z
+    .string()
+    .trim()
+    .min(1)
+    .max(240)
+    .regex(
+      /^\.mogplex\/artifacts\/[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$/,
+      "path must be a JSON file in .mogplex/artifacts/"
+    ),
+});
+
 export const emptyObjectSchema = {
   type: "object",
   additionalProperties: false,

@@ -143,6 +143,12 @@ export type MogplexApiRunDetail = {
     provider: string | null;
     runId: string | null;
   };
+  /**
+   * The commit SHA at the tip of the working branch when the run finished
+   * successfully. Used to pin artifact reads to an immutable commit. Null for
+   * older runs or runs that did not finish successfully.
+   */
+  terminalCommitSha: string | null;
 };
 
 export class MogplexApiRunError extends Error {
