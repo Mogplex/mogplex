@@ -31,6 +31,9 @@ describe("normalizeRepoFullName", () => {
 
 describe("resolveRunRepository", () => {
   it("prefers the persisted target over context and current repository data", () => {
+    // Test that repo_full_name wins over legacy repo when both are present.
+    // In production, legacy `repo` also held the run target (written by
+    // buildRunMetadata), so this case exercises precedence, not a real conflict.
     expect(
       resolveRunRepository(
         {
@@ -38,7 +41,7 @@ describe("resolveRunRepository", () => {
           metadata: {
             run_origin: "slack",
             repo_full_name: "webrenew/gtm-supahost",
-            repo: "Mogplex/mogplex",
+            repo: "webrenew/old-target-snapshot",
           },
         },
         repos

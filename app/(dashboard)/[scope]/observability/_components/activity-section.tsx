@@ -92,11 +92,12 @@ function WhoCell({
       <div className="text-foreground">{model}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
       {call.type === "agent" && (
+        // aria-label is a Playwright test hook (generic elements ignore it for AT)
         <div
           className="max-w-40 whitespace-normal break-all font-mono text-xs text-muted-foreground"
           aria-label="Run repository"
         >
-          {repository || "Repository not recorded"}
+          {repository || "Not recorded"}
         </div>
       )}
     </div>
@@ -344,6 +345,7 @@ export function ActivitySection({
         if (row.original.type === "agent") {
           const repository = resolveRunRepository(row.original, reposById)
           return (
+            // aria-label is a Playwright test hook (generic elements ignore it for AT)
             <span
               className="max-w-40 whitespace-normal break-all text-xs text-muted-foreground"
               aria-label="Run repository location"

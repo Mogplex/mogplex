@@ -58,9 +58,7 @@ for (const width of [390, 1280]) {
         exact: true,
       });
       await expect(summary).toHaveText(
-        snapshot === "missing"
-          ? "Repository not recorded"
-          : "webrenew/gtm-supahost"
+        snapshot === "missing" ? "Not recorded" : "webrenew/gtm-supahost"
       );
       await expect(details).toContainText(
         snapshot === "missing" ? "Not recorded" : "webrenew/gtm-supahost"

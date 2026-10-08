@@ -104,6 +104,7 @@ export function CallExpandedRow({
 
   return (
     <div className="space-y-3 p-4 text-sm">
+      {/* aria-label is a Playwright test hook (generic elements ignore it for AT) */}
       {call.type === "agent" && (
         <div
           className="max-w-64 whitespace-normal"
