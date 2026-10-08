@@ -9,10 +9,11 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
   try {
     await pg.exec(`
       create table ai_calls(id text primary key, type text, status text, started_at timestamptz,
-        user_id text, conversation_id text, repo_id text, metadata jsonb, error text, completed_at timestamptz);
+        user_id text, conversation_id text, repo_id text, runtime_command_id text, metadata jsonb, error text,
+        completed_at timestamptz);
       create table control_continuations(resume_ai_call_id text, user_id text);
       create table ai_call_events(ai_call_id text, user_id text, conversation_id text, repo_id text,
-        event_type text, message text, payload jsonb);
+        event_type text, message text, payload jsonb, created_at timestamptz default now());
     `);
     const now = Date.now();
     for (const [id, type, ageMs, metadata] of [
@@ -23,6 +24,12 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
         "live-continuation",
         "agent",
         15 * 60_000,
+        { surface: "control", control_runtime: "background" },
+      ],
+      [
+        "busy-continuation",
+        "agent",
+        2 * 60 * 60_000,
         { surface: "control", control_runtime: "background" },
       ],
       [
@@ -50,6 +57,11 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
     await pg.exec(
       "insert into control_continuations values ('legacy-continuation', 'owner')"
     );
+    // Old, but it reported progress five minutes ago.
+    await pg.query(
+      "insert into ai_call_events(ai_call_id,user_id,event_type,created_at) values('busy-continuation','owner','log',$1)",
+      [new Date(now - 5 * 60_000).toISOString()]
+    );
     const queryable: Queryable = {
       query: async (text, values) => {
         const result = await pg.query(text, values);
@@ -57,9 +69,14 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
       },
     };
     const client = createPostgrestShim(queryable) as unknown as SupabaseClient;
+    const stopped: string[] = [];
+    const stopWorker = async (input: { call: { id: string } }) => {
+      stopped.push(input.call.id);
+      return false;
+    };
     const results = await Promise.all([
-      reapStaleAiCalls(client),
-      reapStaleAiCalls(client),
+      reapStaleAiCalls(client, stopWorker),
+      reapStaleAiCalls(client, stopWorker),
     ]);
     expect(results.map((result) => result.error)).toEqual([null, null]);
     expect(results.reduce((count, result) => count + result.reaped, 0)).toBe(5);
@@ -67,6 +84,7 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
       "select id,status from ai_calls order by id"
     );
     expect(states.rows).toEqual([
+      { id: "busy-continuation", status: "streaming" },
       { id: "dead-continuation", status: "failed" },
       { id: "dead-control", status: "failed" },
       { id: "dead-legacy-control", status: "failed" },
@@ -78,8 +96,22 @@ it("preserves a live extended chat while reaping expired chats and prepared harn
       { id: "prepared-agent", status: "failed" },
       { id: "quiet-chat", status: "streaming" },
     ]);
+    // Each reaped call has its worker stopped once; live ones are untouched.
+    expect(stopped.toSorted()).toEqual([
+      "dead-continuation",
+      "dead-control",
+      "dead-legacy-control",
+      "expired-chat",
+      "prepared-agent",
+    ]);
+    const reaped = await pg.query<{ error: string }>(
+      "select error from ai_calls where id='dead-continuation'"
+    );
+    expect(reaped.rows[0].error).toBe(
+      "Stopped after 31 minutes with no progress."
+    );
     const events = await pg.query<{ ai_call_id: string }>(
-      "select ai_call_id from ai_call_events order by ai_call_id"
+      "select ai_call_id from ai_call_events where event_type='failed' order by ai_call_id"
     );
     expect(events.rows).toEqual([
       { ai_call_id: "dead-continuation" },

@@ -6,7 +6,7 @@ import {
   failControlContinuation,
 } from "@/lib/control/continuation-runtime";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
-import { AGENT_WORKER_MAX_DURATION_SECONDS } from "@/lib/trigger/agent-worker-duration";
+import { AGENT_WORKER_TASK_OPTIONS } from "@/lib/trigger/agent-worker-duration";
 import {
   reconcileControlContinuationWorker,
   superviseControlContinuation,
@@ -17,8 +17,7 @@ export const executeControlContinuationWorkerTask = schemaTask({
   schema: controlContinuationPayload.extend({
     supervisorRunId: z.string().min(1),
   }),
-  maxDuration: AGENT_WORKER_MAX_DURATION_SECONDS,
-  retry: { maxAttempts: 1 },
+  ...AGENT_WORKER_TASK_OPTIONS,
   run: (payload, { signal }) =>
     executeControlContinuation(payload, payload.supervisorRunId, signal),
   onCancel: async ({ payload, runPromise }) => {

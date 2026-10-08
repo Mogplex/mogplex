@@ -75,8 +75,6 @@ export type ZombieReaperRunnerDeps = {
   captureWarning: (message: string, extra: Record<string, unknown>) => void;
 };
 
-export const ZOMBIE_REAPED_ERROR_MESSAGE =
-  "Run interrupted before finalize (reaped by zombie-row-reaper)";
 export const ZOMBIE_REAPED_CANCEL_REASON = "ZOMBIE_REAPED";
 
 export function safeAgeMs(anchor: string | null, now: number): number | null {

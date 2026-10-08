@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { AI_CALL_TYPE_SET } from "@/lib/ai-call-types";
 import { isStaleLiveInteractiveCall } from "@/lib/interactive-runs";
+import { loadLatestCallActivity } from "@/lib/zombies/ai-call-activity";
 import type { NextRequest } from "next/server";
 import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import type { AiCall, SandboxCallContext } from "@/lib/types";
@@ -40,6 +41,9 @@ type ObservabilityCallsGetDeps = {
     order: boolean
   ) => QueryLike;
   isStaleLiveInteractiveCall: typeof isStaleLiveInteractiveCall;
+  loadLatestActivity: (
+    callIds: string[]
+  ) => Promise<Map<string, string | null | undefined>>;
   loadSandboxRecords: (
     userId: string,
     sandboxRecordIds: string[]
@@ -74,6 +78,8 @@ const defaultObservabilityCallsGetDeps: ObservabilityCallsGetDeps = {
     return query as QueryLike;
   },
   isStaleLiveInteractiveCall,
+  loadLatestActivity: (callIds) =>
+    loadLatestCallActivity(supabaseAdmin, callIds),
   async loadSandboxRecords(userId, sandboxRecordIds) {
     if (sandboxRecordIds.length === 0) return [];
     const { data, error } = await supabaseAdmin
@@ -424,8 +430,23 @@ export function createObservabilityCallsGetHandler(
         );
       }
 
-      const filteredLiveCalls = ((data as AiCallRow[] | null) ?? []).filter(
-        (call) => !deps.isStaleLiveInteractiveCall(call as never)
+      // A call is only hidden once it has gone without progress for its
+      // whole window; calls that are merely old get their newest event read.
+      const liveCalls = (data as AiCallRow[] | null) ?? [];
+      const agedIds = liveCalls
+        .filter((call) => deps.isStaleLiveInteractiveCall(call as never))
+        .map((call) => String(call.id));
+      const activity =
+        agedIds.length > 0
+          ? await deps.loadLatestActivity(agedIds)
+          : new Map<string, string | null | undefined>();
+      const filteredLiveCalls = liveCalls.filter(
+        (call) =>
+          !deps.isStaleLiveInteractiveCall(
+            call as never,
+            undefined,
+            activity.get(String(call.id))
+          )
       );
       const pagedCalls = filteredLiveCalls.slice(
         (page - 1) * limit,

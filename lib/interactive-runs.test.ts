@@ -151,6 +151,37 @@ describe("appendAiCallEvent", () => {
   });
 });
 
+describe("idle staleness", () => {
+  const now = Date.parse("2026-10-08T12:00:00Z");
+  const continuation = {
+    type: "agent" as const,
+    status: "streaming" as const,
+    started_at: new Date(now - 3 * 60 * 60_000).toISOString(),
+    metadata: { surface: "control", control_runtime: "background" },
+  };
+
+  it("should keep an old call that recorded progress inside its window", () => {
+    expect(
+      isStaleLiveInteractiveCall(
+        continuation,
+        now,
+        new Date(now - 30 * 60_000).toISOString()
+      )
+    ).toBe(false);
+  });
+
+  it("should count a call whose last progress is older than its window as stale", () => {
+    expect(
+      isStaleLiveInteractiveCall(
+        continuation,
+        now,
+        new Date(now - 31 * 60_000).toISOString()
+      )
+    ).toBe(true);
+    expect(isStaleLiveInteractiveCall(continuation, now, null)).toBe(true);
+  });
+});
+
 describe("Control turn staleness", () => {
   const now = Date.parse("2026-10-02T12:00:00Z");
   function call(
