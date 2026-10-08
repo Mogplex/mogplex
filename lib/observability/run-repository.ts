@@ -1,0 +1,22 @@
+type Repository = { full_name: string };
+
+function fullName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.trim();
+  return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(name) ? name : null;
+}
+
+/** Resolve the run target, never the currently selected workspace/conversation.
+ * Snapshots survive repo removal/renames and take priority over the repo picker.
+ * `repo` is the snapshot written by older external runs (including Slack).
+ */
+export function resolveRunRepository(
+  call: { repo_id: string | null; metadata?: Record<string, unknown> | null },
+  reposById: ReadonlyMap<string, Repository> = new Map()
+): string | null {
+  return (
+    fullName(call.metadata?.repo_full_name) ??
+    fullName(call.metadata?.repo) ??
+    (call.repo_id ? fullName(reposById.get(call.repo_id)?.full_name) : null)
+  );
+}

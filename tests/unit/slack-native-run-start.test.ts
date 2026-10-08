@@ -3,6 +3,7 @@ import test from "node:test";
 import { defaultStartRepoAgentRun } from "../../trigger/slack-event-lib/run-start";
 import { startMogplexApiRun } from "../../lib/mogplex-api/runs";
 import {
+  buildAiCall,
   buildRunRow,
   buildStartDeps,
 } from "./helpers/mogplex-api-runs-fixtures";
@@ -10,6 +11,7 @@ import {
 for (const preference of [null, "mogplex", "codex", "claude-code"] as const) {
   test(`Slack message and image honor harness preference ${preference ?? "default"}`, async () => {
     let stored = buildRunRow();
+    let observedCall = buildAiCall();
     const image = {
       id: "F1",
       mimetype: "image/png" as const,
@@ -35,7 +37,29 @@ for (const preference of [null, "mogplex", "codex", "claude-code"] as const) {
       (input) =>
         startMogplexApiRun({
           ...input,
+          // Stale/caller context must not override the server-resolved target.
+          extraMetadata: {
+            ...input.extraMetadata,
+            repo: "Mogplex/mogplex",
+            repo_full_name: "Mogplex/mogplex",
+          },
           deps: buildStartDeps({
+            loadOwnedRepo: async (repoId, _userId) => {
+              assert.equal(repoId, stored.repo_id);
+              return {
+                id: repoId,
+                full_name: "webrenew/gtm-supahost",
+                default_branch: "main",
+                root_directory: null,
+              };
+            },
+            createAiCall: async (input) => {
+              observedCall = buildAiCall({
+                repo_id: input.repoId,
+                metadata: input.metadata,
+              });
+              return observedCall;
+            },
             insertRun: async (insert) => {
               stored = buildRunRow({
                 harness: insert.normalized.harness,
@@ -64,6 +88,12 @@ for (const preference of [null, "mogplex", "codex", "claude-code"] as const) {
     assert.equal(result.runId, stored.id);
     assert.equal(stored.harness, preference ?? "mogplex");
     assert.equal(stored.metadata.harness_id, preference ?? "mogplex");
+    for (const metadata of [stored.metadata, observedCall.metadata!]) {
+      assert.equal(metadata.run_origin, "slack");
+      assert.equal(metadata.repo, "webrenew/gtm-supahost");
+      assert.equal(metadata.repo_full_name, "webrenew/gtm-supahost");
+      assert.equal(metadata.repo_id, stored.repo_id);
+    }
     assert.equal(
       stored.metadata.slack_model_id,
       preference === null || preference === "mogplex"

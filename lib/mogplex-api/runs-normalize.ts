@@ -274,6 +274,7 @@ export function buildRunMetadata(input: {
     harness_id: input.normalized.harness,
     repo_id: input.normalized.repoId,
     repo: input.repo.full_name,
+    repo_full_name: input.repo.full_name,
     base_branch: input.normalized.baseBranch,
     working_branch: input.normalized.workingBranch,
     root_directory: input.normalized.rootDirectory,

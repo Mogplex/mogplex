@@ -7,6 +7,7 @@ import { DataTable } from "@/components/ui/data-table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { ActivityFilters } from "@/hooks/use-observability-activity"
 import { resolveGithubObservabilityLink } from "@/lib/observability/github-links"
+import { resolveRunRepository } from "@/lib/observability/run-repository"
 import type { AiCall } from "@/lib/types"
 import {
   AutomationCostCell,
@@ -78,13 +79,24 @@ function PrCell({
   )
 }
 
-function WhoCell({ call }: { call: AiCall }) {
+function WhoCell({ call, repository }: {
+  call: AiCall
+  repository: string | null
+}) {
   const model = call.model.split("/").pop() ?? call.model
   const label = CALL_TYPE_LABELS[call.type] ?? call.type
   return (
     <div className="space-y-0.5">
       <div className="text-foreground">{model}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
+      {call.type === "agent" && (
+        <div
+          className="max-w-40 whitespace-normal break-all font-mono text-xs"
+          aria-label="Run repository"
+        >
+          {repository || "Repository not recorded"}
+        </div>
+      )}
     </div>
   )
 }
@@ -316,12 +328,24 @@ export function ActivitySection({
     {
       id: "who",
       header: "Who",
-      cell: ({ row }) => <WhoCell call={row.original} />,
+      cell: ({ row }) => (
+        <WhoCell
+          call={row.original}
+          repository={resolveRunRepository(row.original, reposById)}
+        />
+      ),
     },
     {
       id: "where",
       header: "Where",
       cell: ({ row }) => {
+        if (row.original.type === "agent") {
+          return (
+            <span className="text-xs">
+              {resolveRunRepository(row.original, reposById) || "Not recorded"}
+            </span>
+          )
+        }
         const repoId = row.original.repo_id
         if (!repoId) return <span className="text-muted-foreground">—</span>
         const repo = reposById.get(repoId)
@@ -411,6 +435,7 @@ export function ActivitySection({
           renderExpandedRow={(call) => (
             <CallExpandedRow
               call={call}
+              repository={resolveRunRepository(call, reposById)}
               canOpenSandboxHealth={canOpenSandboxHealth(call)}
               onOpenSandboxHealth={onOpenSandboxHealth}
             />

@@ -6,6 +6,43 @@ import {
   FakeQuery,
 } from "./helpers/observability-calls-route-fixtures";
 
+test("GET /api/observability/calls preserves Slack target snapshots with user scoping", async () => {
+  const { createObservabilityCallsGetHandler } =
+    await loadObservabilityCallsRoute();
+  const metadata = {
+    run_origin: "slack",
+    repo_full_name: "webrenew/gtm-supahost",
+    repo: "webrenew/gtm-supahost",
+  };
+  const query = new FakeQuery({
+    data: [
+      {
+        id: "slack-call",
+        type: "agent",
+        status: "success",
+        repo_id: "target",
+        metadata,
+      },
+    ],
+    count: 1,
+    error: null,
+  });
+  const handler = createObservabilityCallsGetHandler({
+    requireUserId: async () => "user-123",
+    buildQuery: (userId) => {
+      assert.equal(userId, "user-123");
+      return query as never;
+    },
+  });
+  const response = await handler(
+    new NextRequest("http://localhost/api/observability/calls")
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.deepEqual(payload.calls[0].metadata, metadata);
+  assert.equal(payload.calls[0].repo_id, "target");
+});
+
 test("GET /api/observability/calls paginates after stale live rows are filtered", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();
