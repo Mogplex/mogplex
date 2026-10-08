@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { getOwnedRepoWithGithubAccessToken } from "@/lib/github-access";
-import { loadMogplexApiRun } from "./runs";
+import { presentMogplexApiRun } from "./runs";
+import { loadRunById } from "./runs-db";
 import type { MogplexApiRunDetail } from "./runs-types";
 
+// Always repository-root-relative, even when the run has a rootDirectory.
 // Explicit output files only. Never expose arbitrary checkout files or follow symlinks.
 export const runArtifactPathSchema = z
   .string()
@@ -14,16 +16,19 @@ type Repo = {
   full_name: string;
   github_installation_id?: number | null;
 };
-type Tree = {
-  truncated?: boolean;
-  tree: Array<{
-    path: string;
-    mode: string;
-    type: string;
-    sha: string;
-    size?: number;
-  }>;
-};
+const treeSchema = z.object({
+  truncated: z.boolean().optional(),
+  tree: z.array(
+    z.object({
+      path: z.string(),
+      mode: z.string(),
+      type: z.string(),
+      sha: z.string().min(1),
+      size: z.number().nonnegative().optional(),
+    })
+  ),
+});
+type Tree = z.infer<typeof treeSchema>;
 
 export class RunArtifactError extends Error {
   constructor(
@@ -31,6 +36,7 @@ export class RunArtifactError extends Error {
     message: string
   ) {
     super(message);
+    this.name = "RunArtifactError";
   }
 }
 
@@ -49,7 +55,9 @@ async function githubJson(token: string, url: string): Promise<unknown> {
     throw new RunArtifactError(404, "Committed artifact not found");
   if (!response.ok)
     throw new RunArtifactError(502, "Could not read the committed artifact");
-  return response.json();
+  return response.json().catch(() => {
+    throw new RunArtifactError(502, "GitHub returned an invalid response");
+  });
 }
 
 export type RunArtifactDeps = {
@@ -64,7 +72,11 @@ export type RunArtifactDeps = {
   githubJson: typeof githubJson;
 };
 const defaults: RunArtifactDeps = {
-  loadRun: loadMogplexApiRun,
+  // Artifacts only need stored terminal state, not run/compute/notification reconciliation.
+  loadRun: async ({ userId, runId }) => {
+    const row = await loadRunById(userId, runId);
+    return row ? presentMogplexApiRun(row) : null;
+  },
   loadRepo: (repoId, userId) =>
     getOwnedRepoWithGithubAccessToken<Repo>(repoId, userId, {
       select: "user_id, full_name, github_installation_id",
@@ -93,9 +105,10 @@ async function readBlobSha(
   const segments = path.split("/");
   let current = treeSha;
   for (const [index, segment] of segments.entries()) {
-    const tree = (await read(
-      `${base}/git/trees/${encodeURIComponent(current)}`
-    )) as Tree;
+    const tree = parseProvider(
+      treeSchema,
+      await read(`${base}/git/trees/${encodeURIComponent(current)}`)
+    );
     const entry = tree.tree.find((item) => item.path === segment);
     if (!entry || tree.truncated)
       throw new RunArtifactError(404, "Committed artifact not found");
@@ -145,7 +158,10 @@ export async function loadRunArtifact(
   overrides: Partial<RunArtifactDeps> = {}
 ) {
   const deps = { ...defaults, ...overrides };
-  const path = runArtifactPathSchema.parse(input.path);
+  const parsedPath = runArtifactPathSchema.safeParse(input.path);
+  if (!parsedPath.success)
+    throw new RunArtifactError(400, "Use a JSON file in .mogplex/artifacts");
+  const path = parsedPath.data;
   const run = await deps.loadRun(input);
   if (!run) throw new RunArtifactError(404, "Run not found");
   assertFinishedBranch(run);
@@ -155,14 +171,13 @@ export async function loadRunArtifact(
     throw new RunArtifactError(409, "Reconnect GitHub to read the artifact");
   const base = `https://api.github.com/repos/${repo.full_name.split("/").map(encodeURIComponent).join("/")}`;
   const read = (url: string) => deps.githubJson(githubToken, url);
-  const commit = z
-    .object({
+  const commit = parseProvider(
+    z.object({
       sha: z.string().regex(/^[a-f0-9]{40}$/),
-      commit: z.object({ tree: z.object({ sha: z.string() }) }),
-    })
-    .parse(
-      await read(`${base}/commits/${encodeURIComponent(run.branch.working)}`)
-    );
+      commit: z.object({ tree: z.object({ sha: z.string().min(1) }) }),
+    }),
+    await read(`${base}/commits/${encodeURIComponent(run.branch.working)}`)
+  );
   const blobSha = await readBlobSha(base, commit.commit.tree.sha, path, read);
   const content = decodeArtifact(
     await read(`${base}/git/blobs/${encodeURIComponent(blobSha)}`)
@@ -175,4 +190,11 @@ export async function loadRunArtifact(
     commitSha: commit.sha,
     content,
   };
+}
+
+function parseProvider<T>(schema: z.ZodType<T>, value: unknown): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success)
+    throw new RunArtifactError(502, "GitHub returned an invalid response");
+  return parsed.data;
 }

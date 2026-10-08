@@ -60,6 +60,8 @@ export function createRunArtifactGetHandler(
       }
       console.error("[mogplex-api/artifact] Could not read artifact", {
         runId,
+        errorType:
+          error instanceof Error ? error.constructor.name : "UnknownError",
       });
       return mogplexApiError("INTERNAL_ERROR", "Could not read artifact", 500);
     }

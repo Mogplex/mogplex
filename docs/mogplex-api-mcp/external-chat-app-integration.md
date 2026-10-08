@@ -182,11 +182,14 @@ Use the same bearer authentication as the run APIs. The response envelope contai
 `content`. It uses the caller's existing repository access; no GitHub token is
 returned or copied to the consuming app.
 
+Artifact paths are always relative to the repository root, including runs with a
+non-null `rootDirectory`; write outputs there, not under the application subfolder.
 Only one regular JSON file under `.mogplex/artifacts/` is accepted (letters,
 digits, hyphens and underscores in its name, up to 1 MiB). Symlinks, traversal,
-submodules, unfinished runs and runs on their base branch are refused. The run
-and repository must both belong to the authenticated caller. Errors never include
-file content or provider credentials.
+submodules, unfinished runs and runs on their base branch are refused. The stored
+run is read without replaying runtime cleanup or notification checks. The run and
+repository must both belong to the authenticated caller. Errors never include file
+content or provider credentials.
 
 The endpoint resolves the run's working branch **at read time**, then reads every
 tree/blob from that immutable commit. `commitSha` identifies the imported content;

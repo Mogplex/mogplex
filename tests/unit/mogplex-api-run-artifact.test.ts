@@ -9,6 +9,14 @@ import {
 
 const commitSha = "a".repeat(40);
 const path = ".mogplex/artifacts/preview-test.json";
+
+function matchesMalformedProvider(url: string, malformed?: "commit" | "tree") {
+  return (
+    (malformed === "commit" && url.includes("/commits/")) ||
+    (malformed === "tree" && url.includes("/trees/"))
+  );
+}
+
 async function setup(
   options: {
     owned?: boolean;
@@ -16,6 +24,9 @@ async function setup(
     mode?: string;
     content?: string;
     providerFailure?: boolean;
+    malformed?: "commit" | "tree";
+    rootDirectory?: string;
+    repositoryFailure?: boolean;
   } = {}
 ) {
   await loadRunDetailRoute();
@@ -35,14 +46,21 @@ async function setup(
                 buildRunRow({
                   status: options.status ?? "success",
                   create_branch: true,
+                  root_directory: options.rootDirectory ?? null,
                 })
               ),
-        loadRepo: async () => ({
-          repo: { user_id: "user-123", full_name: "webrenew/previews" },
-          githubToken: "test-token",
-        }),
+        loadRepo: async () => {
+          if (options.repositoryFailure)
+            throw new TypeError("PRIVATE DATABASE DETAIL");
+          return {
+            repo: { user_id: "user-123", full_name: "webrenew/previews" },
+            githubToken: "test-token",
+          };
+        },
         githubJson: async (_token, url) => {
           urls.push(url);
+          if (matchesMalformedProvider(url, options.malformed))
+            return { private: "PRIVATE PROVIDER CONTENT" };
           if (options.providerFailure)
             throw new RunArtifactError(
               502,
@@ -155,4 +173,31 @@ test("invalid JSON and provider failures return safe errors", async () => {
   assert.ok(!(await response.text()).includes("PRIVATE"));
   const failure = await setup({ providerFailure: true });
   assert.equal((await failure.request()).status, 502);
+});
+
+test("malformed provider commits and trees return a sanitized 502", async () => {
+  for (const malformed of ["commit", "tree"] as const) {
+    const { request } = await setup({ malformed });
+    const response = await request();
+    assert.equal(response.status, 502);
+    assert.ok(!(await response.text()).includes("PRIVATE"));
+  }
+});
+test("monorepo artifacts are explicitly anchored at the repository root", async () => {
+  const { request } = await setup({ rootDirectory: "apps/web" });
+  const response = await request();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.artifact.path, path);
+});
+
+test("unexpected failures log an error class without private content", async (context) => {
+  const log = context.mock.method(console, "error", () => {});
+  const { request } = await setup({ repositoryFailure: true });
+  const response = await request();
+  assert.equal(response.status, 500);
+  assert.ok(!(await response.text()).includes("PRIVATE"));
+  assert.deepEqual(log.mock.calls[0].arguments[1], {
+    runId: "run-1",
+    errorType: "TypeError",
+  });
 });
