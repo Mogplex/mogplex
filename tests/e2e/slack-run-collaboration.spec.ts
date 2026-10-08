@@ -26,7 +26,10 @@ import { deliverSlackRunUpdate } from "../../lib/slack/run-delivery";
 import { stripSlackRunControlsForTerminalRun } from "../../lib/slack/run-controls-notify";
 import { emptyRunResultEvidence } from "../../lib/slack/run-result-evidence";
 import { buildRunRow } from "../unit/helpers/mogplex-api-runs-fixtures";
-import type { UpdateSlackMessageInput } from "../../lib/slack/client";
+import type {
+  PostSlackMessageInput,
+  UpdateSlackMessageInput,
+} from "../../lib/slack/client";
 import type { SlackInstallationRow } from "../../lib/slack/installations";
 
 // Service E2E: actual signed HTTP webhook, event routing, Postgres inbox,
@@ -78,6 +81,7 @@ test("a Slack thread reply reaches the next agent step once and survives termina
     }),
   }) as unknown as SupabaseClient;
   const messages: UpdateSlackMessageInput[] = [];
+  const announcements: PostSlackMessageInput[] = [];
   const acknowledgements: string[] = [];
   let unexpectedAgentStarts = 0;
   const updates: Array<{ runId: string; userId: string }> = [];
@@ -293,23 +297,33 @@ test("a Slack thread reply reaches the next agent step once and survives termina
       { runId, userId: owner },
       {
         loadRun: async () => finished,
-        sendTerminal: (row, status) =>
-          stripSlackRunControlsForTerminalRun(row, status, {
-            getSlackBotToken: async () => "fixture-token",
-            updateSlackMessage: async (_token, message) => {
-              messages.push(message);
+        sendTerminal: (row, status, _deps, options) =>
+          stripSlackRunControlsForTerminalRun(
+            row,
+            status,
+            {
+              getSlackBotToken: async () => "fixture-token",
+              updateSlackMessage: async (_token, message) => {
+                messages.push(message);
+              },
+              postSlackMessage: async (_token, message) => {
+                announcements.push(message);
+              },
+              loadRunOutput: async () => result.text,
+              loadGuidance: async () => loadRunGuidance(run, client),
+              loadEvidence: async () => emptyRunResultEvidence(),
             },
-            loadRunOutput: async () => result.text,
-            loadGuidance: async () => loadRunGuidance(run, client),
-            loadEvidence: async () => emptyRunResultEvidence(),
-          }),
+            options
+          ),
         markDelivered: async () => {},
       }
     );
     expect(messages[0].text).toContain("Supplied to agent step 2");
     expect(messages[0].text).toContain(
-      "Agent’s closing report (excerpt)\nDesktop controls preserved."
+      "*Agent’s closing report (excerpt)*\nDesktop controls preserved."
     );
+    expect(announcements).toHaveLength(1);
+    expect(announcements[0].text).toContain("*✅ Run finished:*");
     expect(JSON.stringify(messages[0].blocks)).not.toContain(
       "mogplex-cancel-run"
     );

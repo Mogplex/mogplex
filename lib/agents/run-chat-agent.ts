@@ -22,6 +22,7 @@ import {
   resolveChatModelId,
   type RunChatAgentMessage,
   type ChatAgentContext,
+  type ChatModelStreamDeps,
 } from "@/lib/agents/run-chat";
 import {
   createRunChatProgressReporter,
@@ -39,6 +40,11 @@ import {
   type CapturedUsage,
 } from "@/lib/observability/usage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import {
+  previewTelemetryValue,
+  sanitizeTelemetryValue,
+} from "@/lib/ai-telemetry";
+import type { AiToolCall } from "@/lib/types/ai";
 
 /**
  * Non-HTTP agent runner. Drives the same `streamText` loop the chat route uses
@@ -64,6 +70,11 @@ export type RunChatAgentInput = ChatAgentContext & {
    * from the callback are caught so a progress surface cannot abort the run.
    */
   onProgress?: RunChatAgentProgressCallback;
+  /** Seams for tests: the model stream's dependencies and the ai_calls writer. */
+  deps?: {
+    stream?: Partial<ChatModelStreamDeps>;
+    recordAiCall?: (record: RunChatAiCallRecord) => void;
+  };
 };
 
 export type RunChatAgentResult = {
@@ -166,7 +177,32 @@ async function compactAgentConversation(
   }
 }
 
-function recordRunChatAiCall(input: {
+/** The ai_call record of one finished tool call, sanitized like web chat's. */
+export function recordedToolCall(
+  event: ReturnType<typeof toolCompletionEvent>
+): AiToolCall {
+  const input = sanitizeTelemetryValue(event.toolCall.input);
+  const output = sanitizeTelemetryValue(
+    event.success
+      ? event.output
+      : {
+          error:
+            event.error instanceof Error
+              ? event.error.message
+              : String(event.error),
+        }
+  );
+  return {
+    name: event.toolCall.toolName,
+    input,
+    output,
+    input_preview: previewTelemetryValue(input),
+    output_preview: previewTelemetryValue(output),
+    duration_ms: event.durationMs,
+  };
+}
+
+export type RunChatAiCallRecord = {
   context: RunChatAgentInput;
   model: string;
   startedAt: string;
@@ -177,35 +213,49 @@ function recordRunChatAiCall(input: {
   error?: string | null;
   stepCount?: number | null;
   compactionEvent?: CompactionEventPayload | null;
-}) {
+  toolCalls: AiToolCall[];
+};
+
+function slackAiCallMetadata(input: RunChatAiCallRecord) {
   const partialFailure =
     input.status === "failed" && hasCapturedUsage(input.usage);
+  return {
+    surface: "slack",
+    team_id: input.context.teamId ?? null,
+    repo: input.context.repoFullName ?? null,
+    repo_owner: input.context.repoOwner ?? null,
+    repo_name: input.context.repoName ?? null,
+    workspace_session_id: input.context.workspaceSessionId ?? null,
+    finish_reason: input.finishReason ?? null,
+    step_count: input.stepCount ?? null,
+    ...(partialFailure ? { failed_with_partial_usage: true } : {}),
+  };
+}
+
+/** The ai_calls row for one Slack turn, including the tools it called. */
+export function buildRunChatAiCallRow(input: RunChatAiCallRecord) {
+  return {
+    user_id: input.context.userId,
+    type: "agent" as const,
+    model: input.model,
+    ...capturedUsageAiCallColumns(input.usage),
+    duration_ms: Date.now() - input.startedAtMs,
+    started_at: input.startedAt,
+    completed_at: new Date().toISOString(),
+    status: input.status,
+    error: input.error ?? null,
+    conversation_id: input.context.conversationId ?? null,
+    repo_id: input.context.repoId ?? null,
+    tool_calls_count: input.toolCalls.length,
+    tool_calls: input.toolCalls,
+    metadata: slackAiCallMetadata(input),
+  };
+}
+
+function recordRunChatAiCall(input: RunChatAiCallRecord) {
   void supabaseAdmin
     .from("ai_calls")
-    .insert({
-      user_id: input.context.userId,
-      type: "agent" as const,
-      model: input.model,
-      ...capturedUsageAiCallColumns(input.usage),
-      duration_ms: Date.now() - input.startedAtMs,
-      started_at: input.startedAt,
-      completed_at: new Date().toISOString(),
-      status: input.status,
-      error: input.error ?? null,
-      conversation_id: input.context.conversationId ?? null,
-      repo_id: input.context.repoId ?? null,
-      metadata: {
-        surface: "slack",
-        team_id: input.context.teamId ?? null,
-        repo: input.context.repoFullName ?? null,
-        repo_owner: input.context.repoOwner ?? null,
-        repo_name: input.context.repoName ?? null,
-        workspace_session_id: input.context.workspaceSessionId ?? null,
-        finish_reason: input.finishReason ?? null,
-        step_count: input.stepCount ?? null,
-        ...(partialFailure ? { failed_with_partial_usage: true } : {}),
-      },
-    })
+    .insert(buildRunChatAiCallRow(input))
     .select("id")
     .single()
     .then(async ({ data, error }) => {
@@ -255,6 +305,8 @@ export async function runChatAgent(
       EMPTY_CAPTURED_USAGE
     );
   const progressReporter = createRunChatProgressReporter(input.onProgress);
+  const toolCalls: AiToolCall[] = [];
+  const recordAiCall = input.deps?.recordAiCall ?? recordRunChatAiCall;
   const finalization = createSlackRunFinalization({
     userId: input.userId,
     userText: input.latestUserText,
@@ -278,6 +330,7 @@ export async function runChatAgent(
     systemSuffix: input.systemSuffix,
     abortSignal: input.abortSignal,
     additionalTools: input.additionalTools,
+    deps: input.deps?.stream,
     hooks: {
       onChunk(event) {
         if (event.chunk.type === "reasoning-delta") {
@@ -291,6 +344,7 @@ export async function runChatAgent(
       onToolExecutionEnd(sdkEvent) {
         const event = toolCompletionEvent(sdkEvent);
         finalization.onToolFinish(event);
+        toolCalls.push(recordedToolCall(event));
         return progressReporter.toolFinished(event);
       },
       async onStepEnd(event) {
@@ -306,7 +360,7 @@ export async function runChatAgent(
   } catch (error) {
     await finalization.cleanupAfterInterruption();
     const message = error instanceof Error ? error.message : "Stream error";
-    recordRunChatAiCall({
+    recordAiCall({
       context: input,
       model: resolvedModel,
       startedAt,
@@ -315,6 +369,7 @@ export async function runChatAgent(
       usage: readObservedUsage(),
       error: message,
       compactionEvent: compaction.event,
+      toolCalls,
     });
     throw error;
   } finally {
@@ -350,7 +405,7 @@ export async function runChatAgent(
     },
     observedUsage
   );
-  recordRunChatAiCall({
+  recordAiCall({
     context: input,
     model: resolvedModel,
     startedAt,
@@ -361,6 +416,7 @@ export async function runChatAgent(
     error: finishReason === "error" ? "Stream finished with error" : null,
     stepCount: steps.length,
     compactionEvent: compaction.event,
+    toolCalls,
   });
 
   const inputTokens = usage.inputTokens ?? 0;

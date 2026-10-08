@@ -21,6 +21,8 @@ export type SlackRunControlsMetadata = {
   teamId: string;
   channelId: string;
   messageTs: string;
+  /** The thread the run message sits in, when it was posted as a reply. */
+  threadTs?: string;
 };
 
 const nonEmptyString = (value: unknown): value is string =>
@@ -35,7 +37,10 @@ export function readSlackRunControlsMetadata(
     SLACK_RUN_CONTROLS_METADATA_KEY
   ];
   if (!raw || typeof raw !== "object") return null;
-  const { teamId, channelId, messageTs } = raw as Record<string, unknown>;
+  const { teamId, channelId, messageTs, threadTs } = raw as Record<
+    string,
+    unknown
+  >;
   if (
     !nonEmptyString(teamId) ||
     !nonEmptyString(channelId) ||
@@ -43,7 +48,12 @@ export function readSlackRunControlsMetadata(
   ) {
     return null;
   }
-  return { teamId, channelId, messageTs };
+  return {
+    teamId,
+    channelId,
+    messageTs,
+    ...(nonEmptyString(threadTs) ? { threadTs } : {}),
+  };
 }
 
 /**

@@ -4,7 +4,7 @@ import { stripSlackRunControlsForTerminalRun } from "./run-controls-notify";
 import { buildRunRow } from "../../tests/unit/helpers/mogplex-api-runs-fixtures";
 import { serializeRunProgress } from "./run-progress-store";
 import { applyRunProgress, createRunProgressState } from "./run-progress-state";
-import type { UpdateSlackMessageInput } from "./client";
+import type { PostSlackMessageInput, UpdateSlackMessageInput } from "./client";
 
 process.env.NEXT_PUBLIC_APP_URL ||= "https://mogplex.com";
 
@@ -30,6 +30,7 @@ function fixture() {
     slack_progress_revision: 3,
   });
   const updates: UpdateSlackMessageInput[] = [];
+  const posts: PostSlackMessageInput[] = [];
   let clock = 10_000;
   const updateMessage = async (
     _token: string,
@@ -45,14 +46,24 @@ function fixture() {
     updateMessage,
     sendTerminal: (
       row: Parameters<typeof stripSlackRunControlsForTerminalRun>[0],
-      status: typeof run.status
+      status: typeof run.status,
+      _deps?: unknown,
+      options: { announce?: boolean } = {}
     ) =>
-      stripSlackRunControlsForTerminalRun(row, status, {
-        getSlackBotToken: async () => "test-token",
-        updateSlackMessage: updateMessage,
-        loadRunOutput: async () =>
-          "Changed the controls. Tests passed. https://github.com/example/app/pull/42",
-      }),
+      stripSlackRunControlsForTerminalRun(
+        row,
+        status,
+        {
+          getSlackBotToken: async () => "test-token",
+          updateSlackMessage: updateMessage,
+          postSlackMessage: async (_token, message) => {
+            posts.push(message);
+          },
+          loadRunOutput: async () =>
+            "Changed the controls. Tests passed. https://github.com/example/app/pull/42",
+        },
+        options
+      ),
     markDelivered: async (
       _row: typeof run,
       _status: typeof run.status,
@@ -74,6 +85,7 @@ function fixture() {
   };
   return {
     updates,
+    posts,
     deps,
     input: { runId: run.id, userId: run.user_id },
     getRun: () => run,
@@ -171,4 +183,15 @@ it("preserves worker preparation rather than labelling it queued", async () => {
   await deliverSlackRunUpdate(f.input, f.deps);
   expect(f.updates[0].text).toContain("Starting the isolated workspace.");
   expect(f.updates[0].text).not.toContain("Waiting for the coding worker");
+});
+
+it("announces a run's end once, even when a late guidance receipt refreshes the message", async () => {
+  const f = fixture();
+  f.setRun({ status: "success" });
+  await deliverSlackRunUpdate(f.input, f.deps);
+  f.setRun({ slack_progress_revision: 4 });
+  await deliverSlackRunUpdate(f.input, f.deps);
+  expect(f.updates).toHaveLength(2);
+  expect(f.posts).toHaveLength(1);
+  expect(f.posts[0].text).toContain("Run finished");
 });

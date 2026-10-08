@@ -1,6 +1,13 @@
-import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
+import {
+  readSlackRunControlsMetadata,
+  type SlackRunControlsMetadata,
+} from "@/lib/slack/run-controls";
 import type { MogplexApiRunStatus } from "@/lib/mogplex-api/runs";
-import type { UpdateSlackMessageInput } from "@/lib/slack/client";
+import type {
+  PostSlackMessageInput,
+  UpdateSlackMessageInput,
+} from "@/lib/slack/client";
+import { buildRunFinishedAnnouncement } from "./run-result-announcement";
 import type { RunGuidance } from "./run-guidance-store";
 import { buildRunResultMessage } from "./run-result-presentation";
 import {
@@ -18,6 +25,10 @@ type SlackRunControlsNotifyDeps = {
     botToken: string,
     input: UpdateSlackMessageInput
   ) => Promise<unknown>;
+  postSlackMessage?: (
+    botToken: string,
+    input: PostSlackMessageInput
+  ) => Promise<unknown>;
   /** The agent's own streamed output for the run, oldest first, or null. */
   loadRunOutput?: (run: SlackNotifiableRun) => Promise<string | null>;
   loadGuidance?: (run: SlackNotifiableRun) => Promise<RunGuidance[]>;
@@ -29,11 +40,12 @@ type SlackRunControlsNotifyDeps = {
 const RUN_OUTPUT_EVENT_LIMIT = 400;
 
 async function loadSlackRunControlsNotifyDeps(): Promise<SlackRunControlsNotifyDeps> {
-  const { getSlackBotToken, updateSlackMessage } =
+  const { getSlackBotToken, postSlackMessage, updateSlackMessage } =
     await import("@/lib/slack/client");
   return {
     getSlackBotToken,
     updateSlackMessage,
+    postSlackMessage,
     loadRunOutput,
     loadEvidence: loadRunResultEvidence,
     loadGuidance: async (run) => {
@@ -110,6 +122,30 @@ async function loadRunOutputBestEffort(
   }
 }
 
+async function announceRunEnd(
+  input: {
+    run: SlackNotifiableRun;
+    status: MogplexApiRunStatus;
+    evidence: RunResultEvidence;
+    slack: SlackRunControlsMetadata;
+    botToken: string;
+  },
+  deps: SlackRunControlsNotifyDeps
+) {
+  if (!deps.postSlackMessage) return;
+  const { slack } = input;
+  await deps.postSlackMessage(input.botToken, {
+    channel: slack.channelId,
+    ...(slack.threadTs ? { thread_ts: slack.threadTs } : {}),
+    text: buildRunFinishedAnnouncement({
+      run: input.run,
+      status: input.status,
+      evidence: input.evidence,
+      channelId: slack.channelId,
+    }),
+  });
+}
+
 /**
  * If `run` was started from Slack (its `metadata` carries the run-controls
  * coordinates), rewrite the originating message to drop the "Cancel run" button
@@ -118,13 +154,17 @@ async function loadRunOutputBestEffort(
  * Slack API failures are left for the caller's best-effort wrapper so each run
  * lifecycle can log the failure in its own context.
  *
+ * With `announce`, a short reply beside the run message then says the run
+ * ended: Slack does not notify anyone about an edited message.
+ *
  * The Slack client is imported lazily so callers (e.g. `cancelMogplexApiRun`)
  * don't eagerly pull in the Supabase-backed `lib/slack/client` at module load.
  */
 export async function stripSlackRunControlsForTerminalRun(
   run: SlackNotifiableRun,
   status: MogplexApiRunStatus,
-  deps?: SlackRunControlsNotifyDeps
+  deps?: SlackRunControlsNotifyDeps,
+  options: { announce?: boolean } = {}
 ): Promise<boolean> {
   const slack = readSlackRunControlsMetadata(run.metadata);
   if (!slack) return false;
@@ -149,5 +189,8 @@ export async function stripSlackRunControlsForTerminalRun(
     ts: slack.messageTs,
     ...message,
   });
+  if (options.announce) {
+    await announceRunEnd({ run, status, evidence, slack, botToken }, slackDeps);
+  }
   return true;
 }
