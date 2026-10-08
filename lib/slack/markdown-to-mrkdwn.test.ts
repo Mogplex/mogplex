@@ -61,4 +61,10 @@ describe("markdownToMrkdwn", () => {
       "one\n\ntwo\n```\na\n\n\nb\n```"
     );
   });
+
+  it("should defuse bare broadcast mentions", () => {
+    expect(markdownToMrkdwn("Done @channel, @HERE and @everyone")).toBe(
+      "Done @\u200Bchannel, @\u200BHERE and @\u200Beveryone"
+    );
+  });
 });

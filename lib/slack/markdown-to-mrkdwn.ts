@@ -3,9 +3,11 @@
  * single `*` for bold, `_` for italics, `~` for strikethrough and has no
  * headings, tables or `[label](url)` links.
  *
- * The text is untrusted. `&`, `<` and `>` are escaped, so it cannot mention a
- * channel or forge a link, and a Markdown link keeps its URL visible as
- * "label (url)" instead of hiding it behind a label.
+ * The text is untrusted. `&`, `<` and `>` are escaped and broadcast words are
+ * defused, so it cannot mention a channel or forge a link, and a Markdown
+ * link keeps its URL visible as "label (url)" instead of hiding it behind a
+ * label. `formatSlackConversationalReply` in ./format.ts handles the bot's
+ * own replies, which may link behind a label.
  */
 export function markdownToMrkdwn(markdown: string): string {
   const out: string[] = [];
@@ -32,12 +34,20 @@ export function markdownToMrkdwn(markdown: string): string {
   return out.join("\n").trim();
 }
 
-/** Escapes the three characters Slack reserves for mentions and links. */
+const BROADCAST = /@(here|channel|everyone)\b/gi;
+
+/**
+ * Makes untrusted text inert in Slack mrkdwn: escapes the three characters
+ * Slack reserves for mentions and links, and breaks bare `@here`,
+ * `@channel` and `@everyone` with a zero-width space, because Slack turns
+ * those into broadcast mentions in block text.
+ */
 export function escapeMrkdwn(text: string) {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(BROADCAST, "@\u200B$1");
 }
 
 const FENCE = /^\s*(?:```|~~~)/;

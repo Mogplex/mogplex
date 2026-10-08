@@ -8,7 +8,12 @@ function sanitizeSlackLinkLabel(label: string) {
   return sanitized || "link";
 }
 
-/** Convert the Markdown links and bold the model emits into Slack mrkdwn. */
+/**
+ * Convert the Markdown links and bold the model emits into Slack mrkdwn.
+ * This is for the bot's own conversational replies. Untrusted run reports
+ * go through markdownToMrkdwn (./markdown-to-mrkdwn.ts) instead, which keeps
+ * every link target visible.
+ */
 export function formatSlackConversationalReply(text: string) {
   return text
     .replace(
