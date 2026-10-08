@@ -129,6 +129,15 @@ test("an org-scoped PR trigger keeps its account-type scope across edits", async
   await startNode.click();
   const account = page.getByTestId("flow-trigger-account");
   await expect(account).toHaveAttribute("data-value", "all-org");
+  // The open picker must show the org scope, not an empty selection.
+  await account.click();
+  const scopeRow = page.getByTestId("flow-trigger-account-option-scope");
+  await expect(scopeRow).toContainText("All organizations");
+  await expect(scopeRow.getByRole("checkbox")).toBeChecked();
+  await expect(
+    page.getByTestId("flow-trigger-account-option-all").getByRole("checkbox")
+  ).not.toBeChecked();
+  await page.keyboard.press("Escape");
 
   await selectAppOption(
     page.getByTestId("flow-trigger-author-filter"),
@@ -162,4 +171,66 @@ test("a single-repository trigger bound to a disconnected account prompts for on
   const account = page.getByTestId("flow-trigger-account");
   await expect(account).toHaveAttribute("data-value", "");
   await expect(account).toContainText("Select an account");
+});
+
+test("a multi-account trigger with a disconnected account stays editable", async ({
+  page,
+}) => {
+  // 999 was disconnected after the filter was saved. Unchecking 202 used to
+  // leave [999], which the editor rejects, so the checkbox looked stuck.
+  await stubFlowsPage(page, {
+    installations,
+    startFilter: { scope: "all", installationIds: [202, 999] },
+  });
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "PR opened" })
+    .click();
+  const account = page.getByTestId("flow-trigger-account");
+  await expect(account).toContainText("1 of 3 connected accounts");
+
+  await account.click();
+  await expect(
+    page.getByTestId("flow-trigger-account-option-202").getByRole("checkbox")
+  ).toBeDisabled();
+  await page.getByTestId("flow-trigger-account-option-101").click();
+  await expect(account).toHaveAttribute("data-value", "202,101");
+});
+
+test("switching a multi-account trigger to a schedule binds one account", async ({
+  page,
+}) => {
+  // Publishing rejects a schedule whose filter lists other installations, so
+  // the switch must not carry the GitHub trigger's account list over.
+  const { getFlow } = await stubFlowsPage(page, {
+    installations,
+    startFilter: { scope: "all", installationIds: [101, 202] },
+  });
+  const savedStart = () =>
+    (getFlow().draft_graph.nodes as FlowNode[]).find(
+      (node) => node.type === "start"
+    )?.data;
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "PR opened" })
+    .click();
+  await selectAppOption(page.getByTestId("flow-trigger-event"), "schedule");
+  await expect(page.getByTestId("flow-trigger-account")).toHaveAttribute(
+    "data-value",
+    "101"
+  );
+
+  await page.keyboard.press(`${primaryModifier}+S`);
+  await expect.poll(() => savedStart()?.event).toBe("schedule");
+  expect(savedStart()?.filter).toBeUndefined();
 });

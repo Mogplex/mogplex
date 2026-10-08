@@ -32,6 +32,38 @@ function scopeDataValue(
   return scope === "all" ? "all" : `all-${scope}`
 }
 
+// Toggle and count only connected accounts; a saved id whose installation was
+// disconnected stays in the summary but would make every edit invalid.
+function connectedSelection(
+  selected: number[] | null,
+  installations: Installation[],
+) {
+  if (!selected) return []
+  const connectedIds = new Set(
+    installations.map((installation) => installation.installation_id),
+  )
+  return selected.filter((id) => connectedIds.has(id))
+}
+
+// An org- or personal-scoped trigger (API-authored) covers every account of
+// that type; show it as the checked row so the open picker matches the summary.
+function AccountTypeScopeRow({ label }: { label: string }) {
+  return (
+    <label
+      data-testid="flow-trigger-account-option-scope"
+      className="flex w-full items-start gap-2.5 rounded-md bg-foreground/[0.04] px-2 py-2 text-left"
+    >
+      <Checkbox checked disabled className="mt-0.5" />
+      <span className="min-w-0">
+        <span className="block text-xs font-medium text-foreground">{label}</span>
+        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+          Every connected account of this type, including ones you connect later
+        </span>
+      </span>
+    </label>
+  )
+}
+
 /**
  * Multi-select for the GitHub accounts a GitHub event trigger runs on. No
  * selection means every connected account, including ones connected later.
@@ -49,8 +81,9 @@ export function AccountScopePicker({
   onChange: (installationIds: number[]) => void
 }) {
   const [open, setOpen] = useState(false)
-  const selectedIds = selected ?? []
+  const selectedIds = connectedSelection(selected, installations)
   const allAccounts = selected === null && scope === "all"
+  const allOfType = selected === null && scope !== "all"
   const summary = describeTriggerAccounts(selected, installations, scope)
   const detail = selected === null
     ? "Includes accounts you connect later"
@@ -114,6 +147,7 @@ export function AccountScopePicker({
           </p>
         </div>
         <div className="max-h-60 overflow-y-auto p-1.5">
+          {allOfType ? <AccountTypeScopeRow label={summary} /> : null}
           <label
             data-testid="flow-trigger-account-option-all"
             className={cn(
