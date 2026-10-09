@@ -58,8 +58,11 @@ export type AutomationModelExecutionMetadata = {
   /** Every re-attempt: same-model retries plus fail-overs. */
   retryCount: number;
   /**
-   * True when a same-model retry happened (gateway was unreachable, so the
-   * same model was retried rather than failing over to a fallback).
+   * True when a same-model retry happened. Computed as
+   * `retryCount - failoverModelIds.length > 0`. This includes gateway-unreachable
+   * retries AND the case where a fail_over has no next fallback and falls back
+   * to retry_same on the current model. A run can be both `retried` and
+   * `failedOver` when the fallback model itself needed a same-model retry.
    */
   retried: boolean;
   /** True when a fail-over to a different model happened. */

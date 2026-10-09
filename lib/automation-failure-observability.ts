@@ -410,6 +410,10 @@ export function summarizeAutomationResilience(
     // Runs that switched models mid-flight (even if they ultimately failed).
     // Since `retryAttempted` now means same-model retries only, pure-failover
     // runs would otherwise disappear from the resilience summary.
+    // NOTE: model_failed_over telemetry was added 2026-10-08. Records before
+    // this date read failedOver: false, so failedOverFailures undercounts in
+    // windows that straddle the deploy. retriedFailures also shifts semantics
+    // at this boundary (was any-retry, now same-model-only).
     failedOverFailures: failedRecords.filter(
       (record) => record.diagnostics.failedOver
     ).length,

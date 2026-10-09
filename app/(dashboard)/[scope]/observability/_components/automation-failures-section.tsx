@@ -329,7 +329,7 @@ export function AutomationFailuresSection({
           value={String(summary?.failedTotal ?? 0)}
           sub={`${summary?.retriedFailures ?? 0} retried, ${summary?.failedOverFailures ?? 0} failed over`}
           valueClass={(summary?.failedTotal ?? 0) > 0 ? "text-accent-red" : ""}
-          info="Automation runs in the window that ended failed. The sub-line counts those that attempted at least one same-model retry before giving up (retried), and those that switched to a fallback model but still failed (failed over)."
+          info="Automation runs in the window that ended failed. The sub-line counts those that attempted at least one same-model retry before giving up (retried), and those that switched to a fallback model but still failed (failed over). Note: failed-over tracking was added 2026-10-08; windows that include earlier runs will undercount."
         />
         <FailureStatCard
           label="Successful Recoveries"
