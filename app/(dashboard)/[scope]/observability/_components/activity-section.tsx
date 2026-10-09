@@ -325,10 +325,10 @@ export function ActivitySection({
         if (row.original.type === "agent") {
           const repository = resolveRunRepository(row.original, reposById)
           return (
-            // aria-label is a Playwright test hook (generic elements ignore it for AT)
             <span
               className="max-w-40 whitespace-normal break-all text-xs text-muted-foreground"
-              aria-label="Run repository location"
+              data-testid="run-repository-location"
+              translate="no"
             >
               {repository || "Not recorded"}
             </span>

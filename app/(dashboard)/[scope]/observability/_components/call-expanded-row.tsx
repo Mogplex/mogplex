@@ -104,14 +104,10 @@ export function CallExpandedRow({
 
   return (
     <div className="space-y-3 p-4 text-sm">
-      {/* aria-label is a Playwright test hook (generic elements ignore it for AT) */}
       {call.type === "agent" && (
-        <div
-          className="max-w-64 whitespace-normal"
-          aria-label="Run repository details"
-        >
+        <div className="max-w-64 whitespace-normal" data-testid="run-repository-details">
           <div className="ui-label mb-0.5">Repository</div>
-          <div className="break-all font-mono font-medium text-foreground">
+          <div className="break-all font-mono font-medium text-foreground" translate="no">
             {repository || "Not recorded"}
           </div>
         </div>

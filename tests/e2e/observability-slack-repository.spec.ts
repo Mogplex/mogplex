@@ -24,7 +24,7 @@ test("PR link uses the metadata snapshot instead of the repo picker", async ({
           type: "pr_review",
           model: "anthropic/claude-sonnet-4",
           repo_id: "context-repo",
-          status: "completed",
+          status: "success",
           metadata: {
             repo_full_name: "webrenew/gtm-supahost",
             pr_number: 42,
@@ -42,7 +42,8 @@ test("PR link uses the metadata snapshot instead of the repo picker", async ({
   await page.route("**/api/observability/call-events*", (route) =>
     fulfillJson(route, { events: [] })
   );
-  await page.goto(scopedPath("observability"));
+  // The AI calls table is on the Usage tab.
+  await page.goto(scopedPath("observability?view=usage"));
   // The PR link should use the metadata snapshot, not the repo picker.
   const prLink = page.locator('a[href*="github.com"]').filter({
     hasText: /gtm-supahost#42/,
@@ -104,12 +105,8 @@ for (const width of [390, 1280]) {
       );
       await page.goto(scopedPath("observability?call_id=slack-call"));
       // The Where column and expanded row both show the resolved repository.
-      const whereCell = page.getByLabel("Run repository location", {
-        exact: true,
-      });
-      const details = page.getByLabel("Run repository details", {
-        exact: true,
-      });
+      const whereCell = page.getByTestId("run-repository-location");
+      const details = page.getByTestId("run-repository-details");
       const expectedRepo =
         snapshot === "missing" ? "Not recorded" : "webrenew/gtm-supahost";
       await expect(whereCell).toHaveText(expectedRepo);
