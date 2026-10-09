@@ -58,8 +58,18 @@ export function requiresExistingSlackConversation(
   return payload.eventType === "message" && !isSlackDirectConversation(payload);
 }
 
+/**
+ * Whether a channel type represents a direct conversation (1:1 DM or group DM).
+ * Exported for reuse in run-result-announcement.ts.
+ */
+export function isDirectChannelType(
+  type: string | undefined | null
+): type is "im" | "mpim" {
+  return type === "im" || type === "mpim";
+}
+
 export function isSlackDirectConversation(payload: SlackEventTaskPayload) {
-  return payload.channelType === "im" || payload.channelType === "mpim";
+  return isDirectChannelType(payload.channelType);
 }
 
 export function isUninvokedSlackGroupMessage(

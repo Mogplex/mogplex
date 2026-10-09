@@ -8,7 +8,10 @@ import type {
   SlackThreadMessage,
   UpdateSlackMessageInput,
 } from "@/lib/slack/client";
-import { buildRunFinishedAnnouncement } from "./run-result-announcement";
+import {
+  buildRunFinishedAnnouncement,
+  isRunOutcomeLine,
+} from "./run-result-announcement";
 import type { RunGuidance } from "./run-guidance-store";
 import { buildRunResultMessage } from "./run-result-presentation";
 import {
@@ -33,7 +36,12 @@ type SlackRunControlsNotifyDeps = {
   /** Fetch thread replies to check for duplicate announcements. */
   getThreadMessages?: (
     botToken: string,
-    input: { channel: string; threadTs: string; limit?: number }
+    input: {
+      channel: string;
+      threadTs: string;
+      oldest?: string;
+      limit?: number;
+    }
   ) => Promise<SlackThreadMessage[]>;
   /** The agent's own streamed output for the run, oldest first, or null. */
   loadRunOutput?: (run: SlackNotifiableRun) => Promise<string | null>;
@@ -151,26 +159,36 @@ async function hasExistingAnnouncement(
   if (!deps.getThreadMessages) return false;
   const threadTs = input.slack.threadTs ?? input.slack.messageTs;
   try {
+    // Fetch messages posted after the run message. Announcements are posted at
+    // run completion, so they will be after messageTs. Using `oldest` avoids
+    // scanning from the thread start (conversations.replies is oldest-first)
+    // which would miss announcements in long threads. Limit 200 covers typical
+    // threads; very long threads may still miss, but duplicates are harmless.
     const messages = await deps.getThreadMessages(input.botToken, {
       channel: input.slack.channelId,
       threadTs,
-      limit: 20,
+      oldest: input.slack.messageTs,
+      limit: 200,
     });
     // Look for a bot message with the announcement's distinctive outcome line
     // and the run's view link. Exclude the run's own message (messageTs) which
     // also contains the view link but is not an announcement reply.
     const runViewLink = `/runs/${input.run.id}?view=details`;
-    const announcementPattern = /Run (finished|failed|cancelled)/;
     return messages.some(
       (msg) =>
         msg.bot_id &&
         msg.ts !== input.slack.messageTs &&
         msg.text?.includes(runViewLink) &&
-        announcementPattern.test(msg.text)
+        isRunOutcomeLine(msg.text ?? "")
     );
-  } catch {
+  } catch (error) {
     // If we cannot check, proceed with the announcement to avoid never
     // announcing. Duplicate announcements are harmless; missing ones are not.
+    console.warn(
+      "[slack-run-controls] duplicate-announcement check failed",
+      input.run.id,
+      error
+    );
     return false;
   }
 }

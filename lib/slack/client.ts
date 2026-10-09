@@ -231,6 +231,8 @@ export async function getSlackThreadMessages(
     channel: string;
     threadTs: string;
     latestTs?: string;
+    /** Fetch only messages newer than this timestamp (exclusive). */
+    oldest?: string;
     limit?: number;
   },
   fetchImpl?: typeof fetch
@@ -243,6 +245,9 @@ export async function getSlackThreadMessages(
   if (input.latestTs) {
     query.latest = input.latestTs;
     query.inclusive = "false";
+  }
+  if (input.oldest) {
+    query.oldest = input.oldest;
   }
   const json = await slackApiGet<{ messages?: SlackThreadMessage[] }>(
     "conversations.replies",
