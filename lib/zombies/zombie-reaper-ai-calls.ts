@@ -11,7 +11,7 @@ import type { AiCall } from "@/lib/types/ai";
 import { loadLatestCallActivity } from "./ai-call-activity";
 import { stopOrphanedWorkers } from "./zombie-reaper-orphans";
 import {
-  reportStopFailures,
+  reportStopResults,
   stopWorkers,
   type WorkerStop,
 } from "./zombie-reaper-stops";
@@ -231,7 +231,7 @@ export async function reapStaleAiCalls(
 
   const now = Date.now();
   // Retry stops a previous cycle could not finish before reaping more.
-  reportStopFailures(
+  reportStopResults(
     summary,
     await stopOrphanedWorkers(client, now, stopWorker)
   );
@@ -291,6 +291,6 @@ export async function reapStaleAiCalls(
     });
   }
 
-  reportStopFailures(summary, await stopWorkers(client, stops, stopWorker));
+  reportStopResults(summary, await stopWorkers(client, stops, stopWorker));
   return summary;
 }
