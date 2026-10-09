@@ -11,6 +11,28 @@
  */
 export const COMMIT_SHA_PATTERN = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/;
 
+/**
+ * Artifact path pattern: .mogplex/artifacts/<name>.json where name starts with
+ * alphanumeric and contains only alphanumeric, underscore, or hyphen.
+ * Repository-root-relative, explicit output files only.
+ */
+export const ARTIFACT_PATH_PATTERN =
+  /^\.mogplex\/artifacts\/[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$/;
+
+/**
+ * Extract and validate the terminal commit SHA from run metadata.
+ * Returns null if the key is missing or the value is malformed.
+ * Shared by both presentation (presentMogplexApiRun) and the first-write-wins
+ * check in reconciliation.
+ */
+export function extractTerminalCommitSha(
+  metadata: Record<string, unknown> | null | undefined
+): string | null {
+  const sha = metadata?.terminal_commit_sha;
+  if (typeof sha !== "string" || !COMMIT_SHA_PATTERN.test(sha)) return null;
+  return sha;
+}
+
 export const MOGPLEX_API_RUN_HARNESSES = [
   "mogplex",
   "codex",

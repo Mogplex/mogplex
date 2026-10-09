@@ -17,10 +17,7 @@ import type {
   MogplexApiRunStatus,
 } from "@/lib/mogplex-api/runs";
 import type { AiCall } from "@/lib/types";
-import {
-  recordTerminalCommitSha,
-  type RecordTerminalCommitDeps,
-} from "./run-terminal-commit";
+import { recordTerminalCommitWithTimeout } from "./run-terminal-commit";
 
 export type ExternalAgentRunExecutionPayload = {
   runId: string;
@@ -89,10 +86,7 @@ export type FinalizeDeps = HarnessPassNotifiers & {
   loadAiCall: typeof loadOwnedAiCall;
   appendEvent: typeof safeAppendAiCallEvent;
   /** Optional terminal commit recording for artifact pinning. */
-  recordTerminalCommit?: (
-    run: ExternalAgentRunRow,
-    deps?: Partial<RecordTerminalCommitDeps>
-  ) => Promise<void>;
+  recordTerminalCommit?: typeof recordTerminalCommitWithTimeout;
 };
 
 async function safeNotifyTerminal(
@@ -170,28 +164,11 @@ export async function finalizeHarnessPass(
   // but never fail the run if recording fails.
   // Only record for create_branch runs; worktree-bound runs operate in the worktree,
   // not the repo root, so HEAD would be the base branch tip.
+  // The timeout and failure tolerance are encapsulated in the shared wrapper.
   if (status === "success" && finished.create_branch) {
-    const recordFn = deps.recordTerminalCommit ?? recordTerminalCommitSha;
-    const TERMINAL_COMMIT_TIMEOUT_MS = 10_000;
-    let timerId: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        recordFn(finished),
-        new Promise<void>((_, reject) => {
-          timerId = setTimeout(
-            () => reject(new Error("Terminal commit recording timed out")),
-            TERMINAL_COMMIT_TIMEOUT_MS
-          );
-        }),
-      ]);
-    } catch (error) {
-      console.warn("[run-execution] terminal commit recording failed", {
-        runId: finished.id,
-        error: error instanceof Error ? error.message : "unknown",
-      });
-    } finally {
-      if (timerId !== undefined) clearTimeout(timerId);
-    }
+    const recordFn =
+      deps.recordTerminalCommit ?? recordTerminalCommitWithTimeout;
+    await recordFn(finished);
   }
 
   await safeNotifyTerminal(deps, finished, status);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { flowGraphPayloadSchema } from "@/lib/mogplex-api/automation-request";
 import {
+  ARTIFACT_PATH_PATTERN,
   MOGPLEX_API_RUN_HARNESSES,
   MOGPLEX_API_RUN_MODES,
 } from "@/lib/mogplex-api/runs-types";
@@ -194,7 +195,7 @@ export const runArtifactArgsSchema = runIdArgsSchema.extend({
     .min(1)
     .max(240)
     .regex(
-      /^\.mogplex\/artifacts\/[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$/,
+      ARTIFACT_PATH_PATTERN,
       "path must be a JSON file in .mogplex/artifacts/"
     ),
 });

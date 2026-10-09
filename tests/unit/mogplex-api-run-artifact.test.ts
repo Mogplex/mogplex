@@ -411,3 +411,46 @@ test("GitHub network failures are logged with error class", async (context) => {
   );
   fetchMock.mock.restore();
 });
+
+// Tests for distinct 404 error messages based on pinned vs branch tip
+
+test("commit 404 returns distinct error for pinned vs branch", async () => {
+  await loadRunDetailRoute();
+  const { loadRunArtifact, RunArtifactError } =
+    await import("../../lib/mogplex-api/run-artifacts");
+  const githubJson = async (_token: string, url: string) => {
+    if (url.includes("/commits/"))
+      throw new RunArtifactError(404, "Committed artifact not found");
+    throw new Error("Unexpected GitHub URL");
+  };
+  const buildDeps = (metadata: Record<string, unknown>) => ({
+    loadRun: async () =>
+      presentMogplexApiRun(
+        buildRunRow({
+          status: "success",
+          create_branch: true,
+          working_branch: "mogplex/external/run",
+          metadata,
+        })
+      ),
+    loadRepo: async () => ({
+      repo: { user_id: "user-123", full_name: "webrenew/previews" },
+      githubToken: "test-token",
+    }),
+    githubJson,
+  });
+  // Test pinned commit 404
+  let err = await loadRunArtifact(
+    { userId: "user-123", runId: "run-1", path },
+    buildDeps({ terminal_commit_sha: "f".repeat(40) })
+  ).catch((e) => e);
+  assert.ok(err instanceof RunArtifactError && err.status === 404);
+  assert.ok(err.message.includes("Pinned commit"));
+  // Test branch tip 404
+  err = await loadRunArtifact(
+    { userId: "user-123", runId: "run-1", path },
+    buildDeps({})
+  ).catch((e) => e);
+  assert.ok(err instanceof RunArtifactError && err.status === 404);
+  assert.ok(err.message.includes("Branch no longer exists"));
+});

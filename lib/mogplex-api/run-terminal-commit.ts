@@ -5,13 +5,41 @@
  * The SHA is captured from the sandbox's HEAD (not the GitHub API) to avoid
  * race conditions where GitHub might not have the latest commit yet.
  */
+import type { Sandbox } from "@vercel/sandbox";
 import { getNeonPool } from "@/lib/db/pool";
-import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
+import { resolveVmCredentials } from "@/lib/sandbox/auto-pause-deps";
 import { COMMIT_SHA_PATTERN, type ExternalAgentRunRow } from "./runs-types";
 
 export type SandboxHeadResult = {
   sha: string | null;
   pushed: boolean;
+};
+
+/**
+ * Sandbox record shape for terminal commit recording. Matches fields required
+ * by `resolveVmCredentials` (SandboxAutoPauseRecord) for consistent credential
+ * resolution between platform-billed and user-billed sandboxes.
+ */
+type SandboxRecord = {
+  id: string;
+  user_id: string;
+  repo_id: string;
+  sandbox_id: string;
+  status: string;
+  health_status: string | null;
+  exec_lock_token: string | null;
+  persistent: boolean | null;
+  billing_source: string | null;
+  billing_team_id: string | null;
+  billing_project_id: string | null;
+  vercel_team_id: string | null;
+  vercel_project_id: string | null;
+};
+
+type CommandResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
 };
 
 export type RecordTerminalCommitDeps = {
@@ -29,56 +57,172 @@ export type RecordTerminalCommitDeps = {
 };
 
 /**
- * Get the HEAD SHA from the sandbox and verify it's pushed to origin.
- * Uses the sandbox exec route internally to run git commands.
+ * Run a shell command in the sandbox.
+ * Thin wrapper around sandbox.runCommand for testability.
  */
-async function getSandboxHeadViaExec(
+async function runSandboxShell(
+  sandbox: Sandbox,
+  command: string
+): Promise<CommandResult> {
+  const process = await sandbox.runCommand({
+    cmd: "sh",
+    args: ["-c", command],
+  });
+  const [stdout, stderr, result] = await Promise.all([
+    process.stdout(),
+    process.stderr(),
+    process.wait(),
+  ]);
+  return { exitCode: result.exitCode, stdout, stderr };
+}
+
+/**
+ * Load sandbox record from the database with all fields needed for
+ * credential resolution via resolveVmCredentials.
+ */
+async function loadSandboxRecord(
+  sandboxRecordId: string
+): Promise<SandboxRecord | null> {
+  const pool = getNeonPool();
+  const result = await pool.query<SandboxRecord>(
+    `SELECT id, user_id, repo_id, sandbox_id, status, health_status,
+            exec_lock_token, persistent, billing_source, billing_team_id,
+            billing_project_id, vercel_team_id, vercel_project_id
+     FROM sandboxes WHERE id = $1`,
+    [sandboxRecordId]
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Get a sandbox handle without resuming it.
+ * Returns null if the sandbox doesn't exist or isn't running.
+ * Uses resolveVmCredentials for consistent credential resolution between
+ * platform-billed and user-billed sandboxes (same seam as cleanupTerminalRunSandbox).
+ */
+async function getSandboxHandle(
+  record: SandboxRecord,
+  userId: string
+): Promise<Sandbox | null> {
+  // Defense-in-depth: validate ownership like cleanupTerminalRunSandbox does
+  if (record.user_id !== userId) {
+    console.warn("[terminal-commit] sandbox record user mismatch", {
+      sandboxRecordId: record.id,
+      recordUserId: record.user_id,
+      runUserId: userId,
+    });
+    return null;
+  }
+
+  const { getSandboxIfExists } = await import("@/lib/sandbox/sdk-adapter");
+
+  // Use resolveVmCredentials for consistent handling of platform vs user billing
+  const credentials = await resolveVmCredentials(record);
+  if (!credentials) {
+    console.warn("[terminal-commit] could not resolve VM credentials", {
+      sandboxRecordId: record.id,
+      billingSource: record.billing_source,
+    });
+    return null;
+  }
+
+  try {
+    return await getSandboxIfExists(record.sandbox_id, credentials);
+  } catch {
+    // Sandbox not available - skip pinning
+    return null;
+  }
+}
+
+export type SandboxCommandDeps = {
+  loadSandboxRecord: typeof loadSandboxRecord;
+  getSandboxHandle: (
+    record: SandboxRecord,
+    userId: string
+  ) => Promise<Sandbox | null>;
+  runSandboxShell: typeof runSandboxShell;
+};
+
+const defaultSandboxCommandDeps: SandboxCommandDeps = {
+  loadSandboxRecord,
+  getSandboxHandle,
+  runSandboxShell,
+};
+
+/**
+ * Get the HEAD SHA from the sandbox using lib-level sandbox commands.
+ * Skips pinning if the sandbox isn't running (doesn't resume it).
+ */
+async function getSandboxHeadViaSdk(
   sandboxRecordId: string,
   userId: string,
-  branch: string
+  branch: string,
+  deps: SandboxCommandDeps = defaultSandboxCommandDeps
 ): Promise<SandboxHeadResult> {
-  const { createSandboxExecPostHandler } =
-    await import("@/app/api/sandbox/[id]/exec/route");
+  // Load sandbox record to get the sandbox_id and check status
+  const record = await deps.loadSandboxRecord(sandboxRecordId);
+  if (!record) {
+    console.warn("[terminal-commit] sandbox record not found", {
+      sandboxRecordId,
+    });
+    return { sha: null, pushed: false };
+  }
 
+  // Skip if sandbox is not in a running state
+  if (record.status !== "running") {
+    console.warn("[terminal-commit] sandbox not running, skipping", {
+      sandboxRecordId,
+      status: record.status,
+    });
+    return { sha: null, pushed: false };
+  }
+
+  // Get sandbox handle without resuming
+  const sandbox = await deps.getSandboxHandle(record, userId);
+  if (!sandbox) {
+    console.warn("[terminal-commit] could not get sandbox handle", {
+      sandboxRecordId,
+      sandboxId: record.sandbox_id,
+    });
+    return { sha: null, pushed: false };
+  }
+
+  // Run git commands to get HEAD and verify it's pushed
   const script = `set -eu
 head_sha="$(git rev-parse HEAD 2>/dev/null || echo '')"
 origin_sha="$(git rev-parse "origin/${branch}" 2>/dev/null || echo '')"
 echo "HEAD_SHA=$head_sha"
 echo "ORIGIN_SHA=$origin_sha"`;
 
-  const headers = new Headers(buildInternalApiHeaders(userId));
-  headers.set("content-type", "application/json");
-  headers.set("accept", "application/json");
-  headers.delete("content-length");
-
-  const response = await createSandboxExecPostHandler()(
-    new Request(
-      `https://internal.mogplex/api/sandbox/${sandboxRecordId}/exec`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ command: script }),
-      }
-    ),
-    { params: Promise.resolve({ id: sandboxRecordId }) }
-  );
-
-  if (!response.ok) {
+  try {
+    const result = await deps.runSandboxShell(sandbox, script);
+    if (result.exitCode !== 0) {
+      console.warn("[terminal-commit] git command failed", {
+        sandboxRecordId,
+        exitCode: result.exitCode,
+        stderr: result.stderr.slice(0, 200),
+      });
+      return { sha: null, pushed: false };
+    }
+    return parseGitHeadOutput(result.stdout);
+  } catch (error) {
+    console.warn("[terminal-commit] sandbox command failed", {
+      sandboxRecordId,
+      errorClass: error instanceof Error ? error.constructor.name : "unknown",
+      errorMessage: error instanceof Error ? error.message : "unknown",
+    });
     return { sha: null, pushed: false };
   }
+}
 
-  const body = (await response.json().catch(() => ({}))) as {
-    exitCode?: number | null;
-    stdout?: string;
-  };
-
-  if (body.exitCode !== 0 || !body.stdout) {
-    return { sha: null, pushed: false };
-  }
-
+/**
+ * Parse git HEAD and origin SHA from the output of a git rev-parse script.
+ * Exported for testability.
+ */
+export function parseGitHeadOutput(stdout: string): SandboxHeadResult {
   // Extract and validate SHAs against the shared pattern
-  const headMatch = body.stdout.match(/HEAD_SHA=(\S+)/i);
-  const originMatch = body.stdout.match(/ORIGIN_SHA=(\S+)/i);
+  const headMatch = stdout.match(/HEAD_SHA=(\S+)/i);
+  const originMatch = stdout.match(/ORIGIN_SHA=(\S+)/i);
 
   const headCandidate = headMatch?.[1]?.toLowerCase() ?? null;
   const originCandidate = originMatch?.[1]?.toLowerCase() ?? null;
@@ -104,6 +248,10 @@ echo "ORIGIN_SHA=$origin_sha"`;
  * This avoids lost-update races from read-modify-write patterns.
  *
  * Uses: metadata = coalesce(metadata, '{}') || jsonb_build_object(key, value)
+ *
+ * Rationale: supabase-js read-modify-write would clobber concurrent metadata
+ * keys if another writer updated between our read and write. The raw SQL merge
+ * is atomic at the row level.
  */
 async function updateRunMetadataAtomic(
   userId: string,
@@ -130,7 +278,7 @@ async function updateRunMetadataAtomic(
 }
 
 const defaultDeps: RecordTerminalCommitDeps = {
-  getSandboxHead: getSandboxHeadViaExec,
+  getSandboxHead: getSandboxHeadViaSdk,
   updateRunMetadata: updateRunMetadataAtomic,
 };
 
@@ -187,7 +335,47 @@ export async function recordTerminalCommitSha(
   } catch (error) {
     console.warn("[terminal-commit] failed to record terminal commit", {
       runId: run.id,
-      error: error instanceof Error ? error.message : "unknown",
+      errorClass: error instanceof Error ? error.constructor.name : "unknown",
+      errorMessage: error instanceof Error ? error.message : "unknown",
     });
   }
 }
+
+/** Default timeout for terminal commit recording: 10 seconds. */
+export const TERMINAL_COMMIT_TIMEOUT_MS = 10_000;
+
+/**
+ * Record terminal commit with a timeout guard. Best-effort: catches and logs
+ * failures without throwing. Used by both the worker's `finalizeHarnessPass`
+ * and the supervisor's `finalizeRunAfterWorkerExit` so the timeout policy
+ * and cleanup live in one place.
+ */
+export async function recordTerminalCommitWithTimeout(
+  run: ExternalAgentRunRow,
+  timeoutMs: number = TERMINAL_COMMIT_TIMEOUT_MS,
+  overrides: Partial<RecordTerminalCommitDeps> = {}
+): Promise<void> {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      recordTerminalCommitSha(run, overrides),
+      new Promise<void>((_, reject) => {
+        timerId = setTimeout(
+          () => reject(new Error("Terminal commit recording timed out")),
+          timeoutMs
+        );
+      }),
+    ]);
+  } catch (error) {
+    console.warn("[terminal-commit] recording failed or timed out", {
+      runId: run.id,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  } finally {
+    if (timerId !== undefined) clearTimeout(timerId);
+  }
+}
+
+// Export for testing
+export { getSandboxHeadViaSdk, defaultSandboxCommandDeps };
+export type { SandboxRecord, CommandResult };

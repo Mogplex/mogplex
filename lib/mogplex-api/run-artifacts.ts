@@ -2,14 +2,18 @@ import { z } from "zod";
 import { getOwnedRepoWithGithubAccessToken } from "@/lib/github-access";
 import { presentMogplexApiRun } from "./runs";
 import { loadRunById } from "./runs-db";
-import type { MogplexApiRunDetail } from "./runs-types";
+import {
+  ARTIFACT_PATH_PATTERN,
+  COMMIT_SHA_PATTERN,
+  type MogplexApiRunDetail,
+} from "./runs-types";
 
 // Always repository-root-relative, even when the run has a rootDirectory.
 // Explicit output files only. Never expose arbitrary checkout files or follow symlinks.
 export const runArtifactPathSchema = z
   .string()
   .max(240)
-  .regex(/^\.mogplex\/artifacts\/[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$/);
+  .regex(ARTIFACT_PATH_PATTERN);
 const MAX_ARTIFACT_BYTES = 1024 * 1024;
 type Repo = {
   user_id: string;
@@ -204,13 +208,33 @@ export async function loadRunArtifact(
   const pinned = Boolean(terminalCommitSha);
   const commitRef = terminalCommitSha ?? run.branch.working;
 
+  // Fetch the commit, with distinct 404 error messages based on pinned vs branch
+  let commitRaw: unknown;
+  try {
+    commitRaw = await read(`${base}/commits/${encodeURIComponent(commitRef)}`);
+  } catch (error) {
+    if (error instanceof RunArtifactError && error.status === 404) {
+      // Distinguish pinned commit unreachable vs branch deleted
+      throw pinned
+        ? new RunArtifactError(
+            404,
+            "Pinned commit is no longer available (may have been force-pushed away)"
+          )
+        : new RunArtifactError(
+            404,
+            "Branch no longer exists (may have been deleted)"
+          );
+    }
+    throw error;
+  }
+
   const commit = parseProvider(
     z.object({
       // SHA-1 (40 hex) or SHA-256 object-format (64 hex) repositories.
-      sha: z.string().regex(/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/),
+      sha: z.string().regex(COMMIT_SHA_PATTERN),
       commit: z.object({ tree: z.object({ sha: z.string().min(1) }) }),
     }),
-    await read(`${base}/commits/${encodeURIComponent(commitRef)}`)
+    commitRaw
   );
   const blobSha = await readBlobSha(base, commit.commit.tree.sha, path, read);
   const content = decodeArtifact(

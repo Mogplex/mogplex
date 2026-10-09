@@ -6,8 +6,12 @@ import {
   syncRunAfterRuntime,
   type TerminalRunStatus,
 } from "./run-runtime-store";
-import type { ExternalAgentRunRow } from "./runs-types";
+import {
+  extractTerminalCommitSha,
+  type ExternalAgentRunRow,
+} from "./runs-types";
 import { cleanupTerminalRunSandbox } from "./run-sandbox-cleanup";
+import { recordTerminalCommitWithTimeout } from "./run-terminal-commit";
 
 export type WorkerCompletion = {
   status: "completed" | "failed" | "cancelled";
@@ -21,6 +25,7 @@ export type RuntimeFinalizationDeps = {
   appendEvent: typeof safeAppendAiCallEvent;
   notifyTerminal: typeof notifyTerminalSlackRunOnce;
   cleanupSandbox: typeof cleanupTerminalRunSandbox;
+  recordTerminalCommit: typeof recordTerminalCommitWithTimeout;
 };
 const defaultDeps: RuntimeFinalizationDeps = {
   loadRun: loadRunForExecution,
@@ -30,6 +35,7 @@ const defaultDeps: RuntimeFinalizationDeps = {
   appendEvent: safeAppendAiCallEvent,
   notifyTerminal: notifyTerminalSlackRunOnce,
   cleanupSandbox: cleanupTerminalRunSandbox,
+  recordTerminalCommit: recordTerminalCommitWithTimeout,
 };
 
 export function isTerminalRunStatus(
@@ -95,6 +101,28 @@ export async function finalizeRunAfterWorkerExit(
       },
     });
   }
+  // Record terminal commit SHA for successful create_branch runs (best-effort).
+  // Same logic as run-execution-finalize.ts: only for create_branch runs since
+  // worktree-bound runs operate in the worktree, not the repo root.
+  // First-write-wins: skip if the worker's `finalizeHarnessPass` already pinned
+  // the commit, so a late push while the sandbox is still running cannot silently
+  // move the pin (the exact scenario this pinning feature prevents).
+  // Use the same validation as artifact reads so a malformed value doesn't
+  // block re-recording forever.
+  const alreadyPinned = extractTerminalCommitSha(run.metadata) !== null;
+  if (run.status === "success" && run.create_branch && !alreadyPinned) {
+    // The wrapper handles timeout and failure tolerance. Extra try-catch guards
+    // against injected deps in tests that don't match the wrapper's behavior.
+    try {
+      await deps.recordTerminalCommit(run);
+    } catch (error) {
+      console.warn("[run-reconciliation] terminal commit recording failed", {
+        runId: run.id,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
+
   // Propagate notification errors so the supervisor retries delivery without
   // executing the agent again. A terminal row alone is not successful delivery.
   const results = await Promise.allSettled([

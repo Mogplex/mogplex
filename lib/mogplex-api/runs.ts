@@ -34,7 +34,7 @@ import {
   hashRequest,
 } from "./runs-normalize";
 import {
-  COMMIT_SHA_PATTERN,
+  extractTerminalCommitSha,
   MogplexApiRunError,
   type ExternalAgentRunRow,
   type NormalizedStartRequest,
@@ -167,14 +167,6 @@ async function queueExternalAgentRun(input: {
     runtimeProvider: "trigger",
     runtimeRunId: handle.id ?? null,
   };
-}
-
-function extractTerminalCommitSha(
-  metadata: Record<string, unknown>
-): string | null {
-  const sha = metadata?.terminal_commit_sha;
-  if (typeof sha !== "string" || !COMMIT_SHA_PATTERN.test(sha)) return null;
-  return sha;
 }
 
 export function presentMogplexApiRun(row: ExternalAgentRunRow) {
