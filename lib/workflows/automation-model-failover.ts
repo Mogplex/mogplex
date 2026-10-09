@@ -10,7 +10,10 @@ import {
   isAutomationWrappableLanguageModel,
   isRecord,
 } from "./automation-model-execution-types";
-import { classifyAutomationModelError } from "./automation-model-execution-errors";
+import {
+  automationStepBudgetExhaustedError,
+  classifyAutomationModelError,
+} from "./automation-model-execution-errors";
 import {
   logAutomationModelFailover,
   logAutomationProviderAttemptFailure,
@@ -192,7 +195,7 @@ function createRecoveryMiddleware(input: {
         const budgetSpent = remainingBudgetMs === 0;
 
         if (budgetSpent) {
-          throw new Error(
+          throw automationStepBudgetExhaustedError(
             "Step budget exhausted before starting the next attempt"
           );
         }
@@ -228,14 +231,22 @@ function createRecoveryMiddleware(input: {
             withRemainingGatewayModels(callParams, remaining)
           );
         } catch (error) {
-          const failure = classifyAutomationModelError(error);
+          // If the budget controller fired, surface it as our typed error so the
+          // classification lands in `timeout` rather than whatever the provider
+          // wrapped the abort as (often `provider_unavailable` via UND_ERR_SOCKET).
+          const budgetAborted = budgetController?.signal.aborted === true;
+          const effectiveError = budgetAborted
+            ? automationStepBudgetExhaustedError(
+                "Step budget exhausted during request"
+              )
+            : error;
+          const failure = classifyAutomationModelError(effectiveError);
           const next = planNextAttempt({
             failure,
             retryState,
             hasNextFallback: activeFallbackIndex + 1 < fallbacks.length,
             generationAborted:
-              params.abortSignal?.aborted === true ||
-              budgetController?.signal.aborted === true,
+              params.abortSignal?.aborted === true || budgetAborted,
             stepBudgetSpent:
               stepBudgetMs !== undefined &&
               now() - stepStartedAt >= stepBudgetMs,
@@ -243,12 +254,12 @@ function createRecoveryMiddleware(input: {
           logAutomationProviderAttemptFailure({
             logger,
             context: logContext,
-            error,
+            error: effectiveError,
             failure,
             attempt: retryState.retryCount + 1,
             willRetry: next !== "fail",
           });
-          if (next === "fail") throw error;
+          if (next === "fail") throw effectiveError;
 
           retryState.retryCount += 1;
           retryState.recoveredFromFailureClass ??= failure.classification;

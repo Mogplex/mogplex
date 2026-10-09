@@ -89,6 +89,20 @@ test("presentAutomationFailureDiagnostics normalizes model metadata", () => {
   });
 });
 
+test("presentAutomationFailureDiagnostics maps model_failed_over to failedOver", () => {
+  const diagnostics = presentAutomationFailureDiagnostics({
+    model_failure_class: "timeout",
+    model_failure_message: "Request timed out",
+    model_retry_attempted: false,
+    model_failed_over: true,
+    model_retry_count: 1,
+    model_attempts: 2,
+  });
+
+  assert.equal(diagnostics.failedOver, true);
+  assert.equal(diagnostics.retryAttempted, false);
+});
+
 test("buildAutomationFailureFilterOptions and filters operate on failed records", () => {
   const timeoutRecord = createFailureRecord();
   const authRecord = createFailureRecord({
@@ -239,6 +253,7 @@ test("breakdowns and resilience summary reflect failure classes and recoveries",
     failedTotal: 2,
     successfulRecoveries: 1,
     retriedFailures: 2,
+    failedOverFailures: 0,
     timeoutFailures: 1,
     authenticationFailures: 0,
     configurationFailures: 0,

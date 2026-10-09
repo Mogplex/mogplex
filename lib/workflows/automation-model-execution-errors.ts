@@ -7,6 +7,23 @@ import type {
 } from "./automation-model-execution-types";
 import { isRecord } from "./automation-model-execution-types";
 
+/**
+ * Error code for step budget exhaustion. Thrown when the automation step's
+ * time budget expires before or during an LLM call. Classified as `timeout`
+ * since the underlying failure is that the step ran out of time.
+ */
+export const AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE =
+  "AUTOMATION_STEP_BUDGET_EXHAUSTED";
+
+/**
+ * Creates a typed budget-exhausted error that classifies as `timeout`.
+ */
+export function automationStepBudgetExhaustedError(message: string) {
+  return Object.assign(new Error(message), {
+    code: AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE,
+  });
+}
+
 export class AutomationModelExecutionError extends Error {
   readonly failure: AutomationModelFailureInfo;
   readonly metadata: AutomationModelExecutionMetadata;
@@ -369,6 +386,15 @@ function isDependencyUnavailableAutomationFailure(
   return signals.errorCode === MODEL_ALLOWLIST_UNAVAILABLE_CODE;
 }
 
+function isStepBudgetExhaustedAutomationFailure(
+  signals: AutomationErrorSignals
+) {
+  // Exact-match on the code we throw when the step's time budget expires.
+  // This includes both the loop-top guard (no budget left to start an attempt)
+  // and the mid-flight abort (budget expired while the request was in flight).
+  return signals.errorCode === AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE;
+}
+
 function isAuthenticationAutomationFailure(signals: AutomationErrorSignals) {
   return (
     signals.statusCode === 401 ||
@@ -427,6 +453,14 @@ export function classifyAutomationModelError(
   // at the resolution call site, ahead of the side effects — which is #766.
   if (isDependencyUnavailableAutomationFailure(signals)) {
     return buildAutomationFailure(signals, "dependency_unavailable", true);
+  }
+
+  // Budget exhaustion is a timeout: the step ran out of its allotted time.
+  // Placing the check here (exact code match) ensures message-based heuristics
+  // below cannot steal the classification. Non-retryable because the budget is
+  // gone — retrying would exceed it further.
+  if (isStepBudgetExhaustedAutomationFailure(signals)) {
+    return buildAutomationFailure(signals, "timeout", false);
   }
 
   if (isTimeoutAutomationFailure(signals)) {

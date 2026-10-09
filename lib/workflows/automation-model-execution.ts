@@ -193,9 +193,9 @@ export function asAutomationModelExecutionError(input: {
 
   const failure = classifyAutomationModelError(input.error);
   const retryCount = input.retryCount ?? 0;
-  // When failedOver is provided we trust it; otherwise fall back to legacy
-  // behavior where retried meant any re-attempt. For new callers that pass
-  // both retried and failedOver, this distinction is preserved correctly.
+  // Derive same-model retry count from total retries minus failovers. When
+  // `failoverModelIds` is present (new callers), this distinguishes same-model
+  // retries from model switches; when absent (legacy), fall back to `retried`.
   const failoverCount =
     input.gatewayRoutingMetadata?.failoverModelIds?.length ?? 0;
   const retried = input.retried ?? retryCount - failoverCount > 0;

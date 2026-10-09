@@ -407,6 +407,12 @@ export function summarizeAutomationResilience(
     retriedFailures: failedRecords.filter(
       (record) => record.diagnostics.retryAttempted
     ).length,
+    // Runs that switched models mid-flight (even if they ultimately failed).
+    // Since `retryAttempted` now means same-model retries only, pure-failover
+    // runs would otherwise disappear from the resilience summary.
+    failedOverFailures: failedRecords.filter(
+      (record) => record.diagnostics.failedOver
+    ).length,
     timeoutFailures: failedRecords.filter(
       (record) => record.diagnostics.failureClass === "timeout"
     ).length,

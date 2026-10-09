@@ -248,8 +248,73 @@ describe("step budget ceiling", () => {
     // The primary fails immediately, we fail over to fallback
     // The fallback takes 100ms, but the budget is only 10ms
     await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(
-      "aborted due to budget"
+      "Step budget exhausted during request"
     );
     expect(fallbackAborted).toBe(true);
+  });
+
+  it("should not fail over to the second fallback after a budget abort", async () => {
+    // This test would pass (incorrectly) if the budgetController.signal.aborted
+    // check in planNextAttempt's generationAborted argument were removed: the
+    // first fallback's abort would be classified as provider_unavailable (from
+    // UND_ERR_SOCKET), trigger a fail_over, and invoke the second fallback.
+    const primary = scriptedModel("zai/glm-5.3", [socketDrop()]);
+    let firstFallbackCalled = false;
+    let secondFallbackCalled = false;
+
+    const firstFallbackModel = {
+      specificationVersion: "v4" as const,
+      provider: "gateway",
+      modelId: "zai/glm-5.3-fast",
+      supportedUrls: {},
+      async doGenerate(options: CallOptions) {
+        firstFallbackCalled = true;
+        await new Promise<void>((resolve, reject) => {
+          const abortHandler = () => reject(new Error("aborted due to budget"));
+          if (options.abortSignal?.aborted) {
+            abortHandler();
+            return;
+          }
+          options.abortSignal?.addEventListener("abort", abortHandler);
+          setTimeout(() => resolve(), 100);
+        });
+        return generateResult("should not reach", "zai/glm-5.3-fast");
+      },
+      async doStream() {
+        throw new Error("doStream should not be called");
+      },
+    } as V4Model;
+
+    const secondFallbackModel = {
+      specificationVersion: "v4" as const,
+      provider: "gateway",
+      modelId: "b",
+      supportedUrls: {},
+      async doGenerate() {
+        secondFallbackCalled = true;
+        return generateResult("second fallback", "b");
+      },
+      async doStream() {
+        throw new Error("doStream should not be called");
+      },
+    } as V4Model;
+
+    const wrapped = wrapAutomationModelForRecovery({
+      model: primary.model,
+      fallbackModels: [
+        { modelId: "zai/glm-5.3-fast", model: firstFallbackModel },
+        { modelId: "b", model: secondFallbackModel },
+      ],
+      retryState: freshRetryState(),
+      logger: silentLogger,
+      logContext: { phase: "pr_review", requestedModelId: "zai/glm-5.3" },
+      stepBudgetMs: 10,
+    }) as V4Model;
+
+    await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(
+      "Step budget exhausted"
+    );
+    expect(firstFallbackCalled).toBe(true);
+    expect(secondFallbackCalled).toBe(false);
   });
 });
