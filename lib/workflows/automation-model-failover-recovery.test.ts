@@ -226,8 +226,8 @@ describe("step budget ceiling", () => {
             return;
           }
           options.abortSignal?.addEventListener("abort", abortHandler);
-          // This request would take 100ms, but the budget is only 10ms
-          setTimeout(() => resolve(), 100);
+          // This request would take 500ms, but the budget is only 50ms
+          setTimeout(() => resolve(), 500);
         });
         return generateResult("should not reach", "zai/glm-5.3-fast");
       },
@@ -242,11 +242,11 @@ describe("step budget ceiling", () => {
       retryState: freshRetryState(),
       logger: silentLogger,
       logContext: { phase: "pr_review", requestedModelId: "zai/glm-5.3" },
-      stepBudgetMs: 10,
+      stepBudgetMs: 50,
     }) as V4Model;
 
     // The primary fails immediately, we fail over to fallback
-    // The fallback takes 100ms, but the budget is only 10ms
+    // The fallback takes 500ms, but the budget is only 50ms
     await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(
       "Step budget exhausted during request"
     );
@@ -276,7 +276,7 @@ describe("step budget ceiling", () => {
             return;
           }
           options.abortSignal?.addEventListener("abort", abortHandler);
-          setTimeout(() => resolve(), 100);
+          setTimeout(() => resolve(), 500);
         });
         return generateResult("should not reach", "zai/glm-5.3-fast");
       },
@@ -308,7 +308,7 @@ describe("step budget ceiling", () => {
       retryState: freshRetryState(),
       logger: silentLogger,
       logContext: { phase: "pr_review", requestedModelId: "zai/glm-5.3" },
-      stepBudgetMs: 10,
+      stepBudgetMs: 50,
     }) as V4Model;
 
     await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(

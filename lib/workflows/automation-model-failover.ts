@@ -184,10 +184,11 @@ function createRecoveryMiddleware(input: {
         // Compute remaining budget before each attempt so an attempt that would
         // start past the budget never runs. For fallback models, we also abort
         // in-flight attempts when the budget expires, making this a true ceiling
-        // for those paths. The primary model path (doGenerate) cannot be aborted
-        // mid-request since the middleware callback doesn't accept modified
-        // params; for that path, the stepBudgetSpent check after failure ensures
-        // we don't start new attempts once the budget is exhausted.
+        // for those paths. The primary model path skips mid-request abort: for
+        // non-review phases the SDK timeout already equals the step budget, and
+        // for pr_review the per-request fetch bound (effectiveTimeoutMs ~12.5m)
+        // sits under the 25m step budget anyway; the stepBudgetSpent check after
+        // failure ensures we don't start new attempts once the budget is exhausted.
         const remainingBudgetMs =
           stepBudgetMs === undefined
             ? undefined
