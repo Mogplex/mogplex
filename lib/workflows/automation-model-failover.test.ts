@@ -205,6 +205,38 @@ describe("wrapAutomationModelForRecovery", () => {
     expect(retryState.failoverModelIds).toEqual(["zai/glm-5.3-fast"]);
   });
 
+  it("should throw the budget error at loop top when budget expires between iterations", async () => {
+    // A controlled clock that advances only when read, simulating time passing
+    // between the catch's stepBudgetSpent check and the next loop iteration.
+    // Sequence:
+    //   0 → stepStartedAt
+    //   0 → first loop-top (remaining = 100)
+    //  50 → catch stepBudgetSpent (50 < 100, not spent, loop continues)
+    // 100 → second loop-top (remaining = 0, throws budget error)
+    const times = [0, 0, 50, 100];
+    let readIndex = 0;
+    const controlledClock = () => times[readIndex++] ?? 999999;
+
+    const primary = scriptedModel("zai/glm-5.3", [socketDrop()]);
+    const fallback = scriptedModel("zai/glm-5.3-fast", ["ok"]);
+    const { wrapped, retryState } = wrap(
+      primary.model,
+      [{ modelId: "zai/glm-5.3-fast", model: fallback.model }],
+      freshRetryState(),
+      { stepBudgetMs: 100, now: controlledClock }
+    );
+
+    await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(
+      "Step budget exhausted before starting the next attempt"
+    );
+    expect(primary.calls).toHaveLength(1);
+    expect(fallback.calls).toHaveLength(0);
+    // Failover bookkeeping ran before the loop-top guard fired, so the run
+    // reports both failedOver: true and a target that never received an attempt.
+    // This ordering is intentional (see the source comment).
+    expect(retryState.failoverModelIds).toEqual(["zai/glm-5.3-fast"]);
+  });
+
   it("should hand the request to the fallback when the primary drops the connection", async () => {
     const primary = scriptedModel("zai/glm-5.3", [socketDrop()]);
     const fallback = scriptedModel("zai/glm-5.3-fast", ["ok"]);

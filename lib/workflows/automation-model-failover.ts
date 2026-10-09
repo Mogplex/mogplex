@@ -269,6 +269,13 @@ function createRecoveryMiddleware(input: {
           retryState.recoveredFromFailureClass ??= failure.classification;
           retryState.recoveredFromMessage ??= failure.rawMessage;
           if (next === "fail_over") {
+            // Intentional ordering: bookkeeping runs before the next iteration's
+            // loop-top budget guard. In the sub-millisecond window where the budget
+            // expires between here and the next now() read, metadata will report
+            // failedOver: true with a target that never received an attempt. This
+            // is semantically correct — the run did switch its active model — and
+            // the alternative (re-checking budget here) adds complexity for a race
+            // that is near-impossible in production.
             const fromModelId = activeModelId();
             activeFallbackIndex += 1;
             const toModelId = fallbacks[activeFallbackIndex].modelId;
