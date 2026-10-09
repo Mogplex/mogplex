@@ -97,6 +97,56 @@ describe("stopOrphanedWorkers", () => {
   });
 });
 
+describe("findOrphanedWorkerCalls dedupe", () => {
+  it("deduplicates call ids appearing in both runs and continuations", async () => {
+    const pg = await PGlite.create();
+    try {
+      await pg.exec(`
+        create table external_agent_runs(ai_call_id text, status text);
+        create table control_continuations(resume_ai_call_id text, status text);
+        create table ai_calls(id text primary key, user_id text, runtime_command_id text, error text,
+          status text, completed_at timestamptz);
+      `);
+      const now = Date.now();
+      const minutesAgo = (minutes: number) =>
+        new Date(now - minutes * 60_000).toISOString();
+
+      // Same call id in both tables (unusual but possible)
+      const sharedCallId = "shared-call";
+      await pg.query(
+        "insert into ai_calls values ($1,'owner',null,'Stopped.',$2,$3)",
+        [sharedCallId, "failed", minutesAgo(10)]
+      );
+      await pg.query(
+        "insert into external_agent_runs values ($1,'streaming')",
+        [sharedCallId]
+      );
+      await pg.query(
+        "insert into control_continuations values ($1,'running')",
+        [sharedCallId]
+      );
+
+      const queryable: Queryable = {
+        query: async (text, values) => {
+          const result = await pg.query(text, values);
+          return { rows: result.rows as Record<string, unknown>[] };
+        },
+      };
+      const client = createPostgrestShim(
+        queryable
+      ) as unknown as SupabaseClient;
+
+      const orphans = await findOrphanedWorkerCalls(client, now);
+
+      // Should only return one entry despite the call appearing in both tables
+      expect(orphans).toHaveLength(1);
+      expect(orphans[0].id).toBe(sharedCallId);
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
 describe("findOrphanedWorkerCalls batching", () => {
   it("handles more than 100 call ids by batching queries", async () => {
     const pg = await PGlite.create();

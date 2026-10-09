@@ -2,9 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import {
   forEachConcurrently,
+  reportStopResults,
   stopWorkers,
+  type ReportStopResultsDeps,
   type WorkerStop,
 } from "./zombie-reaper-stops";
+import type { ZombieReaperTableSummary } from "./zombie-reaper-types";
 
 describe("forEachConcurrently", () => {
   it("should process every item with no more than the limit in flight", async () => {
@@ -88,5 +91,75 @@ describe("stopWorkers", () => {
 
     expect(result.notFound).toEqual(["noop"]);
     expect(result.failures).toEqual([{ id: "fail", error: "Network error" }]);
+  });
+});
+
+describe("reportStopResults", () => {
+  const makeSummary = (): ZombieReaperTableSummary => ({
+    table: "ai_calls",
+    scanned: 0,
+    reaped: 0,
+    results: [],
+    error: null,
+  });
+
+  it("records failures and not-stopped entries in the summary", () => {
+    const summary = makeSummary();
+    reportStopResults(summary, {
+      failures: [{ id: "fail-1", error: "Trigger down" }],
+      notFound: ["noop-1", "noop-2"],
+    });
+
+    expect(summary.results).toHaveLength(3);
+    expect(summary.results[0]).toEqual({
+      table: "ai_calls",
+      id: "fail-1",
+      ageMs: null,
+      action: "worker_stop_failed",
+      detail: "Trigger down",
+    });
+    expect(summary.results[1]).toEqual({
+      table: "ai_calls",
+      id: "noop-1",
+      ageMs: null,
+      action: "worker_not_stopped",
+      detail: "No active worker to stop for idle call",
+    });
+    expect(summary.results[2]).toEqual({
+      table: "ai_calls",
+      id: "noop-2",
+      ageMs: null,
+      action: "worker_not_stopped",
+      detail: "No active worker to stop for idle call",
+    });
+  });
+
+  it("calls captureWarning only when failures exist", () => {
+    const captured: Array<{ message: string; extra: Record<string, unknown> }> =
+      [];
+    const deps: ReportStopResultsDeps = {
+      captureWarning: (message, extra) => captured.push({ message, extra }),
+    };
+
+    // No failures: captureWarning not called
+    const summary1 = makeSummary();
+    reportStopResults(summary1, { failures: [], notFound: ["noop-1"] }, deps);
+    expect(captured).toHaveLength(0);
+
+    // With failures: captureWarning called
+    const summary2 = makeSummary();
+    reportStopResults(
+      summary2,
+      {
+        failures: [{ id: "fail-1", error: "Trigger down" }],
+        notFound: [],
+      },
+      deps
+    );
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toEqual({
+      message: "[zombie-reaper] could not stop idle workers",
+      extra: { failures: [{ id: "fail-1", error: "Trigger down" }] },
+    });
   });
 });

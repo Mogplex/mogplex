@@ -74,10 +74,29 @@ export async function stopWorkers(
   return { failures, notFound };
 }
 
+export type ReportStopResultsDeps = {
+  captureWarning?: (message: string, extra: Record<string, unknown>) => void;
+};
+
+const defaultReportDeps: ReportStopResultsDeps = {
+  captureWarning: (message, extra) => {
+    try {
+      Sentry.captureMessage(message, {
+        level: "warning",
+        tags: { table: "ai_calls" },
+        extra,
+      });
+    } catch (captureError) {
+      console.error("[zombie-reaper] Sentry capture failed", captureError);
+    }
+  },
+};
+
 /** Records stop results (failures and not-found) in the cycle summary and Sentry. */
 export function reportStopResults(
   summary: ZombieReaperTableSummary,
-  result: WorkerStopResult
+  result: WorkerStopResult,
+  deps: ReportStopResultsDeps = defaultReportDeps
 ) {
   for (const failure of result.failures) {
     console.error("[zombie-reaper] could not stop idle worker", failure);
@@ -94,18 +113,12 @@ export function reportStopResults(
       table: "ai_calls",
       id,
       ageMs: null,
-      action: "worker_not_found",
-      detail: "No active worker backing this call",
+      action: "worker_not_stopped",
+      detail: "No active worker to stop for idle call",
     });
   }
   if (result.failures.length === 0) return;
-  try {
-    Sentry.captureMessage("[zombie-reaper] could not stop idle workers", {
-      level: "warning",
-      tags: { table: "ai_calls" },
-      extra: { failures: result.failures },
-    });
-  } catch (captureError) {
-    console.error("[zombie-reaper] Sentry capture failed", captureError);
-  }
+  deps.captureWarning?.("[zombie-reaper] could not stop idle workers", {
+    failures: result.failures,
+  });
 }
