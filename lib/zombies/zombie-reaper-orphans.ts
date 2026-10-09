@@ -119,7 +119,7 @@ export async function stopOrphanedWorkers(
               : String(sweepError),
         },
       ],
-      notFound: [],
+      notStopped: [],
     };
   }
 }
