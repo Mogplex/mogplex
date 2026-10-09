@@ -7,7 +7,7 @@
  */
 import { getNeonPool } from "@/lib/db/pool";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
-import type { ExternalAgentRunRow } from "./runs-types";
+import { COMMIT_SHA_PATTERN, type ExternalAgentRunRow } from "./runs-types";
 
 export type SandboxHeadResult = {
   sha: string | null;
@@ -76,15 +76,22 @@ echo "ORIGIN_SHA=$origin_sha"`;
     return { sha: null, pushed: false };
   }
 
-  const headMatch = body.stdout.match(
-    /HEAD_SHA=([a-f0-9]{40}(?:[a-f0-9]{24})?)/i
-  );
-  const originMatch = body.stdout.match(
-    /ORIGIN_SHA=([a-f0-9]{40}(?:[a-f0-9]{24})?)/i
-  );
+  // Extract and validate SHAs against the shared pattern
+  const headMatch = body.stdout.match(/HEAD_SHA=(\S+)/i);
+  const originMatch = body.stdout.match(/ORIGIN_SHA=(\S+)/i);
 
-  const headSha = headMatch?.[1] ?? null;
-  const originSha = originMatch?.[1] ?? null;
+  const headCandidate = headMatch?.[1]?.toLowerCase() ?? null;
+  const originCandidate = originMatch?.[1]?.toLowerCase() ?? null;
+
+  // Validate against the shared pattern (40 or 64 hex chars)
+  const headSha =
+    headCandidate && COMMIT_SHA_PATTERN.test(headCandidate)
+      ? headCandidate
+      : null;
+  const originSha =
+    originCandidate && COMMIT_SHA_PATTERN.test(originCandidate)
+      ? originCandidate
+      : null;
 
   // Verify the commit is pushed: HEAD must match origin/<branch>
   const pushed = headSha !== null && headSha === originSha;

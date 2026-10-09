@@ -5,6 +5,12 @@
  * helper modules. Keeping these in a separate file avoids circular imports.
  */
 
+/**
+ * Git commit SHA pattern: 40 hex chars (SHA-1) or 64 hex chars (SHA-256).
+ * Exported for consistent validation across recording, presentation, and artifact reading.
+ */
+export const COMMIT_SHA_PATTERN = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/;
+
 export const MOGPLEX_API_RUN_HARNESSES = [
   "mogplex",
   "codex",

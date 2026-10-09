@@ -168,24 +168,29 @@ export async function finalizeHarnessPass(
   // This pins artifact reads to the exact commit at run completion.
   // We await to ensure recording completes before the Trigger worker exits,
   // but never fail the run if recording fails.
-  if (status === "success") {
+  // Only record for create_branch runs; worktree-bound runs operate in the worktree,
+  // not the repo root, so HEAD would be the base branch tip.
+  if (status === "success" && finished.create_branch) {
     const recordFn = deps.recordTerminalCommit ?? recordTerminalCommitSha;
     const TERMINAL_COMMIT_TIMEOUT_MS = 10_000;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
         recordFn(finished),
-        new Promise<void>((_, reject) =>
-          setTimeout(
+        new Promise<void>((_, reject) => {
+          timerId = setTimeout(
             () => reject(new Error("Terminal commit recording timed out")),
             TERMINAL_COMMIT_TIMEOUT_MS
-          )
-        ),
+          );
+        }),
       ]);
     } catch (error) {
       console.warn("[run-execution] terminal commit recording failed", {
         runId: finished.id,
         error: error instanceof Error ? error.message : "unknown",
       });
+    } finally {
+      if (timerId !== undefined) clearTimeout(timerId);
     }
   }
 

@@ -34,6 +34,7 @@ import {
   hashRequest,
 } from "./runs-normalize";
 import {
+  COMMIT_SHA_PATTERN,
   MogplexApiRunError,
   type ExternalAgentRunRow,
   type NormalizedStartRequest,
@@ -172,8 +173,7 @@ function extractTerminalCommitSha(
   metadata: Record<string, unknown>
 ): string | null {
   const sha = metadata?.terminal_commit_sha;
-  if (typeof sha !== "string" || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(sha))
-    return null;
+  if (typeof sha !== "string" || !COMMIT_SHA_PATTERN.test(sha)) return null;
   return sha;
 }
 
