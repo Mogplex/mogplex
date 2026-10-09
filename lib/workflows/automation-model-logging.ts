@@ -58,6 +58,7 @@ function buildErrorDetails(
   failure: AutomationModelFailureInfo
 ) {
   const errorRecord = isRecord(error) ? error : null;
+  const causeRecord = isRecord(errorRecord?.cause) ? errorRecord.cause : null;
   return {
     classification: failure.classification,
     errorName: failure.errorName,
@@ -70,6 +71,8 @@ function buildErrorDetails(
         : failure.retryable,
     generationId: readOptionalString(errorRecord?.generationId),
     message: failure.rawMessage,
+    causeMessage: readOptionalString(causeRecord?.message),
+    causeCode: readOptionalString(causeRecord?.code),
   };
 }
 
@@ -105,6 +108,7 @@ export function logAutomationModelFailover(input: {
   logger: AutomationModelLogger;
   context: AutomationModelLogContext;
   failure: AutomationModelFailureInfo;
+  fromModelId: string;
   toModelId: string;
 }) {
   input.logger.warn(
@@ -112,6 +116,7 @@ export function logAutomationModelFailover(input: {
     sanitizeLogPayload({
       event: "automation_model_failover",
       ...buildBaseLogContext(input.context),
+      fromModelId: input.fromModelId,
       toModelId: input.toModelId,
       classification: input.failure.classification,
       statusCode: input.failure.statusCode,

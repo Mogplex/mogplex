@@ -143,11 +143,16 @@ function buildAutomationExecutionMetadata(input: {
   gatewayRoutingState: AutomationGatewayRoutingState;
   finalFailure: AutomationModelFailureInfo | null;
 }) {
+  const failoverCount = input.retryState.failoverModelIds.length;
+  // Same-model retries are retries where the gateway was unreachable and we
+  // retried the same model, as opposed to fail-overs to a different model.
+  const sameModelRetryCount = input.retryState.retryCount - failoverCount;
   return {
     phase: input.phase,
     attempts: input.retryState.retryCount + 1,
     retryCount: input.retryState.retryCount,
-    retried: input.retryState.retryCount > 0,
+    retried: sameModelRetryCount > 0,
+    ...(failoverCount > 0 ? { failedOver: true } : {}),
     effectiveTimeoutMs: input.effectiveTimeoutMs,
     recoveredFromFailureClass: input.retryState.recoveredFromFailureClass,
     recoveredFromMessage: input.retryState.recoveredFromMessage,
@@ -174,6 +179,7 @@ export function asAutomationModelExecutionError(input: {
   attempts?: number;
   retryCount?: number;
   retried?: boolean;
+  failedOver?: boolean;
   observedInputTokens?: number | null;
   observedOutputTokens?: number | null;
   observedUsage?: CapturedUsage | null;
@@ -187,7 +193,12 @@ export function asAutomationModelExecutionError(input: {
 
   const failure = classifyAutomationModelError(input.error);
   const retryCount = input.retryCount ?? 0;
-  const retried = input.retried ?? retryCount > 0;
+  // Derive same-model retry count from total retries minus failovers. When
+  // `failoverModelIds` is present (new callers), this distinguishes same-model
+  // retries from model switches; when absent (legacy), fall back to `retried`.
+  const failoverCount =
+    input.gatewayRoutingMetadata?.failoverModelIds?.length ?? 0;
+  const retried = input.retried ?? retryCount - failoverCount > 0;
   const observedUsage = input.observedUsage ?? null;
   const hasObservedUsage =
     input.observedInputTokens != null ||
@@ -201,6 +212,7 @@ export function asAutomationModelExecutionError(input: {
       attempts: input.attempts ?? 0,
       retryCount,
       retried,
+      ...(input.failedOver === true ? { failedOver: true } : {}),
       effectiveTimeoutMs: getEffectiveAutomationTimeoutMs(input.timeoutMs),
       ...(hasObservedUsage
         ? {
@@ -362,6 +374,8 @@ export async function executeAutomationTextGeneration(input: {
     const observedInputTokens = observedUsage.inputTokens;
     const observedOutputTokens = observedUsage.outputTokens;
     const failure = classifyAutomationModelError(error);
+    const failoverCount = retryState.failoverModelIds.length;
+    const sameModelRetryCount = retryState.retryCount - failoverCount;
     logAutomationGenerationFailure({
       logger,
       context: logContext,
@@ -376,7 +390,8 @@ export async function executeAutomationTextGeneration(input: {
       timeoutMs: input.timeoutMs,
       attempts: retryState.retryCount + 1,
       retryCount: retryState.retryCount,
-      retried: retryState.retryCount > 0,
+      retried: sameModelRetryCount > 0,
+      failedOver: failoverCount > 0,
       observedInputTokens,
       observedOutputTokens,
       observedUsage,

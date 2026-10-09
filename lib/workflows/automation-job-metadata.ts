@@ -77,6 +77,7 @@ export function mergeAutomationExecutionMetadata(
     (execution) => execution.fallbackUsed !== undefined
   );
 
+  const hasFailedOver = executions.some((execution) => execution.failedOver);
   return {
     phase:
       executions.length === 1
@@ -91,6 +92,7 @@ export function mergeAutomationExecutionMetadata(
       0
     ),
     retried: executions.some((execution) => execution.retried),
+    ...(hasFailedOver ? { failedOver: true } : {}),
     effectiveTimeoutMs: Math.max(
       ...executions.map((execution) => execution.effectiveTimeoutMs)
     ),
@@ -136,6 +138,7 @@ export function buildAutomationExecutionMetadataFields(
     model_attempts: execution.attempts,
     model_retry_attempted: execution.retried,
     model_retry_count: execution.retryCount,
+    ...(execution.failedOver === true ? { model_failed_over: true } : {}),
     model_effective_timeout_ms: execution.effectiveTimeoutMs,
     model_recovered_from_failure_class: execution.recoveredFromFailureClass,
     model_recovered_from_message: execution.recoveredFromMessage,

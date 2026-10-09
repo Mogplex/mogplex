@@ -7,6 +7,10 @@ import {
   AUTOMATION_MODEL_TIMEOUT_FLOOR_MS,
 } from "../../lib/workflows/automation-model-execution";
 import {
+  automationStepBudgetExhaustedError,
+  AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE,
+} from "../../lib/workflows/automation-model-execution-errors";
+import {
   isModelAllowlistUnavailableError,
   MODEL_ALLOWLIST_UNAVAILABLE_ERROR,
   MODEL_NOT_IN_ALLOWLIST_ERROR,
@@ -204,4 +208,50 @@ test("both cause-chain walkers agree on the allowlist error", () => {
     assert.equal(viaHttpDetector, expected, `http detector: ${label}`);
     assert.equal(viaClassifier, expected, `classifier: ${label}`);
   }
+});
+
+test("classifyAutomationModelError marks budget exhaustion as non-retryable timeout", () => {
+  const error = automationStepBudgetExhaustedError(
+    "Step budget exhausted during request"
+  );
+
+  const classified = classifyAutomationModelError(error);
+
+  assert.equal(classified.classification, "timeout");
+  assert.equal(classified.retryable, false);
+  assert.equal(classified.errorCode, AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE);
+});
+
+test("classifyAutomationModelError sees the budget code through a wrapped cause", () => {
+  // The mid-flight budget abort depends on classification surviving whatever
+  // error wrapping the AI SDK adds between the middleware throw and the
+  // executeAutomationTextGeneration catch. This test pins that seam.
+  const wrapped = new Error("SDK wrapper", {
+    cause: automationStepBudgetExhaustedError(
+      "Step budget exhausted during request"
+    ),
+  });
+
+  const classified = classifyAutomationModelError(wrapped);
+
+  assert.equal(classified.classification, "timeout");
+  assert.equal(classified.retryable, false);
+  assert.equal(classified.errorCode, AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE);
+});
+
+test("asAutomationModelExecutionError surfaces budget exhaustion as finalFailureClass timeout", () => {
+  const error = automationStepBudgetExhaustedError(
+    "Step budget exhausted during request"
+  );
+
+  const executionError = asAutomationModelExecutionError({
+    error,
+    phase: "pr_review",
+    attempts: 2,
+    retryCount: 1,
+    failedOver: true,
+  });
+
+  assert.equal(executionError.metadata.finalFailureClass, "timeout");
+  assert.equal(executionError.metadata.failedOver, true);
 });

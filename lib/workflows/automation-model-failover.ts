@@ -10,7 +10,10 @@ import {
   isAutomationWrappableLanguageModel,
   isRecord,
 } from "./automation-model-execution-types";
-import { classifyAutomationModelError } from "./automation-model-execution-errors";
+import {
+  automationStepBudgetExhaustedError,
+  classifyAutomationModelError,
+} from "./automation-model-execution-errors";
 import {
   logAutomationModelFailover,
   logAutomationProviderAttemptFailure,
@@ -148,6 +151,7 @@ function planNextAttempt(input: {
 }
 
 function createRecoveryMiddleware(input: {
+  primaryModelId: string;
   fallbacks: { modelId: string; model: V4LanguageModel }[];
   retryState: AutomationGenerateRetryState;
   logger: AutomationModelLogger;
@@ -155,30 +159,100 @@ function createRecoveryMiddleware(input: {
   stepBudgetMs: number | undefined;
   now: () => number;
 }): LanguageModelMiddleware {
-  const { fallbacks, retryState, logger, logContext, stepBudgetMs, now } =
-    input;
+  const {
+    primaryModelId,
+    fallbacks,
+    retryState,
+    logger,
+    logContext,
+    stepBudgetMs,
+    now,
+  } = input;
   let activeFallbackIndex = -1;
+
+  function activeModelId() {
+    return activeFallbackIndex < 0
+      ? primaryModelId
+      : fallbacks[activeFallbackIndex].modelId;
+  }
 
   return {
     specificationVersion: "v4",
     async wrapGenerate({ doGenerate, params }) {
       const stepStartedAt = now();
       for (;;) {
+        // Compute remaining budget before each attempt so an attempt that would
+        // start past the budget never runs. For fallback models, we also abort
+        // in-flight attempts when the budget expires, making this a true ceiling
+        // for those paths. The primary model path skips mid-request abort by
+        // design: for non-review phases the SDK timeout passed to generateText
+        // equals the step budget, so the SDK's own abort fires first. For
+        // pr_review and other phases with per-request bounds, the step budget is
+        // min(2 × effectiveTimeoutMs, 25m), so the budget exceeds the fetch bound
+        // unless effectiveTimeoutMs exceeds 25m. A caller with custom timeoutMs
+        // above 25m could see the primary outlive the step budget until its fetch
+        // timeout fires; this gap was considered acceptable versus the complexity
+        // of injecting an abort signal into the middleware chain.
+        const remainingBudgetMs =
+          stepBudgetMs === undefined
+            ? undefined
+            : Math.max(0, stepBudgetMs - (now() - stepStartedAt));
+        const budgetSpent = remainingBudgetMs === 0;
+
+        if (budgetSpent) {
+          throw automationStepBudgetExhaustedError(
+            "Step budget exhausted before starting the next attempt"
+          );
+        }
+
+        // Budget abort only works for fallback models where we control the call
+        let budgetTimeout: ReturnType<typeof setTimeout> | undefined;
+        const budgetController =
+          activeFallbackIndex >= 0 && remainingBudgetMs !== undefined
+            ? new AbortController()
+            : undefined;
+        if (budgetController && remainingBudgetMs !== undefined) {
+          budgetTimeout = setTimeout(
+            () => budgetController.abort(),
+            remainingBudgetMs
+          );
+        }
+
         try {
-          if (activeFallbackIndex < 0) return await doGenerate();
+          if (activeFallbackIndex < 0) {
+            return await doGenerate();
+          }
+          const mergedSignal =
+            budgetController && params.abortSignal
+              ? AbortSignal.any([params.abortSignal, budgetController.signal])
+              : (budgetController?.signal ?? params.abortSignal);
+          const callParams = mergedSignal
+            ? { ...params, abortSignal: mergedSignal }
+            : params;
           const remaining = fallbacks
             .slice(activeFallbackIndex + 1)
             .map((fallback) => fallback.modelId);
           return await fallbacks[activeFallbackIndex].model.doGenerate(
-            withRemainingGatewayModels(params, remaining)
+            withRemainingGatewayModels(callParams, remaining)
           );
         } catch (error) {
-          const failure = classifyAutomationModelError(error);
+          // If the budget controller fired, surface it as our typed error so the
+          // classification lands in `timeout` rather than whatever the provider
+          // wrapped the abort as (often `provider_unavailable` via UND_ERR_SOCKET).
+          const budgetAborted = budgetController?.signal.aborted === true;
+          const effectiveError = budgetAborted
+            ? automationStepBudgetExhaustedError(
+                "Step budget exhausted during request",
+                error
+              )
+            : error;
+          const failure = classifyAutomationModelError(effectiveError);
           const next = planNextAttempt({
             failure,
             retryState,
             hasNextFallback: activeFallbackIndex + 1 < fallbacks.length,
-            generationAborted: params.abortSignal?.aborted === true,
+            generationAborted:
+              params.abortSignal?.aborted === true || budgetAborted,
             stepBudgetSpent:
               stepBudgetMs !== undefined &&
               now() - stepStartedAt >= stepBudgetMs,
@@ -186,17 +260,25 @@ function createRecoveryMiddleware(input: {
           logAutomationProviderAttemptFailure({
             logger,
             context: logContext,
-            error,
+            error: effectiveError,
             failure,
             attempt: retryState.retryCount + 1,
             willRetry: next !== "fail",
           });
-          if (next === "fail") throw error;
+          if (next === "fail") throw effectiveError;
 
           retryState.retryCount += 1;
           retryState.recoveredFromFailureClass ??= failure.classification;
           retryState.recoveredFromMessage ??= failure.rawMessage;
           if (next === "fail_over") {
+            // Intentional ordering: bookkeeping runs before the next iteration's
+            // loop-top budget guard. In the sub-millisecond window where the budget
+            // expires between here and the next now() read, metadata will report
+            // failedOver: true with a target that never received an attempt. This
+            // is semantically correct — the run did switch its active model — and
+            // the alternative (re-checking budget here) adds complexity for a race
+            // that is near-impossible in production.
+            const fromModelId = activeModelId();
             activeFallbackIndex += 1;
             const toModelId = fallbacks[activeFallbackIndex].modelId;
             retryState.failoverModelIds.push(toModelId);
@@ -204,8 +286,13 @@ function createRecoveryMiddleware(input: {
               logger,
               context: logContext,
               failure,
+              fromModelId,
               toModelId,
             });
+          }
+        } finally {
+          if (budgetTimeout !== undefined) {
+            clearTimeout(budgetTimeout);
           }
         }
       }
@@ -248,6 +335,7 @@ export function wrapAutomationModelForRecovery(input: {
       model: input.model,
       middleware: createRecoveryMiddleware({
         ...input,
+        primaryModelId: input.model.modelId,
         fallbacks,
         stepBudgetMs: input.stepBudgetMs,
         now: input.now ?? Date.now,

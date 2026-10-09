@@ -147,6 +147,7 @@ export type AutomationFailuresResponse = {
     failedTotal: number;
     successfulRecoveries: number;
     retriedFailures: number;
+    failedOverFailures: number;
     timeoutFailures: number;
     authenticationFailures: number;
     configurationFailures: number;

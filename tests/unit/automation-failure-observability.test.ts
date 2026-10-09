@@ -42,6 +42,7 @@ function createFailureRecord(
       timeoutBucket: "under_5m",
       timeoutBucketLabel: "3m-4.9m",
       retryAttempted: true,
+      failedOver: false,
       retryCount: 1,
       attempts: 2,
       recoveredFromFailureClass: null,
@@ -79,12 +80,27 @@ test("presentAutomationFailureDiagnostics normalizes model metadata", () => {
     timeoutBucket: "5m_plus",
     timeoutBucketLabel: "5m+",
     retryAttempted: true,
+    failedOver: false,
     retryCount: 2,
     attempts: 3,
     recoveredFromFailureClass: "rate_limited",
     recoveredFromFailureLabel: "Rate limited",
     recoveredFromMessage: "Recovered after retry",
   });
+});
+
+test("presentAutomationFailureDiagnostics maps model_failed_over to failedOver", () => {
+  const diagnostics = presentAutomationFailureDiagnostics({
+    model_failure_class: "timeout",
+    model_failure_message: "Request timed out",
+    model_retry_attempted: false,
+    model_failed_over: true,
+    model_retry_count: 1,
+    model_attempts: 2,
+  });
+
+  assert.equal(diagnostics.failedOver, true);
+  assert.equal(diagnostics.retryAttempted, false);
 });
 
 test("buildAutomationFailureFilterOptions and filters operate on failed records", () => {
@@ -189,6 +205,8 @@ test("breakdowns and resilience summary reflect failure classes and recoveries",
       failureStatusCode: 503,
       timeoutBucket: "5m_plus",
       timeoutBucketLabel: "5m+",
+      // Exercise the failedOver counting branch in summarizeAutomationResilience
+      failedOver: true,
     },
   });
   const recoveredRun = createFailureRecord({
@@ -237,6 +255,7 @@ test("breakdowns and resilience summary reflect failure classes and recoveries",
     failedTotal: 2,
     successfulRecoveries: 1,
     retriedFailures: 2,
+    failedOverFailures: 1,
     timeoutFailures: 1,
     authenticationFailures: 0,
     configurationFailures: 0,
