@@ -254,10 +254,12 @@ describe("step budget ceiling", () => {
   });
 
   it("should not fail over to the second fallback after a budget abort", async () => {
-    // This test would pass (incorrectly) if the budgetController.signal.aborted
-    // check in planNextAttempt's generationAborted argument were removed: the
-    // first fallback's abort would be classified as provider_unavailable (from
-    // UND_ERR_SOCKET), trigger a fail_over, and invoke the second fallback.
+    // The effective pin here is the catch-time `stepBudgetSpent` check: by the
+    // time the budget controller fires, now() - stepStartedAt >= stepBudgetMs,
+    // so planNextAttempt receives stepBudgetSpent = true and returns "fail"
+    // regardless of error classification. The budgetAborted check inside
+    // generationAborted is defense-in-depth for edge cases (e.g. non-integer
+    // clock drift), not the primary guard.
     const primary = scriptedModel("zai/glm-5.3", [socketDrop()]);
     let firstFallbackCalled = false;
     let secondFallbackCalled = false;
