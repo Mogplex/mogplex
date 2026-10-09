@@ -2,7 +2,7 @@
  * Tests for fail-over logging, retried/failedOver semantics, and budget ceiling.
  * Split from automation-model-failover.test.ts to stay under 500 lines.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AutomationGenerateRetryState,
   GenerateTextRequest,
@@ -207,6 +207,14 @@ describe("retried vs failedOver semantics", () => {
 });
 
 describe("step budget ceiling", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("should abort a fallback model request when the budget expires", async () => {
     const primary = scriptedModel("zai/glm-5.3", [socketDrop()]);
     let fallbackAborted = false;
@@ -226,7 +234,7 @@ describe("step budget ceiling", () => {
             return;
           }
           options.abortSignal?.addEventListener("abort", abortHandler);
-          // This request would take 500ms, but the budget is only 50ms
+          // Simulated 500ms request; budget will abort it at 50ms
           setTimeout(() => resolve(), 500);
         });
         return generateResult("should not reach", "zai/glm-5.3-fast");
@@ -245,9 +253,13 @@ describe("step budget ceiling", () => {
       stepBudgetMs: 50,
     }) as V4Model;
 
-    // The primary fails immediately, we fail over to fallback
-    // The fallback takes 500ms, but the budget is only 50ms
-    await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(
+    // Start the request; primary fails immediately, we fail over to fallback
+    const promise = Promise.resolve(wrapped.doGenerate(callOptions));
+    // Suppress unhandled rejection warning while advancing timers
+    promise.catch(() => {});
+    // Advance time to trigger the 50ms budget abort
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(promise).rejects.toThrow(
       "Step budget exhausted during request"
     );
     expect(fallbackAborted).toBe(true);
@@ -278,6 +290,7 @@ describe("step budget ceiling", () => {
             return;
           }
           options.abortSignal?.addEventListener("abort", abortHandler);
+          // Simulated 500ms request; budget will abort it at 50ms
           setTimeout(() => resolve(), 500);
         });
         return generateResult("should not reach", "zai/glm-5.3-fast");
@@ -313,9 +326,13 @@ describe("step budget ceiling", () => {
       stepBudgetMs: 50,
     }) as V4Model;
 
-    await expect(wrapped.doGenerate(callOptions)).rejects.toThrow(
-      "Step budget exhausted"
-    );
+    // Start the request; primary fails immediately, we fail over to first fallback
+    const promise = Promise.resolve(wrapped.doGenerate(callOptions));
+    // Suppress unhandled rejection warning while advancing timers
+    promise.catch(() => {});
+    // Advance time to trigger the 50ms budget abort
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(promise).rejects.toThrow("Step budget exhausted");
     expect(firstFallbackCalled).toBe(true);
     expect(secondFallbackCalled).toBe(false);
   });
