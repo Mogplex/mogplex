@@ -11,6 +11,32 @@ test("Slack's selected model reaches native execution and observability", async 
   assert.equal(result.call.model, "openai/gpt-6-astra");
 });
 
+for (const mode of [
+  "success",
+  "error",
+  "cancelled",
+  "lease_failure",
+] as const) {
+  test(`Slack target repository survives native run ${mode}`, async () => {
+    const result = await exercise(mode, "Fixed.", {
+      run_origin: "slack",
+      repo: "webrenew/gtm-supahost",
+      repo_full_name: "webrenew/gtm-supahost",
+    });
+    assert.equal(result.call.metadata?.repo, "webrenew/gtm-supahost");
+    assert.equal(result.call.metadata?.repo_full_name, "webrenew/gtm-supahost");
+    assert.equal(result.call.metadata?.run_origin, "slack");
+    assert.equal(
+      result.call.status,
+      mode === "success"
+        ? "success"
+        : mode === "cancelled"
+          ? "cancelled"
+          : "failed"
+    );
+  });
+}
+
 test("native runner records which skills the request needed beside the run, scoped to its team", async () => {
   const result = await exercise("agent");
   assert.equal(result.caught, undefined);

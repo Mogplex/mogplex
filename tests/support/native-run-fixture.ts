@@ -25,7 +25,7 @@ export async function exercise(
   response = "Fixed the header.",
   metadata: Record<string, unknown> = {}
 ) {
-  let call = buildAiCall({ model: "harness:mogplex" });
+  let call = buildAiCall({ model: "harness:mogplex", metadata });
   const run = buildRunRow({
     harness: "mogplex",
     metadata,

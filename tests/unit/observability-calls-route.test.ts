@@ -6,6 +6,67 @@ import {
   FakeQuery,
 } from "./helpers/observability-calls-route-fixtures";
 
+test("GET /api/observability/calls preserves Slack target snapshots through the sanitizer", async () => {
+  const { createObservabilityCallsGetHandler } =
+    await loadObservabilityCallsRoute();
+  const metadata = {
+    run_origin: "slack",
+    repo_full_name: "webrenew/gtm-supahost",
+    repo: "webrenew/gtm-supahost",
+  };
+  const query = new FakeQuery({
+    data: [
+      {
+        id: "slack-call-success",
+        type: "agent",
+        status: "success",
+        repo_id: "target",
+        metadata,
+      },
+      {
+        id: "slack-call-failed",
+        type: "agent",
+        status: "failed",
+        repo_id: "target",
+        metadata,
+        error: "Provider disconnected",
+      },
+    ],
+    count: 2,
+    error: null,
+  });
+  const handler = createObservabilityCallsGetHandler({
+    requireUserId: async () => "user-123",
+    buildQuery: (userId) => {
+      assert.equal(userId, "user-123");
+      return query as never;
+    },
+  });
+  const response = await handler(
+    new NextRequest("http://localhost/api/observability/calls")
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+
+  // Success row preserves snapshots
+  const successRow = payload.calls.find(
+    (c: { id: string }) => c.id === "slack-call-success"
+  );
+  assert.equal(successRow.metadata.repo_full_name, "webrenew/gtm-supahost");
+  assert.equal(successRow.metadata.repo, "webrenew/gtm-supahost");
+  assert.equal(successRow.metadata.run_origin, "slack");
+
+  // Failed row also preserves snapshots (sanitizer must not strip them)
+  // Contract 1: repo is in FAILURE_CONTEXT_RESET_KEYS
+  // Contract 2: repo_full_name matches SAFE_FAILURE_FIELD_SUFFIX_PATTERN (_full_name)
+  // Note: run_origin is not in the safe field lists, so it may be sanitized for failed rows
+  const failedRow = payload.calls.find(
+    (c: { id: string }) => c.id === "slack-call-failed"
+  );
+  assert.equal(failedRow.metadata.repo_full_name, "webrenew/gtm-supahost");
+  assert.equal(failedRow.metadata.repo, "webrenew/gtm-supahost");
+});
+
 test("GET /api/observability/calls paginates after stale live rows are filtered", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();
