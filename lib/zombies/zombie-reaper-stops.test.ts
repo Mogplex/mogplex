@@ -104,11 +104,16 @@ describe("reportStopResults", () => {
   });
 
   it("records failures and not-stopped entries in the summary", () => {
+    const deps: ReportStopResultsDeps = { captureWarning: () => {} };
     const summary = makeSummary();
-    reportStopResults(summary, {
-      failures: [{ id: "fail-1", error: "Trigger down" }],
-      notFound: ["noop-1", "noop-2"],
-    });
+    reportStopResults(
+      summary,
+      {
+        failures: [{ id: "fail-1", error: "Trigger down" }],
+        notFound: ["noop-1", "noop-2"],
+      },
+      deps
+    );
 
     expect(summary.results).toHaveLength(3);
     expect(summary.results[0]).toEqual({

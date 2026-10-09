@@ -98,7 +98,7 @@ describe("stopOrphanedWorkers", () => {
 });
 
 describe("findOrphanedWorkerCalls dedupe", () => {
-  it("deduplicates call ids appearing in both runs and continuations", async () => {
+  it("deduplicates call ids when duplicates straddle batch boundaries", async () => {
     const pg = await PGlite.create();
     try {
       await pg.exec(`
@@ -111,16 +111,25 @@ describe("findOrphanedWorkerCalls dedupe", () => {
       const minutesAgo = (minutes: number) =>
         new Date(now - minutes * 60_000).toISOString();
 
-      // Same call id in both tables (unusual but possible)
+      // Seed 100 unique external_agent_runs ids including "shared-call"
       const sharedCallId = "shared-call";
-      await pg.query(
-        "insert into ai_calls values ($1,'owner',null,'Stopped.',$2,$3)",
-        [sharedCallId, "failed", minutesAgo(10)]
-      );
-      await pg.query(
-        "insert into external_agent_runs values ($1,'streaming')",
-        [sharedCallId]
-      );
+      for (let i = 0; i < 100; i++) {
+        const id =
+          i === 0 ? sharedCallId : `call-${String(i).padStart(3, "0")}`;
+        await pg.query(
+          "insert into ai_calls values ($1,'owner',null,'Stopped.',$2,$3)",
+          [id, "failed", minutesAgo(10)]
+        );
+        await pg.query(
+          "insert into external_agent_runs values ($1,'streaming')",
+          [id]
+        );
+      }
+
+      // Add one control_continuations row for the shared call, creating 101
+      // raw ids total. Without dedupe, the shared call would appear in both
+      // the first batch (from external_agent_runs) and the second batch
+      // (from control_continuations), causing it to be returned twice.
       await pg.query(
         "insert into control_continuations values ($1,'running')",
         [sharedCallId]
@@ -138,9 +147,12 @@ describe("findOrphanedWorkerCalls dedupe", () => {
 
       const orphans = await findOrphanedWorkerCalls(client, now);
 
-      // Should only return one entry despite the call appearing in both tables
-      expect(orphans).toHaveLength(1);
-      expect(orphans[0].id).toBe(sharedCallId);
+      // Should return exactly 100 orphans with shared-call appearing once
+      expect(orphans).toHaveLength(100);
+      const sharedCallOccurrences = orphans.filter(
+        (o) => o.id === sharedCallId
+      );
+      expect(sharedCallOccurrences).toHaveLength(1);
     } finally {
       await pg.close();
     }

@@ -92,7 +92,7 @@ const defaultReportDeps: ReportStopResultsDeps = {
   },
 };
 
-/** Records stop results (failures and not-found) in the cycle summary and Sentry. */
+/** Records stop results (failures and not-stopped) in the cycle summary and Sentry. */
 export function reportStopResults(
   summary: ZombieReaperTableSummary,
   result: WorkerStopResult,
