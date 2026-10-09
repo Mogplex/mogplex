@@ -4,6 +4,56 @@ import { mockActivationFlow } from "./helpers/activation-fixtures";
 import { buildObservabilitySummary } from "./helpers/sandbox-fixtures";
 import { fulfillJson } from "./helpers/automation-control-plane-fixtures";
 
+test("PR link uses the metadata snapshot instead of the repo picker", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockActivationFlow(page);
+  await page.route("**/api/observability/stats*", (route) =>
+    fulfillJson(route, buildObservabilitySummary([]))
+  );
+  // The repo picker has a different repo than the metadata snapshot.
+  await page.route("**/api/repos*", (route) =>
+    fulfillJson(route, [{ id: "context-repo", full_name: "Mogplex/mogplex" }])
+  );
+  await page.route("**/api/observability/calls*", (route) =>
+    fulfillJson(route, {
+      calls: [
+        {
+          id: "pr-link-call",
+          type: "pr_review",
+          model: "anthropic/claude-sonnet-4",
+          repo_id: "context-repo",
+          status: "completed",
+          metadata: {
+            repo_full_name: "webrenew/gtm-supahost",
+            pr_number: 42,
+          },
+          started_at: new Date().toISOString(),
+          tool_calls: [],
+          tool_calls_count: 0,
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 25,
+    })
+  );
+  await page.route("**/api/observability/call-events*", (route) =>
+    fulfillJson(route, { events: [] })
+  );
+  await page.goto(scopedPath("observability"));
+  // The PR link should use the metadata snapshot, not the repo picker.
+  const prLink = page.locator('a[href*="github.com"]').filter({
+    hasText: /gtm-supahost#42/,
+  });
+  await expect(prLink).toBeVisible();
+  await expect(prLink).toHaveAttribute(
+    "href",
+    "https://github.com/webrenew/gtm-supahost/pull/42"
+  );
+});
+
 for (const width of [390, 1280]) {
   for (const snapshot of ["current", "legacy", "missing"] as const) {
     test(`Slack run repository is readable at ${width}px with ${snapshot} metadata`, async ({
@@ -53,35 +103,27 @@ for (const width of [390, 1280]) {
         fulfillJson(route, { events: [] })
       );
       await page.goto(scopedPath("observability?call_id=slack-call"));
-      const summary = page.getByLabel("Run repository", { exact: true });
+      // The Where column and expanded row both show the resolved repository.
+      const whereCell = page.getByLabel("Run repository location", {
+        exact: true,
+      });
       const details = page.getByLabel("Run repository details", {
         exact: true,
       });
-      await expect(summary).toHaveText(
-        snapshot === "missing" ? "Not recorded" : "webrenew/gtm-supahost"
-      );
-      await expect(details).toContainText(
-        snapshot === "missing" ? "Not recorded" : "webrenew/gtm-supahost"
-      );
+      const expectedRepo =
+        snapshot === "missing" ? "Not recorded" : "webrenew/gtm-supahost";
+      await expect(whereCell).toHaveText(expectedRepo);
+      await expect(details).toContainText(expectedRepo);
       await expect(details).not.toContainText("Mogplex/mogplex");
       // No horizontal scroll, hover, raw event JSON, or open workspace needed.
-      // The summary, details, and the Where column cell should be within viewport.
-      for (const label of [summary, details]) {
+      // Both surfaces should be within viewport at all tested widths.
+      for (const label of [whereCell, details]) {
         await expect(label).toBeVisible();
         const box = await label.boundingBox();
         expect(box).not.toBeNull();
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(width);
       }
-      // Also check the Where column's run repository location is bounded.
-      const whereCell = page.getByLabel("Run repository location", {
-        exact: true,
-      });
-      await expect(whereCell).toBeVisible();
-      const whereBox = await whereCell.boundingBox();
-      expect(whereBox).not.toBeNull();
-      expect(whereBox!.x).toBeGreaterThanOrEqual(0);
-      expect(whereBox!.x + whereBox!.width).toBeLessThanOrEqual(width);
     });
   }
 }
