@@ -222,6 +222,23 @@ test("classifyAutomationModelError marks budget exhaustion as non-retryable time
   assert.equal(classified.errorCode, AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE);
 });
 
+test("classifyAutomationModelError sees the budget code through a wrapped cause", () => {
+  // The mid-flight budget abort depends on classification surviving whatever
+  // error wrapping the AI SDK adds between the middleware throw and the
+  // executeAutomationTextGeneration catch. This test pins that seam.
+  const wrapped = new Error("SDK wrapper", {
+    cause: automationStepBudgetExhaustedError(
+      "Step budget exhausted during request"
+    ),
+  });
+
+  const classified = classifyAutomationModelError(wrapped);
+
+  assert.equal(classified.classification, "timeout");
+  assert.equal(classified.retryable, false);
+  assert.equal(classified.errorCode, AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE);
+});
+
 test("asAutomationModelExecutionError surfaces budget exhaustion as finalFailureClass timeout", () => {
   const error = automationStepBudgetExhaustedError(
     "Step budget exhausted during request"

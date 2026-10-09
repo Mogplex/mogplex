@@ -185,12 +185,14 @@ function createRecoveryMiddleware(input: {
         // start past the budget never runs. For fallback models, we also abort
         // in-flight attempts when the budget expires, making this a true ceiling
         // for those paths. The primary model path skips mid-request abort by
-        // design: for non-review phases the SDK timeout already equals the step
-        // budget, and for pr_review the per-request fetch bound (effectiveTimeoutMs
-        // ~12.5m) sits under the 25m step budget. A caller with custom timeoutMs
-        // above ~12.5m could see the primary outlive the step budget until its
-        // fetch timeout fires; this gap was considered acceptable versus the
-        // complexity of injecting an abort signal into the middleware chain.
+        // design: for non-review phases the SDK timeout passed to generateText
+        // equals the step budget, so the SDK's own abort fires first. For
+        // pr_review and other phases with per-request bounds, the step budget is
+        // min(2 × effectiveTimeoutMs, 25m), so the budget exceeds the fetch bound
+        // unless effectiveTimeoutMs exceeds 25m. A caller with custom timeoutMs
+        // above 25m could see the primary outlive the step budget until its fetch
+        // timeout fires; this gap was considered acceptable versus the complexity
+        // of injecting an abort signal into the middleware chain.
         const remainingBudgetMs =
           stepBudgetMs === undefined
             ? undefined
