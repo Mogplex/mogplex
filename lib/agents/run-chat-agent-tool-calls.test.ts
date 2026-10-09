@@ -90,6 +90,85 @@ function streamOf(chunks: unknown[]) {
 }
 
 describe("runChatAgent", () => {
+  it("should record tool calls on a turn that errors after completing a tool", async () => {
+    let step = 0;
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        step++;
+        if (step === 1) {
+          // First step: model returns a tool call
+          return streamOf([
+            { type: "stream-start", warnings: [] },
+            {
+              type: "tool-call",
+              toolCallId: "call-1",
+              toolName: "start_repo_agent_run",
+              input: JSON.stringify({ task: "Fix it" }),
+            },
+            {
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: "tool_use" },
+              usage,
+            },
+          ]);
+        }
+        // Second step: error during the text response
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: "stream-start", warnings: [] });
+              controller.enqueue({ type: "text-start", id: "t1" });
+              controller.enqueue({ type: "text-delta", id: "t1", delta: "OK" });
+              controller.error(new Error("Connection reset by peer"));
+            },
+          }),
+        };
+      },
+    });
+    const records: RunChatAiCallRecord[] = [];
+
+    await expect(
+      runChatAgent({
+        userId: "user-1",
+        model: "test/model",
+        messages: [{ role: "user", content: "Fix PR 599" }],
+        latestUserText: "Fix PR 599",
+        additionalTools: {
+          start_repo_agent_run: tool({
+            inputSchema: z.object({ task: z.string() }),
+            execute: async () => ({ ok: true, runId: "run-1" }),
+          }),
+        },
+        deps: {
+          stream: {
+            resolveModel: (async () => ({
+              model,
+              providerOptions: {},
+            })) as never,
+            buildTools: (async () => ({
+              tools: {},
+              connections: [],
+              cleanup: async () => {},
+            })) as never,
+            resolveSkills: async () => NO_CONVERSATION_SKILLS,
+          },
+          recordAiCall: (record) => {
+            records.push(record);
+          },
+        },
+      })
+    ).rejects.toThrow("Connection reset by peer");
+
+    expect(records).toHaveLength(1);
+    expect(records[0].status).toBe("failed");
+    expect(records[0].error).toBe("Connection reset by peer");
+    expect(records[0].toolCalls).toHaveLength(1);
+    expect(records[0].toolCalls[0]).toMatchObject({
+      name: "start_repo_agent_run",
+      input: { task: "Fix it" },
+    });
+  });
+
   it("should write the tools a Slack turn called onto its ai_calls row", async () => {
     let step = 0;
     const model = new MockLanguageModelV4({

@@ -383,3 +383,44 @@ it("keeps a report whose escaping multiplies its length within Slack's limits", 
   expect(report.text.text.length).toBeLessThanOrEqual(3000);
   expect(message.text.length).toBeLessThanOrEqual(4000);
 });
+
+it.each([
+  {
+    type: "mpim",
+    id: "G123",
+    expectMention: false,
+    desc: "group DM skips mention",
+  },
+  {
+    type: "channel",
+    id: "G123",
+    expectMention: true,
+    desc: "channel includes mention",
+  },
+  {
+    type: undefined,
+    id: "D123",
+    expectMention: false,
+    desc: "D prefix fallback",
+  },
+] as const)("channelType: $desc", async ({ type, id, expectMention }) => {
+  const { posts } = await deliver(
+    "success",
+    {
+      metadata: {
+        slack_user_id: "U123",
+        slackRunControls: {
+          teamId: "T1",
+          channelId: id,
+          messageTs: "1.2",
+          channelType: type,
+        },
+      },
+    },
+    emptyRunResultEvidence(),
+    { announce: true }
+  );
+  if (expectMention) expect(posts[0]?.text).toContain("<@U123>");
+  else expect(posts[0]?.text).not.toContain("<@U123>");
+});
+// Idempotent announcement tests are in run-controls-notify-idempotent.test.ts

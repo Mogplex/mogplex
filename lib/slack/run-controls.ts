@@ -23,10 +23,20 @@ export type SlackRunControlsMetadata = {
   messageTs: string;
   /** The thread the run message sits in, when it was posted as a reply. */
   threadTs?: string;
+  /** Slack channel type: im (1:1 DM), mpim (group DM), channel, or group. */
+  channelType?: "im" | "mpim" | "channel" | "group";
 };
 
 const nonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
+
+const VALID_CHANNEL_TYPES = new Set(["im", "mpim", "channel", "group"]);
+
+function isValidChannelType(
+  value: unknown
+): value is SlackRunControlsMetadata["channelType"] {
+  return typeof value === "string" && VALID_CHANNEL_TYPES.has(value);
+}
 
 /** Narrow an arbitrary run-metadata value to {@link SlackRunControlsMetadata}. */
 export function readSlackRunControlsMetadata(
@@ -37,7 +47,7 @@ export function readSlackRunControlsMetadata(
     SLACK_RUN_CONTROLS_METADATA_KEY
   ];
   if (!raw || typeof raw !== "object") return null;
-  const { teamId, channelId, messageTs, threadTs } = raw as Record<
+  const { teamId, channelId, messageTs, threadTs, channelType } = raw as Record<
     string,
     unknown
   >;
@@ -53,6 +63,7 @@ export function readSlackRunControlsMetadata(
     channelId,
     messageTs,
     ...(nonEmptyString(threadTs) ? { threadTs } : {}),
+    ...(isValidChannelType(channelType) ? { channelType } : {}),
   };
 }
 

@@ -5,9 +5,13 @@ import {
 import type { MogplexApiRunStatus } from "@/lib/mogplex-api/runs";
 import type {
   PostSlackMessageInput,
+  SlackThreadMessage,
   UpdateSlackMessageInput,
 } from "@/lib/slack/client";
-import { buildRunFinishedAnnouncement } from "./run-result-announcement";
+import {
+  buildRunFinishedAnnouncement,
+  isRunOutcomeLine,
+} from "./run-result-announcement";
 import type { RunGuidance } from "./run-guidance-store";
 import { buildRunResultMessage } from "./run-result-presentation";
 import {
@@ -29,6 +33,21 @@ type SlackRunControlsNotifyDeps = {
     botToken: string,
     input: PostSlackMessageInput
   ) => Promise<unknown>;
+  /** Fetch thread replies to check for duplicate announcements. */
+  getThreadMessages?: (
+    botToken: string,
+    input: {
+      channel: string;
+      threadTs: string;
+      oldest?: string;
+      limit?: number;
+    }
+  ) => Promise<SlackThreadMessage[]>;
+  /** Fetch channel messages for top-level duplicate-announcement checks. */
+  getChannelMessages?: (
+    botToken: string,
+    input: { channel: string; oldest?: string; limit?: number }
+  ) => Promise<SlackThreadMessage[]>;
   /** The agent's own streamed output for the run, oldest first, or null. */
   loadRunOutput?: (run: SlackNotifiableRun) => Promise<string | null>;
   loadGuidance?: (run: SlackNotifiableRun) => Promise<RunGuidance[]>;
@@ -40,12 +59,19 @@ type SlackRunControlsNotifyDeps = {
 const RUN_OUTPUT_EVENT_LIMIT = 400;
 
 async function loadSlackRunControlsNotifyDeps(): Promise<SlackRunControlsNotifyDeps> {
-  const { getSlackBotToken, postSlackMessage, updateSlackMessage } =
-    await import("@/lib/slack/client");
+  const {
+    getSlackBotToken,
+    getSlackChannelMessages,
+    getSlackThreadMessages,
+    postSlackMessage,
+    updateSlackMessage,
+  } = await import("@/lib/slack/client");
   return {
     getSlackBotToken,
     updateSlackMessage,
     postSlackMessage,
+    getThreadMessages: getSlackThreadMessages,
+    getChannelMessages: getSlackChannelMessages,
     loadRunOutput,
     loadEvidence: loadRunResultEvidence,
     loadGuidance: async (run) => {
@@ -122,6 +148,67 @@ async function loadRunOutputBestEffort(
   }
 }
 
+/**
+ * Check if an announcement for this run already exists. A retry after a failed
+ * markDelivered would otherwise post a duplicate announcement. The check looks
+ * for bot messages containing the announcement's distinctive outcome line
+ * (e.g., "Run finished", "Run failed"), excluding the run's own message which
+ * also contains the run view link but is not an announcement.
+ *
+ * For threaded runs (threadTs present), scans thread replies. For top-level
+ * runs (no threadTs), scans channel history after the run message.
+ */
+async function hasExistingAnnouncement(
+  input: {
+    run: SlackNotifiableRun;
+    slack: SlackRunControlsMetadata;
+    botToken: string;
+  },
+  deps: SlackRunControlsNotifyDeps
+): Promise<boolean> {
+  try {
+    const runViewLink = `/runs/${input.run.id}?view=details`;
+    const matchAnnouncement = (msg: SlackThreadMessage) =>
+      msg.bot_id &&
+      msg.ts !== input.slack.messageTs &&
+      msg.text?.includes(runViewLink) &&
+      isRunOutcomeLine(msg.text ?? "");
+
+    if (input.slack.threadTs && deps.getThreadMessages) {
+      // Threaded run: scan thread replies after the run message.
+      const messages = await deps.getThreadMessages(input.botToken, {
+        channel: input.slack.channelId,
+        threadTs: input.slack.threadTs,
+        oldest: input.slack.messageTs,
+        limit: 200,
+      });
+      return messages.some(matchAnnouncement);
+    }
+
+    if (!input.slack.threadTs && deps.getChannelMessages) {
+      // Top-level run: scan channel history after the run message.
+      const messages = await deps.getChannelMessages(input.botToken, {
+        channel: input.slack.channelId,
+        oldest: input.slack.messageTs,
+        limit: 200,
+      });
+      return messages.some(matchAnnouncement);
+    }
+
+    // No applicable fetcher available.
+    return false;
+  } catch (error) {
+    // If we cannot check, proceed with the announcement to avoid never
+    // announcing. Duplicate announcements are harmless; missing ones are not.
+    console.warn(
+      "[slack-run-controls] duplicate-announcement check failed",
+      input.run.id,
+      error
+    );
+    return false;
+  }
+}
+
 async function announceRunEnd(
   input: {
     run: SlackNotifiableRun;
@@ -133,6 +220,9 @@ async function announceRunEnd(
   deps: SlackRunControlsNotifyDeps
 ) {
   if (!deps.postSlackMessage) return;
+  // Skip if an announcement for this run already exists (prevents duplicates
+  // when markDelivered fails after a successful send and the delivery retries).
+  if (await hasExistingAnnouncement(input, deps)) return;
   const { slack } = input;
   await deps.postSlackMessage(input.botToken, {
     channel: slack.channelId,

@@ -149,6 +149,52 @@ test("readSlackRunControlsMetadata only accepts complete coordinates", () => {
   );
 });
 
+test("readSlackRunControlsMetadata reads channelType when present", () => {
+  const withChannelType = readSlackRunControlsMetadata({
+    [SLACK_RUN_CONTROLS_METADATA_KEY]: {
+      teamId: "T1",
+      channelId: "G1",
+      messageTs: "1.0",
+      channelType: "mpim",
+    },
+  });
+  assert.deepEqual(withChannelType, {
+    teamId: "T1",
+    channelId: "G1",
+    messageTs: "1.0",
+    channelType: "mpim",
+  });
+
+  // Invalid channelType values are ignored
+  const invalidType = readSlackRunControlsMetadata({
+    [SLACK_RUN_CONTROLS_METADATA_KEY]: {
+      teamId: "T1",
+      channelId: "C1",
+      messageTs: "1.0",
+      channelType: "invalid",
+    },
+  });
+  assert.deepEqual(invalidType, {
+    teamId: "T1",
+    channelId: "C1",
+    messageTs: "1.0",
+  });
+
+  // Missing channelType is OK (backward compatibility with older runs)
+  const noType = readSlackRunControlsMetadata({
+    [SLACK_RUN_CONTROLS_METADATA_KEY]: {
+      teamId: "T1",
+      channelId: "C1",
+      messageTs: "1.0",
+    },
+  });
+  assert.deepEqual(noType, {
+    teamId: "T1",
+    channelId: "C1",
+    messageTs: "1.0",
+  });
+});
+
 test("stripSlackRunControlsForTerminalRun links the pull request from a successful run's output", async () => {
   const updates: UpdateSlackMessageInput[] = [];
   const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;

@@ -1,5 +1,7 @@
 import { buildAppUrl } from "@/lib/app-url";
+import { isDirectChannelType } from "./channel-types";
 import { escapeMrkdwn } from "./markdown-to-mrkdwn";
+import { readSlackRunControlsMetadata } from "./run-controls";
 import { runProgressTitle } from "./run-progress-presentation";
 import { progressText } from "./run-progress-state";
 import { readRunProgressSnapshot } from "./run-progress-store";
@@ -16,9 +18,39 @@ const OUTCOMES: Record<string, string> = {
   cancelled: "⏹️ Run cancelled",
 };
 
+/** Outcome verbs for pattern matching against announcement text. Includes
+ * "ended" for forward-compatibility with the fallback outcome text. */
+const OUTCOME_VERBS = ["finished", "failed", "cancelled", "ended"] as const;
+
+/**
+ * Test whether `text` looks like an announcement outcome line. Used by the
+ * duplicate-announcement check in run-controls-notify.ts to stay in sync with
+ * the OUTCOMES map above.
+ */
+export function isRunOutcomeLine(text: string): boolean {
+  return OUTCOME_VERBS.some((verb) => text.includes(`Run ${verb}`));
+}
+
+/** Whether this is a direct conversation where replies notify everyone. */
+function isDirectConversation(run: RunResultContext, channelId: string) {
+  const slack = readSlackRunControlsMetadata(run.metadata);
+  // Prefer the stored channel type when available.
+  if (isDirectChannelType(slack?.channelType)) {
+    return true;
+  }
+  if (slack?.channelType) {
+    // Explicitly not a direct channel type.
+    return false;
+  }
+  // Fallback for runs created before channelType was stored: D prefix = 1:1 DM.
+  // This misses group DMs (mpim), but those older runs would have had the same
+  // behavior, so the fallback keeps compatibility without changing expectations.
+  return channelId.startsWith("D");
+}
+
 function requesterMention(run: RunResultContext, channelId: string) {
   // Everything in a DM notifies; in a channel, only a mention is sure to.
-  if (channelId.startsWith("D")) return "";
+  if (isDirectConversation(run, channelId)) return "";
   const metadata =
     run.metadata && typeof run.metadata === "object"
       ? (run.metadata as Record<string, unknown>)

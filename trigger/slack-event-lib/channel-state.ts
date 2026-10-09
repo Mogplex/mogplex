@@ -1,3 +1,4 @@
+import { isDirectChannelType } from "@/lib/slack/channel-types";
 import type {
   SlackChannelLinkRow,
   SlackInstallationRow,
@@ -59,7 +60,7 @@ export function requiresExistingSlackConversation(
 }
 
 export function isSlackDirectConversation(payload: SlackEventTaskPayload) {
-  return payload.channelType === "im" || payload.channelType === "mpim";
+  return isDirectChannelType(payload.channelType);
 }
 
 export function isUninvokedSlackGroupMessage(

@@ -149,7 +149,8 @@ function truncateBody(value: string | null | undefined) {
   return value?.slice(0, MAX_REVIEW_BODY_CHARS) ?? "";
 }
 
-function normalizeChecks(nodes: Array<GithubCheckNode | null> = []) {
+/** @internal Exported for testing. */
+export function normalizeChecks(nodes: Array<GithubCheckNode | null> = []) {
   return nodes.flatMap((node) => {
     if (!node) return [];
     if (node.__typename === "CheckRun") {
@@ -380,7 +381,7 @@ export function createGithubPullRequestStatusTool(
 ) {
   return defineTool({
     description:
-      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. Read this before reporting PR readiness or requesting a protected merge. Each check carries `required`: only required checks gate a merge, and GitHub enforces them. A failing check with `required: false` is advisory; name it as advisory, never as required.",
+      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. Read this before reporting PR readiness or requesting a protected merge. Each check carries `required`: only required checks gate a merge, and GitHub enforces them. A failing check with `required: false` is advisory; name it as advisory, never as required. When `required` is `null`, the check's blocking status is unknown (GitHub did not report it); treat it as required/blocking unless the repository's branch protection rules say otherwise.",
     inputSchema: githubPullRequestStatusParams,
     execute: async ({
       owner,
