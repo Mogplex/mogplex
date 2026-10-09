@@ -57,7 +57,7 @@ export async function findOrphanedWorkerCalls(
       `Could not read active continuations: ${tickets.error.message}`
     );
   }
-  const callIds = [
+  const rawCallIds = [
     ...((runs.data ?? []) as Array<{ ai_call_id: string | null }>).map(
       (row) => row.ai_call_id
     ),
@@ -65,7 +65,12 @@ export async function findOrphanedWorkerCalls(
       (tickets.data ?? []) as Array<{ resume_ai_call_id: string | null }>
     ).map((row) => row.resume_ai_call_id),
   ].filter(Boolean);
-  if (callIds.length === 0) return [];
+  if (rawCallIds.length === 0) return [];
+
+  // Dedupe before batching: a call with both an active run and an active
+  // continuation would otherwise appear in multiple batches and be stopped
+  // twice (harmless but noisy).
+  const callIds = [...new Set(rawCallIds)];
 
   // Fetch ended calls in batches to avoid unbounded .in() queries
   const batches = chunk(callIds, ORPHAN_CALL_ID_BATCH_SIZE);
