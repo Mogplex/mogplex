@@ -124,8 +124,20 @@ describe("findOrphanedWorkerCalls batching", () => {
         );
       }
 
+      // Track queries to ai_calls to verify batching
+      const aiCallsQuerySizes: number[] = [];
       const queryable: Queryable = {
         query: async (text, values) => {
+          // Count .in() sizes for ai_calls queries
+          if (text.includes('"ai_calls"') && values && Array.isArray(values)) {
+            // Find the largest array parameter (the batch of ids)
+            const maxArraySize = values
+              .filter((v): v is unknown[] => Array.isArray(v))
+              .reduce((max, arr) => Math.max(max, arr.length), 0);
+            if (maxArraySize > 0) {
+              aiCallsQuerySizes.push(maxArraySize);
+            }
+          }
           const result = await pg.query(text, values);
           return { rows: result.rows as Record<string, unknown>[] };
         },
@@ -135,7 +147,14 @@ describe("findOrphanedWorkerCalls batching", () => {
       ) as unknown as SupabaseClient;
 
       const orphans = await findOrphanedWorkerCalls(client, now);
+
+      // Verify all 150 orphans found
       expect(orphans).toHaveLength(150);
+
+      // Verify batching: 150 ids should be split into 2 batches (100 + 50)
+      expect(aiCallsQuerySizes).toHaveLength(2);
+      expect(aiCallsQuerySizes).toContain(100);
+      expect(aiCallsQuerySizes).toContain(50);
     } finally {
       await pg.close();
     }

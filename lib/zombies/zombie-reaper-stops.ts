@@ -109,11 +109,3 @@ export function reportStopResults(
     console.error("[zombie-reaper] Sentry capture failed", captureError);
   }
 }
-
-/** @deprecated Use reportStopResults instead */
-export function reportStopFailures(
-  summary: ZombieReaperTableSummary,
-  failures: readonly WorkerStopFailure[]
-) {
-  reportStopResults(summary, { failures: [...failures], notFound: [] });
-}
