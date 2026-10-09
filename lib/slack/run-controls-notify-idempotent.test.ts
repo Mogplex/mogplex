@@ -87,24 +87,28 @@ it.each([
       { announce: true }
     );
     expect(posts).toHaveLength(expectPost ? 1 : 0);
-    // Pin thread fetch arguments: channel, thread, oldest (after run msg), limit
-    if (threadMsgs !== "throw" || threadFetchCalls.length > 0) {
-      expect(threadFetchCalls[0]).toEqual({
-        channel: "C1",
-        threadTs: "1.1",
-        oldest: "1.2",
-        limit: 200,
-      });
-    }
+    // Pin thread fetch arguments: channel, thread, oldest (after run msg), limit.
+    // The mock records arguments even when it then throws, so this always runs.
+    expect(threadFetchCalls[0]).toEqual({
+      channel: "C1",
+      threadTs: "1.1",
+      oldest: "1.2",
+      limit: 200,
+    });
   }
 );
 
-// Without threadTs, announceRunEnd posts as a top-level channel message, not a
-// thread reply. conversations.replies cannot find top-level messages, so the
-// duplicate check skips the API call entirely (would never match).
-it("skips duplicate check when no threadTs (top-level announcement)", async () => {
+// Without threadTs, announceRunEnd posts as a top-level channel message. The
+// duplicate check uses conversations.history (getChannelMessages) instead of
+// conversations.replies (getThreadMessages).
+it("uses getChannelMessages for top-level announcement idempotency", async () => {
   const posts: PostSlackMessageInput[] = [];
   let threadFetchCalled = false;
+  const channelFetchCalls: Array<{
+    channel: string;
+    oldest?: string;
+    limit?: number;
+  }> = [];
   const noThreadRun = {
     ...run,
     metadata: {
@@ -121,15 +125,55 @@ it("skips duplicate check when no threadTs (top-level announcement)", async () =
       postSlackMessage: async (_token, msg) => posts.push(msg),
       getThreadMessages: async () => {
         threadFetchCalled = true;
-        return [existingAnnouncement];
+        return [];
+      },
+      getChannelMessages: async (_token, input) => {
+        channelFetchCalls.push(input);
+        return []; // no prior announcement
       },
       loadRunOutput: async () => "Done.",
       loadEvidence: async () => emptyRunResultEvidence(),
     },
     { announce: true }
   );
-  // Should post without calling getThreadMessages (check is skipped)
+  expect(threadFetchCalled).toBe(false); // should use channel, not thread
+  expect(channelFetchCalls).toHaveLength(1);
+  expect(channelFetchCalls[0]).toEqual({
+    channel: "C1",
+    oldest: "1.2",
+    limit: 200,
+  });
   expect(posts).toHaveLength(1);
-  expect(threadFetchCalled).toBe(false);
   expect(posts[0]?.thread_ts).toBeUndefined(); // top-level, not threaded
+});
+
+// When an existing announcement is found in channel history, skip the duplicate.
+it("skips duplicate top-level announcement", async () => {
+  const posts: PostSlackMessageInput[] = [];
+  const existingTopLevelAnnouncement = {
+    ts: "1.5",
+    bot_id: "B123",
+    text: "Run finished\n/runs/run-1?view=details",
+  };
+  const noThreadRun = {
+    ...run,
+    metadata: {
+      ...run.metadata,
+      slackRunControls: { teamId: "T1", channelId: "C1", messageTs: "1.2" },
+    },
+  };
+  await stripSlackRunControlsForTerminalRun(
+    noThreadRun,
+    "success",
+    {
+      getSlackBotToken: async () => "fixture-token",
+      updateSlackMessage: async () => {},
+      postSlackMessage: async (_token, msg) => posts.push(msg),
+      getChannelMessages: async () => [existingTopLevelAnnouncement],
+      loadRunOutput: async () => "Done.",
+      loadEvidence: async () => emptyRunResultEvidence(),
+    },
+    { announce: true }
+  );
+  expect(posts).toHaveLength(0); // duplicate found, skip
 });

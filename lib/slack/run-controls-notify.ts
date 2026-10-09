@@ -43,6 +43,11 @@ type SlackRunControlsNotifyDeps = {
       limit?: number;
     }
   ) => Promise<SlackThreadMessage[]>;
+  /** Fetch channel messages for top-level duplicate-announcement checks. */
+  getChannelMessages?: (
+    botToken: string,
+    input: { channel: string; oldest?: string; limit?: number }
+  ) => Promise<SlackThreadMessage[]>;
   /** The agent's own streamed output for the run, oldest first, or null. */
   loadRunOutput?: (run: SlackNotifiableRun) => Promise<string | null>;
   loadGuidance?: (run: SlackNotifiableRun) => Promise<RunGuidance[]>;
@@ -56,6 +61,7 @@ const RUN_OUTPUT_EVENT_LIMIT = 400;
 async function loadSlackRunControlsNotifyDeps(): Promise<SlackRunControlsNotifyDeps> {
   const {
     getSlackBotToken,
+    getSlackChannelMessages,
     getSlackThreadMessages,
     postSlackMessage,
     updateSlackMessage,
@@ -65,6 +71,7 @@ async function loadSlackRunControlsNotifyDeps(): Promise<SlackRunControlsNotifyD
     updateSlackMessage,
     postSlackMessage,
     getThreadMessages: getSlackThreadMessages,
+    getChannelMessages: getSlackChannelMessages,
     loadRunOutput,
     loadEvidence: loadRunResultEvidence,
     loadGuidance: async (run) => {
@@ -142,11 +149,14 @@ async function loadRunOutputBestEffort(
 }
 
 /**
- * Check if an announcement for this run already exists in the thread. A retry
- * after a failed markDelivered would otherwise post a duplicate announcement.
- * The check looks for bot messages containing the announcement's distinctive
- * outcome line (e.g., "Run finished", "Run failed"), excluding the run's own
- * message which also contains the run view link but is not an announcement.
+ * Check if an announcement for this run already exists. A retry after a failed
+ * markDelivered would otherwise post a duplicate announcement. The check looks
+ * for bot messages containing the announcement's distinctive outcome line
+ * (e.g., "Run finished", "Run failed"), excluding the run's own message which
+ * also contains the run view link but is not an announcement.
+ *
+ * For threaded runs (threadTs present), scans thread replies. For top-level
+ * runs (no threadTs), scans channel history after the run message.
  */
 async function hasExistingAnnouncement(
   input: {
@@ -156,34 +166,37 @@ async function hasExistingAnnouncement(
   },
   deps: SlackRunControlsNotifyDeps
 ): Promise<boolean> {
-  if (!deps.getThreadMessages) return false;
-  // Without a stored threadTs, announceRunEnd posts as a top-level channel
-  // message, not a thread reply. conversations.replies cannot find top-level
-  // messages, so skip the lookup entirely - the check would never match.
-  if (!input.slack.threadTs) return false;
   try {
-    // Fetch messages posted after the run message. Announcements are posted at
-    // run completion, so they will be after messageTs. Using `oldest` avoids
-    // scanning from the thread start (conversations.replies is oldest-first)
-    // which would miss announcements in long threads. Limit 200 covers typical
-    // threads; very long threads may still miss, but duplicates are harmless.
-    const messages = await deps.getThreadMessages(input.botToken, {
-      channel: input.slack.channelId,
-      threadTs: input.slack.threadTs,
-      oldest: input.slack.messageTs,
-      limit: 200,
-    });
-    // Look for a bot message with the announcement's distinctive outcome line
-    // and the run's view link. Exclude the run's own message (messageTs) which
-    // also contains the view link but is not an announcement reply.
     const runViewLink = `/runs/${input.run.id}?view=details`;
-    return messages.some(
-      (msg) =>
-        msg.bot_id &&
-        msg.ts !== input.slack.messageTs &&
-        msg.text?.includes(runViewLink) &&
-        isRunOutcomeLine(msg.text ?? "")
-    );
+    const matchAnnouncement = (msg: SlackThreadMessage) =>
+      msg.bot_id &&
+      msg.ts !== input.slack.messageTs &&
+      msg.text?.includes(runViewLink) &&
+      isRunOutcomeLine(msg.text ?? "");
+
+    if (input.slack.threadTs && deps.getThreadMessages) {
+      // Threaded run: scan thread replies after the run message.
+      const messages = await deps.getThreadMessages(input.botToken, {
+        channel: input.slack.channelId,
+        threadTs: input.slack.threadTs,
+        oldest: input.slack.messageTs,
+        limit: 200,
+      });
+      return messages.some(matchAnnouncement);
+    }
+
+    if (!input.slack.threadTs && deps.getChannelMessages) {
+      // Top-level run: scan channel history after the run message.
+      const messages = await deps.getChannelMessages(input.botToken, {
+        channel: input.slack.channelId,
+        oldest: input.slack.messageTs,
+        limit: 200,
+      });
+      return messages.some(matchAnnouncement);
+    }
+
+    // No applicable fetcher available.
+    return false;
   } catch (error) {
     // If we cannot check, proceed with the announcement to avoid never
     // announcing. Duplicate announcements are harmless; missing ones are not.

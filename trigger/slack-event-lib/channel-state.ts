@@ -107,5 +107,3 @@ export function hasSlackUserInput(
     (payload.attachmentNotices?.length ?? 0) > 0
   );
 }
-
-export { isDirectChannelType } from "@/lib/slack/channel-types";

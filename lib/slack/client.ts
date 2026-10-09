@@ -258,6 +258,36 @@ export async function getSlackThreadMessages(
   return Array.isArray(json.messages) ? json.messages : [];
 }
 
+/**
+ * Fetch recent messages from a channel (conversations.history). Used for
+ * duplicate-announcement checks on top-level (non-threaded) messages.
+ */
+export async function getSlackChannelMessages(
+  botToken: string,
+  input: {
+    channel: string;
+    /** Fetch only messages newer than this timestamp (exclusive). */
+    oldest?: string;
+    limit?: number;
+  },
+  fetchImpl?: typeof fetch
+): Promise<SlackThreadMessage[]> {
+  const query: Record<string, string> = {
+    channel: input.channel,
+    limit: String(input.limit ?? 20),
+  };
+  if (input.oldest) {
+    query.oldest = input.oldest;
+  }
+  const json = await slackApiGet<{ messages?: SlackThreadMessage[] }>(
+    "conversations.history",
+    botToken,
+    query,
+    fetchImpl
+  );
+  return Array.isArray(json.messages) ? json.messages : [];
+}
+
 export async function getSlackUserInfo(
   botToken: string,
   slackUserId: string,
