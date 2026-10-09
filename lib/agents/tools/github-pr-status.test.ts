@@ -12,13 +12,11 @@ describe("github_pr_status tool", () => {
     );
   });
 
-  it("normalizes isRequired from GitHub to required: null when undefined", () => {
-    // Test the normalizeChecks logic by verifying the tool description explains
-    // the behavior - the actual normalization is tested via integration tests
-    // that mock the GitHub API response. The tool description is the contract
-    // for how models should interpret the output.
+  it("guides models to treat required as blocking in the description", () => {
+    // The description is the contract for how models interpret the output.
+    // Actual normalization (isRequired -> required: null) is tested via
+    // integration tests that mock the GitHub API response.
     const tool = createGithubPullRequestStatusTool({ userId: "user-1" });
-    // The description should guide models to treat null as blocking (safe default)
     expect(tool.description).toMatch(/required.*blocking/i);
   });
 });

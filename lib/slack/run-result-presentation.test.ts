@@ -368,7 +368,7 @@ it("does not announce a refreshed terminal message twice", async () => {
   expect(posts).toEqual([]);
 });
 
-it("keeps a report whose escaping multiplies its length within Slack’s limits", () => {
+it("keeps a report whose escaping multiplies its length within Slack's limits", () => {
   const message = buildRunResultMessage({
     run,
     status: "success",
@@ -424,15 +424,31 @@ it.each([
   else expect(posts[0]?.text).not.toContain("<@U123>");
 });
 
+// The run's own message (at messageTs) always has the view link but NOT the
+// announcement outcome line. Announcements are replies that have BOTH the view
+// link AND "Run finished/failed/cancelled" text.
+const runOwnMessage = {
+  ts: "1.2",
+  bot_id: "B123",
+  text: "Run started: Fix the mobile controls\nView run details: /runs/run-1?view=details",
+};
+const existingAnnouncement = {
+  ts: "1.3",
+  bot_id: "B123",
+  text: "Run finished: Fix the mobile controls\n/runs/run-1?view=details",
+};
+
 it.each([
   {
-    case: "duplicate",
-    threadMsgs: [
-      { ts: "1.3", bot_id: "B123", text: "/runs/run-1?view=details" },
-    ],
+    case: "duplicate (announcement exists)",
+    threadMsgs: [runOwnMessage, existingAnnouncement],
     expectPost: false,
   },
-  { case: "no prior", threadMsgs: [], expectPost: true },
+  {
+    case: "no prior (only run message)",
+    threadMsgs: [runOwnMessage],
+    expectPost: true,
+  },
   { case: "check fails", threadMsgs: "throw", expectPost: true },
 ] as const)(
   "idempotent announcement: $case",

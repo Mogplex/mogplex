@@ -136,7 +136,9 @@ async function loadRunOutputBestEffort(
 /**
  * Check if an announcement for this run already exists in the thread. A retry
  * after a failed markDelivered would otherwise post a duplicate announcement.
- * The check looks for bot messages containing the run's view link.
+ * The check looks for bot messages containing the announcement's distinctive
+ * outcome line (e.g., "Run finished", "Run failed"), excluding the run's own
+ * message which also contains the run view link but is not an announcement.
  */
 async function hasExistingAnnouncement(
   input: {
@@ -154,11 +156,17 @@ async function hasExistingAnnouncement(
       threadTs,
       limit: 20,
     });
-    // Look for a bot message with our run's view link, which uniquely identifies
-    // an announcement for this specific run.
+    // Look for a bot message with the announcement's distinctive outcome line
+    // and the run's view link. Exclude the run's own message (messageTs) which
+    // also contains the view link but is not an announcement reply.
     const runViewLink = `/runs/${input.run.id}?view=details`;
+    const announcementPattern = /Run (finished|failed|cancelled)/;
     return messages.some(
-      (msg) => msg.bot_id && msg.text?.includes(runViewLink)
+      (msg) =>
+        msg.bot_id &&
+        msg.ts !== input.slack.messageTs &&
+        msg.text?.includes(runViewLink) &&
+        announcementPattern.test(msg.text)
     );
   } catch {
     // If we cannot check, proceed with the announcement to avoid never
