@@ -3,10 +3,6 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
-import {
-  createWorkerHeartbeatTimer,
-  recordWorkerHeartbeat,
-} from "@/lib/interactive-runs";
 import { createNativeSandboxExecution } from "@/lib/mogplex-api/native-sandbox-execution";
 import { runAuthorizedControlChat } from "@/app/api/control/chat/_lib/authorized-request";
 import { validateControlChatMessages } from "@/app/api/control/chat/_lib/messages";
@@ -73,7 +69,6 @@ export async function executeControlContinuation(
   let checkpoint: ControlStreamCompletion | undefined;
   let aiCallId: string | undefined;
   let watcher: Awaited<ReturnType<typeof watchControlContinuation>> | undefined;
-  let stopHeartbeat: (() => void) | undefined;
   try {
     watcher = await watchControlContinuation(
       {
@@ -147,19 +142,6 @@ export async function executeControlContinuation(
             throw new Error("Could not bind coordinator execution.");
           }
           aiCallId = id;
-          // Start heartbeat timer to prevent premature reaping during long tool
-          // executions. The timer fires once after 15 minutes and records a
-          // progress event, extending the idle window for valid work while still
-          // allowing truly hung workers (past 30min exec + 31min idle) to be reaped.
-          stopHeartbeat = createWorkerHeartbeatTimer(() =>
-            recordWorkerHeartbeat({
-              aiCallId: id,
-              userId: payload.userId,
-              conversationId: ticket.session_id,
-              repoId: ticket.request_context.repoId,
-              source: "control_continuation",
-            })
-          );
         },
         onTranscriptComplete: async (event) => {
           checkpoint = event;
@@ -218,7 +200,6 @@ export async function executeControlContinuation(
     await failControlContinuation(payload, runtimeRunId);
     throw error;
   } finally {
-    stopHeartbeat?.();
     await watcher?.end();
   }
 }
