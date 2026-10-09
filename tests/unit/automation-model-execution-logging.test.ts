@@ -73,6 +73,8 @@ test("logs a retryable provider failure without prompts or provider secrets", as
         retryable: true,
         generationId: null,
         message: "Cannot connect. Authorization: Bearer [redacted]",
+        causeMessage: null,
+        causeCode: null,
       },
     ],
   ]);
@@ -151,6 +153,8 @@ test("logs the terminal provider failure after the bounded retry", async () => {
         retryable: true,
         generationId: "gen-blackbox-failure",
         message: "Service temporarily unavailable",
+        causeMessage: null,
+        causeCode: null,
       },
     ],
   ]);
