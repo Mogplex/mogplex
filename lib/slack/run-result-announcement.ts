@@ -1,5 +1,5 @@
 import { buildAppUrl } from "@/lib/app-url";
-import { isDirectChannelType } from "@/trigger/slack-event-lib/channel-state";
+import { isDirectChannelType } from "./channel-types";
 import { escapeMrkdwn } from "./markdown-to-mrkdwn";
 import { readSlackRunControlsMetadata } from "./run-controls";
 import { runProgressTitle } from "./run-progress-presentation";
@@ -20,12 +20,7 @@ const OUTCOMES: Record<string, string> = {
 
 /** Outcome verbs for pattern matching against announcement text. Includes
  * "ended" for forward-compatibility with the fallback outcome text. */
-export const OUTCOME_VERBS = [
-  "finished",
-  "failed",
-  "cancelled",
-  "ended",
-] as const;
+const OUTCOME_VERBS = ["finished", "failed", "cancelled", "ended"] as const;
 
 /**
  * Test whether `text` looks like an announcement outcome line. Used by the

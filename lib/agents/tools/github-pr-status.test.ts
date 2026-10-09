@@ -1,22 +1,61 @@
 import { describe, expect, it } from "vitest";
-import { createGithubPullRequestStatusTool } from "./github-pr-status";
+import { normalizeChecks } from "./github-pr-status";
 
-describe("github_pr_status tool", () => {
-  it("documents required: null as unknown/blocking in the tool description", () => {
-    const tool = createGithubPullRequestStatusTool({ userId: "user-1" });
-    expect(tool.description).toContain(
-      "When `required` is `null`, the check's blocking status is unknown"
-    );
-    expect(tool.description).toContain(
-      "treat it as required/blocking unless the repository's branch protection rules say otherwise"
-    );
+describe("normalizeChecks", () => {
+  it("maps isRequired: true to required: true for CheckRun nodes", () => {
+    const result = normalizeChecks([
+      { __typename: "CheckRun", name: "ci", isRequired: true },
+    ]);
+    expect(result).toEqual([
+      {
+        name: "ci",
+        status: null,
+        conclusion: null,
+        required: true,
+        url: null,
+      },
+    ]);
   });
 
-  it("guides models to treat required as blocking in the description", () => {
-    // The description is the contract for how models interpret the output.
-    // Actual normalization (isRequired -> required: null) is tested via
-    // integration tests that mock the GitHub API response.
-    const tool = createGithubPullRequestStatusTool({ userId: "user-1" });
-    expect(tool.description).toMatch(/required.*blocking/i);
+  it("maps isRequired: false to required: false for CheckRun nodes", () => {
+    const result = normalizeChecks([
+      { __typename: "CheckRun", name: "lint", isRequired: false },
+    ]);
+    expect(result[0]?.required).toBe(false);
+  });
+
+  it("maps isRequired: null to required: null for CheckRun nodes", () => {
+    const result = normalizeChecks([
+      { __typename: "CheckRun", name: "unknown-check", isRequired: null },
+    ]);
+    expect(result[0]?.required).toBe(null);
+  });
+
+  it("maps missing isRequired (undefined) to required: null for CheckRun nodes", () => {
+    const result = normalizeChecks([
+      { __typename: "CheckRun", name: "legacy" },
+    ]);
+    expect(result[0]?.required).toBe(null);
+  });
+
+  it("handles StatusContext nodes the same way", () => {
+    const result = normalizeChecks([
+      { __typename: "StatusContext", context: "status-a", isRequired: true },
+      { __typename: "StatusContext", context: "status-b", isRequired: null },
+      { __typename: "StatusContext", context: "status-c" },
+    ]);
+    expect(result[0]?.required).toBe(true);
+    expect(result[1]?.required).toBe(null);
+    expect(result[2]?.required).toBe(null);
+  });
+
+  it("skips null nodes and unknown types", () => {
+    const result = normalizeChecks([
+      null,
+      { __typename: "Unknown", name: "x" },
+      { __typename: "CheckRun", name: "valid" },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.name).toBe("valid");
   });
 });

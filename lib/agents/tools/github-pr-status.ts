@@ -149,7 +149,8 @@ function truncateBody(value: string | null | undefined) {
   return value?.slice(0, MAX_REVIEW_BODY_CHARS) ?? "";
 }
 
-function normalizeChecks(nodes: Array<GithubCheckNode | null> = []) {
+/** @internal Exported for testing. */
+export function normalizeChecks(nodes: Array<GithubCheckNode | null> = []) {
   return nodes.flatMap((node) => {
     if (!node) return [];
     if (node.__typename === "CheckRun") {
