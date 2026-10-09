@@ -169,16 +169,29 @@ export async function finalizeHarnessPass(
     error: aiCall?.error ?? null,
   });
 
-  // Record terminal commit SHA for successful runs (best-effort, non-blocking).
+  // Record terminal commit SHA for successful runs (best-effort with bounded timeout).
   // This pins artifact reads to the exact commit at run completion.
+  // We await to ensure recording completes before the Trigger worker exits,
+  // but never fail the run if recording fails.
   if (status === "success") {
     const recordFn = deps.recordTerminalCommit ?? recordTerminalCommitSha;
-    recordFn(finished).catch((error) => {
+    const TERMINAL_COMMIT_TIMEOUT_MS = 10_000;
+    try {
+      await Promise.race([
+        recordFn(finished),
+        new Promise<void>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Terminal commit recording timed out")),
+            TERMINAL_COMMIT_TIMEOUT_MS
+          )
+        ),
+      ]);
+    } catch (error) {
       console.warn("[run-execution] terminal commit recording failed", {
         runId: finished.id,
         error: error instanceof Error ? error.message : "unknown",
       });
-    });
+    }
   }
 
   await safeNotifyTerminal(deps, finished, status);
