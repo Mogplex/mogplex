@@ -365,11 +365,15 @@ describe("executeAutomationTextGeneration fail-over", () => {
     }).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(AutomationModelExecutionError);
+    // The run fails over to the fallback, then retries the fallback when no more
+    // fallbacks exist (fail_over with no next fallback → retry_same).
     expect((failure as AutomationModelExecutionError).metadata).toMatchObject({
       attempts: 3,
       failoverModelIds: ["zai/glm-5.3-fast"],
       fallbackUsed: true,
       finalFailureClass: "provider_unavailable",
+      failedOver: true,
+      retried: true,
     });
   });
 
