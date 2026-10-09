@@ -37,18 +37,18 @@ export type WorkerStopFailure = { id: string; error: string };
 
 export type WorkerStopResult = {
   failures: WorkerStopFailure[];
-  /** Calls where stopIdleWorker returned false (no active worker to stop). */
-  notFound: string[];
+  /** Calls where stopIdleWorker returned false and no worker was stopped (none active, already finished, or a provider without worker stops). */
+  notStopped: string[];
 };
 
-/** Stops the worker behind each call; returns failures and calls with no worker. */
+/** Stops the worker behind each call; returns failures and calls where no worker was stopped. */
 export async function stopWorkers(
   client: Pick<SupabaseClient, "from">,
   stops: readonly WorkerStop[],
   stopWorker: typeof stopIdleWorker = stopIdleWorker
 ): Promise<WorkerStopResult> {
   const failures: WorkerStopFailure[] = [];
-  const notFound: string[] = [];
+  const notStopped: string[] = [];
   await forEachConcurrently(stops, REAPER_CONCURRENCY, async (stop) => {
     try {
       const stopped = await stopWorker({
@@ -61,7 +61,7 @@ export async function stopWorkers(
           "[zombie-reaper] no active worker to stop for idle call",
           stop.call.id
         );
-        notFound.push(stop.call.id);
+        notStopped.push(stop.call.id);
       }
     } catch (stopError) {
       failures.push({
@@ -71,7 +71,7 @@ export async function stopWorkers(
       });
     }
   });
-  return { failures, notFound };
+  return { failures, notStopped };
 }
 
 export type ReportStopResultsDeps = {
@@ -108,7 +108,7 @@ export function reportStopResults(
       detail: failure.error,
     });
   }
-  for (const id of result.notFound) {
+  for (const id of result.notStopped) {
     summary.results.push({
       table: "ai_calls",
       id,

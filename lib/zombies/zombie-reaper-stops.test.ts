@@ -41,7 +41,7 @@ describe("stopWorkers", () => {
     error: "Stopped after idle window",
   });
 
-  it("should track stops that returned false as notFound", async () => {
+  it("should track stops that returned false as notStopped", async () => {
     const calls: string[] = [];
     const stopWorker = async (input: { call: { id: string } }) => {
       calls.push(input.call.id);
@@ -56,7 +56,7 @@ describe("stopWorkers", () => {
 
     expect(calls.toSorted()).toEqual(["stop-1", "stop-2"]);
     expect(result.failures).toEqual([]);
-    expect(result.notFound).toEqual(["stop-2"]);
+    expect(result.notStopped).toEqual(["stop-2"]);
   });
 
   it("should track stops that threw as failures", async () => {
@@ -74,10 +74,10 @@ describe("stopWorkers", () => {
     expect(result.failures).toEqual([
       { id: "stop-2", error: "Trigger unavailable" },
     ]);
-    expect(result.notFound).toEqual([]);
+    expect(result.notStopped).toEqual([]);
   });
 
-  it("should track both notFound and failures in the same batch", async () => {
+  it("should track both notStopped and failures in the same batch", async () => {
     const stopWorker = async (input: { call: { id: string } }) => {
       if (input.call.id === "fail") throw new Error("Network error");
       return input.call.id === "ok";
@@ -89,7 +89,7 @@ describe("stopWorkers", () => {
       stopWorker
     );
 
-    expect(result.notFound).toEqual(["noop"]);
+    expect(result.notStopped).toEqual(["noop"]);
     expect(result.failures).toEqual([{ id: "fail", error: "Network error" }]);
   });
 });
@@ -110,7 +110,7 @@ describe("reportStopResults", () => {
       summary,
       {
         failures: [{ id: "fail-1", error: "Trigger down" }],
-        notFound: ["noop-1", "noop-2"],
+        notStopped: ["noop-1", "noop-2"],
       },
       deps
     );
@@ -148,7 +148,7 @@ describe("reportStopResults", () => {
 
     // No failures: captureWarning not called
     const summary1 = makeSummary();
-    reportStopResults(summary1, { failures: [], notFound: ["noop-1"] }, deps);
+    reportStopResults(summary1, { failures: [], notStopped: ["noop-1"] }, deps);
     expect(captured).toHaveLength(0);
 
     // With failures: captureWarning called
@@ -157,7 +157,7 @@ describe("reportStopResults", () => {
       summary2,
       {
         failures: [{ id: "fail-1", error: "Trigger down" }],
-        notFound: [],
+        notStopped: [],
       },
       deps
     );
