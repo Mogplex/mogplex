@@ -240,7 +240,8 @@ function createRecoveryMiddleware(input: {
           const budgetAborted = budgetController?.signal.aborted === true;
           const effectiveError = budgetAborted
             ? automationStepBudgetExhaustedError(
-                "Step budget exhausted during request"
+                "Step budget exhausted during request",
+                error
               )
             : error;
           const failure = classifyAutomationModelError(effectiveError);

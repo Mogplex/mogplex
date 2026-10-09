@@ -205,6 +205,8 @@ test("breakdowns and resilience summary reflect failure classes and recoveries",
       failureStatusCode: 503,
       timeoutBucket: "5m_plus",
       timeoutBucketLabel: "5m+",
+      // Exercise the failedOver counting branch in summarizeAutomationResilience
+      failedOver: true,
     },
   });
   const recoveredRun = createFailureRecord({
@@ -253,7 +255,7 @@ test("breakdowns and resilience summary reflect failure classes and recoveries",
     failedTotal: 2,
     successfulRecoveries: 1,
     retriedFailures: 2,
-    failedOverFailures: 0,
+    failedOverFailures: 1,
     timeoutFailures: 1,
     authenticationFailures: 0,
     configurationFailures: 0,

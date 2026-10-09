@@ -17,10 +17,16 @@ export const AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE =
 
 /**
  * Creates a typed budget-exhausted error that classifies as `timeout`.
+ * When `cause` is provided, it is attached so the underlying provider error
+ * (e.g. the abort detail) remains available for debugging.
  */
-export function automationStepBudgetExhaustedError(message: string) {
+export function automationStepBudgetExhaustedError(
+  message: string,
+  cause?: unknown
+) {
   return Object.assign(new Error(message), {
     code: AUTOMATION_STEP_BUDGET_EXHAUSTED_CODE,
+    ...(cause !== undefined && { cause }),
   });
 }
 
