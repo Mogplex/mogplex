@@ -21,6 +21,8 @@ type SetupOptions = {
   owned?: boolean;
   status?: "success" | "streaming";
   mode?: string;
+  /** Git entry type for the leaf file. Defaults to "blob". */
+  entryType?: string;
   content?: string;
   providerFailure?: boolean;
   malformed?: "commit" | "tree";
@@ -31,21 +33,28 @@ type SetupOptions = {
   githubToken?: string | null;
   commitSha?: string;
   truncated?: boolean;
-  leafSize?: number;
+  /** Entry size. Use null to omit the size field entirely (simulating GitHub's behavior for missing size). */
+  leafSize?: number | null;
   blob?: Record<string, unknown>;
   // Exercise the production githubJson against a mocked global fetch.
   realGithub?: boolean;
+  /** Terminal commit SHA recorded in run metadata, pins artifact reads. */
+  terminalCommitSha?: string | null;
 };
 
 /** Provider responses for the happy path, keyed by the URL suffix they answer. */
 function providerFixtures(options: SetupOptions): [string, unknown][] {
-  const leaf = {
+  // Build leaf entry: null leafSize means omit size field entirely
+  const leafBase = {
     path: "preview-test.json",
     mode: options.mode ?? "100644",
-    type: "blob",
+    type: options.entryType ?? "blob",
     sha: "blob",
-    size: options.leafSize ?? 10,
   };
+  const leaf =
+    options.leafSize === null
+      ? leafBase // Omit size field
+      : { ...leafBase, size: options.leafSize ?? 10 };
   const blob = options.blob ?? {
     encoding: "base64",
     size: 10,
@@ -53,9 +62,14 @@ function providerFixtures(options: SetupOptions): [string, unknown][] {
       "base64"
     ),
   };
+  // Support pinned commit SHA: use it as the commit ref if provided
+  const commitRef =
+    options.terminalCommitSha ??
+    options.workingBranch ??
+    "mogplex/external/run";
   return [
     [
-      `/commits/${encodeURIComponent(options.workingBranch ?? "mogplex/external/run")}`,
+      `/commits/${encodeURIComponent(commitRef)}`,
       {
         sha: options.commitSha ?? commitSha,
         commit: { tree: { sha: "root" } },
@@ -114,6 +128,10 @@ async function setup(options: SetupOptions = {}) {
                   working_branch:
                     options.workingBranch ?? "mogplex/external/run",
                   root_directory: options.rootDirectory ?? null,
+                  metadata:
+                    options.terminalCommitSha === undefined
+                      ? {}
+                      : { terminal_commit_sha: options.terminalCommitSha },
                 })
               ),
         loadRepo: async () => {
@@ -141,20 +159,28 @@ async function setup(options: SetupOptions = {}) {
   return { request, urls };
 }
 
-test("artifact reads a regular JSON blob at a pinned commit using existing repo access", async () => {
+test("artifact reads a regular JSON blob from the branch tip when no terminal SHA recorded (unpinned)", async () => {
   const { request, urls } = await setup();
   const response = await request();
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
-  assert.deepEqual((await response.json()).data.artifact, {
+  const artifact = (await response.json()).data.artifact;
+  assert.deepEqual(artifact, {
     runId: "run-1",
     repoId: "repo-1",
     branch: "mogplex/external/run",
     commitSha,
     path,
+    pinned: false,
     content: { ready: true },
   });
   assert.equal(urls.filter((url) => url.includes("/commits/")).length, 1);
+  // Verify the commit fetch was against the branch name (unpinned)
+  assert.ok(
+    urls.some((url) =>
+      url.includes(`/commits/${encodeURIComponent("mogplex/external/run")}`)
+    )
+  );
 });
 
 test("anonymous and cross-owner artifact reads are refused", async () => {
@@ -302,4 +328,129 @@ test("runs without their own branch cannot provide artifacts", async () => {
     assert.equal((await request()).status, 409);
     assert.equal(urls.length, 0);
   }
+});
+
+test("pinned artifacts use the recorded terminal commit SHA instead of branch tip", async () => {
+  const pinnedSha = "f".repeat(40);
+  const { request, urls } = await setup({ terminalCommitSha: pinnedSha });
+  const response = await request();
+  assert.equal(response.status, 200);
+  const artifact = (await response.json()).data.artifact;
+  assert.equal(artifact.pinned, true);
+  // Verify the commit fetch was against the pinned SHA
+  assert.ok(urls.some((url) => url.includes(`/commits/${pinnedSha}`)));
+  // Verify the commit fetch was NOT against the branch name
+  assert.ok(
+    !urls.some((url) =>
+      url.includes(`/commits/${encodeURIComponent("mogplex/external/run")}`)
+    )
+  );
+});
+
+test("submodule entries (type=commit mode=160000) are refused", async () => {
+  const { request, urls } = await setup({
+    entryType: "commit",
+    mode: "160000",
+  });
+  const response = await request();
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.error.code, "BAD_REQUEST");
+  assert.ok(body.error.message.includes("regular JSON file"));
+  // The blob should never be fetched for a submodule
+  assert.ok(!urls.some((url) => url.includes("/blobs/")));
+});
+
+test("missing entry.size is treated as oversized and refused before blob read", async () => {
+  // Pass leafSize as null to omit size from the entry
+  const { request, urls } = await setup({ leafSize: null });
+  const response = await request();
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.error.code, "BAD_REQUEST");
+  assert.ok(body.error.message.includes("1 MiB"));
+  // The blob should never be fetched when entry appears oversized
+  assert.ok(!urls.some((url) => url.includes("/blobs/")));
+});
+
+test("GitHub provider failures are logged with status code classification", async (context) => {
+  const logMock = context.mock.method(console, "error", () => {});
+  const fetchMock = context.mock.method(globalThis, "fetch", async () => ({
+    ok: false,
+    status: 429,
+    json: async () => ({}),
+  }));
+  const { request } = await setup({ realGithub: true });
+  const response = await request();
+  assert.equal(response.status, 502);
+  assert.ok(
+    logMock.mock.calls.some(
+      (call) =>
+        call.arguments[0] === "[artifact] GitHub returned error" &&
+        call.arguments[1]?.status === 429 &&
+        call.arguments[1]?.errorClass === "rate_limit"
+    )
+  );
+  fetchMock.mock.restore();
+});
+
+test("GitHub network failures are logged with error class", async (context) => {
+  const logMock = context.mock.method(console, "error", () => {});
+  const fetchMock = context.mock.method(globalThis, "fetch", async () => {
+    throw new TypeError("fetch failed");
+  });
+  const { request } = await setup({ realGithub: true });
+  const response = await request();
+  assert.equal(response.status, 502);
+  assert.ok(
+    logMock.mock.calls.some(
+      (call) =>
+        call.arguments[0] === "[artifact] GitHub request failed" &&
+        call.arguments[1]?.errorClass === "TypeError"
+    )
+  );
+  fetchMock.mock.restore();
+});
+
+// Tests for distinct 404 error messages based on pinned vs branch tip
+
+test("commit 404 returns distinct error for pinned vs branch", async () => {
+  await loadRunDetailRoute();
+  const { loadRunArtifact, RunArtifactError } =
+    await import("../../lib/mogplex-api/run-artifacts");
+  const githubJson = async (_token: string, url: string) => {
+    if (url.includes("/commits/"))
+      throw new RunArtifactError(404, "Committed artifact not found");
+    throw new Error("Unexpected GitHub URL");
+  };
+  const buildDeps = (metadata: Record<string, unknown>) => ({
+    loadRun: async () =>
+      presentMogplexApiRun(
+        buildRunRow({
+          status: "success",
+          create_branch: true,
+          working_branch: "mogplex/external/run",
+          metadata,
+        })
+      ),
+    loadRepo: async () => ({
+      repo: { user_id: "user-123", full_name: "webrenew/previews" },
+      githubToken: "test-token",
+    }),
+    githubJson,
+  });
+  // Test pinned commit 404
+  let err = await loadRunArtifact(
+    { userId: "user-123", runId: "run-1", path },
+    buildDeps({ terminal_commit_sha: "f".repeat(40) })
+  ).catch((e) => e);
+  assert.ok(err instanceof RunArtifactError && err.status === 404);
+  assert.ok(err.message.includes("Pinned commit"));
+  // Test branch tip 404
+  err = await loadRunArtifact(
+    { userId: "user-123", runId: "run-1", path },
+    buildDeps({})
+  ).catch((e) => e);
+  assert.ok(err instanceof RunArtifactError && err.status === 404);
+  assert.ok(err.message.includes("Branch no longer exists"));
 });

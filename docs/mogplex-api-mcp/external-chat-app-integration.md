@@ -178,9 +178,9 @@ After a successful run on a branch created for that run, a server integration ca
 read an explicit output file with
 `GET /api/v1/mogplex/runs/{runId}/artifact?path=.mogplex/artifacts/{name}.json`.
 Use the same bearer authentication as the run APIs. The response envelope contains
-`data.artifact` with `runId`, `repoId`, `branch`, `path`, `commitSha`, and parsed
-`content`. It uses the caller's existing repository access; no GitHub token is
-returned or copied to the consuming app.
+`data.artifact` with `runId`, `repoId`, `branch`, `path`, `commitSha`, `pinned`,
+and parsed `content`. It uses the caller's existing repository access; no GitHub
+token is returned or copied to the consuming app.
 
 Artifact paths are always relative to the repository root, including runs with a
 non-null `rootDirectory`; write outputs there, not under the application subfolder.
@@ -191,10 +191,18 @@ run is read without replaying runtime cleanup or notification checks. The run an
 repository must both belong to the authenticated caller. Errors never include file
 content or provider credentials.
 
-The endpoint resolves the run's working branch **at read time**, then reads every
-tree/blob from that immutable commit. `commitSha` identifies the imported content;
-it does not attest that this was the branch tip when execution ended. Use a unique
-branch per requested build and retain the returned commit with the imported draft.
+**Commit pinning**: When a run completes successfully, Mogplex attempts to record
+the terminal commit SHA in run metadata (best-effort, with a bounded timeout). The
+artifact endpoint uses this pinned SHA when present, so later pushes to the same
+branch do not change the artifact returned for an earlier run. The `pinned` field
+in the response indicates whether the commit was recorded at run completion (`true`)
+or resolved from the branch tip (`false`). Runs without a recorded terminal commit
+(older runs, failed recording, or runs that did not push commits) fall back to the
+branch tip.
+
 Validate the artifact against the consuming app's schema and require its normal
 publication approval. A successful run or agent-written check report is not a
 substitute for that review. This endpoint does not merge or publish anything.
+
+MCP clients can use `mogplex_get_run_artifact` with the same parameters (`runId`,
+`path`). The structured response includes the same fields as the HTTP endpoint.

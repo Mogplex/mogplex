@@ -24,6 +24,7 @@ function fixture() {
   });
   const notified: string[] = [];
   const events: string[] = [];
+  const terminalCommitsRecorded: string[] = [];
   const deps: RuntimeFinalizationDeps = {
     cleanupSandbox: async () => {},
     loadRun: async () => run,
@@ -54,6 +55,9 @@ function fixture() {
     notifyTerminal: async (_run, status) => {
       notified.push(status);
     },
+    recordTerminalCommit: async (r) => {
+      terminalCommitsRecorded.push(r.id);
+    },
   };
   return {
     deps,
@@ -61,6 +65,7 @@ function fixture() {
     call: () => call,
     notified,
     events,
+    terminalCommitsRecorded,
     setRun: (patch: Partial<typeof run>) => {
       run = { ...run, ...patch };
     },
@@ -249,4 +254,73 @@ it("returns null if the run was deleted", async () => {
   f.deps.loadRun = async () => null;
   expect(await finalizeRunAfterWorkerExit(f.run(), timeout, f.deps)).toBeNull();
   expect(f.notified).toEqual([]);
+});
+
+it("records terminal commit SHA for successful create_branch runs", async () => {
+  const f = fixture();
+  f.setRun({ create_branch: true });
+  f.setCall({ status: "success" });
+  await finalizeRunAfterWorkerExit(
+    f.run(),
+    { status: "completed", error: null },
+    f.deps
+  );
+  expect(f.run().status).toBe("success");
+  expect(f.terminalCommitsRecorded).toEqual([f.run().id]);
+});
+
+it("does not record terminal commit for non-create_branch runs", async () => {
+  const f = fixture();
+  f.setRun({ create_branch: false });
+  f.setCall({ status: "success" });
+  await finalizeRunAfterWorkerExit(
+    f.run(),
+    { status: "completed", error: null },
+    f.deps
+  );
+  expect(f.run().status).toBe("success");
+  expect(f.terminalCommitsRecorded).toEqual([]);
+});
+
+it("does not record terminal commit for non-success runs", async () => {
+  const f = fixture();
+  f.setRun({ create_branch: true });
+  await finalizeRunAfterWorkerExit(f.run(), timeout, f.deps);
+  expect(f.run().status).toBe("failed");
+  expect(f.terminalCommitsRecorded).toEqual([]);
+});
+
+it("continues finalization if terminal commit recording fails", async () => {
+  const f = fixture();
+  f.setRun({ create_branch: true });
+  f.setCall({ status: "success" });
+  f.deps.recordTerminalCommit = async () => {
+    throw new Error("Sandbox unavailable");
+  };
+  const result = await finalizeRunAfterWorkerExit(
+    f.run(),
+    { status: "completed", error: null },
+    f.deps
+  );
+  expect(result?.status).toBe("success");
+  expect(f.notified).toEqual(["success"]);
+});
+
+it("skips terminal commit if already pinned (first-write-wins)", async () => {
+  const f = fixture();
+  f.setRun({
+    create_branch: true,
+    metadata: {
+      terminal_commit_sha: "abc123def456abc123def456abc123def456abc1",
+    },
+  });
+  f.setCall({ status: "success" });
+  await finalizeRunAfterWorkerExit(
+    f.run(),
+    { status: "completed", error: null },
+    f.deps
+  );
+  expect(f.run().status).toBe("success");
+  // Should not have recorded again (already pinned)
+  expect(f.terminalCommitsRecorded).toEqual([]);
 });

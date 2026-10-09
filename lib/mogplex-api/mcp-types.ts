@@ -68,6 +68,7 @@ export type MogplexMcpClient = Pick<
   | "getAutomation"
   | "getAutomationRunLogs"
   | "getRun"
+  | "getRunArtifact"
   | "getRunEvents"
   | "getSandboxLogs"
   | "getSkill"

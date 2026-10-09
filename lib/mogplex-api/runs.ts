@@ -34,6 +34,7 @@ import {
   hashRequest,
 } from "./runs-normalize";
 import {
+  extractTerminalCommitSha,
   MogplexApiRunError,
   type ExternalAgentRunRow,
   type NormalizedStartRequest,
@@ -195,6 +196,7 @@ export function presentMogplexApiRun(row: ExternalAgentRunRow) {
       provider: row.runtime_provider,
       runId: row.runtime_run_id,
     },
+    terminalCommitSha: extractTerminalCommitSha(row.metadata),
   } satisfies MogplexApiRunDetail;
 }
 

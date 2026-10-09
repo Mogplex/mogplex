@@ -17,6 +17,7 @@ import type {
   MogplexApiRunStatus,
 } from "@/lib/mogplex-api/runs";
 import type { AiCall } from "@/lib/types";
+import { recordTerminalCommitWithTimeout } from "./run-terminal-commit";
 
 export type ExternalAgentRunExecutionPayload = {
   runId: string;
@@ -84,6 +85,8 @@ export type FinalizeDeps = HarnessPassNotifiers & {
   ) => Promise<ExternalAgentRunRow>;
   loadAiCall: typeof loadOwnedAiCall;
   appendEvent: typeof safeAppendAiCallEvent;
+  /** Optional terminal commit recording for artifact pinning. */
+  recordTerminalCommit?: typeof recordTerminalCommitWithTimeout;
 };
 
 async function safeNotifyTerminal(
@@ -154,6 +157,20 @@ export async function finalizeHarnessPass(
     status,
     error: aiCall?.error ?? null,
   });
+
+  // Record terminal commit SHA for successful runs (best-effort with bounded timeout).
+  // This pins artifact reads to the exact commit at run completion.
+  // We await to ensure recording completes before the Trigger worker exits,
+  // but never fail the run if recording fails.
+  // Only record for create_branch runs; worktree-bound runs operate in the worktree,
+  // not the repo root, so HEAD would be the base branch tip.
+  // The timeout and failure tolerance are encapsulated in the shared wrapper.
+  if (status === "success" && finished.create_branch) {
+    const recordFn =
+      deps.recordTerminalCommit ?? recordTerminalCommitWithTimeout;
+    await recordFn(finished);
+  }
+
   await safeNotifyTerminal(deps, finished, status);
 
   return {

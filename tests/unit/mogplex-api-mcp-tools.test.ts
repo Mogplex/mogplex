@@ -77,6 +77,7 @@ test("Mogplex MCP initialize and tools/list expose the run control tools", async
       "mogplex_get_run",
       "mogplex_get_run_events",
       "mogplex_cancel_run",
+      "mogplex_get_run_artifact",
     ]
   );
 });

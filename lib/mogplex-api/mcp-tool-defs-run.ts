@@ -128,4 +128,25 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
       openWorldHint: false,
     },
   },
+  {
+    name: "mogplex_get_run_artifact",
+    title: "Get Mogplex Run Artifact",
+    description:
+      "Read a committed JSON artifact from a successful Mogplex run. The artifact must be in .mogplex/artifacts/ and the run must have finished successfully on its own branch.",
+    inputSchema: objectSchema({
+      properties: {
+        runId: runIdProperty,
+        path: {
+          type: "string",
+          description:
+            "Artifact path relative to the repository root, e.g. .mogplex/artifacts/result.json",
+        },
+      },
+      required: ["runId", "path"],
+    }),
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+  },
 ];

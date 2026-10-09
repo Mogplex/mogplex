@@ -47,6 +47,7 @@ export function buildRun(
       provider: "trigger",
       runId: "trigger-run-1",
     },
+    terminalCommitSha: null,
     ...overrides,
   };
 }
@@ -199,6 +200,9 @@ export function buildFakeMcpClient(
       run: buildRun({ status: "cancelled" }),
       status: "cancelled",
     }),
+    getRunArtifact: async () => {
+      throw new Error("getRunArtifact was not stubbed");
+    },
     ...overrides,
   };
 }
