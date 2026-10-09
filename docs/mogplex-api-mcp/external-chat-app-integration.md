@@ -191,13 +191,14 @@ run is read without replaying runtime cleanup or notification checks. The run an
 repository must both belong to the authenticated caller. Errors never include file
 content or provider credentials.
 
-**Commit pinning**: When a run completes successfully, Mogplex records the terminal
-commit SHA in run metadata. The artifact endpoint uses this pinned SHA when present,
-guaranteeing that later pushes to the same branch do not change the artifact returned
-for an earlier run. The `pinned` field in the response indicates whether the commit
-was recorded at run completion (`true`) or resolved from the branch tip (`false`).
-Older runs without a recorded terminal commit fall back to the branch tip. New runs
-automatically record the terminal commit.
+**Commit pinning**: When a run completes successfully, Mogplex attempts to record
+the terminal commit SHA in run metadata (best-effort, with a bounded timeout). The
+artifact endpoint uses this pinned SHA when present, so later pushes to the same
+branch do not change the artifact returned for an earlier run. The `pinned` field
+in the response indicates whether the commit was recorded at run completion (`true`)
+or resolved from the branch tip (`false`). Runs without a recorded terminal commit
+(older runs, failed recording, or runs that did not push commits) fall back to the
+branch tip.
 
 Validate the artifact against the consuming app's schema and require its normal
 publication approval. A successful run or agent-written check report is not a
