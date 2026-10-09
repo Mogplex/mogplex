@@ -98,3 +98,38 @@ it.each([
     }
   }
 );
+
+// Without threadTs, announceRunEnd posts as a top-level channel message, not a
+// thread reply. conversations.replies cannot find top-level messages, so the
+// duplicate check skips the API call entirely (would never match).
+it("skips duplicate check when no threadTs (top-level announcement)", async () => {
+  const posts: PostSlackMessageInput[] = [];
+  let threadFetchCalled = false;
+  const noThreadRun = {
+    ...run,
+    metadata: {
+      ...run.metadata,
+      slackRunControls: { teamId: "T1", channelId: "C1", messageTs: "1.2" },
+    },
+  };
+  await stripSlackRunControlsForTerminalRun(
+    noThreadRun,
+    "success",
+    {
+      getSlackBotToken: async () => "fixture-token",
+      updateSlackMessage: async () => {},
+      postSlackMessage: async (_token, msg) => posts.push(msg),
+      getThreadMessages: async () => {
+        threadFetchCalled = true;
+        return [existingAnnouncement];
+      },
+      loadRunOutput: async () => "Done.",
+      loadEvidence: async () => emptyRunResultEvidence(),
+    },
+    { announce: true }
+  );
+  // Should post without calling getThreadMessages (check is skipped)
+  expect(posts).toHaveLength(1);
+  expect(threadFetchCalled).toBe(false);
+  expect(posts[0]?.thread_ts).toBeUndefined(); // top-level, not threaded
+});

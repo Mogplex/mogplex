@@ -157,7 +157,10 @@ async function hasExistingAnnouncement(
   deps: SlackRunControlsNotifyDeps
 ): Promise<boolean> {
   if (!deps.getThreadMessages) return false;
-  const threadTs = input.slack.threadTs ?? input.slack.messageTs;
+  // Without a stored threadTs, announceRunEnd posts as a top-level channel
+  // message, not a thread reply. conversations.replies cannot find top-level
+  // messages, so skip the lookup entirely - the check would never match.
+  if (!input.slack.threadTs) return false;
   try {
     // Fetch messages posted after the run message. Announcements are posted at
     // run completion, so they will be after messageTs. Using `oldest` avoids
@@ -166,7 +169,7 @@ async function hasExistingAnnouncement(
     // threads; very long threads may still miss, but duplicates are harmless.
     const messages = await deps.getThreadMessages(input.botToken, {
       channel: input.slack.channelId,
-      threadTs,
+      threadTs: input.slack.threadTs,
       oldest: input.slack.messageTs,
       limit: 200,
     });

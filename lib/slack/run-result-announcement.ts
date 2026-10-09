@@ -18,8 +18,14 @@ const OUTCOMES: Record<string, string> = {
   cancelled: "⏹️ Run cancelled",
 };
 
-/** Outcome verbs for pattern matching against announcement text. */
-export const OUTCOME_VERBS = ["finished", "failed", "cancelled"] as const;
+/** Outcome verbs for pattern matching against announcement text. Includes
+ * "ended" for forward-compatibility with the fallback outcome text. */
+export const OUTCOME_VERBS = [
+  "finished",
+  "failed",
+  "cancelled",
+  "ended",
+] as const;
 
 /**
  * Test whether `text` looks like an announcement outcome line. Used by the
