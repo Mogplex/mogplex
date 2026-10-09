@@ -2,12 +2,13 @@
  * Records the terminal commit SHA when a run finishes successfully.
  * This pins artifact reads to the exact commit at run completion.
  *
- * The SHA is captured from the sandbox's HEAD (not the GitHub API) to avoid
+ * The SHA is read from the run branch inside the sandbox (not the GitHub API) to avoid
  * race conditions where GitHub might not have the latest commit yet.
  */
 import type { Sandbox } from "@vercel/sandbox";
 import { getNeonPool } from "@/lib/db/pool";
 import { resolveVmCredentials } from "@/lib/sandbox/auto-pause-deps";
+import { SANDBOX_WORKSPACE_ROOT } from "@/lib/sandbox/working-directory";
 import { COMMIT_SHA_PATTERN, type ExternalAgentRunRow } from "./runs-types";
 
 export type SandboxHeadResult = {
@@ -57,16 +58,21 @@ export type RecordTerminalCommitDeps = {
 };
 
 /**
- * Run a shell command in the sandbox.
- * Thin wrapper around sandbox.runCommand for testability.
+ * Run a shell command in the sandbox's repository checkout.
+ * Thin wrapper around sandbox.runCommand for testability. The provider
+ * resolves a missing or relative cwd against `/`, so the workspace root is
+ * always passed explicitly.
  */
 async function runSandboxShell(
   sandbox: Sandbox,
-  command: string
+  command: string,
+  env: Record<string, string>
 ): Promise<CommandResult> {
   const process = await sandbox.runCommand({
     cmd: "sh",
     args: ["-c", command],
+    cwd: SANDBOX_WORKSPACE_ROOT,
+    env,
   });
   const [stdout, stderr, result] = await Promise.all([
     process.stdout(),
@@ -150,7 +156,20 @@ const defaultSandboxCommandDeps: SandboxCommandDeps = {
 };
 
 /**
- * Get the HEAD SHA from the sandbox using lib-level sandbox commands.
+ * Reads the run's branch tip and its remote-tracking ref. Branch refs are
+ * shared by every worktree of the checkout, so this finds the run's commit
+ * whether it worked at the workspace root or in `.worktrees/<run>`; the
+ * root's own HEAD may belong to a different run. The branch name arrives
+ * through the environment rather than being spliced into the script.
+ */
+export const TERMINAL_COMMIT_SCRIPT = `set -eu
+head_sha="$(git rev-parse --verify --quiet "refs/heads/$MOGPLEX_WORKING_BRANCH^{commit}" || true)"
+origin_sha="$(git rev-parse --verify --quiet "refs/remotes/origin/$MOGPLEX_WORKING_BRANCH^{commit}" || true)"
+echo "HEAD_SHA=$head_sha"
+echo "ORIGIN_SHA=$origin_sha"`;
+
+/**
+ * Get the run branch's commit from the sandbox using lib-level sandbox commands.
  * Skips pinning if the sandbox isn't running (doesn't resume it).
  */
 async function getSandboxHeadViaSdk(
@@ -187,15 +206,10 @@ async function getSandboxHeadViaSdk(
     return { sha: null, pushed: false };
   }
 
-  // Run git commands to get HEAD and verify it's pushed
-  const script = `set -eu
-head_sha="$(git rev-parse HEAD 2>/dev/null || echo '')"
-origin_sha="$(git rev-parse "origin/${branch}" 2>/dev/null || echo '')"
-echo "HEAD_SHA=$head_sha"
-echo "ORIGIN_SHA=$origin_sha"`;
-
   try {
-    const result = await deps.runSandboxShell(sandbox, script);
+    const result = await deps.runSandboxShell(sandbox, TERMINAL_COMMIT_SCRIPT, {
+      MOGPLEX_WORKING_BRANCH: branch,
+    });
     if (result.exitCode !== 0) {
       console.warn("[terminal-commit] git command failed", {
         sandboxRecordId,
