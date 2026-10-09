@@ -78,6 +78,8 @@ test("routes app_mention in a linked channel through the repo-agent branch", asy
         teamId: string;
         channelId: string;
         messageTs: string;
+        threadTs?: string;
+        channelType?: string;
       };
       slackContext: {
         mode: string;
@@ -108,6 +110,7 @@ test("routes app_mention in a linked channel through the repo-agent branch", asy
     channelId: "C1",
     messageTs: "1700000000.000999",
     threadTs: "1700000000.000100",
+    channelType: "channel",
   });
 
   const placeholderPost = calls.find((c) => c.op === "post") as {
