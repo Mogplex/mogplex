@@ -215,6 +215,9 @@ importers:
       '@vercel/sandbox':
         specifier: 2.0.0-beta.14
         version: 2.0.0-beta.14
+      '@vercel/speed-insights':
+        specifier: 2.0.0
+        version: 2.0.0(next@16.3.8(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(svelte@5.55.7)
       '@wterm/core':
         specifier: 0.3.2
         version: 0.3.2
@@ -4850,6 +4853,32 @@ packages:
 
   '@vercel/sandbox@2.0.0-beta.14':
     resolution: {integrity: sha512-rXz0UYzDXC7nPe3BfRWe7WJMqZvvMCkDMcCWUaGnDNpfJ+AEIlCO5WIDJ4dIW5TD5d2bTPHzktUenn8wXYLsKA==}
+
+  '@vercel/speed-insights@2.0.0':
+    resolution: {integrity: sha512-jwkNcrTeafWxjmWq4AHBaptSqZiJkYU5adLC9QBSqeim0GcqDMgN5Ievh8OG1rJ6W3A4l1oiP7qr9CWxGuzu3w==}
+    peerDependencies:
+      '@sveltejs/kit': ^1 || ^2
+      next: 16.3.8
+      nuxt: '>= 3'
+      react: ^18 || ^19 || ^19.0.0-rc
+      svelte: 5.55.7
+      vue: ^3
+      vue-router: ^4
+    peerDependenciesMeta:
+      '@sveltejs/kit':
+        optional: true
+      next:
+        optional: true
+      nuxt:
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+      vue-router:
+        optional: true
 
   '@vitest/coverage-v8@4.1.11':
     resolution: {integrity: sha512-8MVGEFnJIcdGjcbfKmeq8z0pZHH0JlVtoVZH9Q/qwUp6wyFnEJUBMrw9DCaj+ra3vShGmhavjalMIhPNxZAUcw==}
@@ -14221,6 +14250,12 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
+
+  '@vercel/speed-insights@2.0.0(next@16.3.8(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(svelte@5.55.7)':
+    optionalDependencies:
+      next: 16.3.8(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react: 19.2.4
+      svelte: 5.55.7
 
   '@vitest/coverage-v8@4.1.11(vitest@4.1.11)':
     dependencies:

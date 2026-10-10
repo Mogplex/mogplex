@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { ConsentManager } from '@/components/consent-manager'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ThemeSettingsSync } from '@/components/theme-settings-sync'
@@ -82,6 +83,7 @@ export default async function RootLayout({
           <DeploymentFailureNotice />
         </ThemeProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
