@@ -28,6 +28,8 @@ import {
   markStripeEventProcessed,
 } from "@/lib/billing/stripe-webhook-events";
 import { handleLegacyInvoicePaid } from "@/lib/billing/legacy-stripe-webhook";
+import { handleInvoicePaymentFailed } from "@/lib/billing/invoice-payment-failed-webhook";
+import { sendPaymentFailedEmail } from "@/lib/email/send-payment-failed";
 import {
   findBillingAccountById,
   findBillingAccountByStripeCustomer,
@@ -59,6 +61,8 @@ export type StripeWebhookDeps = {
   ) => Promise<{ posted: boolean; expiredCents: number }>;
   expireIncludedCredit: (expiry: IncludedCreditExpiry) => Promise<number>;
   retrieveSubscription: (id: string) => Promise<Stripe.Subscription>;
+  retrieveInvoice: (id: string) => Promise<Stripe.Invoice>;
+  sendPaymentFailedEmail: typeof sendPaymentFailedEmail;
   retrievePaymentIntent: (id: string) => Promise<Stripe.PaymentIntent>;
   listRefunds: (chargeId: string) => Promise<Stripe.Refund[]>;
   retrieveCharge: (id: string) => Promise<Stripe.Charge>;
@@ -78,6 +82,8 @@ function defaultDeps(): StripeWebhookDeps {
     postBillingPeriodGrant,
     expireIncludedCredit,
     retrieveSubscription: (id) => getStripe().subscriptions.retrieve(id),
+    retrieveInvoice: (id) => getStripe().invoices.retrieve(id),
+    sendPaymentFailedEmail,
     retrievePaymentIntent: (id) => getStripe().paymentIntents.retrieve(id),
     listRefunds: async (chargeId) =>
       (await getStripe().refunds.list({ charge: chargeId, limit: 100 })).data,
@@ -147,26 +153,6 @@ async function handleInvoicePaid(
   // The legacy handler preserves the existing exact grant and same-period
   // upgrade behavior while capacity subscriptions use their separate path.
   await handleLegacyInvoicePaid({ account, invoice, subscription, deps });
-}
-
-async function handleInvoicePaymentFailed(
-  invoice: Stripe.Invoice,
-  eventCreated: number,
-  deps: StripeWebhookDeps
-) {
-  const customerId = customerIdOf(invoice.customer);
-  if (!customerId) return;
-  const account = await deps.findAccountByCustomer(customerId);
-  if (!account) return;
-  const accountUpdatedAt = account.updated_at
-    ? Date.parse(account.updated_at) / 1000
-    : 0;
-  if (accountUpdatedAt > eventCreated) return;
-  // Smart Retries run on Stripe's side; tier persists through the period
-  // (grace), drop-to-free happens via customer.subscription.deleted.
-  if (account.status !== "frozen_topups") {
-    await deps.updateAccount(account.id, { status: "past_due" });
-  }
 }
 
 async function handlePaymentIntentSucceeded(
@@ -408,7 +394,7 @@ export async function handleStripeEvent(
         deps
       );
     case "invoice.payment_failed":
-      return handleInvoicePaymentFailed(event.data.object, event.created, deps);
+      return handleInvoicePaymentFailed(event.data.object, event, deps);
     case "payment_intent.succeeded":
       return handlePaymentIntentSucceeded(event.data.object, deps);
     case "customer.subscription.updated":
