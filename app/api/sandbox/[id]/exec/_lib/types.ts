@@ -11,6 +11,7 @@ import type {
 } from "@/lib/request-limits";
 import type { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import type { syncTerminalRuntimeAuth } from "@/lib/sandbox/dev-tools";
+import type { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
 
 export type ExecSandboxRecord = {
   sandbox_id: string;
@@ -41,6 +42,7 @@ export type ExecSandboxRecord = {
 };
 
 export type SandboxExecPostDeps = {
+  resolveSandboxGitAuthor: typeof resolveSandboxGitAuthor;
   getSandboxServiceCredentials: typeof getSandboxServiceCredentials;
   loadOwnedSandboxRecord: (
     sandboxId: string,

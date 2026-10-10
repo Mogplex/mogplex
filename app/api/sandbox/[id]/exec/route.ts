@@ -38,6 +38,10 @@ import {
 import { detectInteractiveInvocation } from "@/lib/sandbox/interactive-guard";
 import { startExecStream } from "@/lib/sandbox/exec-stream";
 import { syncTerminalRuntimeAuth } from "@/lib/sandbox/dev-tools";
+import {
+  resolveSandboxGitAuthor,
+  sandboxGitAuthorEnv,
+} from "@/lib/sandbox/git-author";
 import { extractVercelApiErrorDetail } from "@/lib/sandbox/api-error";
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import {
@@ -56,6 +60,7 @@ import type { ExecSandboxRecord, SandboxExecPostDeps } from "./_lib/types";
 export const maxDuration = 1800;
 
 const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
+  resolveSandboxGitAuthor,
   getSandboxServiceCredentials,
   async loadOwnedSandboxRecord(sandboxId, userId) {
     const { data } = await supabaseAdmin
@@ -316,8 +321,11 @@ export function createSandboxExecPostHandler(
       } else if (context.ai.aiBillingSource) {
         envVars.MOGPLEX_AI_BILLING_SOURCE = context.ai.aiBillingSource;
       }
+      Object.assign(
+        envVars,
+        sandboxGitAuthorEnv(await deps.resolveSandboxGitAuthor(creds.userId))
+      );
       const standaloneCd = parseStandaloneChangeDirectory(trimmed);
-
       if (standaloneCd) {
         const cdTarget = standaloneCd.target;
         const cdResult = await sandbox.runCommand({

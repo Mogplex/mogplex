@@ -155,7 +155,20 @@ function ensureSandboxServiceRouteTestEnv() {
 
 export async function loadSandboxExecRouteModule() {
   ensureSandboxServiceRouteTestEnv();
-  return import("../../app/api/sandbox/[id]/exec/route");
+  const route = await import("../../app/api/sandbox/[id]/exec/route");
+  return {
+    ...route,
+    createSandboxExecPostHandler: (
+      overrides: Parameters<typeof route.createSandboxExecPostHandler>[0] = {}
+    ) =>
+      route.createSandboxExecPostHandler({
+        resolveSandboxGitAuthor: async () => ({
+          name: "Test User",
+          email: "123+test@users.noreply.github.com",
+        }),
+        ...overrides,
+      }),
+  };
 }
 
 export async function loadSandboxHarnessRouteModule() {

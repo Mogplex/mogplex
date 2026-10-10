@@ -1,4 +1,5 @@
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
+import { sandboxGitAuthorEnv } from "@/lib/sandbox/git-author";
 import { buildHarnessResearchEnv } from "@/lib/harness/research-auth";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import {
@@ -105,7 +106,7 @@ export async function setupGitDeliveryAuth(
   sandbox: Sandbox,
   ctx: SandboxSetupContext,
   githubToken: string
-): Promise<void> {
+) {
   const gitAuthor = await deps.resolveSandboxGitAuthor(ctx.userId);
   const devToolsResult = await deps.ensureDevTools(sandbox, {
     agentName: gitAuthor.name,
@@ -125,6 +126,7 @@ export async function setupGitDeliveryAuth(
       authSync.error || "Failed to configure GitHub delivery access"
     );
   }
+  return sandboxGitAuthorEnv(gitAuthor);
 }
 
 export type GitWorkspaceSetupResult = {

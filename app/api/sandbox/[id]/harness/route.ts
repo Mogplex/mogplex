@@ -295,7 +295,10 @@ export function createSandboxHarnessPostHandler(
         );
       }
 
-      await setupGitDeliveryAuth(deps, sandbox, setupCtx, githubToken);
+      Object.assign(
+        runtimeEnv,
+        await setupGitDeliveryAuth(deps, sandbox, setupCtx, githubToken)
+      );
       const gitWorkspace = await setupGitWorkspace(
         deps,
         sandbox,

@@ -181,6 +181,10 @@ test("sandbox updateFile writes, commits, and pushes with command env", async ()
   };
 
   const updateFile = buildSandboxPRFixTools({
+    gitAuthor: {
+      name: "Test User",
+      email: "123+test@users.noreply.github.com",
+    },
     githubToken: "github-token",
     owner: "acme",
     repo: "widgets",
@@ -207,6 +211,10 @@ test("sandbox updateFile writes, commits, and pushes with command env", async ()
   assert.equal(commands.at(-1)?.cmd, "sh");
   assert.equal(commands.at(-1)?.cwd, "app");
   assert.deepEqual(commands.at(-1)?.env, {
+    GIT_AUTHOR_NAME: "Test User",
+    GIT_AUTHOR_EMAIL: "123+test@users.noreply.github.com",
+    GIT_COMMITTER_NAME: "Test User",
+    GIT_COMMITTER_EMAIL: "123+test@users.noreply.github.com",
     GITHUB_TOKEN: "github-token",
     GITHUB_REPOSITORY: "acme/widgets",
     MOGPLEX_BRANCH: "fix/widgets",
@@ -267,6 +275,10 @@ test("sandbox updateFile strips rootDirectory from repo-root paths", async () =>
   };
 
   const updateFile = buildSandboxPRFixTools({
+    gitAuthor: {
+      name: "Test User",
+      email: "123+test@users.noreply.github.com",
+    },
     githubToken: "github-token",
     owner: "acme",
     repo: "widgets",
@@ -334,6 +346,10 @@ test("sandbox listFiles strips rootDirectory from repo-root paths", async () => 
   };
 
   const listFiles = buildSandboxPRFixTools({
+    gitAuthor: {
+      name: "Test User",
+      email: "123+test@users.noreply.github.com",
+    },
     githubToken: "github-token",
     owner: "acme",
     repo: "widgets",

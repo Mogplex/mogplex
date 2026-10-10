@@ -9,6 +9,24 @@ export type SandboxGitAuthor = {
   email: string;
 };
 
+/** Git's author environment wins over repository config and `git -c user.*`. */
+export function sandboxGitAuthorEnv(author: SandboxGitAuthor) {
+  return {
+    GIT_AUTHOR_NAME: author.name,
+    GIT_AUTHOR_EMAIL: author.email,
+    GIT_COMMITTER_NAME: author.name,
+    GIT_COMMITTER_EMAIL: author.email,
+  };
+}
+
+/** Accept bigint strings from database clients and numeric IDs from GitHub. */
+export function normalizeGithubUserId(value: unknown): string | null {
+  if (typeof value === "string" && /^[1-9]\d*$/.test(value)) return value;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? String(value)
+    : null;
+}
+
 export const FALLBACK_SANDBOX_GIT_AUTHOR: SandboxGitAuthor = {
   name: FALLBACK_AGENT_NAME,
   email: FALLBACK_AGENT_EMAIL,
@@ -34,20 +52,21 @@ export async function resolveSandboxGitAuthor(
     .maybeSingle();
 
   const login = profile?.github_username?.trim() || null;
-  let userIdNumeric =
-    typeof profile?.github_user_id === "number" ? profile.github_user_id : null;
+  let githubUserId = normalizeGithubUserId(profile?.github_user_id);
 
-  if (login && userIdNumeric === null) {
-    userIdNumeric = await backfillGithubUserId(userId, login);
+  if (login && githubUserId === null) {
+    githubUserId = normalizeGithubUserId(
+      await backfillGithubUserId(userId, login)
+    );
   }
 
-  if (!login || userIdNumeric === null) {
+  if (!login || githubUserId === null) {
     return FALLBACK_SANDBOX_GIT_AUTHOR;
   }
 
   return {
     name: profile?.name?.trim() || login,
-    email: `${userIdNumeric}+${login}@users.noreply.github.com`,
+    email: `${githubUserId}+${login}@users.noreply.github.com`,
   };
 }
 
