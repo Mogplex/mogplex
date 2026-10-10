@@ -34,7 +34,7 @@ function installSandboxRows(
   const sandboxQuery = {
     select: () => sandboxQuery,
     eq: () => sandboxQuery,
-    order: () => sandboxQuery,
+    order: async () => ({ data: running, error: null }),
     limit: async () => ({ data: running, error: null }),
     maybeSingle: async () => ({ data: running[0] ?? null, error: null }),
   };
@@ -142,8 +142,9 @@ describe("sandbox resolution contract", () => {
       )
     ).toEqual({
       error:
-        "Multiple running sandboxes are available for this repository. Select one explicitly before continuing.",
+        "Multiple running sandboxes are available for this repository. Call start_sandbox with one of the listed sandboxId values. Use the branch and directory to identify the intended workspace; ask the user if it is unclear. Keep the other sandboxes running.",
       reason: "multiple_sandboxes",
+      sandboxes: [{ id: "sandbox-1" }, { id: "sandbox-2" }],
     });
   });
 
@@ -304,7 +305,7 @@ describe("sandbox command tool contract", () => {
     };
 
     await expect(tool.execute({ command: "pwd" })).resolves.toMatchObject({
-      error: expect.stringContaining("Select one explicitly"),
+      error: expect.stringContaining("Call start_sandbox"),
     });
     expect(fetched).toBe(false);
   });
@@ -352,7 +353,7 @@ describe("sandbox command tool contract", () => {
       execute: (input: Record<string, never>) => Promise<unknown>;
     };
 
-    expect(Object.keys(tool.inputSchema.shape)).toEqual([]);
+    expect(Object.keys(tool.inputSchema.shape)).toEqual(["sandboxId"]);
     await expect(tool.execute({})).resolves.toMatchObject({
       ok: true,
       sandboxId: "sandbox-server-scoped",

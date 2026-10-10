@@ -120,8 +120,7 @@ async function retryExecAfterSandboxLoss(
     return {
       sandbox: null,
       result: {
-        error: resolution.error,
-        reason: resolution.reason,
+        ...resolution,
         command: ctx.command,
       },
     };
@@ -218,8 +217,7 @@ export function createTerminalExec(
       );
       if (resolution && "error" in resolution) {
         return {
-          error: resolution.error,
-          reason: resolution.reason,
+          ...resolution,
           command,
         };
       }

@@ -16,12 +16,20 @@ export type SandboxResolution = {
 
 export type SandboxResolutionFailure = {
   error: string;
+  sandboxes?: RunningSandboxChoice[];
   reason:
     | "auth_unavailable"
     | "multiple_sandboxes"
     | "repo_lookup_failed"
     | "repo_mismatch"
     | "sandbox_unavailable";
+};
+
+type RunningSandboxChoice = {
+  id: string;
+  working_branch: string | null;
+  root_directory: string | null;
+  last_active_at: string | null;
 };
 
 export function getSandboxRequestHeaders(userId?: string) {
@@ -78,34 +86,41 @@ function repoResolutionFailure(
   };
 }
 
-async function findRunningSandboxIds(
+async function findRunningSandboxes(
   userId: string,
   repoId: string
-): Promise<string[]> {
+): Promise<RunningSandboxChoice[] | SandboxResolutionFailure> {
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("sandboxes")
-    .select("id")
+    .select("id, working_branch, root_directory, last_active_at")
     .eq("user_id", userId)
     .eq("repo_id", repoId)
     .eq("status", "running")
-    .order("created_at", { ascending: false })
-    .limit(2);
+    .order("created_at", { ascending: false });
 
-  return (data ?? []).flatMap((sandbox) =>
-    typeof sandbox?.id === "string" ? [sandbox.id] : []
-  );
+  if (error)
+    return {
+      error: "Could not load running sandboxes. Try again.",
+      reason: "sandbox_unavailable",
+    };
+  return (data ?? []) as RunningSandboxChoice[];
 }
 
-async function isOwnedRunningSandbox(userId: string, sandboxId: string) {
+async function isOwnedRunningSandbox(
+  userId: string,
+  sandboxId: string,
+  repoId?: string
+) {
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("sandboxes")
     .select("id")
     .eq("id", sandboxId)
     .eq("user_id", userId)
-    .eq("status", "running")
-    .maybeSingle();
+    .eq("status", "running");
+  if (repoId) query = query.eq("repo_id", repoId);
+  const { data, error } = await query.maybeSingle();
   return !error && data?.id === sandboxId;
 }
 
@@ -337,8 +352,19 @@ export async function resolveOrCreateSandbox(
   selectedSandboxId?: string,
   signal?: AbortSignal
 ): Promise<SandboxResolution | SandboxResolutionFailure | null> {
+  if (!userId)
+    return selectedSandboxId
+      ? {
+          error: "The selected sandbox is unavailable.",
+          reason: "sandbox_unavailable",
+        }
+      : null;
+  const resolved = await resolveRepoUuid(userId, repoId);
+  if (!resolved.ok) return repoResolutionFailure(resolved.reason);
   if (selectedSandboxId) {
-    if (!userId || !(await isOwnedRunningSandbox(userId, selectedSandboxId))) {
+    if (
+      !(await isOwnedRunningSandbox(userId, selectedSandboxId, resolved.repoId))
+    ) {
       return {
         error: "The selected sandbox is unavailable.",
         reason: "sandbox_unavailable",
@@ -350,26 +376,19 @@ export async function resolveOrCreateSandbox(
       source: "selected",
     };
   }
-  if (!userId) return null;
-
-  const resolved = await resolveRepoUuid(userId, repoId);
-  if (!resolved.ok) {
-    return repoResolutionFailure(resolved.reason);
-  }
   if (!resolved.repoId) return null;
 
-  const runningSandboxIds = await findRunningSandboxIds(
-    userId,
-    resolved.repoId
-  );
-  if (runningSandboxIds.length > 1) {
+  const runningSandboxes = await findRunningSandboxes(userId, resolved.repoId);
+  if ("error" in runningSandboxes) return runningSandboxes;
+  if (runningSandboxes.length > 1) {
     return {
       error:
-        "Multiple running sandboxes are available for this repository. Select one explicitly before continuing.",
+        "Multiple running sandboxes are available for this repository. Call start_sandbox with one of the listed sandboxId values. Use the branch and directory to identify the intended workspace; ask the user if it is unclear. Keep the other sandboxes running.",
       reason: "multiple_sandboxes",
+      sandboxes: runningSandboxes,
     };
   }
-  const runningSandboxId = runningSandboxIds[0];
+  const runningSandboxId = runningSandboxes[0]?.id;
   if (runningSandboxId) {
     return {
       sandboxId: runningSandboxId,

@@ -38,7 +38,7 @@ beforeEach(() => {
   const query = {
     select: () => query,
     eq: () => query,
-    order: () => query,
+    order: async () => ({ data: [], error: null }),
     limit: async () => ({ data: [], error: null }),
     maybeSingle: async () => ({
       data: { id: "00000000-0000-4000-8000-000000000001" },

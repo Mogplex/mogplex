@@ -185,30 +185,12 @@ function buildToolForDef(
   if (def.name === "sandbox_start") {
     if (ctx.sandboxSelectionRequired) return null;
     if (!ctx.repoId) return null;
-    let previousBinding: NonNullable<
-      OrchestratorToolContext["sandboxBinding"]
-    > | null = null;
-    return createStartSandbox(ctx.userId, ctx.repoId, {
-      onPending: () => {
-        if (!ctx.sandboxBinding) return;
-        previousBinding = { ...ctx.sandboxBinding };
-        ctx.sandboxBinding.sandboxId = null;
-        ctx.sandboxBinding.status = "pending";
-      },
-      onResolution: (resolution) => {
-        if (ctx.sandboxBinding) {
-          ctx.sandboxBinding.sandboxId = resolution.sandboxId;
-          ctx.sandboxBinding.status = resolution.status;
-        }
-        previousBinding = null;
-      },
-      onFailure: () => {
-        if (ctx.sandboxBinding && previousBinding) {
-          Object.assign(ctx.sandboxBinding, previousBinding);
-        }
-        previousBinding = null;
-      },
-    });
+    return createStartSandbox(
+      ctx.userId,
+      ctx.repoId,
+      undefined,
+      ctx.sandboxBinding
+    );
   }
   if (def.name === "sandbox_stop") {
     return ctx.sandboxSelectionRequired

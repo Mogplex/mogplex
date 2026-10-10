@@ -51,6 +51,7 @@ import {
   withoutHarnessRunConnections,
 } from "./connections";
 import type { RepoToolDefaults } from "./shared";
+import type { SandboxRuntimeBinding } from "./sandbox-binding";
 
 export * from "./public";
 export { filterToolsByCapability, TOOL_CAPABILITY } from "./tool-capabilities";
@@ -87,6 +88,10 @@ export function buildStaticTools(
   runContext: StaticToolRunContext = {}
 ) {
   const { sandboxExecution, teamId, aiCallId, requestId } = runContext;
+  const sandboxBinding: SandboxRuntimeBinding = {
+    sandboxId: sandboxId ?? null,
+    status: sandboxId ? "running" : "unavailable",
+  };
   // Do not infer sandbox memory scope; buildTools supplies it explicitly.
   const memoryTools = userId
     ? createMemoryTools(userId, repoId, memoryContext ?? {})
@@ -103,7 +108,7 @@ export function buildStaticTools(
       sandboxId,
       userId,
       repoId,
-      undefined,
+      sandboxBinding,
       sandboxExecution,
       userId
         ? {
@@ -118,15 +123,24 @@ export function buildStaticTools(
     // sees its own uncommitted edits; GitHub is the fallback without one.
     ...(sandboxId
       ? {
-          read_file: createSandboxReadFile(userId, sandboxId),
-          list_files: createSandboxListFiles(userId, sandboxId),
+          read_file: createSandboxReadFile(userId, sandboxBinding),
+          list_files: createSandboxListFiles(userId, sandboxBinding),
         }
       : {
           read_file: createReadFile(githubToken, repoDefaults),
           list_files: createListFiles(githubToken, repoDefaults),
         }),
     stop_sandbox: createStopSandbox(userId),
-    ...(repoId ? { start_sandbox: createStartSandbox(userId, repoId) } : {}),
+    ...(repoId
+      ? {
+          start_sandbox: createStartSandbox(
+            userId,
+            repoId,
+            undefined,
+            sandboxBinding
+          ),
+        }
+      : {}),
     ...memoryTools,
     ...skillTools,
     ...(userId
@@ -177,8 +191,8 @@ export function buildStaticTools(
       : {}),
     ...(sandboxId
       ? {
-          write_file: createWriteFile(userId, sandboxId),
-          edit_file: createEditFile(userId, sandboxId),
+          write_file: createWriteFile(userId, sandboxBinding),
+          edit_file: createEditFile(userId, sandboxBinding),
         }
       : {}),
   };
