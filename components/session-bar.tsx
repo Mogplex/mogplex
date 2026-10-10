@@ -5,6 +5,7 @@ import { isWorkspaceSession, useSessionsStore } from "@/hooks/use-sessions"
 import { scopedHref } from "@/lib/scoped-href"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider"
+import { useRepos } from "@/hooks/use-repos"
 import { TouchActions, type ActionItem } from "@/components/ui/touch-actions"
 import {
   Tooltip,
@@ -35,6 +36,7 @@ export function SessionBar() {
   const renameSession = useSessionsStore((s) => s.renameSession)
   const resetSessionLayout = useSessionsStore((s) => s.resetSessionLayout)
   const { launchRepoSandbox } = useSandboxLaunchActions()
+  const { repos, isLoading: reposLoading, error: reposError } = useRepos()
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
@@ -63,7 +65,9 @@ export function SessionBar() {
           const isActive = session.id === activeSessionId
           const colorClass = COLOR_MAP[session.color] || "bg-accent-green"
 
-          const sessionRepo = isWorkspaceSession(session) ? session.activeRepo : null
+          const sessionRepo = isWorkspaceSession(session) && !reposLoading && !reposError
+            ? repos.find(repo => repo.id === session.activeRepo?.id) ?? null
+            : null
           const actions: ActionItem[] = [
             { type: "item", label: "Rename", onSelect: () => { setEditingId(session.id); setEditValue(session.name) } },
             { type: "item", label: "Reset Layout", onSelect: () => resetSessionLayout(session.id) },

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SessionBar } from "@/components/session-bar";
+import { WorkspaceRepoGate } from "@/components/workspace-repo-gate";
 import { SplitContainer } from "@/components/split-container";
 import { MobileWorkspaceShell } from "@/components/mobile/workspace-shell";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
@@ -46,7 +47,11 @@ import {
 } from "../helpers";
 
 export function WorkspaceShell() {
-  const { mutate: mutateRepos } = useRepos();
+  return <WorkspaceRepoGate><AvailableWorkspaceShell /></WorkspaceRepoGate>;
+}
+
+function AvailableWorkspaceShell() {
+  const { repos, mutate: mutateRepos } = useRepos({ showHidden: true });
   const isMobile = useIsMobile();
 
   const activeSessionId = useSessionsStore((s) => s.activeSessionId);
@@ -141,12 +146,12 @@ export function WorkspaceShell() {
   const sandboxPresenceEntries = useMemo(
     () =>
       sessions
-        .filter((session) => Boolean(session.activeSandboxId))
+        .filter((session) => Boolean(session.activeSandboxId) && repos.some(repo => repo.id === session.activeRepo?.id && !repo.is_hidden))
         .map((session) => ({
           sandboxRecordId: session.activeSandboxId as string,
           sessionId: session.id,
         })),
-    [sessions]
+    [sessions, repos]
   );
   useSandboxPresence(sandboxPresenceEntries);
 
