@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { MogplexMark } from "@/components/brand/mogplex-mark";
-import { ArrowRight } from "@/components/marketing/mpx-chrome";
+import { ArrowRight } from "@/components/marketing/mpx-chrome-icons";
 
 import {
   changedFiles,
@@ -21,20 +21,23 @@ import {
   StepIcon,
 } from "./icons";
 import { LiveRunTerminal } from "./live-run-terminal";
+import { RunSeconds, useLiveRunTimeline, useTimelineValue } from "./live-run-timeline";
 
 // The timeline intentionally derives several visible states from one phase.
 // eslint-disable-next-line complexity
 export function LiveRunMockup() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const mockupRef = useRef<HTMLDivElement>(null);
-  const [phase, setPhase] = useState(0);
-  const [fading, setFading] = useState(false);
+  const timeline = useLiveRunTimeline(mockupRef);
+  const phase = useTimelineValue(timeline, "phase");
+  const fading = useTimelineValue(timeline, "fading");
   const [tab, setTab] = useState<"terminal" | "logs" | "events">("terminal");
-  const [implSeconds, setImplSeconds] = useState(13);
-  const [deploySeconds, setDeploySeconds] = useState(0);
   const [fileRing, setFileRing] = useState(false);
 
   useEffect(() => {
+    // CSS reserves and scales the server-rendered demo. Older browsers keep
+    // the same reserved geometry and receive only a transform fallback.
+    if (CSS.supports("transform", "scale(calc(1px / 1px))")) return;
     const wrap = wrapRef.current;
     const mockup = mockupRef.current;
     if (!wrap || !mockup) return;
@@ -42,79 +45,12 @@ export function LiveRunMockup() {
     const resize = () => {
       const scale = Math.min(1.12, wrap.clientWidth / 920);
       mockup.style.transform = `scale(${scale})`;
-      wrap.style.height = `${660 * scale}px`;
     };
     const observer = new ResizeObserver(resize);
     observer.observe(wrap);
     resize();
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      const reducedMotionTimer = setTimeout(() => {
-        setPhase(8);
-        setImplSeconds(18);
-        setDeploySeconds(22);
-      }, 0);
-      return () => clearTimeout(reducedMotionTimer);
-    }
-
-    let cancelled = false;
-    let timers: ReturnType<typeof setTimeout>[] = [];
-    const run = () => {
-      setPhase(0);
-      setFading(false);
-      setImplSeconds(13);
-      setDeploySeconds(0);
-      const sequence = [
-        [1100, 1],
-        [6100, 2],
-        [6450, 3],
-        [7200, 4],
-        [8200, 5],
-        [8900, 6],
-        [9700, 7],
-        [10100, 8],
-      ] as const;
-      timers = sequence.map(([delay, next]) =>
-        setTimeout(() => {
-          if (!cancelled) setPhase(next);
-        }, delay)
-      );
-      timers.push(
-        setTimeout(() => {
-          if (!cancelled) setFading(true);
-        }, 17_100),
-        setTimeout(() => {
-          if (!cancelled) run();
-        }, 17_480)
-      );
-    };
-    run();
-    return () => {
-      cancelled = true;
-      timers.forEach(clearTimeout);
-    };
-  }, []);
-
-  /* implement 13s → 18s while running; deploy 0s → 22s once started */
-  useEffect(() => {
-    if (phase !== 1) return;
-    const interval = setInterval(
-      () => setImplSeconds((s) => Math.min(18, s + 1)),
-      700
-    );
-    return () => clearInterval(interval);
-  }, [phase]);
-  useEffect(() => {
-    if (phase < 7) return;
-    const interval = setInterval(
-      () => setDeploySeconds((s) => Math.min(22, s + 1)),
-      255
-    );
-    return () => clearInterval(interval);
-  }, [phase]);
 
   const progressActive = phase >= 1;
   const implementDone = phase >= 2;
@@ -380,7 +316,7 @@ export function LiveRunMockup() {
                   <i className="mpx-status-dot" />
                 )}
                 <span>{implementDone ? "Completed" : "Running"}</span>
-                <time>{implementDone ? "18s" : `${implSeconds}s`}</time>
+                <time><RunSeconds timeline={timeline} kind="impl" />s</time>
               </div>
               <div
                 className={
@@ -443,7 +379,7 @@ export function LiveRunMockup() {
                 {deployRunning ? (
                   <span className="mpx-status is-run">
                     <i className="mpx-status-dot" />
-                    In progress <time>{deploySeconds}s</time>
+                    In progress <time><RunSeconds timeline={timeline} kind="deploy" />s</time>
                   </span>
                 ) : (
                   <span className="mpx-status">Queued</span>
@@ -479,7 +415,7 @@ export function LiveRunMockup() {
             tab={tab}
             setTab={setTab}
             visibleLines={visibleLines}
-            deploySeconds={deploySeconds}
+            deploySeconds={<RunSeconds timeline={timeline} kind="deploy" />}
           />
         </section>
       </div>

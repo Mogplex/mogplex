@@ -1,13 +1,7 @@
-"use client";
-
 import Link from "next/link";
 
-import {
-  AccentPeriod,
-  Eyebrow,
-  GITHUB_URL,
-  SELF_HOSTING_URL,
-} from "@/components/marketing/mpx-chrome";
+import { AccentPeriod, Eyebrow } from "@/components/marketing/mpx-static";
+import { GITHUB_URL, SELF_HOSTING_URL } from "@/components/marketing/mpx-chrome-constants";
 
 export function EnterpriseSection() {
   return (
@@ -42,6 +36,8 @@ export function EnterpriseSection() {
             <a
               className="mpx-button is-secondary"
               href={SELF_HOSTING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Self-hosting docs
             </a>

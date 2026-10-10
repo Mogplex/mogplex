@@ -1,12 +1,9 @@
-"use client";
-
-import { useEffect, useRef } from "react";
-
 import {
-  BlueprintOverlay,
-  MpxFooter,
   MpxHeader,
 } from "@/components/marketing/mpx-chrome";
+import { BlueprintOverlay } from "./mpx-static";
+import { MpxFooter } from "./mpx-chrome-footer";
+import { MarketingScrollFrame } from "./marketing-scroll-frame";
 import { interTight, plexMono } from "@/components/marketing/mpx-fonts";
 
 import {
@@ -24,30 +21,9 @@ import "./landing-v2.css";
 /* ── page ─────────────────────────────────────────────────────── */
 
 export function MarketingLandingPage() {
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  /* corner brackets fade in while scrolling, matching the blueprint frame */
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const onScroll = () => {
-      rootRef.current?.classList.add("is-scrolling");
-      clearTimeout(timer);
-      timer = setTimeout(
-        () => rootRef.current?.classList.remove("is-scrolling"),
-        180
-      );
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      clearTimeout(timer);
-    };
-  }, []);
-
   return (
-    <div
+    <MarketingScrollFrame
       className={`mpx-landing ${interTight.variable} ${plexMono.variable}`}
-      ref={rootRef}
     >
       <BlueprintOverlay />
 
@@ -70,6 +46,6 @@ export function MarketingLandingPage() {
       </main>
 
       <MpxFooter />
-    </div>
+    </MarketingScrollFrame>
   );
 }

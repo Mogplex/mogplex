@@ -1,13 +1,8 @@
-"use client";
-
 import Link from "next/link";
 
-import {
-  AccentPeriod,
-  ArrowRight,
-  Eyebrow,
-  GITHUB_URL,
-} from "@/components/marketing/mpx-chrome";
+import { AccentPeriod, Eyebrow } from "@/components/marketing/mpx-static";
+import { ArrowRight } from "@/components/marketing/mpx-chrome-icons";
+import { GITHUB_URL } from "@/components/marketing/mpx-chrome-constants";
 
 import { LiveRunMockup } from "./live-run-mockup";
 

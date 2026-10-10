@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+const dashboardStylesUrl = new URL("../../app/dashboard.css", import.meta.url);
 const globalsUrl = new URL("../../app/globals.css", import.meta.url);
 const globalErrorUrl = new URL("../../app/global-error.tsx", import.meta.url);
 const monacoPaneUrl = new URL(
@@ -28,6 +29,10 @@ const appSidebarUrl = new URL(
 
 test("tokenized shadows preserve semantic shadow tokens", async () => {
   const globals = await readFile(globalsUrl, "utf8");
+  const theme = await readFile(
+    new URL("../../app/tailwind-theme.css", import.meta.url),
+    "utf8"
+  );
 
   assert.match(
     globals,
@@ -37,8 +42,8 @@ test("tokenized shadows preserve semantic shadow tokens", async () => {
     globals,
     /--app-shadow-panel: 0 18px 50px oklch\(10\.88% 0\.006 132 \/ 14%\);/
   );
-  assert.match(globals, /--shadow-app-card: var\(--app-shadow-card\)/);
-  assert.match(globals, /--shadow-app-panel: var\(--app-shadow-panel\)/);
+  assert.match(theme, /--shadow-app-card: var\(--app-shadow-card\)/);
+  assert.match(theme, /--shadow-app-panel: var\(--app-shadow-panel\)/);
 });
 
 test("global error keeps semantic tokens in their dark scope", async () => {
@@ -86,7 +91,7 @@ test("application theme tokens carry the Mogplex paper and orange brand roles", 
 test("dashboard chrome exposes the branded shell and compact navigation mark", async () => {
   const [globals, dashboardLayout, topBar, statusBar, appSidebar] =
     await Promise.all([
-      readFile(globalsUrl, "utf8"),
+      readFile(dashboardStylesUrl, "utf8"),
       readFile(dashboardLayoutUrl, "utf8"),
       readFile(topBarUrl, "utf8"),
       readFile(statusBarUrl, "utf8"),

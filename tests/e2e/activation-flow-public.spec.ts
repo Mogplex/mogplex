@@ -38,6 +38,24 @@ test("public landing shows the open-source agent foundry and primary CTA", async
   for (const fontFamily of headingFamilies) {
     expect(fontFamily).toContain("Inter Tight");
   }
+
+  const selfHostingUrl = "https://docs.mogplex.com/self-hosting";
+  await page.context().route(selfHostingUrl, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "Self-hosting documentation",
+    })
+  );
+  for (const name of ["Self-hosting docs", "Self-hosting"]) {
+    const link = page.getByRole("link", { name, exact: true });
+    await expect(link).toHaveAttribute("target", "_blank");
+    const opened = page.waitForEvent("popup");
+    await link.click();
+    const docs = await opened;
+    await expect(docs).toHaveURL(selfHostingUrl);
+    await expect(page).toHaveURL("/");
+    await docs.close();
+  }
 });
 
 test("landing offers three harnesses and drops retired chrome and claims", async ({
