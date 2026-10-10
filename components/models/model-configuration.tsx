@@ -11,6 +11,7 @@ import { useNewModels } from "@/hooks/use-new-models";
 import { scopedHref } from "@/lib/scoped-href";
 import { cn } from "@/lib/utils";
 import { useModelChainContext } from "./model-chain-context";
+import { SurfaceModelDefaults } from "./surface-model-defaults";
 
 type Step = {
   id: string;
@@ -96,8 +97,11 @@ export function ModelConfiguration() {
 
   return (
     <div data-testid="models-configuration" className="grid w-full min-w-0 gap-6 lg:grid-cols-[minmax(0,760px)_minmax(280px,1fr)]">
-      <div className="self-start rounded-lg border border-border/70 bg-card p-5">
-        <ModelChainEditor {...chain} catalog={catalog} />
+      <div className="self-start space-y-4">
+        <div className="rounded-lg border border-border/70 bg-card p-5">
+          <ModelChainEditor {...chain} catalog={catalog} />
+        </div>
+        <SurfaceModelDefaults catalog={catalog} />
       </div>
 
       <div className="space-y-4">
@@ -108,7 +112,7 @@ export function ModelConfiguration() {
           </div>
           <RoutingPreview steps={steps} />
           <p className="mt-4 text-[11px] leading-5 text-muted-foreground">
-            Each request starts at step 01. A failed step hands off to the next one. Unsaved edits show here immediately.
+            Requests that follow the primary start at step 01. A saved surface, conversation, channel, agent, or automation override can choose a different starting model. Unsaved chain edits show here immediately.
           </p>
         </section>
 

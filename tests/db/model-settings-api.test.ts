@@ -4,7 +4,10 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { uuid_ossp } from "@electric-sql/pglite/contrib/uuid_ossp";
 import { vector } from "@electric-sql/pglite/vector";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { createModelTargetsGetHandler } from "@/app/api/settings/model-targets/route";
+import {
+  createModelTargetsGetHandler,
+  createModelTargetsPatchHandler,
+} from "@/app/api/settings/model-targets/route";
 import { createSettingsPatchHandler } from "@/app/api/settings/route";
 import { applyNeonMigrations } from "@/lib/db/neon-migrations";
 import { SHIM_TYPE_PARSERS } from "@/lib/db/pool";
@@ -21,6 +24,7 @@ const other = "00000000-0000-4000-8000-000000000012";
 const chosen = "00000000-0000-4000-8000-000000000013";
 const untouched = "00000000-0000-4000-8000-000000000014";
 const foreign = "00000000-0000-4000-8000-000000000015";
+const surfaceOwner = "00000000-0000-4000-8000-000000000016";
 const graph = {
   nodes: [
     {
@@ -45,15 +49,15 @@ beforeAll(async () => {
     (await applyNeonMigrations(db, { log: () => {}, warn: () => {} })).ok
   ).toBe(true);
   await db.query(
-    "insert into profiles(id,default_model) values ($1,'openai/old'),($2,'openai/old')",
-    [owner, other]
+    "insert into profiles(id,default_model) values ($1,'openai/old'),($2,'openai/old'),($3,'openai/old')",
+    [owner, other, surfaceOwner]
   );
   await db.exec(
     "insert into ai_models(id,provider,name) values ('openai/old','openai','Old'),('openai/new','openai','New')"
   );
   await db.query(
-    "insert into provider_keys(user_id,provider,vault_secret_id) values ($1,'openai',gen_random_uuid())",
-    [owner]
+    "insert into provider_keys(user_id,provider,vault_secret_id) values ($1,'openai',gen_random_uuid()),($2,'openai',gen_random_uuid())",
+    [owner, surfaceOwner]
   );
   await db.query(
     "insert into flows(id,user_id,installation_id,name,draft_graph) values ($1,$4,123,'Selected',$6),($2,$4,123,'Untouched',$6),($3,$5,456,'Foreign',$6)",
@@ -80,6 +84,94 @@ afterAll(async () => {
     else Reflect.deleteProperty(supabaseAdmin, key);
   }
   await db?.close();
+});
+
+test("surfaces explicitly following primary keep following after a chain change", async () => {
+  await db.query(
+    `update profiles set surface_models='{"chat":null,"slack":null,"cli":"openai/old"}' where id=$1`,
+    [surfaceOwner]
+  );
+  try {
+    const { PATCH } = createModelChainHandlers({
+      requireUserId: async () => surfaceOwner,
+    });
+    const response = await PATCH(
+      new Request("http://localhost/api/settings/model-chain", {
+        method: "PATCH",
+        body: JSON.stringify({ primary: "openai/new", fallbacks: [] }),
+      })
+    );
+    expect(response.status).toBe(200);
+    const { surfaces } = await loadModelSettingsTargets(surfaceOwner);
+    expect(surfaces.find((surface) => surface.id === "chat")).toMatchObject({
+      model: "openai/new",
+      followsPrimary: true,
+    });
+    expect(surfaces.find((surface) => surface.id === "slack")?.model).toBe(
+      "openai/new"
+    );
+    expect(surfaces.find((surface) => surface.id === "cli")?.model).toBe(
+      "openai/old"
+    );
+  } finally {
+    await db.query(
+      "update profiles set default_model='openai/old',fallback_model_ids=null,surface_models='{}' where id=$1",
+      [surfaceOwner]
+    );
+  }
+});
+
+test("surface API updates only the acting user's selected destination and preserves state on failure", async () => {
+  const handler = createModelTargetsPatchHandler({
+    requireUserId: async () => surfaceOwner,
+  });
+  const patch = (surface: string, model: string | null, userId?: string) =>
+    handler(
+      new Request("http://localhost/api/settings/model-targets", {
+        method: "PATCH",
+        body: JSON.stringify({ surface, model, userId }),
+      })
+    );
+  try {
+    expect((await patch("chat", "openai/new", other)).status).toBe(200);
+    expect(
+      (await loadModelSettingsTargets(other)).surfaces.find(
+        (row) => row.id === "chat"
+      )?.model
+    ).toBe("openai/old");
+    expect((await patch("slack", "openai/old")).status).toBe(200);
+    expect(await (await patch("chat", null)).json()).toEqual({
+      id: "chat",
+      model: "openai/old",
+      followsPrimary: true,
+    });
+    expect((await patch("chat", "openai/missing")).status).toBe(400);
+    await db.exec(
+      "create function reject_surface_test() returns trigger language plpgsql as $$ begin raise exception 'test storage failure'; end $$; create trigger reject_surface_test before update of surface_models on profiles for each row execute function reject_surface_test()"
+    );
+    try {
+      expect((await patch("chat", "openai/new")).status).toBe(500);
+      const surfaces = (await loadModelSettingsTargets(surfaceOwner)).surfaces;
+      expect(surfaces.find((row) => row.id === "chat")).toEqual({
+        id: "chat",
+        model: "openai/old",
+        followsPrimary: true,
+      });
+      expect(surfaces.find((row) => row.id === "slack")).toEqual({
+        id: "slack",
+        model: "openai/old",
+        followsPrimary: false,
+      });
+    } finally {
+      await db.exec(
+        "drop trigger reject_surface_test on profiles; drop function reject_surface_test()"
+      );
+    }
+  } finally {
+    await db.query("update profiles set surface_models='{}' where id=$1", [
+      surfaceOwner,
+    ]);
+  }
 });
 
 test("automations survive invalid account fallbacks and preserve default, disabled and explicit policies", async () => {

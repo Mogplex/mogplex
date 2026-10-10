@@ -10,7 +10,11 @@ import {
 } from "@/lib/models/surface-defaults";
 
 export type ModelSettingsTargets = {
-  surfaces: { id: ModelSurface; model: string | null }[];
+  surfaces: {
+    id: ModelSurface;
+    model: string | null;
+    followsPrimary: boolean;
+  }[];
   automations: { id: string; name: string }[];
 };
 
@@ -35,6 +39,7 @@ export async function loadModelSettingsTargets(
     surfaces: MODEL_SURFACES.map((id) => ({
       id,
       model: surfaceDefaultModel(profile.data, id),
+      followsPrimary: profile.data?.surface_models?.[id] === null,
     })),
     automations: flows.data ?? [],
   };
