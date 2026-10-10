@@ -6,6 +6,8 @@ import {
   FakeQuery,
 } from "./helpers/observability-calls-route-fixtures";
 
+const sandboxFilterId = "00000000-0000-4000-8000-000000000003";
+
 test("GET /api/observability/calls preserves Slack target snapshots through the sanitizer", async () => {
   const { createObservabilityCallsGetHandler } =
     await loadObservabilityCallsRoute();
@@ -413,7 +415,7 @@ test("GET /api/observability/calls applies sandbox_record_id filtering", async (
 
   const response = await handler(
     new NextRequest(
-      "http://localhost/api/observability/calls?page=1&limit=10&sandbox_record_id=sandbox-record-123"
+      `http://localhost/api/observability/calls?page=1&limit=10&sandbox_record_id=${sandboxFilterId}`
     )
   );
   const payload = await response.json();
@@ -421,11 +423,11 @@ test("GET /api/observability/calls applies sandbox_record_id filtering", async (
   assert.equal(response.status, 200);
   assert.equal(payload.total, 0);
   assert.ok(
-    query.filterCalls.some(
-      ([column, operator, value]) =>
-        column === "metadata->>sandbox_record_id" &&
-        operator === "eq" &&
-        value === "sandbox-record-123"
+    query.orCalls.some(
+      ([value]) =>
+        typeof value === "string" &&
+        value.includes(`metadata->>sandbox_record_id.eq.${sandboxFilterId}`) &&
+        value.includes(`metadata->>sandbox_id.eq.${sandboxFilterId}`)
     )
   );
 });
@@ -471,7 +473,7 @@ test("GET /api/observability/calls can combine repo_id and sandbox_record_id fil
 
   const response = await handler(
     new NextRequest(
-      "http://localhost/api/observability/calls?page=1&limit=10&repo_id=repo-1&sandbox_record_id=sandbox-record-123"
+      `http://localhost/api/observability/calls?page=1&limit=10&repo_id=repo-1&sandbox_record_id=${sandboxFilterId}`
     )
   );
   const payload = await response.json();
@@ -484,11 +486,11 @@ test("GET /api/observability/calls can combine repo_id and sandbox_record_id fil
     )
   );
   assert.ok(
-    query.filterCalls.some(
-      ([column, operator, value]) =>
-        column === "metadata->>sandbox_record_id" &&
-        operator === "eq" &&
-        value === "sandbox-record-123"
+    query.orCalls.some(
+      ([value]) =>
+        typeof value === "string" &&
+        value.includes(`metadata->>sandbox_record_id.eq.${sandboxFilterId}`) &&
+        value.includes(`metadata->>sandbox_id.eq.${sandboxFilterId}`)
     )
   );
 });

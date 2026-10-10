@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useTerminalSessionsStore } from "@/hooks/use-terminal-sessions";
+import { AgentCommands } from "@/components/terminal/agent-commands";
 
 type Props = {
   paneId: string;
@@ -53,5 +54,8 @@ export function XTermPane({
     setBinding,
   ]);
 
-  return <div ref={anchorRef} className="h-full w-full" />;
+  return <div className="flex h-full w-full flex-col">
+    <AgentCommands key={`${repoId}:${sandboxId}`} repoId={repoId} sandboxId={sandboxId} />
+    <div ref={anchorRef} className="min-h-0 flex-1" />
+  </div>;
 }
