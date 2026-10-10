@@ -285,6 +285,9 @@ async function sha256Hex(value: string) {
   ).join("");
 }
 
+/** The branch an API-triggered run works on, fixed when it is triggered. */
+export const API_RUN_BRANCH_PATTERN = /^mogplex\/automation-[a-f0-9]{16}$/;
+
 /**
  * Run metadata every API-triggered run records: the accepted input snapshot,
  * its hash (an idempotent replay must match it), and a branch derived from the

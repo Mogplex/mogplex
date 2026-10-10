@@ -282,6 +282,37 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     },
   },
   {
+    name: "mogplex_get_automation_run_artifact",
+    title: "Get Automation Run Artifact",
+    description:
+      "Read a committed JSON artifact from a successful API-triggered automation run. The file must be in .mogplex/artifacts/; it is read from the run's own working branch at its current tip.",
+    inputSchema: objectSchema({
+      properties: {
+        automationId: {
+          type: "string",
+          format: "uuid",
+          description: "Automation id.",
+        },
+        runId: {
+          type: "string",
+          format: "uuid",
+          description:
+            "Flow job run UUID: run.jobRunId from mogplex_trigger_automation or a run's id from mogplex_list_automation_runs.",
+        },
+        path: {
+          type: "string",
+          description:
+            "Artifact path relative to the repository root, e.g. .mogplex/artifacts/result.json",
+        },
+      },
+      required: ["automationId", "runId", "path"],
+    }),
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
     name: "mogplex_cancel_automation_run",
     title: "Cancel Automation Run",
     description:

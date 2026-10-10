@@ -66,6 +66,7 @@ export type MogplexMcpClient = Pick<
   | "deleteAutomation"
   | "deleteRepoEnvVar"
   | "getAutomation"
+  | "getAutomationRunArtifact"
   | "getAutomationRunLogs"
   | "getRun"
   | "getRunArtifact"

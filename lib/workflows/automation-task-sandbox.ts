@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { API_RUN_BRANCH_PATTERN } from "@/lib/flows/automation-inputs";
 import { loadOwnedSandboxRouteContext } from "@/lib/sandbox/route-context";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
 import { prepareTaskWorkspace } from "./automation-task-workspace";
@@ -8,8 +9,6 @@ import {
   launchAutomationHarnessSandbox,
 } from "./automation-job-sandbox-setup";
 
-const AUTOMATION_BRANCH_PATTERN = /^mogplex\/automation-[a-f0-9]{16}$/;
-
 /**
  * The branch a task run works on. An API-triggered run uses the branch fixed
  * when it was triggered, so a retry of the same run returns to the same work
@@ -18,8 +17,7 @@ const AUTOMATION_BRANCH_PATTERN = /^mogplex\/automation-[a-f0-9]{16}$/;
  */
 export function taskWorkingBranch(context: Pick<JobContext, "metadata">) {
   const recorded = context.metadata.working_branch;
-  return typeof recorded === "string" &&
-    AUTOMATION_BRANCH_PATTERN.test(recorded)
+  return typeof recorded === "string" && API_RUN_BRANCH_PATTERN.test(recorded)
     ? recorded
     : `mogplex/task-${randomUUID()}`;
 }

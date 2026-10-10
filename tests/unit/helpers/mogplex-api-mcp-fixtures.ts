@@ -200,6 +200,9 @@ export function buildFakeMcpClient(
       run: buildRun({ status: "cancelled" }),
       status: "cancelled",
     }),
+    getAutomationRunArtifact: async () => {
+      throw new Error("getAutomationRunArtifact was not stubbed");
+    },
     getRunArtifact: async () => {
       throw new Error("getRunArtifact was not stubbed");
     },
