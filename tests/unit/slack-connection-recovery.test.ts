@@ -71,64 +71,85 @@ test("a queued connection continuation cannot switch to a newly linked account",
   assert.equal(outcome.outcome, "connection_request_unavailable");
 });
 
-test("a resumed task uses its saved repository even after the channel is linked to another one", async () => {
-  const { runSlackEventTask } = await loadSlackEventTask();
-  const outcome = await runSlackEventTask(
-    {
-      ...basePayload,
-      channelType: "channel",
-      eventType: "app_mention",
-      connectionRecoveryRequestId: "saved-request",
-      connectionRecoveryRepository: "acme/widgets",
-      text: "Repository: acme/widgets\nFix the saved task",
-    },
-    {
-      getInstallation: async () => baseInstallation,
-      getBotToken: async () => "bot",
-      resolveSlackAttribution: async () => mappedAttribution(),
-      validateConnectionContinuation: async () => true,
-      getChannelLink: async () => ({
-        id: "link",
-        slack_installation_id: baseInstallation.id,
-        channel_id: basePayload.channelId,
-        channel_name: "new-project",
-        repo_id: "other-repo",
-        created_by_user_id: "user-mogplex",
-        created_at: "2026-10-10",
-      }),
-      loadOrCreateConversation: async () => ({
-        id: "conv",
-        user_id: "user-mogplex",
-        messages: [],
-        model: null,
-        title: null,
-      }),
-      resolveRepoContext: async ({ texts }) => {
-        assert.deepEqual(texts, ["acme/widgets"]);
-        return repo;
+for (const recoveryTarget of [
+  "github",
+  "saved-connector",
+  "missing-repository",
+] as const) {
+  test(`a ${recoveryTarget} continuation retains saved repository ownership after channel relinking`, async () => {
+    const { runSlackEventTask } = await loadSlackEventTask();
+    const result = runSlackEventTask(
+      {
+        ...basePayload,
+        channelType: "channel",
+        eventType: "app_mention",
+        connectionRecoveryRequestId: "saved-request",
+        ...(recoveryTarget === "github"
+          ? { connectionRecoveryRepository: "acme/widgets" }
+          : { connectionRecoveryRepoId: repo.repoId }),
+        text: "Repository: acme/widgets\nFix the saved task",
       },
-      persistConversation: async () => {},
-      postMessage: async (_token, input) => ({
-        channel: input.channel,
-        ts: "10.2",
-      }),
-      updateMessage: async (_token, input) => ({
-        channel: input.channel,
-        ts: input.ts,
-      }),
-      runAgent: async (input) => {
-        assert.equal(input.repoId, repo.repoId);
-        return agentSuccess();
-      },
-      startRepoAgentRun: async () => {
-        throw new Error(
-          "Must not launch directly against the new channel repo"
-        );
-      },
-    }
-  );
-  assert.equal(outcome.outcome, "conversational_reply");
-});
+      {
+        getInstallation: async () => baseInstallation,
+        getBotToken: async () => "bot",
+        resolveSlackAttribution: async () => mappedAttribution(),
+        validateConnectionContinuation: async () => true,
+        getChannelLink: async () => ({
+          id: "link",
+          slack_installation_id: baseInstallation.id,
+          channel_id: basePayload.channelId,
+          channel_name: "new-project",
+          repo_id: "other-repo",
+          created_by_user_id: "user-mogplex",
+          created_at: "2026-10-10",
+        }),
+        loadOrCreateConversation: async () => ({
+          id: "conv",
+          user_id: "user-mogplex",
+          messages: [],
+          model: null,
+          title: null,
+        }),
+        resolveRepoContext: async ({ texts }) => {
+          assert.equal(
+            recoveryTarget,
+            "github",
+            "Saved connector scope must not be inferred again from the thread"
+          );
+          assert.deepEqual(texts, ["acme/widgets"]);
+          return repo;
+        },
+        loadRepoContextById: async (userId, repoId) => {
+          assert.equal(userId, "user-mogplex");
+          assert.equal(repoId, repo.repoId);
+          return recoveryTarget === "missing-repository" ? null : repo;
+        },
+        persistConversation: async () => {},
+        postMessage: async (_token, input) => ({
+          channel: input.channel,
+          ts: "10.2",
+        }),
+        updateMessage: async (_token, input) => ({
+          channel: input.channel,
+          ts: input.ts,
+        }),
+        runAgent: async (input) => {
+          assert.notEqual(recoveryTarget, "missing-repository");
+          assert.equal(input.repoId, repo.repoId);
+          return agentSuccess();
+        },
+        startRepoAgentRun: async () => {
+          throw new Error(
+            "Must not launch directly against the new channel repo"
+          );
+        },
+      }
+    );
+    if (recoveryTarget === "missing-repository")
+      await assert.rejects(result, /repository is no longer available/);
+    else assert.equal((await result).outcome, "conversational_reply");
+  });
+}
 const repo = {
   repoId: "repo-1",
   repoFullName: "acme/widgets",

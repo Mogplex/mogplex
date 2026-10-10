@@ -240,11 +240,13 @@ export function buildConnectionResumePayload(input: {
   payload: SlackEventTaskPayload;
   resumeText: string;
   target?: ConnectionRecoveryTarget;
+  repoId?: string | null;
 }): SlackEventTaskPayload {
   return {
     ...input.payload,
     eventId: `slack-connection:${input.id}`,
     connectionRecoveryRequestId: input.id,
+    connectionRecoveryRepoId: input.repoId ?? undefined,
     connectionRecoveryRepository:
       input.target?.provider === "github" ? input.target.repository : undefined,
     text: `I checked the connection using the Slack authorization dialog. Continue this saved request, using the thread for context and checking the access needed for each operation:\n\n${input.target?.provider === "github" && input.target.repository ? `Repository: ${input.target.repository}\n\n` : ""}${input.resumeText}`,

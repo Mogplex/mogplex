@@ -183,6 +183,7 @@ export async function handleConnectionRecoveryAction(
             payload: request.payload,
             resumeText: request.resume_text,
             target: request.target,
+            repoId: request.repo_id,
           })
         );
         await deps.markDispatched(request.id, userId);

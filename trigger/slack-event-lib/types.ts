@@ -32,6 +32,7 @@ export type SlackEventAttachmentNotice = {
 export type SlackEventTaskPayload = {
   connectionRecoveryRequestId?: string;
   connectionRecoveryRepository?: string;
+  connectionRecoveryRepoId?: string;
   teamId: string;
   eventId: string;
   channelId: string;

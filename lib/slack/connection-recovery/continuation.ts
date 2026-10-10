@@ -27,6 +27,8 @@ export async function validateConnectionContinuation(
     return false;
   const original = saved.payload;
   const current = input.payload;
+  if (current.connectionRecoveryRepoId !== (saved.repo_id ?? undefined))
+    return false;
   if (
     current.connectionRecoveryRepository !==
     (saved.target.provider === "github" ? saved.target.repository : undefined)

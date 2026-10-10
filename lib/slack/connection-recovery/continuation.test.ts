@@ -5,11 +5,13 @@ import { recoveryRequest } from "./test-fixtures";
 
 it("rechecks a queued continuation's current account, workspace, thread, and role", async () => {
   const saved = recoveryRequest();
+  saved.repo_id = "00000000-0000-4000-8000-000000000004";
   const payload = buildConnectionResumePayload({
     id: saved.id,
     payload: saved.payload,
     resumeText: saved.resume_text,
     target: saved.target,
+    repoId: saved.repo_id,
   });
   const input = {
     payload,
@@ -34,6 +36,7 @@ it("rechecks a queued continuation's current account, workspace, thread, and rol
     "threadTs",
     "slackUserId",
     "eventId",
+    "connectionRecoveryRepoId",
   ] as const) {
     expect(
       await validateConnectionContinuation(

@@ -63,6 +63,7 @@ async function buildConversationalAgentInput(input: {
   userMessage: ReturnType<typeof buildSlackUserMessage>["agent"];
   userText: string;
   recoveryRepository?: string;
+  recoveryRepoId?: string;
 }) {
   const messages = [
     ...input.conversation.messages,
@@ -77,18 +78,25 @@ async function buildConversationalAgentInput(input: {
     .filter((message) => message.role === "user")
     .map(getRunChatAgentMessageText)
     .filter(Boolean);
-  const repoContext = await input.deps.resolveRepoContext({
-    mogplexUserId: input.mogplexUserId,
-    texts: input.recoveryRepository
-      ? [input.recoveryRepository]
-      : [
-          input.userText,
-          ...[...input.slackThreadContext.texts].reverse(),
-          ...priorUserTexts.reverse(),
-        ],
-  });
+  const repoContext = input.recoveryRepoId
+    ? await input.deps.loadRepoContextById?.(
+        input.mogplexUserId,
+        input.recoveryRepoId
+      )
+    : await input.deps.resolveRepoContext({
+        mogplexUserId: input.mogplexUserId,
+        texts: input.recoveryRepository
+          ? [input.recoveryRepository]
+          : [
+              input.userText,
+              ...[...input.slackThreadContext.texts].reverse(),
+              ...priorUserTexts.reverse(),
+            ],
+      });
+  if (input.recoveryRepoId && !repoContext)
+    throw new Error("The saved request's repository is no longer available");
 
-  return { messages, repoContext };
+  return { messages, repoContext: repoContext ?? null };
 }
 
 async function loadConversationalConversation(input: {
@@ -231,6 +239,7 @@ export async function runConversationalMode(input: {
       userMessage: userMessage.agent,
       userText,
       recoveryRepository: payload.connectionRecoveryRepository,
+      recoveryRepoId: payload.connectionRecoveryRepoId,
     });
     const repoAgentRun = createSlackStartRepoAgentRunTool({
       deps,
