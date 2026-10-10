@@ -7,6 +7,7 @@ import type {
   PrReviewCheckpointStore,
 } from "./pr-review-checkpoint-store";
 import { normalizeAutomationAgentResult } from "./automation-job-metadata";
+import { hasReviewToolCalls } from "./pr-review-report-state";
 
 export type ReviewGeneration = {
   normalized: AutomationAgentResult;
@@ -81,6 +82,22 @@ export async function runCheckpointedPrReview(input: {
     complete: false,
     inFlightTools: [],
   };
+  // A model can stop before reading the PR. Such a checkpoint contains no
+  // completed work to resume; an explicit retry must get a fresh attempt.
+  // Never discard an unresolved action, even if its completed step is absent.
+  if (
+    checkpoint.complete &&
+    checkpoint.inFlightTools.length === 0 &&
+    !hasReviewToolCalls(checkpoint.steps)
+  ) {
+    checkpoint = {
+      ...checkpoint,
+      messages: [],
+      steps: [],
+      text: "",
+      complete: false,
+    };
+  }
   // Preserve the source even if validation fails before generation. A retry
   // of this retry must retain both evidence and any unresolved action marker.
   await input.store.save(scope, checkpoint);

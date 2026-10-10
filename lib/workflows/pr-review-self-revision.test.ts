@@ -468,7 +468,11 @@ describe("finishPrReview", () => {
 
     const result = await finishPrReview({
       ...followUp,
-      result: { text: "Reviewed.", steps: [], usage: null },
+      result: {
+        text: "Reviewed.",
+        steps: [{ toolCalls: [{ toolName: "getPullRequest", input: {} }] }],
+        usage: null,
+      },
       generate,
       judge,
     });
