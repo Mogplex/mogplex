@@ -1,10 +1,7 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
 import { mogplexAutomationErrorResponse } from "@/lib/mogplex-api/automation-response";
 import { triggerMogplexApiAutomation } from "@/lib/mogplex-api/automations";
-import {
-  MOGPLEX_API_MAX_IDEMPOTENCY_KEY_LENGTH,
-  readMogplexApiIdempotencyKeyResult,
-} from "@/lib/mogplex-api/request";
+import { requireMogplexApiIdempotencyKey } from "@/lib/mogplex-api/request";
 import {
   mogplexApiError,
   mogplexApiSuccess,
@@ -37,14 +34,8 @@ export function createMogplexApiAutomationTriggerPostHandler(
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
-    const idempotencyKey = readMogplexApiIdempotencyKeyResult(request.headers);
-    if (!idempotencyKey.ok) {
-      const message =
-        idempotencyKey.error === "too_long"
-          ? `Idempotency-Key exceeds maximum length of ${MOGPLEX_API_MAX_IDEMPOTENCY_KEY_LENGTH} characters`
-          : "Idempotency-Key is required";
-      return mogplexApiError("BAD_REQUEST", message, 400);
-    }
+    const idempotencyKey = requireMogplexApiIdempotencyKey(request.headers);
+    if (!idempotencyKey.ok) return idempotencyKey.response;
     const body = (await request.json().catch(() => null)) as Record<
       string,
       unknown

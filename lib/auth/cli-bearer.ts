@@ -32,7 +32,9 @@ async function resolvePat(
     ? {
         profileId: result.auth.userId,
         source: "api-key",
-        apiKeyAccess: readStoredApiKeyAccess(result.auth.access),
+        apiKeyAccess: readStoredApiKeyAccess(result.auth.access, {
+          keyId: result.auth.keyId,
+        }),
       }
     : undefined;
 }

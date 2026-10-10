@@ -68,6 +68,30 @@ describe("readStoredApiKeyAccess", () => {
     );
   });
 
+  it("should name the key or team a bad value came from", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    readStoredApiKeyAccess("owner", { keyId: "key-7" });
+    readStoredApiKeyAccess("owner", { teamId: "team-3" });
+    expect(warn).toHaveBeenNthCalledWith(1, expect.any(String), {
+      keyId: "key-7",
+      value: "owner",
+    });
+    expect(warn).toHaveBeenNthCalledWith(2, expect.any(String), {
+      teamId: "team-3",
+      value: "owner",
+    });
+  });
+
+  it("should log a bad row once however often it is read", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (let read = 0; read < 3; read += 1) {
+      expect(readStoredApiKeyAccess("legacy", { keyId: "key-9" })).toBe(
+        "automations"
+      );
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   it("should keep the stored levels without logging", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(readStoredApiKeyAccess("full")).toBe("full");

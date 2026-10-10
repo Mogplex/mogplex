@@ -77,7 +77,7 @@ async function readTeamApiKeyAccess(client: SupabaseClient, teamId: string) {
     .eq("id", teamId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? readStoredApiKeyAccess(data.api_key_access) : null;
+  return data ? readStoredApiKeyAccess(data.api_key_access, { teamId }) : null;
 }
 
 /** The key access a team owner set for one team; null when the team is gone. */

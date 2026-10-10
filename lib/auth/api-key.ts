@@ -129,14 +129,14 @@ export async function lookupApiKeyAccess(
     .digest("hex");
   const { data, error } = await supabaseAdmin
     .from("user_api_keys")
-    .select("access, expires_at")
+    .select("id, access, expires_at")
     .eq("token_hash", hash)
     .is("revoked_at", null)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
   if (data.expires_at && new Date(data.expires_at) < new Date()) return null;
-  return readStoredApiKeyAccess(data.access);
+  return readStoredApiKeyAccess(data.access, { keyId: data.id });
 }
 
 /**
@@ -194,7 +194,7 @@ export async function resolveApiKey(
       userId: data.user_id,
       keyId: data.id,
       scopes: data.scopes,
-      access: readStoredApiKeyAccess(data.access),
+      access: readStoredApiKeyAccess(data.access, { keyId: data.id }),
     },
   };
 }

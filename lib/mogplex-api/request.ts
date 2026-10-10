@@ -1,3 +1,5 @@
+import { mogplexApiError } from "@/lib/mogplex-api/response";
+
 export const MOGPLEX_API_IDEMPOTENCY_KEY_HEADER = "idempotency-key";
 export const MOGPLEX_API_MAX_IDEMPOTENCY_KEY_LENGTH = 200;
 export const MOGPLEX_API_DEFAULT_LIST_LIMIT = 100;
@@ -45,4 +47,23 @@ export function readMogplexApiIdempotencyKeyResult(
     return { ok: false, error: "too_long" };
   }
   return { ok: true, value };
+}
+
+/**
+ * Reads the required Idempotency-Key header for a route that starts work, or
+ * the 400 response to return when it is missing or too long.
+ */
+export function requireMogplexApiIdempotencyKey(
+  headers: Pick<Headers, "get">
+): { ok: true; value: string } | { ok: false; response: Response } {
+  const result = readMogplexApiIdempotencyKeyResult(headers);
+  if (result.ok) return result;
+  const message =
+    result.error === "too_long"
+      ? `Idempotency-Key exceeds maximum length of ${MOGPLEX_API_MAX_IDEMPOTENCY_KEY_LENGTH} characters`
+      : "Idempotency-Key is required";
+  return {
+    ok: false,
+    response: mogplexApiError("BAD_REQUEST", message, 400),
+  };
 }
