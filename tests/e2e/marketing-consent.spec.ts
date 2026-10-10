@@ -75,6 +75,10 @@ test("public consent loads styled controls and saves customized preferences", as
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByTestId("landing-primary-cta")).toBeVisible();
     await page.reload();
+    await expect(page.locator(".mpx-run-ui")).toHaveAttribute(
+      "data-phase",
+      /^[1-8]$/
+    );
     await expect(customize).toHaveCount(0);
   } finally {
     server.kill();

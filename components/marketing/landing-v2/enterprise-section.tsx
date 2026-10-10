@@ -36,6 +36,8 @@ export function EnterpriseSection() {
             <a
               className="mpx-button is-secondary"
               href={SELF_HOSTING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Self-hosting docs
             </a>

@@ -30,7 +30,7 @@ export function MpxFooter() {
           <div>
             <b>OPEN SOURCE</b>
             <Link href="/#capabilities">Security</Link>
-            <a href={SELF_HOSTING_URL}>Self-hosting</a>
+            <a href={SELF_HOSTING_URL} target="_blank" rel="noopener noreferrer">Self-hosting</a>
             <a href="https://docs.mogplex.com">Docs</a>
           </div>
           <div>
