@@ -6,8 +6,8 @@
 // and table owners bypass RLS.
 //
 // Deliberately NOT implemented (unused by this app): realtime channels,
-// foreignTable order/limit options, textSearch, csv, embedded resources in
-// insert/update/delete RETURNING, and auth beyond admin.getUserById. Anything
+// foreignTable order/limit options, textSearch, csv, and auth beyond
+// admin.getUserById. Anything
 // unimplemented throws loudly rather than misbehaving quietly.
 
 import { SchemaCache } from "./schema-cache";

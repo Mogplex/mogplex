@@ -10,7 +10,9 @@ import {
   ensureSessionSandboxBinding,
 } from "@/lib/sandbox/session-retarget";
 import type { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
-import { sortRepos, getRepoOwner } from "./helpers";
+import { sortRepos } from "./helpers";
+
+export { createHideRepo, createHideByOwner } from "./repo-visibility-actions";
 
 export interface RepoActionsContext {
   activeTeamId: string | null;
@@ -41,52 +43,6 @@ export function createToggleFavorite(ctx: RepoActionsContext) {
         sortRepos(current.map((item) => (item.id === data.id ? data : item)))
       );
     }
-  };
-}
-
-export function createHideRepo(ctx: RepoActionsContext) {
-  return async (repo: Repo) => {
-    const res = await fetch("/api/repos", {
-      method: "PATCH",
-      headers: getActiveTeamRequestHeaders(
-        { "Content-Type": "application/json" },
-        ctx.activeTeamId
-      ),
-      body: JSON.stringify({ id: repo.id, is_hidden: !repo.is_hidden }),
-    });
-    if (res.ok) {
-      toast({
-        title: repo.is_hidden ? "Repository restored" : "Repository removed",
-        description: repo.full_name,
-      });
-      void ctx.fetchData();
-    }
-  };
-}
-
-export function createHideByOwner(ctx: RepoActionsContext) {
-  return async (owner: string) => {
-    const ownerRepos = ctx.repos.filter(
-      (repo) => getRepoOwner(repo) === owner && !repo.is_hidden
-    );
-    if (ownerRepos.length === 0) return;
-    await Promise.all(
-      ownerRepos.map((repo) =>
-        fetch("/api/repos", {
-          method: "PATCH",
-          headers: getActiveTeamRequestHeaders(
-            { "Content-Type": "application/json" },
-            ctx.activeTeamId
-          ),
-          body: JSON.stringify({ id: repo.id, is_hidden: true }),
-        })
-      )
-    );
-    toast({
-      title: `Removed ${ownerRepos.length} repositories`,
-      description: owner,
-    });
-    void ctx.fetchData();
   };
 }
 
