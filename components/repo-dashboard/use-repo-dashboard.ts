@@ -17,7 +17,7 @@ import {
 } from "@/lib/activation/setup-state";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
-import { mergeSyncedRepositories, sortRepos, sortWorkspaces } from "./helpers";
+import { sortRepos, sortWorkspaces } from "./helpers";
 import type { RepoDashboardProps } from "./types";
 import {
   createToggleFavorite,
@@ -137,8 +137,13 @@ export function useRepoDashboard({
 
         if (res.ok) {
           const syncedRepos = sortRepos(data);
-          const nextWorkspaces = await fetchWorkspaces();
-          setRepos((current) => mergeSyncedRepositories(current, syncedRepos));
+          // The sync response can predate a completed Remove or Restore.
+          // Revalidate the full scoped collection instead of replacing newer
+          // cache mutations with the sync's visible-only snapshot.
+          const [nextWorkspaces] = await Promise.all([
+            fetchWorkspaces(),
+            mutateRepos(),
+          ]);
           setWorkspaces(nextWorkspaces);
           trackActivation("repo_sync_completed", {
             source,
@@ -171,7 +176,7 @@ export function useRepoDashboard({
         setSyncingRepos(false);
       }
     },
-    [activeTeamId, connectGithubLabel, fetchWorkspaces, setRepos]
+    [activeTeamId, connectGithubLabel, fetchWorkspaces, mutateRepos]
   );
 
   const fetchData = useCallback(

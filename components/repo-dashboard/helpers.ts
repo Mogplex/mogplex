@@ -166,15 +166,3 @@ export function getSandboxErrorMessage(
 ): string {
   return displayError || fallback;
 }
-
-// GitHub sync returns visible repositories; retain removed rows in the full cache.
-export function mergeSyncedRepositories(
-  current: Repo[],
-  synced: Repo[]
-): Repo[] {
-  const syncedIds = new Set(synced.map((repo) => repo.id));
-  return sortRepos([
-    ...synced,
-    ...current.filter((repo) => repo.is_hidden && !syncedIds.has(repo.id)),
-  ]);
-}
