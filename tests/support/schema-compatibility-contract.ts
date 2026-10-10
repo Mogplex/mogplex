@@ -4,6 +4,7 @@ import { createPostgrestShim, type Queryable } from "@/lib/db/postgrest-shim";
 import { runProductionSmokeChecks } from "@/lib/production-smoke";
 import { buildResourceOwnershipInsert } from "@/lib/team-resource-scope";
 import { WORKSPACE_COLUMNS } from "@/lib/workspaces";
+import { surfaceDefaultModel } from "@/lib/models/surface-defaults";
 import {
   claimPendingJob,
   recordStartAttempt,
@@ -53,8 +54,37 @@ export async function checkSchemaCompatibility(
     assert.deepEqual(profile.data, {
       email: "compatibility-before@example.test",
       default_model: "openai/compatibility-default",
-      surface_models: { chat: "openai/compatibility-chat" },
+      surface_models: { chat: "openai/compatibility-chat", slack: null },
     });
+    assert.equal(
+      surfaceDefaultModel(profile.data, "slack"),
+      "openai/compatibility-default"
+    );
+    const savedChain = await client.rpc("save_model_chain", {
+      p_user_id: BEFORE_USER,
+      p_primary: "openai/compatibility-next",
+      p_fallbacks: [],
+      p_previous_resolved: "openai/compatibility-default",
+    });
+    assert.equal(savedChain.error, null, JSON.stringify(savedChain.error));
+    const nextProfile = await client
+      .from("profiles")
+      .select("default_model,surface_models")
+      .eq("id", BEFORE_USER)
+      .single();
+    assert.equal(nextProfile.error, null, JSON.stringify(nextProfile.error));
+    const nextSettings = nextProfile.data as {
+      default_model: string;
+      surface_models: Record<string, string | null>;
+    };
+    assert.equal(
+      surfaceDefaultModel(nextSettings, "slack"),
+      "openai/compatibility-next"
+    );
+    assert.equal(
+      surfaceDefaultModel(nextSettings, "chat"),
+      "openai/compatibility-chat"
+    );
     const job = await client
       .from("job_runs")
       .select("id,status,metadata,retry_of_job_run_id")
@@ -168,7 +198,7 @@ export async function checkSchemaCompatibility(
   const profile = await client.from("profiles").insert({
     id: userId,
     default_model: "openai/compatibility-default",
-    surface_models: { chat: "openai/compatibility-chat" },
+    surface_models: { chat: "openai/compatibility-chat", slack: null },
     email:
       phase === "seed"
         ? "compatibility-before@example.test"
