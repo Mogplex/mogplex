@@ -12,7 +12,8 @@ import type { SlackEventTaskDeps } from "./types";
 
 export function createSlackConnectionTools(
   input: Omit<RequestSlackConnectionInput, "target" | "resumeText"> & {
-    deps: SlackEventTaskDeps;
+    deps: Pick<SlackEventTaskDeps, "requestConnectionRecovery">;
+    repoFullName?: string;
   }
 ): Record<string, Tool> {
   const request = input.deps.requestConnectionRecovery;
@@ -26,7 +27,17 @@ export function createSlackConnectionTools(
         resumeText: z.string().trim().min(1),
       }),
       execute: async ({ target, resumeText }) =>
-        request({ ...input, target, resumeText }),
+        request({
+          ...input,
+          target,
+          resumeText,
+          repoId:
+            target.provider === "github" &&
+            target.repository?.toLowerCase() !==
+              input.repoFullName?.toLowerCase()
+              ? undefined
+              : input.repoId,
+        }),
     }),
     list_connections: tool({
       description:

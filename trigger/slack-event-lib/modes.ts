@@ -62,6 +62,7 @@ async function buildConversationalAgentInput(input: {
   slackThreadContext: SlackThreadContext;
   userMessage: ReturnType<typeof buildSlackUserMessage>["agent"];
   userText: string;
+  recoveryRepository?: string;
 }) {
   const messages = [
     ...input.conversation.messages,
@@ -78,11 +79,13 @@ async function buildConversationalAgentInput(input: {
     .filter(Boolean);
   const repoContext = await input.deps.resolveRepoContext({
     mogplexUserId: input.mogplexUserId,
-    texts: [
-      input.userText,
-      ...[...input.slackThreadContext.texts].reverse(),
-      ...priorUserTexts.reverse(),
-    ],
+    texts: input.recoveryRepository
+      ? [input.recoveryRepository]
+      : [
+          input.userText,
+          ...[...input.slackThreadContext.texts].reverse(),
+          ...priorUserTexts.reverse(),
+        ],
   });
 
   return { messages, repoContext };
@@ -227,6 +230,7 @@ export async function runConversationalMode(input: {
       slackThreadContext,
       userMessage: userMessage.agent,
       userText,
+      recoveryRepository: payload.connectionRecoveryRepository,
     });
     const repoAgentRun = createSlackStartRepoAgentRunTool({
       deps,
@@ -273,6 +277,7 @@ export async function runConversationalMode(input: {
           payload,
           productTeamId: agentInput.repoContext?.teamId,
           repoId: agentInput.repoContext?.repoId,
+          repoFullName: agentInput.repoContext?.repoFullName,
         }),
       },
       systemSuffix: [

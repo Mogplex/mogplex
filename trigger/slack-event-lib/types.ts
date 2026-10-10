@@ -30,6 +30,8 @@ export type SlackEventAttachmentNotice = {
 };
 
 export type SlackEventTaskPayload = {
+  connectionRecoveryRequestId?: string;
+  connectionRecoveryRepository?: string;
   teamId: string;
   eventId: string;
   channelId: string;
@@ -55,6 +57,7 @@ export type SlackEventTaskResult = {
     | "conversational_reply"
     | "repo_agent_run_started"
     | "connection_authorization_requested"
+    | "connection_request_unavailable"
     | "run_guidance_received"
     | "run_cancel_handled"
     | "run_guidance_not_applied"
@@ -155,6 +158,7 @@ export type StartRepoAgentRunResult = {
 };
 
 export type SlackEventTaskDeps = {
+  validateConnectionContinuation?: typeof import("@/lib/slack/connection-recovery/continuation").validateConnectionContinuation;
   loadRepoContextById?: (
     userId: string,
     repoId: string

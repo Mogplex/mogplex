@@ -182,6 +182,7 @@ export async function handleConnectionRecoveryAction(
             id: request.id,
             payload: request.payload,
             resumeText: request.resume_text,
+            target: request.target,
           })
         );
         await deps.markDispatched(request.id, userId);
@@ -189,7 +190,14 @@ export async function handleConnectionRecoveryAction(
           "Access checked. Mogplex is continuing your saved request in the original thread.";
         outcome = "dispatched";
       }
-    } catch {
+    } catch (error) {
+      console.error("[slack] connection recovery failed", {
+        requestId: request.id,
+        provider: request.target.provider,
+        actionId: action?.action_id,
+        error:
+          error instanceof Error ? error.message : "Unknown recovery error",
+      });
       status =
         "Could not finish checking this connection. Try again. Your saved request is still available.";
       outcome = "retry";

@@ -14,7 +14,7 @@ export default async function SlackConnectionsPage({ searchParams }: { searchPar
   const userId = await getProfileId();
   if (!userId) redirect(`/login?next=${encodeURIComponent(connectionRecoveryPath(params.request))}`);
   const resolved = await resolveConnectionRecoveryBrowser({ requestId: params.request, userId });
-  if (!resolved) return <Notice title="This request belongs to another account" text="Sign in to the Mogplex account linked to your Slack identity, then open the connector again." />;
+  if (!resolved) return <Notice title="Connection request unavailable" text="This request is no longer available to your linked account. Reopen the connector in Slack to check your account and access." />;
   if (params.complete !== "1") redirect(resolved.authorizePath);
   return <Notice title="Return to Slack" text="Use Check access & continue in the connection dialog. Mogplex will verify access before continuing your saved request." href={resolved.slackUrl} />;
 }

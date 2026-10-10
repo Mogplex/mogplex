@@ -9,8 +9,126 @@ import {
   agentSuccess,
 } from "./helpers/slack-event-task-fixtures";
 import type { RequestSlackConnectionInput } from "@/lib/slack/connection-recovery/request";
+import { createSlackConnectionTools } from "@/trigger/slack-event-lib/connection-tools";
 
 after(restoreFetch);
+
+test("an explicit GitHub connector proposal does not inherit another repository's ID", async () => {
+  const requests: RequestSlackConnectionInput[] = [];
+  const tools = createSlackConnectionTools({
+    userId: "user",
+    installationId: "installation",
+    botToken: "bot",
+    payload: basePayload,
+    repoId: "old-repo",
+    repoFullName: "acme/old",
+    deps: {
+      requestConnectionRecovery: async (input) => {
+        requests.push(input);
+        return { ok: true, requestId: "id", message: "Connector proposed" };
+      },
+    },
+  });
+  assert.ok(tools.request_connection.execute);
+  await tools.request_connection.execute(
+    {
+      target: { provider: "github", repository: "acme/new", access: "write" },
+      resumeText: "Fix acme/new",
+    },
+    { toolCallId: "call", messages: [], context: {} }
+  );
+  assert.equal(requests[0].repoId, undefined);
+  assert.deepEqual(requests[0].target, {
+    provider: "github",
+    repository: "acme/new",
+    access: "write",
+  });
+});
+
+test("a queued connection continuation cannot switch to a newly linked account", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  const outcome = await runSlackEventTask(
+    { ...basePayload, connectionRecoveryRequestId: "saved-request" },
+    {
+      getInstallation: async () => baseInstallation,
+      getBotToken: async () => "bot",
+      resolveSlackAttribution: async () =>
+        mappedAttribution("different-account"),
+      validateConnectionContinuation: async (input) =>
+        input.userId === "original-account",
+      postMessage: async (_token, input) => {
+        assert.match(input.text, /linked account or access changed/);
+        return { channel: input.channel, ts: "10.2" };
+      },
+      runAgent: async () => {
+        throw new Error("Must not disclose the saved task to another account");
+      },
+      startRepoAgentRun: async () => {
+        throw new Error("Must not run under another account");
+      },
+    }
+  );
+  assert.equal(outcome.outcome, "connection_request_unavailable");
+});
+
+test("a resumed task uses its saved repository even after the channel is linked to another one", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  const outcome = await runSlackEventTask(
+    {
+      ...basePayload,
+      channelType: "channel",
+      eventType: "app_mention",
+      connectionRecoveryRequestId: "saved-request",
+      connectionRecoveryRepository: "acme/widgets",
+      text: "Repository: acme/widgets\nFix the saved task",
+    },
+    {
+      getInstallation: async () => baseInstallation,
+      getBotToken: async () => "bot",
+      resolveSlackAttribution: async () => mappedAttribution(),
+      validateConnectionContinuation: async () => true,
+      getChannelLink: async () => ({
+        id: "link",
+        slack_installation_id: baseInstallation.id,
+        channel_id: basePayload.channelId,
+        channel_name: "new-project",
+        repo_id: "other-repo",
+        created_by_user_id: "user-mogplex",
+        created_at: "2026-10-10",
+      }),
+      loadOrCreateConversation: async () => ({
+        id: "conv",
+        user_id: "user-mogplex",
+        messages: [],
+        model: null,
+        title: null,
+      }),
+      resolveRepoContext: async ({ texts }) => {
+        assert.deepEqual(texts, ["acme/widgets"]);
+        return repo;
+      },
+      persistConversation: async () => {},
+      postMessage: async (_token, input) => ({
+        channel: input.channel,
+        ts: "10.2",
+      }),
+      updateMessage: async (_token, input) => ({
+        channel: input.channel,
+        ts: input.ts,
+      }),
+      runAgent: async (input) => {
+        assert.equal(input.repoId, repo.repoId);
+        return agentSuccess();
+      },
+      startRepoAgentRun: async () => {
+        throw new Error(
+          "Must not launch directly against the new channel repo"
+        );
+      },
+    }
+  );
+  assert.equal(outcome.outcome, "conversational_reply");
+});
 const repo = {
   repoId: "repo-1",
   repoFullName: "acme/widgets",

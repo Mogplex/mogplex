@@ -90,6 +90,11 @@ export { SlackConversationPersistConflictError } from "./slack-event-lib/convers
 export { formatSlackConversationalReply } from "./slack-event-lib/system";
 
 const defaultDeps: SlackEventTaskDeps = {
+  validateConnectionContinuation: async (input) => {
+    const { validateConnectionContinuation } =
+      await import("@/lib/slack/connection-recovery/continuation");
+    return validateConnectionContinuation(input);
+  },
   loadRepoContextById: async (userId, repoId) => {
     const { loadSlackRepoContextById } =
       await import("./slack-event-lib/repo-context");
@@ -294,6 +299,22 @@ export async function runSlackEventTask(
     };
   }
 
+  if (
+    payload.connectionRecoveryRequestId &&
+    !(await deps.validateConnectionContinuation?.({
+      payload,
+      userId: mogplexUserId,
+      installationId: installation.id,
+    }))
+  ) {
+    await deps.postMessage(botToken, {
+      channel: payload.channelId,
+      thread_ts: payload.threadTs,
+      text: "This saved request could not continue because your linked account or access changed. Ask Mogplex to start a new request after updating access.",
+    });
+    return { outcome: "connection_request_unavailable", mogplexUserId };
+  }
+
   const cancelArgument = parseSlackThreadCancel(payload);
   if (cancelArgument !== null) {
     const text = await slackCancelCommandText(
@@ -320,14 +341,16 @@ export async function runSlackEventTask(
     return { outcome: "run_cancel_handled", mogplexUserId };
   }
 
-  const guidance = await handleSlackRunGuidance({
-    deps,
-    payload,
-    installation,
-    botToken,
-    userId: mogplexUserId,
-    userText,
-  });
+  const guidance = payload.connectionRecoveryRequestId
+    ? null
+    : await handleSlackRunGuidance({
+        deps,
+        payload,
+        installation,
+        botToken,
+        userId: mogplexUserId,
+        userText,
+      });
   if (guidance) return guidance;
   if (boundGroupConversation === null) {
     return { outcome: "ignored_uninvoked_group_message" };
@@ -344,7 +367,7 @@ export async function runSlackEventTask(
     userText,
     channelLink,
   });
-  if (channelLink) {
+  if (channelLink && !payload.connectionRecoveryRequestId) {
     return runRepoAgentMode({
       deps,
       payload,
