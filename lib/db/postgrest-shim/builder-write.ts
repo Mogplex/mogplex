@@ -12,7 +12,7 @@ import {
   type Queryable,
 } from "../sql";
 import type { ShimResult } from "./types";
-import { buildWhere, shapeRows } from "./builder-select";
+import { buildSelectList, buildWhere, shapeRows } from "./builder-select";
 import { DatabaseSchemaError } from "@/lib/schema-drift";
 
 export type WriteBuilderState = {
@@ -101,7 +101,7 @@ export async function executeInsert(
           : ` on conflict (${conflictCols.map(quoteIdent).join(", ")}) do nothing`;
     }
   }
-  return executeWrite(state, statement, sql, 201, db);
+  return executeWrite(state, statement, sql, 201, db, schema);
 }
 
 export async function executeUpdate(
@@ -133,7 +133,8 @@ export async function executeUpdate(
     `update ${qualifier} set ${assignments.join(", ")}${where}`,
     sql,
     200,
-    db
+    db,
+    schema
   );
 }
 
@@ -154,7 +155,14 @@ export async function executeDelete(
     sql,
     schema
   );
-  return executeWrite(state, `delete from ${qualifier}${where}`, sql, 200, db);
+  return executeWrite(
+    state,
+    `delete from ${qualifier}${where}`,
+    sql,
+    200,
+    db,
+    schema
+  );
 }
 
 export async function executeWrite(
@@ -162,24 +170,43 @@ export async function executeWrite(
   statement: string,
   sql: SqlBuilder,
   successStatus: number,
-  db: Queryable
+  db: Queryable,
+  schema: SchemaCache
 ): Promise<ShimResult> {
   if (state.select !== null) {
     const parsed = parseSelect(state.select || "*");
-    if (parsed.embeds.length > 0) {
-      throw new Error(
-        "postgrest-shim: embedded resources are not supported in write RETURNING"
-      );
-    }
     const returning = parsed.fields
       .map((field) =>
         field === "*" ? "*" : compileColumnPath(field, quoteIdent(state.table))
       )
       .join(", ");
-    const { rows } = await db.query(
-      `${statement} returning ${returning}`,
-      sql.params
-    );
+    let query = `${statement} returning ${returning}`;
+    if (parsed.embeds.length > 0) {
+      // Read from RETURNING, not the base table: a second SELECT in the same
+      // statement sees the pre-write snapshot. This also keeps projection
+      // failures atomic with the mutation (no saved write behind an error).
+      const qualifier = quoteIdent("__written");
+      const selection = await buildSelectList(
+        state.table,
+        qualifier,
+        parsed,
+        new Map(),
+        sql,
+        schema
+      );
+      const where = await buildWhere(
+        state.table,
+        qualifier,
+        [],
+        [],
+        parsed,
+        new Map(),
+        sql,
+        schema
+      );
+      query = `with ${qualifier} as (${statement} returning *) select ${selection} from ${qualifier}${where}`;
+    }
+    const { rows } = await db.query(query, sql.params);
     return shapeRows(
       rows,
       null,
