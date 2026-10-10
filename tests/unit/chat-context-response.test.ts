@@ -3,6 +3,9 @@ import test from "node:test";
 import { streamText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { createWorkspaceChatResponse } from "../../app/api/chat/_lib/response";
+import { redactSecretsInValue } from "../../lib/ai-telemetry";
+import { latestModelContext } from "../../lib/agents/context-usage";
+import type { UIMessage } from "ai";
 
 for (const actualModel of ["provider/model", "provider/fallback"]) {
   test(`workspace chat measures the actual responding model: ${actualModel}`, async () => {
@@ -56,11 +59,22 @@ for (const actualModel of ["provider/model", "provider/fallback"]) {
         ai_call_id: "call",
         context: {
           model: actualModel,
-          inputTokens: 25000,
-          outputTokens: 600,
+          input: 25000,
+          output: 600,
         },
       }
     );
+    const metadata = chunks.find(
+      (chunk) => chunk.type === "message-metadata"
+    )?.messageMetadata;
+    const saved = redactSecretsInValue([
+      { id: "answer", role: "assistant", parts: [], metadata },
+    ]) as UIMessage[];
+    assert.deepEqual(latestModelContext(saved), {
+      model: actualModel,
+      inputTokens: 25000,
+      outputTokens: 600,
+    });
     assert.equal(
       chunks.filter((chunk) => chunk.type === "text-delta").length,
       1

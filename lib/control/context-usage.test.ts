@@ -54,7 +54,7 @@ it("emits one step measurement without repeating metadata on text chunks", () =>
     })
   ).toEqual({
     ai_call_id: "call",
-    context: { model: "model", inputTokens: 10_000, outputTokens: 240 },
+    context: { model: "model", input: 10_000, output: 240 },
   });
   expect(
     controlMessageMetadata("call", "model", { type: "finish-step" })

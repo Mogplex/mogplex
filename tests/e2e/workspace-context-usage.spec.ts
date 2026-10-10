@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { redactSecretsInValue } from "../../lib/ai-telemetry";
+import { modelMessageMetadata } from "../../lib/agents/context-usage";
 import { enableScopedE2EAuth } from "./helpers/auth";
 import {
   connectedUser,
@@ -15,6 +17,17 @@ for (const width of [1280, 390]) {
     await initializeTrackedEvents(page);
     await enableScopedE2EAuth(page);
     await mockActivationFlow(page);
+    // Exercise the same sanitizer as the real conversation PUT boundary.
+    await page.route(/\/api\/conversations(?:\?.*)?$/, async (route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fallback({
+        postData: JSON.stringify({
+          ...body,
+          messages: redactSecretsInValue(body.messages),
+        }),
+      });
+    });
     await page.route(/\/api\/chat(?:\?.*)?$/, async (route) => {
       const chunks = [
         {
@@ -27,10 +40,10 @@ for (const width of [1280, 390]) {
         { type: "text-end", id: "text" },
         {
           type: "message-metadata",
-          messageMetadata: {
-            ai_call_id: "call-context",
-            context: { model: modelId, inputTokens: 25000, outputTokens: 600 },
-          },
+          messageMetadata: modelMessageMetadata("call-context", modelId, {
+            type: "finish-step",
+            usage: { inputTokens: 25000, outputTokens: 600 },
+          }),
         },
         { type: "finish", finishReason: "stop" },
       ];
@@ -55,7 +68,7 @@ for (const width of [1280, 390]) {
       (response) =>
         response.url().includes("/api/conversations") &&
         response.request().method() === "PUT" &&
-        (response.request().postData() ?? "").includes('"inputTokens":25000')
+        (response.request().postData() ?? "").includes('"input":25000')
     );
     const prompt = page.getByPlaceholder(
       "Ask the agent what to build, fix, or explain. Type / for commands or drop files here."

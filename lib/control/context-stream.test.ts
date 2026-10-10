@@ -50,7 +50,7 @@ it("publishes one current-step measurement through the real SDK without multiply
       type: "message-metadata",
       messageMetadata: {
         ai_call_id: "call",
-        context: { model: "model", inputTokens: 10000, outputTokens: 240 },
+        context: { model: "model", input: 10000, output: 240 },
       },
     },
   ]);

@@ -10,6 +10,18 @@ function tokenCount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
+function sameContextModel(actual: string, selected: string | undefined) {
+  if (actual === selected) return true;
+  // Anthropic returns API ids (claude-sonnet-5-5), while the gateway
+  // catalog uses anthropic/claude-sonnet-5.5. Keep other models, providers,
+  // and dated versions distinct so a fallback cannot borrow the wrong limit.
+  return Boolean(
+    selected?.startsWith("anthropic/") &&
+    actual.replace(/^anthropic\//, "") ===
+      selected.slice("anthropic/".length).replaceAll(".", "-")
+  );
+}
+
 export function presentModelContext(
   usage: ModelContextUsage | null | undefined,
   model: string | undefined,
@@ -17,7 +29,7 @@ export function presentModelContext(
 ) {
   if (
     !usage ||
-    usage.model !== model ||
+    !sameContextModel(usage.model, model) ||
     !tokenCount(usage.inputTokens) ||
     !tokenCount(usage.outputTokens) ||
     !limit ||
@@ -49,13 +61,17 @@ export function latestModelContext(
     const value = metadata?.context;
     if (!value || typeof value !== "object") return null;
     const usage = value as Record<string, unknown>;
+    // Older in-memory messages used token-shaped keys. New persisted metadata
+    // uses neutral keys so the shared secret sanitizer keeps numeric counts.
+    const inputTokens = usage.input ?? usage.inputTokens;
+    const outputTokens = usage.output ?? usage.outputTokens;
     return typeof usage.model === "string" &&
-      tokenCount(usage.inputTokens) &&
-      tokenCount(usage.outputTokens)
+      tokenCount(inputTokens) &&
+      tokenCount(outputTokens)
       ? {
           model: usage.model,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
+          inputTokens,
+          outputTokens,
         }
       : null;
   }
@@ -80,8 +96,8 @@ export function modelMessageMetadata(
       tokenCount(usage?.inputTokens) && tokenCount(usage?.outputTokens)
         ? {
             model,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
+            input: usage.inputTokens,
+            output: usage.outputTokens,
           }
         : null,
   };
