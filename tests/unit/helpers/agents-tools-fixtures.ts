@@ -63,8 +63,11 @@ export async function withPatchedSandboxLookup<T>(
     eq() {
       return query;
     },
-    order() {
-      return query;
+    async order() {
+      return {
+        data: Array.isArray(data) ? data : data ? [data] : [],
+        error: null,
+      };
     },
     limit() {
       return Promise.resolve({

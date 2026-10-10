@@ -37,7 +37,7 @@ test("buildStaticTools keeps sandbox startup repository server-owned", async () 
   const startSandbox = withRepository.start_sandbox as {
     inputSchema: { shape: Record<string, unknown> };
   };
-  assert.deepEqual(Object.keys(startSandbox.inputSchema.shape), []);
+  assert.deepEqual(Object.keys(startSandbox.inputSchema.shape), ["sandboxId"]);
 });
 
 test("webFetch rejects localhost targets before fetching", async () => {

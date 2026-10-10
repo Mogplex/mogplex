@@ -240,7 +240,7 @@ describe("buildOrchestratorTools", () => {
     const schema = tools.sandbox_start.inputSchema as unknown as {
       shape: Record<string, unknown>;
     };
-    expect(Object.keys(schema.shape)).toEqual([]);
+    expect(Object.keys(schema.shape)).toEqual(["sandboxId"]);
     expect(tools.sandbox_start.description).toMatch(
       /server-selected active repository/i
     );

@@ -52,7 +52,7 @@ beforeEach(() => {
   const query = {
     select: () => query,
     eq: () => query,
-    order: () => query,
+    order: async () => ({ data: [], error: null }),
     limit: async () => ({ data: [], error: null }),
     maybeSingle: async () => ({ data: { id: REPO_ID }, error: null }),
   };

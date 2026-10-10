@@ -29,7 +29,7 @@ function installRunningSandbox() {
   const sandboxQuery = {
     select: () => sandboxQuery,
     eq: () => sandboxQuery,
-    order: () => sandboxQuery,
+    order: async () => ({ data: [{ id: "sandbox-new" }], error: null }),
     limit: async () => ({ data: [{ id: "sandbox-new" }], error: null }),
     maybeSingle: async () => ({ data: { id: "sandbox-new" }, error: null }),
   };
