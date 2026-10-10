@@ -31,11 +31,29 @@ if (dsn) {
     replaysOnErrorSampleRate: Number(
       process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? 1
     ),
-    integrations: [Sentry.replayIntegration()],
+    integrations: [],
     denyUrls: [...SENTRY_DENY_URLS],
     debug: false,
     sendDefaultPii: false,
   });
+
+  // Keep error capture available during hydration; recording can load after
+  // the initial page has rendered without competing with its critical assets.
+  const loadReplay = () => {
+    void import("./sentry-replay")
+      .then(({ startReplay }) => startReplay())
+      .catch((error: unknown) => {
+        Sentry.captureException(error, {
+          tags: { integration: "lazy-replay" },
+        });
+      });
+  };
+  const scheduleReplay = () => {
+    if ("requestIdleCallback" in window) window.requestIdleCallback(loadReplay);
+    else loadReplay();
+  };
+  if (document.readyState === "complete") scheduleReplay();
+  else window.addEventListener("load", scheduleReplay, { once: true });
 }
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

@@ -288,6 +288,17 @@
   }
 }
 
+/* Paint the headline immediately while preserving its entrance movement. */
+.mpx-hero h1.mpx-rise {
+  opacity: 1;
+  animation-name: mpx-heading-rise;
+}
+
+@keyframes mpx-heading-rise {
+  from { transform: translateY(16px); }
+  to { transform: none; }
+}
+
 /* ══ header ══ */
 .mpx-header {
   position: relative;
@@ -734,6 +745,9 @@
 
 /* ══ live run mockup ══ */
 .mpx-run-scale-wrap {
+  container-type: inline-size;
+  aspect-ratio: 920 / 660;
+  max-height: 739.2px;
   position: relative;
   overflow: hidden;
   width: 100%;
@@ -741,6 +755,10 @@
 }
 
 .mpx-run-ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: scale(min(1.12, calc(100cqw / 920px)));
   display: grid;
   overflow: hidden;
   width: 920px;
@@ -756,6 +774,12 @@
 
 .dark .mpx-run-ui {
   border-color: var(--border);
+}
+
+.mpx-run-ui[data-paused="true"] *,
+.mpx-run-ui[data-paused="true"] *::before,
+.mpx-run-ui[data-paused="true"] *::after {
+  animation-play-state: paused !important;
 }
 
 .mpx-run-ui.is-fading {
@@ -1357,7 +1381,9 @@ path.mpx-dag-line,
 
 .mpx-progress i {
   display: block;
-  width: 32%;
+  width: 100%;
+  transform: scaleX(0.32);
+  transform-origin: left;
   height: 100%;
   border-radius: inherit;
   background: var(--blue);
@@ -1368,14 +1394,14 @@ path.mpx-dag-line,
 }
 
 .mpx-progress.is-done i {
-  width: 100%;
+  transform: scaleX(1);
   animation: none;
   background: var(--green);
 }
 
 @keyframes mpx-progress {
   to {
-    width: 100%;
+    transform: scaleX(1);
   }
 }
 
@@ -3561,6 +3587,6 @@ path.mpx-dag-line,
   }
 
   .mpx-progress i {
-    width: 100%;
+    transform: scaleX(1);
   }
 }

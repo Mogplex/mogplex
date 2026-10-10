@@ -1,0 +1,1805 @@
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "./control-project-colors.css";
+@reference "./globals.css";
+
+/* App-only utilities and chrome never block the public marketing page. */
+@source "./(dashboard)";
+@source "../components";
+@source "../hooks";
+@source "../lib";
+@source "../node_modules/streamdown/dist/";
+
+@layer components {
+  .app-shell {
+    --background: var(--neutral-1);
+    --foreground: var(--neutral-9);
+    --card: var(--neutral-0);
+    --card-foreground: var(--neutral-9);
+    --popover: var(--neutral-0);
+    --popover-foreground: var(--neutral-9);
+    --primary: var(--brand-accent);
+    --primary-foreground: var(--neutral-0);
+    --secondary: var(--neutral-2);
+    --secondary-foreground: var(--neutral-6);
+    --muted: var(--neutral-2);
+    --muted-foreground: var(--neutral-5);
+    --accent: var(--neutral-3);
+    --accent-foreground: var(--neutral-9);
+    --border: var(--neutral-3);
+    --input: var(--neutral-2);
+    --ring: color-mix(in srgb, var(--foreground) 34%, transparent);
+    --sidebar: var(--neutral-0);
+    --sidebar-foreground: var(--neutral-9);
+    --sidebar-accent: var(--neutral-2);
+    --sidebar-accent-foreground: var(--neutral-9);
+    --sidebar-border: var(--neutral-3);
+    --accent-green: oklch(79.23% 0.2091 151.71);
+    --accent-amber: var(--chart-3);
+    --accent-red: var(--destructive);
+    --accent-blue: oklch(76.52% 0.1399 166.53);
+    --border-dim: var(--neutral-2);
+    --terminal-background: var(--neutral-9);
+    --terminal-foreground: var(--neutral-2);
+    --terminal-muted: var(--neutral-5);
+    --app-blueprint-dot: color-mix(in srgb, var(--border) 62%, transparent);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-border-dim: var(--border-dim);
+    isolation: isolate;
+    color-scheme: light;
+  }
+
+  .dark .app-shell {
+    --background: var(--neutral-11);
+    --foreground: var(--neutral-2);
+    --card: var(--neutral-10);
+    --card-foreground: var(--neutral-2);
+    --popover: var(--neutral-9);
+    --popover-foreground: var(--neutral-2);
+    --primary: var(--brand-accent);
+    --primary-foreground: var(--neutral-11);
+    --secondary: var(--neutral-9);
+    --secondary-foreground: var(--neutral-4);
+    --muted: var(--neutral-8);
+    --muted-foreground: var(--neutral-4);
+    --accent: var(--neutral-7);
+    --accent-foreground: var(--neutral-2);
+    --border: var(--neutral-7);
+    --input: var(--neutral-10);
+    --ring: color-mix(in srgb, var(--foreground) 34%, transparent);
+    --sidebar: var(--neutral-11);
+    --sidebar-foreground: var(--neutral-2);
+    --sidebar-accent: var(--neutral-9);
+    --sidebar-accent-foreground: var(--neutral-2);
+    --sidebar-border: var(--border);
+    --accent-green: oklch(79.23% 0.2091 151.71);
+    --accent-amber: var(--chart-3);
+    --accent-red: var(--destructive);
+    --accent-blue: oklch(76.52% 0.1399 166.53);
+    --border-dim: var(--neutral-8);
+    --terminal-background: var(--input);
+    --terminal-foreground: var(--foreground);
+    --terminal-muted: var(--muted-foreground);
+    --app-blueprint-dot: color-mix(in srgb, var(--border) 62%, transparent);
+    color-scheme: dark;
+  }
+
+  .app-shell-content {
+    background: var(--background);
+  }
+
+  .app-shell :is(input, select, textarea) {
+    color: var(--foreground) !important;
+  }
+
+  .app-shell :is(input, select, textarea)::placeholder {
+    color: var(--muted-foreground) !important;
+  }
+
+  .app-shell
+    :is(
+      .text-white,
+      .text-black,
+      .text-slate-100,
+      .text-slate-200,
+      .text-slate-300,
+      .text-zinc-100,
+      .text-zinc-200,
+      .text-neutral-100,
+      .text-neutral-200,
+      .text-gray-100,
+      .text-gray-200
+    ) {
+    color: var(--foreground);
+  }
+
+  .app-shell
+    :is(
+      .text-slate-400,
+      .text-slate-500,
+      .text-zinc-400,
+      .text-zinc-500,
+      .text-neutral-400,
+      .text-neutral-500,
+      .text-gray-400,
+      .text-gray-500,
+      .text-gray-600,
+      .text-gray-700
+    ) {
+    color: var(--muted-foreground);
+  }
+
+  .app-shell
+    :is(
+      .bg-white,
+      .bg-black,
+      .bg-slate-950,
+      .bg-zinc-950,
+      .bg-neutral-950,
+      .bg-gray-950
+    ) {
+    background-color: var(--background);
+  }
+
+  .app-shell
+    :is(
+      .bg-slate-100,
+      .bg-slate-900,
+      .bg-zinc-800,
+      .bg-zinc-900,
+      .bg-gray-100,
+      .bg-gray-900,
+      .bg-neutral-900
+    ) {
+    background-color: var(--secondary);
+  }
+
+  .app-shell
+    :is(
+      [class~="bg-white/5"],
+      [class~="bg-white/10"],
+      [class~="bg-black/20"],
+      [class~="bg-slate-950/28"],
+      [class~="bg-slate-950/32"],
+      [class~="bg-slate-950/38"]
+    ) {
+    background-color: color-mix(in srgb, var(--foreground) 8%, transparent);
+  }
+
+  .app-shell
+    :is(
+      .border-white,
+      .border-black,
+      .border-slate-800,
+      .border-zinc-800,
+      .border-neutral-800,
+      .border-gray-200,
+      .border-gray-800
+    ) {
+    border-color: var(--border);
+  }
+
+  .app-shell
+    :is(
+      [class~="border-white/10"],
+      [class~="border-white/15"],
+      [class~="border-white/20"]
+    ) {
+    border-color: color-mix(in srgb, var(--foreground) 12%, transparent);
+  }
+
+  .app-shell :is(.hover\:text-white:hover, .hover\:text-black:hover) {
+    color: var(--foreground);
+  }
+
+  .app-shell
+    :is(
+      .hover\:bg-white\/10:hover,
+      .hover\:bg-slate-950\/38:hover,
+      .hover\:bg-zinc-800:hover
+    ) {
+    background-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+
+  .app-shell :is(.rounded-none, .rounded-sm) {
+    border-radius: var(--radius);
+  }
+
+  .app-shell
+    :is(
+      .text-red-100,
+      .text-red-200,
+      .text-red-300,
+      .text-red-400,
+      .text-red-500,
+      .text-red-600,
+      .text-red-700,
+      .text-red-800,
+      .text-red-900
+    ) {
+    color: var(--destructive);
+  }
+
+  .app-shell
+    :is(
+      .text-amber-100,
+      .text-amber-200,
+      .text-amber-300,
+      .text-amber-400,
+      .text-amber-500,
+      .text-amber-600,
+      .text-amber-700,
+      .text-amber-800,
+      .text-amber-900,
+      .text-orange-100,
+      .text-orange-200,
+      .text-orange-300,
+      .text-orange-400,
+      .text-orange-500,
+      .text-orange-600,
+      .text-orange-700,
+      .text-orange-800,
+      .text-orange-900
+    ) {
+    color: var(--accent-amber);
+  }
+
+  .app-shell
+    :is(
+      .text-green-100,
+      .text-green-200,
+      .text-green-300,
+      .text-green-400,
+      .text-green-500,
+      .text-green-600,
+      .text-green-700,
+      .text-green-800,
+      .text-green-900,
+      .text-emerald-100,
+      .text-emerald-200,
+      .text-emerald-300,
+      .text-emerald-400,
+      .text-emerald-500,
+      .text-emerald-600,
+      .text-emerald-700,
+      .text-emerald-800,
+      .text-emerald-900
+    ) {
+    color: var(--accent-green);
+  }
+
+  .app-shell
+    :is(
+      .text-blue-100,
+      .text-blue-200,
+      .text-blue-300,
+      .text-blue-400,
+      .text-blue-500,
+      .text-blue-600,
+      .text-blue-700,
+      .text-blue-800,
+      .text-blue-900,
+      .text-cyan-100,
+      .text-cyan-200,
+      .text-cyan-300,
+      .text-cyan-400,
+      .text-cyan-500,
+      .text-cyan-600,
+      .text-cyan-700,
+      .text-cyan-800,
+      .text-cyan-900
+    ) {
+    color: var(--accent-blue);
+  }
+
+  .app-shell
+    :is(
+      .text-violet-100,
+      .text-violet-200,
+      .text-violet-300,
+      .text-violet-400,
+      .text-violet-500,
+      .text-violet-600,
+      .text-violet-700,
+      .text-violet-800,
+      .text-violet-900,
+      .text-fuchsia-100,
+      .text-fuchsia-200,
+      .text-fuchsia-300,
+      .text-fuchsia-400,
+      .text-fuchsia-500,
+      .text-fuchsia-600,
+      .text-fuchsia-700,
+      .text-fuchsia-800,
+      .text-fuchsia-900
+    ) {
+    color: var(--accent-violet);
+  }
+
+  .app-shell :is(.bg-red-50, .bg-red-100, .bg-red-500, .bg-red-900) {
+    background-color: color-mix(in srgb, var(--destructive) 10%, transparent);
+  }
+
+  .app-shell
+    :is(
+      [class~="bg-red-400/10"],
+      [class~="bg-red-500/5"],
+      [class~="bg-red-500/8"],
+      [class~="bg-red-500/10"],
+      [class~="bg-red-900/20"],
+      [class~="bg-red-900/30"]
+    ) {
+    background-color: color-mix(in srgb, var(--destructive) 10%, transparent);
+  }
+
+  .app-shell
+    :is(
+      .bg-amber-50,
+      .bg-amber-100,
+      .bg-amber-400,
+      .bg-amber-500,
+      .bg-orange-400
+    ) {
+    background-color: color-mix(in srgb, var(--accent-amber) 10%, transparent);
+  }
+
+  .app-shell
+    :is(
+      [class~="bg-amber-100/10"],
+      [class~="bg-amber-400/8"],
+      [class~="bg-amber-400/10"],
+      [class~="bg-amber-400/[0.04]"],
+      [class~="bg-amber-400/[0.06]"],
+      [class~="bg-amber-400/[0.08]"],
+      [class~="bg-amber-500/5"],
+      [class~="bg-amber-500/10"],
+      [class~="bg-orange-400/[0.07]"],
+      [class~="bg-orange-400/[0.10]"],
+      [class~="bg-orange-400/[0.12]"]
+    ) {
+    background-color: color-mix(in srgb, var(--accent-amber) 10%, transparent);
+  }
+
+  .app-shell
+    :is(
+      .bg-green-100,
+      .bg-green-500,
+      .bg-green-900,
+      .bg-emerald-400,
+      .bg-emerald-500
+    ) {
+    background-color: color-mix(in srgb, var(--accent-green) 10%, transparent);
+  }
+
+  .app-shell
+    :is(
+      [class~="bg-green-900/30"],
+      [class~="bg-emerald-400/8"],
+      [class~="bg-emerald-400/12"]
+    ) {
+    background-color: color-mix(in srgb, var(--accent-green) 10%, transparent);
+  }
+
+  .app-shell :is(.border-red-400, .border-red-500) {
+    border-color: color-mix(in srgb, var(--destructive) 40%, transparent);
+  }
+
+  .app-shell
+    :is(
+      [class~="border-red-400/30"],
+      [class~="border-red-500/20"],
+      [class~="border-red-500/30"],
+      [class~="border-red-500/40"]
+    ) {
+    border-color: color-mix(in srgb, var(--destructive) 40%, transparent);
+  }
+
+  .app-shell :is(.border-amber-300, .border-amber-400, .border-amber-500) {
+    border-color: color-mix(in srgb, var(--accent-amber) 40%, transparent);
+  }
+
+  .app-shell
+    :is(
+      [class~="border-amber-200/30"],
+      [class~="border-amber-300/30"],
+      [class~="border-amber-300/40"],
+      [class~="border-amber-400/20"],
+      [class~="border-amber-400/25"],
+      [class~="border-amber-400/30"],
+      [class~="border-amber-400/40"],
+      [class~="border-amber-500/20"],
+      [class~="border-amber-500/30"],
+      [class~="border-amber-500/40"],
+      [class~="border-orange-400/30"],
+      [class~="border-orange-400/45"],
+      [class~="border-orange-400/60"]
+    ) {
+    border-color: color-mix(in srgb, var(--accent-amber) 40%, transparent);
+  }
+
+  .app-shell :is(.border-emerald-300, .border-emerald-400) {
+    border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
+  }
+
+  .app-shell
+    :is([class~="border-emerald-300/20"], [class~="border-emerald-400/70"]) {
+    border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
+  }
+
+  .app-topbar {
+    position: relative;
+    z-index: 20;
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+  }
+
+  .app-sidebar {
+    position: relative;
+    z-index: 30;
+    min-width: 56px;
+    max-width: 320px;
+    user-select: none;
+  }
+
+  .app-sidebar[data-resizing="true"] {
+    cursor: col-resize;
+  }
+
+  .app-sidebar-logo {
+    box-shadow: none;
+  }
+
+  .app-sidebar-link {
+    position: relative;
+  }
+
+  .app-sidebar-link.is-active {
+    box-shadow: none;
+    color: var(--sidebar-accent-foreground);
+  }
+
+  .app-sidebar-link.is-active svg {
+    color: var(--sidebar-accent-foreground);
+  }
+
+  .app-sidebar-resizer::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 1px;
+    background: transparent;
+    content: "";
+  }
+
+  .app-sidebar-resizer:hover::after,
+  .app-sidebar-resizer:focus-visible::after,
+  .app-sidebar[data-resizing="true"] .app-sidebar-resizer::after {
+    background: var(--border-dim);
+  }
+
+  .app-sidebar[data-compact="true"] .app-sidebar-header {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .app-sidebar[data-compact="true"]
+    :is(
+      .app-sidebar-title,
+      .app-sidebar-section-label,
+      .app-sidebar-link-label,
+      .app-sidebar-footer-label
+    ) {
+    display: none;
+  }
+
+  .app-sidebar[data-compact="true"] nav {
+    align-items: center;
+    padding-inline: 0;
+  }
+
+  .app-sidebar[data-compact="true"] .app-sidebar-link {
+    width: 40px;
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  .app-sidebar[data-compact="true"] .app-sidebar-footer {
+    display: flex;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .app-brand-mark {
+    box-shadow: none;
+  }
+
+  .app-command-search kbd {
+    border: 1px solid var(--border);
+    background: var(--card);
+    box-shadow: none;
+  }
+
+  .mogplex-command-palette {
+    width: min(720px, calc(100vw - 48px));
+    border-color: var(--border);
+    border-radius: 16px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: var(--app-shadow-panel);
+    overflow: hidden;
+  }
+
+  .mogplex-command-palette-command {
+    border-radius: 16px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+  }
+
+  .mogplex-command-palette [data-slot="command-input-wrapper"] {
+    height: 56px;
+    border-bottom: 1px solid var(--border);
+    background: var(--input);
+    padding-inline: 16px;
+  }
+
+  .mogplex-command-palette [data-slot="command-input-wrapper"] svg {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
+
+  .mogplex-command-palette [data-slot="command-input"] {
+    height: 56px;
+    color: var(--foreground);
+    font-size: 14px;
+    line-height: 22px;
+  }
+
+  .mogplex-command-palette [data-slot="command-input"]::placeholder {
+    color: var(--muted-foreground);
+  }
+
+  .mogplex-command-palette [data-slot="command-list"] {
+    max-height: min(520px, calc(100vh - 220px));
+    padding: 8px;
+    background: var(--popover);
+  }
+
+  .mogplex-command-palette [data-slot="command-group"] {
+    padding: 4px 0;
+    color: var(--foreground);
+  }
+
+  .mogplex-command-palette [cmdk-group-heading] {
+    padding: 8px 8px 6px;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 16px;
+  }
+
+  .mogplex-command-palette [data-slot="command-item"] {
+    min-height: 40px;
+    border-radius: 10px;
+    color: var(--foreground);
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .mogplex-command-palette [data-slot="command-item"][data-selected="true"] {
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
+    color: var(--foreground);
+  }
+
+  .mogplex-command-palette [data-slot="command-item"] .text-muted-foreground {
+    color: var(--muted-foreground);
+  }
+
+  .mogplex-command-palette [data-slot="command-item"] .text-destructive {
+    color: var(--destructive);
+  }
+
+  .mogplex-command-palette [data-slot="command-separator"] {
+    margin: 6px 0;
+    background: var(--border);
+  }
+
+  .mogplex-command-palette [data-slot="command-empty"] {
+    color: var(--muted-foreground);
+  }
+
+  .mogplex-account-menu {
+    border-color: var(--border);
+    border-radius: 16px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    padding: 6px;
+    box-shadow: var(--app-shadow-panel);
+    overflow: hidden;
+  }
+
+  .mogplex-account-menu [data-slot="dropdown-menu-label"] {
+    color: var(--foreground);
+  }
+
+  .mogplex-account-menu [data-slot="dropdown-menu-label"].text-muted-foreground,
+  .mogplex-account-menu .text-muted-foreground {
+    color: var(--muted-foreground);
+  }
+
+  .mogplex-account-menu [data-slot="dropdown-menu-item"] {
+    min-height: 34px;
+    border-radius: 10px;
+    color: var(--foreground);
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  .mogplex-account-menu [data-slot="dropdown-menu-item"]:focus,
+  .mogplex-account-menu [data-slot="dropdown-menu-item"][data-highlighted] {
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
+    color: var(--foreground);
+  }
+
+  .mogplex-account-menu [data-slot="dropdown-menu-item"][data-disabled] {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
+
+  .mogplex-account-menu [data-slot="dropdown-menu-item"] svg {
+    color: var(--muted-foreground);
+  }
+
+  .mogplex-account-menu [data-slot="dropdown-menu-separator"] {
+    margin: 6px -6px;
+    background: var(--border);
+  }
+
+  .mogplex-account-menu [data-theme-toggle] {
+    border-color: var(--border);
+    background: var(--input);
+  }
+
+  .mogplex-account-menu [data-theme-toggle] > div[aria-hidden="true"] {
+    background: var(--accent);
+  }
+
+  .app-statusbar {
+    position: relative;
+    z-index: 20;
+    background: var(--sidebar);
+  }
+
+  .app-window-frame {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--background);
+  }
+
+  .app-window-chrome {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    height: 54px;
+    border-bottom: 1px solid var(--border);
+    background: var(--sidebar);
+  }
+
+  .app-control-shell {
+    background: var(--background);
+  }
+
+  .app-chat-column {
+    background: var(--background);
+  }
+
+  .app-live-rail {
+    background: var(--card);
+  }
+
+  .app-panel-resizer::after,
+  .sheet-resizer::after {
+    position: absolute;
+    background: transparent;
+    content: "";
+    transition: background-color 120ms ease-out;
+  }
+
+  .app-panel-resizer-left::after,
+  .sheet-resizer:is(.inset-y-0)::after {
+    inset-block: 0;
+    left: 3px;
+    width: 1px;
+  }
+
+  .app-panel-resizer-top::after,
+  .sheet-resizer:is(.inset-x-0)::after {
+    top: 3px;
+    height: 1px;
+    inset-inline: 0;
+  }
+
+  .app-panel-resizer:hover::after,
+  .app-panel-resizer:focus-visible::after,
+  [data-resizing="true"] > .app-panel-resizer::after,
+  .sheet-resizer:hover::after,
+  .sheet-resizer:focus-visible::after,
+  [data-resizing="true"] > .sheet-resizer::after {
+    background: var(--brand-accent);
+  }
+
+  .ui-page-title {
+    @apply text-foreground text-lg font-semibold tracking-tight sm:text-2xl;
+  }
+
+  /* Observability uses the shared Foundry palette with readable semantic
+     foregrounds in each theme, including the small status labels. */
+  .observability-work {
+    --accent-green: oklch(43% 0.11 149.58);
+    --accent-amber: oklch(43% 0.10 70.08);
+    --accent-blue: oklch(44% 0.14 259.81);
+    --accent-red: oklch(47% 0.17 25.33);
+    --primary-foreground: var(--neutral-11);
+    --ring: var(--brand-accent);
+  }
+
+  .dark .observability-work {
+    --accent-green: oklch(76% 0.13 149.58);
+    --accent-amber: oklch(79% 0.13 70.08);
+    --accent-blue: oklch(78% 0.10 259.81);
+    --accent-red: oklch(76% 0.13 25.33);
+  }
+
+  .observability-work :is(.ui-label, .ui-meta, .ui-section-caption) {
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .observability-work [data-slot="button"].border {
+    border-color: var(--border);
+  }
+
+  @media (max-width: 640px) {
+    .observability-work :is([data-slot="button"], [role="tab"], select) {
+      min-height: 44px;
+    }
+  }
+
+  .ui-page-subtitle {
+    @apply text-muted-foreground text-sm leading-6;
+  }
+
+  .ui-section-title {
+    @apply text-foreground text-sm font-medium;
+  }
+
+  .ui-section-caption {
+    @apply text-muted-foreground text-[11px] leading-5;
+  }
+
+  .ui-kicker {
+    @apply text-muted-foreground font-mono text-[10px] font-medium tracking-[0.16em] uppercase;
+  }
+
+  .ui-meta {
+    @apply text-muted-foreground text-[11px];
+  }
+
+  .ui-label {
+    @apply text-muted-foreground text-[11px] font-medium;
+  }
+
+  .signal-lost {
+    --signal-lost-background-start: oklch(13.76% 0.0518 279.66);
+    --signal-lost-background-end: oklch(18.3% 0.0702 291.63);
+    --signal-lost-action-shadow: 0 12px 36px oklch(9.16% 0.0368 264.04 / 20%);
+    background: linear-gradient(
+      0deg,
+      var(--signal-lost-background-start) 30%,
+      var(--signal-lost-background-end)
+    );
+  }
+
+  .ascii-hero {
+    --ascii-hero-background: oklch(15.59% 0.0491 285.08);
+    --ascii-hero-foreground: oklch(70.53% 0.1521 303.03);
+    --ascii-hero-glow: oklch(68.81% 0.1466 299.12 / 35%);
+    --ascii-hero-gradient-start: oklch(13.76% 0.0518 279.66);
+    --ascii-hero-gradient-end: oklch(18.3% 0.0702 291.63);
+  }
+
+  .ascii-hero-fallback {
+    background:
+      radial-gradient(
+        ellipse at 50% 38%,
+        var(--ascii-hero-glow),
+        transparent 55%
+      ),
+      linear-gradient(
+        0deg,
+        var(--ascii-hero-gradient-start) 30%,
+        var(--ascii-hero-gradient-end)
+      );
+  }
+
+  .ascii-hero-fallback-mark {
+    text-shadow: 0 0 22px var(--ascii-hero-glow);
+  }
+
+  /* The flows builder runs a zinc-tinted variant of the app palette so the
+     canvas chrome reads as a control room, but it follows the app's light/dark
+     theme like every other pane. Semantic theme vars are re-scoped here so
+     every Tailwind theme class inside the pane resolves to the builder palette.
+     `.flows-theme` carries the same palette onto portalled UI (context menus,
+     the run-details dialog) that renders outside the pane — and because `.dark`
+     lives on <html>, the dark overrides below reach those portals too. */
+  .flows-pane,
+  .flows-theme {
+    --background: var(--neutral-1);
+    --foreground: var(--neutral-9);
+    --card: var(--neutral-0);
+    --card-foreground: var(--neutral-9);
+    --popover: var(--neutral-0);
+    --popover-foreground: var(--neutral-9);
+    --primary: var(--brand-accent);
+    --primary-foreground: var(--neutral-0);
+    --secondary: var(--neutral-2);
+    --secondary-foreground: var(--neutral-6);
+    --muted: var(--neutral-2);
+    --muted-foreground: var(--neutral-5);
+    --accent: var(--neutral-3);
+    --accent-foreground: var(--neutral-9);
+    --border: var(--neutral-3);
+    --border-dim: var(--neutral-2);
+    --input: var(--neutral-0);
+    --sidebar: var(--neutral-0);
+    --sidebar-foreground: var(--neutral-9);
+    --sidebar-border: var(--neutral-3);
+    --radius: 6px;
+    --flows-node-bg: var(--neutral-0);
+    --flows-node-bg-raised: var(--neutral-1);
+    --flows-node-border: oklch(89.8% 0.01 101 / 90%);
+    --flows-node-muted: var(--neutral-5);
+    --flows-node-title: var(--neutral-9);
+    --flows-node-chip-bg: var(--neutral-2);
+    --flows-node-chip-border: var(--neutral-3);
+    --flows-node-chip-text: var(--neutral-6);
+    --flows-node-shadow:
+      0 1px 2px oklch(10.88% 0.006 132 / 6%),
+      0 8px 20px oklch(10.88% 0.006 132 / 7%);
+    /* Per-tone hues. The `-bg`/`-border` tints are derived from these with
+       color-mix so they layer correctly over whichever surface is active; only
+       the readable text colors need an explicit per-theme value. */
+    --flows-tone-review: oklch(55.34% 0.1739 38.4);
+    --flows-tone-review-text: oklch(46.98% 0.143 37.3);
+    --flows-tone-edit: oklch(58.76% 0.1389 241.97);
+    --flows-tone-edit-text: oklch(50% 0.1193 242.75);
+    --flows-tone-violet: oklch(54.13% 0.2466 293.01);
+    --flows-tone-violet-text: oklch(49.07% 0.2412 292.58);
+    --flows-tone-indigo: oklch(51.06% 0.2301 276.97);
+    --flows-tone-indigo-text: oklch(45.68% 0.2146 277.02);
+    --flows-tone-cyan: oklch(60.89% 0.1109 221.72);
+    --flows-tone-cyan-text: oklch(51.98% 0.0936 223.13);
+    --flows-tone-fuchsia: oklch(59.15% 0.2569 322.9);
+    --flows-tone-fuchsia-text: oklch(51.8% 0.2258 323.95);
+    --flows-tone-muted: var(--neutral-5);
+    --flows-tone-muted-text: var(--neutral-6);
+    --flows-tone-neutral: var(--neutral-6);
+    --flows-tone-success: oklch(59.6% 0.1274 163.23);
+    --flows-tone-success-text: oklch(50.81% 0.1049 165.61);
+    --flows-tone-danger: oklch(57.71% 0.2152 27.33);
+    --flows-tone-danger-text: oklch(50.54% 0.1905 27.52);
+    /* Canvas chrome */
+    --flows-canvas-dot: oklch(37.42% 0.011 112 / 14%);
+    --flows-canvas-vignette-edge: oklch(10.88% 0.006 132 / 4%);
+    --flows-canvas-vignette-base: oklch(10.88% 0.006 132 / 7%);
+    --flows-canvas-edge-stroke: var(--neutral-4);
+    --flows-canvas-edge-stroke-selected: var(--neutral-6);
+    --flows-canvas-minimap-mask-stroke: var(--neutral-4);
+    --flows-canvas-minimap-node: var(--neutral-3);
+    --flows-canvas-controls-shadow: 0 18px 32px
+      oklch(10.88% 0.006 132 / 12%);
+    --flows-canvas-selected-ring: oklch(37.42% 0.011 112 / 55%);
+    --flows-handle-bg: var(--neutral-0);
+    --flows-handle-border: var(--neutral-4);
+    --flows-node-accent: var(--flows-tone-review);
+    --flows-node-accent-bg: color-mix(
+      in srgb,
+      var(--flows-tone-review) 10%,
+      transparent
+    );
+    --flows-node-accent-border: color-mix(
+      in srgb,
+      var(--flows-tone-review) 32%,
+      transparent
+    );
+    --flows-node-accent-text: var(--flows-tone-review-text);
+    color: var(--foreground);
+    color-scheme: light;
+  }
+
+  .dark .flows-pane,
+  .dark .flows-theme {
+    --background: var(--neutral-11);
+    --foreground: var(--neutral-2);
+    --card: var(--neutral-10);
+    --card-foreground: var(--neutral-2);
+    --popover: var(--neutral-9);
+    --popover-foreground: var(--neutral-2);
+    --primary: var(--brand-accent);
+    --primary-foreground: var(--neutral-0);
+    --secondary: var(--neutral-9);
+    --secondary-foreground: var(--neutral-4);
+    --muted: var(--neutral-10);
+    --muted-foreground: var(--neutral-4);
+    --accent: var(--neutral-7);
+    --accent-foreground: var(--neutral-2);
+    --border: var(--neutral-7);
+    --border-dim: var(--neutral-8);
+    --input: var(--neutral-10);
+    --sidebar: var(--neutral-11);
+    --sidebar-foreground: var(--neutral-2);
+    --sidebar-border: var(--neutral-7);
+    --flows-node-bg: var(--neutral-10);
+    --flows-node-bg-raised: var(--neutral-9);
+    --flows-node-border: oklch(28.11% 0.01 116 / 80%);
+    --flows-node-muted: var(--neutral-4);
+    --flows-node-title: var(--neutral-2);
+    --flows-node-chip-bg: var(--neutral-9);
+    --flows-node-chip-border: var(--neutral-7);
+    --flows-node-chip-text: var(--neutral-4);
+    --flows-node-shadow: 0 6px 24px oklch(10.88% 0.006 132 / 50%);
+    --flows-tone-review: oklch(71.04% 0.1371 41.75);
+    --flows-tone-review-text: oklch(77.64% 0.1001 42.34);
+    --flows-tone-edit: oklch(75.35% 0.139 232.66);
+    --flows-tone-edit-text: oklch(82.76% 0.1013 230.32);
+    --flows-tone-violet: oklch(70.9% 0.1592 293.54);
+    --flows-tone-violet-text: oklch(81.12% 0.1013 293.57);
+    --flows-tone-indigo: oklch(68.01% 0.1583 276.93);
+    --flows-tone-indigo-text: oklch(78.53% 0.1041 274.71);
+    --flows-tone-cyan: oklch(79.71% 0.1339 211.53);
+    --flows-tone-cyan-text: oklch(86.51% 0.1153 207.08);
+    --flows-tone-fuchsia: oklch(74.77% 0.207 322.16);
+    --flows-tone-fuchsia-text: oklch(83.3% 0.1322 321.43);
+    --flows-tone-muted: var(--neutral-4);
+    --flows-tone-muted-text: var(--neutral-4);
+    --flows-tone-neutral: var(--neutral-2);
+    --flows-tone-success: oklch(69.59% 0.1491 162.48);
+    --flows-tone-success-text: oklch(77.29% 0.1535 163.22);
+    --flows-tone-danger: oklch(63.68% 0.2078 25.33);
+    --flows-tone-danger-text: oklch(71.06% 0.1661 22.22);
+    --flows-canvas-dot: oklch(98.84% 0.006 95 / 12%);
+    --flows-canvas-vignette-edge: oklch(10.88% 0.006 132 / 80%);
+    --flows-canvas-vignette-base: var(--neutral-11);
+    --flows-canvas-edge-stroke: var(--neutral-7);
+    --flows-canvas-edge-stroke-selected: var(--neutral-4);
+    --flows-canvas-minimap-mask-stroke: var(--neutral-6);
+    --flows-canvas-minimap-node: var(--neutral-7);
+    --flows-canvas-controls-shadow: 0 18px 32px
+      oklch(10.88% 0.006 132 / 42%);
+    --flows-canvas-selected-ring: oklch(74.58% 0.011 103 / 70%);
+    --flows-handle-bg: var(--neutral-9);
+    --flows-handle-border: var(--neutral-5);
+    color-scheme: dark;
+  }
+
+  .flows-pane {
+    container-type: inline-size;
+    container-name: flows;
+    font-family: var(--font-mono);
+  }
+
+  /* The pane is a named container so every breakpoint below reacts to the pane's
+     own width rather than the viewport. The app shell sidebar eats ~270px, so
+     viewport breakpoints consistently over-estimate the room the editor has. */
+  .flows-pane-grid {
+    /* Width of the docked right-hand panel (inspector / assistant). The resizer
+       overrides this inline; the fallback covers pre-hydration renders. */
+    --flows-panel-width: 336px;
+    /* Floor, not a layout width: below this the toolbar and library rail have
+       no honest way to coexist, so the pane scrolls horizontally rather than
+       shredding its own controls. Was 760px, which forced that scroll on every
+       tablet and half-width desktop window. */
+    min-width: 560px;
+    grid-template-columns: clamp(168px, 22cqw, 220px) minmax(0, 1fr);
+  }
+
+  .flows-pane-grid-sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The toolbar lives in the middle column, so its breakpoints have to measure
+     that column — the pane width counts the library sidebar and the docked
+     panel as usable space, which the toolbar never gets. */
+  .flows-editor-column {
+    container-type: inline-size;
+    container-name: flows-editor;
+  }
+
+  /* Base state: hidden and off-screen. The <aside> always carries
+     flows-inspector-open so the CSS transition runs on both entry and exit.
+     data-state drives visibility; the class provides the transition styles. */
+  .flows-inspector {
+    display: none;
+  }
+
+  /* Minimize/expand controls only make sense while the inspector is docked as
+     a grid column (>=1280px container); the overlay sheet dismisses itself. */
+  .flows-inspector-dock-toggle {
+    display: none;
+  }
+
+  /* The resize grip only exists while the panel is a docked grid column; the
+     overlay sheet has a fixed width and dismisses itself. */
+  .flows-inspector-resizer {
+    display: none;
+  }
+
+  .flows-inspector-open {
+    display: flex;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    /* Fixed, not the resizable docked width: the grip is docked-only, so the
+       overlay sheet has no way to be resized back if a drag left it narrow. */
+    width: 400px;
+    max-width: calc(100vw - 2rem);
+    /* Start off-screen; data-state rules below control the visible position. */
+    transform: translateX(100%);
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  /* Slide in */
+  .flows-inspector-open[data-state="open"] {
+    transform: translateX(0);
+  }
+
+  /* Slide out — explicit so the transition fires on close, not just on open.
+     pointer-events:none ensures the off-screen panel is not accidentally
+     interactive during the exit animation. */
+  .flows-inspector-open[data-state="closed"] {
+    transform: translateX(100%);
+    pointer-events: none;
+  }
+
+  .flows-inspector-backdrop {
+    animation: flows-inspector-backdrop-in 140ms ease-out;
+  }
+
+  @keyframes flows-inspector-backdrop-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Docked layout. 1080px (not 1280px) because the pane container already
+     excludes the app shell sidebar: a 1440px laptop gives the pane ~1155px,
+     which is plenty of room for a third column. */
+  @container flows (min-width: 1080px) {
+    .flows-pane-grid {
+      grid-template-columns: 220px minmax(0, 1fr) var(--flows-panel-width);
+    }
+
+    .flows-pane-grid-inspector-open {
+      grid-template-columns: 220px minmax(0, 1fr) var(--flows-panel-width);
+    }
+
+    .flows-pane-grid-assistant-open {
+      grid-template-columns: 220px minmax(0, 1fr) var(--flows-panel-width);
+    }
+
+    /* Re-asserted (not redundant): .flows-pane-grid above sets two columns
+       at this breakpoint, and source order would otherwise win over the base
+       single-column collapsed rule. Keep this rule until .flows-pane-grid
+       is rewritten with compound-selector specificity. */
+    .flows-pane-grid-sidebar-collapsed {
+      grid-template-columns: minmax(0, 1fr) var(--flows-panel-width);
+    }
+
+    .flows-pane-grid-sidebar-collapsed.flows-pane-grid-inspector-open {
+      grid-template-columns: minmax(0, 1fr) var(--flows-panel-width);
+    }
+
+    .flows-pane-grid-sidebar-collapsed.flows-pane-grid-assistant-open {
+      grid-template-columns: minmax(0, 1fr) var(--flows-panel-width);
+    }
+
+    .flows-inspector-resizer {
+      display: block;
+    }
+
+    .flows-pane-grid .flows-inspector,
+    .flows-pane-grid .flows-inspector-open,
+    .flows-pane-grid-inspector-open .flows-inspector,
+    .flows-pane-grid-inspector-open .flows-inspector-open {
+      display: flex;
+      position: relative;
+      z-index: auto;
+      width: auto;
+      min-width: 0;
+      max-width: none;
+      transform: none;
+      transition: none;
+      pointer-events: auto;
+    }
+
+    /* In docked mode the backdrop is hidden via display:none, but the DOM node
+       can still be mounted. pointer-events:none ensures the onClick handler can
+       never fire and accidentally clear the canvas selection. */
+    .flows-pane-grid-inspector-open .flows-inspector-backdrop {
+      display: none;
+      pointer-events: none;
+    }
+
+    .flows-pane-grid .flows-inspector-backdrop {
+      display: none;
+      pointer-events: none;
+    }
+
+    /* Minimized inspector: drop the docked third column and hide the panel.
+       The class is only applied while neither the inspector nor the assistant
+       is open, so these rules never fight the open/assistant templates. Kept
+       after the docked display rules above — equal specificity, source order
+       decides. */
+    .flows-pane-grid-inspector-collapsed {
+      grid-template-columns: 220px minmax(0, 1fr);
+    }
+
+    .flows-pane-grid-sidebar-collapsed.flows-pane-grid-inspector-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .flows-pane-grid-inspector-collapsed .flows-inspector {
+      display: none;
+    }
+
+    .flows-inspector-dock-toggle {
+      display: grid;
+    }
+  }
+
+  /* Drag grip straddling the panel's left border. Sits in the border gutter so
+     it never steals width from the panel content. */
+  .flows-inspector-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -4px;
+    z-index: 20;
+    width: 9px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .flows-inspector-resizer::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+    transition: background-color 120ms ease;
+    content: "";
+  }
+
+  .flows-inspector-resizer:hover::after,
+  .flows-inspector-resizer:focus-visible::after,
+  .flows-inspector-resizer[data-dragging="true"]::after {
+    background: var(--ring);
+  }
+
+  .flows-inspector-resizer:focus-visible {
+    outline: none;
+  }
+
+  /* While a resize is in flight, keep the cursor and kill text selection
+     everywhere — the pointer routinely leaves the 9px grip mid-drag. */
+  .flows-panel-resizing,
+  .flows-panel-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+  }
+
+  /* Shared shell for the docked panels (inspector, empty inspector, assistant).
+     Full-bleed: the panel *is* the column, so it carries no rounding, no inset
+     border, and no gutter against the pane. */
+  .flows-panel-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--card);
+  }
+
+  /* Panel headers are locked to the measured height of the canvas toolbar so
+     the two bottom borders read as one continuous line across the pane.
+     --flows-toolbar-height is set from a ResizeObserver in flows-pane.tsx. */
+  .flows-panel-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: var(--flows-toolbar-height, 53px);
+    padding: 8px 16px;
+    gap: 12px;
+    /* Opaque on purpose: the body scrolls underneath it. */
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .flows-library-group-label {
+    padding: 12px 12px 6px;
+    color: var(--muted-foreground);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .flows-library-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+    padding: 7px 12px;
+    text-align: left;
+    transition:
+      background-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .flows-library-item:hover {
+    background: var(--accent);
+  }
+
+  .flows-library-item:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--foreground) 35%, transparent);
+    outline-offset: -1px;
+  }
+
+  /* Tone tiles derive their fill and border from a single hue so the same rule
+     reads correctly on a white or a near-black surface. */
+  .flows-library-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid
+      color-mix(in srgb, var(--flows-library-hue) 32%, transparent);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--flows-library-hue) 12%, var(--card));
+    color: var(--flows-library-color);
+    --flows-library-hue: var(--flows-tone-neutral);
+    --flows-library-color: var(--foreground);
+  }
+
+  .flows-library-tone-trigger {
+    --flows-library-hue: var(--flows-tone-indigo);
+    --flows-library-color: var(--flows-tone-indigo-text);
+  }
+
+  .flows-library-tone-review {
+    --flows-library-hue: var(--flows-tone-review);
+    --flows-library-color: var(--flows-tone-review-text);
+  }
+
+  .flows-library-tone-indigo {
+    --flows-library-hue: var(--flows-tone-indigo);
+    --flows-library-color: var(--flows-tone-indigo-text);
+  }
+
+  .flows-library-tone-violet {
+    --flows-library-hue: var(--flows-tone-violet);
+    --flows-library-color: var(--flows-tone-violet-text);
+  }
+
+  .flows-library-tone-cyan {
+    --flows-library-hue: var(--flows-tone-cyan);
+    --flows-library-color: var(--flows-tone-cyan-text);
+  }
+
+  .flows-library-tone-fuchsia {
+    --flows-library-hue: var(--flows-tone-fuchsia);
+    --flows-library-color: var(--flows-tone-fuchsia-text);
+  }
+
+  .flows-library-tone-edit {
+    --flows-library-hue: var(--flows-tone-edit);
+    --flows-library-color: var(--flows-tone-edit-text);
+  }
+
+  .flows-pane .flows-canvas {
+    --xy-background-color: var(--background);
+    --xy-background-pattern-dots-color: var(--flows-canvas-dot);
+    --xy-edge-stroke: var(--flows-canvas-edge-stroke);
+    --xy-edge-stroke-selected: var(--flows-canvas-edge-stroke-selected);
+    --xy-connectionline-stroke: var(--flows-node-accent);
+    --xy-controls-button-background-color: var(--card);
+    --xy-controls-button-background-color-hover: var(--accent);
+    --xy-controls-button-color: var(--foreground);
+    --xy-controls-button-color-hover: var(--foreground);
+    --xy-controls-button-border-color: var(--border);
+    --xy-controls-box-shadow: var(--flows-canvas-controls-shadow);
+    --xy-minimap-background-color: var(--card);
+    --xy-minimap-mask-background-color: color-mix(
+      in srgb,
+      var(--background) 72%,
+      transparent
+    );
+    --xy-minimap-mask-stroke-color: var(--flows-canvas-minimap-mask-stroke);
+    --xy-minimap-node-background-color: var(--flows-canvas-minimap-node);
+    --xy-minimap-node-stroke-color: transparent;
+    --xy-node-boxshadow-selected: 0 0 0 1px var(--flows-canvas-selected-ring);
+    --xy-attribution-background-color: color-mix(
+      in srgb,
+      var(--card) 82%,
+      transparent
+    );
+  }
+
+  .flows-execution-log {
+    display: none;
+  }
+
+  @container (min-width: 1024px) {
+    .flows-execution-log {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      z-index: 8;
+      display: block;
+      width: min(660px, calc(100% - 440px));
+      overflow: hidden;
+      transform: translateX(-50%);
+      border: 1px solid var(--flows-node-border);
+      border-radius: 9px;
+      background: color-mix(in srgb, var(--card) 94%, transparent);
+      box-shadow: var(--flows-node-shadow);
+      backdrop-filter: blur(16px);
+    }
+  }
+
+  .flows-pane .react-flow__edge-path,
+  .flows-pane .react-flow__connection-path {
+    /* FlowSemanticEdge also sets this inline; the CSS path keeps connection previews rounded. */
+    stroke-linecap: round;
+  }
+
+  .flows-pane .react-flow__edge-path.flows-edge-path-foreground {
+    stroke: var(--flows-edge-text, currentColor);
+  }
+
+  /* Canvas is locked by default (no grab cursor); holding Space arms panning. */
+  .flows-pane .flows-canvas .react-flow__pane {
+    cursor: default;
+  }
+  .flows-pane .flows-canvas-pan .react-flow__pane {
+    cursor: grab;
+  }
+  .flows-pane .flows-canvas-pan .react-flow__pane.dragging {
+    cursor: grabbing;
+  }
+
+  .flows-pane .react-flow__controls {
+    @apply border-border/80 bg-card/80 rounded-lg border p-1 backdrop-blur-xl;
+  }
+
+  .flows-pane .react-flow__controls-button {
+    @apply rounded-md;
+  }
+
+  .flows-pane .react-flow__minimap {
+    @apply border-border/80 bg-card/75 rounded-lg border p-2 shadow-2xl backdrop-blur-xl;
+    /* The size itself comes from `getMinimapSize`, passed to <MiniMap style>, so
+       React Flow's pan math and the rendered box stay in sync. Those values
+       describe the svg, so opt this element out of Tailwind's global
+       border-box and let the padding and border sit outside them. */
+    box-sizing: content-box;
+    /* Constrain height on short viewports so the minimap shrinks and stays
+       inside the canvas rather than hanging off the bottom. The formula
+       reserves space for the top bar, tabs, and status bar (~450px combined),
+       with an 80px floor so it remains usable. */
+    max-height: max(80px, calc(100vh - 450px));
+  }
+
+  .flows-pane .react-flow__node.selected > div {
+    border-color: var(--flows-canvas-selected-ring);
+    box-shadow:
+      0 0 0 4px
+        color-mix(in srgb, var(--flows-canvas-selected-ring) 15%, transparent),
+      var(--flows-node-shadow);
+  }
+
+  .flows-edge-label {
+    border: 1px solid var(--flows-edge-border);
+    border-radius: 5px;
+    background: var(--flows-edge-bg);
+    box-shadow: var(--flows-node-shadow);
+    color: var(--flows-edge-text);
+    padding: 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  .flows-edge-tone-default {
+    --flows-edge-bg: var(--flows-node-bg);
+    --flows-edge-border: var(--flows-node-border);
+    --flows-edge-text: var(--flows-node-muted);
+  }
+
+  /* Each tone tints the node surface with its own hue, so the same declaration
+     yields a dark-tinted chip on the dark canvas and a pale one on the light
+     canvas. Only the label color is theme-specific. */
+  .flows-edge-tone-success {
+    --flows-edge-bg: color-mix(
+      in srgb,
+      var(--flows-tone-success) 12%,
+      var(--flows-node-bg)
+    );
+    --flows-edge-border: color-mix(
+      in srgb,
+      var(--flows-tone-success) 45%,
+      transparent
+    );
+    --flows-edge-text: var(--flows-tone-success-text);
+  }
+
+  .flows-edge-tone-danger {
+    --flows-edge-bg: color-mix(
+      in srgb,
+      var(--flows-tone-danger) 12%,
+      var(--flows-node-bg)
+    );
+    --flows-edge-border: color-mix(
+      in srgb,
+      var(--flows-tone-danger) 45%,
+      transparent
+    );
+    --flows-edge-text: var(--flows-tone-danger-text);
+  }
+
+  .flows-edge-tone-condition {
+    --flows-edge-bg: color-mix(
+      in srgb,
+      var(--flows-tone-indigo) 12%,
+      var(--flows-node-bg)
+    );
+    --flows-edge-border: color-mix(
+      in srgb,
+      var(--flows-tone-indigo) 45%,
+      transparent
+    );
+    --flows-edge-text: var(--flows-tone-indigo-text);
+  }
+
+  .flows-edge-tone-alternate {
+    --flows-edge-bg: color-mix(
+      in srgb,
+      var(--flows-tone-fuchsia) 12%,
+      var(--flows-node-bg)
+    );
+    --flows-edge-border: color-mix(
+      in srgb,
+      var(--flows-tone-fuchsia) 45%,
+      transparent
+    );
+    --flows-edge-text: var(--flows-tone-fuchsia-text);
+  }
+
+  .flows-edge-tone-parallel {
+    --flows-edge-bg: color-mix(
+      in srgb,
+      var(--flows-tone-violet) 12%,
+      var(--flows-node-bg)
+    );
+    --flows-edge-border: color-mix(
+      in srgb,
+      var(--flows-tone-violet) 45%,
+      transparent
+    );
+    --flows-edge-text: var(--flows-tone-violet-text);
+  }
+
+  .flows-edge-tone-join {
+    --flows-edge-bg: color-mix(
+      in srgb,
+      var(--flows-tone-cyan) 12%,
+      var(--flows-node-bg)
+    );
+    --flows-edge-border: color-mix(
+      in srgb,
+      var(--flows-tone-cyan) 45%,
+      transparent
+    );
+    --flows-edge-text: var(--flows-tone-cyan-text);
+  }
+
+  .flows-node-card {
+    position: relative;
+    min-width: 176px;
+    /* overflow stays visible so React Flow <Handle>s straddling the node edge
+       remain paintable + hit-testable; rounded-corner clipping happens on
+       .flows-node-inner instead. */
+    overflow: visible;
+    border: 1px solid var(--flows-node-border);
+    border-radius: 10px;
+    background: var(--flows-node-bg);
+    box-shadow: var(--flows-node-shadow);
+  }
+
+  .flows-node-type-review {
+    --flows-node-accent: var(--flows-tone-review);
+    --flows-node-accent-bg: color-mix(
+      in srgb,
+      var(--flows-tone-review) 10%,
+      transparent
+    );
+    --flows-node-accent-border: color-mix(
+      in srgb,
+      var(--flows-tone-review) 32%,
+      transparent
+    );
+    --flows-node-accent-text: var(--flows-tone-review-text);
+  }
+
+  .flows-node-type-edit {
+    --flows-node-accent: var(--flows-tone-edit);
+    --flows-node-accent-bg: color-mix(
+      in srgb,
+      var(--flows-tone-edit) 10%,
+      transparent
+    );
+    --flows-node-accent-border: color-mix(
+      in srgb,
+      var(--flows-tone-edit) 30%,
+      transparent
+    );
+    --flows-node-accent-text: var(--flows-tone-edit-text);
+  }
+
+  .flows-node-type-violet {
+    --flows-node-accent: var(--flows-tone-violet);
+    --flows-node-accent-bg: color-mix(
+      in srgb,
+      var(--flows-tone-violet) 10%,
+      transparent
+    );
+    --flows-node-accent-border: color-mix(
+      in srgb,
+      var(--flows-tone-violet) 30%,
+      transparent
+    );
+    --flows-node-accent-text: var(--flows-tone-violet-text);
+  }
+
+  .flows-node-type-indigo {
+    --flows-node-accent: var(--flows-tone-indigo);
+    --flows-node-accent-bg: color-mix(
+      in srgb,
+      var(--flows-tone-indigo) 10%,
+      transparent
+    );
+    --flows-node-accent-border: color-mix(
+      in srgb,
+      var(--flows-tone-indigo) 30%,
+      transparent
+    );
+    --flows-node-accent-text: var(--flows-tone-indigo-text);
+  }
+
+  .flows-node-type-cyan {
+    --flows-node-accent: var(--flows-tone-cyan);
+    --flows-node-accent-bg: color-mix(
+      in srgb,
+      var(--flows-tone-cyan) 9%,
+      transparent
+    );
+    --flows-node-accent-border: color-mix(
+      in srgb,
+      var(--flows-tone-cyan) 28%,
+      transparent
+    );
+    --flows-node-accent-text: var(--flows-tone-cyan-text);
+  }
+
+  .flows-node-type-fuchsia {
+    --flows-node-accent: var(--flows-tone-fuchsia);
+    --flows-node-accent-bg: color-mix(
+      in srgb,
+      var(--flows-tone-fuchsia) 9%,
+      transparent
+    );
+    --flows-node-accent-border: color-mix(
+      in srgb,
+      var(--flows-tone-fuchsia) 28%,
+      transparent
+    );
+    --flows-node-accent-text: var(--flows-tone-fuchsia-text);
+  }
+
+  .flows-node-type-muted {
+    --flows-node-accent: var(--flows-tone-muted);
+    --flows-node-accent-bg: var(--accent);
+    --flows-node-accent-border: var(--border);
+    --flows-node-accent-text: var(--flows-tone-muted-text);
+  }
+
+  /* Trigger (start) nodes: neutral zinc tile with an indigo-tinted card
+     border so the pipeline's entry point reads at a glance. */
+  .flows-node-type-trigger {
+    --flows-node-accent: var(--flows-tone-neutral);
+    --flows-node-accent-bg: var(--accent);
+    --flows-node-accent-border: var(--border);
+    --flows-node-accent-text: var(--flows-tone-neutral);
+    border-color: color-mix(in srgb, var(--flows-tone-indigo) 40%, transparent);
+  }
+
+  .flows-node-inner {
+    position: relative;
+    overflow: hidden;
+    border-radius: 9px;
+    padding: 11px 12px;
+  }
+
+  .flows-node-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .flows-node-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--flows-node-accent-border);
+    border-radius: 8px;
+    background: var(--flows-node-accent-bg);
+    color: var(--flows-node-accent);
+  }
+
+  .flows-node-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .flows-node-kicker {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    line-height: 1;
+    text-transform: uppercase;
+    color: var(--flows-node-muted);
+  }
+
+  .flows-node-title {
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--flows-node-title);
+  }
+
+  .flows-node-meta {
+    color: var(--flows-node-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 17px;
+  }
+
+  .flows-node-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--flows-node-chip-border);
+    border-radius: 5px;
+    background: var(--flows-node-chip-bg);
+    color: var(--flows-node-chip-text);
+    padding: 2px 7px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 14px;
+  }
+
+  .flows-node-chip-accent {
+    border-color: var(--flows-node-accent-border);
+    background: var(--flows-node-accent-bg);
+    color: var(--flows-node-accent-text);
+  }
+
+  .flows-node-error-label {
+    color: var(--accent-red);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  /* Ports read like sockets: dark fill with a zinc ring, matching the edge
+     stroke. Semantic handles keep a colored ring for affordance. */
+  .flows-node-handle {
+    width: 10px !important;
+    height: 10px !important;
+    border: 1.5px solid var(--flows-handle-border) !important;
+    background: var(--flows-handle-bg) !important;
+  }
+
+  /* Enlarge the pointer hit area without growing the visible dot, so
+     connection drags are easy to start/land. */
+  .flows-node-handle::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+
+  .flows-node-handle-branch-primary {
+    border-color: var(--flows-node-accent) !important;
+  }
+
+  .flows-node-handle-branch-secondary {
+    border-color: var(--flows-node-accent-text) !important;
+  }
+
+  .flows-node-handle-danger {
+    border-color: var(--accent-red) !important;
+  }
+
+  .flows-node-handle-success {
+    border-color: var(--accent-green) !important;
+  }
+
+  .flows-pane
+    .flows-canvas
+    :is(.react-flow__minimap, .react-flow__minimap-svg) {
+    pointer-events: none;
+  }
+
+  .flows-pane :is(input, select, textarea) {
+    color-scheme: inherit;
+  }
+}

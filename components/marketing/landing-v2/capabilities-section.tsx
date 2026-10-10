@@ -1,12 +1,7 @@
-"use client";
-
 import Link from "next/link";
 
-import {
-  AccentPeriod,
-  ArrowRight,
-  Eyebrow,
-} from "@/components/marketing/mpx-chrome";
+import { AccentPeriod, Eyebrow } from "@/components/marketing/mpx-static";
+import { ArrowRight } from "@/components/marketing/mpx-chrome-icons";
 
 import { VercelFill } from "@/components/settings/icons";
 

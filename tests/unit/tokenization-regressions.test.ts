@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+const dashboardStylesUrl = new URL("../../app/dashboard.css", import.meta.url);
 const globalsUrl = new URL("../../app/globals.css", import.meta.url);
 const globalErrorUrl = new URL("../../app/global-error.tsx", import.meta.url);
 const monacoPaneUrl = new URL(
@@ -86,7 +87,7 @@ test("application theme tokens carry the Mogplex paper and orange brand roles", 
 test("dashboard chrome exposes the branded shell and compact navigation mark", async () => {
   const [globals, dashboardLayout, topBar, statusBar, appSidebar] =
     await Promise.all([
-      readFile(globalsUrl, "utf8"),
+      readFile(dashboardStylesUrl, "utf8"),
       readFile(dashboardLayoutUrl, "utf8"),
       readFile(topBarUrl, "utf8"),
       readFile(statusBarUrl, "utf8"),

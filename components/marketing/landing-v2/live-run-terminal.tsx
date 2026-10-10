@@ -1,12 +1,14 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import type { TerminalLine } from "./data";
 
 interface LiveRunTerminalProps {
   tab: "terminal" | "logs" | "events";
   setTab: (tab: "terminal" | "logs" | "events") => void;
   visibleLines: TerminalLine[];
-  deploySeconds: number;
+  deploySeconds: ReactNode;
 }
 
 export function LiveRunTerminal({
@@ -111,7 +113,7 @@ export function LiveRunTerminal({
               </span>
               <span className="t-msg is-plain">
                 {line.plain}
-                {line.dyn ? ` (${deploySeconds}s)` : ""}
+                {line.dyn ? <> ({deploySeconds}s)</> : null}
               </span>
             </p>
           ))}

@@ -1,6 +1,4 @@
-"use client";
-
-import { Eyebrow } from "@/components/marketing/mpx-chrome";
+import { Eyebrow } from "@/components/marketing/mpx-static";
 
 import { proofItems } from "./data";
 

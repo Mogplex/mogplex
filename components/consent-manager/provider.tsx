@@ -1,13 +1,12 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import {
-  ConsentBanner,
-  ConsentDialog,
   ConsentManagerProvider,
   policyPackPresets,
-} from '@c15t/nextjs'
+  useConsentManager,
+} from '@c15t/nextjs/headless'
 import { isPublicRoutePath } from '@/lib/auth-route-policy'
 
 type ConsentManagerClientProps = {
@@ -16,6 +15,17 @@ type ConsentManagerClientProps = {
 }
 
 const consentCategories = ['necessary', 'measurement', 'marketing'] as const
+
+const ConsentUi = lazy(() => import('./ui'))
+
+function ConsentSurfaces() {
+  const { activeUI } = useConsentManager()
+  return (
+    <Suspense fallback={null}>
+      {activeUI !== 'none' ? <ConsentUi /> : null}
+    </Suspense>
+  )
+}
 
 const legalLinks = {
   privacyPolicy: {
@@ -108,8 +118,7 @@ export function ConsentManagerClient({
 
   return (
     <ConsentManagerProvider options={options}>
-      <ConsentBanner legalLinks={['privacyPolicy', 'termsOfService']} />
-      <ConsentDialog />
+      <ConsentSurfaces />
       {children}
     </ConsentManagerProvider>
   )
