@@ -29,6 +29,10 @@ const appSidebarUrl = new URL(
 
 test("tokenized shadows preserve semantic shadow tokens", async () => {
   const globals = await readFile(globalsUrl, "utf8");
+  const theme = await readFile(
+    new URL("../../app/tailwind-theme.css", import.meta.url),
+    "utf8"
+  );
 
   assert.match(
     globals,
@@ -38,8 +42,8 @@ test("tokenized shadows preserve semantic shadow tokens", async () => {
     globals,
     /--app-shadow-panel: 0 18px 50px oklch\(10\.88% 0\.006 132 \/ 14%\);/
   );
-  assert.match(globals, /--shadow-app-card: var\(--app-shadow-card\)/);
-  assert.match(globals, /--shadow-app-panel: var\(--app-shadow-panel\)/);
+  assert.match(theme, /--shadow-app-card: var\(--app-shadow-card\)/);
+  assert.match(theme, /--shadow-app-panel: var\(--app-shadow-panel\)/);
 });
 
 test("global error keeps semantic tokens in their dark scope", async () => {

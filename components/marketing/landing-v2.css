@@ -292,6 +292,7 @@
 .mpx-hero h1.mpx-rise {
   opacity: 1;
   animation-name: mpx-heading-rise;
+  animation-fill-mode: both;
 }
 
 @keyframes mpx-heading-rise {
@@ -3584,6 +3585,10 @@ path.mpx-dag-line,
 
   .mpx-rise {
     opacity: 1;
+  }
+
+  .mpx-hero h1.mpx-rise {
+    animation: none;
   }
 
   .mpx-progress i {

@@ -1,6 +1,6 @@
+@import "./tailwind-theme.css";
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 @import "./control-project-colors.css";
-@reference "./globals.css";
 
 /* App-only utilities and chrome never block the public marketing page. */
 @source "./(dashboard)";

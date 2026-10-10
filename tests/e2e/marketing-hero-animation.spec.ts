@@ -1,5 +1,29 @@
 import { expect, test } from "@playwright/test";
 
+test("visible headline rises without jumping down after its entrance delay", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  const position = await page
+    .locator(".mpx-hero h1")
+    .evaluate(async (heading) => {
+      await document.fonts.ready;
+      const animation = heading.getAnimations()[0];
+      animation.pause();
+      animation.currentTime = 0;
+      const before = heading.getBoundingClientRect().y;
+      animation.currentTime = (animation.effect!.getTiming().delay ?? 0) + 1;
+      return {
+        before,
+        after: heading.getBoundingClientRect().y,
+        opacity: getComputedStyle(heading).opacity,
+      };
+    });
+  expect(position.opacity).toBe("1");
+  expect(position.after).toBeLessThanOrEqual(position.before + 0.1);
+});
+
 test("hero reserves its responsive geometry before hydration", async ({
   browser,
 }) => {
