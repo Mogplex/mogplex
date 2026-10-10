@@ -10,6 +10,10 @@ import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import type { AiCall, SandboxCallContext } from "@/lib/types";
 import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
 import { isUuid } from "@/lib/uuid";
+import {
+  callSandboxRecordId,
+  sandboxCallsFilter,
+} from "@/lib/observability/sandbox-scope";
 
 type AiCallRow = Record<string, unknown>;
 type QueryResult = {
@@ -160,12 +164,7 @@ function buildSearchPattern(
 }
 
 function readSandboxRecordId(call: AiCallRow): string | null {
-  const { metadata } = call;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
-    return null;
-  const sandboxRecordId = (metadata as Record<string, unknown>)
-    .sandbox_record_id;
-  return normalizeOptionalText(sandboxRecordId);
+  return callSandboxRecordId(call.metadata);
 }
 
 function buildSandboxContext(row: SandboxContextRow): SandboxCallContext {
@@ -295,11 +294,7 @@ function applySharedFilters(
     nextQuery = nextQuery.eq("status", input.status);
   if (input.repoId) nextQuery = nextQuery.eq("repo_id", input.repoId);
   if (input.sandboxRecordId)
-    nextQuery = nextQuery.filter(
-      "metadata->>sandbox_record_id",
-      "eq",
-      input.sandboxRecordId
-    );
+    nextQuery = nextQuery.or(sandboxCallsFilter(input.sandboxRecordId));
   if (input.conversationId)
     nextQuery = nextQuery.eq("conversation_id", input.conversationId);
   if (input.callIds) nextQuery = nextQuery.in("id", input.callIds);
@@ -352,6 +347,12 @@ export function createObservabilityCallsGetHandler(
     const status = params.get("status");
     const repoId = params.get("repo_id");
     const sandboxRecordId = params.get("sandbox_record_id");
+    if (sandboxRecordId && !isUuid(sandboxRecordId)) {
+      return NextResponse.json(
+        { error: "Invalid sandbox record ID" },
+        { status: 400 }
+      );
+    }
     const liveOnly = params.get("live_only") === "true";
     const from = params.get("from");
     const to = params.get("to");

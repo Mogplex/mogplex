@@ -149,16 +149,19 @@ function terminalText(value: unknown): string | null {
   return safe || null;
 }
 
-function boundedTerminalLines(values: unknown[]): string[] {
-  return values
+function boundedTerminalLines(
+  values: unknown[],
+  fullOutput: boolean
+): string[] {
+  const lines = values
     .flatMap((value) => terminalText(value)?.split(/\r?\n/) ?? [])
     .map((line) =>
-      line.length > MAX_TERMINAL_LINE_LENGTH
+      !fullOutput && line.length > MAX_TERMINAL_LINE_LENGTH
         ? `${line.slice(0, MAX_TERMINAL_LINE_LENGTH)}…`
         : line
     )
-    .filter(Boolean)
-    .slice(-MAX_TERMINAL_LINES);
+    .filter(Boolean);
+  return fullOutput ? lines : lines.slice(-MAX_TERMINAL_LINES);
 }
 
 function isTerminalExecutionTool(name: string) {
@@ -171,7 +174,8 @@ function isSandboxLaunchTool(name: string) {
 
 function terminalEntryFromPart(
   part: Parameters<typeof getToolOrDynamicToolName>[0],
-  id: string
+  id: string,
+  fullOutput: boolean
 ): TerminalActivityEntry | null {
   const toolName = getToolOrDynamicToolName(part);
   const commandTool = isTerminalExecutionTool(toolName);
@@ -199,17 +203,20 @@ function terminalEntryFromPart(
             : 0) / 1000
         )}s`
       : null;
-  const lines = boundedTerminalLines([
-    cleanupRecoveryLine,
-    output.stdout,
-    output.stderr,
-    output.output,
-    "output" in part && typeof part.output === "string"
-      ? part.output
-      : undefined,
-    output.error,
-    "errorText" in part ? part.errorText : undefined,
-  ]);
+  const lines = boundedTerminalLines(
+    [
+      cleanupRecoveryLine,
+      output.stdout,
+      output.stderr,
+      output.output,
+      "output" in part && typeof part.output === "string"
+        ? part.output
+        : undefined,
+      output.error,
+      "errorText" in part ? part.errorText : undefined,
+    ],
+    fullOutput
+  );
 
   return {
     id,
@@ -228,7 +235,8 @@ function terminalEntryFromPart(
  * terminal transcript rather than a second copy of the conversation.
  */
 export function buildTerminalActivityEntries(
-  messages: UIMessage[]
+  messages: UIMessage[],
+  options: { fullOutput?: boolean } = {}
 ): TerminalActivityEntry[] {
   const entries: TerminalActivityEntry[] = [];
 
@@ -238,7 +246,11 @@ export function buildTerminalActivityEntries(
     }
     for (const [index, part] of message.parts.entries()) {
       if (!isToolUIPart(part)) continue;
-      const entry = terminalEntryFromPart(part, `${message.id}-${index}`);
+      const entry = terminalEntryFromPart(
+        part,
+        `${message.id}-${index}`,
+        options.fullOutput ?? false
+      );
       if (entry) {
         const metadata = message.metadata as
           | { workerBranch?: unknown }
