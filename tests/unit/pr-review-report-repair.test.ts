@@ -154,6 +154,33 @@ test("a reviewer that filed its report is not asked again", async () => {
   assert.equal(harness.source, "structured");
 });
 
+test("an agent that never starts reviewing cannot become a clean review through report repair", async () => {
+  const { calls, verdictMissing } = await runReview([
+    {
+      text: "MOGPLEX_FLOW_HANDOFF: review not started",
+      steps: [makeStep({ text: "Review not started" })],
+    },
+    {
+      text: "",
+      steps: [
+        makeStep({
+          toolCalls: [
+            {
+              toolName: "reportReview",
+              input: {
+                hasIssues: false,
+                summary: "No diff was available to review.",
+              },
+            },
+          ],
+        }),
+      ],
+    },
+  ]);
+  assert.equal(calls.length, 1);
+  assert.equal(verdictMissing, true);
+});
+
 test("a failed follow-up leaves the finished review intact and without a verdict", async () => {
   const originalWarn = console.warn;
   console.warn = () => {};

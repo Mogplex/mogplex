@@ -4,6 +4,7 @@ import { mergeAutomationAgentResults } from "./automation-job-metadata";
 import { AutomationModelExecutionError } from "./automation-model-execution-errors";
 import {
   readReviewReportState,
+  hasReviewToolCalls,
   REPORT_REVIEW_TOOL_NAME,
   type ReviewReportState,
 } from "./pr-review-report-state";
@@ -136,7 +137,11 @@ export async function fileMissingReviewReport(
   input: ReviewerFollowUp
 ): Promise<AutomationAgentResult> {
   const state = readReviewReportState(input.result.steps);
-  if (state.kind === "filed") return input.result;
+  if (
+    state.kind === "filed" ||
+    (state.kind === "missing" && !hasReviewToolCalls(input.result.steps))
+  )
+    return input.result;
 
   try {
     return (

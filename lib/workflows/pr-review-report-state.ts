@@ -3,6 +3,13 @@ import { isRecord, toReviewFindings } from "./pr-review-harness-utils";
 
 export const REPORT_REVIEW_TOOL_NAME = "reportReview";
 
+/** Native reviews obtain their evidence through tools before filing a report. */
+export function hasReviewToolCalls(
+  steps: AutomationAgentReviewResult["steps"]
+): boolean {
+  return steps.some((step) => (step.toolCalls?.length ?? 0) > 0);
+}
+
 export type ReviewReportState =
   | { kind: "missing" }
   | { kind: "filed"; report: Record<string, unknown> }
