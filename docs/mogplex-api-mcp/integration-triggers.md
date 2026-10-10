@@ -30,8 +30,8 @@ A key held to automations gets `403` with code `AUTOMATION_REQUIRED` on a
 direct-execution surface, before any run, sandbox, branch or billable request
 is created. That covers `POST /api/v1/mogplex/runs`, `POST /api/v1/mogplex/sandboxes`,
 the `/api/sandbox` routes, hosted CLI inference, creating, editing, publishing,
-retargeting or deleting automations, repository environment variables, and
-writes to account settings and saved MCP servers. The same rules apply through
+retargeting or deleting automations, PR review reruns, repository environment
+variables, and writes to account settings and saved MCP servers. The same rules apply through
 the MCP endpoint, because each MCP tool calls the API with the caller's
 credential. Such a key can trigger only automations with an API trigger.
 
@@ -39,7 +39,7 @@ credential. Such a key can trigger only automations with an API trigger.
 
 1. Create an automation whose start node uses the **API (integrations)** event.
 2. Restrict the start node to the repositories the integration may build in.
-   A trigger for any other repository is refused with `REPO_NOT_ALLOWED`.
+   A trigger for any other repository is refused with `403 FORBIDDEN`.
 3. Declare the inputs under **Inputs (JSON)**. Each field has a `key`
    (lowercase letters, digits and underscores), a `type` (`string`, `integer`,
    `boolean` or `json`), and optionally `required`, `description`, and for
@@ -100,7 +100,6 @@ returns to the same branch. A new build needs a new key.
 ```txt
 GET  /api/v1/mogplex/automations/{automationId}/runs/{jobRunId}
 POST /api/v1/mogplex/automations/{automationId}/runs/{jobRunId}/cancel
-GET  /api/v1/mogplex/automations/{automationId}/runs/{jobRunId}/artifact?path=.mogplex/artifacts/<name>.json
 ```
 
 The run detail carries `status`, node runs, AI calls and `metadata`. Its
@@ -110,8 +109,7 @@ accepted snapshot) and its `input_hash`, `working_branch`, and `trigger`
 the automation's **Runs** tab, with the version, trigger, input, branch and
 links to the transcript and sandbox.
 
-The artifact endpoint reads a JSON file the run committed under
-`.mogplex/artifacts/` on its working branch, at the commit the branch points
-to once the run has succeeded. It returns `content`, `branch` and `commitSha`.
-The run never merges; publishing what it built stays with the integration's
-own review step.
+The agent commits and pushes to `workingBranch` and never pushes to the
+default branch, merges, or enables auto-merge. It opens a pull request only
+when the automation's instructions ask for one. Reading what it built, and
+publishing it, stays with the integration's own review step.

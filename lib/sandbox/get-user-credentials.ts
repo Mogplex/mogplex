@@ -8,8 +8,9 @@ import {
 } from "@/lib/platform-access";
 import { getUserId } from "@/lib/auth";
 import {
+  assertMayExecuteInTeam,
   getDirectExecutionUser,
-  mayExecuteInTeam,
+  type SandboxKeyRestrictedError,
 } from "@/lib/sandbox/direct-execution-user";
 import { resolveSandboxBilling } from "@/lib/sandbox/billing";
 import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
@@ -41,20 +42,19 @@ export class SandboxCapabilityDeniedError extends Error {
 }
 
 /**
- * Name-based typeguard. tsx + node:test can load the same module under two
- * URLs (path-alias vs relative-path resolution) so `instanceof` fails
- * across the boundary even though both classes have identical shape. The
- * name string is the stable contract.
+ * Name-based typeguard for a 403 from the credentials boundary: a missing team
+ * capability, or a Mogplex API key held to automations. tsx + node:test can
+ * load a module under two URLs, so `instanceof` fails; the name is the contract.
  */
-export function isSandboxCapabilityDeniedError(
+export function isSandboxAccessDeniedError(
   err: unknown
-): err is SandboxCapabilityDeniedError {
-  return (
-    err instanceof Error &&
-    err.name === "SandboxCapabilityDeniedError" &&
-    typeof (err as { capability?: unknown }).capability === "string" &&
-    (err as { status?: unknown }).status === 403
-  );
+): err is SandboxCapabilityDeniedError | SandboxKeyRestrictedError {
+  if (!(err instanceof Error) || (err as { status?: unknown }).status !== 403) {
+    return false;
+  }
+  return err.name === "SandboxCapabilityDeniedError"
+    ? typeof (err as { capability?: unknown }).capability === "string"
+    : err.name === "SandboxKeyRestrictedError";
 }
 
 /**
@@ -161,6 +161,7 @@ export async function getUserCredentials() {
  * throws `SandboxCapabilityDeniedError` if the required capability isn't
  * granted. This blocks VM provisioning at the credentials boundary so
  * viewer-role members can't reach the launch path even via a forged body.
+ * A key held to automations throws `SandboxKeyRestrictedError` instead.
  */
 export async function getSandboxServiceCredentials(
   request?: Request,
@@ -179,7 +180,8 @@ export async function getSandboxServiceCredentials(
   const actor = delegatedUserId
     ? { userId: delegatedUserId, viaApiKey: false }
     : await getDirectExecutionUser();
-  if (!actor || !(await mayExecuteInTeam(actor, options?.teamId))) return null;
+  if (!actor) return null;
+  await assertMayExecuteInTeam(actor, options?.teamId);
   const { userId } = actor;
 
   if (options?.requireCapability) {

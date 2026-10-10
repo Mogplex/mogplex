@@ -16,25 +16,45 @@ async function loadCapabilitiesModule() {
 }
 
 test("SandboxCapabilityDeniedError carries 403 and the missing cap", async () => {
-  const { SandboxCapabilityDeniedError, isSandboxCapabilityDeniedError } =
+  const { SandboxCapabilityDeniedError, isSandboxAccessDeniedError } =
     await loadCredentialsModule();
   const err = new SandboxCapabilityDeniedError("tools.bash");
   assert.equal(err.status, 403);
   assert.equal(err.capability, "tools.bash");
   assert.match(err.message, /tools\.bash/);
   assert.ok(err instanceof Error);
-  assert.equal(isSandboxCapabilityDeniedError(err), true);
+  assert.equal(isSandboxAccessDeniedError(err), true);
 });
 
-test("isSandboxCapabilityDeniedError rejects spoofed non-403 errors", async () => {
-  const { isSandboxCapabilityDeniedError } = await loadCredentialsModule();
+test("isSandboxAccessDeniedError rejects spoofed non-403 errors", async () => {
+  const { isSandboxAccessDeniedError } = await loadCredentialsModule();
   const err = Object.assign(new Error("spoofed"), {
     name: "SandboxCapabilityDeniedError",
     capability: "tools.bash",
     status: 500,
   });
 
-  assert.equal(isSandboxCapabilityDeniedError(err), false);
+  assert.equal(isSandboxAccessDeniedError(err), false);
+});
+
+test("isSandboxAccessDeniedError accepts a key held to automations", async () => {
+  const { isSandboxAccessDeniedError } = await loadCredentialsModule();
+  const { SandboxKeyRestrictedError } =
+    await import("../../lib/sandbox/direct-execution-user");
+
+  assert.equal(
+    isSandboxAccessDeniedError(new SandboxKeyRestrictedError("key")),
+    true
+  );
+  assert.equal(
+    isSandboxAccessDeniedError(
+      Object.assign(new Error("spoofed"), {
+        name: "SandboxKeyRestrictedError",
+        status: 500,
+      })
+    ),
+    false
+  );
 });
 
 test("readActiveTeamIdHeader returns null for missing, whitespace, or malformed values", async () => {

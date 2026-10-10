@@ -313,7 +313,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     name: "mogplex_rerun_pr_review",
     title: "Rerun Mogplex PR Review",
     description:
-      'Queue another Mogplex PR Review run for a pull request. Equivalent to clicking the "Re-run review" button on the Mogplex PR Review GitHub check run.',
+      'Queue another Mogplex PR Review run for a pull request. Equivalent to clicking the "Re-run review" button on the Mogplex PR Review GitHub check run. A Mogplex API key set to Automations only, or any key on a team whose owner holds keys to automations, is refused with AUTOMATION_REQUIRED.',
     inputSchema: objectSchema({
       properties: {
         repoId: {

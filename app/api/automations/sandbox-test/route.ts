@@ -9,7 +9,7 @@ import {
 } from "@/lib/repo-settings";
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
   resolveSandboxTarget,
   resolveSandboxTargetCredentials,
 } from "@/lib/sandbox/get-user-credentials";
@@ -97,7 +97,7 @@ export function createAutomationSandboxTestPostHandler(
         requireCapability: "tools.bash",
       });
     } catch (error) {
-      if (isSandboxCapabilityDeniedError(error)) {
+      if (isSandboxAccessDeniedError(error)) {
         return NextResponse.json(
           { error: error.message },
           { status: error.status }

@@ -4,7 +4,7 @@ import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { getSandbox } from "@/lib/sandbox/client";
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
@@ -180,7 +180,7 @@ async function handleConnect(
       requireCapability: "tools.bash",
     });
   } catch (error) {
-    if (isSandboxCapabilityDeniedError(error)) {
+    if (isSandboxAccessDeniedError(error)) {
       return NextResponse.json(
         { error: error.message },
         { status: error.status }

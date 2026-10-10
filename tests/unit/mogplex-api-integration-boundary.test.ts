@@ -169,6 +169,21 @@ test("automations-only keys cannot change repository environment variables", asy
   );
 });
 
+test("automations-only keys cannot rerun a PR review", async () => {
+  const { createMogplexApiPrReviewRerunPostHandler } =
+    await import("../../app/api/v1/mogplex/pr-reviews/rerun/route");
+  const handler = createMogplexApiPrReviewRerunPostHandler({
+    resolveApiKey,
+    loadRepo: sideEffect("loadRepo"),
+    enqueueJobRunRetry: sideEffect("enqueueJobRunRetry"),
+  });
+  await assertAutomationRequired(
+    await handler(
+      patRequest("/pr-reviews/rerun", "POST", { repoId: "repo-1", prNumber: 7 })
+    )
+  );
+});
+
 test("automations-only keys can trigger an automation with an idempotency key and are recorded as the trigger", async () => {
   const { createMogplexApiAutomationTriggerPostHandler } =
     await import("../../app/api/v1/mogplex/automations/[automationId]/trigger/route");
@@ -269,6 +284,7 @@ test("full-access keys cannot start work directly on a team that holds keys to a
   const collection = await import("../../app/api/v1/mogplex/automations/route");
   const publish =
     await import("../../app/api/v1/mogplex/automations/[automationId]/publish/route");
+  const rerun = await import("../../app/api/v1/mogplex/pr-reviews/rerun/route");
 
   const responses = [
     await runs.createMogplexApiRunsPostHandler({
@@ -304,6 +320,14 @@ test("full-access keys cannot start work directly on a team that holds keys to a
       loadTeamKeyAccess: restrictedTeam,
       publishAutomation: sideEffect("publishAutomation"),
     })(patRequest("/automations/flow-1/publish", "POST"), automationParams),
+    await rerun.createMogplexApiPrReviewRerunPostHandler({
+      resolveApiKey: resolveFullAccessKey,
+      loadTeamKeyAccess: restrictedTeam,
+      loadRepo: sideEffect("loadRepo"),
+      enqueueJobRunRetry: sideEffect("enqueueJobRunRetry"),
+    })(
+      patRequest("/pr-reviews/rerun", "POST", { repoId: "repo-1", prNumber: 7 })
+    ),
   ];
   for (const response of responses) {
     assert.match(await assertAutomationRequired(response), /team owner/);

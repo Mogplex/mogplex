@@ -7,7 +7,7 @@ import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 // specific values (getSandboxByName=false, resumeSandboxByName=true).
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import { normalizeRootDirectory } from "@/lib/repo-settings";
@@ -167,7 +167,7 @@ export async function loadOwnedSandboxRouteRecord<
       requireCapability: options.requireCapability,
     });
   } catch (error) {
-    if (isSandboxCapabilityDeniedError(error)) {
+    if (isSandboxAccessDeniedError(error)) {
       return { ok: false, status: error.status, error: error.message };
     }
     throw error;

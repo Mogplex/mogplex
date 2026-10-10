@@ -399,7 +399,10 @@ export function StartInspector({
       />
       {SINGLE_INSTALLATION_TRIGGER_EVENTS.has(node.data.event) ? (
         <ExternalTriggerTestPanel
-          key={`${selectedFlow.id}:${node.id}:${node.data.event}`}
+          // Declared API inputs reshape the sample payload, so start it over.
+          key={`${selectedFlow.id}:${node.id}:${node.data.event}:${
+            node.data.event === "api" ? JSON.stringify(node.data.inputFields ?? []) : ""
+          }`}
           node={node}
           dirty={dirty}
           flowActive={selectedFlow.status === "active"}

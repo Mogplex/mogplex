@@ -4,7 +4,7 @@ import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getSandbox, listVercelSandboxes } from "@/lib/sandbox/client";
@@ -132,7 +132,7 @@ export function createSandboxExecPostHandler(
         requireCapability: "tools.bash",
       });
     } catch (error) {
-      if (isSandboxCapabilityDeniedError(error)) {
+      if (isSandboxAccessDeniedError(error)) {
         return NextResponse.json(
           { error: error.message },
           { status: error.status }

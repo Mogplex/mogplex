@@ -226,6 +226,41 @@ export function validateAutomationInput(
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value };
 }
 
+const SAMPLE_STRINGS = ["example", "example-1", "1", "a"];
+
+function sampleValue(field: AutomationInputField) {
+  switch (field.type) {
+    case "integer":
+      return 1;
+    case "boolean":
+      return false;
+    case "json":
+      return {};
+    case "string":
+      return [...(field.enum ?? []), ...SAMPLE_STRINGS].find(
+        (candidate) => validateString(field, candidate) === null
+      );
+  }
+}
+
+/**
+ * A starting test payload for the inspector, with a value for each field that
+ * passes the field's own rules. When no sample fits, such as a strict pattern,
+ * a required field is left empty for the author to fill in and an optional one
+ * is left out, so it can't fail the test on its own.
+ */
+export function sampleAutomationInput(
+  fields: readonly AutomationInputField[]
+): Record<string, unknown> {
+  const sample: Record<string, unknown> = {};
+  for (const field of fields) {
+    const value = sampleValue(field);
+    if (value !== undefined) sample[field.key] = value;
+    else if (field.required) sample[field.key] = "";
+  }
+  return sample;
+}
+
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   if (isRecord(value)) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
 import { getSandbox } from "@/lib/sandbox/client";
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
@@ -49,7 +49,7 @@ export async function POST(
       requireCapability: "tools.bash",
     });
   } catch (error) {
-    if (isSandboxCapabilityDeniedError(error)) {
+    if (isSandboxAccessDeniedError(error)) {
       return NextResponse.json(
         { error: error.message },
         { status: error.status }

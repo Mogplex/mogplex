@@ -16,8 +16,18 @@ export function isApiKeyAccess(value: unknown): value is ApiKeyAccess {
   return value === "full" || value === "automations";
 }
 
-/** A stored value read from the database. Anything unexpected reads as the restrictive level. */
+/**
+ * A stored value read from the database. Anything unexpected reads as the
+ * restrictive level, and is logged so a bad row or migration gets noticed.
+ */
 export function readStoredApiKeyAccess(value: unknown): ApiKeyAccess {
   if (value === null || value === undefined) return "full";
-  return value === "full" ? "full" : "automations";
+  if (isApiKeyAccess(value)) return value;
+  console.warn(
+    "[api-key-access] unknown stored access; treating as automations",
+    {
+      value: String(value).slice(0, 40),
+    }
+  );
+  return "automations";
 }

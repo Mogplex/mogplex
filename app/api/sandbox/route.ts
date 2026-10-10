@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isSandboxCapabilityDeniedError } from "@/lib/sandbox/get-user-credentials";
+import { isSandboxAccessDeniedError } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { CLI_VISIBLE_STATUSES } from "./_lib/constants";
@@ -70,7 +70,7 @@ export function createSandboxPostHandler(
         requireCapability: "tools.bash",
       });
     } catch (error) {
-      if (isSandboxCapabilityDeniedError(error)) {
+      if (isSandboxAccessDeniedError(error)) {
         return NextResponse.json(
           { error: error.message },
           { status: error.status }
@@ -139,9 +139,22 @@ export function createSandboxGetHandler(
 
   return async function GET(request: Request) {
     const activeTeamId = readActiveTeamIdHeader(request);
-    const baseCreds = await deps.getSandboxServiceCredentials(request, {
-      allowInternal: true,
-    });
+    let baseCreds: Awaited<
+      ReturnType<typeof deps.getSandboxServiceCredentials>
+    >;
+    try {
+      baseCreds = await deps.getSandboxServiceCredentials(request, {
+        allowInternal: true,
+      });
+    } catch (error) {
+      if (isSandboxAccessDeniedError(error)) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.status }
+        );
+      }
+      throw error;
+    }
     if (!baseCreds)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

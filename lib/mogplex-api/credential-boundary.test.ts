@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isAutomationOnly,
   readStoredApiKeyAccess,
@@ -55,12 +55,23 @@ describe("readStoredApiKeyAccess", () => {
     expect(readStoredApiKeyAccess(null)).toBe("full");
   });
 
-  it("should read an unexpected value as the restrictive level", () => {
-    expect(readStoredApiKeyAccess("admin")).toBe("automations");
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("should keep the stored levels", () => {
+  it("should read an unexpected value as the restrictive level and log it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(readStoredApiKeyAccess("admin")).toBe("automations");
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("unknown stored access"),
+      { value: "admin" }
+    );
+  });
+
+  it("should keep the stored levels without logging", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(readStoredApiKeyAccess("full")).toBe("full");
     expect(readStoredApiKeyAccess("automations")).toBe("automations");
+    expect(warn).not.toHaveBeenCalled();
   });
 });

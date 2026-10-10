@@ -100,6 +100,31 @@ test("trigger presets configure GitHub, schedules, signed webhooks, and Dependab
   );
 });
 
+test("API trigger test payload follows the declared inputs", async ({
+  page,
+}) => {
+  await setupWorkflowsPage(page, "dark");
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+
+  await page.locator(".react-flow__node-start").click();
+  await selectAppOption(page.getByTestId("flow-trigger-event"), "api");
+  await page.getByTestId("flow-trigger-api-inputs").fill(
+    JSON.stringify([
+      { key: "slug", type: "string", required: true, pattern: "[a-z0-9-]+" },
+      { key: "tone", type: "string", enum: ["plain", "bold"] },
+      { key: "sha", type: "string", pattern: "[a-f0-9]{40}" },
+    ])
+  );
+  await page.getByTestId("flow-trigger-api-inputs").press("Tab");
+
+  const payload = page.getByTestId("flow-trigger-test-payload");
+  await expect(payload).toHaveValue(/"slug": "example"/);
+  await expect(payload).toHaveValue(/"tone": "plain"/);
+  await expect(payload).not.toHaveValue(/"sha"/);
+});
+
 test("Slack mention trigger selects a connected workspace and channel", async ({
   page,
 }) => {

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { Github, NavArrowDown, Play } from "iconoir-react"
 import { cn } from "@/lib/utils"
+import { sampleAutomationInput } from "@/lib/flows/automation-inputs"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
@@ -354,12 +355,7 @@ function buildExternalTriggerTestPayload(
         test: true,
       };
     case "api":
-      return Object.fromEntries(
-        (node.data.inputFields ?? []).map((field) => [
-          field.key,
-          field.type === "integer" ? 1 : field.type === "boolean" ? false : field.type === "json" ? {} : "",
-        ]),
-      );
+      return sampleAutomationInput(node.data.inputFields ?? [])
     case "slack_mention":
       return {
         team_id: node.data.slackTeamId ?? "",

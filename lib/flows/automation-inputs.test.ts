@@ -3,6 +3,7 @@ import {
   type AutomationInputField,
   buildApiRunInputMetadata,
   coerceAutomationInputFields,
+  sampleAutomationInput,
   MAX_INPUT_FIELDS,
   validateAutomationInput,
   validateAutomationInputFields,
@@ -180,5 +181,44 @@ describe("buildApiRunInputMetadata", () => {
     ]);
     expect(right.input_hash).not.toBe(left.input_hash);
     expect(right.working_branch).toBe(left.working_branch);
+  });
+});
+
+describe("sampleAutomationInput", () => {
+  it("should build a test payload that passes the inspector's example fields", () => {
+    const fields = coerceAutomationInputFields([
+      { key: "slug", type: "string", required: true, pattern: "[a-z0-9-]+" },
+      { key: "details", type: "json" },
+    ]);
+
+    const sample = sampleAutomationInput(fields);
+
+    expect(validateAutomationInput(fields, sample)).toEqual({
+      ok: true,
+      value: sample,
+    });
+  });
+
+  it("should pick an allowed value for an enum and sample every type", () => {
+    const fields: AutomationInputField[] = [
+      { key: "tone", type: "string", required: true, enum: ["plain", "bold"] },
+      { key: "count", type: "integer" },
+      { key: "draft", type: "boolean" },
+    ];
+
+    expect(sampleAutomationInput(fields)).toEqual({
+      tone: "plain",
+      count: 1,
+      draft: false,
+    });
+  });
+
+  it("should leave a strict required field empty and drop a strict optional one", () => {
+    const fields: AutomationInputField[] = [
+      { key: "sha", type: "string", required: true, pattern: "[a-f0-9]{40}" },
+      { key: "ticket", type: "string", pattern: "[A-Z]+-[0-9]+" },
+    ];
+
+    expect(sampleAutomationInput(fields)).toEqual({ sha: "" });
   });
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ApiKeyAccess } from "@/lib/mogplex-api/key-access";
 import {
+  assertMayExecuteInTeam,
   getDirectExecutionUser,
-  mayExecuteInTeam,
+  SandboxKeyRestrictedError,
 } from "./direct-execution-user";
 
 function resolvedAs(
@@ -34,14 +35,22 @@ describe("getDirectExecutionUser", () => {
     );
   });
 
-  it("should refuse an automations-only key", async () => {
-    expect(
-      await getDirectExecutionUser(resolvedAs("api-key", "automations"))
-    ).toBeUndefined();
+  it("should refuse an automations-only key with 403 AUTOMATION_REQUIRED", async () => {
+    const refusal = getDirectExecutionUser(
+      resolvedAs("api-key", "automations")
+    );
+    await expect(refusal).rejects.toBeInstanceOf(SandboxKeyRestrictedError);
+    await expect(refusal).rejects.toMatchObject({
+      status: 403,
+      code: "AUTOMATION_REQUIRED",
+      message: expect.stringMatching(/Settings → Mogplex Keys/),
+    });
   });
 
   it("should refuse a key whose access is unknown", async () => {
-    expect(await getDirectExecutionUser(resolvedAs("api-key"))).toBeUndefined();
+    await expect(
+      getDirectExecutionUser(resolvedAs("api-key"))
+    ).rejects.toBeInstanceOf(SandboxKeyRestrictedError);
   });
 
   it("should refuse a request with no credentials", async () => {
@@ -49,29 +58,39 @@ describe("getDirectExecutionUser", () => {
   });
 });
 
-describe("mayExecuteInTeam", () => {
+describe("assertMayExecuteInTeam", () => {
   const key = { userId: "user-1", viaApiKey: true };
   const login = { userId: "user-1", viaApiKey: false };
   const holdsKeys = async () => "automations" as const;
 
   it("should refuse a key in a team that holds keys to automations", async () => {
-    expect(await mayExecuteInTeam(key, "team-1", holdsKeys)).toBe(false);
+    await expect(
+      assertMayExecuteInTeam(key, "team-1", holdsKeys)
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "AUTOMATION_REQUIRED",
+      message: expect.stringMatching(/team owner/),
+    });
   });
 
   it("should allow a key in a team that allows full access", async () => {
-    expect(await mayExecuteInTeam(key, "team-1", async () => "full")).toBe(
-      true
-    );
+    await expect(
+      assertMayExecuteInTeam(key, "team-1", async () => "full")
+    ).resolves.toBeUndefined();
   });
 
   it("should allow a key outside a team without a lookup", async () => {
     const lookup = async () => {
       throw new Error("no lookup expected");
     };
-    expect(await mayExecuteInTeam(key, null, lookup)).toBe(true);
+    await expect(
+      assertMayExecuteInTeam(key, null, lookup)
+    ).resolves.toBeUndefined();
   });
 
   it("should allow an interactive login in any team", async () => {
-    expect(await mayExecuteInTeam(login, "team-1", holdsKeys)).toBe(true);
+    await expect(
+      assertMayExecuteInTeam(login, "team-1", holdsKeys)
+    ).resolves.toBeUndefined();
   });
 });
