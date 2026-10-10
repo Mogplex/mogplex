@@ -24,6 +24,7 @@ import {
   launchAutofixSandbox,
   launchAutomationHarnessSandbox,
 } from "@/lib/workflows/automation-job-sandbox-setup";
+import { taskWorkingBranch } from "./automation-task-sandbox";
 
 async function attachAutomationHarnessAiCall(input: {
   aiCallId: string;
@@ -191,7 +192,7 @@ export async function runAutomationHarnessAgent(input: {
           input.context,
           input.context.metadata.flow_node_role === "task"
             ? {
-                workingBranch: `mogplex/task-${randomUUID()}`,
+                workingBranch: taskWorkingBranch(input.context),
                 createBranch: true,
               }
             : input.context.assignmentType === "dependabot_alert"

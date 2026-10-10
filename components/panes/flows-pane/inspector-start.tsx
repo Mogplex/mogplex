@@ -18,6 +18,7 @@ import {
   InspectorCallout,
 } from "./inspector-shared"
 import { StartFilterFields, ExternalTriggerTestPanel } from "./start-filter-fields"
+import { ApiTriggerFields } from "./inspector-start-api"
 
 type StartNodeData = Extract<FlowNode, { type: "start" }>["data"]
 
@@ -291,6 +292,18 @@ export function StartInspector({
           </InspectorCallout>
         </>
       )}
+      {node.data.event === "api" && (
+        <ApiTriggerFields
+          key={node.id}
+          automationId={selectedFlow.id}
+          inputFields={node.data.inputFields}
+          onInputFieldsChange={(inputFields) => updateNodeData(node.id, (data) => ({
+            ...data,
+            inputFields,
+          }), { mergeKey: `start-api-inputs-${node.id}` })}
+          copyValue={copyWebhookValue}
+        />
+      )}
       {node.data.event === "slack_mention" && (
         <>
           {slackInstallations.length === 0 ? (
@@ -386,7 +399,10 @@ export function StartInspector({
       />
       {SINGLE_INSTALLATION_TRIGGER_EVENTS.has(node.data.event) ? (
         <ExternalTriggerTestPanel
-          key={`${selectedFlow.id}:${node.id}:${node.data.event}`}
+          // Declared API inputs reshape the sample payload, so start it over.
+          key={`${selectedFlow.id}:${node.id}:${node.data.event}:${
+            node.data.event === "api" ? JSON.stringify(node.data.inputFields ?? []) : ""
+          }`}
           node={node}
           dirty={dirty}
           flowActive={selectedFlow.status === "active"}

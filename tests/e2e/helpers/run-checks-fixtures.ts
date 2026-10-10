@@ -30,6 +30,7 @@ export const TEAM = {
   iconUrl: null,
 };
 export const TEAM_ENDPOINT = `**/api/teams/${TEAM.id}/decision-checks`;
+export const TEAM_KEY_ACCESS_ENDPOINT = `**/api/teams/${TEAM.id}/api-key-access`;
 export const TEAM_SETTINGS_PATH = `/${TEAM.slug}/settings`;
 
 export async function mockTeamSettings(page: Page, role: TeamRole = "owner") {
@@ -59,6 +60,12 @@ export async function mockTeamSettings(page: Page, role: TeamRole = "owner") {
   );
   await page.route(`**/api/teams/${TEAM.id}/models`, (route) =>
     fulfillJson(route, { modelAllowlist: null, viewer: { canManage } })
+  );
+  await page.route(`**/api/teams/${TEAM.id}/api-key-access`, (route) =>
+    fulfillJson(route, {
+      access: "full",
+      viewer: { canManage: role === "owner" },
+    })
   );
   await page.route(`**/api/teams/${TEAM.id}/audit-events`, (route) =>
     fulfillJson(route, { events: [] })

@@ -8,6 +8,22 @@ import {
   launchAutomationHarnessSandbox,
 } from "./automation-job-sandbox-setup";
 
+const AUTOMATION_BRANCH_PATTERN = /^mogplex\/automation-[a-f0-9]{16}$/;
+
+/**
+ * The branch a task run works on. An API-triggered run uses the branch fixed
+ * when it was triggered, so a retry of the same run returns to the same work
+ * and the caller can read its output from a known place. Other task runs get
+ * a fresh branch.
+ */
+export function taskWorkingBranch(context: Pick<JobContext, "metadata">) {
+  const recorded = context.metadata.working_branch;
+  return typeof recorded === "string" &&
+    AUTOMATION_BRANCH_PATTERN.test(recorded)
+    ? recorded
+    : `mogplex/task-${randomUUID()}`;
+}
+
 export function createTaskSandboxLoader(
   context: JobContext,
   githubToken: string
@@ -15,7 +31,7 @@ export function createTaskSandboxLoader(
   let loaded: ReturnType<typeof loadSandbox> | undefined;
   async function loadSandbox() {
     const ref = await launchAutomationHarnessSandbox(context, {
-      workingBranch: `mogplex/task-${randomUUID()}`,
+      workingBranch: taskWorkingBranch(context),
       createBranch: true,
     });
     context.metadata.sandbox_record_id = ref.recordId;

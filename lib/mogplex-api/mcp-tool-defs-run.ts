@@ -10,7 +10,7 @@ export const MCP_TOOLS_RUN: McpToolDefinition[] = [
     name: "mogplex_start_agent_run",
     title: "Start Mogplex Agent Run",
     description:
-      "Start a harness-backed Mogplex agent run in a repository sandbox.",
+      "Start a harness-backed Mogplex agent run in a repository sandbox. A Mogplex API key set to Automations only, or any key on a team whose owner holds keys to automations, is refused with AUTOMATION_REQUIRED and must use mogplex_trigger_automation instead.",
     inputSchema: objectSchema({
       properties: {
         repoId: {

@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { getSandbox } from "@/lib/sandbox/client";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
@@ -180,11 +181,8 @@ async function handleConnect(
       requireCapability: "tools.bash",
     });
   } catch (error) {
-    if (isSandboxCapabilityDeniedError(error)) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      );
+    if (isSandboxAccessDeniedError(error)) {
+      return sandboxAccessDeniedResponse(error);
     }
     throw error;
   }

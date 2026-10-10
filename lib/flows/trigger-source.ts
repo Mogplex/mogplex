@@ -12,6 +12,8 @@ export function flowTriggerSourceKind(
       return "webhook";
     case "slack_mention":
       return "slack";
+    case "api":
+      return "api";
     default:
       return "github";
   }

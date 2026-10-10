@@ -1,6 +1,10 @@
 import { coerceGraph, getStartConfig } from "@/lib/flows/graph";
 import type { FlowGraph, TriggerEvent } from "@/lib/types";
 import type { JobRunStartSource } from "@/lib/job-runs";
+import {
+  buildApiRunInputMetadata,
+  validateAutomationInput,
+} from "@/lib/flows/automation-inputs";
 
 export type PublishedFlowTriggerRow = {
   id: string;
@@ -8,10 +12,13 @@ export type PublishedFlowTriggerRow = {
   installation_id: number;
   status: "active" | "inactive";
   published_version_id: string | null;
-  published_version:
-    | { id: string; graph: unknown }
-    | Array<{ id: string; graph: unknown }>
-    | null;
+  published_version: PublishedVersionRow | PublishedVersionRow[] | null;
+};
+
+type PublishedVersionRow = {
+  id: string;
+  graph: unknown;
+  version_number?: number | null;
 };
 
 export type TriggerRepoRow = {
@@ -51,7 +58,7 @@ async function loadPublishedFlow(
   const { data, error } = await supabaseAdmin
     .from("flows")
     .select(
-      "id, user_id, installation_id, status, published_version_id, published_version:flow_versions!flows_published_version_id_fkey(id, graph)"
+      "id, user_id, installation_id, status, published_version_id, published_version:flow_versions!flows_published_version_id_fkey(id, graph, version_number)"
     )
     .eq("id", flowId)
     .maybeSingle();
@@ -185,6 +192,27 @@ export function createFlowTriggerDispatcher(
     }
 
     const payload = input.payload ?? {};
+    let apiInput: Awaited<ReturnType<typeof buildApiRunInputMetadata>> | null =
+      null;
+    if (input.event === "api") {
+      const validation = validateAutomationInput(
+        start.inputFields ?? [],
+        payload
+      );
+      if (!validation.ok) {
+        return {
+          matched: true,
+          outcome: "suppressed",
+          jobRunId: null,
+          started: false,
+          reason: `INVALID_INPUT: ${validation.errors.join(" ")}`,
+        };
+      }
+      apiInput = await buildApiRunInputMetadata({
+        scopedIdempotencyKey: input.idempotencyKey,
+        value: validation.value,
+      });
+    }
     const metadata = {
       repo_id: repo.id,
       repo_full_name: repo.full_name,
@@ -193,7 +221,21 @@ export function createFlowTriggerDispatcher(
       source_type: input.event,
       flow_id: flow.id,
       flow_version_id: version.id,
-      ...triggerPayloadMetadata(input.event, payload),
+      ...(typeof version.version_number === "number"
+        ? { flow_version_number: version.version_number }
+        : {}),
+      ...(apiInput
+        ? {
+            ...apiInput,
+            source: "api",
+            dispatch_source: "app",
+            trigger: {
+              credential: "interactive",
+              key_id: null,
+              label: "Mogplex app",
+            },
+          }
+        : triggerPayloadMetadata(input.event, payload)),
     };
     const enqueued = await deps.enqueue({
       userId: flow.user_id,

@@ -195,6 +195,17 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
 
   const runDetail = {
     ...runSummary,
+    metadata: {
+      ...runSummary.metadata,
+      flow_version_number: 1,
+      working_branch: "mogplex/automation-0123456789abcdef",
+      input: { slug: "acme-plumbing" },
+      trigger: {
+        credential: "integration",
+        key_id: "key-1",
+        label: "Webrenew agent",
+      },
+    },
     node_runs: [
       ...runSummary.node_runs,
       {
@@ -280,7 +291,7 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
             output_preview: "comment created",
           },
         ],
-        metadata: { agent_id: "agent-1" },
+        metadata: { agent_id: "agent-1", sandbox_record_id: "sbx-1" },
         events: [
           {
             id: "call-event-1",
@@ -424,6 +435,23 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
   await expect(dialog.getByRole("link", { name: "PR #42" })).toHaveAttribute(
     "href",
     "https://github.com/webrenew/blackbox/pull/42"
+  );
+  await expect(dialog.getByText("v1", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText("Integration · Webrenew agent", { exact: true })
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("mogplex/automation-0123456789abcdef", { exact: true })
+  ).toBeVisible();
+  await expect(dialog).toContainText('"slug": "acme-plumbing"');
+  await expect(
+    dialog.getByRole("link", { name: "Open transcript" })
+  ).toHaveAttribute("href", "/alex/observability?call_id=call-1");
+  await expect(
+    dialog.getByRole("link", { name: "Open sandbox" })
+  ).toHaveAttribute(
+    "href",
+    "/alex/observability?repo_id=repo-1&sandbox_record_id=sbx-1"
   );
   await expect(dialog.getByText("Edits", { exact: true })).toBeVisible();
   await expect(

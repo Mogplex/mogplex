@@ -11,12 +11,17 @@ import {
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
 import { requireScope } from "@/lib/mogplex-api/scopes";
+import {
+  resolveAutomationOnly,
+  type LoadTeamKeyAccess,
+} from "@/lib/mogplex-api/team-key-access";
 import type { NextRequest } from "next/server";
 
 export function createMogplexApiAutomationTriggerPostHandler(
   overrides: {
     resolveApiKey?: typeof resolveApiKey;
     triggerAutomation?: typeof triggerMogplexApiAutomation;
+    loadTeamKeyAccess?: LoadTeamKeyAccess;
   } = {}
 ) {
   const resolveKey = overrides.resolveApiKey ?? resolveApiKey;
@@ -55,6 +60,12 @@ export function createMogplexApiAutomationTriggerPostHandler(
     ) {
       return mogplexApiError("BAD_REQUEST", "input must be an object", 400);
     }
+    const access = await resolveAutomationOnly(
+      user,
+      { repoId: body.repoId.trim() },
+      overrides.loadTeamKeyAccess
+    );
+    if (!access.ok) return access.response;
     try {
       const { automationId } = await params;
       const run = await triggerAutomation({
@@ -63,6 +74,11 @@ export function createMogplexApiAutomationTriggerPostHandler(
         repoId: body.repoId.trim(),
         idempotencyKey: idempotencyKey.value,
         input: body.input as Record<string, unknown> | undefined,
+        credential: {
+          kind: user.credentialKind,
+          keyId: user.keyId,
+          automationOnly: access.automationOnly,
+        },
       });
       return mogplexApiSuccess({ run }, { status: 202 });
     } catch (error) {

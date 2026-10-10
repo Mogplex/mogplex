@@ -7,9 +7,10 @@ import {
   normalizeDevPort,
   resolveConfiguredDevPort,
 } from "@/lib/repo-settings";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
   resolveSandboxTarget,
   resolveSandboxTargetCredentials,
 } from "@/lib/sandbox/get-user-credentials";
@@ -97,11 +98,8 @@ export function createAutomationSandboxTestPostHandler(
         requireCapability: "tools.bash",
       });
     } catch (error) {
-      if (isSandboxCapabilityDeniedError(error)) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status }
-        );
+      if (isSandboxAccessDeniedError(error)) {
+        return sandboxAccessDeniedResponse(error);
       }
       throw error;
     }

@@ -2,9 +2,10 @@ import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import {
   getSandboxServiceCredentials,
-  isSandboxCapabilityDeniedError,
+  isSandboxAccessDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getSandbox, listVercelSandboxes } from "@/lib/sandbox/client";
@@ -132,11 +133,8 @@ export function createSandboxExecPostHandler(
         requireCapability: "tools.bash",
       });
     } catch (error) {
-      if (isSandboxCapabilityDeniedError(error)) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status }
-        );
+      if (isSandboxAccessDeniedError(error)) {
+        return sandboxAccessDeniedResponse(error);
       }
       throw error;
     }

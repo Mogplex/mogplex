@@ -1,4 +1,5 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
+import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import { deleteMogplexApiAutomation } from "@/lib/mogplex-api/automation-delete";
 import { mogplexAutomationErrorResponse } from "@/lib/mogplex-api/automation-response";
 import {
@@ -11,14 +12,24 @@ import {
   mogplexApiSuccess,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
+import { requireFullAccessKey } from "@/lib/mogplex-api/credential-boundary";
+import {
+  requireKeyAllowedOn,
+  type LoadTeamKeyAccess,
+  type TeamKeyAccessTarget,
+} from "@/lib/mogplex-api/team-key-access";
 import { requireScope } from "@/lib/mogplex-api/scopes";
 import type { NextRequest } from "next/server";
 
 type AutomationItemDeps = {
   resolveApiKey: typeof resolveApiKey;
+  /** Test seam for OAuth (interactive) bearer tokens. */
+  resolveOAuthToken?: typeof resolveMogplexOAuthToken;
   getAutomation: typeof getMogplexApiAutomation;
   updateAutomation: typeof updateMogplexApiAutomation;
   deleteAutomation: typeof deleteMogplexApiAutomation;
+  /** Test seam for the automation's team key access. */
+  loadTeamKeyAccess?: LoadTeamKeyAccess;
 };
 
 const defaults: AutomationItemDeps = {
@@ -38,6 +49,7 @@ export function createMogplexApiAutomationGetHandler(
   ) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "read");
@@ -63,10 +75,13 @@ export function createMogplexApiAutomationPutHandler(
   ) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
+    const restricted = requireFullAccessKey(user);
+    if (restricted) return restricted;
     const body = (await request.json().catch(() => null)) as Record<
       string,
       unknown
@@ -91,8 +106,17 @@ export function createMogplexApiAutomationPutHandler(
         400
       );
     }
+    const { automationId } = await params;
+    // Both the team the automation is in now and the one it would move to.
+    const targets: TeamKeyAccessTarget[] = [{ automationId }];
+    if (installationId !== undefined) targets.push({ installationId });
+    const teamRefusal = await requireKeyAllowedOn(
+      user,
+      targets,
+      deps.loadTeamKeyAccess
+    );
+    if (teamRefusal) return teamRefusal;
     try {
-      const { automationId } = await params;
       const automation = await deps.updateAutomation(
         user.userId,
         automationId,
@@ -130,12 +154,21 @@ export function createMogplexApiAutomationDeleteHandler(
   ) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
+    const restricted = requireFullAccessKey(user);
+    if (restricted) return restricted;
+    const { automationId } = await params;
+    const teamRefusal = await requireKeyAllowedOn(
+      user,
+      { automationId },
+      deps.loadTeamKeyAccess
+    );
+    if (teamRefusal) return teamRefusal;
     try {
-      const { automationId } = await params;
       return mogplexApiSuccess(
         await deps.deleteAutomation(user.userId, automationId)
       );

@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getPlaywrightUserIdFromHeaders } from "@/lib/internal-api-auth";
 import { resolveCliBearerAuth } from "@/lib/auth/cli-bearer";
+import type { ApiKeyAccess } from "@/lib/mogplex-api/key-access";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ResolvedAuth = {
   profileId: string;
   authUserId: string | null;
   source: "supabase" | "better-auth" | "playwright" | "api-key" | "oauth";
+  /** What a Mogplex API key's owner allows it to do; set only for `api-key`. */
+  apiKeyAccess?: ApiKeyAccess;
 };
 
 type ResolvedAuthDependencies = {
@@ -86,6 +89,9 @@ export async function getResolvedAuth(
       profileId: cliBearerAuth.profileId,
       authUserId: null,
       source: cliBearerAuth.source,
+      ...(cliBearerAuth.apiKeyAccess
+        ? { apiKeyAccess: cliBearerAuth.apiKeyAccess }
+        : {}),
     };
   }
   // Rate-limited and invalid credentials fall through to browser auth. The

@@ -18,6 +18,7 @@ import {
   toReviewFindings,
 } from "@/lib/workflows/automation-job-utils";
 import { isFlowAgentNodeRole } from "@/lib/flows/graph";
+import { buildApiTaskPrompt } from "./automation-job-api-prompt";
 import {
   buildFlowReportContext,
   FLOW_HANDOFF_INSTRUCTIONS,
@@ -70,6 +71,10 @@ export function buildPromptForJob(
   ]
     .filter(Boolean)
     .join("\n");
+
+  if (metadata.flow_node_role === "task" && metadata.source_type === "api") {
+    return buildApiTaskPrompt(metadata, systemPrompt, flowContextBlock);
+  }
 
   if (metadata.flow_node_role === "task") {
     return {

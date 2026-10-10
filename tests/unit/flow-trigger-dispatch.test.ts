@@ -204,3 +204,79 @@ test("Slack mention matching is scoped to the configured workspace and channel",
     false
   );
 });
+
+function apiFlow(): PublishedFlowTriggerRow {
+  const apiGraph = graph("webhook");
+  apiGraph.nodes[0] = {
+    ...apiGraph.nodes[0],
+    data: {
+      label: "Start",
+      event: "api",
+      filter: { scope: "all", repos: ["acme/web"] },
+      inputFields: [{ key: "slug", type: "string", required: true }],
+    },
+  } as FlowGraph["nodes"][number];
+  return {
+    ...flow("webhook"),
+    published_version: { id: "version-1", graph: apiGraph, version_number: 4 },
+  };
+}
+
+test("app test trigger records an API automation's validated input, branch and version", async () => {
+  const enqueues: Array<{ metadata?: Record<string, unknown> | null }> = [];
+  const dispatch = createFlowTriggerDispatcher({
+    loadFlow: async () => apiFlow(),
+    resolveRepo: async () => repo,
+    enqueue: async (input) => {
+      enqueues.push(input);
+      return { outcome: "queued" as const, jobRunId: "run-1", reason: null };
+    },
+    start: async () => ({ started: true, status: "running" }),
+  });
+
+  const result = await dispatch({
+    flowId: "flow-1",
+    event: "api",
+    idempotencyKey: "test-1",
+    payload: { slug: "acme" },
+  });
+
+  assert.equal(result.outcome, "queued");
+  const metadata = enqueues[0]?.metadata ?? {};
+  assert.deepEqual(metadata.input, { slug: "acme" });
+  assert.equal(metadata.flow_version_number, 4);
+  assert.match(
+    String(metadata.working_branch),
+    /^mogplex\/automation-[a-f0-9]{16}$/
+  );
+  assert.deepEqual(metadata.trigger, {
+    credential: "interactive",
+    key_id: null,
+    label: "Mogplex app",
+  });
+  assert.equal(metadata.slug, undefined);
+});
+
+test("app test trigger refuses API automation input outside the declared fields", async () => {
+  let enqueued = false;
+  const dispatch = createFlowTriggerDispatcher({
+    loadFlow: async () => apiFlow(),
+    resolveRepo: async () => repo,
+    enqueue: async () => {
+      enqueued = true;
+      return { outcome: "queued" as const, jobRunId: "run-1", reason: null };
+    },
+    start: async () => ({ started: true, status: "running" }),
+  });
+
+  const result = await dispatch({
+    flowId: "flow-1",
+    event: "api",
+    idempotencyKey: "test-2",
+    payload: { slug: "acme", prompt: "do something else" },
+  });
+
+  assert.equal(result.outcome, "suppressed");
+  assert.match(String(result.reason), /^INVALID_INPUT: Unknown input "prompt"/);
+  assert.equal(enqueued, false);
+});

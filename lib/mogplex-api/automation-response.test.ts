@@ -1,10 +1,11 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { FlowServiceError } from "@/lib/flows/errors";
 import {
   modelAllowlistUnavailableError,
   MODEL_ALLOWLIST_UNAVAILABLE_ERROR,
 } from "@/lib/team-capabilities";
 import { mogplexAutomationErrorResponse } from "./automation-response";
+import { MogplexApiAutomationError } from "./automations.types";
 
 it("recognizes a wrapped allowlist outage before mapping permanent flow errors", async () => {
   const error = new FlowServiceError(
@@ -49,5 +50,26 @@ it("keeps unknown failures sanitized instead of offering an authorization fallba
   expect(await response.json()).toEqual({
     ok: false,
     error: { code: "INTERNAL_ERROR", message: "Could not publish" },
+  });
+});
+
+describe("mogplexAutomationErrorResponse", () => {
+  it.each([
+    ["AUTOMATION_NOT_INTEGRATION_ENABLED", 403, "AUTOMATION_REQUIRED"],
+    ["IDEMPOTENCY_CONFLICT", 409, "IDEMPOTENCY_CONFLICT"],
+    ["REPO_NOT_ALLOWED", 403, "FORBIDDEN"],
+    ["AUTOMATION_NOT_FOUND", 404, "NOT_FOUND"],
+    ["AUTOMATION_INACTIVE", 409, "CONFLICT"],
+    ["INVALID_INPUT", 400, "BAD_REQUEST"],
+  ] as const)("should report %s as %i %s", async (code, status, apiCode) => {
+    const response = mogplexAutomationErrorResponse(
+      new MogplexApiAutomationError(code, "message", status),
+      "fallback"
+    );
+    expect(response.status).toBe(status);
+    expect((await response.json()).error).toEqual({
+      code: apiCode,
+      message: "message",
+    });
   });
 });

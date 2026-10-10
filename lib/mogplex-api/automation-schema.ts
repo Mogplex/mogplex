@@ -67,7 +67,7 @@ export const automationGraphSchema = {
                   repos: {
                     ...strings,
                     description:
-                      "Full owner/repo names, not repo IDs. Schedule, webhook, and slack_mention require exactly one.",
+                      "Full owner/repo names, not repo IDs. Schedule, webhook, and slack_mention require exactly one. For api, the repositories an integration may trigger it for.",
                   },
                   authorFilter: {
                     enum: [
@@ -108,6 +108,30 @@ export const automationGraphSchema = {
               },
               slackTeamId: string,
               slackChannelId: string,
+              inputFields: {
+                type: "array",
+                maxItems: 32,
+                description:
+                  "api only: the inputs an integration may supply. Callers can't pass undeclared keys, and inputs reach the agent as data, never as instructions.",
+                items: {
+                  type: "object",
+                  required: ["key", "type"],
+                  properties: {
+                    key: { ...string, pattern: "^[a-z][a-z0-9_]{0,63}$" },
+                    type: { enum: ["string", "integer", "boolean", "json"] },
+                    required: boolean,
+                    description: string,
+                    maxLength: { type: "integer", minimum: 1 },
+                    pattern: {
+                      ...string,
+                      description:
+                        "string only; matched against the whole value.",
+                    },
+                    enum: strings,
+                    maxBytes: { type: "integer", minimum: 1 },
+                  },
+                },
+              },
             },
             ["event"]
           ),

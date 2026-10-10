@@ -8,8 +8,8 @@ export const AGENT_ID = "22222222-2222-4222-8222-222222222222";
 export async function createAutomationDb() {
   const pg = await PGlite.create();
   await pg.exec(`
-    create table github_installations(id text primary key, user_id text, installation_id bigint);
-    create table repos(id uuid primary key, user_id text, full_name text, default_branch text, github_installation_id bigint);
+    create table github_installations(id text primary key, user_id text, installation_id bigint, product_team_id uuid);
+    create table repos(id uuid primary key, user_id text, full_name text, default_branch text, github_installation_id bigint, product_team_id uuid);
     create table agents(id uuid primary key default gen_random_uuid(), user_id text, name text, slug text,
       model text, system_prompt text, source_template text, created_at timestamptz default now());
     create table profiles(id text primary key, email text, default_model text, surface_models jsonb,
@@ -32,8 +32,8 @@ export async function createAutomationDb() {
     create table flow_node_runs(id uuid primary key default gen_random_uuid(), user_id text, job_run_id uuid,
       flow_id uuid, flow_version_id uuid, node_id text, node_type text, node_label text, status text,
       started_at timestamptz, completed_at timestamptz, duration_ms integer, output jsonb, error text);
-    insert into github_installations values ('installation', 'owner', 123), ('foreign', 'other', 456);
-    insert into repos values ('${REPO_ID}', 'owner', 'acme/widgets', 'main', 123);
+    insert into github_installations values ('installation', 'owner', 123, null), ('foreign', 'other', 456, null);
+    insert into repos values ('${REPO_ID}', 'owner', 'acme/widgets', 'main', 123, null);
     insert into agents(id,user_id,name,slug,model) values ('${AGENT_ID}', 'owner', 'Maintenance', 'maintenance', 'openai/test-model');
     insert into profiles(id,email,allow_platform_ai,allow_platform_sandbox) values ('owner','owner@example.test',true,true);
     insert into ai_models(id,provider,name,is_available) values ('openai/test-model','openai','Test model',true);

@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { enqueueAutomationJobRun } from "@/lib/automation-dispatch";
 import {
   createFlowForUser,
   listOwnedFlowRuns,
@@ -8,8 +6,7 @@ import {
   publishFlowDraft,
   updateFlow,
 } from "@/lib/flows/api";
-import { cloneFlowGraph, coerceGraph, getStartConfig } from "@/lib/flows/graph";
-import { startAutomationJobRun } from "@/lib/workflows/automation-job-workflow";
+import { cloneFlowGraph, coerceGraph } from "@/lib/flows/graph";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { Flow } from "@/lib/types";
 import {
@@ -25,9 +22,10 @@ import type {
   ListMogplexApiAutomationsResult,
   MogplexApiAutomation,
   MogplexApiAutomationSummaryRow,
-  TriggerMogplexApiAutomationInput,
   UpdateMogplexApiAutomationInput,
 } from "./automations.types";
+
+export { triggerMogplexApiAutomation } from "./automation-trigger";
 
 // Re-export all types and utilities for public API compatibility
 export {
@@ -250,111 +248,6 @@ export async function setMogplexApiAutomationModel(input: {
     updated = await publishFlowDraft(input.userId, input.automationId);
   }
   return presentMogplexApiAutomation(updated!);
-}
-
-async function loadOwnedRepoForAutomation(userId: string, repoId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("repos")
-    .select("id, full_name, github_installation_id, default_branch")
-    .eq("id", repoId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-export async function triggerMogplexApiAutomation(
-  input: TriggerMogplexApiAutomationInput
-) {
-  const flow = await loadOwnedFlow(input.userId, input.automationId);
-  if (!flow) {
-    throw new MogplexApiAutomationError(
-      "AUTOMATION_NOT_FOUND",
-      "Automation not found",
-      404
-    );
-  }
-  if (!flow.published_version_id || !flow.published_version) {
-    throw new MogplexApiAutomationError(
-      "AUTOMATION_NOT_PUBLISHED",
-      "Publish the automation before triggering it",
-      409
-    );
-  }
-  if (flow.status !== "active") {
-    throw new MogplexApiAutomationError(
-      "AUTOMATION_INACTIVE",
-      "Activate the automation before triggering it",
-      409
-    );
-  }
-
-  const repo = await loadOwnedRepoForAutomation(input.userId, input.repoId);
-  if (!repo) {
-    throw new MogplexApiAutomationError(
-      "REPO_NOT_FOUND",
-      "Repository not found",
-      404
-    );
-  }
-  if (repo.github_installation_id !== flow.installation_id) {
-    throw new MogplexApiAutomationError(
-      "REPO_SCOPE_MISMATCH",
-      "Repository is outside this automation's GitHub installation"
-    );
-  }
-
-  const sourceType =
-    getStartConfig(flow.published_version.graph)?.event ?? "flow";
-  const metadata = {
-    ...input.input,
-    source: "mcp",
-    source_type: sourceType,
-    dispatch_source: "mcp",
-    flow_id: flow.id,
-    flow_version_id: flow.published_version_id,
-    repo_id: repo.id,
-    repo_full_name: repo.full_name,
-    installation_id: repo.github_installation_id,
-    default_branch: repo.default_branch,
-  };
-  const enqueue = await enqueueAutomationJobRun({
-    userId: input.userId,
-    flowId: flow.id,
-    flowVersionId: flow.published_version_id,
-    repoId: repo.id,
-    installationId: repo.github_installation_id,
-    sourceKind: "flow",
-    sourceType,
-    idempotencyKey: input.idempotencyKey || `mcp:${randomUUID()}`,
-    metadata,
-  });
-
-  if (enqueue.outcome !== "queued" || !enqueue.jobRunId) {
-    return {
-      automationId: flow.id,
-      jobRunId: enqueue.jobRunId,
-      outcome: enqueue.outcome,
-      reason: enqueue.reason,
-      started: false,
-      status: "suppressed" as const,
-      runtime: null,
-    };
-  }
-
-  const started = await startAutomationJobRun(enqueue.jobRunId, "api");
-  return {
-    automationId: flow.id,
-    jobRunId: enqueue.jobRunId,
-    outcome: enqueue.outcome,
-    reason: started.reason ?? enqueue.reason,
-    started: started.started,
-    status: started.status,
-    runtime: {
-      provider: started.runtimeProvider ?? null,
-      runId: started.runtimeRunId ?? started.workflowRunId ?? null,
-    },
-  };
 }
 
 export async function listMogplexApiAutomationRuns(

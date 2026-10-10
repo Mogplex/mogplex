@@ -167,6 +167,8 @@ export function eventLabel(event: TriggerEvent) {
       return "Webhook";
     case "slack_mention":
       return "Slack mention";
+    case "api":
+      return "API trigger";
   }
 }
 

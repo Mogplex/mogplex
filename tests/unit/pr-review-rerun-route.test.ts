@@ -78,6 +78,7 @@ function createHandler(
           started: true,
           status: "running",
         }),
+        loadTeamKeyAccess: async () => null,
         ...overrides,
       })
   );

@@ -66,6 +66,8 @@ test("POST /api/v1/mogplex/repos/[repoId]/env-vars validates and upserts with th
   const upsertCalls: Array<{ userId: string; repoId: string; input: unknown }> =
     [];
   const handler = route.createMogplexApiRepoEnvVarsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true as const,
       auth: { userId: "user-123", keyId: "key-1", scopes: ["read", "write"] },
@@ -119,6 +121,8 @@ test("POST /api/v1/mogplex/repos/[repoId]/env-vars validates and upserts with th
 test("DELETE /api/v1/mogplex/repos/[repoId]/env-vars requires the write scope", async () => {
   const { route } = await loadEnvVarsModules();
   const handler = route.createMogplexApiRepoEnvVarsDeleteHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true as const,
       auth: { userId: "user-123", keyId: "key-1", scopes: ["read"] },
@@ -143,6 +147,8 @@ test("DELETE /api/v1/mogplex/repos/[repoId]/env-vars requires the write scope", 
 test("POST rejects a read-only token before writing variables", async () => {
   const { route } = await loadEnvVarsModules();
   const handler = route.createMogplexApiRepoEnvVarsPostHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () => ({
       ok: true,
       auth: { userId: "user-123", keyId: "key-1", scopes: ["read"] },

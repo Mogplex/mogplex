@@ -2,18 +2,18 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import {
+  ApiKeyAccessOptions,
+  KEY_ACCESS_OPTIONS,
+} from "@/components/settings/api-key-access-options";
+import {
+  CliApiKeyRow,
+  type CliApiKey,
+} from "@/components/settings/cli-api-key-row";
 import { copyText } from "@/lib/clipboard";
 import { fetchJsonObject } from "@/lib/client-fetch";
+import type { ApiKeyAccess } from "@/lib/mogplex-api/key-access";
 
-type CliApiKey = {
-  id: string;
-  name: string;
-  prefix: string;
-  scopes: string[];
-  createdAt: string;
-  lastUsedAt: string | null;
-  expiresAt: string | null;
-};
 
 type KeysResponse = {
   keys: CliApiKey[];
@@ -37,6 +37,7 @@ export function CliApiKeysSection() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [keyName, setKeyName] = useState("");
   const [expiresInDays, setExpiresInDays] = useState<number | null>(null);
+  const [access, setAccess] = useState<ApiKeyAccess>("full");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [newToken, setNewToken] = useState<CreateKeyResponse | null>(null);
@@ -44,6 +45,8 @@ export function CliApiKeysSection() {
     "idle",
   );
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [changingAccess, setChangingAccess] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState<string | null>(null);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -55,6 +58,7 @@ export function CliApiKeysSection() {
         body: JSON.stringify({
           name: keyName,
           expiresInDays: expiresInDays ?? undefined,
+          access,
         }),
       });
       const result = await res.json();
@@ -82,6 +86,7 @@ export function CliApiKeysSection() {
     setShowCreateModal(false);
     setKeyName("");
     setExpiresInDays(null);
+    setAccess("full");
     setNewToken(null);
     setCreateError(null);
     setCopyState("idle");
@@ -103,21 +108,29 @@ export function CliApiKeysSection() {
     }
   };
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "Never";
-    return new Date(dateStr).toLocaleDateString();
-  };
-
-  const formatRelativeTime = (dateStr: string | null) => {
-    if (!dateStr) return "Never";
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 30) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
+  const handleChangeAccess = async (keyId: string, next: ApiKeyAccess) => {
+    setChangingAccess(keyId);
+    setAccessError(null);
+    try {
+      await fetchJsonObject(
+        `/api/settings/api-keys/${keyId}`,
+        "Unable to change this key's access",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ access: next }),
+        },
+      );
+      await mutate();
+    } catch (cause) {
+      setAccessError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to change this key's access",
+      );
+    } finally {
+      setChangingAccess(null);
+    }
   };
 
   return (
@@ -139,6 +152,11 @@ export function CliApiKeysSection() {
       </div>
 
       <div className="px-5 pb-5">
+        {accessError ? (
+          <p role="alert" className="mb-2 text-[11px] text-destructive">
+            {accessError}
+          </p>
+        ) : null}
         {keys.length === 0 ? (
           <div className="text-center text-[11px] text-muted-foreground py-8">
             No keys configured. Generate one to authenticate MCP clients and
@@ -147,41 +165,14 @@ export function CliApiKeysSection() {
         ) : (
           <div className="space-y-2">
             {keys.map((key) => (
-              <div
+              <CliApiKeyRow
                 key={key.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3"
-              >
-                <div className="flex items-center gap-4">
-                  <div>
-                    <div className="text-sm font-medium text-foreground">
-                      {key.name}
-                    </div>
-                    <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                      {key.prefix}...
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    <span>Created {formatDate(key.createdAt)}</span>
-                    {key.lastUsedAt && (
-                      <span className="ml-3">
-                        Last used {formatRelativeTime(key.lastUsedAt)}
-                      </span>
-                    )}
-                    {key.expiresAt && (
-                      <span className="ml-3">
-                        Expires {formatDate(key.expiresAt)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleRevoke(key.id)}
-                  disabled={revoking === key.id}
-                  className="rounded-sm border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-accent-red disabled:opacity-50"
-                >
-                  {revoking === key.id ? "..." : "Revoke"}
-                </button>
-              </div>
+                apiKey={key}
+                changingAccess={changingAccess === key.id}
+                revoking={revoking === key.id}
+                onChangeAccess={handleChangeAccess}
+                onRevoke={handleRevoke}
+              />
             ))}
           </div>
         )}
@@ -275,6 +266,18 @@ export function CliApiKeysSection() {
                       <option value="90">90 days</option>
                       <option value="365">1 year</option>
                     </select>
+                  </div>
+                  <div>
+                    <div className="block text-[11px] text-muted-foreground mb-1">
+                      Access
+                    </div>
+                    <ApiKeyAccessOptions
+                      idPrefix="new-key-access"
+                      label="Access"
+                      options={KEY_ACCESS_OPTIONS}
+                      value={access}
+                      onChange={setAccess}
+                    />
                   </div>
                 </div>
                 <div className="mt-6 flex gap-2">

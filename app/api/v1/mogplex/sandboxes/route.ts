@@ -1,4 +1,5 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
+import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import {
   normalizeOptionalSearchParam,
   parseMogplexApiListLimit,
@@ -9,14 +10,23 @@ import {
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
 import { consumeSandboxLaunchResponse } from "@/lib/mogplex-api/sandbox-launch";
+import { requireFullAccessKey } from "@/lib/mogplex-api/credential-boundary";
+import {
+  requireKeyAllowedOn,
+  type LoadTeamKeyAccess,
+} from "@/lib/mogplex-api/team-key-access";
 import { requireScope } from "@/lib/mogplex-api/scopes";
 import { listMogplexApiSandboxes } from "@/lib/mogplex-api/sandboxes";
 import type { NextRequest } from "next/server";
 
 type MogplexApiSandboxesGetDeps = {
   resolveApiKey: typeof resolveApiKey;
+  /** Test seam for OAuth (interactive) bearer tokens. */
+  resolveOAuthToken?: typeof resolveMogplexOAuthToken;
   listSandboxes: typeof listMogplexApiSandboxes;
   launchSandbox: typeof launchMogplexApiSandbox;
+  /** Test seam for the repository's team key access. */
+  loadTeamKeyAccess?: LoadTeamKeyAccess;
 };
 
 const defaultMogplexApiSandboxesGetDeps: MogplexApiSandboxesGetDeps = {
@@ -61,6 +71,7 @@ export function createMogplexApiSandboxesGetHandler(
   return async function GET(request: NextRequest) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
 
@@ -101,10 +112,13 @@ export function createMogplexApiSandboxesPostHandler(
   return async function POST(request: NextRequest) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
+    const restricted = requireFullAccessKey(user);
+    if (restricted) return restricted;
 
     const body = (await request.json().catch(() => null)) as Record<
       string,
@@ -113,6 +127,12 @@ export function createMogplexApiSandboxesPostHandler(
     if (!body || typeof body.repoId !== "string" || !body.repoId.trim()) {
       return mogplexApiError("BAD_REQUEST", "repoId is required", 400);
     }
+    const teamRefusal = await requireKeyAllowedOn(
+      user,
+      { repoId: body.repoId.trim() },
+      deps.loadTeamKeyAccess
+    );
+    if (teamRefusal) return teamRefusal;
 
     try {
       const result = await deps.launchSandbox(user.userId, body);

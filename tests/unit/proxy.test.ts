@@ -5,12 +5,19 @@ import {
   buildCanonicalHostRedirectUrl,
   buildLoginRedirectUrl,
   config,
+  createProxy,
   proxy,
 } from "../../proxy";
 import {
+  isAutomationOnlyKeyOnDirectPath,
   isCliPatApiRequest,
   isMogplexBearerApiRequest,
 } from "../../lib/internal-api-auth";
+
+const fullAccessProxy = createProxy({ lookupApiKeyAccess: async () => "full" });
+const automationsOnlyProxy = createProxy({
+  lookupApiKeyAccess: async () => "automations",
+});
 
 test("proxy module exports the root proxy handler", () => {
   assert.equal(typeof proxy, "function");
@@ -203,7 +210,7 @@ test("proxy lets CLI PAT requests reach hosted inference routes", async () => {
     }
   );
 
-  const response = await proxy(request);
+  const response = await fullAccessProxy(request);
 
   // The meaningful invariant is that the proxy called NextResponse.next() —
   // asserted via the `x-middleware-next` header it sets — and did not
@@ -239,4 +246,94 @@ test("proxy lets unauthenticated MCP initialization reach the OAuth challenge", 
 
   assert.equal(response.headers.get("x-middleware-next"), "1");
   assert.equal(response.headers.get("location"), null);
+});
+
+test("proxy refuses an automations-only key on hosted inference with the automation error", async () => {
+  const request = new NextRequest(
+    "https://example.com/api/cli/inference/chat/completions",
+    { method: "POST", headers: { authorization: "Bearer mog_abc123" } }
+  );
+
+  const response = await automationsOnlyProxy(request);
+
+  assert.equal(response.status, 403);
+  assert.equal(response.headers.get("x-middleware-next"), null);
+  assert.equal((await response.json()).code, "AUTOMATION_REQUIRED");
+});
+
+test("proxy refuses an automations-only key on sandbox routes", async () => {
+  const request = new NextRequest(
+    "https://example.com/api/sandbox/sandbox-1/harness",
+    { method: "POST", headers: { authorization: "Bearer mog_abc123" } }
+  );
+
+  const response = await automationsOnlyProxy(request);
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "AUTOMATION_REQUIRED");
+});
+
+test("proxy lets a full-access key reach sandbox routes", async () => {
+  const request = new NextRequest(
+    "https://example.com/api/sandbox/sandbox-1/harness",
+    { method: "POST", headers: { authorization: "Bearer mog_abc123" } }
+  );
+
+  const response = await fullAccessProxy(request);
+
+  assert.equal(response.headers.get("x-middleware-next"), "1");
+});
+
+test("isAutomationOnlyKeyOnDirectPath looks up only keys on direct-execution paths", async () => {
+  const lookedUp: string[] = [];
+  const lookup = async (authorization: string) => {
+    lookedUp.push(authorization);
+    return "automations" as const;
+  };
+  const key = (method = "POST") =>
+    new Request("https://example.com/", {
+      method,
+      headers: { authorization: "Bearer mog_abc123" },
+    });
+
+  assert.equal(
+    await isAutomationOnlyKeyOnDirectPath(key(), "/api/sandbox", lookup),
+    true
+  );
+  // Settings stay readable with any key; only writes are direct.
+  assert.equal(
+    await isAutomationOnlyKeyOnDirectPath(key("GET"), "/api/settings", lookup),
+    false
+  );
+  assert.equal(
+    await isAutomationOnlyKeyOnDirectPath(
+      key("PATCH"),
+      "/api/settings",
+      lookup
+    ),
+    true
+  );
+  // OAuth bearers and paths outside the list never trigger a lookup.
+  const oauth = new Request("https://example.com/", {
+    method: "POST",
+    headers: { authorization: "Bearer oauth_token" },
+  });
+  assert.equal(
+    await isAutomationOnlyKeyOnDirectPath(oauth, "/api/sandbox", lookup),
+    false
+  );
+  assert.equal(
+    await isAutomationOnlyKeyOnDirectPath(key(), "/api/models", lookup),
+    false
+  );
+  assert.equal(lookedUp.length, 2);
+  // An unknown or revoked key is left for the route to answer 401.
+  assert.equal(
+    await isAutomationOnlyKeyOnDirectPath(
+      key(),
+      "/api/sandbox",
+      async () => null
+    ),
+    false
+  );
 });

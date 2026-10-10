@@ -8,6 +8,7 @@ import {
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isFlowServiceError } from "./errors";
 import type { FlowGraph } from "@/lib/types";
+import { SINGLE_INSTALLATION_TRIGGER_EVENTS } from "./trigger-accounts";
 
 export type FlowConfigurationValidation = { valid: boolean; errors: string[] };
 
@@ -37,7 +38,7 @@ export async function validateFlowConfiguration(
 
   const start = getStartConfig(graph)!;
   if (
-    ["schedule", "webhook", "slack_mention"].includes(start.event) &&
+    SINGLE_INSTALLATION_TRIGGER_EVENTS.has(start.event) &&
     start.filter?.installationIds?.some((id) => id !== installationId)
   ) {
     errors.push("The trigger installationIds must match installationId.");
@@ -50,7 +51,7 @@ export async function validateFlowConfiguration(
       .in("full_name", start.filter.repos);
     // GitHub event flows may span several installations. External triggers
     // bind one repository to the selected installation.
-    if (["schedule", "webhook", "slack_mention"].includes(start.event)) {
+    if (SINGLE_INSTALLATION_TRIGGER_EVENTS.has(start.event)) {
       query = query.eq("github_installation_id", installationId);
     } else if (start.filter.installationIds?.length) {
       query = query.in("github_installation_id", start.filter.installationIds);

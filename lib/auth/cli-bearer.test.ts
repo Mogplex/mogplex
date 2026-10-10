@@ -25,7 +25,27 @@ describe("resolveCliBearerAuth", () => {
 
     await expect(
       resolveCliBearerAuth("Bearer mog_test", { resolveApiKey })
-    ).resolves.toEqual({ profileId: "profile-1", source: "api-key" });
+    ).resolves.toEqual({
+      profileId: "profile-1",
+      source: "api-key",
+      apiKeyAccess: "full",
+    });
+  });
+
+  it("carries an automations-only key's access", async () => {
+    const resolveApiKey = vi.fn().mockResolvedValue({
+      ok: true,
+      auth: {
+        userId: "profile-1",
+        keyId: "key-1",
+        scopes: ["read", "write"],
+        access: "automations",
+      },
+    });
+
+    await expect(
+      resolveCliBearerAuth("Bearer mog_test", { resolveApiKey })
+    ).resolves.toMatchObject({ apiKeyAccess: "automations" });
   });
 
   it("resolves CLI OAuth tokens with read and write scopes", async () => {

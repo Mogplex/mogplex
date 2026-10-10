@@ -1,4 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
+import {
+  readStoredApiKeyAccess,
+  type ApiKeyAccess,
+} from "@/lib/mogplex-api/key-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const TOKEN_PREFIX = "mog_";
@@ -19,6 +23,8 @@ export interface ApiKeyAuth {
   userId: string;
   keyId: string;
   scopes: string[];
+  /** Set for Mogplex API keys; OAuth resolutions leave it out. */
+  access?: ApiKeyAccess;
 }
 
 /**
@@ -109,6 +115,31 @@ export function generateApiToken(): {
 }
 
 /**
+ * The access level of a live key, or null when the bearer is not a live key.
+ * Used by the proxy to turn an Automations-only key away from paths that start
+ * work directly; it neither counts against the rate limit nor marks the key
+ * used, because the route still resolves the key itself.
+ */
+export async function lookupApiKeyAccess(
+  authorization: string
+): Promise<ApiKeyAccess | null> {
+  if (!authorization.startsWith(`Bearer ${TOKEN_PREFIX}`)) return null;
+  const hash = createHash("sha256")
+    .update(authorization.slice("Bearer ".length))
+    .digest("hex");
+  const { data, error } = await supabaseAdmin
+    .from("user_api_keys")
+    .select("access, expires_at")
+    .eq("token_hash", hash)
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  if (data.expires_at && new Date(data.expires_at) < new Date()) return null;
+  return readStoredApiKeyAccess(data.access);
+}
+
+/**
  * Resolve a bearer token to a user.
  *
  * Returns an `ApiKeyResolution`:
@@ -132,7 +163,7 @@ export async function resolveApiKey(
 
   const { data, error } = await supabaseAdmin
     .from("user_api_keys")
-    .select("id, user_id, scopes, expires_at, revoked_at")
+    .select("id, user_id, scopes, access, expires_at, revoked_at")
     .eq("token_hash", hash)
     .is("revoked_at", null)
     .maybeSingle();
@@ -163,6 +194,7 @@ export async function resolveApiKey(
       userId: data.user_id,
       keyId: data.id,
       scopes: data.scopes,
+      access: readStoredApiKeyAccess(data.access),
     },
   };
 }

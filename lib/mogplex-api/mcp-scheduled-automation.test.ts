@@ -133,7 +133,7 @@ test("scheduled tasks reject unsupported flags, missing instructions and incompa
   start.data.event = "push";
   assert.match(
     validateFlowGraph(graph).errors.join(" "),
-    /Task node "Apply" requires a schedule trigger/
+    /Task node "Apply" requires a schedule or API trigger/
   );
 });
 

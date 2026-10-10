@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { resolveApiKey } from "@/lib/auth/api-key";
+import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import {
   deleteMogplexApiRepoEnvVar,
   listMogplexApiRepoEnvVars,
@@ -10,6 +11,10 @@ import {
   mogplexApiSuccess,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
+import {
+  requireKeyAllowedOn,
+  type LoadTeamKeyAccess,
+} from "@/lib/mogplex-api/team-key-access";
 import { requireScope } from "@/lib/mogplex-api/scopes";
 import type { MogplexApiEnvVarError } from "@/lib/mogplex-api/env-vars";
 import type { NextRequest } from "next/server";
@@ -18,9 +23,13 @@ type RouteContext = { params: Promise<{ repoId: string }> };
 
 type EnvVarRouteDeps = {
   resolveApiKey: typeof resolveApiKey;
+  /** Test seam for OAuth (interactive) bearer tokens. */
+  resolveOAuthToken?: typeof resolveMogplexOAuthToken;
   listEnvVars: typeof listMogplexApiRepoEnvVars;
   upsertEnvVar: typeof upsertMogplexApiRepoEnvVar;
   deleteEnvVar: typeof deleteMogplexApiRepoEnvVar;
+  /** Test seam for the repository's team key access. */
+  loadTeamKeyAccess?: LoadTeamKeyAccess;
 };
 
 const defaultDeps: EnvVarRouteDeps = {
@@ -98,6 +107,7 @@ export function createMogplexApiRepoEnvVarsGetHandler(
   return async function GET(request: NextRequest, ctx: RouteContext) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "read");
@@ -123,16 +133,23 @@ export function createMogplexApiRepoEnvVarsPostHandler(
   return async function POST(request: NextRequest, ctx: RouteContext) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
+    const { repoId } = await ctx.params;
+    const refusal = await requireKeyAllowedOn(
+      user,
+      { repoId },
+      deps.loadTeamKeyAccess
+    );
+    if (refusal) return refusal;
 
     const parsed = await parseBody(request, upsertBodySchema);
     if (!parsed.ok) return parsed.response;
 
     try {
-      const { repoId } = await ctx.params;
       const result = await deps.upsertEnvVar(user.userId, repoId, parsed.body);
       if (!result.ok) return envVarErrorResponse(result.error);
       return mogplexApiSuccess(result.data);
@@ -151,16 +168,23 @@ export function createMogplexApiRepoEnvVarsDeleteHandler(
   return async function DELETE(request: NextRequest, ctx: RouteContext) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: deps.resolveApiKey,
+      resolveOAuthToken: deps.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
+    const { repoId } = await ctx.params;
+    const refusal = await requireKeyAllowedOn(
+      user,
+      { repoId },
+      deps.loadTeamKeyAccess
+    );
+    if (refusal) return refusal;
 
     const parsed = await parseBody(request, deleteBodySchema);
     if (!parsed.ok) return parsed.response;
 
     try {
-      const { repoId } = await ctx.params;
       const result = await deps.deleteEnvVar(user.userId, repoId, parsed.body);
       if (!result.ok) return envVarErrorResponse(result.error);
       return mogplexApiSuccess(result.data);

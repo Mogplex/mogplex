@@ -14,9 +14,16 @@ export const agentOperator: FlowOperatorDefinition<AgentNode> = {
   canFail: true,
   validate: ({ node, graph, inbound, outbound, startNode, options }) => {
     const errors: string[] = [];
-    if (node.data.role === "task" && startNode.data.event !== "schedule") {
+    // Task nodes check out the repository and work on their own branch, so
+    // they need a trigger that names no pull request: a schedule, or an
+    // integration calling the automation's API trigger.
+    if (
+      node.data.role === "task" &&
+      startNode.data.event !== "schedule" &&
+      startNode.data.event !== "api"
+    ) {
       errors.push(
-        `Task node "${node.data.label}" requires a schedule trigger.`
+        `Task node "${node.data.label}" requires a schedule or API trigger.`
       );
     }
     if (

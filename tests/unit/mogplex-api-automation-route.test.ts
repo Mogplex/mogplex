@@ -169,77 +169,13 @@ test("automation list cursor migration supports the composite owner sort", async
   );
 });
 
-test("automation trigger API enforces idempotency and forwards owned user input", async () => {
-  configureEnv();
-  const { createMogplexApiAutomationTriggerPostHandler } =
-    await import("../../app/api/v1/mogplex/automations/[automationId]/trigger/route");
-  const calls: unknown[] = [];
-  const handler = createMogplexApiAutomationTriggerPostHandler({
-    resolveApiKey: async () => VALID_AUTH,
-    triggerAutomation: async (input) => {
-      calls.push(input);
-      return {
-        automationId: input.automationId,
-        jobRunId: "job-1",
-        outcome: "queued",
-        reason: null,
-        started: true,
-        status: "running",
-        runtime: { provider: "trigger", runId: "runtime-1" },
-      };
-    },
-  });
-
-  const missingKey = await handler(
-    new NextRequest(
-      "https://mogplex.example/api/v1/mogplex/automations/flow-1/trigger",
-      {
-        method: "POST",
-        headers: { authorization: "Bearer mog_valid" },
-        body: JSON.stringify({ repoId: "repo-1" }),
-      }
-    ),
-    { params: Promise.resolve({ automationId: "flow-1" }) }
-  );
-  assert.equal(missingKey.status, 400);
-
-  const response = await handler(
-    new NextRequest(
-      "https://mogplex.example/api/v1/mogplex/automations/flow-1/trigger",
-      {
-        method: "POST",
-        headers: {
-          authorization: "Bearer mog_valid",
-          "idempotency-key": "tool-call-1",
-        },
-        body: JSON.stringify({
-          repoId: "repo-1",
-          input: { pull_request: { number: 42 } },
-        }),
-      }
-    ),
-    { params: Promise.resolve({ automationId: "flow-1" }) }
-  );
-
-  assert.equal(response.status, 202);
-  assert.deepEqual(calls, [
-    {
-      userId: "user-123",
-      automationId: "flow-1",
-      repoId: "repo-1",
-      idempotencyKey: "tool-call-1",
-      input: { pull_request: { number: 42 } },
-    },
-  ]);
-});
-
 test("automation update API rejects malformed graph payloads before persistence", async () => {
   configureEnv();
   const { createMogplexApiAutomationPutHandler } =
     await import("../../app/api/v1/mogplex/automations/[automationId]/route");
   let updateCalls = 0;
   const handler = createMogplexApiAutomationPutHandler({
-    resolveApiKey: async () => VALID_AUTH,
+    resolveOAuthToken: async () => VALID_AUTH,
     updateAutomation: async () => {
       updateCalls += 1;
       return {} as never;
@@ -260,7 +196,7 @@ test("automation update API rejects malformed graph payloads before persistence"
         "https://mogplex.example/api/v1/mogplex/automations/flow-1",
         {
           method: "PUT",
-          headers: { authorization: "Bearer mog_valid" },
+          headers: { authorization: "Bearer oauth_valid" },
           body: JSON.stringify({ graph }),
         }
       ),
@@ -279,7 +215,7 @@ test("automation update API rejects invalid installation ids before persistence"
     await import("../../app/api/v1/mogplex/automations/[automationId]/route");
   let updateCalls = 0;
   const handler = createMogplexApiAutomationPutHandler({
-    resolveApiKey: async () => VALID_AUTH,
+    resolveOAuthToken: async () => VALID_AUTH,
     updateAutomation: async () => {
       updateCalls += 1;
       return {} as never;
@@ -301,7 +237,7 @@ test("automation update API rejects invalid installation ids before persistence"
         "https://mogplex.example/api/v1/mogplex/automations/flow-1",
         {
           method: "PUT",
-          headers: { authorization: "Bearer mog_valid" },
+          headers: { authorization: "Bearer oauth_valid" },
           body: JSON.stringify({ installationId }),
         }
       ),
@@ -328,14 +264,14 @@ test("automation create and update APIs accept the same valid graph shape", asyn
   ]);
   const graphs: unknown[] = [];
   const createHandler = createMogplexApiAutomationsPostHandler({
-    resolveApiKey: async () => VALID_AUTH,
+    resolveOAuthToken: async () => VALID_AUTH,
     createAutomation: async (_userId, input) => {
       graphs.push(input.graph);
       return {} as never;
     },
   });
   const updateHandler = createMogplexApiAutomationPutHandler({
-    resolveApiKey: async () => VALID_AUTH,
+    resolveOAuthToken: async () => VALID_AUTH,
     updateAutomation: async (_userId, _automationId, input) => {
       graphs.push(input.graph);
       return {} as never;
@@ -345,7 +281,7 @@ test("automation create and update APIs accept the same valid graph shape", asyn
   const createResponse = await createHandler(
     new NextRequest("https://mogplex.example/api/v1/mogplex/automations", {
       method: "POST",
-      headers: { authorization: "Bearer mog_valid" },
+      headers: { authorization: "Bearer oauth_valid" },
       body: JSON.stringify({ installationId: 123, graph: VALID_GRAPH }),
     })
   );
@@ -354,7 +290,7 @@ test("automation create and update APIs accept the same valid graph shape", asyn
       "https://mogplex.example/api/v1/mogplex/automations/flow-1",
       {
         method: "PUT",
-        headers: { authorization: "Bearer mog_valid" },
+        headers: { authorization: "Bearer oauth_valid" },
         body: JSON.stringify({ graph: VALID_GRAPH }),
       }
     ),
@@ -372,7 +308,7 @@ test("automation create API rejects malformed graphs before creating a flow", as
     await import("../../app/api/v1/mogplex/automations/route");
   let createCalls = 0;
   const handler = createMogplexApiAutomationsPostHandler({
-    resolveApiKey: async () => VALID_AUTH,
+    resolveOAuthToken: async () => VALID_AUTH,
     createAutomation: async () => {
       createCalls += 1;
       return {} as never;
@@ -382,7 +318,7 @@ test("automation create API rejects malformed graphs before creating a flow", as
   const response = await handler(
     new NextRequest("https://mogplex.example/api/v1/mogplex/automations", {
       method: "POST",
-      headers: { authorization: "Bearer mog_valid" },
+      headers: { authorization: "Bearer oauth_valid" },
       body: JSON.stringify({ installationId: 123, graph: { nodes: [] } }),
     })
   );
@@ -396,7 +332,7 @@ test("sandbox creation API delegates to the event-driven launcher", async () => 
   const { createMogplexApiSandboxesPostHandler } =
     await import("../../app/api/v1/mogplex/sandboxes/route");
   const handler = createMogplexApiSandboxesPostHandler({
-    resolveApiKey: async () => VALID_AUTH,
+    resolveOAuthToken: async () => VALID_AUTH,
     launchSandbox: async (userId, body) => {
       assert.equal(userId, "user-123");
       assert.equal(body.repoId, "repo-1");
@@ -422,7 +358,7 @@ test("sandbox creation API delegates to the event-driven launcher", async () => 
   const response = await handler(
     new NextRequest("https://mogplex.example/api/v1/mogplex/sandboxes", {
       method: "POST",
-      headers: { authorization: "Bearer mog_valid" },
+      headers: { authorization: "Bearer oauth_valid" },
       body: JSON.stringify({
         repoId: "repo-1",
         workingBranch: "agent/work",

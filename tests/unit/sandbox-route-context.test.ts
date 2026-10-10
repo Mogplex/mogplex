@@ -97,6 +97,39 @@ test("loadOwnedSandboxRouteRecord returns 403 when requireCapability denies the 
   );
 });
 
+test("loadOwnedSandboxRouteRecord returns 403 when a team holds the caller's key to automations", async () => {
+  const { loadOwnedSandboxRouteRecord, buildSandboxRouteErrorResponse } =
+    await loadSandboxRouteContext();
+  const { SandboxKeyRestrictedError } =
+    await import("../../lib/sandbox/direct-execution-user");
+
+  let loadRecordCalls = 0;
+  const result = await loadOwnedSandboxRouteRecord(
+    buildSandboxRouteContextRequest(),
+    "sb-1",
+    { select: "sandbox_id", requireCapability: "tools.bash" },
+    {
+      getSandboxServiceCredentials: async () => {
+        throw new SandboxKeyRestrictedError("team");
+      },
+      loadOwnedSandboxRecord: async () => {
+        loadRecordCalls += 1;
+        return null;
+      },
+    }
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    const response = buildSandboxRouteErrorResponse(result);
+    assert.equal(response.status, 403);
+    const body = (await response.json()) as { error: string; code?: string };
+    assert.equal(body.code, "AUTOMATION_REQUIRED");
+    assert.match(body.error, /team owner/);
+  }
+  assert.equal(loadRecordCalls, 0);
+});
+
 test("loadOwnedSandboxRouteContext returns 404 when the sandbox is not owned by the caller", async () => {
   const { loadOwnedSandboxRouteContext } = await loadSandboxRouteContext();
 

@@ -1,4 +1,5 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
+import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import { mogplexAutomationErrorResponse } from "@/lib/mogplex-api/automation-response";
 import { setMogplexApiAutomationModel } from "@/lib/mogplex-api/automations";
 import { isMogplexApiModelAvailable } from "@/lib/mogplex-api/models";
@@ -7,12 +8,18 @@ import {
   mogplexApiSuccess,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
+import {
+  requireKeyAllowedOn,
+  type LoadTeamKeyAccess,
+} from "@/lib/mogplex-api/team-key-access";
 import { requireScope } from "@/lib/mogplex-api/scopes";
 import type { NextRequest } from "next/server";
 
 export function createMogplexApiAutomationModelPutHandler(
   overrides: {
     resolveApiKey?: typeof resolveApiKey;
+    resolveOAuthToken?: typeof resolveMogplexOAuthToken;
+    loadTeamKeyAccess?: LoadTeamKeyAccess;
     setModel?: typeof setMogplexApiAutomationModel;
   } = {}
 ) {
@@ -24,10 +31,18 @@ export function createMogplexApiAutomationModelPutHandler(
   ) {
     const user = await resolveMogplexApiUser(request, {
       resolveApiKey: resolveKey,
+      resolveOAuthToken: overrides.resolveOAuthToken,
     });
     if (!user.ok) return user.response;
     const forbidden = requireScope(user, "write");
     if (forbidden) return forbidden;
+    const { automationId } = await params;
+    const refusal = await requireKeyAllowedOn(
+      user,
+      { automationId },
+      overrides.loadTeamKeyAccess
+    );
+    if (refusal) return refusal;
     const body = (await request.json().catch(() => null)) as Record<
       string,
       unknown
@@ -43,7 +58,6 @@ export function createMogplexApiAutomationModelPutHandler(
       );
     }
     try {
-      const { automationId } = await params;
       return mogplexApiSuccess({
         automation: await setModel({
           userId: user.userId,

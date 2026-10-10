@@ -20,6 +20,7 @@ test("GET /api/settings/api-keys returns user keys without plaintext tokens", as
           name: "laptop CLI",
           token_prefix: "mog_ABCDEFGH",
           scopes: ["read"],
+          access: "full",
           created_at: "2024-01-01T00:00:00Z",
           last_used_at: "2024-01-02T00:00:00Z",
           expires_at: null,
@@ -68,6 +69,7 @@ test("POST /api/settings/api-keys creates a new key and returns plaintext token"
     tokenHash: string;
     tokenPrefix: string;
     scopes: string[];
+    access: string;
     expiresAt: string | null;
   }> = [];
 
@@ -106,6 +108,9 @@ test("POST /api/settings/api-keys creates a new key and returns plaintext token"
   // Backfill migration covers existing tokens; the API surface now hands new
   // tokens the same default so CI scripts work out of the box.
   assert.deepEqual(createdKeys[0].scopes, ["read", "write"]);
+  // Omitted access keeps the behavior keys had before access existed.
+  assert.equal(createdKeys[0].access, "full");
+  assert.equal(payload.access, "full");
 });
 
 test("POST /api/settings/api-keys accepts an explicit scopes list", async () => {
@@ -311,5 +316,90 @@ test("POST /api/settings/api-keys handles expiration days", async () => {
   assert.ok(
     diffDays >= 29 && diffDays <= 31,
     `Expected ~30 days, got ${diffDays}`
+  );
+});
+
+test("POST /api/settings/api-keys stores the access its owner chose", async () => {
+  const { createApiKeysPostHandler } = await loadApiKeysRoute();
+  const captured: string[] = [];
+
+  const handler = createApiKeysPostHandler({
+    requireUserId: async () => "user-123",
+    listApiKeys: async () => ({ data: [], error: null }),
+    createApiKey: async (input) => {
+      captured.push(input.access);
+      return { data: { id: "new-key-id" }, error: null };
+    },
+    generateApiToken: () => ({ token: "mog_T", hash: "h", prefix: "mog_T" }),
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "webrenew", access: "automations" }),
+    })
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(captured, ["automations"]);
+  assert.equal((await response.json()).access, "automations");
+});
+
+test("POST /api/settings/api-keys rejects an unknown access level", async () => {
+  const { createApiKeysPostHandler } = await loadApiKeysRoute();
+  let created = false;
+
+  const handler = createApiKeysPostHandler({
+    requireUserId: async () => "user-123",
+    listApiKeys: async () => ({ data: [], error: null }),
+    createApiKey: async () => {
+      created = true;
+      return { data: { id: "new-key-id" }, error: null };
+    },
+    generateApiToken: () => ({ token: "mog_T", hash: "h", prefix: "mog_T" }),
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/settings/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "k", access: "admin" }),
+    })
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(created, false);
+});
+
+test("GET /api/settings/api-keys returns each key's access", async () => {
+  const { createApiKeysGetHandler } = await loadApiKeysRoute();
+  const row = {
+    name: "k",
+    token_prefix: "mog_ABCDEFGH",
+    scopes: ["read", "write"],
+    created_at: "2024-01-01T00:00:00Z",
+    last_used_at: null,
+    expires_at: null,
+    revoked_at: null,
+  };
+
+  const handler = createApiKeysGetHandler({
+    requireUserId: async () => "user-123",
+    listApiKeys: async () => ({
+      data: [
+        { ...row, id: "key-1", access: "automations" },
+        { ...row, id: "key-2", access: "full" },
+      ],
+      error: null,
+    }),
+    createApiKey: async () => ({ data: null, error: null }),
+    generateApiToken: () => ({ token: "", hash: "", prefix: "" }),
+  });
+
+  const payload = await (await handler()).json();
+  assert.deepEqual(
+    payload.keys.map((key: { access: string }) => key.access),
+    ["automations", "full"]
   );
 });

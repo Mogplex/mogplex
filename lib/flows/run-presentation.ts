@@ -30,6 +30,10 @@ export {
   resolveReviewedTargetLink,
 } from "./run-presentation-links";
 
+// Re-export run invocation (version, trigger, input, links) from its module.
+export type { RunInvocation } from "./run-presentation-invocation";
+export { getRunInvocation } from "./run-presentation-invocation";
+
 // Re-export edit diff collection from the edits module.
 export type { RunEditDiff } from "./run-presentation-edits";
 export {

@@ -12,6 +12,7 @@ import { NextRequest } from "next/server";
 import { MogplexApiClient } from "@/lib/mogplex-api/client";
 import { handleMogplexMcpPayload } from "@/lib/mogplex-api/mcp";
 import { createMogplexApiRepoEnvVarsPostHandler } from "@/app/api/v1/mogplex/repos/[repoId]/env-vars/route";
+import { createLoadTeamKeyAccess } from "@/lib/mogplex-api/team-key-access";
 
 const owner = "00000000-0000-4000-8000-000000000001";
 const stranger = "00000000-0000-4000-8000-000000000002";
@@ -21,7 +22,7 @@ let client: SupabaseClient;
 beforeAll(async () => {
   db = await PGlite.create();
   await db.exec(
-    "create table repos(id text primary key, user_id uuid, sandbox_env_vars jsonb)"
+    "create table repos(id text primary key, user_id uuid, sandbox_env_vars jsonb, product_team_id uuid)"
   );
   client = createPostgrestShim({
     query: async (sql, values) => ({
@@ -185,6 +186,7 @@ it("persists an MCP tool call through the API into sandbox launch settings", asy
     }),
     upsertEnvVar: (userId, repoId, input) =>
       upsertMogplexApiRepoEnvVar(userId, repoId, input, { client }),
+    loadTeamKeyAccess: createLoadTeamKeyAccess(client),
   });
   const api = new MogplexApiClient({
     baseUrl: "https://mogplex.example",

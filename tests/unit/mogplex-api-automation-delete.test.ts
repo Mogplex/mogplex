@@ -33,6 +33,8 @@ async function deleteThroughMcp(scenario: Scenario = {}) {
   const requests: Array<{ method?: string; pathname: string }> = [];
 
   const handler = createMogplexApiAutomationDeleteHandler({
+    // Personal work: no team holds this key to automations.
+    loadTeamKeyAccess: async () => null,
     resolveApiKey: async () =>
       scenario.authenticated === false
         ? { ok: false, reason: "invalid" }

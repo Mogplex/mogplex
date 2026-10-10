@@ -21,7 +21,12 @@ import {
   mogplexApiSuccess,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
+import { requireFullAccessKey } from "@/lib/mogplex-api/credential-boundary";
 import { requireScope } from "@/lib/mogplex-api/scopes";
+import {
+  requireKeyAllowedOn,
+  type LoadTeamKeyAccess,
+} from "@/lib/mogplex-api/team-key-access";
 import {
   serializeAutomationJobStart,
   startAutomationJobRun,
@@ -42,6 +47,8 @@ type PrReviewRerunRouteDeps = {
   ) => Promise<JobRunRetryContext | null>;
   enqueueJobRunRetry: typeof enqueueJobRunRetry;
   startAutomationJobRun: typeof startAutomationJobRun;
+  /** Test seam for the repository's team key access. */
+  loadTeamKeyAccess?: LoadTeamKeyAccess;
 };
 
 const defaults: PrReviewRerunRouteDeps = {
@@ -65,6 +72,22 @@ const defaults: PrReviewRerunRouteDeps = {
   enqueueJobRunRetry,
   startAutomationJobRun,
 };
+
+/**
+ * A rerun starts a billable review outside any API-trigger automation, so a
+ * key held to automations, by itself or by the repository's team, is refused.
+ */
+async function refuseKeyHeldToAutomations(
+  user: Parameters<typeof requireFullAccessKey>[0] &
+    Parameters<typeof requireKeyAllowedOn>[0],
+  repoId: string,
+  loadTeamKeyAccess: LoadTeamKeyAccess | undefined
+) {
+  return (
+    requireFullAccessKey(user) ??
+    requireKeyAllowedOn(user, { repoId }, loadTeamKeyAccess)
+  );
+}
 
 export function createMogplexApiPrReviewRerunPostHandler(
   overrides: Partial<PrReviewRerunRouteDeps> = {}
@@ -106,6 +129,12 @@ export function createMogplexApiPrReviewRerunPostHandler(
         400
       );
     }
+    const restricted = await refuseKeyHeldToAutomations(
+      user,
+      repoId,
+      deps.loadTeamKeyAccess
+    );
+    if (restricted) return restricted;
 
     try {
       const repo = await deps.loadRepo(user.userId, repoId);

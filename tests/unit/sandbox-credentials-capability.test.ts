@@ -16,25 +16,45 @@ async function loadCapabilitiesModule() {
 }
 
 test("SandboxCapabilityDeniedError carries 403 and the missing cap", async () => {
-  const { SandboxCapabilityDeniedError, isSandboxCapabilityDeniedError } =
+  const { SandboxCapabilityDeniedError, isSandboxAccessDeniedError } =
     await loadCredentialsModule();
   const err = new SandboxCapabilityDeniedError("tools.bash");
   assert.equal(err.status, 403);
   assert.equal(err.capability, "tools.bash");
   assert.match(err.message, /tools\.bash/);
   assert.ok(err instanceof Error);
-  assert.equal(isSandboxCapabilityDeniedError(err), true);
+  assert.equal(isSandboxAccessDeniedError(err), true);
 });
 
-test("isSandboxCapabilityDeniedError rejects spoofed non-403 errors", async () => {
-  const { isSandboxCapabilityDeniedError } = await loadCredentialsModule();
+test("isSandboxAccessDeniedError rejects spoofed non-403 errors", async () => {
+  const { isSandboxAccessDeniedError } = await loadCredentialsModule();
   const err = Object.assign(new Error("spoofed"), {
     name: "SandboxCapabilityDeniedError",
     capability: "tools.bash",
     status: 500,
   });
 
-  assert.equal(isSandboxCapabilityDeniedError(err), false);
+  assert.equal(isSandboxAccessDeniedError(err), false);
+});
+
+test("isSandboxAccessDeniedError accepts a key held to automations", async () => {
+  const { isSandboxAccessDeniedError } = await loadCredentialsModule();
+  const { SandboxKeyRestrictedError } =
+    await import("../../lib/sandbox/direct-execution-user");
+
+  assert.equal(
+    isSandboxAccessDeniedError(new SandboxKeyRestrictedError("key")),
+    true
+  );
+  assert.equal(
+    isSandboxAccessDeniedError(
+      Object.assign(new Error("spoofed"), {
+        name: "SandboxKeyRestrictedError",
+        status: 500,
+      })
+    ),
+    false
+  );
 });
 
 test("readActiveTeamIdHeader returns null for missing, whitespace, or malformed values", async () => {
@@ -107,6 +127,48 @@ test("POST /api/sandbox returns 403 when getSandboxServiceCredentials denies the
   assert.equal(response.status, 403);
   const body = (await response.json()) as { error: string };
   assert.match(body.error, /tools\.bash/);
+  assert.equal(credentialCalls, 1);
+  assert.equal(createCalls, 0);
+});
+
+test("POST /api/sandbox returns 403 AUTOMATION_REQUIRED when key access is restricted", async () => {
+  const { createSandboxPostHandler } =
+    await import("../../app/api/sandbox/route");
+  const { SandboxKeyRestrictedError } =
+    await import("../../lib/sandbox/direct-execution-user");
+
+  let createCalls = 0;
+  let credentialCalls = 0;
+  const handler = createSandboxPostHandler({
+    getSandboxServiceCredentials: async () => {
+      credentialCalls += 1;
+      throw new SandboxKeyRestrictedError("team");
+    },
+    createSandboxForRepo: async () => {
+      createCalls += 1;
+      throw new Error("createSandboxForRepo should not be called");
+    },
+    createSandboxFromSnapshot: async () => {
+      createCalls += 1;
+      throw new Error("createSandboxFromSnapshot should not be called");
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/sandbox", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-mogplex-team-id": "00000000-0000-4000-8000-000000000001",
+      },
+      body: JSON.stringify({ repoId: "repo-1" }),
+    })
+  );
+
+  assert.equal(response.status, 403);
+  const body = (await response.json()) as { error: string; code?: string };
+  assert.equal(body.code, "AUTOMATION_REQUIRED");
+  assert.match(body.error, /team owner/);
   assert.equal(credentialCalls, 1);
   assert.equal(createCalls, 0);
 });
