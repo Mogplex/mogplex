@@ -1,6 +1,10 @@
 import { tool } from "ai";
 import { resolveSandboxPath } from "@/lib/repo-settings";
 import { z } from "zod";
+import {
+  sandboxGitAuthorEnv,
+  type SandboxGitAuthor,
+} from "@/lib/sandbox/git-author";
 
 import { buildUpdateFilePatch } from "./pr-fixer-patch";
 import {
@@ -253,6 +257,7 @@ export function buildSandboxPRFixTools(config: {
   prNumber: number;
   branch: string;
   sandbox: SandboxFileAccess;
+  gitAuthor: SandboxGitAuthor;
   rootDirectory?: string | null;
 }) {
   const githubTools = buildPRFixTools(config);
@@ -295,8 +300,6 @@ export function buildSandboxPRFixTools(config: {
       args: [
         "-lc",
         [
-          'git config user.name "Mogplex Automation"',
-          'git config user.email "automation@mogplex.com"',
           'git remote set-url origin "https://x-access-token:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"',
           'git add -- "$MOGPLEX_FILE"',
           'if git diff --cached --quiet -- "$MOGPLEX_FILE"; then echo __MOGPLEX_NO_CHANGES__; exit 0; fi',
@@ -307,6 +310,7 @@ export function buildSandboxPRFixTools(config: {
       ],
       cwd: sandboxCwd,
       env: {
+        ...sandboxGitAuthorEnv(config.gitAuthor),
         GITHUB_TOKEN: config.githubToken,
         GITHUB_REPOSITORY: targetRepoFullName,
         MOGPLEX_BRANCH: config.branch,

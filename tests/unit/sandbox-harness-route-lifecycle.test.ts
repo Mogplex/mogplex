@@ -147,6 +147,7 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
   let publishedPrompt: string | undefined;
   let synchronizedCwd: string | undefined;
   let harnessCwd: string | undefined;
+  let harnessGitAuthor: string | undefined;
 
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
@@ -198,6 +199,11 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
     getSandbox: async () => ({}) as never,
     runHarness: async (_sandbox, _harness, _prompt, _env, options) => {
       harnessCwd = options?.cwd;
+      harnessGitAuthor = options?.runtimeEnv?.GIT_AUTHOR_EMAIL;
+      assert.equal(
+        options?.runtimeEnv?.GIT_COMMITTER_EMAIL,
+        "agent@example.com"
+      );
       return {
         installed: false,
         installLogs: "",
@@ -275,6 +281,7 @@ test("POST /api/sandbox/[id]/harness delivers successful changes through a pull 
   assert.equal(publishedPrompt, "Fix checkout");
   assert.equal(synchronizedCwd, checkoutPath);
   assert.equal(harnessCwd, checkoutPath);
+  assert.equal(harnessGitAuthor, "agent@example.com");
   assert.match(
     String(
       events.find(

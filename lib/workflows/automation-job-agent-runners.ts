@@ -7,6 +7,7 @@ import { createTaskSandboxLoader } from "./automation-task-sandbox";
 import { createDependabotSandboxLoader } from "./automation-dependabot-sandbox";
 import { generateText } from "ai";
 import { buildPRFixTools, buildSandboxPRFixTools } from "@/lib/agents/pr-fixer";
+import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
 import {
   buildFlowPRReviewTools,
@@ -490,6 +491,7 @@ export function createSandboxPRFixAgentRunner(
         prNumber: input.pullRequest.number,
         branch: input.pullRequest.headRef,
         sandbox: sandboxData.sandbox,
+        gitAuthor: await resolveSandboxGitAuthor(input.context.repo.user_id),
         rootDirectory: sandboxData.rootDirectory ?? null,
       }),
     });

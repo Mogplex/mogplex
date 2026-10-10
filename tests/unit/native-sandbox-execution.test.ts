@@ -17,6 +17,10 @@ function fixture() {
   const commands: string[] = [];
   let released = 0;
   const deps: Partial<SandboxExecPostDeps> = {
+    resolveSandboxGitAuthor: async () => ({
+      name: "Test User",
+      email: "123+test@users.noreply.github.com",
+    }),
     getSandboxServiceCredentials: async (request, options) => {
       assert.equal(getDelegatedUserIdFromRequest(request!), "user-123");
       assert.equal(readActiveTeamIdHeader(request!), TEAM_ID);
