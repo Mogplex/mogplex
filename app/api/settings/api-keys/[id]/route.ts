@@ -104,7 +104,8 @@ const defaultApiKeyPatchDeps: ApiKeyPatchDeps = {
 /**
  * Change what one of the caller's own keys may do. Only the key's owner can:
  * the update is filtered by their user id, so another account's key reads as
- * not found. The change applies to the key's next request.
+ * not found. The change applies to the key's next request and is logged
+ * with the user, key, and new access.
  */
 export function createApiKeyPatchHandler(
   overrides: Partial<ApiKeyPatchDeps> = {}
@@ -148,6 +149,12 @@ export function createApiKeyPatchHandler(
       return NextResponse.json({ error: "Key not found" }, { status: 404 });
     }
 
+    // Personal keys have no team audit log, so the change is recorded here.
+    console.info("[api-key-access] key access changed", {
+      userId,
+      keyId: id,
+      access,
+    });
     return NextResponse.json({ id, access });
   };
 }

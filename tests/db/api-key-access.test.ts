@@ -8,7 +8,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyNeonMigrations } from "@/lib/db/neon-migrations";
 import { SHIM_TYPE_PARSERS } from "@/lib/db/pool";
 import { createPostgrestShim } from "@/lib/db/postgrest-shim";
-import { createLoadTeamKeyAccess } from "@/lib/mogplex-api/team-key-access";
+import {
+  createLoadTeamKeyAccess,
+  requireKeyAllowedOn,
+} from "@/lib/mogplex-api/team-key-access";
 
 const owner = "00000000-0000-4000-8000-000000000171";
 let db: PGlite;
@@ -35,6 +38,15 @@ async function insertTeam(slug: string, access?: string) {
     params
   );
   return result.rows[0]?.api_key_access;
+}
+
+function loadThroughShim() {
+  const shim = createPostgrestShim({
+    query: async (sql, values) => ({
+      rows: (await db.query(sql, values)).rows as Record<string, unknown>[],
+    }),
+  });
+  return createLoadTeamKeyAccess(shim as unknown as SupabaseClient);
 }
 
 beforeAll(async () => {
@@ -106,12 +118,7 @@ describe("team key access lookup against the migrated schema", () => {
       [owner]
     );
     automationId = flow.rows[0]!.id;
-    const shim = createPostgrestShim({
-      query: async (sql, values) => ({
-        rows: (await db.query(sql, values)).rows as Record<string, unknown>[],
-      }),
-    });
-    load = createLoadTeamKeyAccess(shim as unknown as SupabaseClient);
+    load = loadThroughShim();
   });
 
   it("should read a team installation's key access", async () => {
@@ -136,6 +143,64 @@ describe("team key access lookup against the migrated schema", () => {
   it("should not read another account's installation", async () => {
     await expect(
       load("00000000-0000-4000-8000-000000000999", { installationId: 501 })
+    ).resolves.toBeNull();
+  });
+});
+
+describe("a team key policy change applies to the key's next request", () => {
+  const teamId = "00000000-0000-4000-8000-000000000173";
+  const fullKey = {
+    userId: owner,
+    credentialKind: "integration",
+    keyAccess: "full",
+  } as const;
+  const target = { installationId: 503 };
+
+  async function setTeamAccess(access: "full" | "automations") {
+    await db.query("update teams set api_key_access = $1 where id = $2", [
+      access,
+      teamId,
+    ]);
+  }
+
+  beforeAll(async () => {
+    await db.query(
+      `insert into teams(id, name, slug, owner_user_id)
+       values ($1, 'Flip', 'flip-policy', $2)`,
+      [teamId, owner]
+    );
+    await db.query(
+      `insert into github_installations(user_id, installation_id, product_team_id)
+       values ($1, 503, $2)`,
+      [owner, teamId]
+    );
+  });
+
+  it("should refuse a full key once the owner holds keys to automations and allow it once they lift it", async () => {
+    const load = loadThroughShim();
+    await expect(
+      requireKeyAllowedOn(fullKey, target, load)
+    ).resolves.toBeNull();
+
+    await setTeamAccess("automations");
+    const refusal = await requireKeyAllowedOn(fullKey, target, load);
+    expect(refusal?.status).toBe(403);
+    expect((await refusal?.json())?.error.code).toBe("AUTOMATION_REQUIRED");
+
+    await setTeamAccess("full");
+    await expect(
+      requireKeyAllowedOn(fullKey, target, load)
+    ).resolves.toBeNull();
+  });
+
+  it("should never hold an interactive login to automations", async () => {
+    await setTeamAccess("automations");
+    await expect(
+      requireKeyAllowedOn(
+        { userId: owner, credentialKind: "interactive", keyAccess: null },
+        target,
+        loadThroughShim()
+      )
     ).resolves.toBeNull();
   });
 });

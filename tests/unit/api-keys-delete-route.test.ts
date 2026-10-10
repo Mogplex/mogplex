@@ -96,8 +96,9 @@ test("revoked tokens cannot authenticate (security test)", async () => {
   assert.equal(revokedKeys[0].id, "key-2");
 });
 
-test("PATCH /api/settings/api-keys/[id] changes the owner's key access", async () => {
+test("PATCH /api/settings/api-keys/[id] changes the owner's key access", async (t) => {
   const { createApiKeyPatchHandler } = await loadApiKeyDeleteRoute();
+  const info = t.mock.method(console, "info", () => {});
   const updates: Array<{ userId: string; keyId: string; access: string }> = [];
 
   const handler = createApiKeyPatchHandler({
@@ -124,10 +125,20 @@ test("PATCH /api/settings/api-keys/[id] changes the owner's key access", async (
   assert.deepEqual(updates, [
     { userId: "user-123", keyId: "key-456", access: "automations" },
   ]);
+  assert.deepEqual(
+    info.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "[api-key-access] key access changed",
+        { userId: "user-123", keyId: "key-456", access: "automations" },
+      ],
+    ]
+  );
 });
 
-test("PATCH /api/settings/api-keys/[id] returns 404 for another account's key", async () => {
+test("PATCH /api/settings/api-keys/[id] returns 404 for another account's key", async (t) => {
   const { createApiKeyPatchHandler } = await loadApiKeyDeleteRoute();
+  const info = t.mock.method(console, "info", () => {});
 
   const handler = createApiKeyPatchHandler({
     requireUserId: async () => "user-123",
@@ -143,6 +154,7 @@ test("PATCH /api/settings/api-keys/[id] returns 404 for another account's key", 
   );
 
   assert.equal(response.status, 404);
+  assert.equal(info.mock.callCount(), 0);
 });
 
 test("PATCH /api/settings/api-keys/[id] rejects an unknown access level", async () => {
