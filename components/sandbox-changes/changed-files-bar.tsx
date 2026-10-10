@@ -157,6 +157,7 @@ type Props = {
   /** Bumped by the pane when a turn ends so the bar re-reads git status. */
   refreshToken: number;
   defaultCommitMessage: string;
+  presentation?: "inline" | "panel";
 };
 
 export function ChangedFilesBar(props: Props) {
@@ -168,10 +169,11 @@ function SandboxChangedFilesBar({
   disabled,
   refreshToken,
   defaultCommitMessage,
+  presentation = "inline",
 }: Props) {
   const { changes, loading, busy, error, refresh, loadDiff, revert, commit } =
     useSandboxChanges({ sandboxId, refreshToken });
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(presentation === "panel");
   const [committing, setCommitting] = useState(false);
   const [confirmRevertAll, setConfirmRevertAll] = useState(false);
   const [diff, setDiff] = useState<{ path: string; patch: string } | null>(null);
@@ -195,7 +197,10 @@ function SandboxChangedFilesBar({
     [commit]
   );
 
-  if (!sandboxId || !changes) return null;
+  if (!sandboxId) return null;
+  if (!changes) return presentation === "panel" ? <div className="p-4 text-sm text-muted-foreground">
+    {error ? <><p role="alert">{error}</p><button type="button" className="mt-3 underline" onClick={() => void refresh()}>Retry changes</button></> : <p role="status">{loading ? "Loading changes…" : "Changes are unavailable."}</p>}
+  </div> : null;
   const files = changes.files;
   const totals = files.reduce(
     (acc, file) => ({
@@ -204,13 +209,13 @@ function SandboxChangedFilesBar({
     }),
     { additions: 0, deletions: 0 }
   );
-  if (files.length === 0 && changes.ahead === 0 && !delivery && !error) return null;
+  if (files.length === 0 && changes.ahead === 0 && !delivery && !error && presentation === "inline") return null;
   const actionsDisabled = disabled || busy || loading;
 
   return (
     <div
       data-testid="changed-files-bar"
-      className="border-t border-border-dim bg-background/60 text-[11px]"
+      className={`border-border-dim bg-background/60 text-[11px] ${presentation === "panel" ? "task-changes" : "border-t"}`}
     >
       <div className="flex items-center gap-2 px-2 py-1">
         <button
@@ -321,7 +326,7 @@ function SandboxChangedFilesBar({
         </div>
       ) : null}
       {expanded && files.length > 0 ? (
-        <div className="max-h-48 overflow-y-auto border-t border-border-dim">
+        <div className={`${presentation === "panel" ? "" : "max-h-48"} overflow-y-auto border-t border-border-dim`}>
           {files.map((file) => (
             <FileRow
               key={file.path}
@@ -343,7 +348,11 @@ function SandboxChangedFilesBar({
           onCancel={() => setCommitting(false)}
         />
       ) : null}
-      <Dialog open={diff !== null} onOpenChange={(open) => !open && setDiff(null)}>
+      {presentation === "panel" && files.length === 0 && <p className="p-4 text-sm text-muted-foreground">No uncommitted changes.</p>}
+      {presentation === "panel" ? diff && <section aria-label={`Diff for ${diff.path}`} className="border-t border-border p-3">
+        <div className="mb-3 flex items-center gap-2"><h3 className="min-w-0 flex-1 break-all font-mono text-xs">{diff.path}</h3><button type="button" aria-label="Close diff" onClick={() => setDiff(null)} className="rounded px-2 py-1 text-xs hover:bg-muted">Close</button></div>
+        {diff.patch ? <PatchViewer patch={diff.patch} /> : <p className="text-muted-foreground">No textual diff for this file.</p>}
+      </section> : <Dialog open={diff !== null} onOpenChange={(open) => !open && setDiff(null)}>
         <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
           <DialogTitle className="font-mono text-xs">{diff?.path}</DialogTitle>
           {diff?.patch ? (
@@ -352,7 +361,7 @@ function SandboxChangedFilesBar({
             <p className="text-muted-foreground">No textual diff for this file.</p>
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </div>
   );
 }

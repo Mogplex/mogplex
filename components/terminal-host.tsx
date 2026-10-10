@@ -46,7 +46,8 @@ export function TerminalHost() {
       ...Object.keys(useTerminalSessionsStore.getState().bindings),
     ]);
     for (const id of known) {
-      if (!active.has(id)) clearSession(id);
+      // Command Center owns its terminal mounts independently of workspace panes.
+      if (!active.has(id) && !id.startsWith("control-")) clearSession(id);
     }
   }, [clearSession, paneIds]);
 

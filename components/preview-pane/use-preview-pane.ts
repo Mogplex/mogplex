@@ -27,6 +27,7 @@ import {
 import { usePreviewFeedbackStore } from "@/hooks/use-preview-feedback";
 import { trackActivation } from "@/lib/activation-tracking";
 import {
+  findWorkspaceSession,
   bindSessionToPendingSandboxBranch,
   ensureSessionSandboxBinding,
 } from "@/lib/sandbox/session-retarget";
@@ -51,6 +52,8 @@ export function usePreviewPane(props: PreviewPaneProps) {
     onActiveFileChange,
     onTabChange,
     onPopOut,
+    onSandboxChange,
+    onFeedback,
   } = props;
 
   const router = useRouter();
@@ -62,14 +65,19 @@ export function usePreviewPane(props: PreviewPaneProps) {
     null
   );
   const sendFeedback = usePreviewFeedbackStore((s) => s.send);
-  const activeSessionId = useSessionsStore((s) => s.activeSessionId);
+  const workspaceSessionId = useSessionsStore((s) => s.activeSessionId);
+  const isolated = props.workspaceSessionId === null;
+  const activeSessionId =
+    props.workspaceSessionId === undefined
+      ? workspaceSessionId
+      : props.workspaceSessionId;
   const activeTab = initialTab ?? "preview";
 
   const repoId = activeRepo?.id;
   const sandboxRecord = useSandboxStore((s) =>
     sandboxRecordId
       ? s.getSandboxById(sandboxRecordId)
-      : repoId
+      : repoId && !isolated
         ? s.getSandboxForRepo(repoId)
         : null
   );
@@ -225,12 +233,14 @@ export function usePreviewPane(props: PreviewPaneProps) {
       sandboxRecordId,
       restartedSandbox.id
     );
+    onSandboxChange?.(restartedSandbox.id);
   }, [
     activeSessionId,
     repoId,
     restartSandbox,
     sandboxRecord?.working_branch,
     sandboxRecordId,
+    onSandboxChange,
   ]);
 
   const beginStoppedOverlayLaunchAttempt = useCallback(
@@ -265,13 +275,13 @@ export function usePreviewPane(props: PreviewPaneProps) {
         const currentActiveRepo = activeRepoRef.current;
         if (!currentActiveRepo) return;
 
-        const currentSession = useSessionsStore.getState().getActiveSession();
+        const currentSession = findWorkspaceSession(activeSessionId);
         const currentSessionId = currentSession?.id ?? null;
         const currentSandboxRecordId = sandboxRecordIdRef.current;
         const currentRepoId = currentActiveRepo.id;
         const currentSandboxRecord = currentSandboxRecordId
           ? useSandboxStore.getState().getSandboxById(currentSandboxRecordId)
-          : currentRepoId
+          : currentRepoId && !isolated
             ? useSandboxStore.getState().getSandboxForRepo(currentRepoId)
             : null;
         const currentLiveProbe =
@@ -311,6 +321,7 @@ export function usePreviewPane(props: PreviewPaneProps) {
             launchContext.effectiveSandboxRecordId,
             outcome.sandbox.id
           );
+          onSandboxChange?.(outcome.sandbox.id);
         } else if (outcome.status === "cancelled") {
           clearStoppedOverlayLaunchAttempt(launchAttemptId);
         }
@@ -320,6 +331,9 @@ export function usePreviewPane(props: PreviewPaneProps) {
       beginStoppedOverlayLaunchAttempt,
       clearStoppedOverlayLaunchAttempt,
       launchRepoSandbox,
+      activeSessionId,
+      onSandboxChange,
+      isolated,
     ]
   );
 
@@ -328,12 +342,14 @@ export function usePreviewPane(props: PreviewPaneProps) {
     if (!currentActiveRepo) return;
 
     void (async () => {
-      const currentSession = useSessionsStore.getState().getActiveSession();
+      const currentSession = findWorkspaceSession(activeSessionId);
       const currentSessionId = currentSession?.id ?? null;
       const currentRepoId = currentActiveRepo.id;
       const currentSandboxRecordId =
         sandboxRecordIdRef.current ??
-        useSandboxStore.getState().getSandboxForRepo(currentRepoId)?.id ??
+        (isolated
+          ? null
+          : useSandboxStore.getState().getSandboxForRepo(currentRepoId)?.id) ??
         null;
       const launchAttemptId = beginStoppedOverlayLaunchAttempt(
         currentSandboxRecordId,
@@ -358,6 +374,7 @@ export function usePreviewPane(props: PreviewPaneProps) {
           currentSandboxRecordId,
           outcome.sandbox.id
         );
+        onSandboxChange?.(outcome.sandbox.id);
       } else if (outcome.status === "cancelled") {
         clearStoppedOverlayLaunchAttempt(launchAttemptId);
       }
@@ -366,6 +383,9 @@ export function usePreviewPane(props: PreviewPaneProps) {
     beginStoppedOverlayLaunchAttempt,
     clearStoppedOverlayLaunchAttempt,
     launchRepoSandbox,
+    activeSessionId,
+    onSandboxChange,
+    isolated,
   ]);
 
   const handleCapture = useCallback((region: SelectionRect) => {
@@ -388,15 +408,17 @@ export function usePreviewPane(props: PreviewPaneProps) {
         width_pct: capturedRegion.width,
         height_pct: capturedRegion.height,
       });
-      sendFeedback({
+      const feedback = {
         id: crypto.randomUUID(),
         text: `[Preview feedback — ${regionDesc} (${capturedRegion.x}%,${capturedRegion.y}% ${capturedRegion.width}×${capturedRegion.height}%)]\n${text}`,
         region: capturedRegion,
         timestamp: Date.now(),
-      });
+      };
+      if (onFeedback) onFeedback(feedback.text);
+      else sendFeedback(feedback);
       setCapturedRegion(null);
     },
-    [capturedRegion, sendFeedback]
+    [capturedRegion, onFeedback, sendFeedback]
   );
 
   const handlePopOut = useCallback(() => {

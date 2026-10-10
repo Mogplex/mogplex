@@ -59,6 +59,7 @@ export type ControlTopBarProps = {
   /** Streams an instruction to the agent (same path as the composer). */
   onSendInstruction: (text: string) => void;
   onOpenTerminal: () => void;
+  onOpenPreview: () => void;
   onStartSandbox: () => void;
   onScheduleAutomation: () => void;
   onRename: (title: string) => void;
@@ -117,6 +118,7 @@ export function ControlTopBar({
   repoFullName,
   onSendInstruction,
   onOpenTerminal,
+  onOpenPreview,
   onStartSandbox,
   onScheduleAutomation,
   onRename,
@@ -159,16 +161,16 @@ export function ControlTopBar({
   };
 
   return (
-    <header className="flex flex-wrap items-center gap-3 border-b border-ink-800 px-4 py-3 sm:px-6">
-      <div className="flex min-w-0 items-center gap-2 text-[15px]">
+    <header className="control-task-header flex flex-wrap items-center gap-3 border-b border-ink-800 px-4 py-3 sm:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-2 text-[15px]">
         {sessionNavigation}
-        <Book
+        <Book data-task-header-context
           className="size-3.5 shrink-0 text-ink-400"
           strokeWidth={1.8}
           aria-hidden="true"
         />
-        <span className="truncate text-ink-400">{projectName ?? "Control"}</span>
-        <NavArrowDown
+        <span data-task-header-context className="truncate text-ink-400">{projectName ?? "Control"}</span>
+        <NavArrowDown data-task-header-context
           className="size-3.5 shrink-0 -rotate-90 text-ink-600"
           strokeWidth={2}
           aria-hidden="true"
@@ -178,12 +180,12 @@ export function ControlTopBar({
         </span>
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="task-header-actions ml-auto flex shrink-0 items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className={TRIGGER_CLASS}>
+            <button type="button" data-action-trigger aria-label="Add action" className={TRIGGER_CLASS}>
               <Plus className="size-3.5" strokeWidth={2} />
-              Add action
+              <span data-task-header-label>Add action</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={MENU_CLASS}>
@@ -242,7 +244,7 @@ export function ControlTopBar({
               }
               onSelect={() => {
                 if (previewUrl) {
-                  window.open(previewUrl, "_blank", "noreferrer");
+                  onOpenPreview();
                 } else {
                   onSendInstruction(
                     "Start the project's dev server in the sandbox and share its preview URL."
@@ -264,10 +266,10 @@ export function ControlTopBar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className={TRIGGER_CLASS}>
+            <button type="button" data-action-trigger aria-label="Open" className={TRIGGER_CLASS}>
               <Play className="size-3.5" strokeWidth={1.8} />
-              Open
-              <NavArrowDown className="size-3 text-ink-400" strokeWidth={2} />
+              <span data-task-header-label>Open</span>
+              <NavArrowDown data-task-header-label className="size-3 text-ink-400" strokeWidth={2} />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={MENU_CLASS}>
@@ -275,9 +277,7 @@ export function ControlTopBar({
               <Item
                 icon={Eye}
                 title={previewUrl}
-                onSelect={() =>
-                  window.open(previewUrl, "_blank", "noreferrer")
-                }
+                onSelect={onOpenPreview}
               >
                 Open sandbox preview
               </Item>
@@ -326,12 +326,13 @@ export function ControlTopBar({
             <button
               type="button"
               className={TRIGGER_CLASS}
+              data-action-trigger aria-label="Commit & push"
               disabled={!hasSession}
               title={hasSession ? undefined : "Select a session to commit from"}
             >
               <GitCommit className="size-3.5" strokeWidth={1.8} />
-              Commit &amp; push
-              <NavArrowDown className="size-3 text-ink-400" strokeWidth={2} />
+              <span data-task-header-label>Commit &amp; push</span>
+              <NavArrowDown data-task-header-label className="size-3 text-ink-400" strokeWidth={2} />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={MENU_CLASS}>

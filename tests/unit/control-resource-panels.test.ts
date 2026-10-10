@@ -44,13 +44,13 @@ test("Control resource tabs expose distinct counts and selected compute context"
     })
   );
 
-  assert.match(html, /role="tablist"/);
-  assert.match(html, /aria-label="Control views"/);
+  assert.match(html, /role="group"/);
+  assert.match(html, /aria-label="Task environment"/);
   assert.match(html, /Worktrees, 1 checkout/);
   assert.match(html, /Sandboxes, 1 current sandbox, 0 previous attempts/);
   assert.match(
     html,
-    /Select acme\/widgets, branch feat\/compute-context, Running, for chat and preview/
+    /Selected sandbox acme\/widgets, branch feat\/compute-context, Running. Choose sandbox for chat and preview/
   );
   assert.match(html, /title="sbx_runtime123"/);
   assert.match(html, />acme\/widgets</);
@@ -118,6 +118,7 @@ test("Sandbox panel keeps the compute model visible while loading and empty", ()
       onClearFocus: () => undefined,
       onSelectSandbox: () => undefined,
       onStartSandbox: () => undefined,
+      onOpenPreview: () => undefined,
     })
   );
   assert.match(loadingHtml, /Loading sandbox compute/);
@@ -133,6 +134,7 @@ test("Sandbox panel keeps the compute model visible while loading and empty", ()
       onClearFocus: () => undefined,
       onSelectSandbox: () => undefined,
       onStartSandbox: () => undefined,
+      onOpenPreview: () => undefined,
     })
   );
   assert.match(emptyHtml, /No current sandbox/);

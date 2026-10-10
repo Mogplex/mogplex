@@ -91,7 +91,7 @@ export function PreviewPane(props: PreviewPaneProps) {
         >
           Preview
         </button>
-        {sandboxId && (
+        {sandboxId && !props.hideCodeTab && (
           <button
             onClick={() => handleTabChange("code")}
             className={`rounded px-2 py-0.5 font-mono transition-colors ${
@@ -314,6 +314,7 @@ export function PreviewPane(props: PreviewPaneProps) {
                     sandboxRecordId ?? null,
                     outcome.sandbox.id
                   );
+                  props.onSandboxChange?.(outcome.sandbox.id);
                 }
               }
             }}

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { useSandboxStore } from "@/hooks/use-sandbox";
+import { useMemo } from "react";
+import type { UIMessage } from "ai";
 import type { Repo, SandboxRecord } from "@/lib/types";
 import { resolveControlSessionRepo } from "@/lib/control/session-project";
 import type { ControlChatRequestContext } from "./control-chat-request";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
-import { isCurrentControlSandbox } from "@/lib/control/sandbox-presentation";
+import { useTaskSandbox } from "./use-task-sandbox";
+
+const EMPTY_MESSAGES: UIMessage[] = [];
 
 type ContextRepo = Pick<
   Repo,
@@ -23,21 +25,6 @@ export function selectControlSessionSandboxes<T extends { repo_id: string }>(
 ): T[] {
   if (!activeRepo) return [];
   return allSandboxes.filter((sandbox) => sandbox.repo_id === activeRepo.id);
-}
-
-export function selectControlActiveSandbox<
-  T extends { id: string; runtime_summary: { status: string } },
->(sandboxes: T[], preferredSandboxId: string | null): T | null {
-  const current = sandboxes.filter(isCurrentControlSandbox);
-  const preferred = preferredSandboxId
-    ? current.find((sandbox) => sandbox.id === preferredSandboxId)
-    : null;
-  if (preferred) return preferred;
-  return (
-    current.find((sandbox) => sandbox.runtime_summary.status === "running") ??
-    current[0] ??
-    null
-  );
 }
 
 export function buildControlSessionRequestContext({
@@ -80,6 +67,7 @@ export function useControlSessionContext({
   sessionId,
   selectedMissionId,
   missionTitle,
+  messages = EMPTY_MESSAGES,
 }: {
   activeSession: ControlSessionSummary | null;
   repos: Repo[];
@@ -87,9 +75,8 @@ export function useControlSessionContext({
   sessionId: string | null;
   selectedMissionId: string;
   missionTitle: string | null;
+  messages?: UIMessage[];
 }) {
-  const preferredSandboxId = useSandboxStore((state) => state.activeSandboxId);
-  const selectSandbox = useSandboxStore((state) => state.setActiveSandbox);
   const activeRepo = useMemo(
     () => resolveControlSessionRepo(activeSession, repos),
     [activeSession, repos]
@@ -99,16 +86,11 @@ export function useControlSessionContext({
     () => selectControlSessionSandboxes(activeRepo, allSandboxes),
     [activeRepo, allSandboxes]
   );
-  const activeSandbox = useMemo(
-    () => selectControlActiveSandbox(sandboxes, preferredSandboxId),
-    [preferredSandboxId, sandboxes]
+  const { activeSandbox, selectSandbox } = useTaskSandbox(
+    sessionId,
+    sandboxes,
+    messages
   );
-
-  useEffect(() => {
-    if (activeSandbox && activeSandbox.id !== preferredSandboxId) {
-      selectSandbox(activeSandbox.id);
-    }
-  }, [activeSandbox, preferredSandboxId, selectSandbox]);
 
   const requestContext = useMemo(
     () =>

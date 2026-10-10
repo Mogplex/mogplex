@@ -23,6 +23,7 @@ export interface PreviewPaneProps {
     working_branch?: string | null;
   } | null;
   initialTab?: PreviewPaneTab;
+  hideCodeTab?: boolean;
   activeFilePath?: string | null;
   onActiveFileChange?: (filePath: string | null) => void;
   onRetargetFilePath?: (
@@ -33,4 +34,8 @@ export interface PreviewPaneProps {
   onClearFilePath?: (targetPath: string, sandboxId: string) => void;
   onTabChange?: (tab: PreviewPaneTab) => void;
   onPopOut?: (activeFile?: string) => void;
+  /** Explicit null isolates Control from the repository workspace selection. */
+  workspaceSessionId?: string | null;
+  onSandboxChange?: (sandboxId: string) => void;
+  onFeedback?: (text: string) => void;
 }

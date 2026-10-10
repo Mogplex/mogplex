@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildControlSessionRequestContext,
-  selectControlActiveSandbox,
   selectControlSessionSandboxes,
 } from "../../components/control/use-control-session-context";
 
@@ -16,29 +15,6 @@ test("selectControlSessionSandboxes requires the session repository", () => {
   assert.deepEqual(selectControlSessionSandboxes({ id: "repo-1" }, sandboxes), [
     sandboxes[0],
   ]);
-});
-
-test("selectControlActiveSandbox prefers a running sandbox and honors an explicit selection", () => {
-  const sandboxes = [
-    {
-      id: "sandbox-paused",
-      runtime_summary: { status: "paused" },
-    },
-    {
-      id: "sandbox-running",
-      runtime_summary: { status: "running" },
-    },
-  ];
-
-  assert.equal(selectControlActiveSandbox(sandboxes, null), sandboxes[1]);
-  assert.equal(
-    selectControlActiveSandbox(sandboxes, "sandbox-paused"),
-    sandboxes[0]
-  );
-  assert.equal(
-    selectControlActiveSandbox(sandboxes, "sandbox-from-another-repo"),
-    sandboxes[1]
-  );
 });
 
 test("buildControlSessionRequestContext omits mission and branch context without a repo", () => {

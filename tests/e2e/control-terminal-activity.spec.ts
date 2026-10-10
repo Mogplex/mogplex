@@ -6,7 +6,7 @@ import {
   mockControlSessionBootstrap,
 } from "./helpers/automation-control-plane-fixtures";
 
-test("control shows sandbox launch and command output above the composer", async ({
+test("control shows sandbox launch and command output in the task drawer", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
@@ -83,34 +83,30 @@ test("control shows sandbox launch and command output above the composer", async
     .fill("run the checks");
   await page.getByRole("button", { name: "Start mission" }).click();
 
+  await page.getByRole("button", { name: /^Agent commands/ }).click();
   const terminal = page.getByTestId("control-terminal-activity");
   await expect(terminal).toBeVisible();
-  await expect(terminal).toContainText("Agent Terminal");
-  await expect(terminal).toContainText("READ ONLY");
+  await expect(terminal).toContainText("Read only.");
   await expect(terminal).not.toContainText("sandbox-demo");
   await expect(terminal).toContainText("pnpm test");
-  const output = terminal.getByText("12 tests passed", { exact: true });
-  await expect(output).toBeHidden();
-  expect((await terminal.boundingBox())!.height).toBeLessThan(65);
-  await terminal.getByRole("button", { name: "Show terminal output" }).click();
-  await expect(output).toBeVisible();
   await expect(
-    terminal.getByRole("button", { name: "Hide terminal output" })
-  ).toHaveAttribute("aria-expanded", "true");
+    terminal.getByText("12 tests passed", { exact: true })
+  ).toBeVisible();
   await expect(terminal).toContainText("Sandbox failed");
   await expect(terminal).toContainText("Sandbox capacity unavailable");
   await expect(terminal).toContainText(
     "Sandbox recovered and ready · cleanup 3s"
   );
-
-  // The terminal and composer use the conversation rail, rather than each
-  // introducing a slightly narrower content column.
-  const terminalBox = await page
-    .getByTestId("control-terminal-surface")
-    .boundingBox();
-  const composerBox = await page
-    .getByTestId("control-composer-dropzone")
-    .boundingBox();
-  expect(terminalBox?.x).toBeCloseTo(composerBox?.x ?? 0, 1);
-  expect(terminalBox?.width).toBeCloseTo(composerBox?.width ?? 0, 1);
+  const drawer = page.getByRole("region", { name: "Task terminal" });
+  const before = await drawer.boundingBox();
+  await page
+    .getByRole("separator", { name: "Resize terminal", exact: true })
+    .focus();
+  await page.keyboard.press("ArrowUp");
+  expect((await drawer.boundingBox())!.height).toBeGreaterThan(before!.height);
+  await page.getByRole("button", { name: "Close terminal" }).click();
+  await expect(drawer).toBeHidden();
+  await expect(
+    page.getByRole("textbox", { name: "Ask for follow-up changes" })
+  ).toBeVisible();
 });

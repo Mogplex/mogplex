@@ -117,15 +117,15 @@ test("Control counts worktrees separately from sandbox compute", async ({
   await page.waitForLoadState("networkidle");
 
   await expect(
-    page.getByRole("tab", { name: "Worktrees, 1 checkout" })
+    page.getByRole("button", { name: "Worktrees, 1 checkout" })
   ).toBeVisible();
   await expect(
-    page.getByRole("tab", {
+    page.getByRole("button", {
       name: "Sandboxes, 0 current sandboxes, 0 previous attempts",
     })
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: "Worktrees, 1 checkout" }).click();
+  await page.getByRole("button", { name: "Worktrees, 1 checkout" }).click();
   await expect(page.getByRole("heading", { name: "Worktrees" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
   await expect(
@@ -178,7 +178,7 @@ test("Control counts worktrees separately from sandbox compute", async ({
   expect(pruneForces).toEqual([false, true]);
 
   await page
-    .getByRole("tab", {
+    .getByRole("button", {
       name: "Sandboxes, 0 current sandboxes, 0 previous attempts",
     })
     .click();
@@ -284,9 +284,9 @@ test("Control ignores a stale worktree response after switching sessions", async
   await sessionsRail.getByRole("button", { name: /^Mission B/ }).click();
 
   await expect(
-    page.getByRole("tab", { name: "Worktrees, 1 checkout" })
+    page.getByRole("button", { name: "Worktrees, 1 checkout" })
   ).toBeVisible();
-  await page.getByRole("tab", { name: "Worktrees, 1 checkout" }).click();
+  await page.getByRole("button", { name: "Worktrees, 1 checkout" }).click();
   await expect(page.getByText("mogplex/task/mission-b")).toBeVisible();
 
   const staleResponse = page.waitForResponse((response) =>
@@ -346,7 +346,7 @@ test("Control worktrees keeps teaching copy visible when loading fails", async (
   );
 
   await page.goto(`${scopedPath("control")}?mission=session-error`);
-  await page.getByRole("tab", { name: "Worktrees, 0 checkouts" }).click();
+  await page.getByRole("button", { name: "Worktrees, 0 checkouts" }).click();
   await expect(page.getByText("Worktree service unavailable")).toBeVisible();
   await expect(
     page.getByText(

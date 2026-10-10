@@ -5,7 +5,10 @@ import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import { toast } from "@/hooks/use-toast";
 import type { Repo } from "@/lib/types";
 
-export function useControlSandboxStart(activeRepo: Repo | null) {
+export function useControlSandboxStart(
+  activeRepo: Repo | null,
+  onStarted: (id: string) => void
+) {
   const { launchRepoSandbox } = useSandboxLaunchActions();
 
   return useCallback(() => {
@@ -21,6 +24,8 @@ export function useControlSandboxStart(activeRepo: Repo | null) {
       source: "control",
       trigger: "control-start-sandbox",
       intent: { kind: "start_fresh", interactive: true },
+    }).then((outcome) => {
+      if (outcome.sandbox?.id) onStarted(outcome.sandbox.id);
     });
-  }, [activeRepo, launchRepoSandbox]);
+  }, [activeRepo, launchRepoSandbox, onStarted]);
 }

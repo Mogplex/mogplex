@@ -2,6 +2,14 @@ import { useConversationsStore } from "@/hooks/use-conversations";
 import { collectPaneIds } from "@/hooks/use-split-panes";
 import { useSessionsStore } from "@/hooks/use-sessions";
 
+export function findWorkspaceSession(id: string | null) {
+  return id
+    ? (useSessionsStore
+        .getState()
+        .sessions.find((session) => session.id === id) ?? null)
+    : null;
+}
+
 export function retargetSessionToSandbox(
   sessionId: string | null | undefined,
   previousSandboxId: string | null | undefined,
