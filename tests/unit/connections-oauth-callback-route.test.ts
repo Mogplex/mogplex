@@ -71,6 +71,7 @@ function fixture(
     failWrite?: boolean;
     conflict?: boolean;
     pkce?: boolean;
+    returnTo?: string;
   } = {}
 ) {
   const state = options.state ?? btoa(JSON.stringify(validState));
@@ -152,6 +153,8 @@ function fixture(
     },
     getCookies: async () => ({
       get: (name: string) => {
+        if (name === "conn_oauth_return_to")
+          return options.returnTo ? { value: options.returnTo } : undefined;
         if (name === "conn_oauth_state")
           return options.missingCookie ? undefined : { value: state };
         return options.pkce ? { value: "synthetic-pkce-verifier" } : undefined;
@@ -173,6 +176,27 @@ function fixture(
     authCalls: () => authCalls,
   };
 }
+
+test("OAuth callback returns to the saved Slack dialog handoff and clears its cookie", async () => {
+  for (const [returnTo, expected] of [
+    ["/slack/connections?request=abc&complete=1", "/slack/connections"],
+    ["https://outside.example", "/connections"],
+  ]) {
+    const f = fixture({ returnTo });
+    const response = await f.handler(f.request());
+    const url = new URL(response.headers.get("location")!);
+    assert.equal(url.pathname, expected);
+    assert.equal(url.searchParams.get("oauth"), "success");
+    if (expected === "/slack/connections") {
+      assert.equal(url.searchParams.get("request"), "abc");
+      assert.equal(url.searchParams.get("complete"), "1");
+    }
+    assert.match(
+      response.headers.get("set-cookie")!,
+      /conn_oauth_return_to=; Path=\/; Max-Age=0/
+    );
+  }
+});
 function assertRedirect(response: Response, result: string) {
   assert.equal(response.status, 307);
   assert.equal(

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { buildAppUrl } from "@/lib/app-url";
+import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { storeOAuthToken } from "@/lib/oauth-tokens";
 import { getUserId } from "@/lib/auth";
@@ -139,9 +139,15 @@ export async function GET(request: Request) {
   cookieStore.delete("vercel_oauth_state");
   cookieStore.delete("vercel_oauth_nonce");
   cookieStore.delete("vercel_code_verifier");
+  const returnTo = normalizeAppRedirectPath(
+    cookieStore.get("vercel_oauth_return_to")?.value
+  );
+  cookieStore.delete("vercel_oauth_return_to");
 
   // TODO(#557 commit 3): resolve user scope from x-mogplex-scope-* headers (set by middleware)
   // and redirect to scopedHref(scope, "/settings?vercel=connected"). For now, send to root and
   // let middleware route to the user's personal slug once it lands.
-  return redirect("/?vercel=connected");
+  const returnUrl = buildAppUrl(returnTo, request);
+  returnUrl.searchParams.set("vercel", "connected");
+  return NextResponse.redirect(returnUrl);
 }

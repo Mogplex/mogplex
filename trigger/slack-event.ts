@@ -90,6 +90,39 @@ export { SlackConversationPersistConflictError } from "./slack-event-lib/convers
 export { formatSlackConversationalReply } from "./slack-event-lib/system";
 
 const defaultDeps: SlackEventTaskDeps = {
+  loadRepoContextById: async (userId, repoId) => {
+    const { loadSlackRepoContextById } =
+      await import("./slack-event-lib/repo-context");
+    return loadSlackRepoContextById(userId, repoId);
+  },
+  checkGithubConnection: async ({ userId, repository, teamId }) => {
+    const { canRecoverConnection } =
+      await import("@/lib/slack/connection-recovery/access");
+    if (!(await canRecoverConnection(userId, teamId ?? null, "github")))
+      return true;
+    const { checkGithubRecoveryAccess } =
+      await import("@/lib/slack/connection-recovery/github");
+    const { GithubHttpError } = await import("@/lib/github-app");
+    try {
+      return await checkGithubRecoveryAccess(
+        userId,
+        { provider: "github", repository, access: "write" },
+        { refresh: false, productTeamId: teamId }
+      );
+    } catch (error) {
+      if (
+        error instanceof GithubHttpError &&
+        [401, 403, 404].includes(error.status)
+      )
+        return false;
+      throw error;
+    }
+  },
+  requestConnectionRecovery: async (input) => {
+    const { requestSlackConnectionRecovery } =
+      await import("@/lib/slack/connection-recovery/request");
+    return requestSlackConnectionRecovery(input);
+  },
   cancelCommand: defaultSlackCancelCommandDeps,
   findGuidanceRuns: findSlackGuidanceRuns,
   loadThreadRunContext: loadSlackThreadRunContext,

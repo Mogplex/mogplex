@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildAppUrl } from "@/lib/app-url";
+import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
 import { getUserId } from "@/lib/auth";
 
 function generateRandomString(length: number) {
@@ -22,7 +22,12 @@ export async function GET(request: Request) {
   const userId = await getUserId();
 
   if (!userId) {
-    return NextResponse.redirect(buildAppUrl("/login", request));
+    const loginUrl = buildAppUrl("/login", request);
+    const next = normalizeAppRedirectPath(
+      new URL(request.url).searchParams.get("next")
+    );
+    if (next !== "/") loginUrl.searchParams.set("next", next);
+    return NextResponse.redirect(loginUrl);
   }
 
   const state = generateRandomString(32);
@@ -81,6 +86,16 @@ export async function GET(request: Request) {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     },
+  });
+  const returnTo = normalizeAppRedirectPath(
+    new URL(request.url).searchParams.get("next")
+  );
+  response.cookies.set("vercel_oauth_return_to", returnTo, {
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/",
   });
   response.headers.append(
     "Set-Cookie",

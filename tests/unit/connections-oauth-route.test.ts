@@ -105,6 +105,26 @@ function fixture(
   };
 }
 
+test("OAuth authorization retains only a local Slack continuation path", async () => {
+  for (const [next, expected] of [
+    [
+      "/slack/connections?request=abc&complete=1",
+      "/slack/connections?request=abc&complete=1",
+    ],
+    ["https://outside.example/", "/"],
+    ["//outside.example/", "/"],
+  ]) {
+    const f = fixture();
+    const url = new URL(request().url);
+    url.searchParams.set("next", next);
+    assert.equal((await f.handler(new Request(url))).status, 307);
+    assert.equal(
+      f.set.find((cookie) => cookie.name === "conn_oauth_return_to")?.value,
+      expected
+    );
+  }
+});
+
 for (const preset of [false, true]) {
   test(`OAuth GET builds a scoped redirect, CSRF state and PKCE (${preset})`, async () => {
     const f = fixture({

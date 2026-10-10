@@ -40,6 +40,7 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/company", match: "subtree" },
   { path: "/privacy", match: "subtree" },
   { path: "/slack/link", match: "exact" },
+  { path: "/slack/connections", match: "exact" },
   { path: "/terms", match: "subtree" },
   { path: "/conduct", match: "subtree" },
   { path: "/install.sh", match: "subtree" },

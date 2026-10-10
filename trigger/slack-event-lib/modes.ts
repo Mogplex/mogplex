@@ -12,6 +12,7 @@ import type {
   SlackThreadContext,
 } from "./types";
 import { persistConversationTurn } from "./conversation";
+import { createSlackConnectionTools } from "./connection-tools";
 import {
   prepareSlackAttachments,
   prepareSlackRepoAgentAttachments,
@@ -264,6 +265,15 @@ export async function runConversationalMode(input: {
         buildSlackToolExecutionIdempotencyKey(payload),
       additionalTools: {
         [SLACK_START_REPO_AGENT_RUN_TOOL_NAME]: repoAgentRun.tool,
+        ...createSlackConnectionTools({
+          deps,
+          userId: mogplexUserId,
+          installationId: installation.id,
+          botToken,
+          payload,
+          productTeamId: agentInput.repoContext?.teamId,
+          repoId: agentInput.repoContext?.repoId,
+        }),
       },
       systemSuffix: [
         buildSlackConversationalSystemSuffix({
@@ -364,6 +374,48 @@ export async function runRepoAgentMode(input: {
   });
   if (!prompt.trim()) {
     return { outcome: "skipped_empty_text", mogplexUserId };
+  }
+
+  if (
+    deps.loadRepoContextById &&
+    deps.checkGithubConnection &&
+    deps.requestConnectionRecovery
+  ) {
+    const repo = await deps.loadRepoContextById(
+      mogplexUserId,
+      channelLink.repo_id
+    );
+    if (
+      repo &&
+      !(await deps.checkGithubConnection({
+        userId: mogplexUserId,
+        repository: repo.repoFullName,
+        teamId: repo.teamId,
+      }))
+    ) {
+      const recovery = await deps.requestConnectionRecovery({
+        userId: mogplexUserId,
+        installationId: installation.id,
+        botToken,
+        payload,
+        target: {
+          provider: "github",
+          repository: repo.repoFullName,
+          access: "write",
+        },
+        resumeText: userText,
+        productTeamId: repo.teamId,
+        repoId: repo.repoId,
+      });
+      if (recovery.ok)
+        return { outcome: "connection_authorization_requested", mogplexUserId };
+      await deps.postMessage(botToken, {
+        channel: payload.channelId,
+        thread_ts: payload.threadTs,
+        text: recovery.error,
+      });
+      return { outcome: "repo_agent_user_not_allowed", mogplexUserId };
+    }
   }
 
   const launch = await launchSlackRepoAgentRun({

@@ -22,6 +22,9 @@ export async function loadSlackEventTask() {
       overrides: Parameters<typeof task.runSlackEventTask>[1] = {}
     ) =>
       task.runSlackEventTask(payload, {
+        requestConnectionRecovery: undefined,
+        checkGithubConnection: undefined,
+        loadRepoContextById: undefined,
         findGuidanceRuns: async () => [],
         loadThreadRunContext: async () => null,
         ...overrides,

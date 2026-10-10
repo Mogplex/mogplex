@@ -225,6 +225,19 @@ export async function openSlackView(
   );
 }
 
+export async function updateSlackView(
+  botToken: string,
+  input: { view_id: string; view: Record<string, unknown> },
+  fetchImpl?: typeof fetch
+): Promise<SlackOpenViewResult> {
+  return slackApiCall<SlackOpenViewResult>(
+    "views.update",
+    botToken,
+    input,
+    fetchImpl
+  );
+}
+
 export async function getSlackThreadMessages(
   botToken: string,
   input: {

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { buildAppUrl, getCanonicalAppUrl } from "@/lib/app-url";
+import {
+  buildAppUrl,
+  getCanonicalAppUrl,
+  normalizeAppRedirectPath,
+} from "@/lib/app-url";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildAuthorizeUrl,
@@ -105,6 +109,17 @@ export function createConnectionOAuthGetHandler(
 
       // Store state in cookie for CSRF protection
       const cookieStore = await deps.getCookies();
+      cookieStore.set(
+        "conn_oauth_return_to",
+        normalizeAppRedirectPath(searchParams.get("next")),
+        {
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: 600,
+          path: "/",
+          secure: process.env.NODE_ENV === "production",
+        }
+      );
       cookieStore.set("conn_oauth_state", state, {
         httpOnly: true,
         sameSite: "lax",
