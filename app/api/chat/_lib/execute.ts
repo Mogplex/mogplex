@@ -14,8 +14,7 @@ import { getChatRunScope, buildChatRunMetadata } from "./types";
 import { buildChatMemorySuffix, extractLatestUserText } from "./memory";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import { persistChatSessionMemory } from "./session-memory";
-import { withChatStreamKeepalive } from "@/lib/agents/chat-stream-response";
-import { CHAT_INTERRUPTED_MESSAGE } from "@/lib/agents/chat-stream";
+import { createWorkspaceChatResponse } from "./response";
 import {
   markChatRunStreaming,
   createToolCallStartHandler,
@@ -135,11 +134,10 @@ export async function executeChatRequest(input: {
 
     return {
       aiCall: activeCall,
-      response: withChatStreamKeepalive(
-        result.toUIMessageStreamResponse({
-          onError: () => CHAT_INTERRUPTED_MESSAGE,
-          messageMetadata: () => ({ ai_call_id: activeCall.id }),
-        })
+      response: createWorkspaceChatResponse(
+        result,
+        activeCall.id,
+        input.resolvedModel
       ),
     };
   } catch (error) {

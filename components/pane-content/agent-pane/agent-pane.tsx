@@ -32,7 +32,8 @@ import { AgentHeader } from "./agent-header";
 import { ConversationHistory } from "./conversation-history";
 import { ChatMessageList } from "./chat-message-list";
 import { ChangedFilesBar } from "@/components/sandbox-changes/changed-files-bar";
-import { estimateConversationTokens, lastUserMessageText } from "@/lib/agents/ui-message-text";
+import { lastUserMessageText } from "@/lib/agents/ui-message-text";
+import { latestModelContext } from "@/lib/agents/context-usage";
 import { useAgentConversationLoader } from "./use-agent-conversation-loader";
 
 interface AgentPaneProps {
@@ -203,16 +204,7 @@ export function AgentPane({
     [messages]
   );
 
-  const usedTokens = useMemo(
-    () => estimateConversationTokens(messages),
-    [messages]
-  );
-
-  const maxTokens = contextLimits[model] || 128000;
-  const contextPct = Math.max(
-    0,
-    Math.round((1 - usedTokens / maxTokens) * 100)
-  );
+  const contextUsage = useMemo(() => latestModelContext(messages), [messages]);
 
   useEffect(() => {
     onStreamingChange?.(isAgentRunning);
@@ -485,7 +477,8 @@ export function AgentPane({
             customCommands={asSlashCommands()}
             models={modelIds}
             mode={mode}
-            contextPct={contextPct}
+            contextUsage={contextUsage}
+            contextLimit={contextLimits[model]}
             repoPath={repoPath}
             repoId={activeRepo?.id}
             model={model}
