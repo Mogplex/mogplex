@@ -188,17 +188,27 @@ export const runEventsArgsSchema = runIdArgsSchema.extend({
   limit: limitSchema,
 });
 
+const artifactPathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(240)
+  .regex(
+    ARTIFACT_PATH_PATTERN,
+    "path must be a JSON file in .mogplex/artifacts/"
+  );
+
 export const runArtifactArgsSchema = runIdArgsSchema.extend({
-  path: z
-    .string()
-    .trim()
-    .min(1)
-    .max(240)
-    .regex(
-      ARTIFACT_PATH_PATTERN,
-      "path must be a JSON file in .mogplex/artifacts/"
-    ),
+  path: artifactPathSchema,
 });
+
+export const automationRunArtifactArgsSchema = z
+  .object({
+    automationId: z.string().uuid(),
+    runId: z.string().uuid(),
+    path: artifactPathSchema,
+  })
+  .strict();
 
 export const emptyObjectSchema = {
   type: "object",

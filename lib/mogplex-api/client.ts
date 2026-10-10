@@ -72,6 +72,13 @@ export type MogplexApiRunArtifactResult = {
   };
 };
 
+export type MogplexApiAutomationRunArtifactResult = {
+  artifact: Omit<MogplexApiRunArtifactResult["artifact"], "runId"> & {
+    automationId: string;
+    jobRunId: string;
+  };
+};
+
 export type RerunMogplexPrReviewResult = {
   queued: boolean;
   jobRunId: string | null;
@@ -392,6 +399,17 @@ export class MogplexApiClient {
   getAutomationRunLogs(input: { automationId: string; runId: string }) {
     return this.request<{ run: FlowRunDetail }>(
       `/api/v1/mogplex/automations/${encodeURIComponent(input.automationId)}/runs/${encodeURIComponent(input.runId)}`
+    );
+  }
+
+  getAutomationRunArtifact(input: {
+    automationId: string;
+    runId: string;
+    path: string;
+  }) {
+    return this.request<MogplexApiAutomationRunArtifactResult>(
+      `/api/v1/mogplex/automations/${encodeURIComponent(input.automationId)}/runs/${encodeURIComponent(input.runId)}/artifact`,
+      { query: { path: input.path } }
     );
   }
 

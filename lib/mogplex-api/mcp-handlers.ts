@@ -9,6 +9,7 @@ import {
 } from "./mcp-types";
 import {
   automationIdArgsSchema,
+  automationRunArtifactArgsSchema,
   automationRunLogsArgsSchema,
   automationRunsArgsSchema,
   createAutomationArgsSchema,
@@ -21,45 +22,15 @@ import {
   listSkillsArgsSchema,
   repoIdArgsSchema,
   rerunPrReviewArgsSchema,
-  runArtifactArgsSchema,
-  runEventsArgsSchema,
-  runIdArgsSchema,
   sandboxIdArgsSchema,
   setAutomationModelArgsSchema,
   setEnvVarArgsSchema,
-  startAgentRunArgsSchema,
   triggerAutomationArgsSchema,
   updateAutomationArgsSchema,
   validateAutomationArgsSchema,
 } from "./mcp-schemas";
-
-export function parseArgs<T extends z.ZodTypeAny>(
-  schema: T,
-  args: Record<string, unknown> | undefined
-): z.infer<T> {
-  const result = schema.safeParse(args ?? {});
-  if (result.success) return result.data;
-
-  throw new McpToolArgumentError(
-    result.error.issues
-      .map(
-        (issue) => `${issue.path.join(".") || "arguments"}: ${issue.message}`
-      )
-      .join("; ")
-  );
-}
-
-export function textResult(
-  text: string,
-  structuredContent?: Record<string, unknown>,
-  isError = false
-): McpToolResult {
-  return {
-    content: [{ type: "text", text }],
-    ...(structuredContent ? { structuredContent } : {}),
-    ...(isError ? { isError: true } : { isError: false }),
-  };
-}
+import { callMogplexRunTool } from "./mcp-handlers-runs";
+import { parseArgs, textResult } from "./mcp-tool-result";
 
 function getMogplexApiErrorSuggestion(error: MogplexApiClientError) {
   switch (error.code) {
@@ -308,6 +279,14 @@ export async function callMogplexTool(
           result
         );
       }
+      case "mogplex_get_automation_run_artifact": {
+        const input = parseArgs(automationRunArtifactArgsSchema, args);
+        const result = await context.client.getAutomationRunArtifact(input);
+        return textResult(
+          `Loaded artifact ${result.artifact.path} from automation run ${result.artifact.jobRunId} at commit ${result.artifact.commitSha.slice(0, 7)} (branch tip of ${result.artifact.branch}).`,
+          result
+        );
+      }
       case "mogplex_rerun_pr_review": {
         const input = parseArgs(rerunPrReviewArgsSchema, args);
         const result = await context.client.rerunPrReview(input);
@@ -332,56 +311,11 @@ export async function callMogplexTool(
           result
         );
       }
-      case "mogplex_start_agent_run": {
-        const input = parseArgs(startAgentRunArgsSchema, args);
-        const result = await context.client.startAgentRun({
-          ...input,
-          idempotencyKey: input.idempotencyKey ?? `mcp:${randomUUID()}`,
-        });
-        return textResult(
-          `Started Mogplex run ${result.runId} on branch ${result.branch.working}. Status: ${result.status}.`,
-          { run: result }
-        );
-      }
-      case "mogplex_get_run": {
-        const input = parseArgs(runIdArgsSchema, args);
-        const result = await context.client.getRun(input);
-        return textResult(
-          `Mogplex run ${result.run.runId} is ${result.run.status} on branch ${result.run.branch.working}.`,
-          result
-        );
-      }
-      case "mogplex_get_run_events": {
-        const input = parseArgs(runEventsArgsSchema, args);
-        const result = await context.client.getRunEvents(input);
-        const latest = result.events.at(-1);
-        const latestLabel = latest?.message ?? latest?.type ?? "none";
-        return textResult(
-          `Found ${result.events.length} events for Mogplex run ${result.run.runId}. Latest: ${latestLabel}.`,
-          result
-        );
-      }
-      case "mogplex_cancel_run": {
-        const input = parseArgs(runIdArgsSchema, args);
-        const result = await context.client.cancelRun(input);
-        return textResult(
-          `Cancellation requested for Mogplex run ${result.run.runId}. Status: ${result.status}.`,
-          result
-        );
-      }
-      case "mogplex_get_run_artifact": {
-        const input = parseArgs(runArtifactArgsSchema, args);
-        const result = await context.client.getRunArtifact(input);
-        const pinnedLabel = result.artifact.pinned
-          ? " (pinned)"
-          : " (branch tip)";
-        return textResult(
-          `Loaded artifact ${result.artifact.path} from run ${result.artifact.runId} at commit ${result.artifact.commitSha.slice(0, 7)}${pinnedLabel}.`,
-          result
-        );
-      }
-      default:
+      default: {
+        const runResult = await callMogplexRunTool(name, args, context);
+        if (runResult) return runResult;
         throw new McpToolArgumentError(`Unknown tool: ${name}`);
+      }
     }
   } catch (error) {
     if (error instanceof McpToolArgumentError) throw error;

@@ -96,7 +96,7 @@ export type RunArtifactDeps = {
   ) => Promise<{ repo: Repo | null; githubToken: string | null }>;
   githubJson: typeof githubJson;
 };
-const defaults: RunArtifactDeps = {
+export const defaultRunArtifactDeps: RunArtifactDeps = {
   // Artifacts only need stored terminal state, not run/compute/notification reconciliation.
   loadRun: async ({ userId, runId }) => {
     const row = await loadRunById(userId, runId);
@@ -178,44 +178,35 @@ function decodeArtifact(raw: unknown) {
 }
 
 /**
- * Read an explicit output at one immutable commit, using the run owner's existing repo access.
- * When the run has a recorded terminal commit SHA, uses that exact commit.
- * Falls back to the branch tip for older runs without a recorded SHA.
+ * Read an explicit output committed to the owner's repository at `ref`: a
+ * recorded commit SHA when `pinned`, otherwise a branch tip. Uses the owner's
+ * existing repo access; no GitHub credential leaves the server.
  */
-export async function loadRunArtifact(
-  input: { userId: string; runId: string; path: string },
-  overrides: Partial<RunArtifactDeps> = {}
+export async function readCommittedArtifact(
+  input: {
+    userId: string;
+    repoId: string;
+    ref: string;
+    pinned: boolean;
+    path: string;
+  },
+  deps: Pick<RunArtifactDeps, "loadRepo" | "githubJson">
 ) {
-  const deps = { ...defaults, ...overrides };
-  const parsedPath = runArtifactPathSchema.safeParse(input.path);
-  if (!parsedPath.success)
-    throw new RunArtifactError(400, "Use a JSON file in .mogplex/artifacts");
-  const path = parsedPath.data;
-  const run = await deps.loadRun(input);
-  if (!run) throw new RunArtifactError(404, "Run not found");
-  assertFinishedBranch(run);
-  const { repo, githubToken } = await deps.loadRepo(run.repoId, input.userId);
+  const { repo, githubToken } = await deps.loadRepo(input.repoId, input.userId);
   if (!repo) throw new RunArtifactError(404, "Repository not found");
   if (!githubToken)
     throw new RunArtifactError(409, "Reconnect GitHub to read the artifact");
   const base = `https://api.github.com/repos/${repo.full_name.split("/").map(encodeURIComponent).join("/")}`;
   const read = (url: string) => deps.githubJson(githubToken, url);
 
-  // Use the recorded terminal commit SHA if present (pinned), otherwise fall
-  // back to the branch tip (unpinned). Older runs without a recorded SHA will
-  // use the branch tip, which may have changed since the run completed.
-  const terminalCommitSha = run.terminalCommitSha;
-  const pinned = Boolean(terminalCommitSha);
-  const commitRef = terminalCommitSha ?? run.branch.working;
-
   // Fetch the commit, with distinct 404 error messages based on pinned vs branch
   let commitRaw: unknown;
   try {
-    commitRaw = await read(`${base}/commits/${encodeURIComponent(commitRef)}`);
+    commitRaw = await read(`${base}/commits/${encodeURIComponent(input.ref)}`);
   } catch (error) {
     if (error instanceof RunArtifactError && error.status === 404) {
       // Distinguish pinned commit unreachable vs branch deleted
-      throw pinned
+      throw input.pinned
         ? new RunArtifactError(
             404,
             "Pinned commit is no longer available (may have been force-pushed away)"
@@ -236,16 +227,57 @@ export async function loadRunArtifact(
     }),
     commitRaw
   );
-  const blobSha = await readBlobSha(base, commit.commit.tree.sha, path, read);
+  const blobSha = await readBlobSha(
+    base,
+    commit.commit.tree.sha,
+    input.path,
+    read
+  );
   const content = decodeArtifact(
     await read(`${base}/git/blobs/${encodeURIComponent(blobSha)}`)
+  );
+  return { commitSha: commit.sha, content };
+}
+
+/**
+ * Read an explicit output at one immutable commit, using the run owner's existing repo access.
+ * When the run has a recorded terminal commit SHA, uses that exact commit.
+ * Falls back to the branch tip for older runs without a recorded SHA.
+ */
+export async function loadRunArtifact(
+  input: { userId: string; runId: string; path: string },
+  overrides: Partial<RunArtifactDeps> = {}
+) {
+  const deps = { ...defaultRunArtifactDeps, ...overrides };
+  const parsedPath = runArtifactPathSchema.safeParse(input.path);
+  if (!parsedPath.success)
+    throw new RunArtifactError(400, "Use a JSON file in .mogplex/artifacts");
+  const path = parsedPath.data;
+  const run = await deps.loadRun(input);
+  if (!run) throw new RunArtifactError(404, "Run not found");
+  assertFinishedBranch(run);
+
+  // Use the recorded terminal commit SHA if present (pinned), otherwise fall
+  // back to the branch tip (unpinned). Older runs without a recorded SHA will
+  // use the branch tip, which may have changed since the run completed.
+  const terminalCommitSha = run.terminalCommitSha;
+  const pinned = Boolean(terminalCommitSha);
+  const { commitSha, content } = await readCommittedArtifact(
+    {
+      userId: input.userId,
+      repoId: run.repoId,
+      ref: terminalCommitSha ?? run.branch.working,
+      pinned,
+      path,
+    },
+    deps
   );
   return {
     runId: run.runId,
     repoId: run.repoId,
     path,
     branch: run.branch.working,
-    commitSha: commit.sha,
+    commitSha,
     pinned,
     content,
   };

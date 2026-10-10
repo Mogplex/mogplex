@@ -4,9 +4,9 @@ import {
   mogplexApiSuccess,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
+import { runArtifactErrorResponse } from "@/lib/mogplex-api/run-artifact-response";
 import {
   loadRunArtifact,
-  RunArtifactError,
   runArtifactPathSchema,
 } from "@/lib/mogplex-api/run-artifacts";
 
@@ -45,25 +45,7 @@ export function createRunArtifactGetHandler(
         { headers: { "Cache-Control": "private, no-store" } }
       );
     } catch (error) {
-      if (error instanceof RunArtifactError) {
-        const codes = {
-          400: "BAD_REQUEST",
-          404: "NOT_FOUND",
-          409: "CONFLICT",
-          502: "SERVICE_UNAVAILABLE",
-        } as const;
-        return mogplexApiError(
-          codes[error.status],
-          error.message,
-          error.status
-        );
-      }
-      console.error("[mogplex-api/artifact] Could not read artifact", {
-        runId,
-        errorType:
-          error instanceof Error ? error.constructor.name : "UnknownError",
-      });
-      return mogplexApiError("INTERNAL_ERROR", "Could not read artifact", 500);
+      return runArtifactErrorResponse(error, { runId });
     }
   };
 }

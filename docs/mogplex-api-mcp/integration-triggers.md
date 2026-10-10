@@ -113,3 +113,41 @@ The agent commits and pushes to `workingBranch` and never pushes to the
 default branch, merges, or enables auto-merge. It opens a pull request only
 when the automation's instructions ask for one. Reading what it built, and
 publishing it, stays with the integration's own review step.
+
+## Reading the output
+
+When the automation's instructions have the agent commit a JSON file under
+`.mogplex/artifacts/`, the integration can read it once the run succeeds:
+
+```txt
+GET /api/v1/mogplex/automations/{automationId}/runs/{jobRunId}/artifact?path=.mogplex/artifacts/<name>.json
+```
+
+`200` returns `data.artifact`:
+
+```json
+{
+  "automationId": "…",
+  "jobRunId": "…",
+  "repoId": "…",
+  "path": ".mogplex/artifacts/<name>.json",
+  "branch": "mogplex/automation-0123456789abcdef",
+  "commitSha": "…",
+  "pinned": false,
+  "content": { }
+}
+```
+
+The repository and branch come from the run's trigger record, not from the
+request, and the file is read with the account's own GitHub access; no GitHub
+credential is handed to the integration. Automation runs don't record a final
+commit, so the file is read at the tip of the run's branch and `commitSha`
+names the commit that was read. Any key with the `read` scope can call it,
+including one held to automations.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `BAD_REQUEST` | The path isn't a JSON file in `.mogplex/artifacts/`, or the file is over 1 MiB or not valid JSON |
+| 404 | `NOT_FOUND` | The automation, run, repository, branch or file doesn't exist for this account |
+| 409 | `CONFLICT` | The run hasn't succeeded, wasn't triggered through the API, or GitHub needs reconnecting |
+| 502 | `SERVICE_UNAVAILABLE` | GitHub couldn't be reached or returned an error; retry |
