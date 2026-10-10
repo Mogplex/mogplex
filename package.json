@@ -146,6 +146,7 @@
     "@trigger.dev/sdk": "^4.5.12",
     "@vercel/analytics": "1.6.1",
     "@vercel/sandbox": "2.0.0-beta.14",
+    "@vercel/speed-insights": "2.0.0",
     "@wterm/core": "0.3.2",
     "@wterm/dom": "0.3.2",
     "@wterm/react": "0.3.2",
