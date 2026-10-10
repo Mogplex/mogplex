@@ -12,6 +12,7 @@ import type {
   SlackThreadContext,
 } from "./types";
 import { persistConversationTurn } from "./conversation";
+import { createSlackConnectionTools } from "./connection-tools";
 import {
   prepareSlackAttachments,
   prepareSlackRepoAgentAttachments,
@@ -61,6 +62,8 @@ async function buildConversationalAgentInput(input: {
   slackThreadContext: SlackThreadContext;
   userMessage: ReturnType<typeof buildSlackUserMessage>["agent"];
   userText: string;
+  recoveryRepository?: string;
+  recoveryRepoId?: string;
 }) {
   const messages = [
     ...input.conversation.messages,
@@ -75,16 +78,25 @@ async function buildConversationalAgentInput(input: {
     .filter((message) => message.role === "user")
     .map(getRunChatAgentMessageText)
     .filter(Boolean);
-  const repoContext = await input.deps.resolveRepoContext({
-    mogplexUserId: input.mogplexUserId,
-    texts: [
-      input.userText,
-      ...[...input.slackThreadContext.texts].reverse(),
-      ...priorUserTexts.reverse(),
-    ],
-  });
+  const repoContext = input.recoveryRepoId
+    ? await input.deps.loadRepoContextById?.(
+        input.mogplexUserId,
+        input.recoveryRepoId
+      )
+    : await input.deps.resolveRepoContext({
+        mogplexUserId: input.mogplexUserId,
+        texts: input.recoveryRepository
+          ? [input.recoveryRepository]
+          : [
+              input.userText,
+              ...[...input.slackThreadContext.texts].reverse(),
+              ...priorUserTexts.reverse(),
+            ],
+      });
+  if (input.recoveryRepoId && !repoContext)
+    throw new Error("The saved request's repository is no longer available");
 
-  return { messages, repoContext };
+  return { messages, repoContext: repoContext ?? null };
 }
 
 async function loadConversationalConversation(input: {
@@ -226,6 +238,8 @@ export async function runConversationalMode(input: {
       slackThreadContext,
       userMessage: userMessage.agent,
       userText,
+      recoveryRepository: payload.connectionRecoveryRepository,
+      recoveryRepoId: payload.connectionRecoveryRepoId,
     });
     const repoAgentRun = createSlackStartRepoAgentRunTool({
       deps,
@@ -264,6 +278,16 @@ export async function runConversationalMode(input: {
         buildSlackToolExecutionIdempotencyKey(payload),
       additionalTools: {
         [SLACK_START_REPO_AGENT_RUN_TOOL_NAME]: repoAgentRun.tool,
+        ...createSlackConnectionTools({
+          deps,
+          userId: mogplexUserId,
+          installationId: installation.id,
+          botToken,
+          payload,
+          productTeamId: agentInput.repoContext?.teamId,
+          repoId: agentInput.repoContext?.repoId,
+          repoFullName: agentInput.repoContext?.repoFullName,
+        }),
       },
       systemSuffix: [
         buildSlackConversationalSystemSuffix({
@@ -364,6 +388,48 @@ export async function runRepoAgentMode(input: {
   });
   if (!prompt.trim()) {
     return { outcome: "skipped_empty_text", mogplexUserId };
+  }
+
+  if (
+    deps.loadRepoContextById &&
+    deps.checkGithubConnection &&
+    deps.requestConnectionRecovery
+  ) {
+    const repo = await deps.loadRepoContextById(
+      mogplexUserId,
+      channelLink.repo_id
+    );
+    if (
+      repo &&
+      !(await deps.checkGithubConnection({
+        userId: mogplexUserId,
+        repository: repo.repoFullName,
+        teamId: repo.teamId,
+      }))
+    ) {
+      const recovery = await deps.requestConnectionRecovery({
+        userId: mogplexUserId,
+        installationId: installation.id,
+        botToken,
+        payload,
+        target: {
+          provider: "github",
+          repository: repo.repoFullName,
+          access: "write",
+        },
+        resumeText: userText,
+        productTeamId: repo.teamId,
+        repoId: repo.repoId,
+      });
+      if (recovery.ok)
+        return { outcome: "connection_authorization_requested", mogplexUserId };
+      await deps.postMessage(botToken, {
+        channel: payload.channelId,
+        thread_ts: payload.threadTs,
+        text: recovery.error,
+      });
+      return { outcome: "repo_agent_user_not_allowed", mogplexUserId };
+    }
   }
 
   const launch = await launchSlackRepoAgentRun({

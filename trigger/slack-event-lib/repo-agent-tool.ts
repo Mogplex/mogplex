@@ -13,6 +13,7 @@ import {
 } from "./attachments";
 import { getSlackReplyThreadTs } from "./channel-state";
 import { launchSlackRepoAgentRun } from "./repo-agent-launch";
+import { connectionRecoveryTargetSchema } from "@/lib/slack/connection-recovery/presentation";
 
 export const SLACK_START_REPO_AGENT_RUN_TOOL_NAME = "start_repo_agent_run";
 
@@ -137,7 +138,68 @@ export function createSlackStartRepoAgentRunTool(input: {
   ): Promise<LaunchAttempt> {
     const repo = await resolveRepo(args.repository);
     if ("error" in repo) {
+      if (
+        args.repository &&
+        input.deps.requestConnectionRecovery &&
+        connectionRecoveryTargetSchema.safeParse({
+          provider: "github",
+          repository: args.repository.trim(),
+        }).success
+      ) {
+        const recovery = await input.deps.requestConnectionRecovery({
+          userId: input.mogplexUserId,
+          installationId: input.installation.id,
+          botToken: input.botToken,
+          payload: input.payload,
+          target: {
+            provider: "github",
+            repository: args.repository.trim(),
+            access: "write",
+          },
+          resumeText: `${args.task}\n\nRepository: ${args.repository.trim()}${args.pullRequest ? `\nContinue pull request #${args.pullRequest}.` : ""}`,
+          productTeamId: input.repoContext?.teamId,
+        });
+        return {
+          final: recovery.ok,
+          result: {
+            ok: false,
+            error: recovery.ok ? recovery.message : recovery.error,
+          },
+        };
+      }
       return { final: false, result: { ok: false, error: repo.error } };
+    }
+
+    if (
+      input.deps.checkGithubConnection &&
+      input.deps.requestConnectionRecovery &&
+      !(await input.deps.checkGithubConnection({
+        userId: input.mogplexUserId,
+        repository: repo.repoFullName,
+        teamId: repo.teamId,
+      }))
+    ) {
+      const recovery = await input.deps.requestConnectionRecovery({
+        userId: input.mogplexUserId,
+        installationId: input.installation.id,
+        botToken: input.botToken,
+        payload: input.payload,
+        target: {
+          provider: "github",
+          repository: repo.repoFullName,
+          access: "write",
+        },
+        resumeText: `${args.task}\n\nRepository: ${repo.repoFullName}${args.pullRequest ? `\nContinue pull request #${args.pullRequest}.` : ""}`,
+        productTeamId: repo.teamId,
+        repoId: repo.repoId,
+      });
+      return {
+        final: recovery.ok,
+        result: {
+          ok: false,
+          error: recovery.ok ? recovery.message : recovery.error,
+        },
+      };
     }
 
     const branch = await resolvePullRequestBranch(repo, args.pullRequest);

@@ -114,6 +114,18 @@ function toSlackRepoContext(repoRow: RepoRow): SlackRepoContext | null {
   };
 }
 
+/** Linked channels need to recover hidden repositories as well as visible ones. */
+export async function loadSlackRepoContextById(userId: string, repoId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("repos")
+    .select("id, full_name, default_branch, product_team_id, is_hidden")
+    .eq("id", repoId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error("Could not load the linked repository");
+  return data ? toSlackRepoContext(data as RepoRow) : null;
+}
+
 async function queryVisibleRepos(input: {
   mogplexUserId: string;
   filter: string;

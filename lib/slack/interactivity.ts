@@ -47,6 +47,7 @@ export type SlackBlockActionsPayload = {
   container?: { channel_id?: string };
   response_url?: string;
   trigger_id?: string;
+  view?: { id?: string; private_metadata?: string };
   actions?: SlackBlockAction[];
   /**
    * The message the clicked block is attached to. Slack includes this on
@@ -57,6 +58,7 @@ export type SlackBlockActionsPayload = {
 };
 
 export type SlackInteractivityResult =
+  | { outcome: "connection_recovery"; result: string }
   | { outcome: "ignored"; reason: string }
   | { outcome: "not_linked" }
   | { outcome: "run_not_found"; runId: string }
@@ -400,6 +402,20 @@ export async function handleSlackBlockActions(
 
   if (payload.type !== "block_actions") {
     return { outcome: "ignored", reason: "unsupported_interactivity_type" };
+  }
+
+  if (
+    payload.actions?.some((action) =>
+      action.action_id?.startsWith("mogplex_connection_")
+    )
+  ) {
+    const { isConnectionRecoveryAction, handleConnectionRecoveryAction } =
+      await import("@/lib/slack/connection-recovery/interactions");
+    if (isConnectionRecoveryAction(payload))
+      return {
+        outcome: "connection_recovery",
+        result: await handleConnectionRecoveryAction(payload),
+      };
   }
 
   const selectedModel = findModelSelection(payload);

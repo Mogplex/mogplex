@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { buildAppUrl } from "@/lib/app-url";
+import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   exchangeCodeForTokens,
@@ -37,13 +37,21 @@ export function createConnectionOAuthCallbackGetHandler(
     const cookieStore = await deps.getCookies();
     const storedState = cookieStore.get("conn_oauth_state")?.value;
     const pkceVerifier = cookieStore.get("conn_oauth_pkce_verifier")?.value;
+    const returnTo = normalizeAppRedirectPath(
+      cookieStore.get("conn_oauth_return_to")?.value
+    );
     const connectionsSuccessUrl = buildAppUrl(
-      "/connections?oauth=success",
+      returnTo === "/" ? "/connections" : returnTo,
       req
     );
+    connectionsSuccessUrl.searchParams.set("oauth", "success");
     const redirect = (path: string) =>
       NextResponse.redirect(buildAppUrl(path, req));
     const clearCookies = (response: NextResponse) => {
+      response.headers.append(
+        "Set-Cookie",
+        "conn_oauth_return_to=; Path=/; Max-Age=0"
+      );
       response.headers.append(
         "Set-Cookie",
         "conn_oauth_state=; Path=/; Max-Age=0"

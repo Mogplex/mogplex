@@ -30,6 +30,9 @@ export type SlackEventAttachmentNotice = {
 };
 
 export type SlackEventTaskPayload = {
+  connectionRecoveryRequestId?: string;
+  connectionRecoveryRepository?: string;
+  connectionRecoveryRepoId?: string;
   teamId: string;
   eventId: string;
   channelId: string;
@@ -54,6 +57,8 @@ export type SlackEventTaskResult = {
     | "repo_agent_monthly_limit_reached"
     | "conversational_reply"
     | "repo_agent_run_started"
+    | "connection_authorization_requested"
+    | "connection_request_unavailable"
     | "run_guidance_received"
     | "run_cancel_handled"
     | "run_guidance_not_applied"
@@ -154,6 +159,17 @@ export type StartRepoAgentRunResult = {
 };
 
 export type SlackEventTaskDeps = {
+  validateConnectionContinuation?: typeof import("@/lib/slack/connection-recovery/continuation").validateConnectionContinuation;
+  loadRepoContextById?: (
+    userId: string,
+    repoId: string
+  ) => Promise<SlackRepoContext | null>;
+  checkGithubConnection?: (input: {
+    userId: string;
+    repository: string;
+    teamId?: string | null;
+  }) => Promise<boolean>;
+  requestConnectionRecovery?: typeof import("@/lib/slack/connection-recovery/request").requestSlackConnectionRecovery;
   cancelCommand: SlackCancelCommandDeps;
   queueRunDelivery?: (input: {
     runId: string;
