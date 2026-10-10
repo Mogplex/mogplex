@@ -2,8 +2,6 @@ import type { LocalMessage as ConversationLocalMessage } from "@/hooks/use-conve
 
 export const EMPTY_LOCAL_MESSAGES: ConversationLocalMessage[] = [];
 
-export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
-
 export function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return `${s}s ago`;

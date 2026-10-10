@@ -8,6 +8,7 @@ import { ClaudeFill, OpenaiFill } from "@/components/icons/harness-icons"
 import { McpStatusButton } from "@/components/chat/mcp-status-button"
 import type { CommandInputAttachment as Attachment } from "./command-input-types"
 import { useCommandInputAttachments } from "./use-command-input-attachments"
+import { presentModelContext, type ModelContextUsage } from "@/lib/agents/context-usage"
 
 export type { CommandInputAttachment as Attachment } from "./command-input-types"
 
@@ -17,7 +18,8 @@ interface Props {
   customCommands?: SlashCommand[]
   models: string[]
   mode?: string
-  contextPct?: number
+  contextUsage?: ModelContextUsage | null
+  contextLimit?: number
   repoPath?: string
   repoId?: string
   model?: string
@@ -39,7 +41,8 @@ export function CommandInput({
   customCommands = [],
   models,
   mode = "AUTO",
-  contextPct = 100,
+  contextUsage,
+  contextLimit,
   repoPath,
   repoId,
   model,
@@ -50,6 +53,7 @@ export function CommandInput({
   onStop,
 }: Props) {
   const isMobile = useIsMobile()
+  const context = presentModelContext(contextUsage, model, contextLimit)
   const [value, setValue] = useState("")
   const [showMenu, setShowMenu] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(0)
@@ -229,7 +233,7 @@ export function CommandInput({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[12px] text-muted-foreground border-t border-border/50">
         <span className={mode === "YOLO" ? "text-accent-amber" : ""}>Mode: {mode}</span>
         <span className="text-border">|</span>
-        <span>Context: {contextPct}% left</span>
+        <span title={context.title}>{context.label}</span>
         <span className="text-border">|</span>
         <div className="relative">
           <button
