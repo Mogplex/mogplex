@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import { getSandbox } from "@/lib/sandbox/client";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import {
   getSandboxServiceCredentials,
   isSandboxAccessDeniedError,
@@ -181,10 +182,7 @@ async function handleConnect(
     });
   } catch (error) {
     if (isSandboxAccessDeniedError(error)) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      );
+      return sandboxAccessDeniedResponse(error);
     }
     throw error;
   }

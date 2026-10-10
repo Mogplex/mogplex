@@ -31,7 +31,7 @@ describe("getDirectExecutionUser", () => {
 
   it("should accept a full-access key and mark it for team key policy", async () => {
     expect(await getDirectExecutionUser(resolvedAs("api-key", "full"))).toEqual(
-      { userId: "user-1", viaApiKey: true, apiKeyAccess: "full" }
+      { userId: "user-1", viaApiKey: true }
     );
   });
 
@@ -59,12 +59,8 @@ describe("getDirectExecutionUser", () => {
 });
 
 describe("assertMayExecuteInTeam", () => {
-  const key = {
-    userId: "user-1",
-    viaApiKey: true,
-    apiKeyAccess: "full",
-  } as const;
-  const login = { userId: "user-1", viaApiKey: false } as const;
+  const key = { userId: "user-1", viaApiKey: true };
+  const login = { userId: "user-1", viaApiKey: false };
   const holdsKeys = async () => "automations" as const;
 
   it("should refuse a key in a team that holds keys to automations", async () => {

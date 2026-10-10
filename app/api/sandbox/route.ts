@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import { isSandboxAccessDeniedError } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
@@ -49,15 +50,6 @@ export {
 } from "./_lib/bootstrap";
 export type { CliSandboxRecord } from "./_lib/types";
 
-function buildSandboxAccessDeniedBody(error: {
-  message: string;
-  code?: string;
-}) {
-  return error.code
-    ? { error: error.message, code: error.code }
-    : { error: error.message };
-}
-
 export function createSandboxPostHandler(
   overrides: Partial<SandboxPostDeps> = {}
 ) {
@@ -80,9 +72,7 @@ export function createSandboxPostHandler(
       });
     } catch (error) {
       if (isSandboxAccessDeniedError(error)) {
-        return NextResponse.json(buildSandboxAccessDeniedBody(error), {
-          status: error.status,
-        });
+        return sandboxAccessDeniedResponse(error);
       }
       throw error;
     }
@@ -156,9 +146,7 @@ export function createSandboxGetHandler(
       });
     } catch (error) {
       if (isSandboxAccessDeniedError(error)) {
-        return NextResponse.json(buildSandboxAccessDeniedBody(error), {
-          status: error.status,
-        });
+        return sandboxAccessDeniedResponse(error);
       }
       throw error;
     }

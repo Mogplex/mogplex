@@ -7,6 +7,7 @@ import {
   normalizeDevPort,
   resolveConfiguredDevPort,
 } from "@/lib/repo-settings";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import {
   getSandboxServiceCredentials,
   isSandboxAccessDeniedError,
@@ -98,10 +99,7 @@ export function createAutomationSandboxTestPostHandler(
       });
     } catch (error) {
       if (isSandboxAccessDeniedError(error)) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status }
-        );
+        return sandboxAccessDeniedResponse(error);
       }
       throw error;
     }

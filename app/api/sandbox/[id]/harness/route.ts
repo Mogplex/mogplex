@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { SANDBOX_AGENT_EXECUTION_LEASE_MS } from "@/lib/sandbox/activity-lease";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import { isSandboxAccessDeniedError } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getHarnessConfig } from "@/lib/harness/config";
@@ -68,10 +69,7 @@ export function createSandboxHarnessPostHandler(
       });
     } catch (error) {
       if (isSandboxAccessDeniedError(error)) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status }
-        );
+        return sandboxAccessDeniedResponse(error);
       }
       throw error;
     }

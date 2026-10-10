@@ -2,6 +2,7 @@ import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import {
   getSandboxServiceCredentials,
   isSandboxAccessDeniedError,
@@ -133,10 +134,7 @@ export function createSandboxExecPostHandler(
       });
     } catch (error) {
       if (isSandboxAccessDeniedError(error)) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status }
-        );
+        return sandboxAccessDeniedResponse(error);
       }
       throw error;
     }

@@ -367,6 +367,7 @@ function buildExternalTriggerTestPayload(
       return { test: true };
   }
 }
+
 function parseWebhookTestPayload(value: string) {
   try {
     const payload = JSON.parse(value) as unknown

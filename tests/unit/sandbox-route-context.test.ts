@@ -98,7 +98,8 @@ test("loadOwnedSandboxRouteRecord returns 403 when requireCapability denies the 
 });
 
 test("loadOwnedSandboxRouteRecord returns 403 when a team holds the caller's key to automations", async () => {
-  const { loadOwnedSandboxRouteRecord } = await loadSandboxRouteContext();
+  const { loadOwnedSandboxRouteRecord, buildSandboxRouteErrorResponse } =
+    await loadSandboxRouteContext();
   const { SandboxKeyRestrictedError } =
     await import("../../lib/sandbox/direct-execution-user");
 
@@ -120,8 +121,11 @@ test("loadOwnedSandboxRouteRecord returns 403 when a team holds the caller's key
 
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.equal(result.status, 403);
-    assert.match(result.error, /team owner/);
+    const response = buildSandboxRouteErrorResponse(result);
+    assert.equal(response.status, 403);
+    const body = (await response.json()) as { error: string; code?: string };
+    assert.equal(body.code, "AUTOMATION_REQUIRED");
+    assert.match(body.error, /team owner/);
   }
   assert.equal(loadRecordCalls, 0);
 });

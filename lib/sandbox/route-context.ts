@@ -9,6 +9,7 @@ import {
   getSandboxServiceCredentials,
   isSandboxAccessDeniedError,
 } from "@/lib/sandbox/get-user-credentials";
+import { sandboxAccessDeniedBody } from "@/lib/sandbox/access-denied-response";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import { normalizeRootDirectory } from "@/lib/repo-settings";
 import {
@@ -49,6 +50,8 @@ export type SandboxRouteFailure = {
   ok: false;
   status: number;
   error: string;
+  /** Machine-readable reason, e.g. AUTOMATION_REQUIRED for a restricted key. */
+  code?: string;
 };
 
 export type LoadedSandboxRouteRecord<R extends SandboxRouteRecordLike> = {
@@ -168,7 +171,11 @@ export async function loadOwnedSandboxRouteRecord<
     });
   } catch (error) {
     if (isSandboxAccessDeniedError(error)) {
-      return { ok: false, status: error.status, error: error.message };
+      return {
+        ok: false,
+        status: error.status,
+        ...sandboxAccessDeniedBody(error),
+      };
     }
     throw error;
   }
@@ -345,7 +352,12 @@ export async function loadOwnedSandboxRouteContext<
 }
 
 export function buildSandboxRouteErrorResponse(result: SandboxRouteFailure) {
-  return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(
+    result.code
+      ? { error: result.error, code: result.code }
+      : { error: result.error },
+    { status: result.status }
+  );
 }
 
 /**

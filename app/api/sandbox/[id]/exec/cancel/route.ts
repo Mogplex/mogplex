@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import {
   getSandboxServiceCredentials,
   isSandboxAccessDeniedError,
@@ -50,10 +51,7 @@ export async function POST(
     });
   } catch (error) {
     if (isSandboxAccessDeniedError(error)) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      );
+      return sandboxAccessDeniedResponse(error);
     }
     throw error;
   }
