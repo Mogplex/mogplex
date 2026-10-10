@@ -3,13 +3,21 @@ import {
   AUTOMATION_REQUIRED_MESSAGE,
   TEAM_AUTOMATION_REQUIRED_MESSAGE,
 } from "@/lib/mogplex-api/credential-boundary";
+import type { ApiKeyAccess } from "@/lib/mogplex-api/key-access";
 import { loadTeamApiKeyAccessById } from "@/lib/mogplex-api/team-key-access";
 
-export type DirectExecutionUser = {
-  userId: string;
-  /** True when the request came from a Mogplex API key, so team policy applies. */
-  viaApiKey: boolean;
-};
+export type DirectExecutionUser =
+  | {
+      userId: string;
+      viaApiKey: false;
+    }
+  | {
+      userId: string;
+      /** Only full keys reach this boundary; others throw SandboxKeyRestrictedError. */
+      apiKeyAccess: ApiKeyAccess;
+      /** True when the request came from a Mogplex API key, so team policy applies. */
+      viaApiKey: true;
+    };
 
 /**
  * Thrown when a Mogplex API key is held to automations, by its own access or
@@ -46,7 +54,7 @@ export async function getDirectExecutionUser(
     return { userId: auth.profileId, viaApiKey: false };
   }
   if (auth.apiKeyAccess !== "full") throw new SandboxKeyRestrictedError("key");
-  return { userId: auth.profileId, viaApiKey: true };
+  return { userId: auth.profileId, viaApiKey: true, apiKeyAccess: "full" };
 }
 
 /**

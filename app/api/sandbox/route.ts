@@ -49,6 +49,15 @@ export {
 } from "./_lib/bootstrap";
 export type { CliSandboxRecord } from "./_lib/types";
 
+function buildSandboxAccessDeniedBody(error: {
+  message: string;
+  code?: string;
+}) {
+  return error.code
+    ? { error: error.message, code: error.code }
+    : { error: error.message };
+}
+
 export function createSandboxPostHandler(
   overrides: Partial<SandboxPostDeps> = {}
 ) {
@@ -71,10 +80,9 @@ export function createSandboxPostHandler(
       });
     } catch (error) {
       if (isSandboxAccessDeniedError(error)) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status }
-        );
+        return NextResponse.json(buildSandboxAccessDeniedBody(error), {
+          status: error.status,
+        });
       }
       throw error;
     }
@@ -148,15 +156,15 @@ export function createSandboxGetHandler(
       });
     } catch (error) {
       if (isSandboxAccessDeniedError(error)) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status }
-        );
+        return NextResponse.json(buildSandboxAccessDeniedBody(error), {
+          status: error.status,
+        });
       }
       throw error;
     }
-    if (!baseCreds)
+    if (!baseCreds) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const productTeam = await resolveSandboxListProductTeamId({
       deps,

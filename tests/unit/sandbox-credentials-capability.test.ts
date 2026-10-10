@@ -130,3 +130,45 @@ test("POST /api/sandbox returns 403 when getSandboxServiceCredentials denies the
   assert.equal(credentialCalls, 1);
   assert.equal(createCalls, 0);
 });
+
+test("POST /api/sandbox returns 403 AUTOMATION_REQUIRED when key access is restricted", async () => {
+  const { createSandboxPostHandler } =
+    await import("../../app/api/sandbox/route");
+  const { SandboxKeyRestrictedError } =
+    await import("../../lib/sandbox/direct-execution-user");
+
+  let createCalls = 0;
+  let credentialCalls = 0;
+  const handler = createSandboxPostHandler({
+    getSandboxServiceCredentials: async () => {
+      credentialCalls += 1;
+      throw new SandboxKeyRestrictedError("team");
+    },
+    createSandboxForRepo: async () => {
+      createCalls += 1;
+      throw new Error("createSandboxForRepo should not be called");
+    },
+    createSandboxFromSnapshot: async () => {
+      createCalls += 1;
+      throw new Error("createSandboxFromSnapshot should not be called");
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/sandbox", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-mogplex-team-id": "00000000-0000-4000-8000-000000000001",
+      },
+      body: JSON.stringify({ repoId: "repo-1" }),
+    })
+  );
+
+  assert.equal(response.status, 403);
+  const body = (await response.json()) as { error: string; code?: string };
+  assert.equal(body.code, "AUTOMATION_REQUIRED");
+  assert.match(body.error, /team owner/);
+  assert.equal(credentialCalls, 1);
+  assert.equal(createCalls, 0);
+});

@@ -178,7 +178,7 @@ export async function getSandboxServiceCredentials(
       ? getDelegatedUserIdFromRequest(request)
       : null;
   const actor = delegatedUserId
-    ? { userId: delegatedUserId, viaApiKey: false }
+    ? ({ userId: delegatedUserId, viaApiKey: false } as const)
     : await getDirectExecutionUser();
   if (!actor) return null;
   await assertMayExecuteInTeam(actor, options?.teamId);
