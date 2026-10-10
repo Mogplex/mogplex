@@ -13,6 +13,10 @@ import type {
   IncludedCreditExpiry,
   LedgerEntry,
 } from "../../../lib/billing/ledger";
+import type {
+  PaymentFailedEmailParams,
+  PaymentFailedSendResult,
+} from "../../../lib/email/send-payment-failed";
 
 export async function loadWebhookRoute() {
   return import("../../../app/api/webhooks/stripe/route");
@@ -51,7 +55,24 @@ export type Recorded = {
   capacityScheduleProjections: Array<
     Parameters<typeof recordCapacityScheduleProjection>[0]
   >;
+  emails: PaymentFailedEmailParams[];
 };
+
+export function openInvoiceFixture(
+  overrides: Partial<Stripe.Invoice> = {}
+): Stripe.Invoice {
+  return {
+    id: "in_2",
+    customer: "cus_123",
+    status: "open",
+    customer_email: "billing@example.com",
+    hosted_invoice_url: "https://invoice.stripe.com/i/in_2",
+    amount_remaining: 2000,
+    currency: "usd",
+    next_payment_attempt: Date.parse("2026-08-07T00:00:00.000Z") / 1000,
+    ...overrides,
+  } as Stripe.Invoice;
+}
 
 export function makeDeps(overrides: {
   account?: BillingAccount;
@@ -63,6 +84,8 @@ export function makeDeps(overrides: {
   capacityBillingOperationsEnabled?: boolean;
   capacityBillingStripeMode?: "test" | "live" | null;
   capacityProjectionResult?: CapacityEntitlementProjectionResult;
+  invoice?: Stripe.Invoice;
+  emailResult?: PaymentFailedSendResult;
 }) {
   const account = overrides.account ?? accountFixture();
   const recorded: Recorded = {
@@ -71,6 +94,7 @@ export function makeDeps(overrides: {
     capacitySnapshots: [],
     annualGrantReconciliations: [],
     capacityScheduleProjections: [],
+    emails: [],
   };
   const postedRefs = overrides.postedRefs ?? new Set<string>();
   const deps = {
@@ -129,6 +153,17 @@ export function makeDeps(overrides: {
     },
     retrieveSubscription: async () =>
       overrides.subscription as Stripe.Subscription,
+    retrieveInvoice: async (id: string) =>
+      overrides.invoice ?? openInvoiceFixture({ id }),
+    sendPaymentFailedEmail: async (params: PaymentFailedEmailParams) => {
+      recorded.emails.push(params);
+      return (
+        overrides.emailResult ?? {
+          ok: true as const,
+          channel: "resend" as const,
+        }
+      );
+    },
     retrievePaymentIntent: async () =>
       overrides.paymentIntent as Stripe.PaymentIntent,
     listRefunds: async () => (overrides.refunds ?? []) as Stripe.Refund[],

@@ -158,3 +158,45 @@ test("stale invoice.payment_failed should not clobber a newer account status", a
 
   assert.deepEqual(recorded.updates, []);
 });
+
+function paymentFailedEvent(): Stripe.Event {
+  return {
+    id: "evt_inv_failed",
+    type: "invoice.payment_failed",
+    data: { object: { id: "in_2", customer: "cus_123" } },
+  } as unknown as Stripe.Event;
+}
+
+test("invoice.payment_failed should email the billing contact a pay link", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({});
+
+  await route.handleStripeEvent(paymentFailedEvent(), deps);
+
+  assert.deepEqual(recorded.emails, [
+    {
+      email: "billing@example.com",
+      amountCents: 2000,
+      currency: "usd",
+      nextAttemptAt: new Date("2026-08-07T00:00:00.000Z"),
+      payUrl: "https://invoice.stripe.com/i/in_2",
+      idempotencyKey: "invoice-payment-failed/evt_inv_failed",
+    },
+  ]);
+});
+
+test("invoice.payment_failed should fail the event when the email is not sent", async () => {
+  const route = await loadWebhookRoute();
+  const { deps, recorded } = makeDeps({
+    emailResult: { ok: false, reason: "resend_error" },
+  });
+
+  await assert.rejects(
+    route.handleStripeEvent(paymentFailedEvent(), deps),
+    /payment-failed email for invoice in_2 not sent: resend_error/
+  );
+  // past_due lands first, so a redelivery only retries the email.
+  assert.deepEqual(recorded.updates, [
+    { id: "acct-1", updates: { status: "past_due" } },
+  ]);
+});
