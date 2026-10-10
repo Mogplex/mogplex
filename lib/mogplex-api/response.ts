@@ -110,6 +110,10 @@ export async function resolveMogplexApiUser(
     // OAuth token is issued to a person who approved it in the browser (the
     // Mogplex CLI, or an MCP client such as Claude Code or Cursor).
     credentialKind: isPat ? ("integration" as const) : ("interactive" as const),
-    keyAccess: isPat ? readStoredApiKeyAccess(result.auth.access) : null,
+    keyAccess: isPat
+      ? readStoredApiKeyAccess(result.auth.access, {
+          keyId: result.auth.keyId,
+        })
+      : null,
   };
 }

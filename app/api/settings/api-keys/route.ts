@@ -187,7 +187,7 @@ export function createApiKeysGetHandler(overrides: Partial<ApiKeysDeps> = {}) {
         name: key.name,
         prefix: key.token_prefix,
         scopes: key.scopes,
-        access: readStoredApiKeyAccess(key.access),
+        access: readStoredApiKeyAccess(key.access, { keyId: key.id }),
         createdAt: key.created_at,
         lastUsedAt: key.last_used_at,
         expiresAt: key.expires_at,

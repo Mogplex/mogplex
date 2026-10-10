@@ -1,9 +1,6 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
 import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
-import {
-  MOGPLEX_API_MAX_IDEMPOTENCY_KEY_LENGTH,
-  readMogplexApiIdempotencyKeyResult,
-} from "@/lib/mogplex-api/request";
+import { requireMogplexApiIdempotencyKey } from "@/lib/mogplex-api/request";
 import {
   enforceExternalAgentRunLimits,
   type LimitDecision,
@@ -89,17 +86,8 @@ export function createMogplexApiRunsPostHandler(
     const restricted = requireFullAccessKey(user);
     if (restricted) return restricted;
 
-    const idempotencyKey = readMogplexApiIdempotencyKeyResult(request.headers);
-    if (!idempotencyKey.ok) {
-      if (idempotencyKey.error === "too_long") {
-        return mogplexApiError(
-          "BAD_REQUEST",
-          `Idempotency-Key exceeds maximum length of ${MOGPLEX_API_MAX_IDEMPOTENCY_KEY_LENGTH} characters`,
-          400
-        );
-      }
-      return mogplexApiError("BAD_REQUEST", "Idempotency-Key is required", 400);
-    }
+    const idempotencyKey = requireMogplexApiIdempotencyKey(request.headers);
+    if (!idempotencyKey.ok) return idempotencyKey.response;
 
     let body: Record<string, unknown>;
     try {
