@@ -4,6 +4,7 @@
   "plugins": ["@stryker-mutator/vitest-runner"],
   "vitest": { "related": false },
   "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
   "mutate": ["lib/**/*.ts", "!lib/**/*.test.ts", "!lib/**/*.d.ts"],
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",

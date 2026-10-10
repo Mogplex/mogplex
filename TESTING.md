@@ -169,6 +169,10 @@ Two advisory checks probe whether tests are meaningful, not just present:
   files a PR changes and reports how many mutants the vitest tier kills. It
   never fails on the score — a low score is the machine-checked version of
   "would this test still pass if the feature silently stopped working?"
+  Static mutants (edits to module-level constants, which run only when a
+  file loads) are skipped: each one forces a rerun of the whole suite, and
+  they would push a large PR past the job's time limit before any progress
+  is saved.
 
 Neither advisory check blocks the merge, but reviewers should treat a red
 diff-coverage or a low mutation score as a finding to resolve. Lint and these
