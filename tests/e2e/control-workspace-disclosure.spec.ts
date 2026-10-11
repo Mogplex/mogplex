@@ -217,3 +217,21 @@ test("terminal resizing follows the pointer without animation lag", async ({
   );
   await page.mouse.up();
 });
+
+test("collapsing command output does not initialize an interactive terminal", async ({
+  page,
+}) => {
+  await mockControlWorkspace(page);
+  await page
+    .getByRole("button", { name: "Agent commands (1)", exact: true })
+    .click();
+  const shell = page.locator("#task-output-terminal");
+  await expect(shell).toContainText("Select a sandbox to open its terminal.");
+  await page
+    .getByRole("button", { name: "Open terminal", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Task terminal" })
+  ).toBeHidden();
+  await expect(shell).toContainText("Select a sandbox to open its terminal.");
+});

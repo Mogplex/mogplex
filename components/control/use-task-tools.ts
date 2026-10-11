@@ -97,7 +97,7 @@ export function useTaskTools(sessionId: string) {
       update((previous) => ({
         drawer: previous.drawer ? null : "terminal",
         expanded: null,
-        terminalOpened: true,
+        terminalOpened: previous.terminalOpened || !previous.drawer,
       })),
     [update]
   );
