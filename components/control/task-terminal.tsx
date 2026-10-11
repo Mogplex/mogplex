@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import dynamic from "next/dynamic";
-import { Xmark } from "iconoir-react";
+import { Collapse, Expand, Xmark } from "iconoir-react";
 import type { UIMessage } from "ai";
 import type { SandboxRecord } from "@/lib/types";
 import { useSandboxStore } from "@/hooks/use-sandbox";
@@ -32,7 +33,12 @@ export function TaskTerminal({ sessionId, sandbox, messages, tools, onClose }: {
   const drag = useRef<{ pointer: number; bottom: number } | null>(null);
   const logs = useSandboxStore(state => sandbox ? state.getLaunchLogs(sandbox.repo_id, { sandboxId: sandbox.id }) : undefined);
   const clamp = (next: number) => Math.max(120, Math.min(window.innerHeight * 0.65, next));
-  return <section ref={regionRef} aria-label="Task terminal" className="task-terminal relative shrink-0 border-t border-border bg-background" style={{ height, display: tools.drawer ? "flex" : "none" }}>
+  return <>
+    <div aria-hidden="true" className="task-terminal-space shrink-0" style={{ height: tools.drawer ? height : 0 }} />
+    <motion.section ref={regionRef} layout layoutDependency={tools.expanded} initial={false} aria-label="Task terminal" aria-hidden={!tools.drawer} inert={!tools.drawer}
+      animate={{ y: tools.drawer ? 0 : "100%", opacity: tools.drawer ? 1 : 0, visibility: "visible", transitionEnd: { visibility: tools.drawer ? "visible" : "hidden" } }}
+      className="task-terminal absolute inset-x-0 bottom-0 z-20 flex border-t border-border bg-background" style={{ height }}>
+    <motion.div layout="position" className="flex min-h-0 flex-1 flex-col">
     <div role="separator" aria-label="Resize terminal" aria-orientation="horizontal" aria-valuemin={120} aria-valuenow={Math.round(height)} tabIndex={0}
       className="absolute inset-x-0 -top-1 z-20 h-2 cursor-row-resize touch-none focus-visible:bg-primary/20"
       onPointerDown={event => { drag.current = { pointer: event.pointerId, bottom: regionRef.current?.getBoundingClientRect().bottom ?? 0 }; event.currentTarget.setPointerCapture(event.pointerId); }}
@@ -50,7 +56,8 @@ export function TaskTerminal({ sessionId, sandbox, messages, tools, onClose }: {
       }}>
         {TABS.map(tab => <button key={tab.id} type="button" role="tab" id={`task-drawer-${tab.id}`} aria-controls={`task-output-${tab.id}`} aria-selected={tools.drawer === tab.id} tabIndex={tools.drawer === tab.id ? 0 : -1} onClick={() => tools.openDrawer(tab.id)} className={`rounded px-2 py-1.5 text-xs ${tools.drawer === tab.id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{tab.label}</button>)}
       </div>
-      <button type="button" aria-label="Close terminal" onClick={onClose} className="ml-auto rounded p-2 hover:bg-muted"><Xmark className="size-4" /></button>
+      <button type="button" aria-label={tools.expanded === "terminal" ? "Restore terminal size" : "Expand terminal"} title={tools.expanded === "terminal" ? "Restore split view" : "Expand terminal"} onClick={() => tools.toggleExpanded("terminal")} className="task-expand ml-auto rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground">{tools.expanded === "terminal" ? <Collapse className="size-4" /> : <Expand className="size-4" />}</button>
+      <button type="button" aria-label="Close terminal" title="Collapse terminal" onClick={onClose} className="rounded p-2 hover:bg-muted"><Xmark className="size-4" /></button>
     </div>
     <div role="tabpanel" id="task-output-commands" aria-labelledby="task-drawer-commands" className="min-h-0 flex-1 overflow-auto" hidden={tools.drawer !== "commands"}>
       <TerminalActivity messages={messages} />
@@ -61,5 +68,6 @@ export function TaskTerminal({ sessionId, sandbox, messages, tools, onClose }: {
     <div role="tabpanel" id="task-output-logs" aria-labelledby="task-drawer-logs" className="min-h-0 flex-1 overflow-auto" hidden={tools.drawer !== "logs"}>
       <pre className="whitespace-pre-wrap break-words p-4 font-mono text-xs text-muted-foreground">{logs || sandbox?.dev_log || sandbox?.install_log || "No sandbox logs recorded yet."}</pre>
     </div>
-  </section>;
+    </motion.div>
+  </motion.section></>;
 }

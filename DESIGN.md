@@ -192,6 +192,12 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   composer with that repository selected. Run links open the original run in
   Command Center. Live runs accept guidance; completed runs can continue in
   the same chat after saved history loads. Opening a link never starts an agent.
+  Active tool buttons also collapse their pane. Right panes and the terminal
+  drawer can expand into the workspace and restore their previous split size;
+  Escape restores the split view. Sidebar collapse preserves project disclosure
+  and scroll state. Use short, interruptible transform transitions for these
+  layout changes, keeping controls interactive and live previews and editors
+  mounted. Respect reduced-motion preferences with immediate updates.
 - **[Dialog](./components/ui/dialog.tsx):** reuse the Radix-backed focus and
   dismissal behavior, 6px corners, 24px padding, and responsive action layout.
   Provide a title and description. Use inline disclosure when it can complete

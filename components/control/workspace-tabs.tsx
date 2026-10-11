@@ -199,10 +199,10 @@ export function WorkspaceTabs({ view, onViewChange, sandboxes, worktrees, reposi
   const choices = sandboxChoices(selectedHistory ? [selectedHistory, ...current] : current, repositoryName);
   const selectedChoice = choices.find(choice => choice.sandbox.id === selectedSandboxId) ?? null;
   return <div className="flex min-w-0 items-center gap-1" role="group" aria-label="Task environment">
-    <button type="button" data-task-tool="worktrees" aria-label={`Worktrees, ${countLabel(worktrees.length, "checkout")}`} aria-pressed={view === "worktrees"} onClick={() => onViewChange("worktrees")} className={`${TAB_BASE} ${view === "worktrees" ? TAB_ON : TAB_OFF}`}>
+    <button type="button" data-task-tool="worktrees" aria-label={`Worktrees, ${countLabel(worktrees.length, "checkout")}`} aria-pressed={view === "worktrees"} onClick={() => onViewChange(view === "worktrees" ? "chat" : "worktrees")} className={`${TAB_BASE} ${view === "worktrees" ? TAB_ON : TAB_OFF}`}>
       <GitBranch className="size-4 shrink-0" aria-hidden="true" /><span className="hidden 2xl:inline">Worktrees</span><span className="text-xs">{worktrees.length}</span>
     </button>
-    <button type="button" data-task-tool="sandboxes" aria-label={`Sandboxes, ${countLabel(current.length, "current sandbox", "current sandboxes")}, ${countLabel(history.length, "previous attempt")}`} aria-pressed={view === "sandboxes"} onClick={() => onViewChange("sandboxes")} className={`${TAB_BASE} ${view === "sandboxes" ? TAB_ON : TAB_OFF}`}>
+    <button type="button" data-task-tool="sandboxes" aria-label={`Sandboxes, ${countLabel(current.length, "current sandbox", "current sandboxes")}, ${countLabel(history.length, "previous attempt")}`} aria-pressed={view === "sandboxes"} onClick={() => onViewChange(view === "sandboxes" ? "chat" : "sandboxes")} className={`${TAB_BASE} ${view === "sandboxes" ? TAB_ON : TAB_OFF}`}>
       <Server className="size-4 shrink-0" aria-hidden="true" /><span className="hidden 2xl:inline">Sandboxes</span><span className="text-xs">{current.length}</span>
     </button>
     {choices.length > 0 && <DropdownMenu>

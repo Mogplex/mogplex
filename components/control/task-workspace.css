@@ -1,8 +1,19 @@
 .control-task-column { container-type: inline-size; }
 .task-tool-buttons { flex: 1 1 22rem; }
 .task-workspace { container-type: inline-size; }
-.task-terminal { flex-direction: column; max-height: 65%; }
-.task-tools { max-width: 60%; }
+.task-terminal { flex-direction: column; }
+.task-terminal, .task-terminal-space { max-height: 65%; }
+.task-tools, .task-tools-space { max-width: calc(100% - 280px); }
+.task-workspace[data-expanded-pane="tools"] .task-conversation,
+.task-workspace[data-expanded-pane="tools"] .task-terminal,
+.task-workspace[data-expanded-pane="terminal"] .task-workspace-main { display: none !important; }
+.task-workspace[data-expanded-pane="tools"] .task-tools,
+.task-workspace[data-expanded-pane="tools"] .task-tools-space { width: 100% !important; max-width: none; border-left: none; }
+.task-workspace[data-expanded-pane="tools"] .task-terminal-space,
+.task-workspace[data-expanded-pane="terminal"] .task-terminal-space { display: none; }
+.task-workspace[data-expanded-pane="terminal"] .task-terminal { height: 100% !important; max-height: none; min-height: 0; }
+.task-workspace[data-expanded-pane="tools"] .task-tools-resizer,
+.task-workspace[data-expanded-pane="terminal"] .task-terminal [role="separator"] { display: none; }
 .task-changes > div:first-child { flex-wrap: wrap; padding: 12px; gap: 12px; }
 .task-changes [data-testid^="changed-file-"] { min-height: 36px; font-size: 12px; }
 @container (max-width: 740px) {
@@ -11,8 +22,10 @@
   .task-header-actions [data-action-trigger] { padding: 8px; }
   .task-workspace[data-tool-open="true"] .task-conversation { display: none; }
   .task-tools { width: 100% !important; max-width: none; border-left: none; }
+  .task-tools-space, .task-terminal-space { display: none; }
   .task-tools-resizer { display: none; }
+  .task-expand { display: none; }
   .task-workspace[data-drawer-open="true"] .task-workspace-main { display: none; }
-  .task-terminal > [role="separator"] { display: none; }
-  .task-terminal { height: auto !important; max-height: none; flex: 1; min-height: 0; }
+  .task-terminal [role="separator"] { display: none; }
+  .task-terminal { height: 100% !important; max-height: none; min-height: 0; }
 }
