@@ -65,6 +65,15 @@ for (const outcome of ["success", "error", "cancelled"] as const) {
         "gen_first",
         "gen_second",
       ]);
+      // Gateway supplies the ID on a content chunk even if this request
+      // fails before the SDK can produce a completed step.
+      await checkpoint({
+        providerMetadata: { gateway: { generationId: "gen_partial" } },
+      });
+      await checkpoint({
+        providerMetadata: { gateway: { generationId: "gen_partial" } },
+      });
+      assert.equal(updates.length, 3, "repeated chunks do not write again");
       const input = {
         activeCall: call,
         userId: call.user_id,
@@ -90,6 +99,7 @@ for (const outcome of ["success", "error", "cancelled"] as const) {
       assert.deepEqual(saved.gateway_generation_ids, [
         "gen_first",
         "gen_second",
+        "gen_partial",
       ]);
     } finally {
       if (descriptor) Object.defineProperty(supabaseAdmin, "from", descriptor);

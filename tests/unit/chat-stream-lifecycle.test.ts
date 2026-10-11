@@ -4,12 +4,14 @@ import { streamText, tool } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
 import { createChatFinalizationHooks } from "@/app/api/chat/_lib/lifecycle";
+import { createAgentUserFacingOutputTransform } from "@/lib/agents/user-facing-output";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { buildAiCall } from "./helpers/sandbox-harness-route-fixtures";
 
 for (const scenario of [
   "provider-throw",
   "error-frame",
+  "partial-error",
   "after-tool",
   "success",
   "multi-step-success",
@@ -107,7 +109,21 @@ for (const scenario of [
             stream: new ReadableStream({
               start(controller) {
                 controller.enqueue({ type: "stream-start", warnings: [] });
-                if (scenario === "error-frame") {
+                if (scenario === "partial-error") {
+                  controller.enqueue({ type: "text-start", id: "partial" });
+                  controller.enqueue({
+                    type: "text-delta",
+                    id: "partial",
+                    delta: "partial output",
+                    providerMetadata: {
+                      gateway: { generationId: "generation-1" },
+                    },
+                  });
+                  controller.enqueue({
+                    type: "error",
+                    error: new Error("private-provider-diagnostic"),
+                  });
+                } else if (scenario === "error-frame") {
                   controller.enqueue({
                     type: "error",
                     error: new Error("private-provider-diagnostic"),
@@ -162,6 +178,7 @@ for (const scenario of [
         model,
         prompt: "hello",
         maxRetries: 0,
+        experimental_transform: createAgentUserFacingOutputTransform({}),
         abortSignal: abortController.signal,
         stopWhen: () => false,
         tools: {
@@ -176,7 +193,9 @@ for (const scenario of [
         ...hooks,
       });
       await result.toUIMessageStreamResponse().text();
-      assert.equal(updates.length, 1);
+      const expectedWrites = scenario === "partial-error" ? 2 : 1;
+      assert.equal(updates.length, expectedWrites);
+      assert.equal(updates.filter((update) => update.status).length, 1);
       assert.equal(
         updates[0].status,
         scenario === "cancel-after-tool"
@@ -201,7 +220,11 @@ for (const scenario of [
       );
       await hooks.onAbort?.({ callId: "cancelled", steps: [] });
       await hooks.onError?.({ error: new Error("late-error") });
-      assert.equal(updates.length, 1, "a later abort cannot overwrite failure");
+      assert.equal(
+        updates.length,
+        expectedWrites,
+        "a later abort cannot overwrite failure"
+      );
       assert.equal(releases, 1);
       assert.equal(
         model.doStreamCalls.length,
@@ -220,7 +243,11 @@ for (const scenario of [
           : 0,
         "no command replay"
       );
-      if (scenario !== "provider-throw" && scenario !== "error-frame") {
+      if (scenario === "partial-error") {
+        assert.deepEqual(updates.at(-1)!.gateway_generation_ids, [
+          "generation-1",
+        ]);
+      } else if (scenario !== "provider-throw" && scenario !== "error-frame") {
         const steps = scenario === "multi-step-success" ? 2 : 1;
         assert.equal(updates[0].input_tokens, 2 * steps);
         assert.equal(updates[0].output_tokens, steps);

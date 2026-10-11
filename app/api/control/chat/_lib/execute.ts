@@ -357,6 +357,11 @@ export async function executeControlChatRequest(input: {
         repoName: input.body.repoName,
         userRequestText: input.latestUserText,
       }),
+      async onChunk({ chunk }) {
+        if ("providerMetadata" in chunk) {
+          await checkpointStep({ providerMetadata: chunk.providerMetadata });
+        }
+      },
       onToolExecutionStart(event) {
         sandboxTaskLifecycle.onToolStart(event);
         startToolTelemetry(event);
