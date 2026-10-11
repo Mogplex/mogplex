@@ -217,7 +217,7 @@ export class ControlChatRegistry {
     };
     chat.stop = async () => {
       const callId = this.remoteTurns.get(sessionId);
-      if (!callId && isRunning(chat)) {
+      if (!callId && chat.status === "submitted") {
         // Admission may already have succeeded on the server. Keep receiving
         // its acknowledgement so Stop can cancel that run by its durable ID.
         stopBeforeAcknowledgement = true;
