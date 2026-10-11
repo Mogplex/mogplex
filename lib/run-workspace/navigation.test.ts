@@ -3,7 +3,7 @@ import { runDeepLinkDestination } from "./navigation";
 
 it("existing Slack View work links open the exact run workspace in the user's scope", () => {
   expect(runDeepLinkDestination("alex", "run-1", "call-1")).toBe(
-    "/alex/projects/workspace?run=run-1"
+    "/alex/control?run=run-1"
   );
 });
 it("keeps explicit run details in observability", () => {

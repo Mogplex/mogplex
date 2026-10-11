@@ -23,6 +23,8 @@ export function useControlSessionUrl({
     if (sessionId) {
       if (next.get("mission") === sessionId) return;
       next.set("mission", sessionId);
+      next.delete("repo");
+      next.delete("run");
     } else {
       if (!sessionsLoaded) return;
       const mission = next.get("mission");

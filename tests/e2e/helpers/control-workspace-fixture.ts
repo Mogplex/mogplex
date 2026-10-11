@@ -71,6 +71,7 @@ export async function mockControlWorkspace(
     repo_id: "repo-widgets",
     model_id: null,
     orchestration_run_id: null,
+    external_run_id: null as string | null,
     pinned: false,
     archived: false,
     created_at: "2026-10-10T12:00:00Z",
@@ -166,5 +167,5 @@ export async function mockControlWorkspace(
     route.fulfill({ contentType: "text/html", body: "<h1>Welcome home</h1>" })
   );
   await page.goto(`${scopedPath("control")}?mission=task-one`);
-  return { mutations, sessions };
+  return { mutations, sessions, sandboxes };
 }

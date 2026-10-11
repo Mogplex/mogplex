@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { ControlShell } from "@/components/control/control-shell"
+import { ControlEntry } from "@/components/control/control-entry"
 import { emptyControlData } from "@/lib/control/utils"
 
 type Props = {
@@ -22,7 +22,7 @@ export default async function ControlPage({ params, searchParams }: Props) {
         </div>
       }
     >
-      <ControlShell initialData={initialData} initialMissionId={mission} />
+      <ControlEntry initialData={initialData} initialMissionId={mission} />
     </Suspense>
   )
 }

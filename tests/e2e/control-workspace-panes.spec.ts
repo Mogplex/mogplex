@@ -60,6 +60,10 @@ test("mobile tools use a full-width view and return to the same conversation", a
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockControlWorkspace(page);
+  await expect(page.locator(".app-statusbar")).toContainText("Sandboxes");
+  await expect(page.locator(".app-statusbar")).not.toContainText(
+    "Open a workspace"
+  );
   const composer = page.getByRole("textbox", {
     name: "Ask for follow-up changes",
   });
@@ -80,6 +84,39 @@ test("mobile tools use a full-width view and return to the same conversation", a
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth)
   ).toBeLessThanOrEqual(390);
+});
+
+test("paused task previews show saved-state controls without loading a stopped provider page", async ({
+  page,
+}) => {
+  const { sandboxes } = await mockControlWorkspace(page);
+  const sandbox = sandboxes[0];
+  sandbox.status = "paused";
+  sandbox.health_status = "paused";
+  sandbox.runtime_summary = {
+    ...sandbox.runtime_summary!,
+    status: "paused",
+    health_status: "paused",
+    persistent: true,
+  };
+  await page.route("**/api/sandbox/*/health", (route) =>
+    route.fulfill({
+      json: { status: "paused", healthStatus: "paused", sandbox },
+    })
+  );
+  let providerRequests = 0;
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://preview.example.test/"))
+      providerRequests++;
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Open preview", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Task tools" });
+  await expect(
+    panel.getByRole("button", { name: "Resume preview", exact: true })
+  ).toBeVisible();
+  await expect(panel.locator("iframe")).toHaveCount(0);
+  expect(providerRequests).toBe(0);
 });
 
 test("sandbox choices and drafts stay attached to their task across switches", async ({

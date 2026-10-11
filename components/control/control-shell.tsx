@@ -33,6 +33,7 @@ import { useTaskTools } from "./use-task-tools";
 import { SessionList } from "./session-list";
 import { MobileSessionList } from "./mobile-session-list";
 import { ExternalRunConversation } from "./external-run-conversation";
+import type { ExternalRunWorkspaceRenderer } from "@/components/pane-content/agent-pane/external-run-pane";
 import { useControlSessions } from "./use-control-sessions";
 import { useControlSend } from "./use-control-send";
 import { latestControlContext } from "@/lib/control/context-usage";
@@ -56,8 +57,9 @@ import { useSessionArchive } from "./use-session-archive";
 export type ControlShellProps = {
   initialData: ControlSeedData;
   initialMissionId?: string;
+  initialRepo?: { id: string; full_name: string };
 };
-function ControlShellInner({ initialData, initialMissionId }: ControlShellProps) {
+function ControlShellInner({ initialData, initialMissionId, initialRepo }: ControlShellProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { scope } = useParams<{ scope: string }>();
@@ -157,7 +159,8 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     setSessionId,
     setSessionMessages,
     removeSessionMessages: removeSessionState,
-    deepLinkTarget: searchParams.get("mission"),
+    deepLinkTarget: searchParams.get("mission") ?? initialMissionId,
+    skipRestore: Boolean(initialRepo),
     chatPending,
   });
   const archiveState = useSessionArchive({ setSessionArchived, reserveArchiveSession });
@@ -186,6 +189,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     sessionId,
     sessions: displaySessions,
     deleteSession,
+    initialTarget: initialRepo ? { repoId: initialRepo.id, project: initialRepo.full_name } : undefined,
   });
   const newSessionRepoId = useMemo(
     () => resolveNewSessionRepoId(newSessionTarget, activeSession, repos),
@@ -364,10 +368,22 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
     workingIds: runningSessionIds, onSelect: handleSelectSession,
     onNew: startNewSession, onDelete: deleteChat, archive,
   };
+  const renderWorkspace: ExternalRunWorkspaceRenderer = ({ messages: taskMessages, running, children, onFeedback }) => <TaskWorkspace
+    sessionId={activeChatId} repo={activeRepo} sandbox={activeSandbox}
+    messages={taskMessages} terminalMessages={activeSession?.external_run_id && messages.length === 0 ? taskMessages : terminalMessages} pending={running}
+    tools={taskTools} onSelectSandbox={selectSandbox} onFeedback={onFeedback}
+    contextBar={<WorkspaceTabs view={view} onViewChange={setView} sandboxes={sandboxes} worktrees={controlWorktrees.worktrees} repositoryName={activeRepo?.full_name ?? "Repository"} selectedSandboxId={activeSandbox?.id ?? null}
+      onFocusSandbox={id => { selectSandbox(id); setFocusSandboxId(id); }} />}
+    sandboxes={<SandboxesPanel sandboxes={sandboxes} loading={sandboxesLoading} hasRepository={Boolean(activeRepo)} repositoryLoading={reposLoading}
+      selectedSandboxId={activeSandbox?.id ?? null} focusSandboxId={focusSandboxId} onClearFocus={() => setFocusSandboxId(null)}
+      onSelectSandbox={selectSandbox} onStartSandbox={handleStartSandbox} onOpenPreview={() => taskTools.openTool("preview")} />}
+    worktrees={<WorktreesPanel worktrees={controlWorktrees.worktrees} loading={controlWorktrees.loading} error={controlWorktrees.error}
+      onRefresh={controlWorktrees.refresh} onAction={controlWorktrees.act} onDiff={controlWorktrees.loadDiff} />}
+  >{children}</TaskWorkspace>;
   return (
     <div className="app-control-shell bg-ink-950 text-ink-100 flex h-full overflow-hidden">
       <SessionList {...sessionListProps} />
-      {activeSession?.external_run_id ? <div className="flex min-w-0 flex-1 flex-col"><div className="border-b border-ink-800 px-4 py-1 md:hidden"><MobileSessionList {...sessionListProps} /></div><ExternalRunConversation session={{ ...activeSession, external_run_id: activeSession.external_run_id }} /></div> : <div className="control-task-column flex min-w-0 flex-1 flex-col">
+      {activeSession?.external_run_id && messages.length === 0 ? <div className="flex min-w-0 flex-1 flex-col"><div className="border-b border-ink-800 px-4 py-1 md:hidden"><MobileSessionList {...sessionListProps} /></div><ExternalRunConversation key={activeSession.id} session={{ ...activeSession, external_run_id: activeSession.external_run_id }} renderWorkspace={renderWorkspace} onContinued={async draft => { if (!await selectSession(activeSession.id)) throw new Error("Could not reload this chat. Try again."); setComposerInput(draft); }} /></div> : <div className="control-task-column flex min-w-0 flex-1 flex-col">
         <ControlTopBar
           sessionNavigation={<MobileSessionList {...sessionListProps} />}
           projectName={
@@ -396,42 +412,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
           onExportTranscript={handleExportTranscript}
           onCopyLink={handleCopyLink}
         />
-        <TaskWorkspace
-          sessionId={activeChatId} repo={activeRepo} sandbox={activeSandbox}
-          messages={messages} terminalMessages={terminalMessages} pending={chatPending}
-          tools={taskTools} onSelectSandbox={selectSandbox} onFeedback={text => setComposerInput([composerInput, text].filter(Boolean).join("\n\n"))}
-          contextBar={<WorkspaceTabs
-          view={view}
-          onViewChange={setView}
-          sandboxes={sandboxes}
-          worktrees={controlWorktrees.worktrees}
-          repositoryName={activeRepo?.full_name ?? "Repository"}
-          selectedSandboxId={activeSandbox?.id ?? null}
-          onFocusSandbox={(id) => {
-            selectSandbox(id);
-            setFocusSandboxId(id);
-          }}
-        />}
-          sandboxes={<SandboxesPanel
-              sandboxes={sandboxes}
-              loading={sandboxesLoading}
-              hasRepository={Boolean(activeRepo)} repositoryLoading={reposLoading}
-              selectedSandboxId={activeSandbox?.id ?? null}
-              focusSandboxId={focusSandboxId}
-              onClearFocus={() => setFocusSandboxId(null)}
-              onSelectSandbox={selectSandbox}
-              onStartSandbox={handleStartSandbox}
-              onOpenPreview={() => taskTools.openTool("preview")}
-            />}
-          worktrees={<WorktreesPanel
-              worktrees={controlWorktrees.worktrees}
-              loading={controlWorktrees.loading}
-              error={controlWorktrees.error}
-              onRefresh={controlWorktrees.refresh}
-              onAction={controlWorktrees.act}
-              onDiff={controlWorktrees.loadDiff}
-            />}
-        >
+        {renderWorkspace({ messages, running: chatPending, onFeedback: text => setComposerInput([composerInput, text].filter(Boolean).join("\n\n")), children:
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <Timeline
                   key={activeChatId}
@@ -477,7 +458,7 @@ function ControlShellInner({ initialData, initialMissionId }: ControlShellProps)
                   contextUsage={contextUsage} repoId={activeRepo?.id ?? null}
                 />
               </div>
-        </TaskWorkspace>
+        })}
       </div>}
     </div>
   );

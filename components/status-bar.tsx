@@ -40,10 +40,6 @@ export function StatusBar() {
 
   const { repos } = useRepos()
   const sandboxesById = useSandboxStore((state) => state.sandboxesById)
-  const selectedSandboxId = useSandboxStore((state) => state.activeSandboxId)
-  const selectedSandbox = selectedSandboxId
-    ? sandboxesById[selectedSandboxId] ?? null
-    : null
   const { user } = useUser()
   const githubPrimaryAction = user?.github_primary_action
     || (!user?.github_connected
@@ -92,7 +88,7 @@ export function StatusBar() {
           ? "Start preview"
           : "Ask the agent for a task"
 
-  if (isMobile) {    return (
+  if (isMobile && !isControlRoute) {    return (
       <Sheet>
         <SheetTrigger asChild>
           <div className="app-statusbar flex min-h-8 items-center justify-between border-t border-border bg-card px-3 pb-[env(safe-area-inset-bottom)] font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
@@ -130,16 +126,8 @@ export function StatusBar() {
 
   if (isControlRoute) {
     return (
-      <div className="app-statusbar flex h-8 items-center gap-4 overflow-x-auto border-t border-border bg-card px-3 font-mono text-[10px] tracking-wide text-muted-foreground uppercase whitespace-nowrap">
-        {selectedSandbox && (
-          <span className="flex shrink-0 items-center gap-[5px]">
-            <Server className="size-3" strokeWidth={1.8} />
-            <span>Selected sandbox:</span>
-            <span className="font-mono text-secondary-foreground normal-case">
-              {selectedSandbox.runtime_summary.sandbox_id || selectedSandbox.id}
-            </span>
-          </span>
-        )}
+      <div className="app-statusbar flex min-h-8 items-center gap-4 overflow-x-auto border-t border-border bg-card px-3 pb-[env(safe-area-inset-bottom)] font-mono text-[10px] tracking-wide text-muted-foreground uppercase whitespace-nowrap">
+        <span>Command Center</span>
         <button
           type="button"
           onClick={() => window.dispatchEvent(new Event(CONTROL_VIEW_EVENT))}

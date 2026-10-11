@@ -19,6 +19,7 @@ import { loadControlSessionList } from "./session-list-data";
 import { controlSelectionFailure } from "@/lib/control/session-list-state";
 import { ClientFetchError, fetchJsonObject } from "@/lib/client-fetch";
 import { useControlDeepLink } from "./use-control-deep-link";
+import { createControlSessionRecord } from "./session-create";
 
 const LAST_CONTROL_SESSION_KEY = "mogplex.control.lastSessionId";
 const SESSION_EVENTS = [
@@ -33,6 +34,7 @@ export function useControlSessions({
   removeSessionMessages,
   deepLinkTarget,
   chatPending = false,
+  skipRestore = false,
 }: {
   sessionId: string | null;
   setSessionId: (id: string | null) => void;
@@ -41,6 +43,7 @@ export function useControlSessions({
   /** Session id from the URL (?mission=) to restore once the list loads. */
   deepLinkTarget?: string | null;
   chatPending?: boolean;
+  skipRestore?: boolean;
 }) {
   const [sessions, setSessions] = useState<ControlSessionSummary[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
@@ -223,6 +226,7 @@ export function useControlSessions({
     if (
       restoredSelectionRef.current ||
       restoreInFlightRef.current ||
+      skipRestore ||
       !sessionsLoaded
     )
       return;
@@ -248,7 +252,14 @@ export function useControlSessions({
       restoreInFlightRef.current = false;
       setRestoreSettled(true);
     });
-  }, [sessions, sessionsLoaded, deepLinkTarget, selectSession, sessionId]);
+  }, [
+    sessions,
+    sessionsLoaded,
+    deepLinkTarget,
+    selectSession,
+    sessionId,
+    skipRestore,
+  ]);
 
   const createSession = useCallback(
     async (
@@ -258,36 +269,20 @@ export function useControlSessions({
       request?: string,
       modelId?: string | null
     ) => {
-      const res = await fetch("/api/control/sessions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title: title.slice(0, 80) || "New session",
-          project: project?.trim() || null,
-          repo_id: repoId || null,
-          model_id: modelId ?? null,
-          request: request?.trim() || title,
-        }),
+      const record = await createControlSessionRecord({
+        title,
+        project,
+        repoId,
+        request,
+        modelId,
       });
-      if (!res.ok) return null;
-      const record = (await res.json()) as ControlSessionRecord;
+      if (!record) return null;
       mutationRevisionRef.current += 1;
       removedSessionIdsRef.current.delete(record.id);
       updatedAtBySessionRef.current.set(record.id, record.updated_at);
-      setSessionMessages(record.id, record.messages ?? []);
-      setSessions((current) => [
-        {
-          id: record.id,
-          title: record.title,
-          project: record.project,
-          repo_id: record.repo_id,
-          model_id: record.model_id,
-          orchestration_run_id: record.orchestration_run_id,
-          pinned: record.pinned,
-          updated_at: record.updated_at,
-        },
-        ...current,
-      ]);
+      const { messages: createdMessages, ...summary } = record;
+      setSessionMessages(record.id, createdMessages ?? []);
+      setSessions((current) => [summary, ...current]);
       selectionRevisionRef.current++;
       restoredSelectionRef.current = true;
       setRestoreSettled(true);
@@ -484,7 +479,8 @@ export function useControlSessions({
     sessionsLoaded,
     sessionsError,
     selectionError,
-    restoringSelection: !restoreSettled && !selectionError && !sessionId,
+    restoringSelection:
+      !skipRestore && !restoreSettled && !selectionError && !sessionId,
     retryList: refreshList,
     retrySelection: () =>
       failedSelectionRef.current && !missingSelectionRef.current

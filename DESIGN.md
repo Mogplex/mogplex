@@ -188,6 +188,10 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   space and their close control returns to the same conversation. Sandbox
   selection belongs to the task; ambiguous environments require an explicit
   choice. Read-only command output and the interactive shell remain separate tabs.
+  Repository workspace links select the repository's latest task, or a new
+  composer with that repository selected. Run links open the original run in
+  Command Center. Live runs accept guidance; completed runs can continue in
+  the same chat after saved history loads. Opening a link never starts an agent.
 - **[Dialog](./components/ui/dialog.tsx):** reuse the Radix-backed focus and
   dismissal behavior, 6px corners, 24px padding, and responsive action layout.
   Provide a title and description. Use inline disclosure when it can complete

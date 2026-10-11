@@ -27,6 +27,7 @@ type ControlChatSessionContextRecord = {
   title: string;
   repo_id: string | null;
   model_id: string | null;
+  external_run_id?: string | null;
 };
 
 type ControlChatRepoContextRecord = {
@@ -43,18 +44,32 @@ type ControlChatSessionContextDeps = {
     userId: string;
   }) => Promise<ControlChatSessionContextRecord | null>;
   loadRepo: (repoId: string) => Promise<ControlChatRepoContextRecord | null>;
+  loadExternalRunStatus?: (
+    userId: string,
+    runId: string
+  ) => Promise<string | null>;
 };
 
 const defaultControlChatSessionContextDeps: ControlChatSessionContextDeps = {
   async loadSession(input) {
     const { data, error } = await supabaseAdmin
       .from("control_sessions")
-      .select("id, user_id, title, repo_id, model_id")
+      .select("id, user_id, title, repo_id, model_id, external_run_id")
       .eq("id", input.conversationId)
       .eq("user_id", input.userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     return data;
+  },
+  async loadExternalRunStatus(userId, runId) {
+    const { data, error } = await supabaseAdmin
+      .from("external_agent_runs")
+      .select("status")
+      .eq("id", runId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw new Error("Could not load the original run");
+    return data?.status ?? null;
   },
   async loadRepo(repoId) {
     const { data, error } = await supabaseAdmin
@@ -70,7 +85,7 @@ const defaultControlChatSessionContextDeps: ControlChatSessionContextDeps = {
 export class ControlChatSessionContextError extends Error {
   constructor(
     message: string,
-    readonly status: 404 | 500,
+    readonly status: 404 | 409 | 500,
     options?: ErrorOptions
   ) {
     super(message, options);
@@ -101,6 +116,19 @@ export async function resolveControlChatSessionContext(
   }
   if (session?.user_id !== userId) {
     throw new ControlChatSessionContextError("Control session not found.", 404);
+  }
+  if (session.external_run_id) {
+    const status = await (
+      deps.loadExternalRunStatus ??
+      defaultControlChatSessionContextDeps.loadExternalRunStatus!
+    )(userId, session.external_run_id);
+    if (!status)
+      throw new ControlChatSessionContextError("Original run not found.", 404);
+    if (!["success", "failed", "cancelled"].includes(status))
+      throw new ControlChatSessionContextError(
+        "This run is still active. Send guidance or wait for it to finish.",
+        409
+      );
   }
 
   const missionContext = {

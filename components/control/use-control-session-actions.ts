@@ -8,14 +8,17 @@ export function useControlSessionActions({
   sessionId,
   sessions,
   deleteSession,
+  initialTarget,
 }: {
   sessionId: string | null;
   sessions: ControlSessionSummary[];
   deleteSession: (id: string) => Promise<boolean>;
+  initialTarget?: NewSessionTarget;
 }) {
-  const [newMission, setNewMission] = useState(false);
-  const [newSessionTarget, setNewSessionTarget] =
-    useState<NewSessionTarget | null>(null);
+  const [newMission, setNewMission] = useState(Boolean(initialTarget));
+  const [newSessionTarget, setNewSessionTarget] = useState(
+    initialTarget ?? null
+  );
   // Bumped on every "New" click so the composer starts fresh even when two
   // clicks resolve to the same project.
   const [newSessionRequest, setNewSessionRequest] = useState(0);

@@ -125,7 +125,7 @@ test("a finished coordinator reply keeps worker failure and command output visib
     workers.getByRole("link", {
       name: "View work for mogplex/task/mission/tests",
     })
-  ).toHaveAttribute("href", scopedPath("projects/workspace?run=worker-1"));
+  ).toHaveAttribute("href", scopedPath("control?run=worker-1"));
   await page.getByRole("button", { name: /^Agent commands/ }).click();
   await expect(page.getByTestId("control-terminal-activity")).toContainText(
     "pnpm test"
