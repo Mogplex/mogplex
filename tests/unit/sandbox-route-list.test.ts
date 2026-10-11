@@ -6,86 +6,96 @@ import {
   loadSandboxRouteModule,
 } from "./helpers/sandbox-route-fixtures";
 
-test("GET /api/sandbox reconciles stale sandboxes and returns normalized summaries", async () => {
-  const { createSandboxGetHandler } = await loadSandboxRouteModule();
-  const stoppedIds: string[] = [];
+for (const [status, applied] of [
+  ["running", true],
+  ["running", false],
+  ["creating", false],
+  ["installing", false],
+] as const) {
+  test(`GET /api/sandbox respects ${status} lifecycle ownership (write applied=${applied})`, async () => {
+    const { createSandboxGetHandler } = await loadSandboxRouteModule();
+    const stoppedIds: string[] = [];
 
-  const handler = createSandboxGetHandler({
-    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
-    listSandboxesForUser: async () =>
-      [
-        {
-          id: "sandbox-stale",
-          sandbox_id: "vm_stale",
-          repo_id: "repo-1",
-          user_id: "user-123",
-          status: "running",
-          preview_url: null,
-          runtime: "node22",
-          health_status: "running",
-          error: null,
-          last_preview_http_status: null,
-          last_preview_error: null,
-          last_boot_error: null,
-          boot_attempts: 1,
-          last_boot_started_at: "2026-04-01T10:00:00.000Z",
-          last_boot_completed_at: "2026-04-01T10:01:00.000Z",
-          created_at: "2026-04-01T10:00:00.000Z",
-          last_active_at: "2026-04-01T10:01:00.000Z",
-          billing_source: "platform",
-          billing_team_id: null,
-          billing_project_id: "platform-project",
-          vercel_team_id: null,
-          vercel_project_id: "platform-project",
-        },
-        {
-          id: "sandbox-live",
-          sandbox_id: "vm_live",
-          repo_id: "repo-2",
-          user_id: "user-123",
-          status: "running",
-          preview_url: "https://preview.example.com",
-          runtime: "node22",
-          health_status: "running",
-          error: null,
-          last_preview_http_status: 200,
-          last_preview_error: null,
-          last_boot_error: null,
-          boot_attempts: 2,
-          last_boot_started_at: "2026-04-01T10:00:00.000Z",
-          last_boot_completed_at: "2026-04-01T10:01:00.000Z",
-          created_at: "2026-04-01T10:00:00.000Z",
-          last_active_at: "2026-04-01T10:01:00.000Z",
-          billing_source: "user_vercel_project",
-          billing_team_id: "team-acme",
-          billing_project_id: "project-acme",
-          vercel_team_id: "team-acme",
-          vercel_project_id: "project-acme",
-        },
-      ] as never,
-    findStaleActiveSandboxIds: async () => ({
-      staleIds: new Set(["sandbox-stale"]),
-      skippedIds: new Set(["sandbox-skipped"]),
-    }),
-    stopSandboxRecord: async (id) => {
-      stoppedIds.push(id);
-      return null;
-    },
+    const handler = createSandboxGetHandler({
+      getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+      listSandboxesForUser: async () =>
+        [
+          {
+            id: "sandbox-stale",
+            sandbox_id: "vm_stale",
+            repo_id: "repo-1",
+            user_id: "user-123",
+            status,
+            preview_url: null,
+            runtime: "node22",
+            health_status: "running",
+            error: null,
+            last_preview_http_status: null,
+            last_preview_error: null,
+            last_boot_error: null,
+            boot_attempts: 1,
+            last_boot_started_at: "2026-04-01T10:00:00.000Z",
+            last_boot_completed_at: "2026-04-01T10:01:00.000Z",
+            created_at: "2026-04-01T10:00:00.000Z",
+            last_active_at: "2026-04-01T10:01:00.000Z",
+            billing_source: "platform",
+            billing_team_id: null,
+            billing_project_id: "platform-project",
+            vercel_team_id: null,
+            vercel_project_id: "platform-project",
+          },
+          {
+            id: "sandbox-live",
+            sandbox_id: "vm_live",
+            repo_id: "repo-2",
+            user_id: "user-123",
+            status: "running",
+            preview_url: "https://preview.example.com",
+            runtime: "node22",
+            health_status: "running",
+            error: null,
+            last_preview_http_status: 200,
+            last_preview_error: null,
+            last_boot_error: null,
+            boot_attempts: 2,
+            last_boot_started_at: "2026-04-01T10:00:00.000Z",
+            last_boot_completed_at: "2026-04-01T10:01:00.000Z",
+            created_at: "2026-04-01T10:00:00.000Z",
+            last_active_at: "2026-04-01T10:01:00.000Z",
+            billing_source: "user_vercel_project",
+            billing_team_id: "team-acme",
+            billing_project_id: "project-acme",
+            vercel_team_id: "team-acme",
+            vercel_project_id: "project-acme",
+          },
+        ] as never,
+      findStaleActiveSandboxIds: async () => ({
+        staleIds: new Set(["sandbox-stale"]),
+        skippedIds: new Set(["sandbox-skipped"]),
+      }),
+      stopSandboxRecord: async (id) => {
+        stoppedIds.push(id);
+        return applied ? ({ id, status: "stopped" } as never) : null;
+      },
+    });
+
+    const response = await handler(buildSandboxCollectionRequest());
+    assert.equal(response.status, 200);
+
+    const payload = await response.json();
+    assert.deepEqual(stoppedIds, status === "running" ? ["sandbox-stale"] : []);
+    assert.equal(
+      payload.sandboxes[0].runtime_summary.status,
+      applied ? "stopped" : status
+    );
+    assert.equal(
+      payload.sandboxes[1].billing_summary.label,
+      "Your Vercel project"
+    );
+    assert.equal("status" in payload.sandboxes[0], false);
+    assert.equal("preview_url" in payload.sandboxes[1], false);
   });
-
-  const response = await handler(buildSandboxCollectionRequest());
-  assert.equal(response.status, 200);
-
-  const payload = await response.json();
-  assert.deepEqual(stoppedIds, ["sandbox-stale"]);
-  assert.equal(payload.sandboxes[0].runtime_summary.status, "stopped");
-  assert.equal(
-    payload.sandboxes[1].billing_summary.label,
-    "Your Vercel project"
-  );
-  assert.equal("status" in payload.sandboxes[0], false);
-  assert.equal("preview_url" in payload.sandboxes[1], false);
-});
+}
 
 test("GET /api/sandbox validates and filters by active team", async () => {
   const { createSandboxGetHandler } = await loadSandboxRouteModule();

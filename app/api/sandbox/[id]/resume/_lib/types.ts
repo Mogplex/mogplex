@@ -39,6 +39,7 @@ export type SandboxResumeRecord = {
   persistent: boolean | null;
   created_at: string;
   last_active_at: string | null;
+  last_boot_started_at?: string | null;
   repo:
     | (Record<string, unknown> & {
         root_directory: string | null;

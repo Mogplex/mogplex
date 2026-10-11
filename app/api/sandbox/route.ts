@@ -177,7 +177,7 @@ export function createSandboxGetHandler(
       : baseCreds;
 
     const format = readSandboxFormat(request);
-    const sandboxes = await deps.listSandboxesForUser(
+    let sandboxes = await deps.listSandboxesForUser(
       creds.userId,
       productTeam.productTeamId
     );
@@ -187,7 +187,12 @@ export function createSandboxGetHandler(
         : NextResponse.json({ sandboxes: [] });
     }
 
-    await reconcileStaleListedSandboxes({ deps, creds, sandboxes });
+    if (await reconcileStaleListedSandboxes({ deps, creds, sandboxes })) {
+      sandboxes = await deps.listSandboxesForUser(
+        creds.userId,
+        productTeam.productTeamId
+      );
+    }
 
     if (format === "cli") {
       const visible = sandboxes.filter((s) =>

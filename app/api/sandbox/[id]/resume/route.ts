@@ -96,6 +96,7 @@ export function createSandboxResumeHandler(
     });
     if (!limitDecision.allowed) return buildLimitResponse(limitDecision);
     const limitClaimId = limitDecision.claimId ?? null;
+    const resumeStartedAt = new Date().toISOString();
 
     // Claim before waking the VM: a concurrent loser must never stop the
     // workspace that the winner has just resumed.
@@ -108,13 +109,14 @@ export function createSandboxResumeHandler(
           status: "installing",
           health_status: "starting",
           stop_reason: null,
-          last_boot_started_at: new Date().toISOString(),
+          last_boot_started_at: resumeStartedAt,
           last_boot_completed_at: null,
           last_active_at: new Date().toISOString(),
         },
         {
           expectedSandboxId: record.sandbox_id,
           fromStatuses: record.status,
+          expectedLastBootStartedAt: record.last_boot_started_at ?? null,
           select: RESUME_SELECT,
         }
       )) as SandboxResumeRecord | null;
@@ -138,7 +140,11 @@ export function createSandboxResumeHandler(
           stop_reason: record.stop_reason,
           limit_claim_id: null,
         },
-        { expectedSandboxId: record.sandbox_id, fromStatuses: "installing" }
+        {
+          expectedSandboxId: record.sandbox_id,
+          fromStatuses: "installing",
+          expectedLastBootStartedAt: resumeStartedAt,
+        }
       );
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
     };
@@ -322,6 +328,7 @@ export function createSandboxResumeHandler(
                   {
                     expectedSandboxId: record.sandbox_id,
                     fromStatuses: ["installing", "running"],
+                    expectedLastBootStartedAt: resumeStartedAt,
                     select: RESUME_SELECT,
                   }
                 )) as SandboxResumeRecord | null;
@@ -366,6 +373,7 @@ export function createSandboxResumeHandler(
                     {
                       expectedSandboxId: record.sandbox_id,
                       fromStatuses: ["installing", "running"],
+                      expectedLastBootStartedAt: resumeStartedAt,
                       select: RESUME_SELECT,
                     }
                   )) as SandboxResumeRecord | null;
@@ -423,6 +431,7 @@ export function createSandboxResumeHandler(
             {
               expectedSandboxId: record.sandbox_id,
               fromStatuses: ["installing", "running"],
+              expectedLastBootStartedAt: resumeStartedAt,
             }
           );
           if (!failedRecord) {

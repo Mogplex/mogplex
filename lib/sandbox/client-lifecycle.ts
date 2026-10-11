@@ -180,13 +180,23 @@ export async function listVercelSandboxes(
     namePrefix?: string;
   } = {}
 ) {
-  const result = await Sandbox.list({
+  const params = {
     token: creds.vercelToken,
     projectId: creds.vercelProjectId,
     ...(creds.vercelTeamId ? { teamId: creds.vercelTeamId } : {}),
     ...options,
-  });
-  return result.sandboxes;
+  };
+  const sandboxes: Awaited<ReturnType<typeof Sandbox.list>>["sandboxes"] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await Sandbox.list({
+      ...params,
+      ...(cursor ? { cursor } : {}),
+    });
+    sandboxes.push(...result.sandboxes);
+    cursor = result.pagination.next ?? undefined;
+  } while (cursor && options.limit === undefined);
+  return sandboxes;
 }
 
 /**

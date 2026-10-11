@@ -4,6 +4,29 @@ import {
   withDatabase,
 } from "../support/sandbox-pause-race-harness";
 
+it.each(["creating", "installing"])(
+  "detail reads preserve an owned %s boot while the previous VM is stopped",
+  async (status) => {
+    await withDatabase(async (pg) => {
+      await pg.query(
+        "update sandboxes set status=$1,health_status='starting',last_boot_started_at=now()",
+        [status]
+      );
+      const routes = buildRoutes(
+        pg,
+        async () => {},
+        async () => "stopped"
+      );
+      expect(
+        (await (await routes.detail()).json()).sandbox.runtime_summary.status
+      ).toBe(status);
+      expect((await pg.query("select status from sandboxes")).rows).toEqual([
+        { status },
+      ]);
+    });
+  }
+);
+
 it("starts the pause recovery clock at the claim rather than the sandbox's old activity", async () => {
   await withDatabase(async (pg) => {
     let age: number | undefined;

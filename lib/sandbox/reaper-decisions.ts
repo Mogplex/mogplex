@@ -107,7 +107,12 @@ export async function tryStopMissingVmSandbox(
   evaluation: ActiveSandboxEvaluation,
   deps: SandboxReaperRunnerDeps
 ): Promise<ReaperSandboxDecision> {
-  if (!evaluation.confirmedGone || sandbox.sandbox_id === "pending") {
+  if (
+    !evaluation.confirmedGone ||
+    sandbox.sandbox_id === "pending" ||
+    sandbox.status === "creating" ||
+    sandbox.status === "installing"
+  ) {
     return unhandledReaperDecision();
   }
 

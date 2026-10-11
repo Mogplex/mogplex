@@ -148,7 +148,7 @@ export async function restoreStalePausingAsRunning(
 export async function stopSandbox(
   sandbox: Pick<
     ReaperSandboxRecord,
-    "id" | "sandbox_id" | "status" | "persistent"
+    "id" | "sandbox_id" | "status" | "persistent" | "last_boot_started_at"
   >,
   credentials: ReaperSandboxCredentials,
   options: {
@@ -196,12 +196,16 @@ export async function stopSandbox(
       // last confirmed provider timestamp for the final debit.
       await deps.prepareSandboxBillingClose(sandbox.id);
     }
-    await deps.stopSandboxRecord(sandbox.id, {
+    const stopped = await deps.stopSandboxRecord(sandbox.id, {
       expectedSandboxId: sandbox.sandbox_id,
       expectedHealthStatus: options.expectedHealthStatus,
       fromStatuses: options.fromStatuses ?? REAPER_ACTIVE_STOP_STATUSES,
       stopReason: stopReasonForAction(options.onSuccessAction),
+      expectedLastBootStartedAt: sandbox.last_boot_started_at ?? null,
     });
+    if (!stopped) {
+      return { stopped: false as const, action: "skipped_lifecycle_conflict" };
+    }
 
     return {
       stopped: true as const,

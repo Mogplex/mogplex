@@ -132,7 +132,7 @@ test("stopSandbox soft-pauses a persistent sandbox on idle timeout (state preser
       },
       stopSandboxRecord: async () => {
         stopSandboxRecordCalled = true;
-        return null;
+        return { id: "sandbox-1", status: "stopped" } as never;
       },
     }
   );
@@ -183,34 +183,41 @@ test("stopSandbox hard-stops a non-persistent sandbox on idle timeout (no soft-p
   assert.equal(updateSandboxRecordCalled, false);
 });
 
-test("stopSandbox hard-stops a persistent sandbox when VM is confirmed gone (no soft-pause)", async () => {
-  const { stopSandbox } = await loadSandboxReaperRouteModule();
-  let stopSandboxRecordCalled = false;
+for (const applied of [false, true]) {
+  test(`stopSandbox reports the confirmed-gone write outcome (applied=${applied})`, async () => {
+    const { stopSandbox } = await loadSandboxReaperRouteModule();
+    let stopSandboxRecordCalled = false;
 
-  const result = await stopSandbox(
-    {
-      id: "sandbox-1",
-      sandbox_id: "vm_123",
-      status: "running",
-      persistent: true,
-    },
-    { ok: true, vercelToken: "t", vercelTeamId: null, vercelProjectId: "p" },
-    { onSuccessAction: "stopped_vm_gone", confirmedGone: true },
-    {
-      getSandbox: async () => {
-        throw new Error("getSandbox should not be called when confirmedGone");
+    const result = await stopSandbox(
+      {
+        id: "sandbox-1",
+        sandbox_id: "vm_123",
+        status: "running",
+        persistent: true,
       },
-      updateSandboxRecord: async () => null,
-      stopSandboxRecord: async () => {
-        stopSandboxRecordCalled = true;
-        return null;
-      },
-    }
-  );
+      { ok: true, vercelToken: "t", vercelTeamId: null, vercelProjectId: "p" },
+      { onSuccessAction: "stopped_vm_gone", confirmedGone: true },
+      {
+        getSandbox: async () => {
+          throw new Error("getSandbox should not be called when confirmedGone");
+        },
+        updateSandboxRecord: async () => null,
+        stopSandboxRecord: async () => {
+          stopSandboxRecordCalled = true;
+          return applied
+            ? ({ id: "sandbox-1", status: "stopped" } as never)
+            : null;
+        },
+      }
+    );
 
-  assert.deepEqual(result, { stopped: true, action: "stopped_vm_gone" });
-  assert.equal(stopSandboxRecordCalled, true);
-});
+    assert.deepEqual(result, {
+      stopped: applied,
+      action: applied ? "stopped_vm_gone" : "skipped_lifecycle_conflict",
+    });
+    assert.equal(stopSandboxRecordCalled, true);
+  });
+}
 
 test("stopSandbox only marks a sandbox stopped after confirmed-gone or successful stop", async () => {
   const { stopSandbox } = await loadSandboxReaperRouteModule();
@@ -233,7 +240,7 @@ test("stopSandbox only marks a sandbox stopped after confirmed-gone or successfu
       },
       stopSandboxRecord: async () => {
         stopCalls += 1;
-        return null;
+        return { id: "sandbox-1", status: "stopped" } as never;
       },
       updateSandboxRecord: async () => {
         throw new Error("updateSandboxRecord should not be called");
