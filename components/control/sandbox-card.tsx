@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { OpenNewWindow, Refresh, Server, Trash, Xmark } from "iconoir-react";
+import { Server, Trash } from "iconoir-react";
 import { buildSandboxStateKey, useSandboxStore } from "@/hooks/use-sandbox";
 import type { SandboxRecord } from "@/lib/types";
 import { getSandboxPreviewPresentation } from "@/lib/control/sandbox-presentation";
@@ -15,13 +15,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-
-export type SandboxPreviewTarget = {
-  url: string;
-  runtimeId: string;
-  branch: string;
-};
 
 type LifecycleAction = "stop" | "resume" | "restart" | "delete";
 
@@ -112,76 +105,6 @@ function sandboxLogLines(
     .slice(-8);
 }
 
-export function SandboxPreviewModal({
-  target,
-  onClose,
-}: {
-  target: SandboxPreviewTarget | null;
-  onClose: () => void;
-}) {
-  const [reloadKey, setReloadKey] = useState(0);
-  return (
-    <Dialog
-      open={target !== null}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent
-        showCloseButton={false}
-        className="border-ink-700 bg-ink-900 flex h-[95dvh] w-[95dvw] max-w-[95dvw] flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-2xl sm:max-w-[95dvw]"
-        aria-label="Sandbox preview"
-      >
-        <div className="border-ink-800 bg-ink-850 flex items-center gap-2 border-b px-3 py-2">
-          <DialogTitle className="sr-only">
-            Preview for sandbox {target?.runtimeId ?? ""}
-          </DialogTitle>
-          <div className="border-ink-700/60 bg-ink-950 text-ink-300 flex min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-[12.5px]">
-            <span className="min-w-0 truncate">{target?.url ?? ""}</span>
-          </div>
-          <span className="border-ink-700 bg-ink-800 text-ink-300 hidden shrink-0 rounded-md border px-2 py-1 font-mono text-[11.5px] sm:inline">
-            {target?.branch ?? ""}
-          </span>
-          <button
-            type="button"
-            aria-label="Reload preview"
-            onClick={() => setReloadKey((key) => key + 1)}
-            className="text-ink-400 hover:bg-ink-800 hover:text-ink-100 shrink-0 rounded-md p-1.5 transition-colors"
-          >
-            <Refresh className="size-3.5" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            aria-label="Open in new tab"
-            onClick={() => {
-              if (target) window.open(target.url, "_blank", "noreferrer");
-            }}
-            className="text-ink-400 hover:bg-ink-800 hover:text-ink-100 shrink-0 rounded-md p-1.5 transition-colors"
-          >
-            <OpenNewWindow className="size-3.5" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            aria-label="Close preview"
-            onClick={onClose}
-            className="text-ink-400 hover:bg-ink-800 hover:text-ink-100 shrink-0 rounded-md p-1.5 transition-colors"
-          >
-            <Xmark className="size-3.5" strokeWidth={2} />
-          </button>
-        </div>
-        {target ? (
-          <iframe
-            key={`${target.url}-${reloadKey}`}
-            src={target.url}
-            title={`Sandbox preview: ${target.runtimeId}`}
-            className="min-h-0 flex-1 bg-white"
-          />
-        ) : null}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function SandboxOutput({
   error,
   lines,
@@ -207,7 +130,6 @@ function SandboxOutput({
 
 function SandboxActions({
   sandbox,
-  runtimeId,
   previewUrl,
   previewState,
   lifecycleAction,
@@ -218,13 +140,12 @@ function SandboxActions({
   onDelete,
 }: {
   sandbox: SandboxRecord;
-  runtimeId: string;
   previewUrl: string | null;
   previewState: "ready" | "starting" | "error" | "unavailable";
   lifecycleAction: LifecycleAction | null;
   onRunAction: (action: LifecycleAction) => Promise<void>;
   onSelect?: (id: string) => void;
-  onPreview: (target: SandboxPreviewTarget) => void;
+  onPreview: () => void;
   onStop: () => void;
   onDelete: () => void;
 }) {
@@ -248,11 +169,7 @@ function SandboxActions({
         onClick={() => {
           if (!previewUrl) return;
           onSelect?.(sandbox.id);
-          onPreview({
-            url: previewUrl,
-            runtimeId,
-            branch: sandbox.working_branch,
-          });
+          onPreview();
         }}
         className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-medium transition-colors ${
           previewUrl
@@ -323,7 +240,7 @@ export function SandboxCard({
   registerRef: (id: string, el: HTMLElement | null) => void;
   launchLogs: Record<string, string>;
   onSelect?: (id: string) => void;
-  onPreview: (target: SandboxPreviewTarget) => void;
+  onPreview: () => void;
 }) {
   const stop = useSandboxStore((state) => state.stop);
   const resume = useSandboxStore((state) => state.resume);
@@ -357,8 +274,10 @@ export function SandboxCard({
         if (selected) onSelect?.(sandbox.id);
       } else if (action === "resume") {
         await resume(sandbox.id);
+        onSelect?.(sandbox.id);
       } else if (action === "restart") {
-        await restart(sandbox.repo_id, { sandboxId: sandbox.id });
+        const restarted = await restart(sandbox.repo_id, { sandboxId: sandbox.id });
+        if (restarted) onSelect?.(restarted.id);
       } else {
         await deleteRecord(sandbox.id);
       }
@@ -445,7 +364,6 @@ export function SandboxCard({
         <Elapsed sandbox={sandbox} />
         <SandboxActions
           sandbox={sandbox}
-          runtimeId={runtimeId}
           previewUrl={previewUrl}
           previewState={preview.state}
           lifecycleAction={lifecycleAction}

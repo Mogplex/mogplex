@@ -24,6 +24,8 @@ import {
   Rocket,
   Search,
   Settings,
+  SidebarCollapse,
+  SidebarExpand,
 } from "iconoir-react";
 import {
   buildAppNavItems,
@@ -158,10 +160,13 @@ export function AppSidebar() {
     Boolean(scope) && (membershipsLoading || scopeResolved);
   const billingPending = membershipsLoading || billingLoading;
   const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [controlExpanded, setControlExpanded] = useState(false);
+  const inControl = pathname === scopedHref(scope, "/control");
   const { showSettings, backToMain, openSettings, settingsLinkRef } = useSettingsNavigation(scope, pathname);
   const [resizing, setResizing] = useState(false);
   const activePointerId = useRef<number | null>(null);
-  const compact = !showSettings && width <= COMPACT_THRESHOLD;
+  const effectiveWidth = inControl && !controlExpanded && !showSettings ? MIN_WIDTH : width;
+  const compact = !showSettings && effectiveWidth <= COMPACT_THRESHOLD;
 
   useEffect(() => {
     const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -210,9 +215,10 @@ export function AppSidebar() {
   function resizeFromKeyboard(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
+    setControlExpanded(true);
       const direction = event.key === "ArrowLeft" ? -8 : 8;
-      setWidth((current) => {
-        const next = clampWidth(current + direction);
+      setWidth(() => {
+        const next = clampWidth(effectiveWidth + direction);
         window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
         window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
         return next;
@@ -225,9 +231,13 @@ export function AppSidebar() {
       data-compact={compact ? "true" : "false"}
       data-resizing={resizing ? "true" : "false"}
       data-testid="app-sidebar"
-      style={{ width: showSettings ? Math.max(width, SETTINGS_MIN_WIDTH) : width }}
+      style={{ width: showSettings ? Math.max(width, SETTINGS_MIN_WIDTH) : effectiveWidth }}
     >
-      <div className="app-sidebar-header h-[20px] shrink-0" aria-hidden="true" />
+      {inControl && !showSettings ? <div className="flex h-12 shrink-0 items-center justify-end px-3">
+        <button type="button" aria-label={compact ? "Expand navigation" : "Collapse navigation"} onClick={() => { setControlExpanded(compact); if (compact && width <= COMPACT_THRESHOLD) setWidth(DEFAULT_WIDTH); }} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground">
+          {compact ? <SidebarExpand className="size-4" /> : <SidebarCollapse className="size-4" />}
+        </button>
+      </div> : <div className="app-sidebar-header h-[20px] shrink-0" aria-hidden="true" />}
 
       {compact ? null : (
         <div className="px-5 pb-5">
@@ -245,7 +255,7 @@ export function AppSidebar() {
         <SettingsNavigation onBack={backToMain} />
       ) : <>
       <nav
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-4 py-0"
+        className={`flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-0 ${compact ? "px-2" : "px-4"}`}
         aria-label="Primary"
       >
         {primaryItems.map((item) => (
@@ -259,7 +269,7 @@ export function AppSidebar() {
       </nav>
 
       <nav
-        className="mb-2 flex flex-col gap-1 border-t border-sidebar-border px-4 pt-2"
+        className={`mb-2 flex flex-col gap-1 border-t border-sidebar-border pt-2 ${compact ? "px-2" : "px-4"}`}
         aria-label="Admin"
       >
         {adminItems.map((item) => (
@@ -314,15 +324,18 @@ export function AppSidebar() {
         aria-orientation="vertical"
         aria-valuemin={MIN_WIDTH}
         aria-valuemax={MAX_WIDTH}
-        aria-valuenow={Math.round(width)}
+        aria-valuenow={Math.round(effectiveWidth)}
         tabIndex={0}
         data-testid="app-sidebar-resizer"
         onKeyDown={resizeFromKeyboard}
         onDoubleClick={() => {
+          setControlExpanded(true);
           setWidth(DEFAULT_WIDTH);
           window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(DEFAULT_WIDTH));
         }}
         onPointerDown={(event) => {
+          setWidth(effectiveWidth);
+          setControlExpanded(true);
           activePointerId.current = event.pointerId;
           setResizing(true);
         }}

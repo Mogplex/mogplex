@@ -273,7 +273,7 @@ export function MonacoPane({
   // Debounced save to sandbox
   const saveToSandbox = useCallback(
     (content: string) => {
-      if (!sandboxId || !filePath) return
+      if (readOnly || !sandboxId || !filePath) return
 
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(async () => {
@@ -290,7 +290,7 @@ export function MonacoPane({
         }
       }, 1000)
     },
-    [sandboxId, filePath]
+    [sandboxId, filePath, readOnly]
   )
 
   useEffect(() => {

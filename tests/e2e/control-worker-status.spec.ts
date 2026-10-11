@@ -126,6 +126,7 @@ test("a finished coordinator reply keeps worker failure and command output visib
       name: "View work for mogplex/task/mission/tests",
     })
   ).toHaveAttribute("href", scopedPath("projects/workspace?run=worker-1"));
+  await page.getByRole("button", { name: /^Agent commands/ }).click();
   await expect(page.getByTestId("control-terminal-activity")).toContainText(
     "pnpm test"
   );
@@ -136,6 +137,7 @@ test("a finished coordinator reply keeps worker failure and command output visib
     "mogplex/task/mission/tests"
   );
   await page.reload();
+  await page.getByRole("button", { name: /^Agent commands/ }).click();
   await expect(workers).toContainText("1 worker failed");
   await expect(page.getByTestId("control-terminal-activity")).toContainText(
     "3 tests failed"
@@ -156,6 +158,7 @@ test("a finished coordinator reply keeps worker failure and command output visib
   await page.screenshot({
     path: testInfo.outputPath("worker-status-desktop.png"),
   });
+  await page.getByRole("button", { name: "Close terminal" }).click();
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(workers).toBeVisible();
   await expect(

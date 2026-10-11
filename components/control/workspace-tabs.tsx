@@ -2,12 +2,10 @@
 
 import {
   Check,
-  ChatBubble,
   GitBranch,
   NavArrowDown,
   Server,
 } from "iconoir-react";
-import type { KeyboardEvent } from "react";
 import type { SandboxRecord } from "@/lib/types";
 import type { OrchestrationWorktreeDTO } from "@/lib/worktrees/types";
 import { partitionControlSandboxes } from "@/lib/control/sandbox-presentation";
@@ -186,43 +184,8 @@ function SandboxChoiceMenu({
   );
 }
 
-function handleTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-  const supportedKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
-  if (!supportedKeys.includes(event.key)) return;
-
-  const tabs = Array.from(
-    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-  );
-  const currentIndex = tabs.indexOf(
-    document.activeElement as HTMLButtonElement
-  );
-  if (currentIndex < 0) return;
-
-  event.preventDefault();
-  const nextIndex =
-    event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? tabs.length - 1
-        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) %
-          tabs.length;
-  tabs[nextIndex]?.focus();
-  tabs[nextIndex]?.click();
-}
-
-/**
- * Workspace switcher under the top bar. Worktree checkout counts and sandbox
- * compute counts stay separate; sandbox branch tabs focus the matching card.
- */
-export function WorkspaceTabs({
-  view,
-  onViewChange,
-  sandboxes,
-  worktrees,
-  repositoryName,
-  selectedSandboxId,
-  onFocusSandbox,
-}: {
+/** Repository environment tools beside the task's preview/file controls. */
+export function WorkspaceTabs({ view, onViewChange, sandboxes, worktrees, repositoryName, selectedSandboxId, onFocusSandbox }: {
   view: ControlView;
   onViewChange: (view: ControlView) => void;
   sandboxes: SandboxRecord[];
@@ -233,150 +196,22 @@ export function WorkspaceTabs({
 }) {
   const { current, history } = partitionControlSandboxes(sandboxes);
   const choices = sandboxChoices(current, repositoryName);
-  const selectedChoice =
-    choices.find((choice) => choice.sandbox.id === selectedSandboxId) ??
-    choices[0] ??
-    null;
-  const desktopChoices = selectedChoice ? [selectedChoice] : [];
-  const desktopChoiceIds = new Set(
-    desktopChoices.map((choice) => choice.sandbox.id)
-  );
-  const overflowChoices = choices.filter(
-    (choice) => !desktopChoiceIds.has(choice.sandbox.id)
-  );
-  return (
-    <div className="border-ink-800 flex min-w-0 flex-wrap items-center gap-1 overflow-hidden border-b px-4 py-2 sm:px-6 xl:flex-nowrap">
-      <div
-        role="tablist"
-        aria-label="Control views"
-        onKeyDown={handleTabKeyDown}
-        className="flex shrink-0 items-center gap-1"
-      >
-        <button
-          type="button"
-          role="tab"
-          id="control-chat-tab"
-          aria-controls="control-chat-panel"
-          aria-selected={view === "chat"}
-          aria-label="Chat"
-          tabIndex={view === "chat" ? 0 : -1}
-          onClick={() => onViewChange("chat")}
-          className={`${TAB_BASE} ${view === "chat" ? TAB_ON : TAB_OFF}`}
-        >
-          <ChatBubble className="size-3.5 shrink-0" strokeWidth={1.8} />
-          Chat
+  const selectedChoice = choices.find(choice => choice.sandbox.id === selectedSandboxId) ?? null;
+  return <div className="flex min-w-0 items-center gap-1" role="group" aria-label="Task environment">
+    <button type="button" data-task-tool="worktrees" aria-label={`Worktrees, ${countLabel(worktrees.length, "checkout")}`} aria-pressed={view === "worktrees"} onClick={() => onViewChange("worktrees")} className={`${TAB_BASE} ${view === "worktrees" ? TAB_ON : TAB_OFF}`}>
+      <GitBranch className="size-4 shrink-0" aria-hidden="true" /><span className="hidden 2xl:inline">Worktrees</span><span className="text-xs">{worktrees.length}</span>
+    </button>
+    <button type="button" data-task-tool="sandboxes" aria-label={`Sandboxes, ${countLabel(current.length, "current sandbox", "current sandboxes")}, ${countLabel(history.length, "previous attempt")}`} aria-pressed={view === "sandboxes"} onClick={() => onViewChange("sandboxes")} className={`${TAB_BASE} ${view === "sandboxes" ? TAB_ON : TAB_OFF}`}>
+      <Server className="size-4 shrink-0" aria-hidden="true" /><span className="hidden 2xl:inline">Sandboxes</span><span className="text-xs">{current.length}</span>
+    </button>
+    {choices.length > 0 && <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label={selectedChoice ? `Selected sandbox ${sandboxChoiceDescription(selectedChoice, repositoryName)}. Choose sandbox for chat and preview` : "Choose sandbox for this task"} title={selectedChoice?.runtimeId} className={`${TAB_BASE} ${TAB_OFF} min-w-0 max-w-80`}>
+          {selectedChoice ? <SandboxChoiceContent choice={selectedChoice} repositoryName={repositoryName} /> : <span>Choose sandbox</span>}
+          <NavArrowDown className="size-3 shrink-0" aria-hidden="true" />
         </button>
-        <button
-          type="button"
-          role="tab"
-          id="control-worktrees-tab"
-          aria-controls="control-worktrees-panel"
-          aria-selected={view === "worktrees"}
-          aria-label={`Worktrees, ${countLabel(worktrees.length, "checkout")}`}
-          tabIndex={view === "worktrees" ? 0 : -1}
-          onClick={() => onViewChange("worktrees")}
-          className={`${TAB_BASE} ${view === "worktrees" ? TAB_ON : TAB_OFF}`}
-        >
-          <GitBranch className="size-3.5 shrink-0" strokeWidth={1.8} />
-          Worktrees
-          <span className="bg-ink-700 text-ink-200 rounded px-1.5 text-[10.5px] leading-4">
-            {worktrees.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="control-sandboxes-tab"
-          aria-controls="control-sandboxes-panel"
-          aria-selected={view === "sandboxes"}
-          aria-label={`Sandboxes, ${countLabel(current.length, "current sandbox", "current sandboxes")}, ${countLabel(history.length, "previous attempt")}`}
-          tabIndex={view === "sandboxes" ? 0 : -1}
-          onClick={() => onViewChange("sandboxes")}
-          className={`${TAB_BASE} ${view === "sandboxes" ? TAB_ON : TAB_OFF}`}
-        >
-          <Server className="size-3.5 shrink-0" strokeWidth={1.8} />
-          Sandboxes
-          <span className="bg-ink-700 text-ink-200 rounded px-1.5 text-[10.5px] leading-4">
-            {current.length}
-          </span>
-        </button>
-      </div>
-      {current.length > 0 ? (
-        <div className="bg-ink-800 mx-1 hidden h-4 w-px shrink-0 xl:block" />
-      ) : null}
-      {selectedChoice ? (
-        <div
-          role="group"
-          aria-label="Sandbox used by chat and preview"
-          className="flex w-full min-w-0 flex-none justify-start overflow-hidden pt-1 xl:w-auto xl:flex-1 xl:justify-end xl:pt-0"
-        >
-          <div className="hidden min-w-0 items-center justify-end gap-1 overflow-hidden xl:flex">
-            {desktopChoices.map((choice) => {
-              const selected = choice.sandbox.id === selectedSandboxId;
-              return (
-                <button
-                  key={choice.sandbox.id}
-                  type="button"
-                  aria-pressed={selected}
-                  aria-label={`Select ${sandboxChoiceDescription(choice, repositoryName)}, for chat and preview`}
-                  title={choice.runtimeId}
-                  onClick={() => onFocusSandbox(choice.sandbox.id)}
-                  className={`${TAB_BASE} max-w-72 ${selected ? TAB_ON : TAB_OFF}`}
-                >
-                  <SandboxChoiceContent
-                    choice={choice}
-                    repositoryName={repositoryName}
-                  />
-                </button>
-              );
-            })}
-            {overflowChoices.length > 0 ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label={`Choose from ${overflowChoices.length} more sandboxes`}
-                    className={`${TAB_BASE} ${TAB_OFF}`}
-                  >
-                    +{overflowChoices.length}
-                    <NavArrowDown className="size-3 shrink-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <SandboxChoiceMenu
-                  choices={overflowChoices}
-                  selectedSandboxId={selectedSandboxId}
-                  repositoryName={repositoryName}
-                  onSelect={onFocusSandbox}
-                />
-              </DropdownMenu>
-            ) : null}
-          </div>
-          <div className="min-w-0 flex-1 xl:hidden">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`Selected sandbox ${sandboxChoiceDescription(selectedChoice, repositoryName)}. Choose sandbox for chat and preview`}
-                  title={selectedChoice.runtimeId}
-                  className={`${TAB_BASE} ${TAB_ON} w-full max-w-full`}
-                >
-                  <SandboxChoiceContent
-                    choice={selectedChoice}
-                    repositoryName={repositoryName}
-                  />
-                  <NavArrowDown className="size-3 shrink-0" />
-                </button>
-              </DropdownMenuTrigger>
-              <SandboxChoiceMenu
-                choices={choices}
-                selectedSandboxId={selectedSandboxId}
-                repositoryName={repositoryName}
-                onSelect={onFocusSandbox}
-              />
-            </DropdownMenu>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+      </DropdownMenuTrigger>
+      <SandboxChoiceMenu choices={choices} selectedSandboxId={selectedSandboxId} repositoryName={repositoryName} onSelect={onFocusSandbox} />
+    </DropdownMenu>}
+  </div>;
 }

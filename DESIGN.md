@@ -180,6 +180,14 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   section is selected. Billing has Billing Settings and Usage tabs.
   Connections has Integrations and MCP Servers tabs; MCP Servers is not a
   Settings section.
+- **[Command Center](./components/control/task-workspace.tsx):** use a compact
+  app navigation rail, a resizable task sidebar, and a persistent conversation.
+  Preview, changes, files, and plan open in a resizable right pane; commands,
+  terminal, and logs open in a bottom drawer. Closing a pane hides its content
+  without ending execution. At narrow workspace widths, tools fill the available
+  space and their close control returns to the same conversation. Sandbox
+  selection belongs to the task; ambiguous environments require an explicit
+  choice. Read-only command output and the interactive shell remain separate tabs.
 - **[Dialog](./components/ui/dialog.tsx):** reuse the Radix-backed focus and
   dismissal behavior, 6px corners, 24px padding, and responsive action layout.
   Provide a title and description. Use inline disclosure when it can complete

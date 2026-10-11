@@ -10,6 +10,7 @@ type Props = {
   repoId?: string;
   workingBranch?: string | null;
   terminalSessionKey: string;
+  showAgentCommands?: boolean;
 };
 
 // The live wterm instance is rendered by <TerminalSession> (mounted once per
@@ -22,6 +23,7 @@ export function XTermPane({
   repoId,
   workingBranch,
   terminalSessionKey,
+  showAgentCommands = true,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement | null>(null);
   const setAnchor = useTerminalSessionsStore((state) => state.setAnchor);
@@ -55,7 +57,7 @@ export function XTermPane({
   ]);
 
   return <div className="flex h-full w-full flex-col">
-    <AgentCommands key={`${repoId}:${sandboxId}`} repoId={repoId} sandboxId={sandboxId} />
+    {showAgentCommands && <AgentCommands key={`${repoId}:${sandboxId}`} repoId={repoId} sandboxId={sandboxId} />}
     <div ref={anchorRef} className="min-h-0 flex-1" />
   </div>;
 }

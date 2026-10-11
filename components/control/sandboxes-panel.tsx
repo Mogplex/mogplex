@@ -5,11 +5,7 @@ import { Plus } from "iconoir-react";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import type { SandboxRecord } from "@/lib/types";
 import { partitionControlSandboxes } from "@/lib/control/sandbox-presentation";
-import {
-  SandboxCard,
-  SandboxPreviewModal,
-  type SandboxPreviewTarget,
-} from "./sandbox-card";
+import { SandboxCard } from "./sandbox-card";
 
 export function SandboxesPanel({
   sandboxes,
@@ -21,6 +17,7 @@ export function SandboxesPanel({
   onClearFocus,
   onSelectSandbox,
   onStartSandbox,
+  onOpenPreview,
 }: {
   sandboxes: SandboxRecord[];
   loading: boolean;
@@ -31,9 +28,9 @@ export function SandboxesPanel({
   onClearFocus: () => void;
   onSelectSandbox: (id: string) => void;
   onStartSandbox: () => void;
+  onOpenPreview: () => void;
 }) {
   const launchLogs = useSandboxStore((state) => state.logs);
-  const [preview, setPreview] = useState<SandboxPreviewTarget | null>(null);
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const [ringId, setRingId] = useState<string | null>(null);
   const { current, history } = partitionControlSandboxes(sandboxes);
@@ -122,7 +119,7 @@ export function SandboxesPanel({
         </div>
       ) : null}
       {!loading ? (
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4">
           {current.map((sandbox) => (
             <SandboxCard
               key={sandbox.id}
@@ -132,7 +129,7 @@ export function SandboxesPanel({
               registerRef={registerRef}
               launchLogs={launchLogs}
               onSelect={onSelectSandbox}
-              onPreview={setPreview}
+              onPreview={onOpenPreview}
             />
           ))}
           <button
@@ -159,7 +156,7 @@ export function SandboxesPanel({
           <p className="text-ink-500 mt-1 text-xs leading-5">
             Stopped and failed attempts stay here for logs, restart, or removal.
           </p>
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4">
             {history.map((sandbox) => (
               <SandboxCard
                 key={sandbox.id}
@@ -168,13 +165,13 @@ export function SandboxesPanel({
                 focused={ringId === sandbox.id}
                 registerRef={registerRef}
                 launchLogs={launchLogs}
-                onPreview={setPreview}
+                onSelect={onSelectSandbox}
+                onPreview={onOpenPreview}
               />
             ))}
           </div>
         </details>
       ) : null}
-      <SandboxPreviewModal target={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

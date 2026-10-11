@@ -176,9 +176,11 @@ test("a follow-up focuses the latest request and shows live command progress and
   await expect(
     page.getByRole("button", { name: "Send", exact: true })
   ).toBeVisible();
+  await page.getByRole("button", { name: /^Agent commands/ }).click();
   await expect(page.getByTestId("control-terminal-activity")).toContainText(
     "Previous batch output"
   );
+  await page.getByRole("button", { name: "Close terminal" }).click();
   await composer.fill("Fix the failing tests");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   const progress = page.getByRole("status", { name: "Current activity" });
@@ -187,7 +189,9 @@ test("a follow-up focuses the latest request and shows live command progress and
   const workers = page.getByRole("region", { name: "Mission workers" });
   await expect(workers).toContainText("5 workers failed");
   await expect(workers.getByRole("link", { name: /View work/ })).toHaveCount(0);
-  await expect(page.getByTestId("control-terminal-activity")).toHaveCount(0);
+  await expect(page.getByTestId("control-terminal-activity")).not.toContainText(
+    "Previous batch output"
+  );
   await expect(
     page.getByRole("region", { name: "Latest request" })
   ).toContainText("Fix the failing tests");
@@ -238,6 +242,10 @@ test("a follow-up focuses the latest request and shows live command progress and
       )
     );
   await refreshWorkers();
+  await page
+    .getByRole("button", { name: "Open terminal", exact: true })
+    .click();
+  await page.getByRole("tab", { name: "Agent commands", exact: true }).click();
   const terminal = page.getByTestId("control-terminal-activity");
   await expect(terminal).toContainText("Current tests progress");
   await expect(terminal).toContainText("Current lint progress");
@@ -246,10 +254,11 @@ test("a follow-up focuses the latest request and shows live command progress and
     currentWorker("lint", "failed", "Current lint failed"),
   ];
   await refreshWorkers();
-  await expect(workers).toContainText("6 workers failed");
   await expect(terminal).toContainText("Current tests passed");
   await expect(terminal).toContainText("Current lint failed");
   await expect(terminal).not.toContainText("Previous batch output");
+  await page.getByRole("button", { name: "Close terminal" }).click();
+  await expect(workers).toContainText("6 workers failed");
   await expect(
     page.getByRole("button", { name: "Stop", exact: true })
   ).toBeVisible();

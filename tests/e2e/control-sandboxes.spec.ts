@@ -261,42 +261,23 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
     .fill("Run the tests");
   await page.getByRole("button", { name: "Start mission" }).click();
   await expect(page).toHaveURL(/\/control\?mission=sess-worktrees$/);
-  // Control view tabs follow the keyboard tab pattern and keep counts distinct.
-  const chatTab = page.getByRole("tab", { name: "Chat", exact: true });
-  await chatTab.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(
-    page.getByRole("tab", { name: "Worktrees, 0 checkouts" })
-  ).toHaveAttribute("aria-selected", "true");
-  await page.keyboard.press("ArrowRight");
-  await expect(
-    page.getByRole("tab", {
-      name: "Sandboxes, 5 current sandboxes, 2 previous attempts",
-    })
-  ).toHaveAttribute("aria-selected", "true");
-  await page.keyboard.press("Home");
-  await expect(chatTab).toHaveAttribute("aria-selected", "true");
-
-  // Sandbox selectors lead with readable repository context, expose status in
-  // text, and keep the full runtime ID in secondary detail.
-  const selectedSandboxChoice = page.getByRole("button", {
-    name: /Select acme\/widgets, branch feat\/demo, Running, sandbox live123/,
+  // Environment tools open beside the persistent conversation.
+  const worktreesButton = page.getByRole("button", {
+    name: "Worktrees, 0 checkouts",
   });
-  await expect(selectedSandboxChoice).toBeVisible();
-  await expect(selectedSandboxChoice).toHaveAttribute("title", "sbx_live123");
+  await worktreesButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(worktreesButton).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByPlaceholder("Ask for follow-up changes or attach images")
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close task tools" }).click();
+  // With multiple environments a new task must explicitly choose one.
   const overflowSelector = page.getByRole("button", {
-    name: "Choose from 4 more sandboxes",
+    name: "Choose sandbox for this task",
   });
   await expect(overflowSelector).toBeVisible();
-  await expect(page.getByRole("button", { name: /sbx_unrelated/ })).toHaveCount(
-    0
-  );
-  await expect(
-    page.getByRole("tab", {
-      name: "Sandboxes, 5 current sandboxes, 2 previous attempts",
-    })
-  ).toBeVisible();
-  expect(chatRequests[0]?.sandboxId).toBe("rec-1");
+  expect(chatRequests[0]?.sandboxId).toBeNull();
 
   // Keyboard selection from overflow updates the exact context sent to the
   // agent and used by preview.
@@ -313,23 +294,18 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   await cloneChoice.focus();
   await page.keyboard.press("Enter");
   const selectedClone = page.getByRole("button", {
-    name: /Select acme\/widgets, branch feat\/demo, Running, sandbox a_111111/,
+    name: /Selected sandbox acme\/widgets, branch feat\/demo, Running, sandbox a_111111/,
   });
-  await expect(selectedClone).toHaveAttribute("aria-pressed", "true");
+  await expect(selectedClone).toBeVisible();
   await expect(selectedClone).toHaveAttribute(
     "title",
     "sbx_clone_alpha_111111"
   );
-  await expect(page.getByText("Selected sandbox:")).toBeVisible();
-  await expect(
-    page.getByText("sbx_clone_alpha_111111", { exact: true }).last()
-  ).toBeVisible();
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await expect(
     page.getByRole("menuitem", { name: "Open sandbox preview" })
   ).toHaveAttribute("title", "https://clone-a-preview.example.vercel.app");
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "Chat", exact: true }).click();
   await page
     .getByPlaceholder("Ask for follow-up changes or attach images")
     .fill("Continue in the selected sandbox");
@@ -339,7 +315,7 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
 
   // The Sandboxes tab shows remote compute with real status and actions.
   await page
-    .getByRole("tab", {
+    .getByRole("button", {
       name: "Sandboxes, 5 current sandboxes, 2 previous attempts",
     })
     .click();
@@ -403,16 +379,17 @@ test("control sandboxes panel shows live sandbox cards and preview", async ({
   ).toHaveAttribute("title", "https://paused-preview.example.vercel.app");
   await page.keyboard.press("Escape");
 
-  // Preview opens the real sandbox URL in a modal and closes again.
+  // Preview opens beside the existing task, and can return to its environments.
   await liveSandbox.getByRole("button", { name: "Preview" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
   await expect(
-    dialog.getByText("https://preview.example.vercel.app")
-  ).toBeVisible();
-  await expect(dialog.getByText("feat/demo")).toBeVisible();
-  await dialog.getByRole("button", { name: "Close preview" }).click();
-  await expect(dialog).toBeHidden();
+    page.getByTitle("Sandbox Preview", { exact: true })
+  ).toHaveAttribute("src", "https://preview.example.vercel.app");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page
+    .getByRole("button", {
+      name: "Sandboxes, 5 current sandboxes, 2 previous attempts",
+    })
+    .click();
 
   // Stop hits the real endpoint and the card reflects the new state.
   await liveSandbox.getByRole("button", { name: "Stop compute" }).click();

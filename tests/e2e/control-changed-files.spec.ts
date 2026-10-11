@@ -151,17 +151,19 @@ test("control shows the sandbox working tree with diff, revert, and commit", asy
     .fill("Rename the constant");
   await page.getByRole("button", { name: "Start mission" }).click();
 
+  await page.getByRole("button", { name: "Open changes", exact: true }).click();
   const bar = page.getByTestId("changed-files-bar");
   await expect(bar).toContainText("2 files changed");
   await expect(bar).toContainText("mogplex/agent-live");
 
-  await page.getByTestId("changed-files-toggle").click();
   await page
     .getByTestId("changed-file-src/app.ts")
     .getByText("src/app.ts")
     .click();
-  await expect(page.getByRole("dialog")).toContainText("const fresh = 2;");
-  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("complementary", { name: "Task tools" })
+  ).toContainText("const fresh = 2;");
+  await page.getByRole("button", { name: "Close diff" }).click();
 
   await page
     .getByTestId("changed-file-docs/new.md")
