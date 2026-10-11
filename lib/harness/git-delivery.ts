@@ -188,7 +188,8 @@ if [ "$MOGPLEX_DELIVERY_MODE" = branch ]; then
     echo "$committed_runtime_files" >&2
     exit 1
   fi
-  # The platform ignores .mogplex, so artifacts are staged by force.
+  # The platform writes .mogplex/.gitignore as "*" so runtime files stay
+  # untracked; artifacts are the one exception and need a forced add.
   for artifact in .mogplex/artifacts/*.json; do
     if [ -f "$artifact" ] && [ ! -L "$artifact" ]; then
       git add -f -- "$artifact"
