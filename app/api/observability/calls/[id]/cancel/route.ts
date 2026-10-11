@@ -120,6 +120,7 @@ export function createObservabilityCallCancelPostHandler(
           cacheCreationInputTokens: currentCall.cache_creation_input_tokens,
           reasoningTokens: currentCall.reasoning_tokens,
           gatewayGenerationId: currentCall.gateway_generation_id,
+          gatewayGenerationIds: currentCall.gateway_generation_ids,
           cancelRequestedAt,
           controlState: "cancelled",
           metadata: currentCall.metadata,
@@ -198,6 +199,7 @@ export function createObservabilityCallCancelPostHandler(
           cacheCreationInputTokens: currentCall.cache_creation_input_tokens,
           reasoningTokens: currentCall.reasoning_tokens,
           gatewayGenerationId: currentCall.gateway_generation_id,
+          gatewayGenerationIds: currentCall.gateway_generation_ids,
           metadata: currentCall.metadata,
         })
       );

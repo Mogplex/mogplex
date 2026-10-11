@@ -3,6 +3,7 @@ import {
   captureUsage,
   mergeUsage,
   EMPTY_CAPTURED_USAGE,
+  fillUsageGaps,
 } from "@/lib/observability/usage";
 import {
   finalizeCancelledChatRun,
@@ -11,7 +12,7 @@ import {
 
 type ChatFinalizationInput = Omit<
   Parameters<typeof finalizeCancelledChatRun>[0],
-  "steps"
+  "steps" | "capturedUsage"
 >;
 
 /** One terminal result per response, even when SDK terminal callbacks overlap. */
@@ -47,7 +48,7 @@ export function createChatFinalizationHooks(
     async onAbort({ steps }) {
       if (finalized) return;
       finalized = true;
-      await finalizeCancelledChatRun({ ...input, steps });
+      await finalizeCancelledChatRun({ ...input, steps, capturedUsage });
     },
     async onEnd({ totalUsage, steps, finishReason, providerMetadata }) {
       if (finalized) return;
@@ -58,6 +59,10 @@ export function createChatFinalizationHooks(
         steps,
         finishReason,
         providerMetadata,
+        capturedUsage: fillUsageGaps(
+          capturedUsage,
+          captureUsage(totalUsage, providerMetadata)
+        ),
       });
     },
   };

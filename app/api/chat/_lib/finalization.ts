@@ -4,7 +4,12 @@ import {
   safeAppendAiCallEvent,
   updateAiCall,
 } from "@/lib/interactive-runs";
-import { captureUsage, type CapturedUsage } from "@/lib/observability/usage";
+import {
+  captureUsage,
+  capturedUsageAiCallColumns,
+  EMPTY_CAPTURED_USAGE,
+  type CapturedUsage,
+} from "@/lib/observability/usage";
 import type { LanguageModelUsage, ProviderMetadata } from "ai";
 import type { ActiveChatCall, ChatRunScope } from "./types";
 import { summarizeToolCalls } from "./events";
@@ -47,6 +52,7 @@ export async function finalizeCancelledChatRun(input: {
   scope: ChatRunScope;
   limitClaimId: string | null;
   callStartedAt: string;
+  capturedUsage?: CapturedUsage;
   steps: Array<{
     toolCalls?: Array<{ toolName: string; input?: unknown }>;
     toolResults?: unknown[];
@@ -55,15 +61,15 @@ export async function finalizeCancelledChatRun(input: {
   await releaseChatLimitClaimIfNeeded(input.userId, input.limitClaimId);
 
   const toolCalls = summarizeToolCalls(input.steps);
-  await updateAiCall(
-    input.activeCall.id,
-    buildAiCallCompletionUpdate({
+  await updateAiCall(input.activeCall.id, {
+    ...buildAiCallCompletionUpdate({
       startedAt: input.callStartedAt,
       status: "cancelled",
       toolCalls,
       metadata: input.activeCall.metadata,
-    })
-  );
+    }),
+    ...capturedUsageAiCallColumns(input.capturedUsage ?? EMPTY_CAPTURED_USAGE),
+  });
   await safeAppendAiCallEvent({
     aiCallId: input.activeCall.id,
     userId: input.userId,
@@ -117,6 +123,7 @@ export async function finalizeFinishedChatRun(input: {
       cacheCreationInputTokens: usage.cacheCreationInputTokens,
       reasoningTokens: usage.reasoningTokens,
       gatewayGenerationId: usage.generationId,
+      gatewayGenerationIds: usage.generationIds,
       error: completion.error,
       toolCalls,
       metadata: input.activeCall.metadata,

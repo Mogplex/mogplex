@@ -12,6 +12,8 @@ for (const scenario of [
   "error-frame",
   "after-tool",
   "success",
+  "multi-step-success",
+  "cancel-after-tool",
 ] as const) {
   test(`chat finalizes once on ${scenario} and preserves completed work`, async () => {
     const updates: Record<string, unknown>[] = [];
@@ -82,10 +84,25 @@ for (const scenario of [
         limitClaimId: "chat-claim",
         callStartedAt: activeCall.started_at,
       });
+      const abortController = new AbortController();
       const model = new MockLanguageModelV4({
         doStream: async () => {
-          if (scenario === "provider-throw" || model.doStreamCalls.length > 1)
+          if (
+            scenario === "cancel-after-tool" &&
+            model.doStreamCalls.length > 1
+          ) {
+            abortController.abort();
+            throw new DOMException("Aborted", "AbortError");
+          }
+          if (
+            scenario === "provider-throw" ||
+            (scenario === "after-tool" && model.doStreamCalls.length > 1)
+          )
             throw new Error("private-provider-diagnostic");
+          const toolStep =
+            ["after-tool", "multi-step-success", "cancel-after-tool"].includes(
+              scenario
+            ) && model.doStreamCalls.length === 1;
           return {
             stream: new ReadableStream({
               start(controller) {
@@ -96,7 +113,7 @@ for (const scenario of [
                     error: new Error("private-provider-diagnostic"),
                   });
                 } else {
-                  if (scenario === "after-tool")
+                  if (toolStep)
                     controller.enqueue({
                       type: "tool-call",
                       toolCallId: "completed-command",
@@ -115,8 +132,7 @@ for (const scenario of [
                   controller.enqueue({
                     type: "finish",
                     finishReason: {
-                      unified:
-                        scenario === "after-tool" ? "tool-calls" : "stop",
+                      unified: toolStep ? "tool-calls" : "stop",
                       raw: "stop",
                     },
                     usage: {
@@ -127,6 +143,11 @@ for (const scenario of [
                         cacheWrite: 0,
                       },
                       outputTokens: { total: 1, text: 1, reasoning: 0 },
+                    },
+                    providerMetadata: {
+                      gateway: {
+                        generationId: `generation-${model.doStreamCalls.length}`,
+                      },
                     },
                   });
                 }
@@ -141,6 +162,7 @@ for (const scenario of [
         model,
         prompt: "hello",
         maxRetries: 0,
+        abortSignal: abortController.signal,
         stopWhen: () => false,
         tools: {
           bash: tool({
@@ -157,13 +179,21 @@ for (const scenario of [
       assert.equal(updates.length, 1);
       assert.equal(
         updates[0].status,
-        scenario === "success" ? "success" : "failed"
+        scenario === "cancel-after-tool"
+          ? "cancelled"
+          : scenario.includes("success")
+            ? "success"
+            : "failed"
       );
       assert.ok(updates[0].completed_at);
       assert.equal(events.length, 1);
       assert.equal(
         events[0].event_type,
-        scenario === "success" ? "finished" : "failed"
+        scenario === "cancel-after-tool"
+          ? "cancelled"
+          : scenario.includes("success")
+            ? "finished"
+            : "failed"
       );
       assert.doesNotMatch(
         JSON.stringify({ updates, events }),
@@ -175,17 +205,31 @@ for (const scenario of [
       assert.equal(releases, 1);
       assert.equal(
         model.doStreamCalls.length,
-        scenario === "after-tool" ? 2 : 1
+        ["after-tool", "multi-step-success", "cancel-after-tool"].includes(
+          scenario
+        )
+          ? 2
+          : 1
       );
       assert.equal(
         commandExecutions,
-        scenario === "after-tool" ? 1 : 0,
+        ["after-tool", "multi-step-success", "cancel-after-tool"].includes(
+          scenario
+        )
+          ? 1
+          : 0,
         "no command replay"
       );
-      if (scenario === "success" || scenario === "after-tool") {
-        assert.equal(updates[0].input_tokens, 2);
-        assert.equal(updates[0].output_tokens, 1);
-        assert.equal(updates[0].cache_read_input_tokens, 1);
+      if (scenario !== "provider-throw" && scenario !== "error-frame") {
+        const steps = scenario === "multi-step-success" ? 2 : 1;
+        assert.equal(updates[0].input_tokens, 2 * steps);
+        assert.equal(updates[0].output_tokens, steps);
+        assert.equal(updates[0].cache_read_input_tokens, steps);
+        assert.deepEqual(
+          updates[0].gateway_generation_ids,
+          steps === 2 ? ["generation-1", "generation-2"] : ["generation-1"]
+        );
+        assert.equal(updates[0].gateway_generation_id, "generation-1");
       }
       if (scenario === "after-tool") {
         assert.equal(updates[0].tool_calls_count, 1);
