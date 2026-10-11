@@ -6,6 +6,7 @@ import {
 } from "@/lib/harness/failure";
 import { buildAiCallCompletionUpdate } from "@/lib/interactive-runs";
 import type { HarnessId } from "@/lib/harness/config";
+import type { HarnessDeliveryMode } from "@/lib/harness/git-delivery";
 import type { MemoryScope } from "@/lib/memories-client";
 import type { Sandbox, Command } from "@vercel/sandbox";
 import type { SandboxHarnessPostDeps } from "./types";
@@ -34,6 +35,7 @@ export type StreamExecutionContext = {
   trimmedPrompt: string;
   memoryScope: MemoryScope | undefined;
   runtimeEnv: Record<string, string>;
+  deliveryMode: HarnessDeliveryMode;
 };
 
 export type FinalizeCancelledRunFn = (input?: {
@@ -134,6 +136,7 @@ export function createHarnessStreamBody(
               prompt: ctx.trimmedPrompt,
               baseBranch: gitWorkspace.baseBranch,
               workingBranch: gitWorkspace.workingBranch,
+              delivery: ctx.deliveryMode,
               cwd: resolveSandboxWorkingDirectory(undefined, ctx.rootDirectory),
               env: ctx.runtimeEnv,
             });
@@ -157,7 +160,9 @@ export function createHarnessStreamBody(
               eventType: "log",
               message: pullRequestUrl
                 ? "Pull request ready"
-                : "No code changes to deliver",
+                : delivery.changed
+                  ? `Pushed ${gitWorkspace.workingBranch}`
+                  : "No code changes to deliver",
               payload: {
                 stage: "git_delivery",
                 changed: delivery.changed,

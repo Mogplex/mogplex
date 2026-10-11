@@ -7,7 +7,10 @@ import {
   materializeSlackImageAttachmentsForHarness,
   normalizeSlackRunImageAttachmentsMetadata,
 } from "@/lib/slack/run-attachments";
-import { buildHarnessDeliveryPrompt } from "@/lib/harness/git-delivery";
+import {
+  buildHarnessDeliveryPrompt,
+  type HarnessDeliveryMode,
+} from "@/lib/harness/git-delivery";
 import {
   materializeBrowserAttachmentsForHarness,
   type BrowserHarnessAttachment,
@@ -35,6 +38,7 @@ export type SandboxSetupContext = {
   workingBranch: string;
   previewUrl: string | null;
   aiCallId: string;
+  deliveryMode: HarnessDeliveryMode;
 };
 
 export type SandboxEnvSetup = {
@@ -351,6 +355,7 @@ export async function setupSlackAttachmentsAndPrompt(
     prompt: promptWithMemoryContext,
     baseBranch: gitWorkspace.baseBranch,
     workingBranch: gitWorkspace.workingBranch,
+    delivery: ctx.deliveryMode,
   });
 
   // The full task prompt is not a memory: it is run input, already persisted

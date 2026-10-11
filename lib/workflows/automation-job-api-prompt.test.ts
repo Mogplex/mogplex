@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildPromptForJob } from "./automation-job-prompts";
-import { taskWorkingBranch } from "./automation-task-sandbox";
+import {
+  harnessDeliveryMode,
+  taskWorkingBranch,
+} from "./automation-task-sandbox";
 
 const apiMetadata = {
   flow_node_role: "task",
@@ -59,4 +62,25 @@ describe("taskWorkingBranch", () => {
       ).toMatch(/^mogplex\/task-[0-9a-f-]{36}$/);
     }
   );
+});
+
+describe("harnessDeliveryMode", () => {
+  it("should deliver an API task run to its recorded branch", () => {
+    expect(
+      harnessDeliveryMode({
+        metadata: { ...apiMetadata, flow_node_role: "task" },
+      })
+    ).toBe("branch");
+  });
+
+  it.each([
+    [
+      "a review node on an API run",
+      { ...apiMetadata, flow_node_role: "review" },
+    ],
+    ["a scheduled task", { flow_node_role: "task", working_branch: "main" }],
+    ["a task without a recorded branch", { flow_node_role: "task" }],
+  ])("should open a pull request for %s", (_label, metadata) => {
+    expect(harnessDeliveryMode({ metadata })).toBe("pull_request");
+  });
 });

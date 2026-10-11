@@ -5,6 +5,7 @@ import { isSandboxAccessDeniedError } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { getHarnessConfig } from "@/lib/harness/config";
 import { normalizeHarnessExecutionMode } from "@/lib/harness/claude-permissions";
+import { normalizeHarnessDeliveryMode } from "@/lib/harness/git-delivery";
 import { HarnessCancelRequestedError } from "@/lib/harness/runner";
 import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import {
@@ -91,6 +92,7 @@ export function createSandboxHarnessPostHandler(
       attachments?: unknown;
       worktreeId?: string | null;
       agentId?: string | null;
+      delivery?: string | null;
     };
     try {
       body = await request.json();
@@ -119,6 +121,7 @@ export function createSandboxHarnessPostHandler(
     const harnessId = harness as HarnessId;
     const config = getHarnessConfig(harnessId);
     const normalizedMode = normalizeHarnessExecutionMode(body.mode);
+    const deliveryMode = normalizeHarnessDeliveryMode(body.delivery);
     const existingAiCallId =
       typeof body.aiCallId === "string" && body.aiCallId.trim()
         ? body.aiCallId.trim()
@@ -257,6 +260,7 @@ export function createSandboxHarnessPostHandler(
       workingBranch: worktree?.branch_name ?? record.working_branch,
       previewUrl: record.preview_url,
       aiCallId: aiCall.id,
+      deliveryMode,
     };
 
     try {
@@ -437,6 +441,7 @@ export function createSandboxHarnessPostHandler(
           trimmedPrompt,
           memoryScope,
           runtimeEnv,
+          deliveryMode,
         },
         gitWorkspace,
         finalizeCancelledRun

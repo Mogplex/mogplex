@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { API_RUN_BRANCH_PATTERN } from "@/lib/flows/automation-inputs";
+import type { HarnessDeliveryMode } from "@/lib/harness/git-delivery";
 import { loadOwnedSandboxRouteContext } from "@/lib/sandbox/route-context";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
 import { prepareTaskWorkspace } from "./automation-task-workspace";
@@ -16,10 +17,28 @@ import {
  * a fresh branch.
  */
 export function taskWorkingBranch(context: Pick<JobContext, "metadata">) {
+  return apiRunBranch(context) ?? `mogplex/task-${randomUUID()}`;
+}
+
+/**
+ * How a CLI harness run hands back its work. An API-triggered task delivers
+ * to the branch its trigger fixed, where the caller reads the output, and
+ * opens a pull request only if its instructions ask for one.
+ */
+export function harnessDeliveryMode(
+  context: Pick<JobContext, "metadata">
+): HarnessDeliveryMode {
+  return context.metadata.flow_node_role === "task" && apiRunBranch(context)
+    ? "branch"
+    : "pull_request";
+}
+
+/** The branch an API trigger fixed for this run; null for any other run. */
+export function apiRunBranch(context: Pick<JobContext, "metadata">) {
   const recorded = context.metadata.working_branch;
   return typeof recorded === "string" && API_RUN_BRANCH_PATTERN.test(recorded)
     ? recorded
-    : `mogplex/task-${randomUUID()}`;
+    : null;
 }
 
 export function createTaskSandboxLoader(

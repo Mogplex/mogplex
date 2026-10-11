@@ -156,8 +156,10 @@ test("successful code changes are committed, pushed, and return a PR URL", async
   assert.match(commands[0]?.command ?? "", /git ls-files --others/);
   assert.match(commands[0]?.command ?? "", /tracked_runtime_files/);
   assert.match(commands[0]?.command ?? "", /':\(exclude\)\.mogplex'/);
-  assert.match(commands[0]?.command ?? "", /git diff --name-only HEAD/);
+  assert.match(commands[0]?.command ?? "", /runtime_changes HEAD/);
   assert.match(commands[0]?.command ?? "", /git add -u/);
+  assert.match(commands[0]?.command ?? "", /git diff --cached --name-only/);
+  assert.equal(commands[0]?.env?.MOGPLEX_DELIVERY_MODE, "pull_request");
   assert.doesNotMatch(commands[0]?.command ?? "", /git add -A/);
   assert.match(commands[0]?.command ?? "", /git commit/);
   assert.match(commands[0]?.command ?? "", /git push -u origin/);
@@ -256,6 +258,6 @@ test("tracked Mogplex runtime files fail delivery before auto-commit", async () 
   );
   assert.match(
     commands[0]?.command ?? "",
-    /git diff --name-only HEAD -- \.mogplex/
+    /git diff --name-only "\$1" -- \.mogplex\n/
   );
 });
