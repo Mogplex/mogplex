@@ -29,6 +29,7 @@ import { currentTurnMessages } from "@/lib/control/turn-progress";
 import { Timeline } from "./timeline";
 import { Composer } from "./composer";
 import { TaskWorkspace } from "./task-workspace";
+import { WorkspaceMotion } from "./workspace-motion";
 import { useTaskTools } from "./use-task-tools";
 import { SessionList } from "./session-list";
 import { MobileSessionList } from "./mobile-session-list";
@@ -466,7 +467,7 @@ function ControlShellInner({ initialData, initialMissionId, initialRepo }: Contr
 export function ControlShell(props: ControlShellProps) {
   return (
     <SandboxLaunchProvider>
-      <ControlShellInner {...props} />
+      <WorkspaceMotion><ControlShellInner {...props} /></WorkspaceMotion>
     </SandboxLaunchProvider>
   );
 }

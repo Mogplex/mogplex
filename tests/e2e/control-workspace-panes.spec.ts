@@ -75,6 +75,7 @@ test("mobile tools use a full-width view and return to the same conversation", a
   const panel = page.getByRole("complementary", { name: "Task tools" });
   await expect(panel).toContainText("Update welcome copy");
   await page.screenshot({ path: testInfo.outputPath("workspace-mobile.png") });
+  await expect(panel).toHaveCSS("transform", "none");
   const box = await panel.boundingBox();
   expect(box!.width).toBeGreaterThan(350);
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);

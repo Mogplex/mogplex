@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { motion } from "motion/react";
 import {
   Archive,
-  NavArrowDown,
   NavArrowRight,
   Plus,
   Search,
@@ -29,6 +29,7 @@ import { SessionListOptions, type SessionGrouping, type SessionSort } from "./se
 import { SessionArchiveList } from "./session-archive-list";
 import type { SessionArchiveControls } from "./use-session-archive";
 import { resolveSessionListState } from "@/lib/control/session-list-state";
+import { useWorkspaceTransition } from "./workspace-motion";
 
 export type SessionLoadState = { loaded: boolean; error: string | null; onRetry: () => void };
 
@@ -153,7 +154,7 @@ function ProjectGroupSection({
   };
 
   return (
-    <div className="mt-1">
+    <motion.div layout="position" className="mt-1">
       <ProjectRowActions
         projectName={group.name}
         onNew={() => onNew(newSessionTarget)}
@@ -167,11 +168,7 @@ function ProjectGroupSection({
           onClick={() => setOpen((current) => !current)}
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-ink-200 transition-colors hover:bg-ink-800"
         >
-          {open ? (
-            <NavArrowDown className="size-3 shrink-0 text-ink-400" />
-          ) : (
-            <NavArrowRight className="size-3 shrink-0 text-ink-400" />
-          )}
+          <NavArrowRight className={`size-3 shrink-0 text-ink-400 transition-transform duration-150 motion-reduce:transition-none ${open ? "rotate-90" : ""}`} />
           <span
             aria-hidden="true"
             className={`size-3.5 shrink-0 rounded-full ${colorClass}`}
@@ -183,7 +180,7 @@ function ProjectGroupSection({
         </button>
       </ProjectRowActions>
       {open ? (
-        <div className="ml-6 space-y-px">
+        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="ml-6 space-y-px">
           {visible.map((session) => (
             <SessionRow
               key={session.id}
@@ -203,9 +200,9 @@ function ProjectGroupSection({
               {showAll ? "Show less" : "Show more"}
             </button>
           ) : null}
-        </div>
+        </motion.div>
       ) : null}
-    </div>
+    </motion.div>
   );
 }
 
@@ -284,12 +281,10 @@ export function SessionList({
     });
   };
 
-  if (collapsed && presentation === "sidebar") {
-    return (
-      <aside
-        aria-label="Sessions"
-        className="hidden w-10 shrink-0 flex-col border-r border-ink-800 bg-ink-900 md:flex"
-      >
+  const isCollapsed = collapsed && presentation === "sidebar";
+  const transition = useWorkspaceTransition(resizing);
+  const collapsedRail = (
+      <div className="flex min-h-0 w-10 flex-1 flex-col">
         <button
           type="button"
           aria-label="Expand sessions"
@@ -321,18 +316,19 @@ export function SessionList({
             {workingCount > 0 ? ` · ${workingCount} working` : ""}
           </span>
         </div>
-      </aside>
-    );
-  }
+      </div>
+  );
 
   return (
-    <aside
+    <motion.aside layout={!resizing} layoutDependency={isCollapsed} transition={transition}
       ref={panelRef}
       aria-label="Sessions"
       data-resizing={resizing ? "true" : "false"}
-      style={presentation === "sidebar" ? { width } : undefined}
-      className={presentation === "drawer" ? "relative flex min-h-0 w-full flex-1 flex-col bg-ink-900 [&_button]:min-h-10 [&_button]:min-w-10" : "relative hidden shrink-0 flex-col border-r border-ink-800 bg-ink-900 md:flex"}
+      style={presentation === "sidebar" ? { width: isCollapsed ? 40 : width } : undefined}
+      className={presentation === "drawer" ? "relative flex min-h-0 w-full flex-1 flex-col bg-ink-900 [&_button]:min-h-10 [&_button]:min-w-10" : "session-sidebar relative hidden shrink-0 flex-col border-r border-ink-800 bg-ink-900 md:flex"}
     >
+      {isCollapsed ? collapsedRail : null}
+      <motion.div layout="position" className="min-h-0 flex-1 flex-col" style={{ display: isCollapsed ? "none" : "flex" }}>
       {presentation === "sidebar" ? <div
         {...resizerProps}
         onDoubleClick={toggleCollapsed}
@@ -382,7 +378,7 @@ export function SessionList({
         </div>
       </div>
       {archive.busy ? <p role="status" className="px-4 pb-2 text-xs text-ink-400">Updating chats…</p> : null}
-      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 pb-3 text-[13px]">
+      <motion.nav layoutScroll className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 pb-3 text-[13px]">
         {listState === "ready" && loadState?.error ? <div role="alert" className="px-4 py-3 text-xs text-accent-amber">{loadState.error}<button type="button" onClick={loadState.onRetry} className="mt-2 block underline underline-offset-2">Retry</button></div> : null}
         {listState === "loading" ? <div role="status" aria-label="Loading sessions" className="space-y-3 p-3"><span className="sr-only">Loading sessions</span>{[1, 2, 3].map(row => <div key={row} className="bg-ink-800 h-8 animate-pulse rounded-md" />)}</div> : listState === "error" ? <div role="alert" className="px-4 py-3 text-xs text-accent-amber">{loadState?.error}<button type="button" onClick={loadState?.onRetry} className="mt-2 block underline underline-offset-2">Retry</button></div> : listState === "empty" ? (
           <p className="px-2 py-6 text-center text-[11px] text-ink-400">
@@ -406,12 +402,13 @@ export function SessionList({
             />
           ))
         )}
-      </nav>
+      </motion.nav>
       <button type="button" disabled={archive.busy} onClick={() => void archive.show()} className="mx-3 mb-3 flex items-center gap-2 rounded-md px-2 py-2 text-[13px] text-ink-400 hover:bg-ink-800 hover:text-ink-100 disabled:opacity-50">
         <Archive className="size-4" aria-hidden="true" />
         Archived chats
       </button>
       </>}
-    </aside>
+      </motion.div>
+    </motion.aside>
   );
 }

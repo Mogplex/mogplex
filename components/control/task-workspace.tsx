@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
-import { Eye, Folder, GitCompare, Notes, Terminal, Xmark } from "iconoir-react";
+import { motion } from "motion/react";
+import { Collapse, Expand, Eye, Folder, GitCompare, Notes, Terminal, Xmark } from "iconoir-react";
 import type { UIMessage } from "ai";
 import type { Repo, SandboxRecord } from "@/lib/types";
 import { usePanelWidth } from "@/hooks/use-panel-width";
@@ -17,6 +18,7 @@ import { ChangedFilesCard } from "./changed-files-card";
 import { ArtifactSidePanel } from "./artifact-side-panel";
 import { collectControlArtifacts } from "./artifact-side-panel-model";
 import type { TaskTool, useTaskTools } from "./use-task-tools";
+import { useWorkspaceTransition } from "./workspace-motion";
 import "./task-workspace.css";
 
 const TOOL_BUTTONS = [
@@ -42,7 +44,8 @@ export function TaskWorkspace({ sessionId, repo, sandbox, messages, terminalMess
   onFeedback: (text: string) => void;
   children: ReactNode;
 }) {
-  const { width, panelRef, resizerProps } = usePanelWidth({ storageKey: "mogplex.control.tools.width", defaultWidth: 520, minWidth: 320, maxWidth: 1000, handle: "left" });
+  const { width, resizing, panelRef, resizerProps } = usePanelWidth({ storageKey: "mogplex.control.tools.width", defaultWidth: 520, minWidth: 320, maxWidth: 1000, handle: "left" });
+  const transition = useWorkspaceTransition(resizing);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const restoreFocus = (tool: string) => toolbarRef.current?.querySelector<HTMLButtonElement>(`[data-task-tool="${tool}"]`)?.focus();
   const closeTool = () => { tools.closeTool(); restoreFocus(tools.tool ?? "preview"); };
@@ -79,30 +82,41 @@ export function TaskWorkspace({ sessionId, repo, sandbox, messages, terminalMess
       case "worktrees": return worktrees;
     }
   };
-  return <div className="task-workspace flex min-h-0 flex-1 flex-col" data-tool-open={Boolean(tools.tool)} data-drawer-open={Boolean(tools.drawer)}>
+  return <div className="task-workspace flex min-h-0 flex-1 flex-col" data-tool-open={Boolean(tools.tool)} data-drawer-open={Boolean(tools.drawer)} data-expanded-pane={tools.expanded ?? undefined}
+    onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented && tools.expanded) { event.preventDefault(); tools.restoreSize(); } }}>
     <div ref={toolbarRef} className="task-workspace-toolbar flex shrink-0 flex-wrap items-center gap-x-3 border-b border-border px-3 py-1">
       <div className="task-tool-buttons flex min-w-0 items-center gap-1 overflow-x-auto" role="group" aria-label="Task tools">
-        {TOOL_BUTTONS.map(({ id, label, icon: Icon }) => <button key={id} data-task-tool={id} type="button" aria-label={`Open ${label.toLowerCase()}`} aria-pressed={tools.tool === id} onClick={() => tools.openTool(id)} className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-2 text-xs sm:gap-1.5 sm:px-2.5 transition-colors ${tools.tool === id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+        {TOOL_BUTTONS.map(({ id, label, icon: Icon }) => <button key={id} data-task-tool={id} type="button" aria-label={`Open ${label.toLowerCase()}`} aria-pressed={tools.tool === id} aria-expanded={tools.tool === id} onClick={() => tools.toggleTool(id)} className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-2 text-xs sm:gap-1.5 sm:px-2.5 transition-colors ${tools.tool === id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
           <Icon className="size-4" aria-hidden="true" />{label}{id === "changes" && changed.length > 0 && <span className="rounded bg-muted px-1 text-xs">{changed.length}</span>}
         </button>)}
-        {artifacts.length > 0 && <button type="button" data-task-tool="artifacts" aria-label="Open artifacts" aria-pressed={tools.tool === "artifacts"} onClick={() => tools.openTool("artifacts")} className="shrink-0 rounded px-2 py-2 text-xs hover:bg-muted">Artifacts ({artifacts.length})</button>}
-        <button type="button" data-task-tool="terminal" aria-label="Open terminal" aria-expanded={Boolean(tools.drawer)} onClick={() => tools.openDrawer("terminal")} className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-2 text-xs sm:gap-1.5 sm:px-2.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Terminal className="size-4" aria-hidden="true" /><span className="hidden sm:inline">Terminal</span></button>
+        {artifacts.length > 0 && <button type="button" data-task-tool="artifacts" aria-label="Open artifacts" aria-pressed={tools.tool === "artifacts"} aria-expanded={tools.tool === "artifacts"} onClick={() => tools.toggleTool("artifacts")} className="shrink-0 rounded px-2 py-2 text-xs hover:bg-muted">Artifacts ({artifacts.length})</button>}
+        <button type="button" data-task-tool="terminal" aria-label="Open terminal" aria-expanded={Boolean(tools.drawer)} onClick={tools.toggleDrawer} className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-2 text-xs sm:gap-1.5 sm:px-2.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Terminal className="size-4" aria-hidden="true" /><span className="hidden sm:inline">Terminal</span></button>
       </div>
       {contextBar}
     </div>
+    <div className="task-workspace-body relative flex min-h-0 flex-1 flex-col overflow-hidden">
     <div className="task-workspace-main relative flex min-h-0 flex-1 overflow-hidden">
-      <div className="task-conversation flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-      <aside ref={panelRef} aria-label="Task tools" className="task-tools relative min-h-0 shrink-0 flex-col border-l border-border bg-background" style={{ width, display: tools.tool ? "flex" : "none" }}>
+      <motion.div layout layoutDependency={`${tools.tool}:${tools.drawer}:${tools.expanded}`} className="task-conversation flex min-h-0 min-w-0 flex-1 flex-col"><motion.div layout="position" className="flex min-h-0 flex-1 flex-col">{children}</motion.div></motion.div>
+      <div aria-hidden="true" className="task-tools-space shrink-0" style={{ width: tools.tool ? width : 0 }} />
+      <motion.aside ref={panelRef} layout={!resizing} layoutDependency={tools.expanded} transition={transition} initial={false} aria-label="Task tools" aria-hidden={!tools.tool} inert={!tools.tool}
+        animate={{ x: tools.tool ? 0 : "100%", opacity: tools.tool ? 1 : 0, visibility: "visible", transitionEnd: { visibility: tools.tool ? "visible" : "hidden" } }}
+        className="task-tools absolute inset-y-0 right-0 z-10 flex min-h-0 flex-col border-l border-border bg-background" style={{ width }}>
+        <motion.div layout="position" className="flex min-h-0 flex-1 flex-col">
         <div {...resizerProps} aria-label="Resize task tools" className="task-tools-resizer absolute inset-y-0 -left-1 z-30 w-2 cursor-col-resize touch-none focus-visible:bg-primary/20" />
         <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
           <span className="text-sm font-medium">{tools.tool ? TITLES[tools.tool] : "Task tools"}</span>
-          <button type="button" aria-label="Close task tools" onClick={closeTool} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Xmark className="size-4" /></button>
+          <div className="flex items-center gap-1">
+            <button type="button" aria-label={tools.expanded === "tools" ? "Restore task tools size" : "Expand task tools"} title={tools.expanded === "tools" ? "Restore split view" : "Expand panel"} onClick={() => tools.toggleExpanded("tools")} className="task-expand rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground">{tools.expanded === "tools" ? <Collapse className="size-4" /> : <Expand className="size-4" />}</button>
+            <button type="button" aria-label="Close task tools" title="Collapse panel" onClick={closeTool} className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Xmark className="size-4" /></button>
+          </div>
         </div>
         {tools.openedTools.map(tool => <div key={`${sessionId}:${tool}`} className="min-h-0 flex-1 flex-col overflow-auto" style={{ display: tools.tool === tool ? "flex" : "none" }}>
           <PaneErrorBoundary paneName={TITLES[tool]}>{panel(tool)}</PaneErrorBoundary>
         </div>)}
-      </aside>
+        </motion.div>
+      </motion.aside>
     </div>
     <TaskTerminal sessionId={sessionId} sandbox={sandbox} messages={terminalMessages} tools={tools} onClose={closeDrawer} />
+    </div>
   </div>;
 }
