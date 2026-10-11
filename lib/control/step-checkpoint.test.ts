@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { it as test } from "vitest";
 import { createControlStepCheckpoint } from "@/lib/control/step-checkpoint";
 import {
   finalizeCancelledControlRun,
   finalizeFinishedControlRun,
 } from "@/app/api/control/chat/_lib/lifecycle";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { buildAiCall } from "./helpers/sandbox-harness-route-fixtures";
+import { buildAiCall } from "@/tests/unit/helpers/sandbox-harness-route-fixtures";
 
 for (const outcome of ["success", "error", "cancelled"] as const) {
   test(`Control preserves every completed generation through ${outcome}`, async () => {
