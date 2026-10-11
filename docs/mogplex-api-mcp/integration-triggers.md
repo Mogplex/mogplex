@@ -116,8 +116,13 @@ publishing it, stays with the integration's own review step.
 
 ## Reading the output
 
-When the automation's instructions have the agent commit a JSON file under
-`.mogplex/artifacts/`, the integration can read it once the run succeeds:
+When the automation's instructions have the agent write a JSON file directly
+under `.mogplex/artifacts/`, the integration can read it once the run
+succeeds. This works on every harness. Claude Code and Codex runs end with
+platform delivery, which commits those artifacts for the agent and pushes the
+branch. It opens no pull request of its own on an API-triggered run, and it
+still refuses every other `.mogplex` file, because that directory holds the
+run's runtime configuration.
 
 ```txt
 GET /api/v1/mogplex/automations/{automationId}/runs/{jobRunId}/artifact?path=.mogplex/artifacts/<name>.json

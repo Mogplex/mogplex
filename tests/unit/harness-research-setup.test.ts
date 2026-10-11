@@ -17,6 +17,7 @@ const context: SandboxSetupContext = {
   baseBranch: "main",
   workingBranch: "main",
   previewUrl: null,
+  deliveryMode: "pull_request",
 };
 
 test("sandbox environment and Claude MCP reuse one research credential across setup steps", async (t) => {

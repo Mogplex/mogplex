@@ -24,7 +24,10 @@ import {
   launchAutofixSandbox,
   launchAutomationHarnessSandbox,
 } from "@/lib/workflows/automation-job-sandbox-setup";
-import { taskWorkingBranch } from "./automation-task-sandbox";
+import {
+  harnessDeliveryMode,
+  taskWorkingBranch,
+} from "./automation-task-sandbox";
 
 async function attachAutomationHarnessAiCall(input: {
   aiCallId: string;
@@ -222,6 +225,7 @@ export async function runAutomationHarnessAgent(input: {
           harness: input.harnessId,
           prompt,
           mode: "AUTO",
+          delivery: harnessDeliveryMode(input.context),
         }),
       }
     ),

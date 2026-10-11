@@ -14,6 +14,21 @@ export type HarnessGitWorkspace = {
   createdBranch: boolean;
 };
 
+/**
+ * How a finished run reaches GitHub. `pull_request` opens or updates a PR.
+ * `branch` pushes the working branch and opens nothing, and it also delivers
+ * the run's JSON artifacts under `.mogplex/artifacts/`: API-triggered
+ * automation tasks use it, because their caller reads the output from the
+ * branch the trigger fixed.
+ */
+export type HarnessDeliveryMode = "pull_request" | "branch";
+
+export function normalizeHarnessDeliveryMode(
+  value: unknown
+): HarnessDeliveryMode {
+  return value === "branch" ? "branch" : "pull_request";
+}
+
 export type HarnessPullRequestDelivery = {
   pullRequestUrl: string | null;
   /** Whether the delivery branch currently contains commits ahead of base. */
@@ -53,7 +68,15 @@ export function buildHarnessDeliveryPrompt(input: {
   prompt: string;
   baseBranch: string;
   workingBranch: string;
+  delivery?: HarnessDeliveryMode;
 }) {
+  const branchOnly = input.delivery === "branch";
+  const finalStep = branchOnly
+    ? `4. Open a pull request only if your instructions ask for one. The run's output is read from ${input.workingBranch}.`
+    : `4. Open or update a pull request into ${input.baseBranch} and include its URL in your final response.`;
+  const runtimeFiles = branchOnly
+    ? "Never commit files under .mogplex except the JSON artifacts directly under .mogplex/artifacts/ that your instructions ask for. Delivery commits those artifacts for you and refuses every other .mogplex file."
+    : "Never commit files under .mogplex; they contain runtime configuration and delivery refuses them.";
   return `<delivery-contract>
 You are working on branch ${input.workingBranch}, based on ${input.baseBranch}. The repository has already been fetched, checked out, and fast-forwarded before this run.
 
@@ -61,10 +84,10 @@ If you change code, you must finish the delivery loop before declaring success:
 1. Run the relevant tests.
 2. Commit every intended change on ${input.workingBranch}.
 3. Push ${input.workingBranch} to origin without force-pushing.
-4. Open or update a pull request into ${input.baseBranch} and include its URL in your final response.
+${finalStep}
 
 Leave no untracked files in the repository. Commit intended new files, add disposable files to .gitignore, or delete scratch files before finishing; otherwise delivery fails closed.
-Never commit files under .mogplex; they contain runtime configuration and delivery refuses them.
+${runtimeFiles}
 
 Do not leave completed work only in the sandbox. If GitHub delivery is blocked, state the exact blocker instead of claiming the work is finished.
 </delivery-contract>
@@ -136,6 +159,7 @@ export async function publishHarnessPullRequest(
     prompt: string;
     baseBranch: string;
     workingBranch: string;
+    delivery?: HarnessDeliveryMode;
     cwd?: string;
     env?: Record<string, string>;
   }
@@ -150,9 +174,30 @@ if [ "$current_branch" != "$MOGPLEX_WORKING_BRANCH" ]; then
   echo "Unexpected working branch: $current_branch" >&2
   exit 1
 fi
+runtime_changes() {
+  if [ "$MOGPLEX_DELIVERY_MODE" = branch ]; then
+    git diff --name-only "$1" -- .mogplex ':(exclude,glob).mogplex/artifacts/*.json'
+  else
+    git diff --name-only "$1" -- .mogplex
+  fi
+}
+if [ "$MOGPLEX_DELIVERY_MODE" = branch ]; then
+  committed_runtime_files="$(runtime_changes "origin/$MOGPLEX_BASE_BRANCH...HEAD")"
+  if [ -n "$committed_runtime_files" ]; then
+    echo "Refusing to deliver committed Mogplex runtime files:" >&2
+    echo "$committed_runtime_files" >&2
+    exit 1
+  fi
+  # The platform ignores .mogplex, so artifacts are staged by force.
+  for artifact in .mogplex/artifacts/*.json; do
+    if [ -f "$artifact" ] && [ ! -L "$artifact" ]; then
+      git add -f -- "$artifact"
+    fi
+  done
+fi
 changed=false
 if [ -n "$(git status --porcelain)" ]; then
-  tracked_runtime_files="$(git diff --name-only HEAD -- .mogplex)"
+  tracked_runtime_files="$(runtime_changes HEAD)"
   if [ -n "$tracked_runtime_files" ]; then
     echo "Refusing to deliver tracked Mogplex runtime files:" >&2
     echo "$tracked_runtime_files" >&2
@@ -164,10 +209,10 @@ if [ -n "$(git status --porcelain)" ]; then
     echo "$untracked_files" >&2
     exit 1
   fi
-  git diff --name-only HEAD -- . ':(exclude).mogplex' | while IFS= read -r file; do
+  git add -u -- . ':(exclude).mogplex'
+  git diff --cached --name-only | while IFS= read -r file; do
     printf '${AUTO_COMMITTED_FILE_MARKER}%s\n' "$file"
   done
-  git add -u -- . ':(exclude).mogplex'
   if ! git diff --cached --quiet; then
     git commit -m "$MOGPLEX_PR_TITLE"
     changed=true
@@ -181,7 +226,7 @@ if [ "$ahead" -eq 0 ]; then
   exit 0
 fi
 pull_request_url="$(gh pr list --head "$MOGPLEX_WORKING_BRANCH" --base "$MOGPLEX_BASE_BRANCH" --state open --limit 1 --json url --jq '.[0].url // ""' 2>/dev/null || true)"
-if [ -z "$pull_request_url" ]; then
+if [ -z "$pull_request_url" ] && [ "$MOGPLEX_DELIVERY_MODE" != branch ]; then
   pull_request_url="$(gh pr create --base "$MOGPLEX_BASE_BRANCH" --head "$MOGPLEX_WORKING_BRANCH" --title "$MOGPLEX_PR_TITLE" --body "Created by a Mogplex agent run.")"
 fi
 echo "${CHANGED_MARKER}true"
@@ -194,6 +239,7 @@ echo "${PULL_REQUEST_MARKER}$pull_request_url"
       MOGPLEX_BASE_BRANCH: input.baseBranch,
       MOGPLEX_WORKING_BRANCH: input.workingBranch,
       MOGPLEX_PR_TITLE: pullRequestTitle(input.prompt),
+      MOGPLEX_DELIVERY_MODE: input.delivery ?? "pull_request",
     },
   });
   if (result.exitCode !== 0) {
