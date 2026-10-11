@@ -146,12 +146,13 @@ test("POST /api/sandbox/[id]/resume records resume_after_auto_pause metric", asy
   assert.equal(typeof lifecycleEvents[0].payload?.pause_duration_ms, "number");
 });
 
-test("POST /api/sandbox/[id]/resume emits cancelled when paused -> installing CAS fails", async () => {
+test("a losing resume claim never wakes or stops the winning workspace", async () => {
   const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();
   const releasedClaims: string[] = [];
   let resolvedEnv = false;
   let bootstrapped = false;
   let stopCalls = 0;
+  let wakeCalls = 0;
 
   const handler = createSandboxResumeHandler({
     loadOwnedSandboxRouteContext: (async () =>
@@ -164,12 +165,14 @@ test("POST /api/sandbox/[id]/resume emits cancelled when paused -> installing CA
       releasedClaims.push(input.claimId);
       return true;
     }) as never,
-    getSandbox: (async () =>
-      ({
+    getSandbox: (async () => {
+      wakeCalls += 1;
+      return {
         stop: async () => {
           stopCalls += 1;
         },
-      }) as never) as never,
+      } as never;
+    }) as never,
     updateSandboxRecord: async () => null,
     resolveRepoSandboxEnv: (async () => {
       resolvedEnv = true;
@@ -192,7 +195,8 @@ test("POST /api/sandbox/[id]/resume emits cancelled when paused -> installing CA
   assert.match(body, /"reason":"conflict"/);
   assert.equal(resolvedEnv, false);
   assert.equal(bootstrapped, false);
-  assert.equal(stopCalls, 1);
+  assert.equal(wakeCalls, 0);
+  assert.equal(stopCalls, 0);
   assert.deepEqual(releasedClaims, ["claim-resume-1"]);
 });
 

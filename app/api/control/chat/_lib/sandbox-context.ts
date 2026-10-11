@@ -101,10 +101,12 @@ export function resolveControlToolSandboxId(
   if (context.selectionRequired) return null;
   const selectedId = context.selected?.recordId;
   if (selectedId) {
-    // Defense in depth: only the running record shown in prompt context may
-    // cross into the tool binding, even if a future resolver branch drifts.
+    // Keep the owned selection while stopped, so tools resume this workspace
+    // instead of falling back to another VM or creating a fresh checkout.
     return context.sandboxes.some(
-      (sandbox) => sandbox.id === selectedId && sandbox.status === "running"
+      (sandbox) =>
+        sandbox.id === selectedId &&
+        ["running", "stopped", "paused"].includes(sandbox.status)
     )
       ? selectedId
       : null;
@@ -235,11 +237,11 @@ export async function resolveControlPromptSandboxContext(
     };
   }
 
-  if (loaded.record.status !== "running") {
+  if (!["running", "stopped", "paused"].includes(loaded.record.status)) {
     return {
       decisionSource: "server_validated_request",
       rejectionReason: "sandbox_inactive",
-      selectionRequired: false,
+      selectionRequired: true,
       selected: null,
       sandboxes: [presentPromptSandbox(loaded.record)],
     };

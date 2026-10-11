@@ -6,7 +6,7 @@ import {
   safeAppendAiCallEvent,
 } from "@/lib/interactive-runs";
 import { sanitizeTelemetryRecord } from "@/lib/ai-telemetry";
-import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
+import { killRuntimeCommand } from "./runtime-command";
 import {
   presentMogplexApiRun,
   type ExternalAgentRunRow,
@@ -15,6 +15,8 @@ import {
 import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
 import type { AiCall, AiCallEvent } from "@/lib/types";
 import { MogplexApiRunControlError } from "./run-control-error";
+
+export { killRuntimeCommand } from "./runtime-command";
 
 export { MogplexApiRunControlError } from "./run-control-error";
 
@@ -66,8 +68,6 @@ type RunCancelDeps = {
   ) => Promise<void>;
 };
 
-const SANDBOX_CANCEL_ROUTE_SELECT =
-  "sandbox_id, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id";
 const REDACTED_EVENT_VALUE = "[redacted]";
 const EVENT_PAYLOAD_MAX_STRING_LENGTH = 2_000;
 const EVENT_PAYLOAD_MAX_ITEMS = 25;
@@ -195,50 +195,6 @@ async function updateRunForUser(
   }
 
   return (data as ExternalAgentRunRow | null) ?? null;
-}
-
-export async function killRuntimeCommand(input: {
-  user_id: string;
-  sandbox_record_id: string | null;
-  runtimeCommandId: string;
-}) {
-  if (!input.sandbox_record_id) {
-    throw new MogplexApiRunControlError(
-      "BAD_REQUEST",
-      "Run has no sandbox metadata",
-      400
-    );
-  }
-
-  const request = new Request("https://internal.mogplex/api/sandbox/cancel", {
-    headers: buildInternalApiHeaders(input.user_id),
-  });
-  const { loadOwnedSandboxRouteContext } =
-    await import("@/lib/sandbox/route-context");
-  const sandboxData = await loadOwnedSandboxRouteContext(
-    request,
-    input.sandbox_record_id,
-    {
-      select: SANDBOX_CANCEL_ROUTE_SELECT,
-    }
-  );
-  if (!sandboxData.ok) {
-    throw new MogplexApiRunControlError(
-      "CONFLICT",
-      sandboxData.error,
-      sandboxData.status
-    );
-  }
-  if (!sandboxData.sandbox) {
-    throw new MogplexApiRunControlError(
-      "CONFLICT",
-      "Sandbox is not ready",
-      409
-    );
-  }
-
-  const command = await sandboxData.sandbox.getCommand(input.runtimeCommandId);
-  await command.kill();
 }
 
 const defaultEventDeps: RunEventListDeps = {

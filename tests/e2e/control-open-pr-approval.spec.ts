@@ -11,10 +11,14 @@ import {
 } from "./helpers/automation-control-plane-fixtures";
 
 for (const decision of ["Approve", "Deny"] as const) {
-  test(`opening a PR waits for operator approval: ${decision}`, async ({
+  test(`opening a PR waits for operator approval after reload: ${decision}`, async ({
     page,
   }) => {
     await enableScopedE2EAuth(page);
+    await page.setViewportSize({
+      width: decision === "Approve" ? 1440 : 390,
+      height: 900,
+    });
     await mockBaseChrome(page);
     await mockControlSessionBootstrap(page);
     await page.route("**/api/control/approvals**", (route) =>
@@ -44,10 +48,25 @@ for (const decision of ["Approve", "Deny"] as const) {
       }
     );
     let turns = 0;
+    let conversationId: string | undefined;
     await page.route("**/api/control/chat", async (route) => {
-      const { messages } = route.request().postDataJSON() as {
+      const body = route.request().postDataJSON() as {
         messages: UIMessage[];
+        conversationId?: string;
       };
+      const { messages } = body;
+      // Match the durable route's required session identity. A messages-only
+      // mock previously hid the production approval continuation regression.
+      if (
+        !body.conversationId ||
+        (conversationId && body.conversationId !== conversationId)
+      )
+        return fulfillJson(
+          route,
+          { error: "Missing or changed conversation" },
+          400
+        );
+      conversationId = body.conversationId;
       const firstTurn = turns++ === 0;
       const result = streamText({
         stopWhen: [],
@@ -113,6 +132,12 @@ for (const decision of ["Approve", "Deny"] as const) {
       .getByPlaceholder("Ask anything or run a command...")
       .fill("Open a PR for this change");
     const request = page.waitForResponse("**/api/control/chat");
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/control/sessions") &&
+        response.request().method() === "PUT" &&
+        response.request().postData()?.includes("approval-requested") === true
+    );
     await page.getByRole("button", { name: "Start mission" }).click();
     expect((await request).ok()).toBe(true);
     await expect(
@@ -120,6 +145,11 @@ for (const decision of ["Approve", "Deny"] as const) {
     ).toBeVisible();
     expect(createdPrs).toBe(0);
     expect(approvals).toEqual(["open-pr-call"]);
+    await saved;
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: "Approve", exact: true })
+    ).toBeVisible();
 
     const continuation = page.waitForResponse("**/api/control/chat");
     await page.getByRole("button", { name: decision, exact: true }).click();

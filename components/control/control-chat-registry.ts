@@ -237,11 +237,21 @@ export class ControlChatRegistry {
     };
     const addApproval = chat.addToolApprovalResponse;
     chat.addToolApprovalResponse = async (response) => {
+      if (this.remoteTurns.has(sessionId))
+        throw new Error(CONTROL_TURN_RUNNING_MESSAGE);
+      stopBeforeAcknowledgement = false;
+      this.remoteErrors.delete(sessionId);
       this.assertNotArchiving(sessionId);
       if (this.chats.get(sessionId) !== chat)
         throw new Error("This chat is no longer available. Select it again.");
       approvals.request(chat.messages, response.id);
-      await addApproval(response);
+      await addApproval({
+        ...response,
+        // Automatic SDK submissions do not inherit sendMessage's request body.
+        // The server restores execution settings from the saved turn, including
+        // after a reload when this Chat has never sent a message.
+        options: { body: { conversationId: sessionId } },
+      });
     };
     this.chats.set(sessionId, chat);
     // The public useChat hook owns one Chat at a time, so this registry uses

@@ -1,12 +1,8 @@
+import { describe, expect, it } from "vitest";
 import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest";
+  installSandboxRows,
+  OWNED_REPO_ID,
+} from "../../../tests/support/sandbox-resolution-fixture";
 import {
   createStartSandbox,
   createTerminalExec,
@@ -14,83 +10,50 @@ import {
 } from "./sandbox";
 import { resolveOrCreateSandbox } from "./sandbox-resolution";
 
-type RunningSandbox = { id: string };
-const OWNED_REPO_ID = "00000000-0000-4000-8000-000000000001";
-
-let supabaseAdmin: typeof import("@/lib/supabase/admin").supabaseAdmin;
-let originalFrom: typeof supabaseAdmin.from;
-const originalFetch = global.fetch;
-const originalSecret = process.env.INTERNAL_API_SECRET;
-const originalSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-function installSandboxRows(
-  running: RunningSandbox[],
-  repoLookup?: { id: string } | null,
-  repoLookupError: { message: string } | null = null
-) {
-  const resolvedRepoLookup =
-    repoLookup === undefined ? { id: OWNED_REPO_ID } : repoLookup;
-  const sandboxQuery = {
-    select: () => sandboxQuery,
-    eq: () => sandboxQuery,
-    order: async () => ({ data: running, error: null }),
-    limit: async () => ({ data: running, error: null }),
-    maybeSingle: async () => ({ data: running[0] ?? null, error: null }),
-  };
-  const repoQuery = {
-    select: () => repoQuery,
-    eq: () => repoQuery,
-    maybeSingle: async () => ({
-      data: resolvedRepoLookup,
-      error: repoLookupError,
-    }),
-  };
-  Object.defineProperty(supabaseAdmin, "from", {
-    configurable: true,
-    writable: true,
-    value: (table: string) =>
-      table === "sandboxes" ? sandboxQuery : repoQuery,
-  });
-}
-
-beforeAll(async () => {
-  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
-  ({ supabaseAdmin } = await import("@/lib/supabase/admin"));
-  originalFrom = supabaseAdmin.from.bind(supabaseAdmin);
-});
-
-afterAll(() => {
-  if (originalSupabaseUrl === undefined)
-    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-  else process.env.NEXT_PUBLIC_SUPABASE_URL = originalSupabaseUrl;
-  if (originalServiceRoleKey === undefined)
-    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-  else process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceRoleKey;
-});
-
-beforeEach(() => {
-  process.env.INTERNAL_API_SECRET = "internal-secret";
-  installSandboxRows([]);
-});
-
-afterEach(() => {
-  Object.defineProperty(supabaseAdmin, "from", {
-    configurable: true,
-    writable: true,
-    value: originalFrom,
-  });
-  Object.defineProperty(global, "fetch", {
-    configurable: true,
-    writable: true,
-    value: originalFetch,
-  });
-  if (originalSecret === undefined) delete process.env.INTERNAL_API_SECRET;
-  else process.env.INTERNAL_API_SECRET = originalSecret;
-});
-
 describe("sandbox resolution contract", () => {
+  for (const status of ["stopped", "paused"]) {
+    it(`resumes the selected ${status} workspace and waits for ready`, async () => {
+      installSandboxRows([{ id: "saved", status, persistent: true }]);
+      const requests: string[] = [];
+      global.fetch = async (url) => {
+        requests.push(String(url));
+        return new Response(
+          [
+            'data: {"type":"sandbox_created","recordId":"saved"}\n\n',
+            'data: {"type":"ready","sandbox":{"id":"saved","status":"running"}}\n\n',
+          ].join(""),
+          { headers: { "Content-Type": "text/event-stream" } }
+        );
+      };
+      expect(
+        await resolveOrCreateSandbox("user-1", OWNED_REPO_ID, "saved")
+      ).toEqual({ sandboxId: "saved", status: "running", source: "selected" });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatch(/\/api\/sandbox\/saved\/resume$/);
+    });
+  }
+
+  it("does not replace saved work when resume fails or returns another identity", async () => {
+    for (const response of [
+      Response.json({ error: "Snapshot unavailable" }, { status: 502 }),
+      Response.json({ sandbox: { id: "replacement", status: "running" } }),
+    ]) {
+      installSandboxRows([
+        { id: "saved", status: "stopped", persistent: true },
+      ]);
+      const requests: string[] = [];
+      global.fetch = async (url) => {
+        requests.push(String(url));
+        return response;
+      };
+      expect(
+        await resolveOrCreateSandbox("user-1", OWNED_REPO_ID, "saved")
+      ).toMatchObject({ reason: "sandbox_unavailable" });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatch(/\/saved\/resume$/);
+    }
+  });
+
   it("uses an owned running selected sandbox", async () => {
     installSandboxRows([{ id: "sandbox-selected" }]);
     expect(

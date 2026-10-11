@@ -17,7 +17,7 @@ const startServerSelectedSandboxParams = z.object({
     .uuid()
     .optional()
     .describe(
-      "Select an existing running sandbox from the choices returned by this tool or bash. Omit to reuse the current selection or start a sandbox when none exists."
+      "Select an existing sandbox from the choices returned by this tool or bash. Stopped or paused persistent workspaces resume with their saved files. Omit to reuse the current selection or start a sandbox when none exists."
     ),
 });
 const startSandboxParams = startServerSelectedSandboxParams.extend({

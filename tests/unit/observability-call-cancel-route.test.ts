@@ -78,6 +78,7 @@ test("POST /api/observability/calls/[id]/cancel cancels sandbox-backed runs via 
   }> = [];
   let killedCommandId: string | null = null;
   let loadedSandboxId: string | null = null;
+  let exited = false;
 
   const handler = createObservabilityCallCancelPostHandler({
     requireUserId: async () => "user-123",
@@ -87,12 +88,14 @@ test("POST /api/observability/calls/[id]/cancel cancels sandbox-backed runs via 
         ...buildActiveAiCall(),
         control_state: "cancel_requested",
       }) as never,
-    finalizeAiCallAsCancelledIfActive: async () =>
-      ({
+    finalizeAiCallAsCancelledIfActive: async () => {
+      assert.equal(exited, true, "Stop must wait for confirmed process exit");
+      return {
         ...buildActiveAiCall(),
         status: "cancelled",
         control_state: "cancelled",
-      }) as never,
+      } as never;
+    },
     appendAiCallEvent: async (input) => {
       appendedEvents.push({
         eventType: input.eventType,
@@ -105,8 +108,13 @@ test("POST /api/observability/calls/[id]/cancel cancels sandbox-backed runs via 
       return buildLoadedSandboxCallCancelContext({
         sandbox: {
           getCommand: async (commandId: string) => ({
+            exitCode: null,
             kill: async () => {
               killedCommandId = commandId;
+            },
+            wait: async () => {
+              exited = true;
+              return { exitCode: 143 };
             },
           }),
         },
@@ -164,4 +172,46 @@ test("POST /api/observability/calls/[id]/cancel returns shared loader failures f
     error:
       "Sandbox is missing its stored Vercel project for user-owned billing.",
   });
+});
+
+test("Stop stays retryable when command termination cannot be confirmed", async () => {
+  const { createObservabilityCallCancelPostHandler } =
+    await loadObservabilityCallCancelRoute();
+  let finalized = false;
+  const events: string[] = [];
+  const handler = createObservabilityCallCancelPostHandler({
+    requireUserId: async () => "user-123",
+    loadOwnedAiCall: async () => buildActiveAiCall() as never,
+    requestAiCallCancellationIfActive: async () =>
+      ({ ...buildActiveAiCall(), control_state: "cancel_requested" }) as never,
+    finalizeAiCallAsCancelledIfActive: async () => {
+      finalized = true;
+      return null;
+    },
+    appendAiCallEvent: async (event) => {
+      events.push(event.eventType);
+      return {} as never;
+    },
+    loadOwnedSandboxRouteContext: async () =>
+      buildLoadedSandboxCallCancelContext({
+        sandbox: {
+          getCommand: async () => ({
+            exitCode: null,
+            kill: async () => {},
+            wait: async () => {
+              throw new Error("Termination unconfirmed");
+            },
+          }),
+        },
+      }) as never,
+  });
+  const response = await handler(
+    new Request("http://localhost/api/observability/calls/call-123/cancel", {
+      method: "POST",
+    }),
+    { params: Promise.resolve({ id: "call-123" }) }
+  );
+  assert.equal(response.status, 500);
+  assert.equal(finalized, false);
+  assert.deepEqual(events, ["cancel_requested"]);
 });

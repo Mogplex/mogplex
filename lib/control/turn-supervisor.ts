@@ -7,7 +7,7 @@ import {
 } from "./terminal-outcome";
 import { loadControlTurn, loadControlTurnCall } from "./turn-store";
 import { releaseLimitClaim } from "@/lib/request-limits";
-import { killRuntimeCommand } from "@/lib/mogplex-api/run-control";
+import { killRuntimeCommand } from "@/lib/mogplex-api/runtime-command";
 import { createWorkspaceCheckpoint } from "./workspace-checkpoint";
 
 export const controlTurnPayload = z.object({
@@ -42,12 +42,7 @@ export async function reconcileControlTurn(
       user_id: payload.userId,
       sandbox_record_id: call.metadata.sandbox_record_id,
       runtimeCommandId: call.runtime_command_id,
-    }).catch((error) =>
-      console.error("[control] orphan command cleanup failed", {
-        aiCallId: call!.id,
-        error,
-      })
-    );
+    });
   }
   if (
     call.status !== "success" &&
