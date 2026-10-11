@@ -50,7 +50,8 @@ export async function* bootstrapFromSnapshotStreaming(
     sandbox,
     context.requiresBun,
     context.runtimeEnv,
-    context.previewUrl
+    context.previewUrl,
+    context
   );
 
   if (!context.hasDevScript) {
@@ -108,7 +109,8 @@ export async function bootstrapSandbox(
     sandbox,
     context.requiresBun,
     context.runtimeEnv,
-    context.previewUrl
+    context.previewUrl,
+    context
   );
 
   const installLog = await runInstallPhase(
@@ -202,7 +204,8 @@ export async function* bootstrapSandboxStreaming(
     sandbox,
     context.requiresBun,
     context.runtimeEnv,
-    context.previewUrl
+    context.previewUrl,
+    context
   );
 
   // --- Install phase ---

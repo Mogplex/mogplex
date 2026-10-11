@@ -157,9 +157,13 @@ test("baseline streaming ensures Bun before launching the dev command", async ()
         {
           type: "log",
           phase: "install",
-          data: "Ensuring Bun runtime is available...\n",
+          data: "Checking repository runtime requirements...\n",
         },
-        { type: "log", phase: "install", data: "Bun runtime ready.\n" },
+        {
+          type: "log",
+          phase: "install",
+          data: "Runtime requirements ready.\n",
+        },
       ]
     );
   } finally {
@@ -190,7 +194,7 @@ test("streamed Bun prerequisite failures retain setup diagnostics", async () => 
     value: {
       type: "log",
       phase: "install",
-      data: "Ensuring Bun runtime is available...\n",
+      data: "Checking repository runtime requirements...\n",
     },
   });
   await assert.rejects(stream.next(), (error: unknown) => {

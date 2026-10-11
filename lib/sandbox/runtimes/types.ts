@@ -1,10 +1,11 @@
 import type { Sandbox } from "@vercel/sandbox";
 
-export type SandboxRuntime = "node22" | "node24" | "python3.13";
+export type SandboxRuntime = "node22" | "node24" | "node26" | "python3.13";
 
 export const SUPPORTED_RUNTIMES: readonly SandboxRuntime[] = [
   "node22",
   "node24",
+  "node26",
   "python3.13",
 ] as const;
 
@@ -61,5 +62,6 @@ export type RuntimeStrategy = {
 export const RUNTIME_LABELS: Record<SandboxRuntime, string> = {
   node22: "Node.js 22",
   node24: "Node.js 24",
+  node26: "Node.js 26",
   "python3.13": "Python 3.13",
 };

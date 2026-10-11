@@ -7,7 +7,7 @@ export async function assertBaselineRuntime(
   sandbox: Sandbox,
   runtime: SandboxRuntime
 ) {
-  if (runtime !== "node22" && runtime !== "node24") return;
+  if (!runtime.startsWith("node")) return;
   try {
     const result = await sandbox.runCommand({
       cmd: "node",

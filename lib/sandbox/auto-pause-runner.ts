@@ -351,7 +351,7 @@ export async function runSandboxAutoPauseCheck(
   }
   try {
     sandbox = await deps.getSandbox(finalRecord.sandbox_id, credentials);
-    await sandbox.stop({ blocking: true });
+    await sandbox.stop();
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Auto-pause failed";

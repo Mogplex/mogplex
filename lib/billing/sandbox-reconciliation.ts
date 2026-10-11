@@ -157,7 +157,7 @@ async function stopSandboxWithConfirmation(input: {
 }) {
   let stopError: unknown;
   try {
-    await input.sandbox.stop({ blocking: true });
+    await input.sandbox.stop();
     return;
   } catch (error) {
     stopError = error;
@@ -193,7 +193,7 @@ async function stopDepletedSandbox(input: {
   );
   let stopError: unknown = null;
   try {
-    await input.sandbox.stop({ blocking: true });
+    await input.sandbox.stop();
   } catch (error) {
     stopError = error;
   }
@@ -342,7 +342,7 @@ async function reconcileActiveSession(input: {
       record.status
     );
     if (!recordExpectsRunning) {
-      await sandbox.stop({ blocking: true });
+      await sandbox.stop();
       const observed = await deps.getSandbox(record.sandbox_id, {
         vercelToken: credentials.vercelToken,
         vercelTeamId: credentials.vercelTeamId,

@@ -128,7 +128,7 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
     );
 
     if (sandbox.persistent) {
-      if (sandbox.status !== "stopped") await sandbox.stop({ blocking: true });
+      if (sandbox.status !== "stopped") await sandbox.stop();
       const session = sandbox.currentSession();
       return {
         snapshotId: sandbox.currentSnapshotId ?? null,
@@ -184,7 +184,7 @@ async function stopRemoteSandboxBestEffort<R extends SandboxRouteRecordLike>(
         error
       );
       try {
-        await sandbox.stop({ blocking: true });
+        await sandbox.stop();
         const session = sandbox.currentSession();
         return {
           snapshotId: null,

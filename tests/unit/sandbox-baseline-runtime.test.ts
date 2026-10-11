@@ -4,6 +4,18 @@ import type { Sandbox } from "@vercel/sandbox";
 import { assertBaselineRuntime } from "../../lib/sandbox/baseline-runtime";
 import { BaselineSnapshotRestoreError } from "../../lib/sandbox/baseline-errors";
 
+test("Node 26 launches reject older baselines and accept matching ones", async () => {
+  const sandbox = (version: string) =>
+    ({
+      runCommand: async () => ({ exitCode: 0, stdout: async () => version }),
+    }) as unknown as Sandbox;
+  await assert.rejects(
+    assertBaselineRuntime(sandbox("24.1.0"), "node26"),
+    BaselineSnapshotRestoreError
+  );
+  await assertBaselineRuntime(sandbox("26.5.0"), "node26");
+});
+
 test("a Node 22 baseline cannot boot a repository requiring Node 24", async () => {
   const sandbox = {
     runCommand: async () => ({ exitCode: 0, stdout: async () => "22.22.0\n" }),

@@ -1,4 +1,5 @@
 import type { Sandbox } from "@vercel/sandbox";
+import { ensureNodePrerequisite } from "./node-prerequisite";
 import { buildRuntimeSandboxEnv } from "@/lib/repo-settings";
 import type { SandboxBootstrapStreamEvent } from "@/lib/sandbox/events";
 import type {
@@ -157,9 +158,21 @@ export async function runRuntimePrerequisitePhase(
   sandbox: Sandbox,
   requiresBun: boolean,
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
-  previewUrl: string
+  previewUrl: string,
+  context?: Pick<
+    ResolvedBootstrapContext,
+    "effectiveRuntime" | "normalizedRoot"
+  >
 ): Promise<string> {
-  if (!requiresBun) return "";
+  const nodeLog = context
+    ? await ensureNodePrerequisite(
+        sandbox,
+        context.effectiveRuntime,
+        context.normalizedRoot,
+        previewUrl
+      )
+    : "";
+  if (!requiresBun) return nodeLog;
 
   const command = await withTimeout(
     sandbox.runCommand({
@@ -182,32 +195,37 @@ export async function runRuntimePrerequisitePhase(
     });
   }
 
-  return installLog;
+  return [nodeLog, installLog].filter(Boolean).join("\n");
 }
 
 export async function* streamRuntimePrerequisitePhase(
   sandbox: Sandbox,
   requiresBun: boolean,
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>,
-  previewUrl: string
+  previewUrl: string,
+  context?: Pick<
+    ResolvedBootstrapContext,
+    "effectiveRuntime" | "normalizedRoot"
+  >
 ): AsyncGenerator<SandboxBootstrapStreamEvent, string> {
-  if (!requiresBun) return "";
+  if (!requiresBun && !context) return "";
 
   yield {
     type: "log",
     phase: "install",
-    data: "Ensuring Bun runtime is available...\n",
+    data: "Checking repository runtime requirements...\n",
   };
   const installLog = await runRuntimePrerequisitePhase(
     sandbox,
     requiresBun,
     runtimeEnv,
-    previewUrl
+    previewUrl,
+    context
   );
   yield {
     type: "log",
     phase: "install",
-    data: "Bun runtime ready.\n",
+    data: `${installLog ? `${installLog}\n` : ""}Runtime requirements ready.\n`,
   };
   return installLog;
 }

@@ -4,6 +4,14 @@ import { detectRuntimeFromGithub } from "../../lib/sandbox/runtimes";
 
 for (const fixture of [
   {
+    name: "Node 26 engines and version pin",
+    files: {
+      "package.json": '{"engines":{"node":">=26.5.0 <27"}}',
+      ".nvmrc": "26.5.0\n",
+    },
+    runtime: "node26",
+  },
+  {
     name: "auto-selected monorepo workspace",
     files: {
       "package.json": '{"workspaces":["apps/web"]}',

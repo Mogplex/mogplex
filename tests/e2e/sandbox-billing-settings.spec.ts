@@ -60,6 +60,9 @@ test("workspace and repo settings retire legacy personal Vercel configuration", 
 
   await page.getByRole("button", { name: "Repo actions" }).click();
   await page.getByText("Space Settings").click();
+  await page
+    .getByRole("combobox", { name: "Runtime", exact: true })
+    .selectOption("node26");
   await expect(
     page.getByRole("combobox", { name: "Sandbox Billing" })
   ).toHaveValue("inherit");
@@ -68,10 +71,16 @@ test("workspace and repo settings retire legacy personal Vercel configuration", 
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Save Settings" }).click();
   expect(state.repoPatchBodies.at(-1)).toMatchObject({
+    runtime: "node26",
     sandbox_billing_mode_override: null,
     sandbox_billing_target: "personal",
     vercel_team_id: null,
     vercel_project_id: null,
   });
   expect(targetRequests).toEqual([]);
+  await page.getByRole("button", { name: "Repo actions" }).click();
+  await page.getByText("Space Settings").click();
+  await expect(
+    page.getByRole("combobox", { name: "Runtime", exact: true })
+  ).toHaveValue("node26");
 });

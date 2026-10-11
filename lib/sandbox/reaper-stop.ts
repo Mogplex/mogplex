@@ -230,7 +230,7 @@ export async function stopSandbox(
       vercelTeamId: credentials.vercelTeamId,
       vercelProjectId: credentials.vercelProjectId,
     });
-    await vm.stop({ blocking: true });
+    await vm.stop();
     const providerSession = vm.currentSession();
     providerEndedAt =
       providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();

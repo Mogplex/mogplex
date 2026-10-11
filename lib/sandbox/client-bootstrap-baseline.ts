@@ -209,7 +209,8 @@ export async function* bootstrapFromBaselineSnapshotStreaming(
     sandbox,
     context.requiresBun,
     context.runtimeEnv,
-    context.previewUrl
+    context.previewUrl,
+    context
   );
   yield* runBaselineConditionalInstallPhase(
     sandbox,

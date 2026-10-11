@@ -209,7 +209,7 @@ export async function tryReconcileStalePausingSandbox(
       vercelTeamId: evaluation.credentials.vercelTeamId ?? null,
       vercelProjectId: evaluation.credentials.vercelProjectId,
     });
-    await vm.stop({ blocking: true });
+    await vm.stop();
   } catch (error) {
     console.warn(
       `[sandbox-reaper] Failed to finish stale pausing sandbox ${sandbox.id}; restoring running state:`,

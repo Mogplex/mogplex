@@ -56,6 +56,7 @@ export function createSaveRepoSettings(ctx: RepoActionsContext) {
       ),
       body: JSON.stringify({
         id: repo.id,
+        runtime: repo.runtime,
         default_branch: repo.default_branch,
         vercel_team_id: repo.vercel_team_id,
         vercel_project_id: repo.vercel_project_id,

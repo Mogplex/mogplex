@@ -1,4 +1,4 @@
-import { nodeStrategy, node24Strategy } from "./node";
+import { nodeStrategy, node24Strategy, node26Strategy } from "./node";
 import { pythonStrategy } from "./python";
 import type { Sandbox } from "@vercel/sandbox";
 import type { RuntimeStrategy, SandboxRuntime, DetectionResult } from "./types";
@@ -18,6 +18,7 @@ export {
 const STRATEGIES: Record<SandboxRuntime, RuntimeStrategy> = {
   node22: nodeStrategy,
   node24: node24Strategy,
+  node26: node26Strategy,
   "python3.13": pythonStrategy,
 };
 
