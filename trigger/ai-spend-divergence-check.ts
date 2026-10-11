@@ -174,6 +174,7 @@ export async function runAiSpendDivergenceCheck(
     }),
     // Gateway applies tags with ANY semantics before grouping. Grouping by
     // day counts each matching request once, even if it carries both tags.
+    // https://vercel.com/docs/ai-gateway/observability-and-spend/custom-reporting#filtering
     gateway.getSpendReport({
       startDate: window.startDate,
       endDate: window.gatewayInclusiveEndDate,
@@ -193,6 +194,9 @@ export async function runAiSpendDivergenceCheck(
   const internalOverheadTotal = sumReport(internalReport);
   if (internalOverheadTotal - gatewayTotal > 1e-8)
     throw new Error("Internal Gateway spend exceeds the total report");
+  // Round the difference once to ai_calls' 1e-8 USD precision, preserving the
+  // raw reports in telemetry. Clamp only sub-precision floating-point noise;
+  // inconsistent reports above that tolerance have already failed.
   const trackedGatewayTotal = Math.max(
     0,
     Math.round((gatewayTotal - internalOverheadTotal) * 1e8) / 1e8

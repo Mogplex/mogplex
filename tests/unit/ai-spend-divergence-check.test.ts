@@ -391,6 +391,34 @@ test("internal-only days do not produce missing-run warnings", async () => {
   assert.equal(summary.skipped, true);
 });
 
+test("clamps sub-precision floating-point noise without hiding invalid reports", async () => {
+  const { runAiSpendDivergenceCheck } = await loadSpendModule();
+  const { client } = createSpendSupabase(0);
+  for (const internal of [0.1 + 0.2, 0.3000001]) {
+    const check = runAiSpendDivergenceCheck({
+      supabase: client as never,
+      now: () => new Date("2026-05-16T12:00:00Z"),
+      gateway: {
+        getSpendReport: async (params) => ({
+          results: [{ totalCost: params.tags ? internal : 0.3 }],
+        }),
+      },
+      sentry: {
+        captureMessage: () => {
+          assert.fail("No unknown run spend");
+        },
+      },
+    });
+    if (internal > 0.30000001) await assert.rejects(check, /exceeds the total/);
+    else {
+      const summary = await check;
+      assert.equal(summary.trackedGatewayTotal, 0);
+      assert.equal(summary.internalOverheadTotal, internal);
+      assert.equal(summary.skipped, true);
+    }
+  }
+});
+
 for (const [total, internal] of [
   [Number.NaN, 0],
   [-1, 0],
