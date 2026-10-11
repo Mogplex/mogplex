@@ -43,7 +43,10 @@ for (const outcome of ["success", "error", "cancelled"] as const) {
     });
     try {
       const call = buildAiCall({ id: "control-usage", status: "streaming" });
+      const initialMetadata = { ...call.metadata };
       const checkpoint = createControlStepCheckpoint(call);
+      await checkpoint({});
+      assert.equal(updates.length, 0, "chunks without usage do not write");
       for (const generationId of ["gen_first", "gen_second"]) {
         await checkpoint({
           usage: {
@@ -74,6 +77,12 @@ for (const outcome of ["success", "error", "cancelled"] as const) {
         providerMetadata: { gateway: { generationId: "gen_partial" } },
       });
       assert.equal(updates.length, 3, "repeated chunks do not write again");
+      const expectedMetadata = {
+        ...initialMetadata,
+        gateway_generation_ids: ["gen_first", "gen_second", "gen_partial"],
+      };
+      assert.deepEqual(updates.at(-1)!.metadata, expectedMetadata);
+      assert.deepEqual(call.metadata, expectedMetadata);
       const input = {
         activeCall: call,
         userId: call.user_id,
