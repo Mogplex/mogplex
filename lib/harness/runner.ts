@@ -14,6 +14,8 @@ import type { Sandbox, Command } from "@vercel/sandbox";
 import type { HarnessExecutionMode } from "./claude-permissions";
 
 type RunHarnessOpts = {
+  /** Only platform-billed requests receive this server-owned attribution. */
+  gatewayCallId?: string;
   continue?: boolean;
   resumeSessionId?: string | null;
   mode?: HarnessExecutionMode;
@@ -122,6 +124,7 @@ export async function runHarness(
         resumeSessionId: opts?.resumeSessionId,
         mcpConfigPath: opts?.mcpConfigPath,
         env: baseEnv,
+        gatewayCallId: opts?.gatewayCallId,
       })
     ));
     env = { ...baseEnv, ...buildAcpAgentEnv(harnessId, baseEnv, opts?.mode) };
@@ -137,7 +140,7 @@ export async function runHarness(
     env = { ...authEnv, ...opts?.runtimeEnv };
     if (harnessId === "codex") {
       args = [
-        ...codexProviderArgs(env),
+        ...codexProviderArgs(env, opts?.gatewayCallId),
         ...codexResearchArgs(env),
         ...codexWorkerIsolationArgs(),
         ...args,

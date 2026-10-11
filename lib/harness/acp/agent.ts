@@ -59,19 +59,25 @@ export type AcpGatewayAuth = {
   baseUrl: string;
   providerName: string;
   apiKeyEnv: string;
+  headers?: Record<string, string>;
 };
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 
-export function codexAcpAuth(env: Record<string, string>): AcpGatewayAuth {
-  const provider =
-    codexProviderConfig(env)?.model_providers[CODEX_GATEWAY_PROVIDER_ID];
+export function codexAcpAuth(
+  env: Record<string, string>,
+  aiCallId?: string
+): AcpGatewayAuth {
+  const provider = codexProviderConfig(env, aiCallId)?.model_providers[
+    CODEX_GATEWAY_PROVIDER_ID
+  ];
   if (provider) {
     return {
       type: "gateway",
       baseUrl: provider.base_url,
       providerName: provider.name,
       apiKeyEnv: provider.env_key,
+      ...(provider.http_headers ? { headers: provider.http_headers } : {}),
     };
   }
   // A direct OpenAI key, or the user's own OpenAI-compatible endpoint.

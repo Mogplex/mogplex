@@ -43,6 +43,7 @@ export function buildAcpRunConfig(input: {
   mcpConfigPath?: string;
   /** The run's environment, for the model endpoint the agent signs in to. */
   env: Record<string, string>;
+  gatewayCallId?: string;
 }): AcpRunConfig {
   return {
     agent: { command: input.agent.binary, args: [] },
@@ -55,7 +56,10 @@ export function buildAcpRunConfig(input: {
       ? path.posix.resolve(input.cwd, input.mcpConfigPath)
       : null,
     permissions: acpPermissionPolicy(input.mode),
-    auth: input.harnessId === "codex" ? codexAcpAuth(input.env) : null,
+    auth:
+      input.harnessId === "codex"
+        ? codexAcpAuth(input.env, input.gatewayCallId)
+        : null,
   };
 }
 
