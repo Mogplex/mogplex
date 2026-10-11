@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { persistControlTerminalOutcome } from "@/lib/control/terminal-outcome";
 import {
   ACTIVE_CONTROL_CHAT_STALE_THRESHOLD_MS,
   ACTIVE_CHAT_STALE_THRESHOLD_MS,
@@ -191,6 +192,22 @@ async function markIdleCallFailed(
   }
 
   if (!updated) return false; // Another reaper or finalizer already finished it.
+  if (row.metadata?.surface === "control" && row.conversation_id) {
+    await persistControlTerminalOutcome(
+      {
+        userId: row.user_id,
+        sessionId: row.conversation_id,
+        aiCallId: row.id,
+        cancelled: false,
+      },
+      client
+    ).catch((saveError) =>
+      console.error("[zombie-reaper] Control outcome save failed", {
+        id: row.id,
+        error: saveError,
+      })
+    );
+  }
 
   // Best-effort terminal event so the observability pane shows the
   // reap explicitly rather than a silent status flip.

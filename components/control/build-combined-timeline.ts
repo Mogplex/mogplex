@@ -13,7 +13,10 @@ import {
   toolActivityLabel,
   toolActivityDetail,
 } from "@/lib/control/turn-progress";
-import { controlToolOutcome } from "@/lib/control/tool-outcome";
+import {
+  controlToolOutcome,
+  controlToolFailureDetail,
+} from "@/lib/control/tool-outcome";
 import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from "ai";
 
 /**
@@ -226,8 +229,6 @@ export function buildCombinedTimeline(
           });
         } else {
           const toolInput = "input" in part ? part.input : undefined;
-          const structuredError =
-            typeof output?.error === "string" ? output.error : null;
           if (controlToolOutcome(state, output) === "failed") {
             result.push({
               kind: "fail",
@@ -235,7 +236,7 @@ export function buildCombinedTimeline(
               time: "now",
               body: toolFailureBody(toolName, output),
               log: sanitizeAgentUserFacingError(
-                structuredError ?? "The tool returned an error."
+                controlToolFailureDetail(output)
               ),
             });
             continue;

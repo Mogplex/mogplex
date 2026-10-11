@@ -337,70 +337,13 @@ export function sanitizeAgentUserFacingError(
   return sanitizeAgentUserFacingText(text, options);
 }
 
-function isPassThroughPayload(
-  value: unknown
-): value is null | number | boolean | undefined {
-  const kind = typeof value;
-  return (
-    value === null ||
-    kind === "number" ||
-    kind === "boolean" ||
-    kind === "undefined"
-  );
-}
-
 /**
- * Tool results and errors are working data, not prose: the persisted
- * transcript feeds them back to the model on the next turn, which then has to
- * act on paths it printed (`git rev-parse --show-toplevel`, `pwd`, file
- * listings). Rewriting them into "the repository workspace" left the model
- * unable to name its own working directory, so payloads keep filesystem paths
- * while secrets, internal URLs, identifiers, and provider names are still
- * sanitized.
+ * The SDK records transformed tool chunks as next-step model context. Only
+ * redact credentials here: provider names, paths, URLs and identifiers can
+ * all be literal source data. Failure presentation belongs to the UI boundary.
  */
-const TOOL_PAYLOAD_DISCLOSURE: InfrastructureDiagnosticScope = [
-  "filesystem-path",
-];
-
-function sanitizeToolPayloadText(
-  text: string,
-  options: Pick<AgentUserFacingOutputOptions, "repoName">
-) {
-  return sanitizeAgentUserFacingText(text, {
-    repoName: options.repoName,
-    diagnosticScope: TOOL_PAYLOAD_DISCLOSURE,
-  });
-}
-
-function sanitizeAgentUserFacingPayload(
-  value: unknown,
-  options: Pick<AgentUserFacingOutputOptions, "repoName">,
-  depth = 0
-): unknown {
-  if (depth >= 20) return "[redacted]";
-  if (typeof value === "string") {
-    return sanitizeToolPayloadText(value, options);
-  }
-  if (isPassThroughPayload(value)) return value;
-  if (value instanceof Error) {
-    return sanitizeToolPayloadText(value.message, options);
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) =>
-      sanitizeAgentUserFacingPayload(entry, options, depth + 1)
-    );
-  }
-  if (typeof value === "object") {
-    const redacted = redactSecretsInValue(value);
-    if (!redacted || typeof redacted !== "object") return redacted;
-    return Object.fromEntries(
-      Object.entries(redacted).map(([key, entry]) => [
-        key,
-        sanitizeAgentUserFacingPayload(entry, options, depth + 1),
-      ])
-    );
-  }
-  return sanitizeToolPayloadText(String(value), options);
+function redactToolPayload(value: unknown): unknown {
+  return redactSecretsInValue(value instanceof Error ? value.message : value);
 }
 
 /**
@@ -443,14 +386,14 @@ export function createAgentUserFacingOutputTransform<TOOLS extends ToolSet>(
           if (chunk.type === "tool-error") {
             controller.enqueue({
               ...chunk,
-              error: sanitizeAgentUserFacingPayload(chunk.error, options),
+              error: redactToolPayload(chunk.error),
             } as TextStreamPart<TOOLS>);
             return;
           }
           if (chunk.type === "tool-result") {
             controller.enqueue({
               ...chunk,
-              output: sanitizeAgentUserFacingPayload(chunk.output, options),
+              output: redactToolPayload(chunk.output),
             } as TextStreamPart<TOOLS>);
             return;
           }

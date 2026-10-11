@@ -1,16 +1,14 @@
 import { toolCompletionEvent } from "@/lib/agents/tool-execution-event";
-import {
-  streamText,
-  convertToModelMessages,
-  createUIMessageStreamResponse,
-} from "ai";
+import { durableControlTools } from "@/lib/control/execution-tools";
+import { createWorkspaceCheckpoint } from "@/lib/control/workspace-checkpoint";
+import { createControlStepCheckpoint } from "@/lib/control/step-checkpoint";
+import { streamText, convertToModelMessages } from "ai";
 import { controlMessageMetadata } from "@/lib/control/context-usage";
 import { controlMessagesForModel } from "@/lib/control/request-history";
 import { prepareControlWorkerHandoff } from "./worker-handoff";
 import { prepareControlExecutionHistory } from "./execution-history";
 import type { ControlBackgroundExecution } from "@/lib/control/background-context";
-import { saveControlTranscript } from "@/lib/control/transcript-store";
-import { persistedControlStream } from "@/lib/control/persisted-stream";
+import { controlResponseStream } from "./response-stream";
 import { createControlAiCall } from "./start-call";
 import { compactChatMessagesForModel } from "@/lib/agents/compaction/chat-adapter";
 import {
@@ -73,6 +71,7 @@ export async function executeControlChatRequest(input: {
   infrastructureDiagnosticScope: InfrastructureDiagnosticScope;
   latestUserText: string;
   background?: ControlBackgroundExecution;
+  preparedCall?: ActiveControlCall;
 }) {
   let scope = getControlChatRunScope(input.body);
   const teamId = readActiveTeamIdHeader(input.req);
@@ -80,7 +79,7 @@ export async function executeControlChatRequest(input: {
 
   try {
     await input.background?.assertCurrent();
-    aiCall = await createControlAiCall(input, teamId);
+    aiCall = input.preparedCall ?? (await createControlAiCall(input, teamId));
     const activeCall = aiCall;
     await input.background?.onAiCallStarted(activeCall.id);
 
@@ -153,7 +152,7 @@ export async function executeControlChatRequest(input: {
       completeApproval,
     } = await prepareControlExecutionHistory({
       userId: input.userId,
-      sessionId: scope.missionId,
+      sessionId: input.body.conversationId ?? scope.missionId,
       aiCallId: activeCall.id,
       messages: input.body.messages,
     });
@@ -197,13 +196,20 @@ export async function executeControlChatRequest(input: {
     });
 
     // Registry tools with policy wrapping, plus the operator's connections
-    const { tools, systemPrompt } = buildControlTurnTools({
+    const built = buildControlTurnTools({
       toolContext,
       promptContext,
       connectionTools,
       enableTools: input.body.enableTools !== false,
       assertCurrent: input.background?.assertCurrent,
     });
+    const { systemPrompt } = built;
+    const tools = durableControlTools(
+      built.tools,
+      { userId: input.userId, aiCallId: activeCall.id },
+      createWorkspaceCheckpoint(activeCall, sandboxBinding, teamId)
+    );
+    const checkpointStep = createControlStepCheckpoint(activeCall);
 
     // Resolve model
     const gatewayContext = buildControlGatewayContext(input.userId, input.body);
@@ -316,6 +322,8 @@ export async function executeControlChatRequest(input: {
       scope
     );
 
+    const sessionId = input.body.conversationId ?? scope.missionId;
+    let finishAfterTranscript: (() => Promise<void>) | undefined;
     const result = streamText({
       model,
       providerOptions,
@@ -357,8 +365,9 @@ export async function executeControlChatRequest(input: {
         );
         finishToolTelemetry(event);
       },
-      onStepEnd(step) {
+      async onStepEnd(step) {
         latestSteps.push(step);
+        await checkpointStep(step);
         turnTasks.onStep(latestSteps);
       },
       async onAbort({ steps }) {
@@ -373,42 +382,59 @@ export async function executeControlChatRequest(input: {
       },
       async onEnd({ totalUsage, steps, finishReason, providerMetadata }) {
         replaceLatestSteps(steps);
-        // AI SDK provider/model errors arrive as UI error parts and finish with
-        // reason `error`; finalizeFinishedControlRun maps that reason to failed.
-        let finalizedNow = false;
-        try {
-          finalizedNow = await finalization.run(async () => {
-            await sandboxTaskLifecycle.cleanup();
-            await connectionTools.cleanup();
-            stampSandboxMetadata();
-            await finalizeFinishedControlRun({
-              activeCall,
-              userId: input.userId,
-              scope,
-              limitClaimId: input.limitClaimId,
-              callStartedAt: input.callStartedAt,
-              finishReason,
-              terminalFailure,
-              totalUsage,
-              providerMetadata,
-              steps: latestSteps,
+        finishAfterTranscript = async () => {
+          // AI SDK provider/model errors arrive as UI error parts and finish with
+          // reason `error`; finalizeFinishedControlRun maps that reason to failed.
+          let finalizedNow: boolean;
+          try {
+            finalizedNow = await finalization.run(async () => {
+              await sandboxTaskLifecycle.cleanup();
+              await connectionTools.cleanup();
+              stampSandboxMetadata();
+              await finalizeFinishedControlRun({
+                activeCall,
+                userId: input.userId,
+                scope,
+                limitClaimId: input.limitClaimId,
+                callStartedAt: input.callStartedAt,
+                finishReason,
+                terminalFailure,
+                totalUsage,
+                providerMetadata,
+                steps: latestSteps,
+              });
             });
-          });
-        } catch (error) {
-          // Do not turn a fully delivered response into a stream failure when
-          // terminal persistence is unavailable after its bounded retries.
-          console.error("[control/chat] finish finalization failed", { error });
-        }
-        if (!finalizedNow) return;
-        // Memory promotion and decision checks never touch the finished run.
-        if (finishReason === "error") return;
-        await turnTasks.onEnd({ model, steps: latestSteps });
+          } catch (error) {
+            console.error("[control/chat] finish finalization failed", {
+              error,
+            });
+            throw error;
+          }
+          if (!finalizedNow) return;
+          // Memory promotion and decision checks never touch the finished run.
+          if (finishReason === "error") return;
+          await turnTasks.onEnd({ model, steps: latestSteps });
+        };
+        if (!sessionId) await finishAfterTranscript();
       },
     });
 
     const uiStream = result.toUIMessageStream({
-      messageMetadata: ({ part }) =>
-        controlMessageMetadata(activeCall.id, input.resolvedModel, part),
+      messageMetadata: ({ part }) => {
+        const metadata = controlMessageMetadata(
+          activeCall.id,
+          input.resolvedModel,
+          part
+        );
+        return metadata
+          ? {
+              ...metadata,
+              workspace_changes: activeCall.metadata.workspace_changes,
+              workspace_snapshot_error:
+                activeCall.metadata.workspace_snapshot_error,
+            }
+          : undefined;
+      },
       onError: (error) =>
         sanitizeAgentUserFacingError(
           error instanceof Error ? error.message : "The request failed.",
@@ -421,54 +447,27 @@ export async function executeControlChatRequest(input: {
       footer: sandboxTaskLifecycle.footer,
       textPartId: `sandbox-lifecycle-${activeCall.id}`,
     });
-    const sessionId = scope.missionId;
-    const durable = sessionId
-      ? await persistedControlStream({
-          stream: visibleStream,
-          messages: uiMessages,
-          expectedMessages,
-          messageId: `control-${activeCall.id}`,
-          continuationMessageId,
-          onComplete: async (event) => {
-            await completeApproval?.();
-            await handoff?.complete(event);
-            await input.background?.onTranscriptComplete(event);
-          },
-          save: (messages, previous) =>
-            saveControlTranscript({
-              userId: input.userId,
-              sessionId,
-              messages,
-              expectedMessages: previous,
-            }),
-          onError: (error) => {
-            const message = sanitizeAgentUserFacingError(
-              error instanceof Error
-                ? error.message
-                : "Could not save the Control conversation."
-            );
-            console.error("[control/chat] transcript checkpoint failed", {
-              aiCallId: activeCall.id,
-              message,
-            });
-            return message;
-          },
-        })
-      : { stream: visibleStream, completion: null };
-    const completion =
-      durable.completion
-        ?.finally(async () => {
-          // AI SDK does not await onAbort; join terminal persistence before the
-          // background execution (or Next after lifetime) is allowed to end.
-          if (input.req.signal.aborted) await finalizeCancelled();
-        })
-        .catch(async (error) => {
-          await handoff?.fail();
-          throw error;
-        }) ?? null;
-    void completion?.catch(() => undefined);
-    const response = createUIMessageStreamResponse({
-      stream: durable.stream,
+    const { response, completion } = await controlResponseStream({
+      stream: visibleStream,
+      userId: input.userId,
+      sessionId,
+      aiCallId: activeCall.id,
+      messages: uiMessages,
+      expectedMessages,
+      continuationMessageId,
+      onComplete: async (event) => {
+        await finishAfterTranscript?.();
+        await completeApproval?.();
+        await handoff?.complete(event);
+        await input.background?.onTranscriptComplete(event);
+      },
+      onClosed: async () => {
+        if (input.req.signal.aborted) await finalizeCancelled();
+      },
+      onFailure: async () => {
+        await finalizeStreamFailure();
+        await handoff?.fail();
+      },
     });
 
     return {

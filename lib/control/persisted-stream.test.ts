@@ -15,6 +15,43 @@ const record = (messages: UIMessage[]): ControlSessionRecord => ({
   messages,
 });
 
+it("saves text while the provider is still streaming, before a finish or disconnect", async () => {
+  let controller!: ReadableStreamDefaultController<UIMessageChunk>;
+  let notify!: () => void;
+  let savedText = "";
+  const saved = new Promise<void>((resolve) => {
+    notify = resolve;
+  });
+  const durable = await persistedControlStream({
+    stream: new ReadableStream({
+      start(c) {
+        controller = c;
+      },
+    }),
+    messages: [],
+    expectedMessages: [],
+    messageId: "partial-text",
+    save: async (messages) => {
+      savedText = JSON.stringify(messages);
+      if (savedText.includes("Work in progress")) notify();
+      return record(messages);
+    },
+    onError: () => "Save failed",
+  });
+  controller.enqueue({ type: "start" });
+  controller.enqueue({ type: "text-start", id: "text" });
+  controller.enqueue({
+    type: "text-delta",
+    id: "text",
+    delta: "Work in progress",
+  });
+  await saved;
+  expect(savedText).toContain("Work in progress");
+  controller.enqueue({ type: "abort" });
+  controller.close();
+  await durable.completion;
+});
+
 it.each(["stop", "error", "abort"] as const)(
   "reports %s only after the final durable checkpoint",
   async (ending) => {
@@ -118,7 +155,8 @@ it("checkpoints command evidence while running and saves completion after the br
     parts: [
       expect.anything(),
       expect.objectContaining({
-        output: { exitCode: 1, stdout: "One test failed" },
+        input: { command: "pnpm test" },
+        state: "input-available",
       }),
     ],
   });
@@ -134,11 +172,13 @@ it("checkpoints command evidence while running and saves completion after the br
   controller.close();
   await durable.completion;
   await leaving;
-  expect(writes).toHaveLength(2);
-  expect(writes[1].previous).toEqual(writes[0].messages);
-  expect(writes[1].messages[0].id).toBe("this-response");
-  expect(JSON.stringify(writes[1].messages)).toContain("Here is the failure.");
-  expect(JSON.stringify(writes[1].messages)).not.toContain("Other tab reply");
+  for (let index = 1; index < writes.length; index++)
+    expect(writes[index].previous).toEqual(writes[index - 1].messages);
+  const final = writes.at(-1)!;
+  expect(final.messages[0].id).toBe("this-response");
+  expect(JSON.stringify(final.messages)).toContain("One test failed");
+  expect(JSON.stringify(final.messages)).toContain("Here is the failure.");
+  expect(JSON.stringify(final.messages)).not.toContain("Other tab reply");
 });
 
 it("retains partial output on abort and never claims a failed save completed", async () => {

@@ -1,7 +1,8 @@
 import { getToolOrDynamicToolName, isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
 import { redactSecretsInText } from "@/lib/ai-telemetry";
-import { controlToolOutcome } from "./tool-outcome";
+import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors";
+import { controlToolOutcome, controlToolFailureDetail } from "./tool-outcome";
 
 /**
  * CLI-style activity entries derived from the control chat's UI messages.
@@ -145,7 +146,9 @@ export type TerminalActivityEntry = {
 
 function terminalText(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const safe = redactSecretsInText(value).trim();
+  const safe = redactSecretsInText(
+    sanitizeObservabilityPayload(value, "TOOL", "control-terminal")
+  ).trim();
   return safe || null;
 }
 
@@ -214,6 +217,15 @@ function terminalEntryFromPart(
         : undefined,
       output.error,
       "errorText" in part ? part.errorText : undefined,
+      commandTool &&
+      state === "failed" &&
+      ("exitCode" in output || "exit_code" in output || "failures" in output)
+        ? controlToolFailureDetail({
+            ...output,
+            error: undefined,
+            stderr: undefined,
+          })
+        : undefined,
     ],
     fullOutput
   );

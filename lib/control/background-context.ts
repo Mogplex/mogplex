@@ -7,7 +7,10 @@ export type ControlBackgroundExecution = {
   onAiCallStarted: (aiCallId: string) => Promise<void>;
   systemContext: string;
   sandboxExecution: SandboxCommandExecution;
-  expectedContext: import("./continuation-store").ControlContinuationContext;
+  expectedContext: Pick<
+    import("@/app/api/control/chat/_lib/types").ControlChatRequestBody,
+    "repoId" | "missionId" | "model"
+  >;
   onTranscriptComplete: (
     event: import("./persisted-stream").ControlStreamCompletion
   ) => Promise<void>;

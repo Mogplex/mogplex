@@ -4,6 +4,10 @@ import type { Tool } from "ai";
 // simultaneous calls from one model step instead of making them race for it.
 const SANDBOX_COMMAND_TOOLS = new Set([
   "run_command",
+  "write_file",
+  "edit_file",
+  "sandbox_start",
+  "sandbox_stop",
   "diff_worktree",
   "rebase_worktree",
   "spawn_worktree",

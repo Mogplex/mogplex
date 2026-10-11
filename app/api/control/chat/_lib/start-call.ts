@@ -12,7 +12,8 @@ export async function createControlAiCall(
     callStartedAt: string;
     background?: ControlBackgroundExecution;
   },
-  teamId: string | null
+  teamId: string | null,
+  runtime?: "request" | "background"
 ) {
   const scope = getControlChatRunScope(input.body);
   return createAiCall({
@@ -27,7 +28,7 @@ export async function createControlAiCall(
     metadata: buildControlChatRunMetadata(
       input.body,
       teamId,
-      input.background ? "background" : "request"
+      runtime ?? (input.background ? "background" : "request")
     ),
   });
 }

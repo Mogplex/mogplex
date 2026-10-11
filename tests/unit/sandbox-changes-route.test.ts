@@ -73,6 +73,30 @@ function loadedContext(sandbox: unknown, record: Record<string, unknown> = {}) {
 const params = { params: Promise.resolve({ id: "sandbox-record-1" }) };
 const noop = async () => undefined;
 
+test("workspace snapshots include file patches and fail visibly if a patch cannot be read", async () => {
+  const { createSandboxChangesGetHandler } = await loadRouteModule();
+  const patch = "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-a\n+b\n";
+  let failed = false;
+  const { sandbox } = fakeSandbox((script) =>
+    script.includes("MOGPLEX_STATUS_BEGIN")
+      ? { exitCode: 0, stdout: STATUS_STDOUT }
+      : { exitCode: failed ? 1 : 0, stdout: patch }
+  );
+  const handler = createSandboxChangesGetHandler({
+    loadOwnedSandboxRouteContext: loadedContext(sandbox),
+    renewSandboxActivityLease: noop as never,
+    touchSandboxLastActive: noop as never,
+  });
+  const request = new Request(
+    "https://app.test/api/sandbox/sandbox-record-1/changes?snapshot=1"
+  );
+  const response = await handler(request, params);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).files[0].patch, patch);
+  failed = true;
+  assert.equal((await handler(request, params)).status, 500);
+});
+
 test("GET /api/sandbox/[id]/changes returns parsed working-tree changes from the sandbox root", async () => {
   const { createSandboxChangesGetHandler } = await loadRouteModule();
   const { sandbox, commands } = fakeSandbox(() => ({

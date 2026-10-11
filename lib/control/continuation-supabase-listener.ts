@@ -8,7 +8,12 @@ import type {
 
 /** Legacy Supabase deployments need no direct PostgreSQL URL for cancellation. */
 export async function createControlSupabaseListener(
-  input: { userId: string; sessionId: string; continuationId: string },
+  input: {
+    userId: string;
+    sessionId: string;
+    continuationId: string;
+    callId?: string;
+  },
   client = supabaseAdmin
 ): Promise<TableEventListener> {
   let notify: ((event: TableEventPayload) => void) | undefined;
@@ -38,7 +43,10 @@ export async function createControlSupabaseListener(
     };
   for (const [table, id] of [
     ["control_sessions", input.sessionId],
-    ["control_continuations", input.continuationId],
+    [
+      input.callId ? "ai_calls" : "control_continuations",
+      input.callId ?? input.continuationId,
+    ],
   ]) {
     channel.on(
       "postgres_changes",

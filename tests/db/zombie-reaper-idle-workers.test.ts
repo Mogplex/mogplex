@@ -57,6 +57,10 @@ function fakeTrigger(
     reconcileContinuation: async (payload, supervisorRunId) => {
       reconciled.push(`${payload.continuationId}@${supervisorRunId}`);
     },
+    reconcileTurn: async (payload, supervisorRunId) => {
+      reconciled.push(`${payload.aiCallId}@${supervisorRunId}`);
+      return { status: "failed" };
+    },
   };
   return { deps, cancelled, killed, finalized, reconciled };
 }
@@ -64,6 +68,42 @@ function fakeTrigger(
 const error = "Stopped after 360 minutes with no progress.";
 
 describe("stopIdleWorker", () => {
+  it("stops a direct Control worker and reconciles an exited supervisor without replay", async () => {
+    await pg.exec(
+      "create table control_turns(ai_call_id text,user_id text,runtime_run_id text); insert into control_turns values('direct-call','owner','direct-parent')"
+    );
+    const runtime = {
+      id: "direct-parent",
+      status: "WAITING",
+      taskIdentifier: "execute-control-turn",
+      relatedRuns: {
+        children: [
+          {
+            id: "direct-child",
+            status: "EXECUTING",
+            taskIdentifier: "execute-control-turn-worker",
+          },
+        ],
+      },
+    };
+    const trigger = fakeTrigger({ "direct-parent": runtime });
+    const input = {
+      client,
+      call: { id: "direct-call", user_id: "owner" },
+      error,
+    };
+    expect(await stopIdleWorker(input, trigger.deps)).toBe(true);
+    expect(trigger.cancelled).toEqual(["direct-child"]);
+    runtime.status = "CRASHED";
+    expect(await stopIdleWorker(input, trigger.deps)).toBe(true);
+    expect(trigger.reconciled).toEqual(["direct-call@direct-parent"]);
+    expect(
+      await stopIdleWorker(
+        { ...input, call: { id: "direct-call", user_id: "other" } },
+        trigger.deps
+      )
+    ).toBe(false);
+  });
   it("should cancel only the live worker of an external run and kill its command", async () => {
     await pg.exec(
       "insert into external_agent_runs values ('run-1','call-1','owner','trigger','run_sup','sbx-1','streaming')"

@@ -2,6 +2,44 @@ import { expect, it } from "vitest";
 import { tool, jsonSchema } from "ai";
 import { serializeSandboxCommandTools } from "./serialized-commands";
 
+it("queues file mutations and shutdown behind the current sandbox command", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const starts: string[] = [];
+  const names = [
+    "run_command",
+    "write_file",
+    "edit_file",
+    "sandbox_stop",
+    "sandbox_start",
+  ];
+  const commands = serializeSandboxCommandTools(
+    Object.fromEntries(
+      names.map((name) => [
+        name,
+        tool({
+          inputSchema: jsonSchema<{}>({ type: "object" }),
+          execute: async () => {
+            starts.push(name);
+            if (name === "run_command") await gate;
+            return name;
+          },
+        }),
+      ])
+    )
+  );
+  const pending = names.map((name) =>
+    commands[name].execute!({}, { context: {}, toolCallId: name, messages: [] })
+  );
+  await Promise.resolve();
+  expect(starts).toEqual(["run_command"]);
+  release();
+  expect(await Promise.all(pending)).toEqual(names);
+  expect(starts).toEqual(names);
+});
+
 it("serializes shared-sandbox reads without delaying unrelated worker dispatch", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {

@@ -1,4 +1,11 @@
-import type { TextStreamPart, ToolSet } from "ai";
+import {
+  streamText,
+  tool,
+  jsonSchema,
+  type TextStreamPart,
+  type ToolSet,
+} from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
 import {
   createAgentUserFacingOutputTransform,
@@ -9,6 +16,70 @@ import {
 } from "./user-facing-output";
 
 describe("agent user-facing output", () => {
+  it("feeds literal tool paths into the next real SDK model step", async () => {
+    const source =
+      "components/marketing/run-gallery.tsx imports @/lib/supabase/client";
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        const first = model.doStreamCalls.length === 1;
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: "stream-start", warnings: [] });
+              if (first)
+                controller.enqueue({
+                  type: "tool-call",
+                  toolCallId: "read",
+                  toolName: "read_file",
+                  input: "{}",
+                });
+              else {
+                controller.enqueue({ type: "text-start", id: "answer" });
+                controller.enqueue({
+                  type: "text-delta",
+                  id: "answer",
+                  delta: "File inspected.",
+                });
+                controller.enqueue({ type: "text-end", id: "answer" });
+              }
+              controller.enqueue({
+                type: "finish",
+                finishReason: {
+                  unified: first ? "tool-calls" : "stop",
+                  raw: "stop",
+                },
+                usage: {
+                  inputTokens: {
+                    total: 1,
+                    noCache: 1,
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                  },
+                  outputTokens: { total: 1, text: 1, reasoning: 0 },
+                },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const result = streamText({
+      model,
+      prompt: "Read this source file.",
+      stopWhen: () => false,
+      tools: {
+        read_file: tool({
+          inputSchema: jsonSchema<{}>({ type: "object" }),
+          execute: async () => ({ content: source }),
+        }),
+      },
+      experimental_transform: createAgentUserFacingOutputTransform(),
+    });
+    await result.consumeStream();
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain(source);
+  });
   it("replaces internal infrastructure details with product language", () => {
     const output = sanitizeAgentUserFacingText(
       "Vercel Sandbox sbx_01HXYZ987654 is running from /vercel/sandbox/.worktrees/wt-7/src/app.ts. Trigger.dev deployment run_01HXYZ987654 failed, so retry the command.",
@@ -185,7 +256,7 @@ describe("agent user-facing output", () => {
     expect(text).toMatch(/src\/app\.ts/);
   });
 
-  it("sanitizes tool failures and results but keeps the paths the model must act on", async () => {
+  it("redacts secrets without rewriting the tool data the model must act on", async () => {
     const transform = createAgentUserFacingOutputTransform<ToolSet>();
     const source = new ReadableStream<TextStreamPart<ToolSet>>({
       start(controller) {
@@ -206,7 +277,8 @@ describe("agent user-facing output", () => {
           output: {
             status: "error",
             error: "https://192.168.20.4:8080 failed from /app/main.py",
-            stdout: "/vercel/sandbox\n M src/app.ts\n2>/dev/null",
+            stdout:
+              '/vercel/sandbox\n M src/app.ts\n2>/dev/null\nimport { client } from "@/lib/supabase/client";\ncomponents/marketing/run-gallery.tsx',
           },
           dynamic: true,
         });
@@ -225,10 +297,11 @@ describe("agent user-facing output", () => {
     }
 
     const serialized = JSON.stringify(chunks);
-    expect(serialized).not.toMatch(
-      /Vercel Sandbox|tool-secret|192\.168\.20\.4/
-    );
-    expect(serialized).toMatch(/development environment|internal service/);
+    expect(serialized).not.toContain("tool-secret");
+    expect(serialized).toContain("Vercel Sandbox");
+    expect(serialized).toContain([192, 168, 20, 4].join("."));
+    expect(serialized).toContain("@/lib/supabase/client");
+    expect(serialized).toContain("components/marketing/run-gallery.tsx");
     // Paths stay verbatim: the model reads these results back next turn and
     // must be able to `cd` to or `cat` what a command printed.
     expect(serialized).toMatch(/\/opt\/runtime\/app\.ts/);

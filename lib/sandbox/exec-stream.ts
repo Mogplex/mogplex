@@ -1,17 +1,18 @@
 import type { Sandbox } from "@vercel/sandbox";
 import { redactSecretsInText } from "@/lib/ai-telemetry";
 import { streamCommandLogsWithResume } from "@/lib/sandbox/command-stream";
+import { observeShellCommand } from "./observed-shell";
 
 export type ExecStreamEvent =
   | { type: "run"; cmdId: string }
   | { type: "log"; stream: "stdout" | "stderr"; data: string }
-  | { type: "done"; exitCode: number | null; cwd: string }
+  | { type: "done"; exitCode: number | null; cwd: string; failures?: number[] }
   | { type: "cancelled" }
   | { type: "error"; data: string };
 
 type RunSpec =
   | { kind: "raw"; cmd: string; args: string[] }
-  | { kind: "shell"; command: string };
+  | { kind: "shell"; command: string; captureFailures?: boolean };
 
 export type StartExecStreamOptions = {
   sandbox: Sandbox;
@@ -37,6 +38,10 @@ export async function startExecStream(
   opts: StartExecStreamOptions
 ): Promise<Response> {
   const { sandbox, run, cwd, env, reportedCwd, onComplete, onActivity } = opts;
+  const observed =
+    run.kind === "shell" && run.captureFailures
+      ? observeShellCommand(run.command)
+      : null;
 
   const detachedCmd =
     run.kind === "raw"
@@ -48,8 +53,8 @@ export async function startExecStream(
           detached: true,
         })
       : await sandbox.runCommand({
-          cmd: "sh",
-          args: ["-lc", run.command],
+          cmd: observed?.cmd ?? "sh",
+          args: observed?.args ?? ["-lc", run.command],
           cwd,
           env,
           detached: true,
@@ -85,17 +90,32 @@ export async function startExecStream(
             send({
               type: "log",
               stream: log.stream,
-              data: redactSecretsInText(log.data),
+              data: redactSecretsInText(
+                log.stream === "stderr" && observed
+                  ? observed.stderr(log.data)
+                  : log.data
+              ),
             });
           },
         });
 
+        if (observed)
+          send({
+            type: "log",
+            stream: "stderr",
+            data: redactSecretsInText(observed.stderr("", true)),
+          });
         const exit = { exitCode };
 
         if (killed) {
           send({ type: "cancelled" });
         } else {
-          send({ type: "done", exitCode: exit.exitCode, cwd: reportedCwd });
+          send({
+            type: "done",
+            exitCode: exit.exitCode,
+            cwd: reportedCwd,
+            ...(observed ? { failures: observed.failures } : {}),
+          });
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "stream error";

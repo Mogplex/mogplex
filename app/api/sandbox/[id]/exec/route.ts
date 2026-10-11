@@ -37,6 +37,7 @@ import {
 } from "@/lib/sandbox/route-context";
 import { detectInteractiveInvocation } from "@/lib/sandbox/interactive-guard";
 import { startExecStream } from "@/lib/sandbox/exec-stream";
+import { executeSandboxCommand } from "@/lib/sandbox/exec-result";
 import { syncTerminalRuntimeAuth } from "@/lib/sandbox/dev-tools";
 import {
   resolveSandboxGitAuthor,
@@ -149,7 +150,12 @@ export function createSandboxExecPostHandler(
 
     const jsonBody = await parseJsonBody(request);
     if (!jsonBody.ok) return jsonBody.response;
-    const { command, args, cwd } = jsonBody.body;
+    const { command, args, cwd, captureFailures } = jsonBody.body;
+    if (captureFailures !== undefined && typeof captureFailures !== "boolean")
+      return NextResponse.json(
+        { error: "Invalid captureFailures" },
+        { status: 400 }
+      );
     if (!command)
       return NextResponse.json({ error: "command required" }, { status: 400 });
 
@@ -399,7 +405,7 @@ export function createSandboxExecPostHandler(
           sandbox,
           run: args
             ? { kind: "raw", cmd: trimmed, args }
-            : { kind: "shell", command: trimmed },
+            : { kind: "shell", command: trimmed, captureFailures },
           cwd: commandCwd,
           env: envVars,
           reportedCwd: commandCwd,
@@ -432,24 +438,18 @@ export function createSandboxExecPostHandler(
         return streamResponse;
       }
 
-      const result = args
-        ? await sandbox.runCommand({
-            cmd: trimmed,
-            args,
-            cwd: commandCwd,
-            env: envVars,
-          })
-        : await sandbox.runCommand({
-            cmd: "sh",
-            args: ["-lc", trimmed],
-            cwd: commandCwd,
-            env: envVars,
-          });
-
-      const [stdout, stderr] = await Promise.all([
-        result.stdout(),
-        result.stderr(),
-      ]);
+      const result = await executeSandboxCommand(sandbox, {
+        command: trimmed,
+        args,
+        cwd: commandCwd,
+        env: envVars,
+        captureFailures,
+        signal: request.signal,
+        onStarted: deps.onCommandStarted
+          ? (commandId) => deps.onCommandStarted!({ sandboxId: id, commandId })
+          : undefined,
+        onFinished: deps.onCommandFinished,
+      });
 
       try {
         await deps.touchSandboxLastActive(id);
@@ -460,12 +460,7 @@ export function createSandboxExecPostHandler(
         });
       }
 
-      return immediateExecJson({
-        exitCode: result.exitCode,
-        stdout,
-        stderr,
-        cwd: commandCwd,
-      });
+      return immediateExecJson(result);
     } catch (err) {
       const billingError = presentSandboxBillingAdmissionError(err);
       const baseMessage =

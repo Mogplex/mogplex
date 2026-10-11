@@ -5,15 +5,24 @@ import { Chat } from "@ai-sdk/react";
 import { DefaultChatTransport, validateUIMessages, type UIMessage } from "ai";
 import { createControlApprovalSubmission } from "@/lib/control/approval-submission";
 import { CONTROL_TURN_RUNNING_MESSAGE } from "@/lib/control/turn-conflict";
+import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
+import { isUuid } from "@/lib/uuid";
 
 function isRunning(chat: Chat<UIMessage>) {
   return chat.status === "submitted" || chat.status === "streaming";
 }
 
 type ChatSnapshot = Pick<Chat<UIMessage>, "error" | "messages" | "status">;
+const TURN_EVENTS = [
+  { table: "ai_calls", filter: "user_id=eq.$USER_ID" },
+  { table: "control_sessions", filter: "user_id=eq.$USER_ID" },
+];
 
 export class ControlChatRegistry {
   private readonly chats = new Map<string, Chat<UIMessage>>();
+  private readonly remoteTurns = new Map<string, string>();
+  private readonly remoteErrors = new Map<string, Error>();
+  private readonly refreshRevisions = new Map<string, number>();
   private readonly hydrated = new Set<string>();
   private readonly persisting = new Set<string>();
   private readonly persistFailed = new Set<string>();
@@ -43,15 +52,67 @@ export class ControlChatRegistry {
       messages: UIMessage[]
     ) => Promise<void>,
     private readonly onStatus: (sessionId: string, running: boolean) => void,
-    private readonly onSnapshot: (
+    private readonly publishSnapshot: (
       sessionId: string,
-      chat: Chat<UIMessage>
+      chat: ChatSnapshot
     ) => void,
     private readonly onPersistState: (
       sessionId: string,
       failed: boolean
     ) => void = () => {}
   ) {}
+
+  private onSnapshot(sessionId: string, chat: Chat<UIMessage>) {
+    const running = isRunning(chat) || this.remoteTurns.has(sessionId);
+    this.onStatus(sessionId, running);
+    this.publishSnapshot(sessionId, {
+      messages: chat.messages,
+      status: running ? "streaming" : chat.status,
+      error: chat.error ?? this.remoteErrors.get(sessionId),
+    });
+  }
+
+  async refreshRemote(sessionId: string) {
+    if (!isUuid(sessionId)) return;
+    const revision = (this.refreshRevisions.get(sessionId) ?? 0) + 1;
+    this.refreshRevisions.set(sessionId, revision);
+    const response = await fetch(
+      `/api/control/turns?sessionId=${encodeURIComponent(sessionId)}`,
+      { cache: "no-store" }
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    const messages = await validateUIMessages({ messages: data.messages });
+    const chat = this.chats.get(sessionId);
+    if (
+      !chat ||
+      this.refreshRevisions.get(sessionId) !== revision ||
+      isRunning(chat)
+    )
+      return;
+    const active =
+      data.call && ["pending", "streaming"].includes(data.call.status);
+    if (active) this.remoteTurns.set(sessionId, data.call.id);
+    else this.remoteTurns.delete(sessionId);
+    if (typeof data.call?.error === "string")
+      this.remoteErrors.set(sessionId, new Error(data.call.error));
+    else this.remoteErrors.delete(sessionId);
+    this.hydrate(sessionId, messages);
+    this.onSnapshot(sessionId, chat);
+  }
+
+  async refreshActive(activeId: string) {
+    await Promise.all(
+      [...new Set([activeId, ...this.remoteTurns.keys()])].map((id) =>
+        this.refreshRemote(id).catch((error) => {
+          console.error("[control] live turn refresh failed", {
+            sessionId: id,
+            error,
+          });
+        })
+      )
+    );
+  }
 
   async persistFinishedMessages(sessionId: string, messages: UIMessage[]) {
     const previous = this.persistQueues.get(sessionId);
@@ -96,7 +157,28 @@ export class ControlChatRegistry {
       id: `control-${sessionId}`,
       transport: this.transport,
       sendAutomaticallyWhen: approvals.shouldSubmit,
+      onData: (part) => {
+        if (
+          part.type !== "data-control-turn" ||
+          !part.data ||
+          typeof part.data !== "object"
+        )
+          return;
+        const data = part.data as { aiCallId?: string; sessionId?: string };
+        if (data.sessionId !== sessionId || !data.aiCallId) return;
+        this.remoteTurns.set(sessionId, data.aiCallId);
+        this.remoteErrors.delete(sessionId);
+        this.onSnapshot(sessionId, chat);
+      },
       onFinish: ({ messages }) => {
+        if (this.remoteTurns.has(sessionId)) {
+          // The server saved this request before enqueueing it. Observe the
+          // durable run; never write the short acknowledgement as its reply.
+          queueMicrotask(() => {
+            void this.refreshActive(sessionId);
+          });
+          return;
+        }
         // The SDK also finishes HTTP failures. A rejected turn must never
         // persist its stale transcript over the turn that won admission.
         if (chat.error?.message === CONTROL_TURN_RUNNING_MESSAGE) return;
@@ -110,10 +192,33 @@ export class ControlChatRegistry {
     });
     const sendMessage = chat.sendMessage;
     chat.sendMessage = async (...args) => {
+      if (this.remoteTurns.has(sessionId))
+        throw new Error(CONTROL_TURN_RUNNING_MESSAGE);
+      this.remoteErrors.delete(sessionId);
       this.assertNotArchiving(sessionId);
       if (this.chats.get(sessionId) !== chat)
         throw new Error("This chat is no longer available. Select it again.");
       return sendMessage(...args);
+    };
+    const stop = chat.stop;
+    const { clearError } = chat;
+    chat.clearError = () => {
+      this.remoteErrors.delete(sessionId);
+      clearError();
+      this.onSnapshot(sessionId, chat);
+    };
+    chat.stop = async () => {
+      const callId = this.remoteTurns.get(sessionId);
+      if (callId) {
+        const response = await fetch(
+          `/api/observability/calls/${encodeURIComponent(callId)}/cancel`,
+          { method: "POST" }
+        );
+        if (!response.ok && response.status !== 409)
+          throw new Error("Could not stop the agent. Try again.");
+      }
+      await stop();
+      if (callId) await this.refreshRemote(sessionId);
     };
     const addApproval = chat.addToolApprovalResponse;
     chat.addToolApprovalResponse = async (response) => {
@@ -131,7 +236,10 @@ export class ControlChatRegistry {
     const unsubscribers = [
       chat["~registerMessagesCallback"](() => this.onSnapshot(sessionId, chat)),
       chat["~registerStatusCallback"](() => {
-        this.onStatus(sessionId, isRunning(chat));
+        this.onStatus(
+          sessionId,
+          isRunning(chat) || this.remoteTurns.has(sessionId)
+        );
         this.onSnapshot(sessionId, chat);
       }),
       chat["~registerErrorCallback"](() => this.onSnapshot(sessionId, chat)),
@@ -196,6 +304,7 @@ export class ControlChatRegistry {
     const chat = this.chats.get(sessionId);
     return (
       !this.archiveReservations.has(sessionId) &&
+      !this.remoteTurns.has(sessionId) &&
       !(chat && isRunning(chat)) &&
       !this.persisting.has(sessionId) &&
       !this.persistFailed.has(sessionId)
@@ -222,6 +331,8 @@ export class ControlChatRegistry {
     this.unsubscribers.get(sessionId)?.();
     this.unsubscribers.delete(sessionId);
     this.chats.delete(sessionId);
+    this.remoteTurns.delete(sessionId);
+    this.remoteErrors.delete(sessionId);
     this.hydrated.delete(sessionId);
     this.persisting.delete(sessionId);
     this.persistFailed.delete(sessionId);
@@ -267,7 +378,7 @@ export function useControlChats({
     []
   );
   const updateSnapshot = useCallback(
-    (sessionId: string, chat: Chat<UIMessage>) => {
+    (sessionId: string, chat: ChatSnapshot) => {
       setSnapshots((current) => {
         const previous = current[sessionId];
         if (
@@ -314,6 +425,18 @@ export function useControlChats({
     () => registry.get(activeChatId),
     [activeChatId, registry]
   );
+  const refreshRemote = useCallback(
+    () => registry.refreshActive(activeChatId),
+    [registry, activeChatId]
+  );
+  useRealtimeRouteRefresh({
+    channelName: "control-durable-turns",
+    specs: TURN_EVENTS,
+    onInvalidate: refreshRemote,
+  });
+  useEffect(() => {
+    void refreshRemote();
+  }, [refreshRemote]);
   const activeSnapshot = snapshots[activeChatId];
   const messages = activeSnapshot?.messages ?? activeChat.messages;
   const status = activeSnapshot?.status ?? activeChat.status;

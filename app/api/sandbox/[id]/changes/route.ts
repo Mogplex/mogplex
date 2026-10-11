@@ -225,6 +225,20 @@ export function createSandboxChangesGetHandler(
       }
       const changes = await readStatus(ctx.sandbox, ctx.cwd, ctx.baseBranch);
       await deps.touchSandboxLastActive(id);
+      if (new URL(request.url).searchParams.get("snapshot") === "1") {
+        const files = [];
+        for (const file of changes.files) {
+          const result = await runShell(
+            ctx.sandbox,
+            buildFileDiffScript(file.path),
+            ctx.cwd
+          );
+          if (result.exitCode !== 0)
+            throw new Error("Could not save the workspace diff.");
+          files.push({ ...file, patch: result.stdout });
+        }
+        return NextResponse.json({ ...changes, files });
+      }
       return NextResponse.json(changes);
     } catch (error) {
       const message =

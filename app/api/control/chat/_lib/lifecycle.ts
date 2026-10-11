@@ -3,7 +3,8 @@ import {
   appendAiCallEvent,
   buildAiCallCompletionUpdate,
   safeAppendAiCallEvent,
-  updateAiCall,
+  updateAiCallIfActive,
+  finalizeAiCallAsCancelledIfActive,
 } from "@/lib/interactive-runs";
 import { captureUsage } from "@/lib/observability/usage";
 import { releaseLimitClaimIfNeeded } from "./context";
@@ -34,7 +35,8 @@ export async function markControlRunStreaming(
     },
   });
 
-  await updateAiCall(activeCall.id, { status: "streaming" });
+  if (!(await updateAiCallIfActive(activeCall.id, { status: "streaming" })))
+    throw new Error("The Control turn is no longer active.");
   await appendAiCallEvent({
     aiCallId: activeCall.id,
     userId,
@@ -142,15 +144,22 @@ export async function finalizeCancelledControlRun(input: {
   await releaseLimitClaimIfNeeded(input.userId, input.limitClaimId);
 
   const toolCalls = summarizeToolCalls(input.steps);
-  await updateAiCall(
+  const cancelled = await finalizeAiCallAsCancelledIfActive(
     input.activeCall.id,
     buildAiCallCompletionUpdate({
       startedAt: input.callStartedAt,
       status: "cancelled",
+      inputTokens: input.activeCall.input_tokens,
+      outputTokens: input.activeCall.output_tokens,
+      cacheReadInputTokens: input.activeCall.cache_read_input_tokens,
+      cacheCreationInputTokens: input.activeCall.cache_creation_input_tokens,
+      reasoningTokens: input.activeCall.reasoning_tokens,
+      gatewayGenerationId: input.activeCall.gateway_generation_id,
       toolCalls,
       metadata: input.activeCall.metadata,
     })
   );
+  if (!cancelled) return;
   await safeAppendAiCallEvent({
     aiCallId: input.activeCall.id,
     userId: input.userId,
@@ -198,22 +207,28 @@ export async function finalizeFinishedControlRun(input: {
     input.providerMetadata
   );
 
-  await updateAiCall(
+  const finished = await updateAiCallIfActive(
     input.activeCall.id,
     buildAiCallCompletionUpdate({
       startedAt: input.callStartedAt,
       status: completion.status,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cacheReadInputTokens: usage.cacheReadInputTokens,
-      cacheCreationInputTokens: usage.cacheCreationInputTokens,
-      reasoningTokens: usage.reasoningTokens,
-      gatewayGenerationId: usage.generationId,
+      inputTokens: usage.inputTokens ?? input.activeCall.input_tokens,
+      outputTokens: usage.outputTokens ?? input.activeCall.output_tokens,
+      cacheReadInputTokens:
+        usage.cacheReadInputTokens ?? input.activeCall.cache_read_input_tokens,
+      cacheCreationInputTokens:
+        usage.cacheCreationInputTokens ??
+        input.activeCall.cache_creation_input_tokens,
+      reasoningTokens:
+        usage.reasoningTokens ?? input.activeCall.reasoning_tokens,
+      gatewayGenerationId:
+        usage.generationId ?? input.activeCall.gateway_generation_id,
       error: completion.error,
       toolCalls,
       metadata: input.activeCall.metadata,
     })
   );
+  if (!finished) return;
   await safeAppendAiCallEvent({
     aiCallId: input.activeCall.id,
     userId: input.userId,
@@ -249,7 +264,7 @@ export async function persistControlStartupFailure(input: {
   if (!input.aiCall) return;
 
   try {
-    await updateAiCall(
+    await updateAiCallIfActive(
       input.aiCall.id,
       buildAiCallCompletionUpdate({
         startedAt: input.callStartedAt,

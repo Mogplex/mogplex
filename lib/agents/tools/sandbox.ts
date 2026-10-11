@@ -43,7 +43,12 @@ export type SandboxCommandExecution = {
 
 /** Shape an exec response, truncating streams so tool output stays bounded. */
 function formatSandboxExecResult(
-  data: { exitCode?: number; stdout?: string; stderr?: string },
+  data: {
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
+    failures?: number[];
+  },
   command: string,
   sandbox: SandboxResolution
 ) {
@@ -52,6 +57,9 @@ function formatSandboxExecResult(
     // the model as "we don't know" rather than as 0, which it would read as a
     // clean exit, so surface the gap instead of asserting it away.
     exitCode: data.exitCode ?? null,
+    ...(Array.isArray(data.failures)
+      ? { failures: data.failures.filter(Number.isInteger) }
+      : {}),
     stdout: redactSecretsInText(data.stdout?.slice(0, EXEC_STDOUT_LIMIT) ?? ""),
     stderr: redactSecretsInText(data.stderr?.slice(0, EXEC_STDERR_LIMIT) ?? ""),
     command,
@@ -129,6 +137,7 @@ async function retryExecAfterSandboxLoss(
   const retry = await ctx.execute(resolution.sandboxId, ctx.headers, {
     command: ctx.command,
     cwd: ctx.cwd,
+    captureFailures: true,
   });
 
   const retryData = await retry.json().catch(() => ({}));
@@ -242,6 +251,7 @@ export function createTerminalExec(
     const res = await execute(cachedSandbox.sandboxId, requestHeaders.headers, {
       command,
       cwd,
+      captureFailures: true,
     });
     if (res.ok) {
       const formatted = formatSandboxExecResult(

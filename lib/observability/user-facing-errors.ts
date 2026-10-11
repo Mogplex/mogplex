@@ -58,6 +58,14 @@ const SAFE_FAILURE_FIELDS = new Set([
   "branch",
   "harness",
   "review_dedup_key",
+  "surface",
+  "control_runtime",
+  "repo_owner",
+  "repo_name",
+  "mode",
+  "scope",
+  "target",
+  "permissions",
 ]);
 // Dispatch context recorded before a run fails (PR refs, shas, titles, repo
 // names) carries no diagnostics; wiping it made failed runs render as if the
