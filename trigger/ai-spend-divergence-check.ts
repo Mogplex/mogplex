@@ -4,14 +4,19 @@ import { createObservabilityGatewayClient } from "@/lib/observability/gateway-cl
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 
-// Gateway is the authoritative denominator: |gateway - local| / gateway.
+// Compare the same run-cost scope on both sides; Gateway is authoritative.
 const DIVERGENCE_THRESHOLD = 0.05;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// These internal checks never create customer ai_calls. All other spend,
+// including unknown or untagged requests, stays in the drift comparison.
+const INTERNAL_GATEWAY_TAGS = ["surface:quality", "surface:decisions"];
 
 export type AiSpendDivergenceSummary = {
   startDate: string;
   endDate: string;
   gatewayTotal: number;
+  internalOverheadTotal: number;
+  trackedGatewayTotal: number;
   localTotal: number;
   divergenceRatio: number | null;
   divergent: boolean;
@@ -30,6 +35,7 @@ type GatewaySpendReportClient = {
     startDate: string;
     endDate: string;
     groupBy: "day";
+    tags?: string[];
   }) => Promise<GatewaySpendReport>;
 };
 
@@ -103,6 +109,8 @@ function captureSpendDrift(
     startDate: string;
     endDate: string;
     gatewayTotal: number;
+    internalOverheadTotal: number;
+    trackedGatewayTotal: number;
     localTotal: number;
     divergenceRatio: number | null;
     spendReport: GatewaySpendReport;
@@ -115,6 +123,8 @@ function captureSpendDrift(
       start_date: input.startDate,
       end_date: input.endDate,
       gateway_total: input.gatewayTotal,
+      internal_overhead_total: input.internalOverheadTotal,
+      tracked_gateway_total: input.trackedGatewayTotal,
       local_total: input.localTotal,
       divergence_ratio: input.divergenceRatio,
       reason: input.reason,
@@ -154,7 +164,7 @@ export async function runAiSpendDivergenceCheck(
   // missing config should fail the scheduled run visibly at execution time.
   const gateway = deps.gateway ?? createObservabilityGatewayClient();
   const window = getYesterdayUtcWindow(deps.now());
-  const [spendReport, localTotal] = await Promise.all([
+  const [spendReport, internalReport, localTotal] = await Promise.all([
     // Gateway failures should fail the scheduled run; divergence over threshold
     // is the warning-only tripwire path.
     gateway.getSpendReport({
@@ -162,20 +172,43 @@ export async function runAiSpendDivergenceCheck(
       endDate: window.gatewayInclusiveEndDate,
       groupBy: "day",
     }),
+    // Gateway applies tags with ANY semantics before grouping. Grouping by
+    // day counts each matching request once, even if it carries both tags.
+    gateway.getSpendReport({
+      startDate: window.startDate,
+      endDate: window.gatewayInclusiveEndDate,
+      groupBy: "day",
+      tags: INTERNAL_GATEWAY_TAGS,
+    }),
     loadLocalAiCallCostTotal(deps, window),
   ]);
 
-  const gatewayTotal = spendReport.results.reduce(
-    (total, row) => total + row.totalCost,
-    0
+  const sumReport = (report: GatewaySpendReport) =>
+    report.results.reduce((total, row) => {
+      if (!Number.isFinite(row.totalCost) || row.totalCost < 0)
+        throw new Error("Invalid Gateway spend report cost");
+      return total + row.totalCost;
+    }, 0);
+  const gatewayTotal = sumReport(spendReport);
+  const internalOverheadTotal = sumReport(internalReport);
+  if (internalOverheadTotal - gatewayTotal > 1e-8)
+    throw new Error("Internal Gateway spend exceeds the total report");
+  const trackedGatewayTotal = Math.max(
+    0,
+    Math.round((gatewayTotal - internalOverheadTotal) * 1e8) / 1e8
   );
+  const totals = {
+    gatewayTotal,
+    internalOverheadTotal,
+    trackedGatewayTotal,
+    localTotal,
+  };
 
   if (localTotal < 0) {
     captureSpendDrift(deps, {
       startDate: window.startDate,
       endDate: window.dbExclusiveEndDate,
-      gatewayTotal,
-      localTotal,
+      ...totals,
       divergenceRatio: null,
       spendReport,
       reason: "local_negative",
@@ -184,8 +217,7 @@ export async function runAiSpendDivergenceCheck(
     return {
       startDate: window.startDate,
       endDate: window.dbExclusiveEndDate,
-      gatewayTotal,
-      localTotal,
+      ...totals,
       divergenceRatio: null,
       divergent: true,
       skipped: false,
@@ -194,12 +226,11 @@ export async function runAiSpendDivergenceCheck(
 
   // Zero-local days are intentionally skipped per W7's verification matrix.
   if (localTotal === 0) {
-    if (gatewayTotal > 0) {
+    if (trackedGatewayTotal > 0) {
       captureSpendDrift(deps, {
         startDate: window.startDate,
         endDate: window.dbExclusiveEndDate,
-        gatewayTotal,
-        localTotal,
+        ...totals,
         divergenceRatio: null,
         spendReport,
         reason: "zero_local_nonzero_gateway",
@@ -209,20 +240,18 @@ export async function runAiSpendDivergenceCheck(
     return {
       startDate: window.startDate,
       endDate: window.dbExclusiveEndDate,
-      gatewayTotal,
-      localTotal,
+      ...totals,
       divergenceRatio: null,
       divergent: false,
       skipped: true,
     };
   }
 
-  if (gatewayTotal <= 0) {
+  if (trackedGatewayTotal <= 0) {
     captureSpendDrift(deps, {
       startDate: window.startDate,
       endDate: window.dbExclusiveEndDate,
-      gatewayTotal,
-      localTotal,
+      ...totals,
       divergenceRatio: null,
       spendReport,
       reason: "gateway_zero_local_nonzero",
@@ -231,8 +260,7 @@ export async function runAiSpendDivergenceCheck(
     return {
       startDate: window.startDate,
       endDate: window.dbExclusiveEndDate,
-      gatewayTotal,
-      localTotal,
+      ...totals,
       divergenceRatio: null,
       divergent: true,
       skipped: false,
@@ -240,15 +268,15 @@ export async function runAiSpendDivergenceCheck(
   }
 
   // Gateway spend is the authoritative denominator for this W7 backstop.
-  const divergenceRatio = Math.abs(gatewayTotal - localTotal) / gatewayTotal;
+  const divergenceRatio =
+    Math.abs(trackedGatewayTotal - localTotal) / trackedGatewayTotal;
   const divergent = divergenceRatio > DIVERGENCE_THRESHOLD;
 
   if (divergent) {
     captureSpendDrift(deps, {
       startDate: window.startDate,
       endDate: window.dbExclusiveEndDate,
-      gatewayTotal,
-      localTotal,
+      ...totals,
       divergenceRatio,
       spendReport,
     });
@@ -257,8 +285,7 @@ export async function runAiSpendDivergenceCheck(
   return {
     startDate: window.startDate,
     endDate: window.dbExclusiveEndDate,
-    gatewayTotal,
-    localTotal,
+    ...totals,
     divergenceRatio,
     divergent,
     skipped: false,
@@ -287,6 +314,8 @@ export async function runScheduledAiSpendDivergenceCheck(
 
   const summary = await deps.runAiSpendDivergenceCheck();
   deps.metadata.set("gatewayTotal", summary.gatewayTotal);
+  deps.metadata.set("internalOverheadTotal", summary.internalOverheadTotal);
+  deps.metadata.set("trackedGatewayTotal", summary.trackedGatewayTotal);
   deps.metadata.set("localTotal", summary.localTotal);
   deps.metadata.set("divergent", summary.divergent);
   deps.metadata.set("skipped", summary.skipped);
